@@ -13,6 +13,8 @@ public static class Slice3DemoSeed
     public static readonly Guid FootballAnnualId = Guid.Parse("51000000-0000-0000-0000-000000000003");
     public static readonly Guid FootballSessionsId = Guid.Parse("51000000-0000-0000-0000-000000000004");
     public static readonly Guid SwimmingMonthlyId = Guid.Parse("51000000-0000-0000-0000-000000000005");
+    public const string ExternalRenewalCode = "RNW-DEMO-NG-0003-7K9M";
+    public const string FutureAcademyRenewalCode = "RNW-DEMO-FT-0001-4Q2X";
 
     public static async Task SeedAsync(FoundationDbContext db, Guid guardianUserId, DateTimeOffset now, CancellationToken ct)
     {
@@ -33,6 +35,11 @@ public static class Slice3DemoSeed
         await Confirmed(db, Guid.Parse("53000000-0000-0000-0000-000000000004"), mariamFootball, FootballMonthlyId, guardianUserId, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 30), now.AddDays(-58), now, ct);
         await Incomplete(db, Guid.Parse("54000000-0000-0000-0000-000000000001"), mariamFootball, FootballMonthlyId, guardianUserId, PaymentRequestStatus.Failed, RenewalRequestStatus.Failed, now.AddDays(-1), ct);
         await Incomplete(db, Guid.Parse("54000000-0000-0000-0000-000000000002"), omarSwimming, SwimmingMonthlyId, guardianUserId, PaymentRequestStatus.Pending, RenewalRequestStatus.PaymentInProgress, now, ct);
+        var otherFootball = await Enrollment(db, Slice2DemoSeed.OtherPlayerId, Slice2DemoSeed.FootballId, ct);
+        await Reference(db, Guid.Parse("55000000-0000-0000-0000-000000000001"), otherFootball, ExternalRenewalCode, guardianUserId, now, ct);
+        var academyBEnrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.FutureAcademyId && x.PlayerId == Slice2DemoSeed.AcademyBPlayerId, ct);
+        var academyBOwner = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.FutureAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.AcademyOwner).Select(x => x.UserId).SingleAsync(ct);
+        await Reference(db, Guid.Parse("55000000-0000-0000-0000-000000000002"), academyBEnrollment, FutureAcademyRenewalCode, academyBOwner, now, ct);
     }
 
     private static async Task Plan(FoundationDbContext db, Guid id, Guid academy, Guid sport, string name, SubscriptionPlanType type, decimal price, int? days, int? sessions, int order, DateTimeOffset now, CancellationToken ct)
@@ -60,6 +67,11 @@ public static class Slice3DemoSeed
     {
         var paymentId = Change(root, 1); if (await db.PaymentRequests.AnyAsync(x => x.Id == paymentId, ct)) return; var plan = await db.SubscriptionPlans.SingleAsync(x => x.Id == planId, ct); var renewalId = Change(root, 2);
         db.AddRange(new RenewalRequest { Id = renewalId, AcademyId = enrollment.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, SubscriptionPlanId = plan.Id, RequestedByUserId = user, RequestedAtUtc = at, AmountExpected = plan.Price, Currency = plan.Currency, Status = renewalStatus, PaymentRequestId = paymentId, IdempotencyKey = $"seed-{root:N}", CreatedAtUtc = at, UpdatedAtUtc = at }, new PaymentRequest { Id = paymentId, AcademyId = enrollment.AcademyId, RenewalRequestId = renewalId, Provider = InternalTestPaymentGateway.ProviderName, ProviderEnvironment = "Demo", Amount = plan.Price, Currency = plan.Currency, Status = paymentStatus, ProviderReference = $"ITP-{paymentId:N}", CheckoutReference = $"seed-{paymentId:N}", CreatedAtUtc = at, UpdatedAtUtc = at }); await db.SaveChangesAsync(ct);
+    }
+    private static async Task Reference(FoundationDbContext db, Guid id, Academy.Infrastructure.People.SportEnrollment enrollment, string code, Guid actor, DateTimeOffset now, CancellationToken ct)
+    {
+        if (await db.BeneficiaryRenewalReferences.AnyAsync(x => x.Id == id, ct)) return;
+        db.Add(new BeneficiaryRenewalReference { Id = id, AcademyId = enrollment.AcademyId, SportEnrollmentId = enrollment.Id, CodeHash = BeneficiaryRenewalCodes.Hash(code), CodeHint = BeneficiaryRenewalCodes.Hint(code), ExpiresAtUtc = now.AddYears(2), GeneratedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now }); await db.SaveChangesAsync(ct);
     }
     private static Guid Change(Guid id, byte value) { var bytes = id.ToByteArray(); bytes[14] = value; return new Guid(bytes); }
 }

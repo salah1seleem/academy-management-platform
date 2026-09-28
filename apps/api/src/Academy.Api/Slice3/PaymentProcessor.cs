@@ -43,6 +43,23 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             return new(true, true, "already-confirmed", existingReceipt);
         }
 
+        if (payment.Status is PaymentRequestStatus.Failed or PaymentRequestStatus.Cancelled or PaymentRequestStatus.Expired)
+        {
+            providerEvent.ProcessedAtUtc = clock.UtcNow;
+            providerEvent.ProcessingResult = $"terminal-{payment.Status.ToString().ToLowerInvariant()}-ignored";
+            payment.LastProviderEventAtUtc = clock.UtcNow;
+            payment.UpdatedAtUtc = clock.UtcNow;
+            await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
+            return new(true, false, providerEvent.ProcessingResult);
+        }
+
+        if (payment.Status != PaymentRequestStatus.Pending)
+        {
+            providerEvent.ProcessedAtUtc = clock.UtcNow; providerEvent.ProcessingResult = "invalid-transition";
+            await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
+            return new(false, false, providerEvent.ProcessingResult);
+        }
+
         payment.LastProviderEventAtUtc = clock.UtcNow;
         payment.UpdatedAtUtc = clock.UtcNow;
         if (outcome != PaymentEventOutcome.Success)

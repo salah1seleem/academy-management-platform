@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./page";
-vi.mock("next/navigation", () => ({ useParams: () => ({ paymentId: "pay-1" }) }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ paymentId: "pay-1" }), useRouter: () => ({ push: vi.fn() }) }));
 beforeEach(() => { global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "pay-1", providerReference: "ITP-1", amount: 900, currency: "EGP", status: "Pending", player: "عمر أحمد محمود", sport: "كرة القدم", plan: "اشتراك شهري" }) }); });
 describe("internal test checkout", () => {
   it("shows the warning and test states without unsupported payment brands", async () => {

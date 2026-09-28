@@ -11,7 +11,7 @@
 - Demo seed حتمي لأكاديميتين، وOTP ثابت محروس ببيئة `Demo` فقط، واختبارات عزل backend وE2E.
 - فروع ورياضات وفئات ومجموعات وجداول أسبوعية وإسناد مدرب، مع Player مستقل عن `SportEnrollment` وروابط وصاية صريحة.
 - Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
-- باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر Online-first عبر بوابة داخلية Demo/Test، مع `PaymentRequest` وevents وتحصل وإيصال ذريين idempotent.
+- باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر لنفس أبنائه أو لمستفيد آخر عبر كود آمن وOnline-first، مع `PaymentRequest` وevents وتحصيل وإيصال ذريين idempotent.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
 
@@ -68,7 +68,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `Slice3SubscriptionsPayments`، وتضيف جداول الباقات والفترات وطلبات التجديد والدفع وprovider events والتحصيلات والإيصالات بقيود tenant-aware. لا تضيف Attendance أو Evaluation أو وحدات المحتوى.
+آخر migration هي `SecureBeneficiaryRenewalReference` بعد `Slice3SubscriptionsPayments`. تضيف جدول أكواد تجديد المستفيدين المشفّرة والـtenant-scoped؛ لا تضيف Attendance أو Evaluation أو وحدات المحتوى.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -116,7 +116,7 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. الإداري يرى وحدة «الاشتراكات» وقوائم الدفع والتحصيل. ولي الأمر `01000000001` مع OTP التجريبي يختار تسجيلًا وباقة ثم يدخل شاشة واضحة باسم Test Payment Gateway لمحاكاة نجاح/فشل/إلغاء؛ لا توجد أموال حقيقية. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
+افتح `http://127.0.0.1:3000/login`. الإداري يرى وحدة «الاشتراكات» وقوائم الدفع والتحصيل. ولي الأمر `01000000001` مع OTP التجريبي يستطيع تجديد اشتراك طفل مرتبط، أو اختيار «تجديد اشتراك لغيره» واستخدام الكود الموثق في ملف Demo، ثم يدخل Test Payment Gateway لمحاكاة نجاح/فشل/إلغاء؛ لا توجد أموال حقيقية. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
 
 ## 8. تشغيل الاختبارات
 

@@ -33,6 +33,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
     public DbSet<PaymentCollection> Collections => Set<PaymentCollection>();
     public DbSet<Receipt> Receipts => Set<Receipt>();
+    public DbSet<BeneficiaryRenewalReference> BeneficiaryRenewalReferences => Set<BeneficiaryRenewalReference>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -198,6 +199,16 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasIndex(x => new { x.AcademyId, x.SportId, x.ArabicName }).IsUnique();
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionPlans_Configuration", "(\"PlanType\" = 'Duration' AND \"DurationDays\" > 0 AND \"SessionCount\" IS NULL) OR (\"PlanType\" = 'Sessions' AND \"DurationDays\" IS NULL AND \"SessionCount\" > 0) OR (\"PlanType\" = 'Combined' AND \"DurationDays\" > 0 AND \"SessionCount\" > 0)"));
+        });
+
+        ConfigureTenantEntity<BeneficiaryRenewalReference>(builder, "BeneficiaryRenewalReferences");
+        builder.Entity<BeneficiaryRenewalReference>(entity =>
+        {
+            entity.Property(x => x.CodeHash).HasMaxLength(64).IsFixedLength();
+            entity.Property(x => x.CodeHint).HasMaxLength(12);
+            entity.HasIndex(x => new { x.AcademyId, x.CodeHash }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.SportEnrollmentId, x.RevokedAtUtc });
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });
 
         ConfigureTenantEntity<SubscriptionPeriod>(builder, "SubscriptionPeriods");

@@ -9,6 +9,17 @@ public enum RenewalRequestStatus { PendingPayment = 1, PaymentInProgress = 2, Pa
 public enum PaymentRequestStatus { Created = 1, Pending = 2, Confirmed = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentEventOutcome { Success = 1, Failed = 2, Cancelled = 3 }
 
+public sealed class BeneficiaryRenewalReference : TenantEntity
+{
+    public Guid SportEnrollmentId { get; set; }
+    public required string CodeHash { get; set; }
+    public required string CodeHint { get; set; }
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+    public DateTimeOffset? RevokedAtUtc { get; set; }
+    public Guid GeneratedByUserId { get; set; }
+    public SportEnrollment SportEnrollment { get; set; } = null!;
+}
+
 public sealed class SubscriptionPlan : TenantEntity
 {
     public Guid SportId { get; set; }
