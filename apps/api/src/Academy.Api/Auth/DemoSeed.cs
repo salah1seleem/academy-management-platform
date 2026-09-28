@@ -2,6 +2,7 @@ using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
 using Academy.Api.Slice2;
+using Academy.Api.Slice3;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -67,6 +68,7 @@ public static class DemoSeed
         await UpsertMembership(db, NogoomAcademyId, guardian.Id, AcademyRole.Guardian, now, cancellationToken);
         await UpsertMembership(db, FutureAcademyId, futureOwner.Id, AcademyRole.AcademyOwner, now, cancellationToken);
         await Slice2DemoSeed.SeedAsync(db, users, owner.Id, futureOwner.Id, guardian.Id, coach.Id, now, cancellationToken);
+        await Slice3DemoSeed.SeedAsync(db, guardian.Id, now, cancellationToken);
     }
 
     private static async Task UpsertAcademy(FoundationDbContext db, Infrastructure.Tenancy.Academy academy, CancellationToken ct)

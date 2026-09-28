@@ -1,6 +1,7 @@
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Subscriptions;
 using Academy.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -25,6 +26,13 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<Player> Players => Set<Player>();
     public DbSet<GuardianPlayerLink> GuardianPlayerLinks => Set<GuardianPlayerLink>();
     public DbSet<SportEnrollment> SportEnrollments => Set<SportEnrollment>();
+    public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
+    public DbSet<RenewalRequest> RenewalRequests => Set<RenewalRequest>();
+    public DbSet<PaymentRequest> PaymentRequests => Set<PaymentRequest>();
+    public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
+    public DbSet<PaymentCollection> Collections => Set<PaymentCollection>();
+    public DbSet<Receipt> Receipts => Set<Receipt>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -171,10 +179,98 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
         {
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.SportId, x.TrainingGroupId }).IsUnique();
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
             entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.TrainingGroup).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId, x.BranchId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.BranchId, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<SubscriptionPlan>(builder, "SubscriptionPlans");
+        builder.Entity<SubscriptionPlan>(entity =>
+        {
+            entity.Property(x => x.ArabicName).HasMaxLength(160);
+            entity.Property(x => x.EnglishName).HasMaxLength(160);
+            entity.Property(x => x.PlanType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.Price).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
+            entity.HasIndex(x => new { x.AcademyId, x.SportId, x.ArabicName }).IsUnique();
+            entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionPlans_Configuration", "(\"PlanType\" = 'Duration' AND \"DurationDays\" > 0 AND \"SessionCount\" IS NULL) OR (\"PlanType\" = 'Sessions' AND \"DurationDays\" IS NULL AND \"SessionCount\" > 0) OR (\"PlanType\" = 'Combined' AND \"DurationDays\" > 0 AND \"SessionCount\" > 0)"));
+        });
+
+        ConfigureTenantEntity<SubscriptionPeriod>(builder, "SubscriptionPeriods");
+        builder.Entity<SubscriptionPeriod>(entity =>
+        {
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.PriceSnapshot).HasPrecision(18, 2);
+            entity.Property(x => x.CurrencySnapshot).HasMaxLength(3).IsFixedLength();
+            entity.HasIndex(x => new { x.AcademyId, x.SportEnrollmentId, x.StartDate });
+            entity.HasIndex(x => new { x.AcademyId, x.CollectionId }).IsUnique();
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SubscriptionPlan).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Collection).WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<RenewalRequest>(builder, "RenewalRequests");
+        builder.Entity<RenewalRequest>(entity =>
+        {
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(24);
+            entity.Property(x => x.AmountExpected).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(x => new { x.AcademyId, x.RequestedByUserId, x.IdempotencyKey }).IsUnique();
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportEnrollmentId });
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SubscriptionPlan).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<PaymentRequest>(builder, "PaymentRequests");
+        builder.Entity<PaymentRequest>(entity =>
+        {
+            entity.Property(x => x.Provider).HasMaxLength(60); entity.Property(x => x.ProviderEnvironment).HasMaxLength(30);
+            entity.Property(x => x.Amount).HasPrecision(18, 2); entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.ProviderReference).HasMaxLength(100); entity.Property(x => x.CheckoutReference).HasMaxLength(160);
+            entity.HasIndex(x => new { x.AcademyId, x.RenewalRequestId }).IsUnique();
+            entity.HasIndex(x => new { x.Provider, x.ProviderReference }).IsUnique();
+            entity.HasOne(x => x.RenewalRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.RenewalRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<PaymentProviderEvent>(builder, "PaymentProviderEvents");
+        builder.Entity<PaymentProviderEvent>(entity =>
+        {
+            entity.Property(x => x.Provider).HasMaxLength(60); entity.Property(x => x.ProviderEventId).HasMaxLength(100);
+            entity.Property(x => x.EventType).HasMaxLength(50); entity.Property(x => x.RawStatus).HasMaxLength(50);
+            entity.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength(); entity.Property(x => x.ProcessingResult).HasMaxLength(100);
+            entity.HasIndex(x => new { x.Provider, x.ProviderEventId }).IsUnique();
+            entity.HasOne(x => x.PaymentRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.PaymentRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<PaymentCollection>(builder, "Collections");
+        builder.Entity<PaymentCollection>(entity =>
+        {
+            entity.Property(x => x.Amount).HasPrecision(18, 2); entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
+            entity.Property(x => x.PaymentMethod).HasMaxLength(60); entity.Property(x => x.Provider).HasMaxLength(60);
+            entity.Property(x => x.ProviderReference).HasMaxLength(100); entity.Property(x => x.ConfirmedBy).HasMaxLength(60);
+            entity.HasIndex(x => new { x.AcademyId, x.PaymentRequestId }).IsUnique();
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RenewalRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.RenewalRequestId, x.SportEnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportEnrollmentId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PaymentRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.PaymentRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<Receipt>(builder, "Receipts");
+        builder.Entity<Receipt>(entity =>
+        {
+            entity.Property(x => x.ReceiptNumber).HasMaxLength(40); entity.Property(x => x.PlayerNameSnapshot).HasMaxLength(180);
+            entity.Property(x => x.SportNameSnapshot).HasMaxLength(120); entity.Property(x => x.PlanNameSnapshot).HasMaxLength(160);
+            entity.Property(x => x.Amount).HasPrecision(18, 2); entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
+            entity.Property(x => x.PaymentMethod).HasMaxLength(60); entity.Property(x => x.ProviderReference).HasMaxLength(100);
+            entity.HasIndex(x => new { x.AcademyId, x.CollectionId }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.ReceiptNumber }).IsUnique();
+            entity.HasOne(x => x.Collection).WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

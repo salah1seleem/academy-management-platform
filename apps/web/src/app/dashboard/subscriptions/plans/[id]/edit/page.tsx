@@ -1,0 +1,1 @@
+"use client"; import { useParams } from "next/navigation"; import { PlanForm } from "../../../../../../features/subscriptions"; export default function Page() { return <PlanForm id={String(useParams().id)} />; }

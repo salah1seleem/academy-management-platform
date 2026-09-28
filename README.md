@@ -1,6 +1,6 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 2: هيكل الأكاديمية والأشخاص والتسجيل الرياضي**؛ لا توجد بعد الاشتراكات أو التحصيل أو الحضور.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 3: الاشتراكات والتجديد والدفع الإلكتروني التجريبي والتحصيل**؛ الحضور والتقييم والمحتوى ما زالت خارج النطاق.
 
 ## ما الموجود الآن؟
 
@@ -11,6 +11,7 @@
 - Demo seed حتمي لأكاديميتين، وOTP ثابت محروس ببيئة `Demo` فقط، واختبارات عزل backend وE2E.
 - فروع ورياضات وفئات ومجموعات وجداول أسبوعية وإسناد مدرب، مع Player مستقل عن `SportEnrollment` وروابط وصاية صريحة.
 - Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
+- باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر Online-first عبر بوابة داخلية Demo/Test، مع `PaymentRequest` وevents وتحصل وإيصال ذريين idempotent.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
 
@@ -67,7 +68,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migrations هما `StructurePeopleEnrollment` و`EnrollmentGroupContextInvariant`. الأولى تنشئ جداول Slice 2 فقط، والثانية تضيف قيد تطابق المجموعة مع الفرع والرياضة؛ ولا تحتويان Subscription أو Attendance أو Evaluation أو وحدات المحتوى.
+آخر migration هي `Slice3SubscriptionsPayments`، وتضيف جداول الباقات والفترات وطلبات التجديد والدفع وprovider events والتحصيلات والإيصالات بقيود tenant-aware. لا تضيف Attendance أو Evaluation أو وحدات المحتوى.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -79,9 +80,12 @@ Demo__SeedEnabled=true
 Demo__FixedOtpEnabled=true
 Demo__FixedOtp=246810
 Demo__StaffPassword='Demo-Only-123!'
+Demo__ReferenceDate=2026-09-28
+Payments__InternalTest__Enabled=true
+Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456'
 ```
 
-يرفض API البدء إذا فُعّل seed أو fixed OTP خارج `Demo`. لا توجد خدمة SMS فعلية في هذه الشريحة.
+يرفض API البدء إذا فُعّل seed/fixed OTP أو بوابة الدفع الداخلية خارج بيئة مسموحة. بوابة الاختبار لا تحرك أموالًا حقيقية، ولا تعرض أو تحاكي Apple Pay أو provider إنتاجيًا. لا توجد خدمة SMS أو payment provider فعلية في هذه الشريحة.
 
 ## 6. تشغيل API
 
@@ -112,7 +116,7 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. يسجّل الإداري بـ`admin.nogoom@example.test` ثم يدخل Dashboard ويختار «تسجيل لاعب جديد». ولي الأمر `01000000001` مع OTP التجريبي يرى الطفلين المرتبطين به فقط. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
+افتح `http://127.0.0.1:3000/login`. الإداري يرى وحدة «الاشتراكات» وقوائم الدفع والتحصيل. ولي الأمر `01000000001` مع OTP التجريبي يختار تسجيلًا وباقة ثم يدخل شاشة واضحة باسم Test Payment Gateway لمحاكاة نجاح/فشل/إلغاء؛ لا توجد أموال حقيقية. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
 
 ## 8. تشغيل الاختبارات
 
@@ -153,4 +157,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: Subscription/Payment/Attendance/Evaluation/Nutrition/Product/Medical/Gallery/Reports، TrainingSession فعلية، SMS إنتاجي، native auth، نشر أو إثبات production-readiness.
+لا يوجد حتى الآن: Attendance/Evaluation/Nutrition/Product/Medical/Gallery/advanced Reports، TrainingSession فعلية، خصومات/تجميد/إلغاء مكتمل، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.

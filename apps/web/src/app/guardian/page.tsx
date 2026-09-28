@@ -1,5 +1,12 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-type Child = { id: string; playerCode: string; arabicName: string };
-export default function GuardianPage() { const router = useRouter(); const [children, setChildren] = useState<Child[]>([]); useEffect(() => { fetch("/api/v1/guardian/children").then(async r => { if (!r.ok) return router.replace("/login"); setChildren(await r.json() as Child[]); }); }, [router]); return <main className="page-shell"><section className="authenticated-card"><span className="eyebrow">مساحة ولي الأمر</span><h1>الأبناء المرتبطون</h1><div className="data-list">{children.map(child => <article key={child.id}><div><strong>{child.arabicName}</strong><small>{child.playerCode}</small></div></article>)}</div><p className="development-note">تظهر الروابط الصريحة فقط. التقارير والاشتراكات والمحتوى تصل في شرائح لاحقة.</p></section></main>; }
+type Period = { plan: string; startDate: string; endDate?: string; remainingSessions?: number; status: string };
+type Enrollment = { id: string; playerId: string; player: string; sport: string; period?: Period };
+export default function GuardianPage() {
+  const router = useRouter(); const [items, setItems] = useState<Enrollment[]>([]);
+  useEffect(() => { fetch("/api/v1/guardian/subscriptions/enrollments").then(async r => { if (!r.ok) return router.replace("/login"); setItems(await r.json() as Enrollment[]); }); }, [router]);
+  const children = Array.from(Map.groupBy(items, item => item.playerId).values());
+  return <main className="page-shell guardian-wide"><section className="authenticated-card"><span className="eyebrow">مساحة ولي الأمر · اشتراكات الأبناء</span><h1>الأبناء المرتبطون</h1><div className="data-list child-subscriptions">{children.map(enrollments => <article key={enrollments[0].playerId}><strong>{enrollments[0].player}</strong><div>{enrollments.map(item => <section className="sport-subscription" key={item.id}><div><b>{item.sport}</b><small>{item.period ? `${item.period.plan} · ${item.period.status} · ${item.period.startDate}${item.period.endDate ? ` ← ${item.period.endDate}` : ""}${item.period.remainingSessions != null ? ` · ${item.period.remainingSessions} حصة` : ""}` : "لا يوجد اشتراك مدفوع"}</small></div><Link className="primary-action" href={`/guardian/renew/${item.id}`}>تجديد الاشتراك</Link></section>)}</div></article>)}</div></section></main>;
+}

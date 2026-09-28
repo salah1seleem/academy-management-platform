@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardShell, PageHeader, RowActions } from "./dashboard-shell";
 
 const replace = vi.fn();
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard/players", useRouter: () => ({ replace }) }));
+let currentPath = "/dashboard/players";
+vi.mock("next/navigation", () => ({ usePathname: () => currentPath, useRouter: () => ({ replace }) }));
 
-beforeEach(() => { replace.mockReset(); global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: "منى السيد", role: "AcademyAdmin" }) }); });
+beforeEach(() => { currentPath = "/dashboard/players"; replace.mockReset(); global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: "منى السيد", role: "AcademyAdmin" }) }); });
 afterEach(cleanup);
 
 describe("dashboard navigation governance", () => {
@@ -35,5 +36,16 @@ describe("dashboard navigation governance", () => {
     fireEvent.click(screen.getByRole("button", { name: "فتح القائمة" }));
     expect(screen.getAllByRole("button", { name: "إغلاق القائمة" })[0]).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("complementary", { name: "التنقل الرئيسي" })).toHaveClass("open");
+  });
+
+  it("shows the subscriptions module and its approved sub-modules as an accordion", () => {
+    currentPath = "/dashboard/subscriptions/plans";
+    render(<DashboardShell><div>المحتوى</div></DashboardShell>);
+    const subscriptionModule = screen.getByRole("button", { name: /الاشتراكات/ });
+    expect(subscriptionModule).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "الباقات" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "طلبات الدفع" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "التحصيلات" })).toBeVisible();
+    fireEvent.click(subscriptionModule); expect(subscriptionModule).toHaveAttribute("aria-expanded", "false");
   });
 });

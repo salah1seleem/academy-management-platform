@@ -14,12 +14,19 @@ const modules: NavModule[] = [
   ] },
   { id: "players", title: "اللاعبون", links: [{ label: "قائمة اللاعبين", href: "/dashboard/players" }, { label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }] },
   { id: "guardians", title: "أولياء الأمور", links: [{ label: "قائمة أولياء الأمور", href: "/dashboard/guardians" }] },
+  { id: "subscriptions", title: "الاشتراكات", links: [
+    { label: "الباقات", href: "/dashboard/subscriptions/plans" }, { label: "الاشتراكات الحالية", href: "/dashboard/subscriptions/current" },
+    { label: "طلبات التجديد", href: "/dashboard/subscriptions/renewals" }, { label: "طلبات الدفع", href: "/dashboard/subscriptions/payments" },
+    { label: "التحصيلات", href: "/dashboard/subscriptions/collections" }, { label: "الاشتراكات التي تنتهي قريباً", href: "/dashboard/subscriptions/expiring" },
+    { label: "الاشتراكات المنتهية", href: "/dashboard/subscriptions/expired" },
+  ] },
 ];
 
 function currentModule(path: string) {
   if (path.startsWith("/dashboard/academy/")) return "academy";
   if (path.startsWith("/dashboard/players")) return "players";
   if (path.startsWith("/dashboard/guardians")) return "guardians";
+  if (path.startsWith("/dashboard/subscriptions")) return "subscriptions";
   return "home";
 }
 

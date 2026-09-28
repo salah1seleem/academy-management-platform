@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
 using Academy.Api.Slice2;
+using Academy.Api.Slice3;
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
@@ -22,6 +23,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("ConnectionStrings__Default must be provided through environment configuration.");
 
 builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
+builder.Services.Configure<InternalTestPaymentOptions>(builder.Configuration.GetSection(InternalTestPaymentOptions.SectionName));
 builder.Services.AddDbContext<FoundationDbContext>(options => options.UseNpgsql(connectionString,
     npgsql => npgsql.MigrationsAssembly(typeof(FoundationDbContext).Assembly.FullName)));
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -63,7 +65,7 @@ builder.Services.AddAuthorization(options =>
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));
     options.AddPolicy(AcademyPermissions.StaffProvision, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.StaffProvision)));
-    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead })
+    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead })
         options.AddPolicy(permission, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(permission)));
 });
 builder.Services.AddAntiforgery(options =>
@@ -76,10 +78,14 @@ builder.Services.AddAntiforgery(options =>
     options.HeaderName = "X-CSRF-TOKEN";
 });
 builder.Services.AddScoped<CsrfFilter>();
+builder.Services.AddScoped<ISubscriptionClock, SubscriptionClock>();
+builder.Services.AddScoped<IPaymentGateway, InternalTestPaymentGateway>();
+builder.Services.AddScoped<PaymentProcessor>();
 builder.Services.AddHealthChecks().AddDbContextCheck<FoundationDbContext>("postgresql", tags: ["ready"]);
 
 var app = builder.Build();
 DemoSeed.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+InternalTestPaymentGateway.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<InternalTestPaymentOptions>>().Value);
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -237,6 +243,7 @@ api.MapPost("/staff", async (CreateStaffRequest request, CurrentTenant tenant, U
 
 app.MapSlice2Endpoints();
 app.MapSlice2DashboardEndpoints();
+app.MapSlice3Endpoints();
 
 if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
 app.Run();

@@ -1,55 +1,37 @@
 # Status
 
-تاريخ التحديث: 2026-09-28. الفرع: `codex/04b-slice2-dashboard-remediation`.
+تاريخ التحديث: 2026-09-28. الفرع: `codex/05-slice3-subscriptions-payments`.
 
-## Slice 2 UX Remediation — منفذ فعليًا
+## Slice 3 — منفذ فعليًا
 
-- تحولت القائمة الجانبية إلى accordion فعلي: الوحدة الحالية مفتوحة تلقائيًا، ويمكن فتح/غلق كل Module، مع active Sub-module واضح وdrawer صالح للمس على الموبايل.
-- البحث يعمل على البيانات المعروضة للفروع والرياضات والفئات والمجموعات والمدربين، ويظل بحث اللاعبين server-side. أضيف بحث أولياء الأمور server-side بالاسم أو رقم التواصل داخل نطاق `CurrentTenant`.
-- أزيلت أزرار `RowActions` الوهمية. الفروع/الرياضات/الفئات/المجموعات تدعم عرضًا وتعديلًا وتفعيلًا/إيقافًا مع dialog تأكيد واسم السجل، دون hard delete. إيقاف أصل هيكلي يحفظ العلاقات القديمة ويمنع ظهوره ومجموعاته التابعة في اختيارات تسجيل جديدة.
-- ملف اللاعب يعرض بياناته وتسجيلاته الرياضية الحالية، مع تعديل الحقول الأساسية وتفعيل/إيقاف يحفظ التسجيلات. ملف ولي الأمر يعرض الأطفال المرتبطين صراحةً ويتيح تعديل الاسم ورقم التواصل داخل الأكاديمية دون تغيير هوية/رقم دخول الحساب.
-- شاشة المدرب تعرض إسنادات المجموعات وتتيح إسناد مجموعة وإزالة/إعادة الإسناد. لا يظهر فعل «تعديل» غير حقيقي للمدرب.
-- كل endpoints الجديدة تستخدم سياسات Slice 1 و`CurrentTenant`، وDTOs محددة الحقول، وتعيد `404` عند محاولة الوصول إلى مورد أكاديمية أخرى.
-- لا توجد migrations جديدة؛ هذه معالجة تفاعل وعرض مع endpoints فوق نموذج Slice 2 المعتمد.
-
-## Slice 2 — منفذ فعليًا
-
-- هيكل الأكاديمية: `Branch`, `Sport`, `AgeCategory`, `TrainingGroup`, `RecurringSchedule`, `StaffGroupAssignment`.
-- الأشخاص: `GuardianProfile`, `Player`, `GuardianPlayerLink` الصريح. العمر مشتق من `DateOfBirth` ولا ينشأ وصول من الهاتف/الاسم.
-- `SportEnrollment` يفصل هوية اللاعب عن سياق الرياضة/الفرع/المجموعة. الفئة مشتقة من المجموعة، والتحقق يمنع Group/Sport/Branch mismatch.
-- كل entity تحمل `AcademyId`، والعلاقات الرئيسية تستخدم composite alternate/foreign keys `(AcademyId, Id)` لمنع cross-tenant references في PostgreSQL، مع فحص `CurrentTenant` والسياسات عند API.
-- registration endpoint ذري: ينشئ أو يعيد استخدام Player/Guardian داخل الأكاديمية، ثم link وenrollment في transaction؛ لا Subscription أو Payment.
-- بحث staff بالاسم/الكود/هاتف ولي الأمر وفلاتر branch/sport/category/group، scoped بالأكاديمية. Guardian endpoint يعرض linked children فقط، وCoach endpoint يعرض assigned groups فقط.
-- Dashboard عربي RTL responsive مع sidebar Module → Sub-module، list-first، PageHeader/Create، search/filters، row actions وحالات empty/error، ونموذج تسجيل mobile-friendly dependent selects.
-- migrations forward-only: `StructurePeopleEnrollment` ثم `EnrollmentGroupContextInvariant`. الجداول الجديدة: `Branches`, `Sports`, `AgeCategories`, `TrainingGroups`, `RecurringSchedules`, `StaffGroupAssignments`, `GuardianProfiles`, `Players`, `GuardianPlayerLinks`, `SportEnrollments`. الثانية لا تنشئ جدولًا؛ بل تفرض في قاعدة البيانات تطابق Group/Branch/Sport داخل التسجيل.
-- Demo seed idempotent: ثلاثة فروع/رياضات/فئات، ثلاث مجموعات وجدول أسبوعي، sibling family، طفل برياضتين، طفلان بنفس الرياضة، اسم عربي مشابه في أسرة أخرى، فرع مختلف، وبيانات Academy B معزولة.
-
-## دليل التحقق
-
-- Release build: ناجح، 0 warnings / 0 errors.
-- migration طُبقت على PostgreSQL 17 محليًا، وفحصها أكد عدم وجود Subscription/Attendance/Evaluation/Nutrition/Product/Medical/Gallery tables.
-- integration tests: 39/39، ومنها 7 اختبارات remediation لتحديث same-tenant، ورفض cross-tenant، ومنع Coach/Guardian، وقراءة العلاقات، وحفظ علاقة المجموعة عند إيقاف الفرع.
-- architecture/unit tests: 2/2؛ الإجمالي المحلي للـbackend هو 41/41.
-- frontend typecheck/lint: ناجحان؛ frontend tests 5/5 وتغطي accordion/auto-expand/active state/mobile drawer/functional search/real actions/Create action.
-- production build: ناجح؛ routes الخاصة بالـdashboard/registration/guardian بُنيت.
-- mobile E2E: 4/4 على Mobile Chromium؛ أضيفت رحلة Admin تفتح وحدة الأكاديمية، تبحث عن فرع أُنشئ للاختبار، تعرضه وتعدله ثم توقفه وتعيد تفعيله.
-- `npm audit`: صفر vulnerabilities. Remote CI ينتظر دفع فرع remediation، لذلك لا تسجل هذه الوثيقة نتيجة غير منفذة مسبقًا.
+- نموذج tenant-scoped للباقات `Duration/Sessions/Combined` مع تحقق تطبيق وقيد PostgreSQL، أسعار `decimal(18,2)` وEGP للديمو. لا hard delete للباقات المستخدمة.
+- فترات اشتراك append-only مرتبطة بـ`SportEnrollment` والخطة والتحصيل. المدة شمولية؛ التجديد المبكر يبدأ بعد آخر نهاية، والمنتهي يبدأ من تاريخ تأكيد الدفع. أرصدة الحصص محفوظة ولا تُستهلك قبل Slice 4.
+- `RenewalRequest` منفصل عن `PaymentRequest`. السعر والعملة مشتقان server-side من الخطة، و`Idempotency-Key` يمنع double-click. إنشاء الطلب لا ينشئ تحصيلًا أو فترة.
+- `IPaymentGateway` مع `InternalTestPaymentGateway` لـDemo/Test فقط. event موقع HMAC ومطابق للمرجع والمبلغ والعملة؛ browser return لا يؤكد الدفع. نجاح موثق ينشئ ذريًا Collection واحدة وReceipt واحدة وSubscriptionPeriod واحدة. الفشل/الإلغاء لا ينشئ أيًا منها.
+- قيود قاعدة البيانات: event reference فريد، Collection واحدة لكل PaymentRequest، Receipt وفترة واحدة لكل Collection، receipt number فريد داخل Academy، وعلاقات Academy/Sport المركبة تمنع الخلط بين tenants.
+- API للإداري للباقات والفترات الحالية/القريبة/المنتهية وطلبات التجديد والدفع والتحصيلات المشتقة من السجلات المؤكدة. Guardian لا يرى إلا تسجيلات الأطفال المرتبطين وإيصالاتهم ومدفوعاتهم.
+- Dashboard يحوي Module «الاشتراكات» وسبعة Sub-modules. ولي الأمر يختار التسجيل والبـاقة ويمر بشاشة Test Payment Gateway عربية واضحة ثم يرى الحالة الموثقة والإيصال.
+- seed حتمي بتاريخ `2026-09-28` لأكاديميتين، وباقات كرة قدم وسباحة، وحالات active/expiring/expired/scheduled وconfirmed/failed/pending. إعادة seed idempotent ولا تمس Production.
+- migration forward-only: `Slice3SubscriptionsPayments`، وتضيف `SubscriptionPlans`, `SubscriptionPeriods`, `RenewalRequests`, `PaymentRequests`, `PaymentProviderEvents`, `Collections`, `Receipts` فقط.
 
 ## مراجعة الأمان المركزة
 
-- tenant/IDOR: لا DTO كتابة يقبل `AcademyId`; كل lookup يضيف trusted tenant. composite FKs ترفض cross-tenant Branch/Sport/Group/Player/Guardian/Coach relationships.
-- guardian/player: phone lookup لا يمنح وصولًا؛ `GuardianPlayerLink` unique وصريح، وقراءة الطفل تعيد `404` خارج روابط المستخدم.
-- coach scope: assignment يتطلب Coach membership وGroup داخل الأكاديمية نفسها؛ القراءة عبر assignment للمستخدم الحالي.
-- search: endpoint محصور Owner/Admin، والاستعلام والـguardian-phone subquery scoped بالأكاديمية؛ Guardian لا يملك staff search policy.
-- mass assignment/transaction: request models allowlist الحقول؛ المجموعة هي مصدر branch/sport/category الموثوق، ويؤكد composite FK الرباعي ذلك في PostgreSQL. تبدأ transaction قبل إنشاء أي person/link/enrollment وتُلغى عند أي failure. إعادة استخدام Player/Guardian مرتبطين تضيف SportEnrollment فقط ولا تكرر اللاعب أو الرابط.
-- archive/deactivate هو النمط؛ لا hard-delete endpoints أضيفت.
+- لا يقبل DTO المالي `AcademyId` أو amount/currency من العميل؛ `CurrentTenant` و`GuardianPlayerLink` يحددان النطاق، والموارد الخارجية تعيد 404 آمنًا.
+- callback يتحقق HMAC وprovider/reference/amount/currency وevent replay قبل الأثر. transaction serializable والـunique indexes يوفران دفاعًا متعدد الطبقات ضد duplicate callback/double-click.
+- simulation routes وcallback الداخلي لا تُسجل إلا في `Demo/Testing`، وبدء التطبيق يرفض تمكين البوابة في Production. CSRF مفروض على إنشاء التجديد والمحاكاة، ولا يوجد open redirect أو secret في الاستجابة.
+- لا PAN/CVV أو Apple Pay credentials. لا Cash/InstaPay/Vodafone أو شعارات/ادعاءات Apple Pay/Geidea/Fawry. تفاصيل adapter المستقبلي في `docs/payments/PAYMENT_PROVIDER_ADAPTER.md`.
+
+## دليل التحقق
+
+- طُبقت migration على PostgreSQL 17 محليًا، وفُحص سجل migrations والجداول والقيود الجديدة.
+- Release build: ناجح، 0 warnings / 0 errors. backend: 59/59 إجمالًا (`57 integration + 1 unit + 1 architecture`)؛ منها 18/18 حالة مالية Slice 3.
+- frontend: typecheck وlint وproduction build ناجحة؛ 8/8 اختبارات UI. Mobile Chromium E2E: 7/7، منها 3 رحلات Slice 3 للنجاح والفشل والرؤية الإدارية.
+- `npm audit --omit=dev`: صفر vulnerabilities. نتيجة remote CI تُسجل بعد الدفع ولا تُفترض مسبقًا.
 
 ## غير منفذ
 
-لا SubscriptionPeriod أو plans/payment/collection، ولا TrainingSession فعلية أو Attendance، ولا Evaluation أو Nutrition/Product/Medical/Gallery/Reports. لا Parent Experience كاملة، ولا coach evaluations، ولا production SMS/media/deployment/tests. approved requirements لم تتغير و`main` لم يُمس.
-
-تعمدت المعالجة عدم دعم hard delete، أو إيقاف Guardian من واجهة الأكاديمية لما لذلك من أثر على الهوية والوصول، أو تعديل/إيقاف Coach membership؛ المتاح للمدرب هو إدارة إسنادات المجموعات فقط. كما يُرفض تغيير فرع/رياضة مجموعة لها تسجيلات قائمة حفاظًا على التاريخ.
+لا Attendance أو session consumption أو Evaluations أو Nutrition أو Sport Products أو Medical أو Gallery أو advanced Reports. لا خصومات/تجميد/تعديل أيام/إلغاء كامل أو renewal-for-someone-else، ولا refund. لا Geidea/Fawry/Apple Pay أو card/wallet حقيقي، ولا SMS، نشر، أو اختبار Production. `main` لم يُمس.
 
 ## نقطة التوقف
 
-Slice 2 مع UX remediation فقط؛ Slice 3 لا يبدأ دون تفويض جديد.
+Slice 3 فقط. المهمة التالية بعد المراجعة هي Slice 4 Attendance ضمن تفويض مستقل؛ لم تبدأ هنا.

@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 2:** بالإضافة إلى foundation، تحققت `Branch`, `Sport`, `AgeCategory`, `TrainingGroup`, `RecurringSchedule`, `StaffGroupAssignment`, `GuardianProfile`, `Player`, `GuardianPlayerLink`, و`SportEnrollment`. العلاقات المركبة تحمل `AcademyId`. الفئة العمرية مشتقة من المجموعة في التسجيل لتجنب التكرار، والعمر مشتق من الميلاد. بقية الكيانات أدناه مستقبلية ولم تُنشأ جداولها.
+**ملاحظة تنفيذ Slice 3:** تحققت كيانات Slice 2، وأضيفت فعليًا `SubscriptionPlan`, `SubscriptionPeriod`, `RenewalRequest`, `PaymentRequest`, `PaymentProviderEvent`, `Collection`, و`Receipt`. العلاقات المركبة تحمل `AcademyId` وتربط الخطة والتسجيل بالرياضة نفسها. كيانات الحضور والتقييم والمحتوى أدناه ما زالت مستقبلية.
 
 ## العلاقات الأساسية
 
@@ -26,7 +26,10 @@ erDiagram
   SportEnrollment ||--o{ SubscriptionPeriod : has
   SubscriptionPlan ||--o{ SubscriptionPeriod : defines
   SportEnrollment ||--o{ RenewalRequest : requests
-  RenewalRequest ||--o| Collection : confirms
+  RenewalRequest ||--o| PaymentRequest : pays
+  PaymentRequest ||--o{ PaymentProviderEvent : receives
+  PaymentRequest ||--o| Collection : confirms
+  Collection ||--|| Receipt : issues
   SubscriptionPeriod ||--o{ SubscriptionAdjustment : changes
   TrainingSession ||--o{ Attendance : records
   SportEnrollment ||--o{ Attendance : trainee
@@ -73,7 +76,7 @@ stateDiagram-v2
   Active --> Cancelled
 ```
 
-القواعد الدقيقة للمدة والحصص والتجميد والإلغاء تخضع لـ`OD-004/005`. الانتقال المالي `Pending -> Confirmed` وحده ينشئ Collection/Receipt ويمدد الفترة atomically وبـ idempotency key. التصحيح لا يحذف السجل الأصلي.
+وفق `OD-004/005` المعتمدين: `Duration` يتطلب أيامًا فقط، و`Sessions` حصصًا فقط، و`Combined` الاثنين. البداية والنهاية شموليتان؛ النهاية = البداية + الأيام - 1. التجديد المبكر يلي آخر نهاية، والمنتهي يبدأ من تاريخ التأكيد. الانتقال المالي الموثق `Pending -> Confirmed` وحده ينشئ `Collection/Receipt/SubscriptionPeriod` في transaction واحدة. unique constraints على provider event وPayment→Collection وCollection→Receipt/Period، مع idempotency key لطلب التجديد، تمنع الأثر المكرر. الفشل/الإلغاء لا ينشئ أثرًا ماليًا أو اشتراكًا.
 
 ## التقييم والتقارير
 
