@@ -1,14 +1,14 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 0: أساس تقني قابل للتشغيل فقط**؛ بطاقات الأدوار معاينات بصرية وليست تسجيل دخول أو صلاحيات.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 1: أساس Academy tenancy وهوية وصلاحيات قابل للتشغيل**؛ لا توجد بعد وحدات اللاعبين أو الاشتراكات أو الحضور.
 
 ## ما الموجود الآن؟
 
 - ASP.NET Core Web API مع `/health/live` و`/health/ready`.
-- EF Core وNpgsql مع migration تقنية لا تحتوي جداول أعمال.
-- Next.js shell عربي RTL، موبايل أولاً، وPWA manifest/icon.
+- EF Core وNpgsql مع ASP.NET Core Identity وعضويات Academy معزولة وجلسات browser محفوظة على الخادم.
+- Next.js login وauthenticated shell عربيان RTL، mobile-first، مع تبديل Academy مخوّل من الخادم وPWA manifest/icon.
 - PostgreSQL 17 محلي عبر Docker Compose.
-- اختبارات backend وfrontend وE2E وCI أولي.
+- Demo seed حتمي لأكاديميتين، وOTP ثابت محروس ببيئة `Demo` فقط، واختبارات عزل backend وE2E.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
 
@@ -65,9 +65,23 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-الـmigration الحالية `FoundationInitialized` تقنية وفارغة من جداول الأعمال؛ تطبيقها ينشئ جدول EF التقني `__EFMigrationsHistory` فقط.
+تُطبق migrations بالترتيب: `FoundationInitialized` ثم `TenantIdentityFoundation` و`IdentityUserClaims` و`MembershipRoleInvariant`. لا توجد فيها جداول Player أو أي وحدة أعمال لاحقة.
 
-## 5. تشغيل API
+## 5. تشغيل Demo آمن محليًا
+
+بيانات العرض الصناعية موثقة في [`docs/demo/SLICE1_DEMO_ACCOUNTS.md`](docs/demo/SLICE1_DEMO_ACCOUNTS.md). لا تنسخها إلى Production. عدّل `.env` محليًا فقط:
+
+```bash
+ASPNETCORE_ENVIRONMENT=Demo
+Demo__SeedEnabled=true
+Demo__FixedOtpEnabled=true
+Demo__FixedOtp=246810
+Demo__StaffPassword='Demo-Only-123!'
+```
+
+يرفض API البدء إذا فُعّل seed أو fixed OTP خارج `Demo`. لا توجد خدمة SMS فعلية في هذه الشريحة.
+
+## 6. تشغيل API
 
 في Terminal أول، من جذر المستودع:
 
@@ -87,7 +101,7 @@ curl -i http://127.0.0.1:5080/health/ready
 
 `live` يجب أن ينجح ما دامت عملية API تعمل. `ready` ينجح فقط عندما يستطيع API الاتصال بـPostgreSQL.
 
-## 6. تشغيل Web/PWA shell
+## 7. تشغيل Web/PWA
 
 في Terminal مستقل، من جذر المستودع:
 
@@ -96,9 +110,9 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000`. هذه شاشة تأسيسية فقط ولا تحتوي authentication أو وظائف أكاديمية.
+افتح `http://127.0.0.1:3000/login`. يسجّل مالك Demo الدخول بالبريد وكلمة المرور، بينما يستخدم ولي الأمر الهاتف والـOTP التجريبي. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
 
-## 7. تشغيل الاختبارات
+## 8. تشغيل الاختبارات
 
 مع PostgreSQL يعمل وبعد تحميل `.env`:
 
@@ -119,7 +133,7 @@ npm exec --workspace @academy/e2e playwright install chromium
 npm run test:e2e
 ```
 
-## 8. إيقاف البيئة المحلية
+## 9. إيقاف البيئة المحلية
 
 أوقف API والويب بـ`Ctrl+C` في نافذتيهما، ثم:
 
@@ -137,4 +151,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: multi-tenancy منفذ، auth/users، Academy أو Player أو Subscription tables، شاشات أعمال، بيانات demo، دفع/SMS، نشر أو إعداد production.
+لا يوجد حتى الآن: Player/GuardianPlayerLink أو Branch/Sport/Group، Subscription/Attendance/Evaluation/Finance أو بقية وحدات الأعمال، SMS إنتاجي، native auth، دفع، نشر أو إثبات production-readiness.

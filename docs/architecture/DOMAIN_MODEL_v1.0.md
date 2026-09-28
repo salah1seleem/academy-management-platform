@@ -1,6 +1,8 @@
 # Domain Model v1.0
 
-**الحالة: PROPOSED — مفاهيمي فقط؛ لا SQL ولا migrations.**
+**الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
+
+**ملاحظة تنفيذ Slice 1:** تحقق فعليًا فقط `Academy`, `ApplicationUser`, `AcademyMembership`, `UserSession`, و`GuardianOtpChallenge`/Identity claims. كل الكيانات التجارية الظاهرة أدناه ما زالت مفاهيم مستقبلية ولم تُنشأ جداولها.
 
 ## العلاقات الأساسية
 

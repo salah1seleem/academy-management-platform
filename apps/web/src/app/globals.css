@@ -147,6 +147,61 @@ footer {
   font-size: 0.8rem;
 }
 
+.center-shell {
+  display: grid;
+  min-height: 100svh;
+  padding: 1rem;
+  place-items: center;
+}
+
+.login-card,
+.authenticated-card {
+  width: min(100%, 34rem);
+  padding: clamp(1.25rem, 5vw, 2.5rem);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.4rem;
+  box-shadow: 0 1.2rem 3rem rgb(15 64 60 / 10%);
+}
+
+.login-card h1,
+.authenticated-card h1 {
+  font-size: clamp(1.8rem, 7vw, 3rem);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  margin-block: 1.5rem;
+  padding: 0.3rem;
+  background: var(--background);
+  border-radius: 0.8rem;
+}
+
+.tabs button {
+  padding: 0.65rem;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0.6rem;
+  cursor: pointer;
+}
+
+.tabs button.active { color: var(--text); background: white; box-shadow: 0 0.15rem 0.6rem rgb(15 64 60 / 8%); }
+.field { display: grid; gap: 0.45rem; margin-block: 1rem; color: var(--muted); font-size: 0.9rem; font-weight: 700; }
+.field input, .field select { width: 100%; padding: 0.85rem; color: var(--text); background: white; border: 1px solid var(--border); border-radius: 0.7rem; }
+.primary-button, .secondary-button { width: 100%; padding: 0.85rem 1rem; border-radius: 0.7rem; font-weight: 800; cursor: pointer; }
+.primary-button { color: white; background: var(--primary); border: 1px solid var(--primary); }
+.secondary-button { color: var(--primary); background: white; border: 1px solid var(--primary); }
+.primary-button:disabled { opacity: 0.6; cursor: wait; }
+.demo-note { padding: 0.75rem; color: var(--warning); background: var(--warning-soft); border-radius: 0.7rem; font-size: 0.85rem; }
+.error-message { color: #a51414; font-size: 0.9rem; }
+.identity-summary { display: grid; gap: 0.75rem; margin-block: 1.5rem; }
+.identity-summary div { padding: 0.9rem; background: var(--background); border-radius: 0.8rem; }
+.identity-summary dt { color: var(--muted); font-size: 0.8rem; }
+.identity-summary dd { margin: 0.3rem 0 0; font-weight: 800; }
+
 @media (min-width: 40rem) {
   .page-shell {
     padding-block-start: 5rem;
