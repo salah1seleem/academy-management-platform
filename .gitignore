@@ -1,0 +1,39 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+
+# Node
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+*.pfx
+*.key
+secrets/
+
+# Local-only data and sensitive artifacts
+reference-archives/
+local-uploads/
+uploads/
+dumps/
+*.dump
+*.sql.gz
+
+# Logs / temporary files
+*.log
+tmp/
