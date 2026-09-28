@@ -16,6 +16,9 @@ public static class AcademyPermissions
     public const string GuardianOwnRenewal = "renewal.guardian.own";
     public const string PaymentRead = "payment.read";
     public const string CollectionRead = "collection.read";
+    public const string AttendanceRead = "attendance.read";
+    public const string AttendanceManage = "attendance.manage";
+    public const string GuardianAttendanceRead = "attendance.guardian.read";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
@@ -41,6 +44,9 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
             AcademyPermissions.GuardianOwnRenewal => membership.Role == AcademyRole.Guardian,
             AcademyPermissions.PaymentRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.CollectionRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.AttendanceRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
+            AcademyPermissions.AttendanceManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
+            AcademyPermissions.GuardianAttendanceRead => membership.Role == AcademyRole.Guardian,
             _ => false
         };
         if (allowed) context.Succeed(requirement);

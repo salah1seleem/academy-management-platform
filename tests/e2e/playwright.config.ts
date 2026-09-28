@@ -7,6 +7,7 @@ const localConnectionFallback = process.env.ConnectionStrings__Default
 export default defineConfig({
   testDir: "./specs",
   fullyParallel: false,
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: "line",
   use: {

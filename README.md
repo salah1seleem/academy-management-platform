@@ -1,6 +1,6 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 3: الاشتراكات والتجديد والدفع الإلكتروني التجريبي والتحصيل**؛ الحضور والتقييم والمحتوى ما زالت خارج النطاق.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 4: جلسات التدريب والحضور واستهلاك رصيد الحصص**؛ التقييم والمحتوى ما زالا خارج النطاق.
 
 ## ما الموجود الآن؟
 
@@ -12,6 +12,7 @@
 - فروع ورياضات وفئات ومجموعات وجداول أسبوعية وإسناد مدرب، مع Player مستقل عن `SportEnrollment` وروابط وصاية صريحة.
 - Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
 - باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر لنفس أبنائه أو لمستفيد آخر عبر كود آمن وOnline-first، مع `PaymentRequest` وevents وتحصيل وإيصال ذريين idempotent.
+- `TrainingSession` فعلية مولّدة دون تكرار من الجدول الأسبوعي أو منشأة يدويًا، وحضور لاعبين وجهاز فني منفصلان. `Present` يخصم حصة واحدة فقط من `Sessions/Combined` المؤهل، والتصحيح يعيدها بحركات audit append-only.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
 
@@ -68,7 +69,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `SecureBeneficiaryRenewalReference` بعد `Slice3SubscriptionsPayments`. تضيف جدول أكواد تجديد المستفيدين المشفّرة والـtenant-scoped؛ لا تضيف Attendance أو Evaluation أو وحدات المحتوى.
+آخر migration هي `20260928205223_Slice4TrainingSessionsAttendance`. تضيف `TrainingSessions`, `PlayerAttendances`, `StaffAttendances`, و`SubscriptionSessionMovements` وقيود عدم التكرار/الرصيد غير السالب؛ لا تضيف Evaluation أو وحدات المحتوى.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -116,7 +117,7 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. الإداري يرى وحدة «الاشتراكات» وقوائم الدفع والتحصيل. ولي الأمر `01000000001` مع OTP التجريبي يستطيع تجديد اشتراك طفل مرتبط، أو اختيار «تجديد اشتراك لغيره» واستخدام الكود الموثق في ملف Demo، ثم يدخل Test Payment Gateway لمحاكاة نجاح/فشل/إلغاء؛ لا توجد أموال حقيقية. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
+افتح `http://127.0.0.1:3000/login`. الإداري يرى وحدة «الحضور». افتح حصة كرة القدم بتاريخ العرض `2026-09-28`: «عمر أحمد حسن» يبدأ برصيد 5؛ اختر «حاضر» فيصبح 4، وإعادة الحفظ لا تخصم ثانية، ثم «غائب» يعيده إلى 5. «عمر أحمد محمود» `Duration` فلا يتغير له رصيد. المدرب يرى مجموعته ويسجل حضوره، وولي الأمر يرى حضور طفله فقط. رحلات الدفع التجريبي السابقة ما زالت تعمل؛ لا أموال أو SMS حقيقية. الجلسة `HttpOnly` ولا tokens في `localStorage`.
 
 ## 8. تشغيل الاختبارات
 
@@ -157,4 +158,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: Attendance/Evaluation/Nutrition/Product/Medical/Gallery/advanced Reports، TrainingSession فعلية، خصومات/تجميد/إلغاء مكتمل، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.
+لا يوجد حتى الآن: Evaluation/Nutrition/Product/Medical/Gallery/advanced Reports، تصدير حضور، rescheduling متقدم، خصومات/تجميد/إلغاء اشتراك مكتمل، provider دفع أو SMS إنتاجي، native auth، نشر أو إثات production-readiness.

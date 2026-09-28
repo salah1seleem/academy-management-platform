@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 3:** تحققت كيانات Slice 2، وأضيفت فعليًا `SubscriptionPlan`, `SubscriptionPeriod`, `RenewalRequest`, `PaymentRequest`, `PaymentProviderEvent`, `Collection`, و`Receipt` ثم `BeneficiaryRenewalReference`. العلاقات المركبة تحمل `AcademyId` وتربط الخطة والتسجيل بالرياضة نفسها. كيانات الحضور والتقييم والمحتوى أدناه ما زالت مستقبلية.
+**ملاحظة تنفيذ Slice 4:** تحققت كيانات Slice 0–3، وأضيفت فعليًا `TrainingSession`, `PlayerAttendance`, `StaffAttendance`, و`SubscriptionSessionMovement`. العلاقات المركبة تحمل `AcademyId` وتثبت تطابق session/group/enrollment/staff assignment داخل الأكاديمية. التقييم والمحتوى مستقبليان.
 
 ## العلاقات الأساسية
 
@@ -32,9 +32,12 @@ erDiagram
   PaymentRequest ||--o| Collection : confirms
   Collection ||--|| Receipt : issues
   SubscriptionPeriod ||--o{ SubscriptionAdjustment : changes
-  TrainingSession ||--o{ Attendance : records
-  SportEnrollment ||--o{ Attendance : trainee
-  AcademyMembership ||--o{ Attendance : staff
+  TrainingSession ||--o{ PlayerAttendance : records_players
+  SportEnrollment ||--o{ PlayerAttendance : trainee
+  TrainingSession ||--o{ StaffAttendance : records_staff
+  AcademyMembership ||--o{ StaffAttendance : staff
+  PlayerAttendance ||--o{ SubscriptionSessionMovement : causes
+  SubscriptionPeriod ||--o{ SubscriptionSessionMovement : adjusts
   Sport ||--o{ EvaluationCriterion : defines
   SportEnrollment ||--o{ PlayerEvaluation : receives
   PlayerEvaluation ||--o{ EvaluationScore : contains
@@ -50,7 +53,9 @@ erDiagram
 ## الملكية والثوابت
 
 - `Player` هوية الطفل داخل الأكاديمية؛ `SportEnrollment` هو ارتباطه برياضة/فرع/مجموعة. uniqueness يمنع تسجيلين active متطابقين وفق قاعدة تعتمد لاحقًا، ولا يمنع رياضتين. `GuardianPlayerLink` علاقة صريحة بحالة وصلاحيات، وليست استنتاجًا من الهاتف أو الدفع.
-- `TrainingGroup` يجمع الرياضة/الفرع/الفئة؛ `RecurringSchedule` قالب أسبوعي، و`TrainingSession` واقعة مؤرخة بحالة Scheduled/Held/Cancelled. `Attendance` unique على academy+session+subject-type+subject-id وحالته `NotRecorded|Present|Absent`؛ عدم السجل لا يتحول تلقائيًا إلى غياب.
+- `TrainingGroup` يجمع الرياضة/الفرع/الفئة؛ `RecurringSchedule` قالب أسبوعي، و`TrainingSession` واقعة مؤرخة بحالة `Scheduled|Held|Cancelled` ومصدر `RecurringSchedule|Manual`. FK مركب يثبت تطابق branch/sport مع المجموعة، وoccurrence فريد على academy+group+date+start.
+- `PlayerAttendance` فريد على academy+session+SportEnrollment، و`StaffAttendance` منفصل ولا يقبل إلا عضوًا مكلفًا بالمجموعة. كلاهما `NotRecorded|Present|Absent`؛ عدم السجل لا يعني غيابًا.
+- `SubscriptionSessionMovement` append-only لـ`AttendanceConsume(-1)` و`AttendanceRestore(+1)`، مرتبط بحضور وفترة محددين. `ConsumedSubscriptionPeriodId` يمثل الأثر الفعال، و`ReversesMovementId` الفريد يمنع استعادة الخصم مرتين. DB تمنع `RemainingSessions < 0`.
 - `SubscriptionPlan` نوعه `Duration|Sessions|Combined` ويحمل العملة/السعر والمدة أو الحصص المنطبقة. `SubscriptionPeriod` تاريخ محفوظ لا يُستبدل بالتجديد. `RenewalRequest` يحتفظ بالمُسدِّد في `RequestedByUserId` والمستفيد في `SportEnrollmentId`، وهو منفصل عن `Collection`; `Receipt` يعكس Collection مؤكدة فقط. `BeneficiaryRenewalReference` يرتبط بتسجيل واحد وأكاديمية واحدة، يخزن hash وتلميحًا فقط مع expiry/revocation، ولا يمثل تفويضًا لملف اللاعب. `SubscriptionAdjustment` append-only للتجميد/الأيام/الإلغاء/التصحيح مع السبب والمنفذ.
 - `PlayerEvaluation` مرتبط بالتسجيل والمدرب وreporting period وحالته `Draft|Published|Superseded`. score nullable من 0–100؛ null ليست صفرًا. criteria رياضية، ويمكن ربط criterion بمحور report اختياري ووزن لاحقًا.
 - `SportProduct` تجارة رياضية محتملة مستقلة. `NutritionItem` معلومات وصورة وحصة وقيم/source status وتصنيفات Breakfast/Lunch/Dinner؛ لا Money أو Rating أو Cart أو Order. `PlayerMedicalRecord` و`PlayerMedia` لهما visibility/publication policy منفصلة.
@@ -80,6 +85,13 @@ stateDiagram-v2
 وفق `OD-004/005` المعتمدين: `Duration` يتطلب أيامًا فقط، و`Sessions` حصصًا فقط، و`Combined` الاثنين. البداية والنهاية شموليتان؛ النهاية = البداية + الأيام - 1. التجديد المبكر يلي آخر نهاية، والمنتهي يبدأ من تاريخ التأكيد. الانتقال المالي الموثق `Pending -> Confirmed` وحده ينشئ `Collection/Receipt/SubscriptionPeriod` في transaction واحدة. unique constraints على provider event وPayment→Collection وCollection→Receipt/Period، مع idempotency key لطلب التجديد، تمنع الأثر المكرر. الفشل/الإلغاء لا ينشئ أثرًا ماليًا أو اشتراكًا.
 
 حالات `PaymentRequest`: الإنشاء الداخلي ينتج `Pending`، ومنها فقط يسمح `Confirmed|Failed|Cancelled|Expired`. كل الحالات الأربع نهائية لذلك الطلب. إعادة المحاولة بعد فشل/إلغاء/انتهاء تنشئ طلب تجديد ودفع جديدين؛ callback نجاح متأخر للطلب القديم يُحفظ كحدث متجاهل ولا ينشئ تحصيلًا أو إيصالًا أو فترة.
+
+## دورة الحضور ورصيد الحصص
+
+- يختار الخادم أقدم `SubscriptionPeriod` غير ملغاة/مجمدة، بدأت في أو قبل تاريخ الحصة وتغطيه، مع رصيد متاح لـ`Sessions/Combined` إن وجد. لا يقبل العميل period أو رصيدًا جديدًا.
+- `Present` في `Duration` يسجل الحقيقة فقط؛ في `Sessions/Combined` يخصم واحدًا داخل transaction بعد PostgreSQL advisory transaction lock. الحفظ المتكرر وطلبان متزامنان لا يخصمان مرتين.
+- الرصيد صفر لا يمنع حفظ `Present`، لكنه لا ينخفض ولا ينشئ دينًا/تحصيلًا ويعيد warning. `Absent/NotRecorded` لا يخصمان.
+- `Present -> Absent|NotRecorded` يعيد واحدًا فقط إذا أنشأ هذا الحضور خصمًا، وحركة restoration تشير للحركة الأصلية. العودة لحاضر تنشئ دورة خصم جديدة موثقة. الحصة الملغاة تمنع الإدخال، ولا تُلغى حصة بعد حضور فعلي قبل تصحيحه.
 
 ## التقييم والتقارير
 

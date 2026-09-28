@@ -27,7 +27,8 @@ export default function LoginPage() {
         body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
       });
       if (!response.ok) throw new Error("بيانات الدخول غير صحيحة.");
-      router.replace("/dashboard");
+      const me = await fetch("/api/v1/me").then(result => result.json()) as { role: string };
+      router.replace(me.role === "Coach" ? "/dashboard/attendance/sessions" : "/dashboard");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تسجيل الدخول."); setBusy(false); }
   }
 

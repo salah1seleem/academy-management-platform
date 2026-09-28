@@ -42,14 +42,14 @@ public static class Slice3DemoSeed
         await Reference(db, Guid.Parse("55000000-0000-0000-0000-000000000002"), academyBEnrollment, FutureAcademyRenewalCode, academyBOwner, now, ct);
     }
 
-    private static async Task Plan(FoundationDbContext db, Guid id, Guid academy, Guid sport, string name, SubscriptionPlanType type, decimal price, int? days, int? sessions, int order, DateTimeOffset now, CancellationToken ct)
+    internal static async Task Plan(FoundationDbContext db, Guid id, Guid academy, Guid sport, string name, SubscriptionPlanType type, decimal price, int? days, int? sessions, int order, DateTimeOffset now, CancellationToken ct)
     {
         if (await db.SubscriptionPlans.AnyAsync(x => x.Id == id, ct)) return;
         db.Add(new SubscriptionPlan { Id = id, AcademyId = academy, SportId = sport, ArabicName = name, PlanType = type, Price = price, Currency = "EGP", DurationDays = days, SessionCount = sessions, DisplayOrder = order, CreatedAtUtc = now, UpdatedAtUtc = now }); await db.SaveChangesAsync(ct);
     }
     private static Task<Academy.Infrastructure.People.SportEnrollment> Enrollment(FoundationDbContext db, Guid player, Guid sport, CancellationToken ct) => db.SportEnrollments.SingleAsync(x => x.PlayerId == player && x.SportId == sport, ct);
 
-    private static async Task Confirmed(FoundationDbContext db, Guid root, Academy.Infrastructure.People.SportEnrollment enrollment, Guid planId, Guid user, DateOnly start, DateOnly end, DateTimeOffset paid, DateTimeOffset now, CancellationToken ct)
+    internal static async Task Confirmed(FoundationDbContext db, Guid root, Academy.Infrastructure.People.SportEnrollment enrollment, Guid planId, Guid user, DateOnly start, DateOnly end, DateTimeOffset paid, DateTimeOffset now, CancellationToken ct)
     {
         var paymentId = Change(root, 1); if (await db.PaymentRequests.AnyAsync(x => x.Id == paymentId, ct)) return;
         var plan = await db.SubscriptionPlans.Include(x => x.Sport).SingleAsync(x => x.Id == planId, ct); var renewalId = Change(root, 2); var collectionId = Change(root, 3); var receiptId = Change(root, 4); var periodId = Change(root, 5);

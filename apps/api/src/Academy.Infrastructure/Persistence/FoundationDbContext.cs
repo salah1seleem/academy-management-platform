@@ -1,4 +1,5 @@
 using Academy.Infrastructure.Identity;
+using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Subscriptions;
@@ -34,6 +35,10 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<PaymentCollection> Collections => Set<PaymentCollection>();
     public DbSet<Receipt> Receipts => Set<Receipt>();
     public DbSet<BeneficiaryRenewalReference> BeneficiaryRenewalReferences => Set<BeneficiaryRenewalReference>();
+    public DbSet<TrainingSession> TrainingSessions => Set<TrainingSession>();
+    public DbSet<PlayerAttendance> PlayerAttendances => Set<PlayerAttendance>();
+    public DbSet<StaffAttendance> StaffAttendances => Set<StaffAttendance>();
+    public DbSet<SubscriptionSessionMovement> SubscriptionSessionMovements => Set<SubscriptionSessionMovement>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -140,7 +145,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
         ConfigureTenantEntity<StaffGroupAssignment>(builder, "StaffGroupAssignments");
         builder.Entity<StaffGroupAssignment>(entity =>
         {
-            entity.HasIndex(x => new { x.AcademyId, x.AcademyMembershipId, x.TrainingGroupId }).IsUnique();
+            entity.HasAlternateKey(x => new { x.AcademyId, x.AcademyMembershipId, x.TrainingGroupId });
             entity.HasOne(x => x.AcademyMembership).WithMany().HasForeignKey(x => new { x.AcademyId, x.AcademyMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.TrainingGroup).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });
@@ -181,6 +186,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.SportId, x.TrainingGroupId }).IsUnique();
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId });
             entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -222,6 +228,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.SubscriptionPlan).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Collection).WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionPeriods_RemainingSessions", "\"RemainingSessions\" IS NULL OR \"RemainingSessions\" >= 0"));
         });
 
         ConfigureTenantEntity<RenewalRequest>(builder, "RenewalRequests");
@@ -282,6 +289,59 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasIndex(x => new { x.AcademyId, x.CollectionId }).IsUnique();
             entity.HasIndex(x => new { x.AcademyId, x.ReceiptNumber }).IsUnique();
             entity.HasOne(x => x.Collection).WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<TrainingSession>(builder, "TrainingSessions");
+        builder.Entity<TrainingSession>(entity =>
+        {
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.Source).HasConversion<string>().HasMaxLength(24);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId });
+            entity.HasIndex(x => new { x.AcademyId, x.TrainingGroupId, x.SessionDate, x.StartTime }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.SessionDate, x.Status });
+            entity.HasOne(x => x.TrainingGroup).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId, x.BranchId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.BranchId, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AgeCategory).WithMany().HasForeignKey(x => new { x.AcademyId, x.AgeCategoryId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RecurringSchedule).WithMany().HasForeignKey(x => new { x.AcademyId, x.RecurringScheduleId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_TrainingSessions_Time", "\"StartTime\" < \"EndTime\""));
+        });
+
+        ConfigureTenantEntity<PlayerAttendance>(builder, "PlayerAttendances");
+        builder.Entity<PlayerAttendance>(entity =>
+        {
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasIndex(x => new { x.AcademyId, x.TrainingSessionId, x.SportEnrollmentId }).IsUnique();
+            entity.HasOne(x => x.TrainingSession).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingSessionId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ConsumedSubscriptionPeriod).WithMany().HasForeignKey(x => new { x.AcademyId, x.ConsumedSubscriptionPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<StaffAttendance>(builder, "StaffAttendances");
+        builder.Entity<StaffAttendance>(entity =>
+        {
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasIndex(x => new { x.AcademyId, x.TrainingSessionId, x.AcademyMembershipId }).IsUnique();
+            entity.HasOne(x => x.TrainingSession).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingSessionId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AcademyMembership).WithMany().HasForeignKey(x => new { x.AcademyId, x.AcademyMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<StaffGroupAssignment>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AcademyMembershipId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.AcademyMembershipId, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<SubscriptionSessionMovement>(builder, "SubscriptionSessionMovements");
+        builder.Entity<SubscriptionSessionMovement>(entity =>
+        {
+            entity.Property(x => x.MovementType).HasConversion<string>().HasMaxLength(24);
+            entity.Property(x => x.Reason).HasMaxLength(200);
+            entity.HasIndex(x => new { x.AcademyId, x.PlayerAttendanceId, x.OccurredAtUtc });
+            entity.HasIndex(x => new { x.AcademyId, x.ReversesMovementId }).IsUnique().HasFilter("\"ReversesMovementId\" IS NOT NULL");
+            entity.HasOne(x => x.SubscriptionPeriod).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PlayerAttendance).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerAttendanceId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReversesMovement).WithMany().HasForeignKey(x => new { x.AcademyId, x.ReversesMovementId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionSessionMovements_Quantity", "(\"MovementType\" = 'AttendanceConsume' AND \"Quantity\" = -1 AND \"BalanceAfter\" = \"BalanceBefore\" - 1) OR (\"MovementType\" = 'AttendanceRestore' AND \"Quantity\" = 1 AND \"BalanceAfter\" = \"BalanceBefore\" + 1)"));
+            entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionSessionMovements_Balance", "\"BalanceBefore\" >= 0 AND \"BalanceAfter\" >= 0"));
         });
     }
 

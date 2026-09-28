@@ -5,7 +5,7 @@ import GuardianPage from "./page";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+  global.fetch = vi.fn(() => new Promise<Response>(() => undefined));
 });
 
 describe("guardian subscription actions", () => {

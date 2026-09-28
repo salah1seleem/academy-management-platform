@@ -20,6 +20,11 @@ const modules: NavModule[] = [
     { label: "التحصيلات", href: "/dashboard/subscriptions/collections" }, { label: "الاشتراكات التي تنتهي قريباً", href: "/dashboard/subscriptions/expiring" },
     { label: "الاشتراكات المنتهية", href: "/dashboard/subscriptions/expired" },
   ] },
+  { id: "attendance", title: "الحضور", links: [
+    { label: "جلسات التدريب", href: "/dashboard/attendance/sessions" },
+    { label: "حضور المدربين", href: "/dashboard/attendance/staff" },
+    { label: "سجل الحضور", href: "/dashboard/attendance/history" },
+  ] },
 ];
 
 function currentModule(path: string) {
@@ -27,6 +32,7 @@ function currentModule(path: string) {
   if (path.startsWith("/dashboard/players")) return "players";
   if (path.startsWith("/dashboard/guardians")) return "guardians";
   if (path.startsWith("/dashboard/subscriptions")) return "subscriptions";
+  if (path.startsWith("/dashboard/attendance")) return "attendance";
   return "home";
 }
 
@@ -37,9 +43,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [navOverride, setNavOverride] = useState<{ path: string; id: string | null } | null>(null);
   const [name, setName] = useState("");
+  const [role, setRole] = useState("");
   const openModule = navOverride?.path === path ? navOverride.id : activeModule;
 
-  useEffect(() => { fetch("/api/v1/me").then(async response => { if (!response.ok) return router.replace("/login"); const me = await response.json() as { displayName: string; role: string }; if (!["AcademyOwner", "AcademyAdmin"].includes(me.role)) return router.replace(me.role === "Guardian" ? "/guardian" : "/"); setName(me.displayName); }); }, [router]);
+  useEffect(() => { fetch("/api/v1/me").then(async response => { if (!response.ok) return router.replace("/login"); const me = await response.json() as { displayName: string; role: string }; if (!["AcademyOwner", "AcademyAdmin", "Coach"].includes(me.role)) return router.replace(me.role === "Guardian" ? "/guardian" : "/"); setName(me.displayName); setRole(me.role); if (me.role === "Coach" && path === "/dashboard") router.replace("/dashboard/attendance/sessions"); }); }, [path, router]);
 
   function toggleModule(id: string) { setNavOverride({ path, id: openModule === id ? null : id }); }
   async function logout() { const csrf = await fetch("/api/v1/auth/csrf").then(response => response.json()) as { token: string }; await fetch("/api/v1/auth/logout", { method: "POST", headers: { "X-CSRF-TOKEN": csrf.token } }); router.replace("/login"); }
@@ -49,7 +56,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     {drawerOpen && <button className="nav-backdrop" aria-label="إغلاق القائمة" onClick={() => setDrawerOpen(false)} />}
     <aside className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي">
       <div className="brand">منصة الأكاديمية<small>{name}</small></div>
-      {modules.map(module => {
+      {modules.filter(module => role !== "Coach" || module.id === "attendance").map(module => {
         const isExpanded = openModule === module.id;
         return <section key={module.id} className={`nav-module ${activeModule === module.id ? "current" : ""}`}>
           <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span>{module.title}</span><span aria-hidden="true">{isExpanded ? "−" : "+"}</span></button>

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Academy.Api.Auth;
 using Academy.Api.Slice2;
 using Academy.Api.Slice3;
+using Academy.Api.Slice4;
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
@@ -65,7 +66,7 @@ builder.Services.AddAuthorization(options =>
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));
     options.AddPolicy(AcademyPermissions.StaffProvision, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.StaffProvision)));
-    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead })
+    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead, AcademyPermissions.AttendanceRead, AcademyPermissions.AttendanceManage, AcademyPermissions.GuardianAttendanceRead })
         options.AddPolicy(permission, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(permission)));
 });
 builder.Services.AddAntiforgery(options =>
@@ -81,6 +82,8 @@ builder.Services.AddScoped<CsrfFilter>();
 builder.Services.AddScoped<ISubscriptionClock, SubscriptionClock>();
 builder.Services.AddScoped<IPaymentGateway, InternalTestPaymentGateway>();
 builder.Services.AddScoped<PaymentProcessor>();
+builder.Services.AddScoped<AttendanceService>();
+builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddHealthChecks().AddDbContextCheck<FoundationDbContext>("postgresql", tags: ["ready"]);
 
 var app = builder.Build();
@@ -244,6 +247,7 @@ api.MapPost("/staff", async (CreateStaffRequest request, CurrentTenant tenant, U
 app.MapSlice2Endpoints();
 app.MapSlice2DashboardEndpoints();
 app.MapSlice3Endpoints();
+app.MapSlice4Endpoints();
 
 if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
 app.Run();
