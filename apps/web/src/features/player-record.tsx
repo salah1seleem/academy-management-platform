@@ -1,0 +1,24 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { csrfRequest } from "./dashboard-api";
+
+type Enrollment = { id: string; sportName: string; branchName: string; groupName: string; categoryName: string; status: string };
+type Player = { id: string; playerCode: string; arabicName: string; englishName?: string; dateOfBirth: string; gender?: number; heightCm?: number; weightKg?: number; preferredFoot?: number; footballPosition?: string; address?: string; isActive: boolean; enrollments: Enrollment[] };
+
+function usePlayer(id: string) { const [player, setPlayer] = useState<Player | null>(null); const [error, setError] = useState(""); useEffect(() => { fetch(`/api/v1/people/players/${id}`).then(async response => { if (!response.ok) throw new Error(); setPlayer(await response.json() as Player); }).catch(() => setError("تعذر تحميل اللاعب أو أنه خارج نطاق الأكاديمية.")); }, [id]); return { player, error, setError }; }
+
+export function PlayerDetails({ id }: { id: string }) {
+  const { player, error } = usePlayer(id);
+  return <><PageHeader title="ملف اللاعب" context="اللاعبون / عرض" action={{ label: "تعديل البيانات", href: `/dashboard/players/${id}/edit` }} />{error ? <ErrorState message={error} /> : !player ? <LoadingState /> : <section className="detail-card"><h2>{player.arabicName}</h2><dl className="detail-grid"><div><dt>كود اللاعب</dt><dd dir="ltr">{player.playerCode}</dd></div><div><dt>تاريخ الميلاد</dt><dd>{player.dateOfBirth}</dd></div><div><dt>الحالة</dt><dd>{player.isActive ? "فعال" : "متوقف"}</dd></div>{player.footballPosition && <div><dt>المركز</dt><dd>{player.footballPosition}</dd></div>}</dl><div className="linked-list"><h3>التسجيلات الرياضية الحالية</h3>{player.enrollments.length ? player.enrollments.map(enrollment => <article key={enrollment.id}><div><strong>{enrollment.sportName}</strong><small>{enrollment.branchName} · {enrollment.categoryName} · {enrollment.groupName}</small></div><span className="status-pill">{enrollment.status === "Active" ? "فعال" : enrollment.status}</span></article>) : <p>لا توجد تسجيلات رياضية.</p>}</div><Link className="back-link" href="/dashboard/players">العودة إلى قائمة اللاعبين</Link></section>}</>;
+}
+
+export function PlayerEdit({ id }: { id: string }) {
+  const router = useRouter(); const { player, error, setError } = usePlayer(id);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); try { await csrfRequest(`/api/v1/people/players/${id}`, "PUT", { arabicName: data.get("arabicName"), englishName: data.get("englishName"), dateOfBirth: data.get("dateOfBirth"), gender: Number(data.get("gender")) || null, heightCm: Number(data.get("heightCm")) || null, weightKg: Number(data.get("weightKg")) || null, preferredFoot: Number(data.get("preferredFoot")) || null, footballPosition: data.get("footballPosition"), address: data.get("address") }); router.push(`/dashboard/players/${id}`); } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر حفظ بيانات اللاعب."); } }
+  if (!player) return <><PageHeader title="تعديل اللاعب" context="اللاعبون / تعديل" />{error ? <ErrorState message={error} /> : <LoadingState />}</>;
+  return <><PageHeader title="تعديل بيانات اللاعب" context="اللاعبون / تعديل" /><form className="form-shell" onSubmit={event => void submit(event)}><label>الاسم بالعربية<input name="arabicName" defaultValue={player.arabicName} required /></label><label>الاسم بالإنجليزية<input name="englishName" dir="ltr" defaultValue={player.englishName ?? ""} /></label><label>تاريخ الميلاد<input name="dateOfBirth" type="date" defaultValue={player.dateOfBirth} required /></label><label>النوع<select name="gender" defaultValue={player.gender ?? ""}><option value="">غير محدد</option><option value="1">ذكر</option><option value="2">أنثى</option></select></label><label>الطول بالسنتيمتر<input name="heightCm" type="number" step="0.01" defaultValue={player.heightCm ?? ""} /></label><label>الوزن بالكيلوجرام<input name="weightKg" type="number" step="0.01" defaultValue={player.weightKg ?? ""} /></label><label>القدم المفضلة<select name="preferredFoot" defaultValue={player.preferredFoot ?? ""}><option value="">غير محدد</option><option value="1">اليمنى</option><option value="2">اليسرى</option><option value="3">كلتاهما</option></select></label><label>مركز كرة القدم<input name="footballPosition" defaultValue={player.footballPosition ?? ""} /></label><label>العنوان<input name="address" defaultValue={player.address ?? ""} /></label>{error && <ErrorState message={error} />}<div className="form-actions"><button className="primary-button">حفظ التعديلات</button><button type="button" onClick={() => router.back()}>إلغاء</button></div></form></>;
+}

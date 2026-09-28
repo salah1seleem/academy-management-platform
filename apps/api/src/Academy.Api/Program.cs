@@ -236,6 +236,7 @@ api.MapPost("/staff", async (CreateStaffRequest request, CurrentTenant tenant, U
 }).RequireAuthorization(AcademyPermissions.StaffProvision).AddEndpointFilter<CsrfFilter>();
 
 app.MapSlice2Endpoints();
+app.MapSlice2DashboardEndpoints();
 
 if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
 app.Run();

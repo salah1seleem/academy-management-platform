@@ -23,7 +23,7 @@ public static class Slice2Endpoints
             var branches = await db.Branches.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName }).ToListAsync();
             var sports = await db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName }).ToListAsync();
             var categories = await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName }).ToListAsync();
-            var groups = await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName)
+            var groups = await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive).OrderBy(x => x.ArabicName)
                 .Select(x => new { x.Id, x.ArabicName, x.BranchId, x.SportId, x.AgeCategoryId }).ToListAsync();
             var coaches = await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Role == AcademyRole.Coach && x.IsActive).OrderBy(x => x.User.DisplayName).Select(x => new { id = x.Id, arabicName = x.User.DisplayName }).ToListAsync();
             return Results.Ok(new { branches, sports, categories, groups, coaches });
@@ -69,7 +69,7 @@ public static class Slice2Endpoints
 
         var people = api.MapGroup("/people").RequireAuthorization(AcademyPermissions.PeopleManage);
         people.MapGet("/players", SearchPlayers);
-        people.MapGet("/guardians", async (CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.GuardianProfiles.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.DisplayName).Select(x => new { x.Id, x.DisplayName, x.ContactPhone }).ToListAsync()); });
+        people.MapGet("/guardians", async (string? search, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var normalizedPhone = EgyptPhoneNormalizer.Normalize(search); return Results.Ok(await db.GuardianProfiles.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && (string.IsNullOrWhiteSpace(search) || x.DisplayName.Contains(search.Trim()) || (normalizedPhone != null && x.ContactPhone == normalizedPhone))).OrderBy(x => x.DisplayName).Select(x => new { x.Id, x.DisplayName, x.ContactPhone }).ToListAsync()); });
         people.MapPost("/registrations", RegisterPlayer).AddEndpointFilter<CsrfFilter>();
 
         api.MapGet("/guardian/children", GuardianChildren).RequireAuthorization(AcademyPermissions.GuardianChildrenRead);
@@ -89,13 +89,13 @@ public static class Slice2Endpoints
     private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!;
-        var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
+        var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.ArabicName.Contains(search) || x.PlayerCode.Contains(search) || db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.Id && l.Guardian.ContactPhone == EgyptPhoneNormalizer.Normalize(search)));
         if (branchId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.BranchId == branchId));
         if (sportId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.SportId == sportId));
         if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroup.AgeCategoryId == ageCategoryId));
         if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroupId == groupId));
-        return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active) }).ToListAsync());
+        return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, x.IsActive, enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active) }).ToListAsync());
     }
 
     private static async Task<IResult> GuardianChildren(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
@@ -108,7 +108,7 @@ public static class Slice2Endpoints
     private static async Task<IResult> RegisterPlayer(RegistrationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; var actorId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var group = await db.TrainingGroups.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.GroupId && x.IsActive);
+        var group = await db.TrainingGroups.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.GroupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
         if (group is null || group.BranchId != request.BranchId || group.SportId != request.SportId) return Results.UnprocessableEntity(new { message = "المجموعة لا تطابق الفرع والرياضة المختارين." });
         await using var transaction = await db.Database.BeginTransactionAsync();
         Player player;

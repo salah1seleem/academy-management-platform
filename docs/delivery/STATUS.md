@@ -1,6 +1,16 @@
 # Status
 
-تاريخ التحديث: 2026-09-28. الفرع: `codex/04-slice2-structure-people`.
+تاريخ التحديث: 2026-09-28. الفرع: `codex/04b-slice2-dashboard-remediation`.
+
+## Slice 2 UX Remediation — منفذ فعليًا
+
+- تحولت القائمة الجانبية إلى accordion فعلي: الوحدة الحالية مفتوحة تلقائيًا، ويمكن فتح/غلق كل Module، مع active Sub-module واضح وdrawer صالح للمس على الموبايل.
+- البحث يعمل على البيانات المعروضة للفروع والرياضات والفئات والمجموعات والمدربين، ويظل بحث اللاعبين server-side. أضيف بحث أولياء الأمور server-side بالاسم أو رقم التواصل داخل نطاق `CurrentTenant`.
+- أزيلت أزرار `RowActions` الوهمية. الفروع/الرياضات/الفئات/المجموعات تدعم عرضًا وتعديلًا وتفعيلًا/إيقافًا مع dialog تأكيد واسم السجل، دون hard delete. إيقاف أصل هيكلي يحفظ العلاقات القديمة ويمنع ظهوره ومجموعاته التابعة في اختيارات تسجيل جديدة.
+- ملف اللاعب يعرض بياناته وتسجيلاته الرياضية الحالية، مع تعديل الحقول الأساسية وتفعيل/إيقاف يحفظ التسجيلات. ملف ولي الأمر يعرض الأطفال المرتبطين صراحةً ويتيح تعديل الاسم ورقم التواصل داخل الأكاديمية دون تغيير هوية/رقم دخول الحساب.
+- شاشة المدرب تعرض إسنادات المجموعات وتتيح إسناد مجموعة وإزالة/إعادة الإسناد. لا يظهر فعل «تعديل» غير حقيقي للمدرب.
+- كل endpoints الجديدة تستخدم سياسات Slice 1 و`CurrentTenant`، وDTOs محددة الحقول، وتعيد `404` عند محاولة الوصول إلى مورد أكاديمية أخرى.
+- لا توجد migrations جديدة؛ هذه معالجة تفاعل وعرض مع endpoints فوق نموذج Slice 2 المعتمد.
 
 ## Slice 2 — منفذ فعليًا
 
@@ -18,12 +28,12 @@
 
 - Release build: ناجح، 0 warnings / 0 errors.
 - migration طُبقت على PostgreSQL 17 محليًا، وفحصها أكد عدم وجود Subscription/Attendance/Evaluation/Nutrition/Product/Medical/Gallery tables.
-- integration tests: 32/32 (منها 18 اختبار Slice 2 تغطي البنود الـ16 المطلوبة وإعادة استخدام اللاعب/ولي الأمر عند إضافة رياضة، مع فصل Coach وGuardian authorization).
-- architecture/unit tests: 2/2؛ الإجمالي المحلي للـbackend هو 34/34.
-- frontend typecheck/lint: ناجحان؛ frontend tests 2/2.
+- integration tests: 39/39، ومنها 7 اختبارات remediation لتحديث same-tenant، ورفض cross-tenant، ومنع Coach/Guardian، وقراءة العلاقات، وحفظ علاقة المجموعة عند إيقاف الفرع.
+- architecture/unit tests: 2/2؛ الإجمالي المحلي للـbackend هو 41/41.
+- frontend typecheck/lint: ناجحان؛ frontend tests 5/5 وتغطي accordion/auto-expand/active state/mobile drawer/functional search/real actions/Create action.
 - production build: ناجح؛ routes الخاصة بالـdashboard/registration/guardian بُنيت.
-- mobile E2E: 3/3 على Mobile Chromium، ويشمل إنشاء Player/Guardian/Enrollment حقيقي ثم ظهوره في القائمة، ورؤية ولي الأمر للطفلين المرتبطين فقط.
-- `npm audit`: صفر vulnerabilities. Remote CI ينتظر دفع الفرع، لذلك لا تسجل هذه الوثيقة نتيجة غير منفذة مسبقًا.
+- mobile E2E: 4/4 على Mobile Chromium؛ أضيفت رحلة Admin تفتح وحدة الأكاديمية، تبحث عن فرع أُنشئ للاختبار، تعرضه وتعدله ثم توقفه وتعيد تفعيله.
+- `npm audit`: صفر vulnerabilities. Remote CI ينتظر دفع فرع remediation، لذلك لا تسجل هذه الوثيقة نتيجة غير منفذة مسبقًا.
 
 ## مراجعة الأمان المركزة
 
@@ -38,6 +48,8 @@
 
 لا SubscriptionPeriod أو plans/payment/collection، ولا TrainingSession فعلية أو Attendance، ولا Evaluation أو Nutrition/Product/Medical/Gallery/Reports. لا Parent Experience كاملة، ولا coach evaluations، ولا production SMS/media/deployment/tests. approved requirements لم تتغير و`main` لم يُمس.
 
+تعمدت المعالجة عدم دعم hard delete، أو إيقاف Guardian من واجهة الأكاديمية لما لذلك من أثر على الهوية والوصول، أو تعديل/إيقاف Coach membership؛ المتاح للمدرب هو إدارة إسنادات المجموعات فقط. كما يُرفض تغيير فرع/رياضة مجموعة لها تسجيلات قائمة حفاظًا على التاريخ.
+
 ## نقطة التوقف
 
-Slice 2 فقط؛ Slice 3 لا يبدأ دون تفويض جديد.
+Slice 2 مع UX remediation فقط؛ Slice 3 لا يبدأ دون تفويض جديد.
