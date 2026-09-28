@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: academy_test
+          POSTGRES_USER: academy
+          POSTGRES_PASSWORD: academy_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U academy -d academy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_test;Username=academy;Password=academy_ci_only
+      ACADEMY_TEST_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=academy_test;Username=academy;Password=academy_ci_only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - run: dotnet restore AcademyManagementPlatform.slnx
+      - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release
+      - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --no-build --configuration Release
+      - run: dotnet test AcademyManagementPlatform.slnx --no-build --configuration Release
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:web
+      - run: npm run build:web

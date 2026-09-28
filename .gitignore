@@ -11,6 +11,8 @@ node_modules/
 out/
 coverage/
 *.tsbuildinfo
+playwright-report/
+test-results/
 
 # Editors / OS
 .idea/

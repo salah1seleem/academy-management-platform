@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="أيقونة منصة إدارة الأكاديمية">
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <path d="M116 202 256 126l140 76-140 76-140-76Z" fill="#fff"/>
+  <path d="M164 246v84c0 34 41 62 92 62s92-28 92-62v-84l-92 50-92-50Z" fill="#dff5f1"/>
+  <circle cx="396" cy="280" r="18" fill="#f4c95d"/>
+</svg>

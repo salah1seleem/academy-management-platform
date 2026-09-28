@@ -1,6 +1,6 @@
 # Architecture v1.0
 
-**الحالة: PROPOSED — READY FOR OWNER REVIEW**  
+**الحالة: APPROVED FOR FOUNDATION IMPLEMENTATION — 2026-09-28**
 **النطاق:** مرشح تنفيذي، لا يثبت بناء التطبيق أو اعتماد القرارات المفتوحة.
 
 ## الاتجاه والـ stack
