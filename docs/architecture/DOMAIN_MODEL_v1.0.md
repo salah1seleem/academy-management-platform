@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 5:** تحققت كيانات Slice 0–4، وأضيفت فعليًا `EvaluationCriterion`, `PlayerEvaluation`, و`EvaluationScore`. العلاقات المركبة تحمل `AcademyId` وتثبت تطابق evaluation/enrollment/group/sport/criterion داخل الأكاديمية. وحدات المحتوى ما زالت مستقبلية.
+**ملاحظة تنفيذ Slice 6:** تحققت كيانات Slice 0–5، وأضيف فعليًا `NewEnrollmentRequest`. العلاقات المركبة تحمل `AcademyId` وتثبت تطابق الطلب مع اللاعب/الرياضة/الفرع والتسجيل الناتج. وحدات المحتوى ما زالت مستقبلية.
 
 ## العلاقات الأساسية
 
@@ -23,6 +23,11 @@ erDiagram
   Player ||--o{ SportEnrollment : enrolls
   Sport ||--o{ SportEnrollment : for
   TrainingGroup ||--o{ SportEnrollment : assigns
+  User ||--o{ NewEnrollmentRequest : submits
+  Player o|--o{ NewEnrollmentRequest : existing_child
+  Sport ||--o{ NewEnrollmentRequest : requests
+  Branch ||--o{ NewEnrollmentRequest : prefers
+  NewEnrollmentRequest o|--o| SportEnrollment : creates_after_approval
   SportEnrollment ||--o{ SubscriptionPeriod : has
   SubscriptionPlan ||--o{ SubscriptionPeriod : defines
   SportEnrollment ||--o{ RenewalRequest : requests
@@ -53,6 +58,8 @@ erDiagram
 ## الملكية والثوابت
 
 - `Player` هوية الطفل داخل الأكاديمية؛ `SportEnrollment` هو ارتباطه برياضة/فرع/مجموعة. uniqueness يمنع تسجيلين active متطابقين وفق قاعدة تعتمد لاحقًا، ولا يمنع رياضتين. `GuardianPlayerLink` علاقة صريحة بحالة وصلاحيات، وليست استنتاجًا من الهاتف أو الدفع.
+- `NewEnrollmentRequest` طلب tenant-scoped من Guardian موثق: إما `ExistingChildNewSport` مع `ExistingPlayerId` مرتبط صراحة، أو `NewChild` مع الاسم والميلاد فقط. يحمل الرياضة والفرع المفضل ولا يحمل مجموعة من ولي الأمر. حالاته `Pending|UnderReview|Approved|Rejected|Cancelled`، وله idempotency key فريد داخل academy+guardian. الطلب لا ينشئ `Player`, `GuardianPlayerLink`, `SportEnrollment`, `SubscriptionPeriod`, `PaymentRequest` أو `Collection` عند التقديم.
+- الاعتماد الإداري يتحقق من Academy/Sport/Branch/TrainingGroup ومن عدم التسجيل النشط المكرر، ثم ينشئ أو يعيد استخدام Player باختيار إداري صريح، وينشئ GuardianPlayerLink صريحة وتسجيلًا واحدًا داخل transaction. الهاتف أو تطابق الاسم لا ينشئان ربطًا. الطلب المعتمد يشير إلى Player والتسجيل الناتجين؛ الرفض يحفظ السجل وسببًا منفصلًا ظاهرًا لولي الأمر دون كشف `AdminNotes`.
 - `TrainingGroup` يجمع الرياضة/الفرع/الفئة؛ `RecurringSchedule` قالب أسبوعي، و`TrainingSession` واقعة مؤرخة بحالة `Scheduled|Held|Cancelled` ومصدر `RecurringSchedule|Manual`. FK مركب يثبت تطابق branch/sport مع المجموعة، وoccurrence فريد على academy+group+date+start.
 - `PlayerAttendance` فريد على academy+session+SportEnrollment، و`StaffAttendance` منفصل ولا يقبل إلا عضوًا مكلفًا بالمجموعة. كلاهما `NotRecorded|Present|Absent`؛ عدم السجل لا يعني غيابًا.
 - `SubscriptionSessionMovement` append-only لـ`AttendanceConsume(-1)` و`AttendanceRestore(+1)`، مرتبط بحضور وفترة محددين. `ConsumedSubscriptionPeriodId` يمثل الأثر الفعال، و`ReversesMovementId` الفريد يمنع استعادة الخصم مرتين. DB تمنع `RemainingSessions < 0`.
@@ -62,6 +69,20 @@ erDiagram
 - `SportProduct` تجارة رياضية محتملة مستقلة. `NutritionItem` معلومات وصورة وحصة وقيم/source status وتصنيفات Breakfast/Lunch/Dinner؛ لا Money أو Rating أو Cart أو Order. `PlayerMedicalRecord` و`PlayerMedia` لهما visibility/publication policy منفصلة.
 
 ## دورات الحالة
+
+```mermaid
+stateDiagram-v2
+  [*] --> Pending: NewEnrollmentRequest
+  Pending --> UnderReview
+  Pending --> Approved
+  UnderReview --> Approved
+  Pending --> Rejected
+  UnderReview --> Rejected
+  Pending --> Cancelled
+  Approved --> [*]
+  Rejected --> [*]
+  Cancelled --> [*]
+```
 
 ```mermaid
 stateDiagram-v2

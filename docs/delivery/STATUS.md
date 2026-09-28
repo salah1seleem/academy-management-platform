@@ -1,34 +1,39 @@
 # Status
 
-تاريخ التحديث: 2026-09-29. الفرع: `codex/07-slice5-evaluations`.
+تاريخ التحديث: 2026-09-29. الفرع: `codex/08-slice6-guardian-core`.
 
-## Slice 5 — منفذ فعليًا
+## Slice 6 — منفذ فعليًا
 
-- أضيفت `EvaluationCriteria`, `PlayerEvaluations`, و`EvaluationScores` tenant-scoped. العلاقات المركبة تثبت Academy/Sport/Enrollment/Group؛ unique يمنع criterion مكررًا في تقييم، وDB تقيد score إلى null أو 0–100 والوزن إلى أكبر من صفر.
-- Owner/Admin يديران معايير الرياضة وتفعيلها. المحور السداسي اختياري ومسموح لكرة القدم فقط. إيقاف معيار مستخدم يحفظ التاريخ؛ لا hard delete.
-- Owner/Admin يريان الأكاديمية، والمدرب يرى ويقيّم وينشر لاعبي مجموعاته المسندة فقط. Guardian يرى Published لطفله المرتبط فقط؛ Draft وموارد طفل/أكاديمية أخرى تعيد 404/403.
-- المسودة تحمل criteria الفعالة وتقبل null وnotes، والحفظ المتكرر يحدث نفس السجل. `xmin`/Version يكشف stale edit. النشر صريح ويتطلب درجة واحدة، ويسجل الناشر والوقت، وبعده يمنع التعديل المباشر. revision→supersede مؤجل ولا overwrite للتاريخ.
-- الاسم والوزن والمحور snapshots داخل الدرجة؛ تعديل criterion لاحقًا لا يغير التقرير المنشور. الحساب الخادمي فقط عبر `IEvaluationReportCalculator`: weighted average للدرجات المتاحة في كل محور، ومتوسط المحاور المتاحة للإجمالي، missing ≠ 0، وتقريب منزلة عشرية واحدة؛ completeness منفصلة. `OD-007` ما زال **PENDING / NOT APPROVED**.
-- واجهة عربية RTL وموبايل أولًا تضيف «التقييمات»: معايير التقييم، تقييمات اللاعبين، والتقارير المنشورة. نموذج الدرجات بطاقات لمس 0–100 بلا stars. تقرير كرة القدم يعرض اللاعب/المركز/الإجمالي، radar سداسي responsive مع قيم نصية accessible، العمر والطول والوزن والقدم وكل المعايير والملاحظات. لا pitch diagram ولا AI. السباحة تعرض تقريرًا تفصيليًا بلا radar كرة قدم.
-- migration forward-only: `20260928214148_Slice5PlayerEvaluations`. لم تتغير migrations السابقة.
-- Demo حتمي بتاريخ `2026-09-28`: 18 معيار كرة قدم عبر المحاور الستة، 7 معايير سباحة مستقلة، تقييمان كرة قدم منشوران للتاريخ، مسودة مخفية عن Guardian، تقييم سباحة منشور، وسجل أكاديمية ثانية للعزل. إعادة seed idempotent ومقصورة على `Demo`.
+- أصبحت واجهة ولي الأمر عربية RTL وموبايل أولًا: ترحيب وهوية الأكاديمية، وثلاثة إجراءات ثابتة هي «اشتراك جديد»، «تجديد الاشتراك»، و«تجديد اشتراك لغيره». أُعيد استخدام مساري التجديد والدفع الموجودين بلا تكرار لمنطق التحصيل.
+- الصفحة الرئيسية تجمع تسجيلات الرياضات في بطاقة واحدة لكل طفل، وتعرض سياق الرياضات مرة واحدة عبر الأطفال، مع حالة الاشتراك الفعلية: فعال، ينتهي قريبًا وفق نافذة الخادم الحالية (7 أيام)، منتهي، أو غير مفعل.
+- ملف الطفل يجمع التقييمات المنشورة فقط، جدول المجموعة والجلسات القادمة، سجل وملخص الحضور من السجلات المخزنة، والاشتراكات وروابط التجديد. لا تظهر Draft ولا بيانات طفل غير مرتبط.
+- أضيف `NewEnrollmentRequest` بحالات `Pending → UnderReview → Approved/Rejected` مع `Cancelled` محفوظة للمستقبل، وبيانات طفل قائم أو طفل جديد، ورياضة وفرع مفضل، وملاحظات منفصلة داخلية/مرئية، وروابط اللاعب والتسجيل الناتجين، والمراجع الزمنية والمراجع التدقيقية و`Version`.
+- ولي الأمر يرسل طلب إضافة رياضة لطفل مرتبط أو طلب طفل جديد بحد أدنى من البيانات، من دون اختيار مجموعة. الإنشاء لا ينشئ لاعبًا أو رابط وصاية أو تسجيلًا رياضيًا أو اشتراكًا أو تحصيلًا أو دفعًا.
+- منطقة «اللاعبون ← طلبات الاشتراك الجديدة» توفر البحث وفلاتر الحالة/الرياضة/الفرع/الفترة، بدء المراجعة، الرفض بسبب ظاهر منفصل، والاعتماد بعد اختيار مجموعة مطابقة. في طلب الطفل الجديد تظهر المطابقات الدقيقة للاسم وتاريخ الميلاد فقط، ولا يعاد استخدام لاعب إلا باختيار إداري صريح.
+- الاعتماد يعمل داخل معاملة `Serializable`: يتحقق من tenant والرياضة والفرع والمجموعة والرابط، ينشئ أو يعيد استخدام اللاعب صراحة، ينشئ `GuardianPlayerLink` صريحًا و`SportEnrollment` واحدًا، ثم يربط نتيجة الطلب؛ ولا ينشئ أي أثر مالي.
+- أضيفت صلاحيات `EnrollmentRequestRead`, `EnrollmentRequestManage`, و`GuardianEnrollmentRequestCreate`. Owner/Admin يديران الطلبات، Guardian ينشئ ويرى طلباته وموارد أطفاله المرتبطين فقط، وCoach محجوب عن الإدارة.
+- migration forward-only: `20260928221209_Slice6GuardianCore`، وتضيف جدول `NewEnrollmentRequests` فقط. لم تُعدّل migrations السابقة ولم تُنشأ جداول Nutrition/Products/Medical/Gallery/Matches/Messages.
+- بيانات Demo حتمية ومحددة النطاق تشمل Pending وApproved وRejected وطلب طفل جديد، وطلبًا مستقلًا لأكاديمية ثانية. إعادة seed idempotent ولا تمس بيانات Production.
 
-## مراجعة الأمن والتاريخ
+## مراجعة الأمن والاتساق
 
-- AcademyId لا يؤخذ من العميل؛ tenant من الجلسة. IDOR على evaluation/enrollment/criterion/player محجوب، والمدرب مقيد بـ`StaffGroupAssignment` وGuardian بـ`GuardianPlayerLink`.
-- الخادم يرفض cross-tenant/cross-sport criterion، score خارج الحدود، duplicate criterion، نشر بلا درجة، وتعديل Published أو stale Draft. العميل لا يرسل overall/axes/completeness كحقائق؛ الخادم يحسبها من snapshots.
-- لا تغيير في الاشتراكات أو التحصيل أو الحضور أو روابط الوصاية. Nutrition/Product/Medical/Gallery/Communications/AI Reports لم تبدأ.
+- `AcademyId` لا يؤخذ من العميل؛ tenant من الجلسة وتُثبت العلاقات المركبة اتساق Player/Sport/Branch/Enrollment. كل قراءة طفل تتطلب `GuardianPlayerLink` نشطًا، وكل قراءة طلب Guardian تقيد بالمستخدم الحالي.
+- تم اختبار child/request IDOR، عزل Academy B، تبديل player/sport/branch/group، منع Coach، فصل التعليق الداخلي عن سبب الرفض، وعدم استنتاج الوصاية من الهاتف.
+- مفتاح idempotency فريد لكل academy/guardian، والطلبات القائمة والتسجيل النشط محميان منطقيًا، وإعادة الاعتماد لا تنشئ تسجيلًا ثانيًا. DTOs محددة تمنع overposting، والاعتماد المتكرر آمن.
+- نموذج Player منفصل عن SportEnrollment؛ الطفل متعدد الرياضات لا يتكرر، وطلب الطفل القائم لا يكرر Player. Nutrition وSport Products وMedical وGallery وCommunications وAI Reports لم تبدأ.
+- `OD-006` ما زال **PENDING / NOT APPROVED**؛ الافتراضي القابل للعكس هو اختيار الطفل/الرياضة/الفرع ثم تعيين الإدارة للمجموعة. `OD-011` ما زال **PENDING / NOT APPROVED**؛ المعروض تدريب وجلسات فقط بلا Match entity.
 
 ## دليل التحقق الحالي
 
-- Release build: ناجح، 0 warnings / 0 errors. migration طُبقت على PostgreSQL 17 مؤقت، و`has-pending-model-changes` أكد تطابق النموذج.
-- اختبارات Slice 5 الحرجة: 25/25 PostgreSQL. المجموعة الكاملة: 128/128 (`126 integration + 1 unit + 1 architecture`) مع بقاء الدفع والحضور والعزل خضراء.
-- Frontend: typecheck وlint وproduction build ناجحة؛ UI tests هي 21/21، منها 11 لتجربة Slice 5 والقائمة؛ `npm audit` صفر vulnerabilities. Mobile Chromium E2E هي 15/15، منها ثلاث رحلات تقييم حقيقية للمدرب وولي الأمر والعزل. نتيجة remote CI تسجل بعد الدفع ولا تفترض مسبقًا.
+- `dotnet restore` وRelease build ناجحان: 0 warnings / 0 errors. migration مطبقة على PostgreSQL 17، وEF pending-model check أكد عدم وجود تغييرات غير مهاجرة.
+- Backend كامل: **156/156** (`154 integration + 1 unit + 1 architecture`)؛ منها **28/28** اختبار PostgreSQL مخصصًا لـSlice 6، مع بقاء auth/tenancy/payments/attendance/evaluations خضراء.
+- Frontend: typecheck وlint وproduction build (30 صفحة) ناجحة؛ **34/34** UI tests، و`npm audit` = 0 vulnerabilities.
+- Mobile Chromium E2E: **19/19** تشمل كل الرحلات السابقة وأربع رحلات Guardian/Admin حقيقية لـSlice 6. نتيجة GitHub Actions تسجل بعد الدفع ولا تفترض مسبقًا.
 
 ## مؤجل صراحة
 
-اعتماد معادلة `OD-007`، revision/supersede UI، مقارنة الفترات/الاتجاه/الألوان، template رسومي للسباحة، Nutrition، Sport Products، Medical، Gallery، Communications، advanced BI، attendance exports، provider دفع/SMS حقيقيان، والنشر الإنتاجي. لا production-readiness claim.
+Nutrition، Sport Products، Medical، Gallery/media، Slice 7، communications/messages، Match entity، مزود دفع أو SMS حقيقي، Apple Pay، advanced reports، والنشر الإنتاجي. لا production-readiness claim.
 
 ## نقطة التوقف
 
-تتوقف المهمة عند Slice 5. لا يبدأ Slice 6، و`main` لا يُدمج أو يُعدل ضمن هذه المهمة.
+تتوقف المهمة عند Slice 6. لا يبدأ Slice 7، و`main` لا يُدمج أو يُعدل ضمن هذه المهمة.

@@ -5,6 +5,7 @@ using Academy.Api.Slice2;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
 using Academy.Api.Slice5;
+using Academy.Api.Slice6;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -73,6 +74,7 @@ public static class DemoSeed
         await Slice3DemoSeed.SeedAsync(db, guardian.Id, now, cancellationToken);
         await Slice4DemoSeed.SeedAsync(db, owner.Id, coach.Id, futureOwner.Id, now, cancellationToken);
         await Slice5DemoSeed.SeedAsync(db, owner.Id, coach.Id, futureOwner.Id, now, cancellationToken);
+        await Slice6DemoSeed.SeedAsync(db, guardian.Id, admin.Id, now, cancellationToken);
     }
 
     private static async Task UpsertAcademy(FoundationDbContext db, Infrastructure.Tenancy.Academy academy, CancellationToken ct)

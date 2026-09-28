@@ -12,7 +12,7 @@ const modules: NavModule[] = [
     { label: "الفئات العمرية", href: "/dashboard/academy/categories" }, { label: "المجموعات", href: "/dashboard/academy/groups" },
     { label: "المدربون", href: "/dashboard/academy/coaches" },
   ] },
-  { id: "players", title: "اللاعبون", links: [{ label: "قائمة اللاعبين", href: "/dashboard/players" }, { label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }] },
+  { id: "players", title: "اللاعبون", links: [{ label: "قائمة اللاعبين", href: "/dashboard/players" }, { label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }, { label: "طلبات الاشتراك الجديدة", href: "/dashboard/enrollment-requests" }] },
   { id: "guardians", title: "أولياء الأمور", links: [{ label: "قائمة أولياء الأمور", href: "/dashboard/guardians" }] },
   { id: "subscriptions", title: "الاشتراكات", links: [
     { label: "الباقات", href: "/dashboard/subscriptions/plans" }, { label: "الاشتراكات الحالية", href: "/dashboard/subscriptions/current" },
@@ -34,7 +34,7 @@ const modules: NavModule[] = [
 
 function currentModule(path: string) {
   if (path.startsWith("/dashboard/academy/")) return "academy";
-  if (path.startsWith("/dashboard/players")) return "players";
+  if (path.startsWith("/dashboard/players") || path.startsWith("/dashboard/enrollment-requests")) return "players";
   if (path.startsWith("/dashboard/guardians")) return "guardians";
   if (path.startsWith("/dashboard/subscriptions")) return "subscriptions";
   if (path.startsWith("/dashboard/attendance")) return "attendance";

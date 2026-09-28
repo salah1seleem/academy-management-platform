@@ -4,13 +4,13 @@ async function guardianLogin(page: Page) {
   await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click();
   await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click();
   await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click();
-  await expect(page.getByRole("heading", { name: "الأبناء المرتبطون" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();
 }
 
 async function startFootballRenewal(page: Page) {
-  const child = page.locator("article").filter({ hasText: "عمر أحمد محمود" });
-  const row = child.locator(".sport-subscription").filter({ hasText: "كرة القدم" });
-  await row.getByRole("link", { name: "تجديد الاشتراك" }).click();
+  const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
+  const row = child.locator(".subscription-mini p").filter({ hasText: "كرة القدم" });
+  await row.getByRole("link").click();
   await page.getByText("اشتراك شهري", { exact: true }).click();
   await page.getByRole("button", { name: /الدفع الإلكتروني — ادفع الآن/ }).click();
   await expect(page.getByText("بيئة دفع تجريبية — لا توجد أموال حقيقية")).toBeVisible();
@@ -47,7 +47,7 @@ test("Guardian renews for another player without gaining profile access", async 
   await expect(page.getByText("إيصال تحصيل", { exact: true })).toBeVisible();
   await expect(page.getByText("عمر أحمد حسن")).toBeVisible();
   await page.goto("/guardian");
-  await expect(page.getByRole("heading", { name: "الأبناء المرتبطون" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();
   await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
 });
 

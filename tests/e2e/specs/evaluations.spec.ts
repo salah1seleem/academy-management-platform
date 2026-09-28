@@ -16,7 +16,7 @@ test("Coach creates, saves and publishes an assigned player's evaluation", async
 });
 
 test("Guardian sees published football report and never sees Draft", async ({ page }) => {
-  await guardianLogin(page); const child = page.locator("article").filter({ hasText: "عمر أحمد محمود" }).first(); await expect(child.getByRole("heading", { name: "تقرير اللاعب" })).toBeVisible(); await expect(child).not.toContainText("مسودة"); await child.getByRole("link", { name: /عرض التقرير/ }).first().click();
+  await guardianLogin(page); const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await expect(child).not.toContainText("مسودة"); await child.getByRole("link", { name: "عرض الملف" }).click(); await expect(page.getByRole("heading", { name: "تقرير اللاعب" })).toBeVisible(); await page.getByRole("link", { name: /عرض التقرير/ }).first().click();
   await expect(page.getByText("جناح أيمن")).toBeVisible(); await expect(page.getByText("التقييم الإجمالي")).toBeVisible(); await expect(page.getByRole("img", { name: "مخطط محاور أداء كرة القدم" })).toBeVisible(); await expect(page.getByLabel("القيم النصية للمحاور")).toContainText("التمرير"); await expect(page.getByText("142 سم")).toBeVisible(); await expect(page.getByText("38 كجم")).toBeVisible(); await expect(page.getByText("اليمنى")).toBeVisible(); await expect(page.getByRole("heading", { name: "المعايير التفصيلية" })).toBeVisible(); await expect(page.getByText(/ملعب/)).toHaveCount(0);
 });
 

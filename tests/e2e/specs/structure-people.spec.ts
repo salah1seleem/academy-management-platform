@@ -32,8 +32,8 @@ test("Demo Guardian sees linked siblings and no unrelated child", async ({ page 
   await page.getByRole("button", { name: "طلب رمز تجريبي" }).click();
   await page.getByLabel("رمز التحقق").fill("246810");
   await page.getByRole("button", { name: "تحقق ودخول" }).click();
-  await expect(page.getByRole("heading", { name: "الأبناء المرتبطون" })).toBeVisible();
-  await expect(page.getByText("عمر أحمد محمود", { exact: true })).toBeVisible();
-  await expect(page.getByText("مريم أحمد محمود", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "عمر أحمد محمود" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "مريم أحمد محمود" })).toBeVisible();
   await expect(page.getByText("عمر أحمد حسن", { exact: true })).toHaveCount(0);
 });

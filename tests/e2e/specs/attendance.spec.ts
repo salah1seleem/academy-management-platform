@@ -46,5 +46,5 @@ test("Coach records own attendance and cannot open an unrelated group", async ({
 
 test("Guardian sees attendance for linked child only", async ({ page }) => {
   await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click(); await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click(); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click();
-  const child = page.locator("article").filter({ hasText: "عمر أحمد محمود" }); await expect(child.getByRole("heading", { name: "آخر الحضور" })).toBeVisible(); await expect(child).toContainText("حاضر"); await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
+  const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await child.getByRole("link", { name: "عرض الملف" }).click(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
 });

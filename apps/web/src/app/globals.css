@@ -200,6 +200,54 @@ footer {
 .guardian-report-shell { max-width: 70rem; }
 @media (min-width: 42rem) { .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .info-cards { grid-template-columns: repeat(4, 1fr); } .axis-values { grid-template-columns: repeat(3, 1fr); } .report-hero { grid-template-columns: auto 1fr auto; } .overall-score { grid-column: auto; display: grid; border: 0; padding: 0; } }
 
+.guardian-app { min-height: 100svh; padding: 0 0 5.3rem; background: linear-gradient(180deg, #0b514c 0, #0f766e 14rem, var(--background) 25rem); }
+.guardian-app-content { width: min(100% - 1.25rem, 60rem); margin-inline: auto; padding-block: 1.25rem 2rem; }
+.guardian-hero { min-height: 10.5rem; padding: 1rem .5rem; color: white; }
+.guardian-hero span, .guardian-page-header > span { color: #bfe8e2; font-weight: 700; }
+.guardian-hero h1 { margin: .45rem 0; font-size: clamp(1.75rem, 8vw, 2.8rem); }
+.guardian-hero p, .guardian-page-header p { margin: 0; color: #d8f3ef; line-height: 1.7; }
+.guardian-primary-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-block-end: 1rem; }
+.guardian-primary-actions a { display: grid; min-height: 6.2rem; padding: .75rem .45rem; place-items: center; align-content: center; gap: .4rem; color: var(--text); background: white; border: 1px solid rgb(255 255 255 / 55%); border-radius: 1rem; box-shadow: 0 .7rem 1.6rem rgb(9 67 62 / 13%); text-align: center; text-decoration: none; }
+.guardian-primary-actions b { display: grid; width: 2rem; height: 2rem; place-items: center; color: white; background: var(--primary); border-radius: 50%; font-size: 1.15rem; }
+.guardian-primary-actions span { font-size: .82rem; font-weight: 800; }
+.guardian-section, .profile-section { margin-block: .8rem; padding: 1rem; background: white; border: 1px solid var(--border); border-radius: 1.15rem; box-shadow: 0 .5rem 1.4rem rgb(15 64 60 / 6%); }
+.guardian-section-title { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-block-end: .8rem; }
+.guardian-section-title h2, .profile-section h2 { margin: 0; font-size: 1.1rem; }
+.guardian-section-title span { color: var(--muted); font-size: .78rem; }
+.guardian-child-grid { display: grid; gap: .8rem; }
+.guardian-child-card { padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; background: #fbfdfd; }
+.guardian-child-head { display: flex; align-items: center; gap: .8rem; }
+.guardian-child-head h3 { margin: 0 0 .2rem; }
+.guardian-child-head small { color: var(--muted); }
+.guardian-avatar { display: grid; flex: 0 0 3rem; width: 3rem; height: 3rem; place-items: center; color: white; background: linear-gradient(145deg, #178a80, #0b514c); border-radius: 50%; font-size: 1.25rem; font-weight: 900; }
+.guardian-avatar.large { width: 4.5rem; height: 4.5rem; font-size: 1.7rem; }
+.sport-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin-block: .7rem; }
+.sport-badges span { padding: .3rem .55rem; color: var(--primary); background: var(--primary-soft); border-radius: 999px; font-size: .76rem; font-weight: 800; }
+.subscription-mini { display: grid; gap: .4rem; padding-block: .5rem; border-block: 1px solid var(--border); }
+.subscription-mini p { display: grid; grid-template-columns: 1fr auto; gap: .25rem .5rem; margin: 0; align-items: center; }
+.subscription-mini a { grid-column: 1 / -1; color: var(--primary); font-size: .78rem; font-weight: 800; }
+.status-pill { display: inline-flex; width: fit-content; padding: .28rem .5rem; color: #385654; background: #edf3f2; border-radius: 999px; font-size: .72rem; font-weight: 800; }
+.status-pill.active, .status-pill.approved, .status-pill.present { color: #075a3d; background: #dff6e9; }
+.status-pill.expiring, .status-pill.pending, .status-pill.underreview { color: #7b4b00; background: #fff1c7; }
+.status-pill.expired, .status-pill.rejected, .status-pill.absent { color: #9a2525; background: #ffe4e4; }
+.guardian-card-cta, .profile-row a, .guardian-request-list a { display: inline-flex; justify-content: center; margin-block-start: .7rem; padding: .65rem .8rem; color: white; background: var(--primary); border-radius: .7rem; text-decoration: none; font-weight: 800; }
+.sport-context-grid { display: grid; gap: .55rem; }
+.sport-context-grid article { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .7rem; padding: .8rem; background: var(--background); border-radius: .8rem; }
+.sport-context-grid h3, .sport-context-grid p { margin: 0; }.sport-context-grid p { margin-block-start: .25rem; color: var(--muted); font-size: .78rem; }
+.sport-context-icon { color: var(--primary); }.sport-context-grid article > b { display: grid; width: 1.8rem; height: 1.8rem; place-items: center; background: white; border-radius: 50%; }
+.guardian-bottom-nav { position: fixed; z-index: 10; inset-inline: 0; inset-block-end: 0; display: grid; grid-template-columns: repeat(4, 1fr); min-height: 4.4rem; padding: .45rem max(.5rem, env(safe-area-inset-right)) calc(.45rem + env(safe-area-inset-bottom)); background: rgb(255 255 255 / 96%); border-block-start: 1px solid var(--border); box-shadow: 0 -.4rem 1.2rem rgb(15 64 60 / 8%); }
+.guardian-bottom-nav a { display: grid; place-items: center; color: var(--muted); text-decoration: none; font-size: .75rem; font-weight: 800; }
+.guardian-page-header { padding: 1rem; color: white; }.guardian-page-header h1 { margin: .45rem 0 .65rem; font-size: clamp(1.8rem, 9vw, 3rem); }.guardian-page-header .guardian-card-cta { background: white; color: var(--primary); }
+.back-link { display: inline-flex; padding: .5rem .7rem; color: white; text-decoration: none; font-weight: 800; }
+.request-kind-grid { display: grid; gap: .8rem; margin-block-start: 1rem; }.request-kind-grid button { display: grid; gap: .4rem; min-height: 7rem; padding: 1rem; color: var(--text); background: white; border: 1px solid var(--border); border-radius: 1rem; text-align: start; cursor: pointer; }.request-kind-grid span { color: var(--muted); }
+.guardian-form { display: grid; gap: .9rem; padding: 1rem; background: white; border-radius: 1rem; }.guardian-form label, .admin-request-actions label { display: grid; gap: .4rem; color: var(--muted); font-size: .85rem; font-weight: 800; }.guardian-form input, .guardian-form select, .guardian-form textarea, .admin-request-actions select, .admin-request-actions textarea { width: 100%; min-height: 2.9rem; padding: .75rem; color: var(--text); background: white; border: 1px solid var(--border); border-radius: .7rem; }.guardian-form textarea, .admin-request-actions textarea { min-height: 5rem; }.form-hint { margin: 0; padding: .7rem; color: var(--muted); background: var(--background); border-radius: .7rem; font-size: .8rem; line-height: 1.6; }
+.guardian-request-list { display: grid; gap: .7rem; }.guardian-request-list article { display: grid; grid-template-columns: 1fr auto; gap: .4rem .7rem; padding: 1rem; background: white; border: 1px solid var(--border); border-radius: 1rem; }.guardian-request-list h2, .guardian-request-list p { margin: 0; }.guardian-request-list small { color: var(--muted); }.guardian-request-list .request-reason, .guardian-request-list a { grid-column: 1 / -1; }.request-reason { padding: .6rem; color: #8c2525; background: #fff0f0; border-radius: .6rem; font-size: .85rem; }
+.child-profile-hero { display: flex; align-items: center; gap: 1rem; margin-block: .5rem 1rem; padding: 1.2rem; color: white; }.child-profile-hero h1 { margin: 0; font-size: clamp(1.7rem, 8vw, 2.7rem); }
+.profile-section { display: grid; gap: .65rem; }.profile-row { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: .75rem; background: var(--background); border-radius: .75rem; }.profile-row small { display: block; margin-block-start: .25rem; color: var(--muted); }.profile-row a { margin: 0; font-size: .78rem; }.schedule-card { padding: .8rem; background: var(--background); border-radius: .8rem; }.schedule-card h3, .schedule-card p { margin: 0 0 .3rem; }.schedule-card p, .schedule-card small { display: block; color: var(--muted); }.subscription-profile { align-items: flex-start; }
+.enrollment-request-detail dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem; }.enrollment-request-detail dl div { padding: .75rem; background: var(--background); border-radius: .7rem; }.enrollment-request-detail dt { color: var(--muted); font-size: .78rem; }.enrollment-request-detail dd { margin: .25rem 0 0; font-weight: 800; }.admin-request-actions { display: grid; gap: .8rem; margin-block-start: 1rem; }.danger-button { width: 100%; padding: .8rem; color: #9a2525; background: #fff0f0; border: 1px solid #eab9b9; border-radius: .7rem; font-weight: 800; cursor: pointer; }.danger-button:disabled { opacity: .5; }
+@media (min-width: 42rem) { .guardian-child-grid, .sport-context-grid, .request-kind-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .guardian-app { padding-block-start: 1rem; } }
+@media (max-width: 23rem) { .guardian-primary-actions { grid-template-columns: 1fr; } .guardian-bottom-nav { font-size: .68rem; } .profile-row { align-items: stretch; flex-direction: column; } }
+
 .center-shell {
   display: grid;
   min-height: 100svh;

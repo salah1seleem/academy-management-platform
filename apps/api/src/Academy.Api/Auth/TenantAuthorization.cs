@@ -23,6 +23,9 @@ public static class AcademyPermissions
     public const string EvaluationManage = "evaluation.manage";
     public const string EvaluationCriteriaManage = "evaluation.criteria.manage";
     public const string GuardianEvaluationRead = "evaluation.guardian.read";
+    public const string EnrollmentRequestRead = "enrollment.request.read";
+    public const string EnrollmentRequestManage = "enrollment.request.manage";
+    public const string GuardianEnrollmentRequestCreate = "enrollment.request.guardian.create";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
@@ -55,6 +58,9 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
             AcademyPermissions.EvaluationManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
             AcademyPermissions.EvaluationCriteriaManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.GuardianEvaluationRead => membership.Role == AcademyRole.Guardian,
+            AcademyPermissions.EnrollmentRequestRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.EnrollmentRequestManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.GuardianEnrollmentRequestCreate => membership.Role == AcademyRole.Guardian,
             _ => false
         };
         if (allowed) context.Succeed(requirement);

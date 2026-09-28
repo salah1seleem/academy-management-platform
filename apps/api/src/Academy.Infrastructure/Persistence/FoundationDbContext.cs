@@ -28,6 +28,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<Player> Players => Set<Player>();
     public DbSet<GuardianPlayerLink> GuardianPlayerLinks => Set<GuardianPlayerLink>();
     public DbSet<SportEnrollment> SportEnrollments => Set<SportEnrollment>();
+    public DbSet<NewEnrollmentRequest> NewEnrollmentRequests => Set<NewEnrollmentRequest>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
     public DbSet<RenewalRequest> RenewalRequests => Set<RenewalRequest>();
@@ -195,6 +196,33 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.TrainingGroup).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId, x.BranchId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.BranchId, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<NewEnrollmentRequest>(builder, "NewEnrollmentRequests");
+        builder.Entity<NewEnrollmentRequest>(entity =>
+        {
+            entity.Property(x => x.RequestType).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.NewChildArabicName).HasMaxLength(180);
+            entity.Property(x => x.Notes).HasMaxLength(600);
+            entity.Property(x => x.AdminNotes).HasMaxLength(600);
+            entity.Property(x => x.GuardianVisibleReason).HasMaxLength(400);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(x => new { x.AcademyId, x.RequestedByGuardianUserId, x.IdempotencyKey }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.Status, x.CreatedAtUtc });
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
+            entity.HasOne(x => x.RequestedByGuardianUser).WithMany().HasForeignKey(x => x.RequestedByGuardianUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ExistingPlayer).WithMany().HasForeignKey(x => new { x.AcademyId, x.ExistingPlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PreferredBranch).WithMany().HasForeignKey(x => new { x.AcademyId, x.PreferredBranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ApprovedPlayer).WithMany().HasForeignKey(x => new { x.AcademyId, x.ApprovedPlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedSportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.CreatedSportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReviewedByUser).WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_NewEnrollmentRequests_Shape", "(\"RequestType\" = 'ExistingChildNewSport' AND \"ExistingPlayerId\" IS NOT NULL AND \"NewChildArabicName\" IS NULL AND \"NewChildDateOfBirth\" IS NULL) OR (\"RequestType\" = 'NewChild' AND \"ExistingPlayerId\" IS NULL AND \"NewChildArabicName\" IS NOT NULL AND \"NewChildDateOfBirth\" IS NOT NULL)");
+                t.HasCheckConstraint("CK_NewEnrollmentRequests_Review", "(\"Status\" IN ('Pending', 'UnderReview') AND \"ReviewedAtUtc\" IS NULL AND \"ReviewedByUserId\" IS NULL) OR (\"Status\" IN ('Approved', 'Rejected', 'Cancelled'))");
+            });
         });
 
         ConfigureTenantEntity<SubscriptionPlan>(builder, "SubscriptionPlans");
