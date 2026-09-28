@@ -153,7 +153,6 @@ footer {
 .gateway-actions { display: grid; gap: .7rem; margin-block: 1rem; }
 .gateway-actions button:not(.primary-button) { padding: .8rem; background: white; border: 1px solid var(--border); border-radius: .7rem; cursor: pointer; }
 .metric { padding: 1rem; color: var(--primary); background: var(--primary-soft); border-radius: .8rem; font-weight: 800; }
-.child-subscriptions > article { display: block; }
 .child-subscriptions > article > strong { display: block; margin-block-end: .7rem; font-size: 1.05rem; }
 .sport-subscription { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-block: .65rem; border-block-start: 1px solid var(--border); }
 .sport-subscription small { display: block; margin-block-start: .25rem; }
@@ -164,6 +163,42 @@ footer {
 .beneficiary-confirmation { margin-block-start: 1.25rem; }
 .review-box { padding: .9rem; background: var(--primary-soft); border-radius: .75rem; line-height: 1.7; }
 @media (max-width: 36rem) { .guardian-actions { grid-template-columns: 1fr; } }
+
+.form-shell textarea, .field textarea, .score-card textarea { width: 100%; min-height: 5rem; padding: .8rem; resize: vertical; color: var(--text); background: white; border: 1px solid var(--border); border-radius: .7rem; }
+.check-field { display: flex !important; grid-template-columns: auto 1fr; align-items: center; }
+.check-field input { width: auto; }
+.evaluation-editor, .player-report { display: grid; gap: 1.2rem; }
+.report-meta { display: flex; flex-wrap: wrap; gap: .6rem; }
+.report-meta > * { padding: .55rem .7rem; color: var(--muted); background: white; border: 1px solid var(--border); border-radius: .6rem; }
+.score-grid { display: grid; grid-template-columns: 1fr; gap: .8rem; }
+.score-card { display: grid; gap: .65rem; padding: 1rem; background: white; border: 1px solid var(--border); border-radius: .9rem; }
+.score-card h3, .score-card p { margin: 0; }
+.score-card small { color: var(--primary); font-weight: 800; }
+.score-card label { display: grid; gap: .35rem; color: var(--muted); font-size: .85rem; font-weight: 700; }
+.score-card input { width: 100%; padding: .8rem; border: 1px solid var(--border); border-radius: .65rem; }
+.sticky-actions { position: sticky; z-index: 5; inset-block-end: .5rem; padding: .7rem; border: 1px solid var(--border); border-radius: .8rem; box-shadow: 0 .5rem 1.5rem rgb(15 64 60 / 12%); }
+.report-hero { display: grid; grid-template-columns: auto 1fr; gap: .9rem; align-items: center; padding: 1.2rem; color: white; background: linear-gradient(135deg, #123c3a, #0f766e); border-radius: 1.1rem; }
+.report-hero h2, .report-hero p { margin: 0; }
+.report-hero p { margin-block-start: .35rem; color: #d7f2ed; }
+.player-avatar { display: grid; width: 4rem; height: 4rem; place-items: center; object-fit: cover; background: rgb(255 255 255 / 15%); border-radius: 50%; font-size: 1.7rem; font-weight: 900; }
+.overall-score { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; padding-block-start: .8rem; border-block-start: 1px solid rgb(255 255 255 / 20%); }
+.overall-score b { font-size: 2.3rem; }
+.radar { width: min(100%, 28rem); margin: auto; padding: 1rem; background: white; border: 1px solid var(--border); border-radius: 1rem; }
+.radar svg { display: block; width: 100%; }
+.radar figcaption { color: var(--muted); text-align: center; font-size: .78rem; }
+.radar-ring, .radar-line { fill: none; stroke: #b8cfcc; stroke-width: 1; }
+.radar-value { fill: rgb(15 118 110 / 28%); stroke: var(--primary); stroke-width: 2.5; }
+.axis-values, .info-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: .65rem; }
+.axis-values div, .info-cards article { display: grid; gap: .25rem; padding: .8rem; background: white; border: 1px solid var(--border); border-radius: .75rem; }
+.axis-values span, .info-cards span { color: var(--muted); font-size: .8rem; }
+.neutral-summary, .completeness, .coach-notes { padding: 1rem; background: white; border: 1px solid var(--border); border-radius: .8rem; }
+.completeness { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
+.coach-notes h2 { margin-block-start: 0; }
+.guardian-evaluations { width: 100%; margin-block-start: 1rem; padding-block-start: .8rem; border-block-start: 1px solid var(--border); }
+.guardian-evaluations p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem; }
+.guardian-evaluations a { color: var(--primary); font-weight: 800; }
+.guardian-report-shell { max-width: 70rem; }
+@media (min-width: 42rem) { .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .info-cards { grid-template-columns: repeat(4, 1fr); } .axis-values { grid-template-columns: repeat(3, 1fr); } .report-hero { grid-template-columns: auto 1fr auto; } .overall-score { grid-column: auto; display: grid; border: 0; padding: 0; } }
 
 .center-shell {
   display: grid;
@@ -245,6 +280,7 @@ footer {
 .player-filters select { padding: .75rem; background: white; border: 1px solid var(--border); border-radius: .7rem; }
 .data-list { display: grid; gap: .65rem; margin-block-start: 1rem; }
 .data-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem; background: #fbfdfd; border: 1px solid var(--border); border-radius: .8rem; }
+.data-list.child-subscriptions > article { display: block; }
 .data-list small { display: block; margin-block-start: .3rem; color: var(--muted); }
 .row-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
 .row-actions button, .row-actions a, .small-link { padding: .48rem .62rem; color: var(--primary); background: white; border: 1px solid var(--border); border-radius: .5rem; text-decoration: none; cursor: pointer; }

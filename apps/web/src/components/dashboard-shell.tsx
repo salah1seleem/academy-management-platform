@@ -25,6 +25,11 @@ const modules: NavModule[] = [
     { label: "حضور المدربين", href: "/dashboard/attendance/staff" },
     { label: "سجل الحضور", href: "/dashboard/attendance/history" },
   ] },
+  { id: "evaluations", title: "التقييمات", links: [
+    { label: "معايير التقييم", href: "/dashboard/evaluations/criteria" },
+    { label: "تقييمات اللاعبين", href: "/dashboard/evaluations" },
+    { label: "التقارير المنشورة", href: "/dashboard/evaluations/reports" },
+  ] },
 ];
 
 function currentModule(path: string) {
@@ -33,6 +38,7 @@ function currentModule(path: string) {
   if (path.startsWith("/dashboard/guardians")) return "guardians";
   if (path.startsWith("/dashboard/subscriptions")) return "subscriptions";
   if (path.startsWith("/dashboard/attendance")) return "attendance";
+  if (path.startsWith("/dashboard/evaluations")) return "evaluations";
   return "home";
 }
 
@@ -56,11 +62,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     {drawerOpen && <button className="nav-backdrop" aria-label="إغلاق القائمة" onClick={() => setDrawerOpen(false)} />}
     <aside className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي">
       <div className="brand">منصة الأكاديمية<small>{name}</small></div>
-      {modules.filter(module => role !== "Coach" || module.id === "attendance").map(module => {
+      {modules.filter(module => role !== "Coach" || module.id === "attendance" || module.id === "evaluations").map(module => {
         const isExpanded = openModule === module.id;
         return <section key={module.id} className={`nav-module ${activeModule === module.id ? "current" : ""}`}>
           <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span>{module.title}</span><span aria-hidden="true">{isExpanded ? "−" : "+"}</span></button>
-          <div id={`nav-${module.id}`} className="submodule-list" hidden={!isExpanded}>{module.links.map(link => {
+          <div id={`nav-${module.id}`} className="submodule-list" hidden={!isExpanded}>{module.links.filter(link => role !== "Coach" || !link.href.includes("/criteria")).map(link => {
             const isActive = path === link.href;
             return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "active" : ""} href={link.href} key={link.href} onClick={() => setDrawerOpen(false)}>{link.label}</Link>;
           })}</div>

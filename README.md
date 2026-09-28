@@ -1,6 +1,6 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 4: جلسات التدريب والحضور واستهلاك رصيد الحصص**؛ التقييم والمحتوى ما زالا خارج النطاق.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 5: تقييمات اللاعبين والتقارير المنشورة**؛ وحدات المحتوى ما زالت خارج النطاق.
 
 ## ما الموجود الآن؟
 
@@ -13,6 +13,7 @@
 - Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
 - باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر لنفس أبنائه أو لمستفيد آخر عبر كود آمن وOnline-first، مع `PaymentRequest` وevents وتحصيل وإيصال ذريين idempotent.
 - `TrainingSession` فعلية مولّدة دون تكرار من الجدول الأسبوعي أو منشأة يدويًا، وحضور لاعبين وجهاز فني منفصلان. `Present` يخصم حصة واحدة فقط من `Sessions/Combined` المؤهل، والتصحيح يعيدها بحركات audit append-only.
+- معايير تقييم خاصة بالرياضة، مسودات ودرجات 0–100 ونشر immutable. تقرير كرة القدم يحسب ستة محاور من snapshots الخادم ويعرض radar وقيمًا نصية وتاريخًا لولي الأمر؛ السباحة لها criteria مستقلة بلا radar كرة قدم.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
 
@@ -69,7 +70,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `20260928205223_Slice4TrainingSessionsAttendance`. تضيف `TrainingSessions`, `PlayerAttendances`, `StaffAttendances`, و`SubscriptionSessionMovements` وقيود عدم التكرار/الرصيد غير السالب؛ لا تضيف Evaluation أو وحدات المحتوى.
+آخر migration هي `20260928214148_Slice5PlayerEvaluations`. تضيف `EvaluationCriteria`, `PlayerEvaluations`, و`EvaluationScores` مع قيود tenant/sport/group والتفرد و0–100؛ لا تضيف وحدات المحتوى.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -117,7 +118,7 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. الإداري يرى وحدة «الحضور». افتح حصة كرة القدم بتاريخ العرض `2026-09-28`: «عمر أحمد حسن» يبدأ برصيد 5؛ اختر «حاضر» فيصبح 4، وإعادة الحفظ لا تخصم ثانية، ثم «غائب» يعيده إلى 5. «عمر أحمد محمود» `Duration` فلا يتغير له رصيد. المدرب يرى مجموعته ويسجل حضوره، وولي الأمر يرى حضور طفله فقط. رحلات الدفع التجريبي السابقة ما زالت تعمل؛ لا أموال أو SMS حقيقية. الجلسة `HttpOnly` ولا tokens في `localStorage`.
+افتح `http://127.0.0.1:3000/login`. من حساب المدرب افتح «التقييمات ← تقييمات اللاعبين»، أنشئ مسودة للاعب «عمر أحمد محمود»، أدخل درجات 0–100 ثم احفظ وانشر. قبل النشر لا تظهر المسودة لولي الأمر؛ بعده يفتح ولي الأمر بطاقة عمر ثم «تقرير اللاعب» ليشاهد الإجمالي، المحاور الستة، القياسات، التفاصيل والتاريخ. يوجد أيضًا تقرير سباحة بلا مخطط كرة قدم. معادلة العرض default تقني و`OD-007` لم يعتمد بعد. رحلات الدفع والحضور السابقة باقية؛ لا أموال أو SMS حقيقية. الجلسة `HttpOnly` ولا tokens في `localStorage`.
 
 ## 8. تشغيل الاختبارات
 
@@ -158,4 +159,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: Evaluation/Nutrition/Product/Medical/Gallery/advanced Reports، تصدير حضور، rescheduling متقدم، خصومات/تجميد/إلغاء اشتراك مكتمل، provider دفع أو SMS إنتاجي، native auth، نشر أو إثات production-readiness.
+لا يوجد حتى الآن: Nutrition/Product/Medical/Gallery/Communications/AI Reports أو advanced BI، revision/supersede UI أو مقارنة فترات التقييم، تصدير حضور، rescheduling متقدم، خصومات/تجميد/إلغاء اشتراك مكتمل، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.

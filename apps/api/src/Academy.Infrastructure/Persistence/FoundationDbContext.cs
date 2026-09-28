@@ -1,5 +1,6 @@
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Subscriptions;
@@ -39,6 +40,9 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<PlayerAttendance> PlayerAttendances => Set<PlayerAttendance>();
     public DbSet<StaffAttendance> StaffAttendances => Set<StaffAttendance>();
     public DbSet<SubscriptionSessionMovement> SubscriptionSessionMovements => Set<SubscriptionSessionMovement>();
+    public DbSet<EvaluationCriterion> EvaluationCriteria => Set<EvaluationCriterion>();
+    public DbSet<PlayerEvaluation> PlayerEvaluations => Set<PlayerEvaluation>();
+    public DbSet<EvaluationScore> EvaluationScores => Set<EvaluationScore>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -342,6 +346,53 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasOne(x => x.ReversesMovement).WithMany().HasForeignKey(x => new { x.AcademyId, x.ReversesMovementId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionSessionMovements_Quantity", "(\"MovementType\" = 'AttendanceConsume' AND \"Quantity\" = -1 AND \"BalanceAfter\" = \"BalanceBefore\" - 1) OR (\"MovementType\" = 'AttendanceRestore' AND \"Quantity\" = 1 AND \"BalanceAfter\" = \"BalanceBefore\" + 1)"));
             entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionSessionMovements_Balance", "\"BalanceBefore\" >= 0 AND \"BalanceAfter\" >= 0"));
+        });
+
+        ConfigureTenantEntity<EvaluationCriterion>(builder, "EvaluationCriteria");
+        builder.Entity<EvaluationCriterion>(entity =>
+        {
+            entity.Property(x => x.ArabicName).HasMaxLength(160);
+            entity.Property(x => x.EnglishName).HasMaxLength(160);
+            entity.Property(x => x.Description).HasMaxLength(600);
+            entity.Property(x => x.Weight).HasPrecision(8, 3);
+            entity.Property(x => x.FootballAxis).HasConversion<string>().HasMaxLength(20);
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
+            entity.HasIndex(x => new { x.AcademyId, x.SportId, x.ArabicName }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.SportId, x.DisplayOrder });
+            entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_EvaluationCriteria_Weight", "\"Weight\" > 0"));
+        });
+
+        ConfigureTenantEntity<PlayerEvaluation>(builder, "PlayerEvaluations");
+        builder.Entity<PlayerEvaluation>(entity =>
+        {
+            entity.Property(x => x.ReportingPeriod).HasMaxLength(120);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.GeneralNotes).HasMaxLength(2000);
+            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
+            entity.HasIndex(x => new { x.AcademyId, x.SportEnrollmentId, x.EvaluationDate });
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SportEnrollment>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.TrainingGroup).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.EvaluatedByUser).WithMany().HasForeignKey(x => x.EvaluatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PublishedByUser).WithMany().HasForeignKey(x => x.PublishedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReplacesEvaluation).WithMany().HasForeignKey(x => new { x.AcademyId, x.ReplacesEvaluationId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_PlayerEvaluations_Status", "\"Status\" IN ('Draft','Published','Superseded')"));
+        });
+
+        ConfigureTenantEntity<EvaluationScore>(builder, "EvaluationScores");
+        builder.Entity<EvaluationScore>(entity =>
+        {
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.CriterionNameSnapshot).HasMaxLength(160);
+            entity.Property(x => x.WeightSnapshot).HasPrecision(8, 3);
+            entity.Property(x => x.FootballAxisSnapshot).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(x => new { x.AcademyId, x.PlayerEvaluationId, x.EvaluationCriterionId }).IsUnique();
+            entity.HasOne(x => x.PlayerEvaluation).WithMany(x => x.Scores).HasForeignKey(x => new { x.AcademyId, x.PlayerEvaluationId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.EvaluationCriterion).WithMany().HasForeignKey(x => new { x.AcademyId, x.EvaluationCriterionId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_EvaluationScores_Score", "\"Score\" IS NULL OR (\"Score\" >= 0 AND \"Score\" <= 100)"));
+            entity.ToTable(t => t.HasCheckConstraint("CK_EvaluationScores_WeightSnapshot", "\"WeightSnapshot\" > 0"));
         });
     }
 

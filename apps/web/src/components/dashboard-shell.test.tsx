@@ -48,4 +48,14 @@ describe("dashboard navigation governance", () => {
     expect(screen.getByRole("link", { name: "التحصيلات" })).toBeVisible();
     fireEvent.click(subscriptionModule); expect(subscriptionModule).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("shows the evaluation module with criteria, players and published reports", () => {
+    currentPath = "/dashboard/evaluations";
+    render(<DashboardShell><div>المحتوى</div></DashboardShell>);
+    const evaluationModule = screen.getByRole("button", { name: /التقييمات/ });
+    expect(evaluationModule).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "معايير التقييم" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "تقييمات اللاعبين" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "التقارير المنشورة" })).toBeVisible();
+  });
 });

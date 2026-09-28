@@ -1,40 +1,34 @@
 # Status
 
-تاريخ التحديث: 2026-09-29. الفرع: `codex/06-slice4-attendance`.
+تاريخ التحديث: 2026-09-29. الفرع: `codex/07-slice5-evaluations`.
 
-## Slice 4 — منفذ فعليًا
+## Slice 5 — منفذ فعليًا
 
-- أضيفت `TrainingSessions` كوقائع فعلية tenant-scoped بحالات `Scheduled/Held/Cancelled` ومصدر يدوي أو جدول متكرر. التوليد لنطاق أقصاه 31 يومًا، يتجاهل المجموعات/الجداول غير النشطة، ويعيد التشغيل بلا تكرار. الإنشاء اليدوي يتحقق من المجموعة والوقت والتكرار.
-- `PlayerAttendances` منفصل عن `StaffAttendances`. الحالات `NotRecorded/Present/Absent` صريحة، والـunique/FKs المركبة تمنع duplicate والحضور خارج المجموعة أو الأكاديمية. الحفظ batch وذري؛ معرف واحد غير صالح يرفض الدفعة كلها.
-- `Present` مع `Duration` لا يغير رصيدًا. مع `Sessions/Combined` يختار الخادم الفترة المؤهلة زمنيًا لنفس `SportEnrollment` ويخصم واحدًا. `Absent/NotRecorded` لا يخصمان. الرصيد صفر يحفظ الحضور مع warning، بلا رصيد سالب أو دين/تحصيل.
-- التصحيح `Present -> Absent|NotRecorded` يعيد فقط الخصم المرتبط بسجل الحضور. `SubscriptionSessionMovements` append-only يوثق before/after والمنفذ والسبب، ويربط restoration بـconsume الأصلية. العودة إلى حاضر تنشئ دورة audit جديدة.
-- transaction وPostgreSQL advisory transaction lock مع unique constraints يمنعان double-click/retry وتحديثين متزامنين من الخصم مرتين. `RemainingSessions` و`SubscriptionPeriodId` لا يأتيان من العميل.
-- المدرب يرى جلسات مجموعاته فقط ويسجل حضور اللاعبين وحضوره الشخصي؛ لا يصل لمجموعة أخرى أو Collections/Payments. Owner/Admin يديران كل جلسات الأكاديمية. ولي الأمر يرى `Present/Absent` لطفله المرتبط فقط، بلا ملاحظات داخلية أو حضور جهاز فني.
-- واجهة عربية RTL وموبايل أولًا تضيف وحدة «الحضور» بثلاثة sub-modules لتقليل التكرار: «جلسات التدريب» (ومنها حضور اللاعبين)، «حضور المدربين»، و«سجل الحضور». توجد list-first، بحث بالاسم/كود اللاعب، أزرار لمس، batch save، إنشاء يدوي، توليد، إنهاء/إلغاء آمن، وfeedback/loading/error/empty. لا QR/export/SMS وهمية.
-- API: `GET/POST /api/v1/attendance/sessions`, `POST /sessions/generate`, `PUT /sessions/{id}/status`, player/staff roster + batch save، `GET /attendance/history`، و`GET /guardian/children/{playerId}/attendance`.
-- migration forward-only: `20260928205223_Slice4TrainingSessionsAttendance`؛ تضيف الجداول الأربعة وقيود التطابق والتفرد والرصيد غير السالب. لم تتغير migrations السابقة.
-- Demo ثابت على `2026-09-28`: حصة أمس `Held` مع حاضر/غائب ومدرب حاضر، حصة اليوم وغدًا، حصة ملغاة، سباحة اليوم، وحصة للأكاديمية الثانية. «عمر أحمد حسن» له 5 حصص، «عمر أحمد محمود» Duration، والسباحة Combined. إعادة seed idempotent ومقصورة على `Demo`.
+- أضيفت `EvaluationCriteria`, `PlayerEvaluations`, و`EvaluationScores` tenant-scoped. العلاقات المركبة تثبت Academy/Sport/Enrollment/Group؛ unique يمنع criterion مكررًا في تقييم، وDB تقيد score إلى null أو 0–100 والوزن إلى أكبر من صفر.
+- Owner/Admin يديران معايير الرياضة وتفعيلها. المحور السداسي اختياري ومسموح لكرة القدم فقط. إيقاف معيار مستخدم يحفظ التاريخ؛ لا hard delete.
+- Owner/Admin يريان الأكاديمية، والمدرب يرى ويقيّم وينشر لاعبي مجموعاته المسندة فقط. Guardian يرى Published لطفله المرتبط فقط؛ Draft وموارد طفل/أكاديمية أخرى تعيد 404/403.
+- المسودة تحمل criteria الفعالة وتقبل null وnotes، والحفظ المتكرر يحدث نفس السجل. `xmin`/Version يكشف stale edit. النشر صريح ويتطلب درجة واحدة، ويسجل الناشر والوقت، وبعده يمنع التعديل المباشر. revision→supersede مؤجل ولا overwrite للتاريخ.
+- الاسم والوزن والمحور snapshots داخل الدرجة؛ تعديل criterion لاحقًا لا يغير التقرير المنشور. الحساب الخادمي فقط عبر `IEvaluationReportCalculator`: weighted average للدرجات المتاحة في كل محور، ومتوسط المحاور المتاحة للإجمالي، missing ≠ 0، وتقريب منزلة عشرية واحدة؛ completeness منفصلة. `OD-007` ما زال **PENDING / NOT APPROVED**.
+- واجهة عربية RTL وموبايل أولًا تضيف «التقييمات»: معايير التقييم، تقييمات اللاعبين، والتقارير المنشورة. نموذج الدرجات بطاقات لمس 0–100 بلا stars. تقرير كرة القدم يعرض اللاعب/المركز/الإجمالي، radar سداسي responsive مع قيم نصية accessible، العمر والطول والوزن والقدم وكل المعايير والملاحظات. لا pitch diagram ولا AI. السباحة تعرض تقريرًا تفصيليًا بلا radar كرة قدم.
+- migration forward-only: `20260928214148_Slice5PlayerEvaluations`. لم تتغير migrations السابقة.
+- Demo حتمي بتاريخ `2026-09-28`: 18 معيار كرة قدم عبر المحاور الستة، 7 معايير سباحة مستقلة، تقييمان كرة قدم منشوران للتاريخ، مسودة مخفية عن Guardian، تقييم سباحة منشور، وسجل أكاديمية ثانية للعزل. إعادة seed idempotent ومقصورة على `Demo`.
 
-## مراجعة أمن الحالة والمحاسبة
+## مراجعة الأمن والتاريخ
 
-- IDOR وAcademyId injection: كل query/relationship يحمل Academy من الخادم؛ الموارد غير المخولة تعيد 404/403.
-- group/session/enrollment tampering: composite FKs والتحقق الخدمي يثبتان المجموعة؛ المدرب مقيد بـ`StaffGroupAssignment`.
-- duplicate/concurrency/negative balance: unique indexes + transaction lock + check constraint؛ اختبار طلبي `Present` متزامنين أثبت خصمًا واحدًا.
-- restoration abuse: لا restore دون consume غير معكوس لنفس attendance/period، وفهرس `ReversesMovementId` يمنع العكس مرتين.
-- لا يقبل API رصيدًا جديدًا أو period من العميل، ولا يسمح بحضور حصة ملغاة. ولي الأمر لا يملك mutation ولا يرى لاعبًا غير مرتبط أو staff/internal notes.
+- AcademyId لا يؤخذ من العميل؛ tenant من الجلسة. IDOR على evaluation/enrollment/criterion/player محجوب، والمدرب مقيد بـ`StaffGroupAssignment` وGuardian بـ`GuardianPlayerLink`.
+- الخادم يرفض cross-tenant/cross-sport criterion، score خارج الحدود، duplicate criterion، نشر بلا درجة، وتعديل Published أو stale Draft. العميل لا يرسل overall/axes/completeness كحقائق؛ الخادم يحسبها من snapshots.
+- لا تغيير في الاشتراكات أو التحصيل أو الحضور أو روابط الوصاية. Nutrition/Product/Medical/Gallery/Communications/AI Reports لم تبدأ.
 
-## دليل التحقق
+## دليل التحقق الحالي
 
-- migration طُبقت على PostgreSQL 17، و`has-pending-model-changes` أكد تطابق النموذج.
-- اختبارات Slice 4 الحرجة: 27/27 PostgreSQL، وتشمل concurrency الحقيقي، التصحيح، zero balance، العزل والصلاحيات والـaudit.
-- Release build: ناجح، 0 warnings / 0 errors. backend: 103/103 (`101 integration + 1 unit + 1 architecture`)، واختبارات Slice 3 وrenew-for-another بقيت خضراء.
-- frontend: typecheck وlint وproduction build ناجحة، وUI tests هي 10/10. Mobile Chromium E2E هي 12/12، منها أربع رحلات حضور حقيقية للإداري/المدرب/ولي الأمر. `npm audit`: صفر vulnerabilities.
-- نتيجة remote CI تُسجل بعد الدفع ولا تُفترض مسبقًا.
+- Release build: ناجح، 0 warnings / 0 errors. migration طُبقت على PostgreSQL 17 مؤقت، و`has-pending-model-changes` أكد تطابق النموذج.
+- اختبارات Slice 5 الحرجة: 25/25 PostgreSQL. المجموعة الكاملة: 128/128 (`126 integration + 1 unit + 1 architecture`) مع بقاء الدفع والحضور والعزل خضراء.
+- Frontend: typecheck وlint وproduction build ناجحة؛ UI tests هي 21/21، منها 11 لتجربة Slice 5 والقائمة؛ `npm audit` صفر vulnerabilities. Mobile Chromium E2E هي 15/15، منها ثلاث رحلات تقييم حقيقية للمدرب وولي الأمر والعزل. نتيجة remote CI تسجل بعد الدفع ولا تفترض مسبقًا.
 
 ## مؤجل صراحة
 
-Evaluations/Slice 5، Nutrition، Sport Products، Medical، Gallery، advanced Reports وتصدير الحضور، rescheduling متقدم، QR، provider دفع/SMS حقيقيان، freeze/day adjustments/refunds، والنشر الإنتاجي. لا production-readiness claim.
+اعتماد معادلة `OD-007`، revision/supersede UI، مقارنة الفترات/الاتجاه/الألوان، template رسومي للسباحة، Nutrition، Sport Products، Medical، Gallery، Communications، advanced BI، attendance exports، provider دفع/SMS حقيقيان، والنشر الإنتاجي. لا production-readiness claim.
 
 ## نقطة التوقف
 
-تتوقف المهمة عند Slice 4. لا يبدأ Slice 5 دون تفويض مستقل، و`main` لا يُدمج أو يُعدل ضمن هذه المهمة.
+تتوقف المهمة عند Slice 5. لا يبدأ Slice 6، و`main` لا يُدمج أو يُعدل ضمن هذه المهمة.

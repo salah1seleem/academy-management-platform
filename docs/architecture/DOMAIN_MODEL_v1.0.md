@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 4:** تحققت كيانات Slice 0–3، وأضيفت فعليًا `TrainingSession`, `PlayerAttendance`, `StaffAttendance`, و`SubscriptionSessionMovement`. العلاقات المركبة تحمل `AcademyId` وتثبت تطابق session/group/enrollment/staff assignment داخل الأكاديمية. التقييم والمحتوى مستقبليان.
+**ملاحظة تنفيذ Slice 5:** تحققت كيانات Slice 0–4، وأضيفت فعليًا `EvaluationCriterion`, `PlayerEvaluation`, و`EvaluationScore`. العلاقات المركبة تحمل `AcademyId` وتثبت تطابق evaluation/enrollment/group/sport/criterion داخل الأكاديمية. وحدات المحتوى ما زالت مستقبلية.
 
 ## العلاقات الأساسية
 
@@ -57,7 +57,8 @@ erDiagram
 - `PlayerAttendance` فريد على academy+session+SportEnrollment، و`StaffAttendance` منفصل ولا يقبل إلا عضوًا مكلفًا بالمجموعة. كلاهما `NotRecorded|Present|Absent`؛ عدم السجل لا يعني غيابًا.
 - `SubscriptionSessionMovement` append-only لـ`AttendanceConsume(-1)` و`AttendanceRestore(+1)`، مرتبط بحضور وفترة محددين. `ConsumedSubscriptionPeriodId` يمثل الأثر الفعال، و`ReversesMovementId` الفريد يمنع استعادة الخصم مرتين. DB تمنع `RemainingSessions < 0`.
 - `SubscriptionPlan` نوعه `Duration|Sessions|Combined` ويحمل العملة/السعر والمدة أو الحصص المنطبقة. `SubscriptionPeriod` تاريخ محفوظ لا يُستبدل بالتجديد. `RenewalRequest` يحتفظ بالمُسدِّد في `RequestedByUserId` والمستفيد في `SportEnrollmentId`، وهو منفصل عن `Collection`; `Receipt` يعكس Collection مؤكدة فقط. `BeneficiaryRenewalReference` يرتبط بتسجيل واحد وأكاديمية واحدة، يخزن hash وتلميحًا فقط مع expiry/revocation، ولا يمثل تفويضًا لملف اللاعب. `SubscriptionAdjustment` append-only للتجميد/الأيام/الإلغاء/التصحيح مع السبب والمنفذ.
-- `PlayerEvaluation` مرتبط بالتسجيل والمدرب وreporting period وحالته `Draft|Published|Superseded`. score nullable من 0–100؛ null ليست صفرًا. criteria رياضية، ويمكن ربط criterion بمحور report اختياري ووزن لاحقًا.
+- `EvaluationCriterion` tenant-scoped وsport-scoped، له اسم وترتيب ووزن موجب ومحور كرة قدم اختياري. الإيقاف يمنعه من تقييم جديد ولا يحذف الدرجات القديمة. `PlayerEvaluation` مرتبط بـ`SportEnrollment` ونفس الرياضة والمجموعة بعلاقات مركبة، وبالمقيّم والتاريخ والفترة؛ حالته `Draft|Published|Superseded`. `EvaluationScore` فريد على evaluation+criterion، ودرجته nullable أو 0–100 شاملًا.
+- عند إنشاء المسودة تُنسخ `CriterionNameSnapshot`, `WeightSnapshot`, و`FootballAxisSnapshot` إلى `EvaluationScore`. الحساب والتقرير المنشور يستخدمان snapshots، لذلك تعديل المعيار لاحقًا لا يعيد كتابة التاريخ. التقييم المنشور immutable في Slice 5؛ التصحيح عبر revision/supersede محفوظ في النموذج لكنه مؤجل بدل السماح بالكتابة فوق المنشور.
 - `SportProduct` تجارة رياضية محتملة مستقلة. `NutritionItem` معلومات وصورة وحصة وقيم/source status وتصنيفات Breakfast/Lunch/Dinner؛ لا Money أو Rating أو Cart أو Order. `PlayerMedicalRecord` و`PlayerMedia` لهما visibility/publication policy منفصلة.
 
 ## دورات الحالة
@@ -95,7 +96,9 @@ stateDiagram-v2
 
 ## التقييم والتقارير
 
-تقرير كرة القدم يعرض الاسم/الصورة/المركز/الإجمالي، ثم ستة محاور (`passing, dribbling, speed, defending, physical, shooting`)، ثم العمر والطول والوزن والقدم، ثم كل criteria. default المقترح للمراجعة: متوسط موزون للدرجات المنشورة غير الناقصة داخل الفترة؛ قيمة المحور من criteria المرتبطة به، والإجمالي من المحاور المتاحة فقط مع إظهار completeness. لا يعتمد هذا قبل `OD-007` ولا يملأ محورًا ناقصًا بصفر. للرياضات الأخرى قالب report خاص بالرياضة؛ إلى حين اعتماده تعرض criteria التفصيلية فقط ورسالة أن الملخص غير معرف.
+`IEvaluationReportCalculator` هو الحد الوحيد لمعادلة التقرير. default تقني قابل للعكس في Slice 5: لكل محور كرة قدم يحسب `sum(score × snapshot weight) / sum(snapshot weight)` للدرجات المتاحة فقط؛ missing لا تدخل ولا تصبح صفرًا. الإجمالي متوسط المحاور المتاحة، والتقريب إلى منزلة عشرية واحدة بـ`AwayFromZero`. يعرض `ScoredCriteria/TotalApplicableCriteria`, نسبة الاكتمال، و`AvailableAxes/6` كمعلومات لا كدرجة جودة. يظل `OD-007` **PENDING / NOT APPROVED**.
+
+تقرير كرة القدم يعرض الاسم/الصورة/المركز/الإجمالي، المخطط السداسي (`Passing, Dribbling, Speed, Defending, Physical, Shooting`) وملخصه النصي، ثم العمر المحسوب في تاريخ التقييم والطول والوزن والقدم وكل criteria والملاحظات. missing axis يظهر «غير متاح»؛ fallback الرسم يضع النقطة في المركز للعرض فقط دون تلويث الحساب. لا pitch diagram ولا AI. السباحة والرياضات الأخرى تعرض البيانات والمعايير التفصيلية ورسالة أن الملخص الرسومي غير معرّف، بلا محاور كرة قدم مختلقة.
 
 ## الوقت والمال والقياسات
 
