@@ -27,7 +27,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
       });
       if (!response.ok) throw new Error("بيانات الدخول غير صحيحة.");
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تسجيل الدخول."); setBusy(false); }
   }
 
@@ -40,7 +40,7 @@ export default function LoginPage() {
       const body = challengeId ? { challengeId, phoneNumber: phone, code: data.get("code") } : { phoneNumber: phone };
       const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": token }, body: JSON.stringify(body) });
       if (!response.ok) throw new Error("تعذر التحقق من رقم الهاتف أو الرمز.");
-      if (challengeId) return router.replace("/");
+      if (challengeId) return router.replace("/guardian");
       const result = (await response.json()) as { challengeId: string };
       setChallengeId(result.challengeId); setBusy(false);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر المتابعة."); setBusy(false); }

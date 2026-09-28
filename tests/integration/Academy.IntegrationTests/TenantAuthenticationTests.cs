@@ -155,12 +155,16 @@ public sealed class TenantAuthenticationTests : IAsyncLifetime
     [Fact]
     public async Task Demo_seed_rerun_is_idempotent()
     {
+        await using var beforeScope = factory.Services.CreateAsyncScope();
+        var beforeDb = beforeScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var academiesBefore = await beforeDb.Academies.CountAsync();
+        var membershipsBefore = await beforeDb.AcademyMemberships.CountAsync();
         await DemoSeed.SeedAsync(factory.Services);
         await DemoSeed.SeedAsync(factory.Services);
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        Assert.Equal(2, await db.Academies.CountAsync(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId));
-        Assert.Equal(5, await db.AcademyMemberships.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId || x.AcademyId == DemoSeed.FutureAcademyId));
+        Assert.Equal(academiesBefore, await db.Academies.CountAsync());
+        Assert.Equal(membershipsBefore, await db.AcademyMemberships.CountAsync());
     }
 
     private async Task SetOwnerMembershipActive(bool active)

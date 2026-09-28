@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
+using Academy.Api.Slice2;
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
@@ -62,6 +63,8 @@ builder.Services.AddAuthorization(options =>
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));
     options.AddPolicy(AcademyPermissions.StaffProvision, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.StaffProvision)));
+    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead })
+        options.AddPolicy(permission, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(permission)));
 });
 builder.Services.AddAntiforgery(options =>
 {
@@ -231,6 +234,8 @@ api.MapPost("/staff", async (CreateStaffRequest request, CurrentTenant tenant, U
     await transaction.CommitAsync();
     return Results.Created($"/api/v1/staff/{user.Id}", new { user.Id, academyId = current.AcademyId });
 }).RequireAuthorization(AcademyPermissions.StaffProvision).AddEndpointFilter<CsrfFilter>();
+
+app.MapSlice2Endpoints();
 
 if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
 app.Run();

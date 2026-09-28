@@ -1,48 +1,43 @@
 # Status
 
-تاريخ التحديث: 2026-09-28. الفرع: `codex/03-slice1-tenant-auth`.
+تاريخ التحديث: 2026-09-28. الفرع: `codex/04-slice2-structure-people`.
 
-## Slice 1 — منفذ فعليًا
+## Slice 2 — منفذ فعليًا
 
-- `Academy` tenant root و`ApplicationUser` عبر ASP.NET Core Identity و`AcademyMembership` بأدوار `AcademyOwner`, `AcademyAdmin`, `Coach`, `Guardian`.
-- shared PostgreSQL schema مع `AcademyId` على العضوية، واختيار active Academy من عضويات المستخدم الفعالة فقط. يعيد الخادم فحص Academy والعضوية عند كل tenant request؛ لا يمثل header/query/body سلطة tenant.
-- cookie جلسة `HttpOnly`, `SameSite=Lax`, و`Secure` خارج Development/Demo. الـcookie يحمل key مشفّرًا فقط؛ التذكرة في `UserSessions`، بمهلة idle 30 دقيقة وabsolute 12 ساعة. logout يلغي سجل الجلسة، والحساب المعطل يُرفض فورًا، وsecurity stamp يُفحص كل 5 دقائق.
-- CSRF double-token على كل POST، ولا JWT منزلي أو token في URL/`localStorage`.
-- staff password login مع hashing/lockout من Identity، وAPI إنشاء staff محدود للأكاديمية الحالية: Owner ينشئ Admin/Coach وAdmin ينشئ Coach فقط.
-- Guardian phone normalization إلى E.164 لمصر، وDemo OTP بخمس محاولات/خمس دقائق/single-use. fixed OTP والseed يرفضان startup خارج بيئة `Demo`؛ لا SMS إنتاجي.
-- Demo seed idempotent لأكاديميتين وخمسة memberships صناعية، بلا Player أو طفل أو `GuardianPlayerLink`.
-- login عربي RTL، authenticated shell، Academy/role display، server-authorized Academy selector عند تعدد العضويات، وlogout. لا dashboard أعمال.
-- proof APIs فقط: `/api/v1/me`, `/my-academies`, `/session/academy`, `/tenant/probe/{academyId}`، مع health endpoints السابقة.
-- migrations forward-only: `TenantIdentityFoundation` ثم `IdentityUserClaims` و`MembershipRoleInvariant`. الجداول الجديدة: `Academies`, `Users`, `AspNetUserClaims`, `AcademyMemberships`, `UserSessions`, `GuardianOtpChallenges`.
-- `OD-003` سُجل `APPROVED` كما قرر مالك المنتج.
+- هيكل الأكاديمية: `Branch`, `Sport`, `AgeCategory`, `TrainingGroup`, `RecurringSchedule`, `StaffGroupAssignment`.
+- الأشخاص: `GuardianProfile`, `Player`, `GuardianPlayerLink` الصريح. العمر مشتق من `DateOfBirth` ولا ينشأ وصول من الهاتف/الاسم.
+- `SportEnrollment` يفصل هوية اللاعب عن سياق الرياضة/الفرع/المجموعة. الفئة مشتقة من المجموعة، والتحقق يمنع Group/Sport/Branch mismatch.
+- كل entity تحمل `AcademyId`، والعلاقات الرئيسية تستخدم composite alternate/foreign keys `(AcademyId, Id)` لمنع cross-tenant references في PostgreSQL، مع فحص `CurrentTenant` والسياسات عند API.
+- registration endpoint ذري: ينشئ أو يعيد استخدام Player/Guardian داخل الأكاديمية، ثم link وenrollment في transaction؛ لا Subscription أو Payment.
+- بحث staff بالاسم/الكود/هاتف ولي الأمر وفلاتر branch/sport/category/group، scoped بالأكاديمية. Guardian endpoint يعرض linked children فقط، وCoach endpoint يعرض assigned groups فقط.
+- Dashboard عربي RTL responsive مع sidebar Module → Sub-module، list-first، PageHeader/Create، search/filters، row actions وحالات empty/error، ونموذج تسجيل mobile-friendly dependent selects.
+- migrations forward-only: `StructurePeopleEnrollment` ثم `EnrollmentGroupContextInvariant`. الجداول الجديدة: `Branches`, `Sports`, `AgeCategories`, `TrainingGroups`, `RecurringSchedules`, `StaffGroupAssignments`, `GuardianProfiles`, `Players`, `GuardianPlayerLinks`, `SportEnrollments`. الثانية لا تنشئ جدولًا؛ بل تفرض في قاعدة البيانات تطابق Group/Branch/Sport داخل التسجيل.
+- Demo seed idempotent: ثلاثة فروع/رياضات/فئات، ثلاث مجموعات وجدول أسبوعي، sibling family، طفل برياضتين، طفلان بنفس الرياضة، اسم عربي مشابه في أسرة أخرى، فرع مختلف، وبيانات Academy B معزولة.
 
-## دليل التحقق المحلي
+## دليل التحقق
 
-الإصدارات: .NET SDK `10.0.401` / runtime `10.0.12`، EF Core/Identity `10.0.12`، Npgsql provider `10.0.3`، PostgreSQL `17.11`، Node `24.21.0`، Next.js `16.3.6`.
-
-- `dotnet restore` وRelease build: نجحا، 0 warnings / 0 errors.
-- تطبيق migrations على PostgreSQL `academy_test` و`academy`: نجح، وفُحصت migrations دون أي جدول business لاحق.
-- backend solution tests: architecture 1، unit 1، integration 14؛ الإجمالي 16/16 ناجح. اختبارات integration تشمل السيناريوهات الأمنية الـ12 المطلوبة، seed idempotency وDemo guard على PostgreSQL حقيقي.
-- `npm run typecheck`, `npm run lint`, `npm run test:web`: نجحت؛ frontend test 1/1.
-- `npm run build:web`: نجح، والصفحتان `/` و`/login` بُنيتا production build.
-- `npm run test:e2e`: نجح 1/1 على mobile Chromium؛ login عربي، Academy/role الصحيحان، رفض Academy B، logout ثم منع الرجوع للجلسة.
-- `npm audit --audit-level=high`: نجح، 0 vulnerabilities.
-- CI عُدّل لتشغيل backend PostgreSQL tests وfrontend checks وE2E مع PostgreSQL؛ نتيجة remote تنتظر push.
+- Release build: ناجح، 0 warnings / 0 errors.
+- migration طُبقت على PostgreSQL 17 محليًا، وفحصها أكد عدم وجود Subscription/Attendance/Evaluation/Nutrition/Product/Medical/Gallery tables.
+- integration tests: 32/32 (منها 18 اختبار Slice 2 تغطي البنود الـ16 المطلوبة وإعادة استخدام اللاعب/ولي الأمر عند إضافة رياضة، مع فصل Coach وGuardian authorization).
+- architecture/unit tests: 2/2؛ الإجمالي المحلي للـbackend هو 34/34.
+- frontend typecheck/lint: ناجحان؛ frontend tests 2/2.
+- production build: ناجح؛ routes الخاصة بالـdashboard/registration/guardian بُنيت.
+- mobile E2E: 3/3 على Mobile Chromium، ويشمل إنشاء Player/Guardian/Enrollment حقيقي ثم ظهوره في القائمة، ورؤية ولي الأمر للطفلين المرتبطين فقط.
+- `npm audit`: صفر vulnerabilities. Remote CI ينتظر دفع الفرع، لذلك لا تسجل هذه الوثيقة نتيجة غير منفذة مسبقًا.
 
 ## مراجعة الأمان المركزة
 
-- tenant tampering/IDOR: المورد التجريبي يقارن route ID مع tenant المحلول من server-side ticket ثم membership فعالة؛ اختبارات URL/body/header وAcademy B تمر بالرفض `403`.
-- CSRF/session fixation: token/header مطلوب لكل mutation، وsign-out يسبق كل sign-in/switch. logout يلغي التذكرة المخزنة في DB.
-- cookie/account state: key مشفّر فقط في cookie؛ لا بيانات اعتماد في URL أو logs. `ITicketStore` يرفض revoked/expired/disabled في كل request؛ security-stamp window أقصاه 5 دقائق.
-- password/OTP: Identity hashing وlockout؛ OTP لا يُسجّل، منتهي، single-use، وحده الأقصى خمس محاولات. طلب OTP يعطي ردًا عامًا، ولا ينشئ child access.
-- staff scope: request لا يحتوي `AcademyId`؛ العضوية الجديدة تُكتب داخل tenant الحالي فقط وفي transaction. role policy يرفض Coach/Guardian.
-- Demo leakage: guard يفشل startup إذا فعّل seed/fixed OTP خارج `Demo`. لا real SMS/provider credential.
-- إصلاحات المراجعة: حُوّل seed clock إلى UTC المتوافق مع PostgreSQL، حُفظ tenant claim في server ticket، وأضيف lockout وحد محاولات OTP. لا توجد findings حرجة متبقية ضمن Slice 1.
+- tenant/IDOR: لا DTO كتابة يقبل `AcademyId`; كل lookup يضيف trusted tenant. composite FKs ترفض cross-tenant Branch/Sport/Group/Player/Guardian/Coach relationships.
+- guardian/player: phone lookup لا يمنح وصولًا؛ `GuardianPlayerLink` unique وصريح، وقراءة الطفل تعيد `404` خارج روابط المستخدم.
+- coach scope: assignment يتطلب Coach membership وGroup داخل الأكاديمية نفسها؛ القراءة عبر assignment للمستخدم الحالي.
+- search: endpoint محصور Owner/Admin، والاستعلام والـguardian-phone subquery scoped بالأكاديمية؛ Guardian لا يملك staff search policy.
+- mass assignment/transaction: request models allowlist الحقول؛ المجموعة هي مصدر branch/sport/category الموثوق، ويؤكد composite FK الرباعي ذلك في PostgreSQL. تبدأ transaction قبل إنشاء أي person/link/enrollment وتُلغى عند أي failure. إعادة استخدام Player/Guardian مرتبطين تضيف SportEnrollment فقط ولا تكرر اللاعب أو الرابط.
+- archive/deactivate هو النمط؛ لا hard-delete endpoints أضيفت.
 
-## قيود وما لم يُنفذ
+## غير منفذ
 
-لا `Branch`, `Sport`, `Group`, coach profile، `Player`, `GuardianPlayerLink`, subscriptions, attendance, evaluations, finance, nutrition, products, medical, gallery أو reporting. لا SMS/OTP production provider، native auth، deployment أو production tests. staff UI غير موجود؛ المسار API محدود فقط. لم تتغير ملفات requirements baseline ولم تُستخدم أي بنية أو بيانات للأهلي.
+لا SubscriptionPeriod أو plans/payment/collection، ولا TrainingSession فعلية أو Attendance، ولا Evaluation أو Nutrition/Product/Medical/Gallery/Reports. لا Parent Experience كاملة، ولا coach evaluations، ولا production SMS/media/deployment/tests. approved requirements لم تتغير و`main` لم يُمس.
 
 ## نقطة التوقف
 
-Slice 1 فقط. أي Slice 2/Structure/People يحتاج تفويضًا جديدًا؛ لم يبدأ.
+Slice 2 فقط؛ Slice 3 لا يبدأ دون تفويض جديد.

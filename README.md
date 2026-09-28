@@ -1,6 +1,6 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 1: أساس Academy tenancy وهوية وصلاحيات قابل للتشغيل**؛ لا توجد بعد وحدات اللاعبين أو الاشتراكات أو الحضور.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 2: هيكل الأكاديمية والأشخاص والتسجيل الرياضي**؛ لا توجد بعد الاشتراكات أو التحصيل أو الحضور.
 
 ## ما الموجود الآن؟
 
@@ -9,6 +9,8 @@
 - Next.js login وauthenticated shell عربيان RTL، mobile-first، مع تبديل Academy مخوّل من الخادم وPWA manifest/icon.
 - PostgreSQL 17 محلي عبر Docker Compose.
 - Demo seed حتمي لأكاديميتين، وOTP ثابت محروس ببيئة `Demo` فقط، واختبارات عزل backend وE2E.
+- فروع ورياضات وفئات ومجموعات وجداول أسبوعية وإسناد مدرب، مع Player مستقل عن `SportEnrollment` وروابط وصاية صريحة.
+- Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
 
@@ -65,7 +67,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-تُطبق migrations بالترتيب: `FoundationInitialized` ثم `TenantIdentityFoundation` و`IdentityUserClaims` و`MembershipRoleInvariant`. لا توجد فيها جداول Player أو أي وحدة أعمال لاحقة.
+آخر migrations هما `StructurePeopleEnrollment` و`EnrollmentGroupContextInvariant`. الأولى تنشئ جداول Slice 2 فقط، والثانية تضيف قيد تطابق المجموعة مع الفرع والرياضة؛ ولا تحتويان Subscription أو Attendance أو Evaluation أو وحدات المحتوى.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -110,7 +112,7 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. يسجّل مالك Demo الدخول بالبريد وكلمة المرور، بينما يستخدم ولي الأمر الهاتف والـOTP التجريبي. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
+افتح `http://127.0.0.1:3000/login`. يسجّل الإداري بـ`admin.nogoom@example.test` ثم يدخل Dashboard ويختار «تسجيل لاعب جديد». ولي الأمر `01000000001` مع OTP التجريبي يرى الطفلين المرتبطين به فقط. الجلسة في cookie `HttpOnly` ولا تُحفظ tokens في `localStorage`.
 
 ## 8. تشغيل الاختبارات
 
@@ -151,4 +153,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: Player/GuardianPlayerLink أو Branch/Sport/Group، Subscription/Attendance/Evaluation/Finance أو بقية وحدات الأعمال، SMS إنتاجي، native auth، دفع، نشر أو إثبات production-readiness.
+لا يوجد حتى الآن: Subscription/Payment/Attendance/Evaluation/Nutrition/Product/Medical/Gallery/Reports، TrainingSession فعلية، SMS إنتاجي، native auth، نشر أو إثبات production-readiness.

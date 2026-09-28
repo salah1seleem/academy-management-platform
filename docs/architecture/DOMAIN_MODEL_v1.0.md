@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 1:** تحقق فعليًا فقط `Academy`, `ApplicationUser`, `AcademyMembership`, `UserSession`, و`GuardianOtpChallenge`/Identity claims. كل الكيانات التجارية الظاهرة أدناه ما زالت مفاهيم مستقبلية ولم تُنشأ جداولها.
+**ملاحظة تنفيذ Slice 2:** بالإضافة إلى foundation، تحققت `Branch`, `Sport`, `AgeCategory`, `TrainingGroup`, `RecurringSchedule`, `StaffGroupAssignment`, `GuardianProfile`, `Player`, `GuardianPlayerLink`, و`SportEnrollment`. العلاقات المركبة تحمل `AcademyId`. الفئة العمرية مشتقة من المجموعة في التسجيل لتجنب التكرار، والعمر مشتق من الميلاد. بقية الكيانات أدناه مستقبلية ولم تُنشأ جداولها.
 
 ## العلاقات الأساسية
 

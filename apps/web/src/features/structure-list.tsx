@@ -1,0 +1,7 @@
+"use client";
+import { useEffect, useState } from "react";
+import { PageHeader, RowActions } from "../components/dashboard-shell";
+type Item = { id: string; arabicName: string };
+type Options = { branches: Item[]; sports: Item[]; categories: Item[]; groups: Item[]; coaches: Item[] };
+const config = { branches: ["الفروع", "إضافة فرع"], sports: ["الرياضات", "إضافة رياضة"], categories: ["الفئات العمرية", "إضافة فئة عمرية"], groups: ["المجموعات", "إنشاء مجموعة"], coaches: ["المدربون", "إضافة مدرب"] } as const;
+export function StructureList({ kind }: { kind: keyof typeof config }) { const [items, setItems] = useState<Item[]>([]); const [error, setError] = useState(""); useEffect(() => { fetch("/api/v1/manage/structure/options").then(async r => { if (!r.ok) throw new Error(); const data = await r.json() as Options; setItems(data[kind]); }).catch(() => setError("تعذر تحميل البيانات.")); }, [kind]); return <><PageHeader title={config[kind][0]} context={`الأكاديمية / ${config[kind][0]}`} action={{ label: config[kind][1], href: `/dashboard/academy/${kind}/new` }} /><section className="list-card"><div className="filter-bar"><input aria-label="بحث" placeholder="بحث…" /></div>{error ? <p role="alert">{error}</p> : items.length === 0 ? <div className="empty-state">لا توجد سجلات بعد.</div> : <div className="data-list">{items.map(x => <article key={x.id}><strong>{x.arabicName}</strong><RowActions /></article>)}</div>}</section></>; }

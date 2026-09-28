@@ -3,6 +3,7 @@ using System;
 using Academy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Academy.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FoundationDbContext))]
-    partial class FoundationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928174020_StructurePeopleEnrollment")]
+    partial class StructurePeopleEnrollment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -400,10 +403,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "SportId");
 
+                    b.HasIndex("AcademyId", "TrainingGroupId");
+
                     b.HasIndex("AcademyId", "PlayerId", "SportId", "TrainingGroupId")
                         .IsUnique();
-
-                    b.HasIndex("AcademyId", "TrainingGroupId", "BranchId", "SportId");
 
                     b.ToTable("SportEnrollments", (string)null);
                 });
@@ -905,8 +908,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Academy.Infrastructure.Structure.TrainingGroup", "TrainingGroup")
                         .WithMany()
-                        .HasForeignKey("AcademyId", "TrainingGroupId", "BranchId", "SportId")
-                        .HasPrincipalKey("AcademyId", "Id", "BranchId", "SportId")
+                        .HasForeignKey("AcademyId", "TrainingGroupId")
+                        .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
