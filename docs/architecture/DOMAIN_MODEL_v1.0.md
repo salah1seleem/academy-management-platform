@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 6:** تحققت كيانات Slice 0–5، وأضيف فعليًا `NewEnrollmentRequest`. العلاقات المركبة تحمل `AcademyId` وتثبت تطابق الطلب مع اللاعب/الرياضة/الفرع والتسجيل الناتج. وحدات المحتوى ما زالت مستقبلية.
+**ملاحظة تنفيذ Slice 7:** تحققت كيانات Slice 0–6، وأضيف فعليًا `SportCatalogItem`, `NutritionItem`, `NutritionCategoryLink`, `PlayerMedicalRecord`, و`PlayerMedia`. العلاقات المركبة تحمل `AcademyId`، والنشر/التفعيل يحددان ما يراه ولي الأمر. تخزين الملفات الإنتاجي ما زال مستقبليًا.
 
 ## العلاقات الأساسية
 
@@ -47,9 +47,12 @@ erDiagram
   SportEnrollment ||--o{ PlayerEvaluation : receives
   PlayerEvaluation ||--o{ EvaluationScore : contains
   EvaluationCriterion ||--o{ EvaluationScore : scores
-  Sport ||--o{ SportProduct : categorizes
+  Sport ||--o{ SportCatalogItem : categorizes
+  Academy ||--o{ NutritionItem : owns
   NutritionItem ||--o{ NutritionCategoryLink : appears_in
+  Academy ||--o{ PlayerMedicalRecord : owns
   Player ||--o{ PlayerMedicalRecord : has
+  Academy ||--o{ PlayerMedia : owns
   Player ||--o{ PlayerMedia : has
 ```
 
@@ -66,7 +69,10 @@ erDiagram
 - `SubscriptionPlan` نوعه `Duration|Sessions|Combined` ويحمل العملة/السعر والمدة أو الحصص المنطبقة. `SubscriptionPeriod` تاريخ محفوظ لا يُستبدل بالتجديد. `RenewalRequest` يحتفظ بالمُسدِّد في `RequestedByUserId` والمستفيد في `SportEnrollmentId`، وهو منفصل عن `Collection`; `Receipt` يعكس Collection مؤكدة فقط. `BeneficiaryRenewalReference` يرتبط بتسجيل واحد وأكاديمية واحدة، يخزن hash وتلميحًا فقط مع expiry/revocation، ولا يمثل تفويضًا لملف اللاعب. `SubscriptionAdjustment` append-only للتجميد/الأيام/الإلغاء/التصحيح مع السبب والمنفذ.
 - `EvaluationCriterion` tenant-scoped وsport-scoped، له اسم وترتيب ووزن موجب ومحور كرة قدم اختياري. الإيقاف يمنعه من تقييم جديد ولا يحذف الدرجات القديمة. `PlayerEvaluation` مرتبط بـ`SportEnrollment` ونفس الرياضة والمجموعة بعلاقات مركبة، وبالمقيّم والتاريخ والفترة؛ حالته `Draft|Published|Superseded`. `EvaluationScore` فريد على evaluation+criterion، ودرجته nullable أو 0–100 شاملًا.
 - عند إنشاء المسودة تُنسخ `CriterionNameSnapshot`, `WeightSnapshot`, و`FootballAxisSnapshot` إلى `EvaluationScore`. الحساب والتقرير المنشور يستخدمان snapshots، لذلك تعديل المعيار لاحقًا لا يعيد كتابة التاريخ. التقييم المنشور immutable في Slice 5؛ التصحيح عبر revision/supersede محفوظ في النموذج لكنه مؤجل بدل السماح بالكتابة فوق المنشور.
-- `SportProduct` تجارة رياضية محتملة مستقلة. `NutritionItem` معلومات وصورة وحصة وقيم/source status وتصنيفات Breakfast/Lunch/Dinner؛ لا Money أو Rating أو Cart أو Order. `PlayerMedicalRecord` و`PlayerMedia` لهما visibility/publication policy منفصلة.
+- `SportCatalogItem` tenant/sport-scoped ويحمل الاسم والوصف ومرجع أصل مشروع وحالة وترتيبًا، مع display price/currency/discount اختيارية لا تنشئ تجارة أو معاملة مالية. الظهور لولي الأمر يتطلب item فعالًا ورياضة ذات `SportEnrollment` نشط لطفل مرتبط؛ تجميع الرياضة يمنع التكرار بين الأبناء. لا Cart/Order/Inventory/Rating/Favourite.
+- `NutritionItem` tenant-scoped ومعلوماتي فقط: اسم ووصف ومرجع صورة وحصة وقيم nullable و`DemoUnreviewed|Reviewed` ومصدر وحالة. `NutritionCategoryLink` مفتاحه academy+item+category ويربط المادة نفسها بـ`Breakfast|Lunch|Dinner` دون نسخ قيمها؛ القيود تمنع السالب. لا Money أو Price أو Discount أو Rating أو Quantity أو Cart أو Order أو Checkout أو Payment أو Delivery أو Inventory، ولا علاقة بالطفل أو اشتراكه.
+- `PlayerMedicalRecord` tenant/player-scoped ونوعه `Injury|Consultation` وحالته العامة `Open|Monitoring|Resolved`. يفصل `StaffNotes` عن `GuardianVisibleNotes`، ولا يظهر للGuardian إلا `IsPublishedToGuardian=true` بعد إثبات `GuardianPlayerLink`; Coach بلا صلاحية افتراضية. لا تشخيص أو توصية آلية.
+- `PlayerMedia` tenant/player-scoped ويخزن metadata فقط لـ`Image|Video` مع reference/caption/time/order/publication. Guardian يرى published لطفله المرتبط فقط. Slice 7 يقبل refs تحت `/demo-assets/` بلا `..` أو URL خارجي؛ لا binary upload أو public child bucket أو production object storage.
 
 ## دورات الحالة
 

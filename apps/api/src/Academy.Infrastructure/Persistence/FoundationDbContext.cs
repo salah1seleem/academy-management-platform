@@ -1,5 +1,6 @@
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Content;
 using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Structure;
@@ -44,6 +45,11 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<EvaluationCriterion> EvaluationCriteria => Set<EvaluationCriterion>();
     public DbSet<PlayerEvaluation> PlayerEvaluations => Set<PlayerEvaluation>();
     public DbSet<EvaluationScore> EvaluationScores => Set<EvaluationScore>();
+    public DbSet<SportCatalogItem> SportCatalogItems => Set<SportCatalogItem>();
+    public DbSet<NutritionItem> NutritionItems => Set<NutritionItem>();
+    public DbSet<NutritionCategoryLink> NutritionCategoryLinks => Set<NutritionCategoryLink>();
+    public DbSet<PlayerMedicalRecord> PlayerMedicalRecords => Set<PlayerMedicalRecord>();
+    public DbSet<PlayerMedia> PlayerMedia => Set<PlayerMedia>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -421,6 +427,75 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasOne(x => x.EvaluationCriterion).WithMany().HasForeignKey(x => new { x.AcademyId, x.EvaluationCriterionId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t => t.HasCheckConstraint("CK_EvaluationScores_Score", "\"Score\" IS NULL OR (\"Score\" >= 0 AND \"Score\" <= 100)"));
             entity.ToTable(t => t.HasCheckConstraint("CK_EvaluationScores_WeightSnapshot", "\"WeightSnapshot\" > 0"));
+        });
+
+        ConfigureTenantEntity<SportCatalogItem>(builder, "SportCatalogItems");
+        builder.Entity<SportCatalogItem>(entity =>
+        {
+            entity.Property(x => x.ArabicName).HasMaxLength(160);
+            entity.Property(x => x.EnglishName).HasMaxLength(160);
+            entity.Property(x => x.ArabicDescription).HasMaxLength(600);
+            entity.Property(x => x.ImageReference).HasMaxLength(300);
+            entity.Property(x => x.DisplayPrice).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
+            entity.Property(x => x.DiscountPercentage).HasPrecision(5, 2);
+            entity.HasIndex(x => new { x.AcademyId, x.SportId, x.ArabicName }).IsUnique();
+            entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_SportCatalogItems_Display", "(\"DisplayPrice\" IS NULL OR \"DisplayPrice\" >= 0) AND (\"DiscountPercentage\" IS NULL OR (\"DiscountPercentage\" >= 0 AND \"DiscountPercentage\" <= 100))"));
+        });
+
+        ConfigureTenantEntity<NutritionItem>(builder, "NutritionItems");
+        builder.Entity<NutritionItem>(entity =>
+        {
+            entity.Property(x => x.ArabicName).HasMaxLength(160);
+            entity.Property(x => x.ArabicDescription).HasMaxLength(1000);
+            entity.Property(x => x.ImageReference).HasMaxLength(300);
+            entity.Property(x => x.ServingDescription).HasMaxLength(160);
+            entity.Property(x => x.Calories).HasPrecision(8, 2);
+            entity.Property(x => x.ProteinGrams).HasPrecision(8, 2);
+            entity.Property(x => x.CarbohydratesGrams).HasPrecision(8, 2);
+            entity.Property(x => x.FatGrams).HasPrecision(8, 2);
+            entity.Property(x => x.DataStatus).HasConversion<string>().HasMaxLength(24);
+            entity.Property(x => x.SourceDescription).HasMaxLength(500);
+            entity.HasIndex(x => new { x.AcademyId, x.ArabicName }).IsUnique();
+            entity.ToTable(t => t.HasCheckConstraint("CK_NutritionItems_Values", "(\"Calories\" IS NULL OR \"Calories\" >= 0) AND (\"ProteinGrams\" IS NULL OR \"ProteinGrams\" >= 0) AND (\"CarbohydratesGrams\" IS NULL OR \"CarbohydratesGrams\" >= 0) AND (\"FatGrams\" IS NULL OR \"FatGrams\" >= 0)"));
+        });
+
+        builder.Entity<NutritionCategoryLink>(entity =>
+        {
+            entity.ToTable("NutritionCategoryLinks");
+            entity.HasKey(x => new { x.AcademyId, x.NutritionItemId, x.Category });
+            entity.Property(x => x.Category).HasConversion<string>().HasMaxLength(16);
+            entity.HasIndex(x => new { x.AcademyId, x.Category, x.DisplayOrder });
+            entity.HasOne<Tenancy.Academy>().WithMany().HasForeignKey(x => x.AcademyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.NutritionItem).WithMany(x => x.Categories).HasForeignKey(x => new { x.AcademyId, x.NutritionItemId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        ConfigureTenantEntity<PlayerMedicalRecord>(builder, "PlayerMedicalRecords");
+        builder.Entity<PlayerMedicalRecord>(entity =>
+        {
+            entity.Property(x => x.RecordType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.ArabicTitle).HasMaxLength(180);
+            entity.Property(x => x.ArabicDescription).HasMaxLength(1500);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.StaffNotes).HasMaxLength(1000);
+            entity.Property(x => x.GuardianVisibleNotes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.RecordDate });
+            entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.UpdatedByUser).WithMany().HasForeignKey(x => x.UpdatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        ConfigureTenantEntity<PlayerMedia>(builder, "PlayerMedia");
+        builder.Entity<PlayerMedia>(entity =>
+        {
+            entity.Property(x => x.MediaType).HasConversion<string>().HasMaxLength(16);
+            entity.Property(x => x.MediaReference).HasMaxLength(300);
+            entity.Property(x => x.ThumbnailReference).HasMaxLength(300);
+            entity.Property(x => x.ArabicCaption).HasMaxLength(400);
+            entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.DisplayOrder });
+            entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

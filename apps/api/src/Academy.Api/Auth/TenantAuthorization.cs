@@ -26,6 +26,14 @@ public static class AcademyPermissions
     public const string EnrollmentRequestRead = "enrollment.request.read";
     public const string EnrollmentRequestManage = "enrollment.request.manage";
     public const string GuardianEnrollmentRequestCreate = "enrollment.request.guardian.create";
+    public const string SportCatalogRead = "content.catalog.read";
+    public const string SportCatalogManage = "content.catalog.manage";
+    public const string NutritionRead = "content.nutrition.read";
+    public const string NutritionManage = "content.nutrition.manage";
+    public const string MedicalRecordRead = "content.medical.read";
+    public const string MedicalRecordManage = "content.medical.manage";
+    public const string PlayerMediaRead = "content.media.read";
+    public const string PlayerMediaManage = "content.media.manage";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
@@ -61,6 +69,14 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
             AcademyPermissions.EnrollmentRequestRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.EnrollmentRequestManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.GuardianEnrollmentRequestCreate => membership.Role == AcademyRole.Guardian,
+            AcademyPermissions.SportCatalogRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Guardian,
+            AcademyPermissions.SportCatalogManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.NutritionRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Guardian,
+            AcademyPermissions.NutritionManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.MedicalRecordRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Guardian,
+            AcademyPermissions.MedicalRecordManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.PlayerMediaRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Guardian,
+            AcademyPermissions.PlayerMediaManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             _ => false
         };
         if (allowed) context.Succeed(requirement);
