@@ -35,7 +35,7 @@ async function applyDiscount(page: Page, renewalId: string, type: "نسبة مئ
 test.describe.serial("Slice 8C subscription discount journeys", () => {
   test("Journey A — Admin applies 10 percent and final amount updates", async ({ page }) => {
     const renewal = await startRenewal(page); originalCheckout = renewal.url; await applyDiscount(page, renewal.renewalId, "نسبة مئوية", "10", "خصم إخوة تجريبي");
-    await expect(page.getByText("10% (-90 EGP)")).toBeVisible(); await expect(page.getByText("810 EGP", { exact: true })).toBeVisible(); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
+    await expect(page.getByText("10% (-90 جنيه)")).toBeVisible(); await expect(page.getByText("810 جنيه", { exact: true })).toBeVisible(); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
   });
 
   test("Journey B — Guardian pays the discounted final amount and sees receipt", async ({ page }) => {

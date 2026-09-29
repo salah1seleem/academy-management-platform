@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { EmptyState, ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { Activity, CalendarClock, CircleX, Clock3, CreditCard, ReceiptText, RefreshCcw, UserPlus, UsersRound, WalletCards } from "lucide-react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { AdminDataTable, EmptyState, ErrorState, LoadingState, MetricCard, PageHeader, SectionCard } from "../components/dashboard-shell";
 
 type OwnerSummary = { asOfDate: string; currency: string; collections: { total: number; today: number; month: number }; payments: { confirmed: number; failed: number; pending: number; cancelled: number; expired: number }; subscriptions: { active: number; expiring: number; expired: number }; activePlayers: number; attendance: { sessions: number; present: number; absent: number; notRecorded: number }; bySport: { name: string; amount: number; count: number }[]; byBranch: { name: string; amount: number; count: number }[]; latest: { receiptId: string; receiptNumber: string; player: string; amount: number; currency: string; confirmedAtUtc: string }[] };
 type Option = { id: string; arabicName: string; branchId?: string; sportId?: string };
@@ -20,17 +21,62 @@ export function OwnerDashboard() {
   useEffect(() => { fetch("/api/v1/me").then(r => r.json()).then((me: { role: string }) => { setRole(me.role); if (me.role === "AcademyOwner") return fetch("/api/v1/reports/owner-summary").then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(setData); }).catch(() => setError("تعذر تحميل لوحة المتابعة.")); }, []);
   if (error) return <><PageHeader title="الرئيسية" context="لوحة الإدارة" /><ErrorState message={error} /></>;
   if (!role || role === "AcademyOwner" && !data) return <><PageHeader title="لوحة المالك" context="الرئيسية" /><LoadingState /></>;
-  if (role !== "AcademyOwner") return <><PageHeader title="الرئيسية" context="لوحة الإدارة" action={{ label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }} /><section className="dashboard-card"><h2>إدارة الأكاديمية</h2><p>اختر الوظيفة المطلوبة من القائمة، أو افتح التقارير التشغيلية والمالية.</p></section></>;
-  const cards = [
-    ["إجمالي التحصيلات", money(data!.collections.total, data!.currency)], ["تحصيل اليوم", money(data!.collections.today, data!.currency)], ["تحصيلات هذا الشهر", money(data!.collections.month, data!.currency)],
-    ["مدفوعات ناجحة", data!.payments.confirmed], ["مدفوعات معلقة", data!.payments.pending], ["مدفوعات فاشلة", data!.payments.failed],
-    ["اشتراكات فعالة", data!.subscriptions.active], ["تنتهي قريبًا", data!.subscriptions.expiring], ["اشتراكات منتهية", data!.subscriptions.expired],
-    ["لاعبون نشطون", data!.activePlayers], ["حضور اليوم", `${data!.attendance.present} حاضر · ${data!.attendance.absent} غائب`], ["حصص اليوم", data!.attendance.sessions],
-  ];
-  return <><PageHeader title="لوحة المالك" context={`الرئيسية / حتى ${data!.asOfDate}`} action={{ label: "فتح التقرير المالي", href: "/dashboard/reports/financial" }} /><section className="report-metrics">{cards.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</section><div className="report-columns"><Breakdown title="التحصيل حسب الرياضة" rows={data!.bySport} currency={data!.currency} /><Breakdown title="التحصيل حسب الفرع" rows={data!.byBranch} currency={data!.currency} /></div><section className="list-card"><h2>أحدث التحصيلات</h2>{data!.latest.length === 0 ? <EmptyState message="لا توجد تحصيلات مؤكدة." /> : <div className="data-list">{data!.latest.map(row => <article key={row.receiptId}><div><strong>{row.receiptNumber} — {row.player}</strong><small>{money(row.amount, row.currency)} · {new Date(row.confirmedAtUtc).toLocaleString("ar-EG")}</small></div><Link className="small-link" href={`/dashboard/subscriptions/receipts/${row.receiptId}`}>عرض الإيصال</Link></article>)}</div>}</section></>;
+  if (role !== "AcademyOwner") return <>
+    <PageHeader title="الرئيسية" context="لوحة الإدارة" description="وصول سريع إلى مهام التشغيل اليومية للأكاديمية." action={{ label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }} />
+    <section className="dashboard-card admin-home-card">
+      <div className="admin-home-intro"><h2>مرحبًا بك في مساحة الإدارة</h2><p>اختر المهمة التي تريد تنفيذها، أو استخدم القائمة للوصول إلى بقية وحدات الأكاديمية.</p></div>
+      <nav className="admin-quick-actions" aria-label="الإجراءات التشغيلية السريعة">
+        <Link href="/dashboard/players/new"><UserPlus />تسجيل لاعب جديد</Link>
+        <Link href="/dashboard/enrollment-requests"><UsersRound />طلبات الاشتراك</Link>
+        <Link href="/dashboard/attendance/sessions"><CalendarClock />جلسات التدريب</Link>
+        <Link href="/dashboard/attendance/history"><Activity />سجل الحضور</Link>
+        <Link href="/dashboard/subscriptions/renewals"><RefreshCcw />طلبات التجديد</Link>
+        <Link href="/dashboard/players"><UsersRound />البحث عن لاعب</Link>
+      </nav>
+    </section>
+  </>;
+
+  const owner = data!;
+  return <>
+    <PageHeader title="لوحة المالك" context="الرئيسية / نظرة عامة" description={`ملخص أداء الأكاديمية من السجلات المحفوظة حتى ${owner.asOfDate}.`} action={{ label: "التقرير المالي", href: "/dashboard/reports/financial" }} />
+    <section className="owner-primary-metrics" aria-label="المؤشرات الأساسية">
+      <MetricCard label="تحصيل اليوم" value={money(owner.collections.today, owner.currency)} icon={<WalletCards />} emphasis="primary" />
+      <MetricCard label="تحصيل الشهر" value={money(owner.collections.month, owner.currency)} icon={<ReceiptText />} emphasis="primary" />
+      <MetricCard label="الاشتراكات الفعالة" value={owner.subscriptions.active} icon={<CreditCard />} emphasis="primary" />
+      <MetricCard label="تنتهي قريبًا" value={owner.subscriptions.expiring} icon={<Clock3 />} emphasis="primary" detail={`${owner.subscriptions.expired} اشتراك منتهي`} />
+    </section>
+    <section className="owner-secondary-metrics" aria-label="المؤشرات المساندة">
+      <MetricCard label="إجمالي التحصيلات" value={money(owner.collections.total, owner.currency)} icon={<WalletCards />} />
+      <MetricCard label="مدفوعات معلقة" value={owner.payments.pending} icon={<Clock3 />} />
+      <MetricCard label="مدفوعات فاشلة" value={owner.payments.failed} icon={<CircleX />} />
+      <MetricCard label="اللاعبون النشطون" value={owner.activePlayers} icon={<UsersRound />} />
+      <MetricCard label="حضور اليوم" value={`${owner.attendance.present} حاضر`} icon={<Activity />} detail={`${owner.attendance.absent} غائب · ${owner.attendance.sessions} حصة`} />
+    </section>
+    <div className="owner-business-grid">
+      <Breakdown title="التحصيل حسب الرياضة" rows={owner.bySport} currency={owner.currency} />
+      <Breakdown title="التحصيل حسب الفرع" rows={owner.byBranch} currency={owner.currency} />
+    </div>
+    <SectionCard title="أحدث التحصيلات" description="آخر العمليات المؤكدة المسجلة في الأكاديمية">
+      {owner.latest.length === 0 ? <EmptyState message="لا توجد تحصيلات مؤكدة." /> : <AdminDataTable label="أحدث التحصيلات" rows={owner.latest} rowKey={row => row.receiptId} columns={[
+        { key: "receipt", header: "الإيصال واللاعب", primary: true, width: "minmax(15rem, 2fr)", render: row => <><b dir="ltr">{row.receiptNumber}</b><small>{row.player}</small></> },
+        { key: "amount", header: "القيمة", width: "minmax(8rem, .8fr)", render: row => <b>{money(row.amount, row.currency)}</b> },
+        { key: "date", header: "التاريخ", width: "minmax(10rem, 1fr)", render: row => new Date(row.confirmedAtUtc).toLocaleString("ar-EG") },
+        { key: "actions", header: "الإجراء", width: "minmax(7rem, .6fr)", render: row => <Link className="small-link" href={`/dashboard/subscriptions/receipts/${row.receiptId}`}>عرض الإيصال</Link> },
+      ]} />}
+    </SectionCard>
+    <nav className="owner-quick-actions" aria-label="إجراءات سريعة للمالك">
+      <Link href="/dashboard/players/new"><UserPlus />تسجيل لاعب</Link>
+      <Link href="/dashboard/subscriptions/plans/new"><CreditCard />إضافة باقة</Link>
+      <Link href="/dashboard/attendance/sessions"><CalendarClock />فتح الحضور</Link>
+      <Link href="/dashboard/reports/financial"><ReceiptText />التقرير المالي</Link>
+    </nav>
+  </>;
 }
 
-function Breakdown({ title, rows, currency }: { title: string; rows: OwnerSummary["bySport"]; currency: string }) { return <section className="dashboard-card"><h2>{title}</h2>{rows.length === 0 ? <EmptyState /> : rows.map(row => <p className="breakdown-row" key={row.name}><span>{row.name}</span><b>{money(row.amount, currency)} · {row.count} عملية</b></p>)}</section>; }
+function Breakdown({ title, rows, currency }: { title: string; rows: OwnerSummary["bySport"]; currency: string }) {
+  const maximum = Math.max(...rows.map(row => row.amount), 1);
+  return <SectionCard title={title}>{rows.length === 0 ? <EmptyState /> : <div className="breakdown-list">{rows.map(row => <div className="breakdown-item" key={row.name}><div><span>{row.name}</span><b>{money(row.amount, currency)} · {row.count} عملية</b></div><div className="breakdown-track" aria-hidden="true"><span style={{ "--bar-width": `${Math.max(4, row.amount / maximum * 100)}%` } as CSSProperties} /></div></div>)}</div>}</SectionCard>;
+}
 
 export function FinancialReport() {
   const [filters, setFilters] = useState<Filters>({ from: "", to: "", sportId: "", branchId: "", planId: "", provider: "", search: "" }); const [data, setData] = useState<FinancialResponse | null>(null); const [options, setOptions] = useState<{ sports: Option[]; branches: Option[]; groups: Option[] }>({ sports: [], branches: [], groups: [] }); const [plans, setPlans] = useState<Option[]>([]); const [error, setError] = useState("");

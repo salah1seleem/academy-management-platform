@@ -55,7 +55,7 @@ test("Admin sees confirmed and failed payments and confirmed collection", async 
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("button", { name: /الاشتراكات/ }).click();
   await page.getByRole("link", { name: "طلبات الدفع" }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
-  await expect(page.getByText(/Confirmed/).first()).toBeVisible(); await expect(page.getByText(/Failed/).first()).toBeVisible();
+  await expect(page.getByText("مؤكد", { exact: true }).first()).toBeVisible(); await expect(page.getByText("فشل", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("link", { name: "التحصيلات" }).click();
   await expect(page.getByText(/إجمالي التحصيل المؤكد/)).toBeVisible(); await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
 });

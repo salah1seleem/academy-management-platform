@@ -31,10 +31,12 @@ test("Demo Admin uses accordion, searches, opens, edits and changes a branch sta
   await page.getByRole("textbox", { name: "بحث الفروع" }).fill(updatedName);
   const updatedRow = page.locator("article").filter({ hasText: updatedName });
   await expect(updatedRow).toBeVisible();
-  await updatedRow.getByRole("button", { name: "إيقاف" }).click();
+  await updatedRow.getByRole("button", { name: "المزيد من الإجراءات" }).click();
+  await updatedRow.getByRole("menuitem", { name: "إيقاف" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "إيقاف" }).click();
   await expect(updatedRow).toContainText("متوقف");
-  await updatedRow.getByRole("button", { name: "تفعيل" }).click();
+  await updatedRow.getByRole("button", { name: "المزيد من الإجراءات" }).click();
+  await updatedRow.getByRole("menuitem", { name: "تفعيل" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "تفعيل" }).click();
   await expect(updatedRow).toContainText("فعال");
 });

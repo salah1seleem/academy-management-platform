@@ -13,7 +13,7 @@ beforeEach(() => { global.fetch = vi.fn((input) => { const url = String(input); 
 afterEach(cleanup);
 
 describe("Slice 8A reports", () => {
-  it("loads real owner metrics without fake trends", async () => { render(<OwnerDashboard />); expect(await screen.findByText("٥٬٠٠٠ جنيه")).toBeVisible(); expect(screen.getByText("اشتراكات فعالة")).toBeVisible(); expect(screen.queryByText(/%/)).not.toBeInTheDocument(); });
+  it("loads real owner metrics without fake trends", async () => { render(<OwnerDashboard />); expect(await screen.findByText("٥٬٠٠٠ جنيه")).toBeVisible(); expect(screen.getByText("الاشتراكات الفعالة")).toBeVisible(); expect(screen.queryByText(/%/)).not.toBeInTheDocument(); });
   it("shows owner loading state", async () => { let release!: (value: Response) => void; const pending = new Promise<Response>(resolve => { release = resolve; }); global.fetch = vi.fn().mockReturnValueOnce(pending).mockResolvedValueOnce(new Response(JSON.stringify(summary), { status: 200 })) as typeof fetch; render(<OwnerDashboard />); expect(screen.getByRole("status")).toBeVisible(); await act(async () => release(new Response(JSON.stringify({ role: "AcademyOwner" }), { status: 200 }))); expect(await screen.findByText("لوحة المالك")).toBeVisible(); });
   it("shows owner error state", async () => { global.fetch = vi.fn(() => Promise.reject()) as typeof fetch; render(<OwnerDashboard />); expect(await screen.findByRole("alert")).toBeVisible(); });
   it("renders financial confirmed total", async () => { render(<FinancialReport />); expect((await screen.findAllByText("٩٠٠ جنيه"))[0]).toBeVisible(); expect(screen.getByText(/لا تشمل المدفوعات الفاشلة/)).toBeVisible(); });

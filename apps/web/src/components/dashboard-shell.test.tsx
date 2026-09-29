@@ -1,12 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DashboardShell, PageHeader, RowActions } from "./dashboard-shell";
+import { AdminDataTable, DashboardShell, FilterToolbar, PageHeader, RowActions, SearchInput, StatusBadge } from "./dashboard-shell";
 
 const replace = vi.fn();
 let currentPath = "/dashboard/players";
 vi.mock("next/navigation", () => ({ usePathname: () => currentPath, useRouter: () => ({ replace }) }));
 
-beforeEach(() => { currentPath = "/dashboard/players"; replace.mockReset(); global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: "منى السيد", role: "AcademyAdmin" }) }); });
+beforeEach(() => { currentPath = "/dashboard/players"; replace.mockReset(); global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: "منى السيد", role: "AcademyAdmin", academyName: "أكاديمية النجوم" }) }); });
 afterEach(cleanup);
 
 describe("dashboard navigation governance", () => {
@@ -73,5 +73,32 @@ describe("dashboard navigation governance", () => {
     expect(await screen.findByRole("link", { name: "تقارير الحضور" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "التقارير المالية" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "الإيصالات" })).not.toBeInTheDocument();
+  });
+
+  it("keeps secondary row actions in an accessible overflow menu", () => {
+    const callback = vi.fn();
+    render(<RowActions actions={[{ label: "عرض", href: "/record/1" }, { label: "تعديل", href: "/record/1/edit" }, { label: "إيقاف", onClick: callback, tone: "danger" }]} />);
+    expect(screen.getByRole("link", { name: "عرض" })).toBeVisible();
+    fireEvent.click(screen.getByLabelText("المزيد من الإجراءات"));
+    expect(screen.getByRole("menuitem", { name: "تعديل" })).toHaveAttribute("href", "/record/1/edit");
+    fireEvent.click(screen.getByRole("menuitem", { name: "إيقاف" }));
+    expect(callback).toHaveBeenCalledOnce();
+  });
+
+  it("renders Arabic status labels and a structured responsive table", () => {
+    const rows = [{ id: "1", name: "عمر", status: "Active" }];
+    render(<><StatusBadge status="Active" /><AdminDataTable label="قائمة تجريبية" rows={rows} rowKey={row => row.id} columns={[{ key: "name", header: "الاسم", primary: true, render: row => row.name }, { key: "status", header: "الحالة", render: row => <StatusBadge status={row.status} /> }]} /></>);
+    expect(screen.getByRole("table", { name: "قائمة تجريبية" })).toBeVisible();
+    expect(screen.getAllByText("فعال")).toHaveLength(2);
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+  });
+
+  it("exposes a labelled filter bar with result count and reset", () => {
+    const reset = vi.fn();
+    render(<FilterToolbar resultCount={7} onReset={reset}><SearchInput value="" onChange={() => {}} label="بحث السجلات" /></FilterToolbar>);
+    expect(screen.getByRole("textbox", { name: "بحث السجلات" })).toBeVisible();
+    expect(screen.getByText("7 نتيجة")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "إعادة الضبط" }));
+    expect(reset).toHaveBeenCalledOnce();
   });
 });

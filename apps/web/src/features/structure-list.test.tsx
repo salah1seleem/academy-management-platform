@@ -15,8 +15,9 @@ describe("structure list", () => {
     await waitFor(() => expect(screen.queryByText("فرع مدينة نصر")).not.toBeInTheDocument());
     expect(screen.getByText("فرع التجمع الخامس")).toBeVisible();
     expect(screen.getByRole("link", { name: "عرض" })).toHaveAttribute("href", "/dashboard/academy/branches/2");
-    expect(screen.getByRole("link", { name: "تعديل" })).toHaveAttribute("href", "/dashboard/academy/branches/2/edit");
-    fireEvent.click(screen.getByRole("button", { name: "إيقاف" }));
+    fireEvent.click(screen.getByLabelText("المزيد من الإجراءات"));
+    expect(screen.getByRole("menuitem", { name: "تعديل" })).toHaveAttribute("href", "/dashboard/academy/branches/2/edit");
+    fireEvent.click(screen.getByRole("menuitem", { name: "إيقاف" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("فرع التجمع الخامس");
   });
 });

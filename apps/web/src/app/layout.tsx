@@ -1,6 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Cairo } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
+
+const cairo = Cairo({
+  subsets: ["arabic", "latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-cairo",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   applicationName: "منصة إدارة الأكاديمية",
@@ -21,7 +29,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" className={cairo.variable}>
       <body>{children}</body>
     </html>
   );

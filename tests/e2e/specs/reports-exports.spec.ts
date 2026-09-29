@@ -7,8 +7,12 @@ test.describe("Slice 8A operational reporting journeys", () => {
   test("Journey A — owner dashboard uses stored financial and subscription metrics", async ({ page }) => {
     await staffLogin(page, "owner.nogoom@example.test");
     await expect(page.getByRole("heading", { name: "لوحة المالك" })).toBeVisible();
-    for (const label of ["إجمالي التحصيلات", "تحصيلات هذا الشهر", "اشتراكات فعالة", "تنتهي قريبًا", "اشتراكات منتهية"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "فتح التقرير المالي" }).click();
+    const primaryMetrics = page.getByRole("region", { name: "المؤشرات الأساسية" });
+    const secondaryMetrics = page.getByRole("region", { name: "المؤشرات المساندة" });
+    for (const label of ["تحصيل الشهر", "الاشتراكات الفعالة", "تنتهي قريبًا"]) await expect(primaryMetrics.getByText(label, { exact: true })).toBeVisible();
+    await expect(primaryMetrics.getByText(/اشتراك منتهي/)).toBeVisible();
+    await expect(secondaryMetrics.getByText("إجمالي التحصيلات", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "التقرير المالي", exact: true }).first().click();
     await expect(page.getByRole("heading", { name: "التقارير المالية" })).toBeVisible();
   });
 

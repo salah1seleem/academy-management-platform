@@ -7,7 +7,7 @@ test("Demo Admin registers a real player and enrollment from mobile", async ({ p
   await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
-  await page.locator("main").getByRole("link", { name: "تسجيل لاعب جديد" }).click();
+  await page.locator("main header").getByRole("link", { name: "تسجيل لاعب جديد" }).click();
   await expect(page.getByRole("heading", { name: "تسجيل لاعب جديد" })).toBeVisible();
   await page.getByLabel("اسم اللاعب بالعربية").fill(playerName);
   await page.getByLabel("تاريخ الميلاد").fill("2016-05-10");

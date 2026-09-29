@@ -36,7 +36,7 @@ describe("evaluation experience", () => {
 
   it("renders draft evaluation action and completeness", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [{ id: "e1", player: "عمر أحمد محمود", sport: "كرة القدم", group: "مجموعة أ", evaluationDate: "2026-09-28", evaluator: "كريم حسن", status: "Draft", scoredCriteria: 2, totalApplicableCriteria: 18, completenessPercentage: 11.1, version: 1 }] });
-    render(<EvaluationsList />); expect(await screen.findByText(/عمر أحمد محمود/)).toBeVisible(); expect(screen.getByText(/الاكتمال 2\/18/)).toBeVisible(); expect(screen.getByRole("link", { name: "عرض وتعديل" })).toHaveAttribute("href", "/dashboard/evaluations/e1/edit");
+    render(<EvaluationsList />); expect(await screen.findByText(/عمر أحمد محمود/)).toBeVisible(); expect(screen.getByText("2/18")).toBeVisible(); expect(screen.getByRole("columnheader", { name: "الاكتمال" })).toBeVisible(); expect(screen.getByRole("link", { name: "عرض وتعديل" })).toHaveAttribute("href", "/dashboard/evaluations/e1/edit");
   });
 
   it("uses integer 0–100 inputs and explicit Draft/Publish actions", async () => {
