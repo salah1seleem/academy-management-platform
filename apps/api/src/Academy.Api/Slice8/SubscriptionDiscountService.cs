@@ -3,6 +3,7 @@ using Academy.Api.Slice3;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Academy.Api.Slice8;
 
@@ -126,6 +127,10 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
         {
             throw new DiscountConflictException("تعذر تنفيذ الأمر بأمان بسبب تعارض أو إعادة إرسال. أعد تحميل الصفحة.");
         }
+        catch (Exception exception) when (IsSerializationFailure(exception))
+        {
+            throw new DiscountConflictException("تغير طلب التجديد أثناء الحفظ. أعد تحميل الصفحة وحاول مرة أخرى.");
+        }
     }
 
     private static string NormalizeReason(string reason)
@@ -135,6 +140,10 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
         if (value.Length > 500) throw new DiscountValidationException("السبب لا يتجاوز 500 حرف.");
         return value;
     }
+
+    private static bool IsSerializationFailure(Exception exception)
+        => exception is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }
+           || (exception.InnerException is not null && IsSerializationFailure(exception.InnerException));
 
     private static RenewalDiscountResult Result(RenewalRequest renewal, RenewalDiscountAdjustment adjustment, bool replay)
         => new(renewal.Id, renewal.OriginalAmount, renewal.DiscountType?.ToString(), renewal.DiscountValue,
