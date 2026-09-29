@@ -180,6 +180,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.WeightKg).HasPrecision(5, 2);
             entity.HasIndex(x => new { x.AcademyId, x.PlayerCode }).IsUnique();
             entity.HasIndex(x => new { x.AcademyId, x.ArabicName });
+            entity.HasIndex(x => new { x.AcademyId, x.DateOfBirth });
         });
 
         ConfigureTenantEntity<GuardianPlayerLink>(builder, "GuardianPlayerLinks");
@@ -290,6 +291,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.ProviderReference).HasMaxLength(100); entity.Property(x => x.CheckoutReference).HasMaxLength(160);
             entity.HasIndex(x => new { x.AcademyId, x.RenewalRequestId }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.Status, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.Provider, x.ProviderReference }).IsUnique();
             entity.HasOne(x => x.RenewalRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.RenewalRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });
@@ -312,6 +314,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.PaymentMethod).HasMaxLength(60); entity.Property(x => x.Provider).HasMaxLength(60);
             entity.Property(x => x.ProviderReference).HasMaxLength(100); entity.Property(x => x.ConfirmedBy).HasMaxLength(60);
             entity.HasIndex(x => new { x.AcademyId, x.PaymentRequestId }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.ConfirmedAtUtc });
             entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.RenewalRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.RenewalRequestId, x.SportEnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportEnrollmentId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PaymentRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.PaymentRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

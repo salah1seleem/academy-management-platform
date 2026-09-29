@@ -75,7 +75,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `20260928225824_Slice7GuardianContent`. تضيف `SportCatalogItems`, `NutritionItems`, `NutritionCategoryLinks`, `PlayerMedicalRecords`, و`PlayerMedia` فقط، بعلاقات tenant-scoped وقيود نشر وقيم. لا تضيف Carts أو Orders أو Ratings أو Favorites أو Payments أو Messages أو cloud-storage tables.
+آخر migration هي `20260928234906_Slice8ReportingIndexes`. لا تضيف جداول تقارير أو مصدر حقيقة مالي جديد؛ تضيف فقط فهارس محددة لـ`Collections.ConfirmedAtUtc` و`PaymentRequests.Status/CreatedAtUtc` و`Players.DateOfBirth` لدعم الاستعلامات. تظل migration محتوى Slice 7 السابقة كما هي.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -125,6 +125,8 @@ npm run dev:web -- --hostname 127.0.0.1
 
 افتح `http://127.0.0.1:3000/login`. ادخل كولي الأمر «سارة محمود» بالهاتف التجريبي، وشاهد عمر مرة واحدة مع كرة القدم والسباحة، ثم كتالوج الرياضتين مرة واحدة بلا أزرار شراء. افتح ملف عمر ثم «التغذية والصحة» لعرض التبويبات والشكشوكة وحالة البيانات، و«الإصابات والاستشارات الطبية» لعرض السجل المنشور فقط، و«الصور والفيديوهات» لعرض الرسومات المحلية المنشورة. مريم تعرض الحالات الفارغة الطبية/المعرض. ادخل كإداري وافتح «المحتوى» لإدارة الكتالوج والتغذية، و«اللاعبون» لإدارة السجلات الطبية وmetadata المعرض. `OD-008` و`OD-009` و`OD-010` ما زالت غير معتمدة.
 
+لتجربة Slice 8A، ادخل كمالك وافتح «لوحة المالك»، ثم «التقرير المالي» لتصفية التحصيلات المؤكدة حسب الفترة/الرياضة/الفرع/الباقة وتنزيل CSV عربي حقيقي. كإداري افتح «التقارير ← تقارير الحضور»، اختر سبتمبر 2026 وسنة الميلاد 2019 ومجموعة كرة القدم، ثم صدّر CSV؛ يعرض التقرير سجلات الحضور المحفوظة فقط ولا يستنتج الغياب من سجل مفقود. كولي أمر افتح «الإيصالات»، اختر إيصالًا واضغط «طباعة الإيصال» لاستخدام طباعة المتصفح العربية؛ لا يتم إنشاء PDF أو فاتورة ضريبية.
+
 صور الكتالوج والتغذية والمعرض الحالية رسوم SVG محلية اصطناعية مملوكة للمشروع لأغراض Demo. لا يوجد upload أو تخزين وسائط production-grade؛ object storage الخاص، الفحص، الاحتفاظ، والروابط المؤقتة جزء من Production gate لاحق.
 
 ## 8. تشغيل الاختبارات
@@ -166,4 +168,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: تجارة منتجات أو تغذية، production media upload/storage، Communications/AI Reports أو advanced BI، revision/supersede UI أو مقارنة فترات التقييم، تصدير حضور، rescheduling متقدم، خصومات/تجميد/إلغاء اشتراك مكتمل، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.
+لا يوجد حتى الآن: تجارة منتجات أو تغذية، production media upload/storage، Communications/AI Reports أو advanced BI، revision/supersede UI أو مقارنة فترات التقييم، rescheduling متقدم، خصومات/تجميد/إلغاء اشتراك مكتمل، PDF receipts، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.

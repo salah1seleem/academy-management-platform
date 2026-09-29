@@ -21,7 +21,7 @@ test("Guardian completes a successful online test renewal and sees receipt", asy
   await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click();
   await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
   await page.getByRole("link", { name: "عرض الإيصال" }).click();
-  await expect(page.getByText("إيصال تحصيل", { exact: true })).toBeVisible(); await expect(page.getByText("900 EGP")).toBeVisible();
+  await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible(); await expect(page.getByText(/900|٩٠٠/)).toBeVisible();
 });
 
 test("Guardian failed payment does not report a renewal", async ({ page }) => {
@@ -44,7 +44,7 @@ test("Guardian renews for another player without gaining profile access", async 
   await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click();
   await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
   await page.getByRole("link", { name: "عرض الإيصال" }).click();
-  await expect(page.getByText("إيصال تحصيل", { exact: true })).toBeVisible();
+  await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
   await expect(page.getByText("عمر أحمد حسن")).toBeVisible();
   await page.goto("/guardian");
   await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();

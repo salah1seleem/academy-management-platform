@@ -37,7 +37,7 @@ public static class Slice3Endpoints
         admin.MapGet("/renewals", async (CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.RenewalRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.RequestedAtUtc).Select(x => new { x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.SubscriptionPlan.Sport.ArabicName, plan = x.SubscriptionPlan.ArabicName, guardian = db.Users.Where(u => u.Id == x.RequestedByUserId).Select(u => u.DisplayName).FirstOrDefault(), amount = x.AmountExpected, x.Currency, status = x.Status.ToString(), x.RequestedAtUtc }).ToListAsync()); });
         admin.MapGet("/payments", async (CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.PaymentRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, reference = x.ProviderReference, player = x.RenewalRequest.SportEnrollment.Player.ArabicName, plan = x.RenewalRequest.SubscriptionPlan.ArabicName, x.Provider, x.Amount, x.Currency, status = x.Status.ToString(), x.CreatedAtUtc, x.ConfirmedAtUtc }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.PaymentRead);
         admin.MapGet("/collections", async (CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var rows = await db.Collections.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.ConfirmedAtUtc).Select(x => new { x.Id, receiptId = db.Receipts.Where(r => r.AcademyId == t.AcademyId && r.CollectionId == x.Id).Select(r => r.Id).Single(), receiptNumber = db.Receipts.Where(r => r.AcademyId == t.AcademyId && r.CollectionId == x.Id).Select(r => r.ReceiptNumber).Single(), player = x.SportEnrollment.Player.ArabicName, sport = x.SportEnrollment.Sport.ArabicName, x.Amount, x.Currency, x.Provider, x.ConfirmedAtUtc }).ToListAsync(); return Results.Ok(new { total = rows.Sum(x => x.Amount), items = rows }); }).RequireAuthorization(AcademyPermissions.CollectionRead);
-        admin.MapGet("/receipts/{receiptId:guid}", async (Guid receiptId, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var receipt = await db.Receipts.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == receiptId).Select(x => new { x.Id, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return receipt is null ? Results.NotFound() : Results.Ok(receipt); }).RequireAuthorization(AcademyPermissions.CollectionRead);
+        admin.MapGet("/receipts/{receiptId:guid}", async (Guid receiptId, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var receipt = await db.Receipts.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == receiptId).Select(x => new { x.Id, academyName = t.AcademyName, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return receipt is null ? Results.NotFound() : Results.Ok(receipt); }).RequireAuthorization(AcademyPermissions.CollectionRead);
         admin.MapGet("/beneficiary-references", async (CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.BeneficiaryRenewalReferences.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.SportEnrollment.Player.ArabicName).Select(x => new { x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.SportEnrollment.Sport.ArabicName, x.CodeHint, x.ExpiresAtUtc, isActive = x.RevokedAtUtc == null && x.ExpiresAtUtc > clock.UtcNow }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.SubscriptionPlanManage);
         admin.MapPost("/beneficiary-references/{enrollmentId:guid}/regenerate", RegenerateBeneficiaryReference).RequireAuthorization(AcademyPermissions.SubscriptionPlanManage).AddEndpointFilter<CsrfFilter>();
 
@@ -49,6 +49,7 @@ public static class Slice3Endpoints
         guardian.MapPost("/external/renewals", CreateExternalRenewal).AddEndpointFilter<CsrfFilter>();
         guardian.MapGet("/payments/{paymentId:guid}", GuardianPayment);
         guardian.MapPost("/payments/{paymentId:guid}/retry", RetryPayment).AddEndpointFilter<CsrfFilter>();
+        guardian.MapGet("/receipts", GuardianReceipts);
         guardian.MapGet("/receipts/{receiptId:guid}", GuardianReceipt);
 
         if (app.Environment.IsEnvironment("Demo") || app.Environment.IsEnvironment("Testing"))
@@ -112,7 +113,20 @@ public static class Slice3Endpoints
     }
     private static async Task<IResult> GuardianReceipt(Guid receiptId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
-        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var r = await db.Receipts.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == receiptId && x.Collection.RenewalRequest.RequestedByUserId == user).Select(x => new { x.Id, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return r is null ? Results.NotFound() : Results.Ok(r);
+        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var r = await db.Receipts.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == receiptId && x.Collection.RenewalRequest.RequestedByUserId == user).Select(x => new { x.Id, academyName = t.AcademyName, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return r is null ? Results.NotFound() : Results.Ok(r);
+    }
+
+    private static async Task<IResult> GuardianReceipts(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var user = UserId(principal);
+        var items = await db.Receipts.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.Collection.RenewalRequest.RequestedByUserId == user)
+            .OrderByDescending(x => x.PaidAtUtc)
+            .Take(100)
+            .Select(x => new { x.Id, x.ReceiptNumber, player = x.PlayerNameSnapshot, sport = x.SportNameSnapshot, plan = x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc })
+            .ToListAsync();
+        return Results.Ok(new { items });
     }
 
     private static async Task<IResult> ResolveExternalBeneficiary(ExternalReferenceRequest request, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)

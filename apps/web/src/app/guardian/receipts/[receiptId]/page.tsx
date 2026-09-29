@@ -1,5 +1,5 @@
 "use client";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-type Receipt = { receiptNumber: string; playerNameSnapshot: string; sportNameSnapshot: string; planNameSnapshot: string; amount: number; currency: string; paymentMethod: string };
-export default function Page() { const id = String(useParams().receiptId); const [r, setR] = useState<Receipt | null>(null); useEffect(() => { fetch(`/api/v1/guardian/subscriptions/receipts/${id}`).then(x => x.json()).then(setR); }, [id]); return <main className="center-shell"><section className="authenticated-card"><span className="eyebrow">إيصال تحصيل</span><h1>{r?.receiptNumber ?? "جارٍ التحميل…"}</h1>{r && <dl className="identity-summary"><div><dt>اللاعب</dt><dd>{r.playerNameSnapshot}</dd></div><div><dt>الرياضة والباقة</dt><dd>{r.sportNameSnapshot} — {r.planNameSnapshot}</dd></div><div><dt>المبلغ</dt><dd>{r.amount} {r.currency}</dd></div><div><dt>طريقة الدفع</dt><dd>{r.paymentMethod}</dd></div></dl>}<p className="development-note">هذا إيصال تحصيل وليس فاتورة ضريبية.</p></section></main>; }
+import { GuardianShell } from "../../../../components/guardian-shell";
+import { ReceiptPrint } from "../../../../features/receipt-print";
+export default function Page() { const id = String(useParams().receiptId); return <GuardianShell><header className="guardian-page-header"><span>إيصالات الدفع</span><h1>إيصال دفع</h1></header><ReceiptPrint endpoint={`/api/v1/guardian/subscriptions/receipts/${id}`} /></GuardianShell>; }

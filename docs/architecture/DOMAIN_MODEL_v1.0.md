@@ -131,5 +131,12 @@ stateDiagram-v2
 
 - التخزين الزمني `timestamptz` UTC؛ العرض بمنطقة الأكاديمية (demo: Africa/Cairo). تاريخ الميلاد وstart/end كـ`date` عندما لا يلزم وقت. clock حقن قابل للاختبار وDemoReferenceDate صريح.
 - الأموال `decimal(18,2)` مع ISO currency (EGP للديمو)، بلا float. السعر الأصلي والخصم والصافي محفوظة، والتقارير تجمع Collections confirmed فقط.
+
+### Read models التشغيلية في Slice 8A
+
+- `OwnerSummary`, `FinancialReportRow`, `AttendanceReportRow` و`ReceiptListRow` نماذج قراءة مشتقة وليست entities أو جداول حقيقة جديدة. المصدر المالي الوحيد هو `PaymentCollection` المؤكد، مع snapshots التاريخية من `Receipt`؛ حالات `PaymentRequest` المعلقة/الفاشلة/الملغاة/المنتهية تُعد تشغيليًا ولا تُجمع كإيراد.
+- حدود التاريخ المدخلة هي أيام تقويم محلية في timezone الأكاديمية (`Africa/Cairo` للديمو)، ثم يحولها الخادم إلى نطاق UTC نصف مفتوح للتحصيلات. الحضور يستخدم `TrainingSession.SessionDate` مباشرة.
+- تقرير الحضور يعرض `StoredRecordsOnly`: `Present`, `Absent`, `NotRecorded` المسجلة فقط. غياب السجل لا يتحول إلى `Absent`. سنة الميلاد مشتقة من `Player.DateOfBirth` ولا تُخزن تكراريًا، وبيانات اللاعبين والجهاز الفني تبقى منفصلة.
+- الاستعلامات التفاعلية محدودة بـ366 يومًا و100 صف للصفحة، والتصدير بـ5000 صف. CSV يستخدم UTF-8 BOM ويحصّن القيم التي تبدأ بـ`=`, `+`, `-`, `@` من formula injection.
 - الطول cm والوزن kg بقيم decimal وحدود validation؛ العمر يحسب من الميلاد في تاريخ العرض ولا يخزن كحقيقة مستقلة.
 - السجلات التاريخية audit fields (`CreatedAt`, `CreatedBy`, version/concurrency token) وأرشفة بدل الحذف عندما توجد مراجع مالية/حضور/تقييم.

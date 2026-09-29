@@ -1,2 +1,2 @@
-import { PageHeader } from "../../components/dashboard-shell";
-export default function DashboardPage() { return <><PageHeader title="الرئيسية" context="لوحة الإدارة" action={{ label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }} /><section className="dashboard-card"><h2>إدارة منظمة من مكان واحد</h2><p>استخدم القائمة الجانبية لإدارة هيكل الأكاديمية واللاعبين وأولياء الأمور. الاشتراكات والتحصيل غير منفذين في هذه الشريحة.</p></section></>; }
+import { OwnerDashboard } from "../../features/reports";
+export default function DashboardPage() { return <OwnerDashboard />; }

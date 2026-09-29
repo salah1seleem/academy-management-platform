@@ -34,6 +34,10 @@ public static class AcademyPermissions
     public const string MedicalRecordManage = "content.medical.manage";
     public const string PlayerMediaRead = "content.media.read";
     public const string PlayerMediaManage = "content.media.manage";
+    public const string ReportsFinancialRead = "reports.financial.read";
+    public const string ReportsAttendanceRead = "reports.attendance.read";
+    public const string ReportsExport = "reports.export";
+    public const string OwnerDashboardRead = "dashboard.owner.read";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
@@ -77,6 +81,10 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
             AcademyPermissions.MedicalRecordManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.PlayerMediaRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Guardian,
             AcademyPermissions.PlayerMediaManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.ReportsFinancialRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.ReportsAttendanceRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
+            AcademyPermissions.ReportsExport => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
+            AcademyPermissions.OwnerDashboardRead => membership.Role == AcademyRole.AcademyOwner,
             _ => false
         };
         if (allowed) context.Succeed(requirement);

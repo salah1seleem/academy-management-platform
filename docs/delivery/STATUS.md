@@ -1,37 +1,35 @@
 # Status
 
-تاريخ التحديث: 2026-09-29. الفرع: `codex/09-slice7-content`.
+تاريخ التحديث: 2026-09-29. الفرع: `codex/10-slice8a-reports-exports`.
 
-## Slice 7 — منفذ فعليًا
+## Slice 8A — منفذ فعليًا
 
-- أضيف كتالوج رياضي **للعرض فقط** ومربوط بالرياضات ذات التسجيل النشط لأطفال ولي الأمر. تُجمع الرياضة مرة واحدة ولو تكررت بين الأطفال، ولا توجد سلة أو طلب أو checkout أو دفع أو مخزون أو مفضلة أو تقييمات.
-- أضيفت مكتبة تغذية معلوماتية عامة من قاعدة البيانات، بتبويبات الإفطار والغداء والعشاء وتفاصيل الحصة والسعرات والبروتين والكربوهيدرات والدهون وحالة المصدر. بيانات Demo موسومة بوضوح «بيانات تجريبية غير مراجعة» وليست وصفة شخصية أو حقيقة غذائية معتمدة.
-- أضيفت سجلات `Injury|Consultation` للاعب، مع فصل `StaffNotes` عن الملاحظات المرئية، وحالات `Open|Monitoring|Resolved` ونشر صريح. Owner/Admin يديرانها، وGuardian يرى المنشور فقط لطفله المرتبط، وCoach بلا وصول طبي.
-- أضيف معرض `PlayerMedia` كـmetadata للاعب ونوع `Image|Video` ونشر صريح. Guardian يرى المنشور فقط لطفله المرتبط. الأصول الحالية SVG محلية اصطناعية تحت `/demo-assets/`؛ لا upload أو object storage إنتاجي.
-- أضيفت شاشات إدارة عربية للكتالوج والتغذية والسجلات الطبية والمعرض، مع الإنشاء والعرض والتعديل والتفعيل/النشر والفلاتر الملائمة. لا حذف تاريخي ولا حقول تجارة تغذية.
-- دمجت الأقسام في رئيسية ولي الأمر وملف الطفل بترتيب التقرير، التدريب، التغذية، الطب، المعرض، ثم التجديد، مع حالات فارغة صريحة.
-- migration forward-only: `20260928225824_Slice7GuardianContent`، وتضيف فقط `SportCatalogItems`, `NutritionItems`, `NutritionCategoryLinks`, `PlayerMedicalRecords`, و`PlayerMedia`.
-- Demo حتمي ومحدد النطاق: 8 منتجات فعالة لرياضتين، 15 مادة تغذية فريدة في 18 موضع تصنيف، سجل طبي منشور وآخر غير منشور، صورتان منشورتان وعنصر غير منشور، وبيانات Academy B لاختبارات العزل. إعادة seed idempotent ولا تمس بيانات Production.
+- لوحة مالك عربية RTL مشتقة من السجلات المخزنة: التحصيل الكلي/اليومي/الشهري، حالات طلبات الدفع، الاشتراكات الفعالة/القريبة/المنتهية، اللاعبين النشطين، حضور اليوم، breakdown حسب الرياضة والفرع، وأحدث التحصيلات. لا constants مالية ولا trends مختلقة.
+- تقرير مالي Owner/Admin من `Collections` المؤكدة فقط، بفلاتر التاريخ والرياضة والفرع والباقة والمزود/الطريقة والبحث، pagination، ومجموع مطابق للنتيجة. حالات الدفع المعلقة/الفاشلة/الملغاة/المنتهية لا تُحسب إيرادًا.
+- تقرير حضور Owner/Admin، وCoach داخل المجموعات المسندة فقط، مع فصل اللاعبين عن الجهاز الفني وفلاتر الشهر/السنة أو الفترة والفرع والرياضة والمجموعة والحالة والبحث وسنة الميلاد. التغطية `StoredRecordsOnly` ولا يُستنتج الغياب من سجل مفقود.
+- تصدير CSV فعلي مطابق للفلاتر، UTF-8 BOM، أسماء ملفات متوقعة وامتداد صحيح، tenant/resource authorization، حد 5000 صف، وحماية spreadsheet formula injection. لا تُصدّر هواتف أو بيانات طبية أو أسرار دفع.
+- قائمة إيصالات Owner/Admin وقائمة دفع خاصة بولي الأمر، وصفحة «إيصال دفع» عربية تحفظ snapshots التاريخية وتدعم browser print. ليست PDF ولا فاتورة ضريبية.
+- صلاحيات مستقلة: `OwnerDashboardRead`, `ReportsFinancialRead`, `ReportsAttendanceRead`, `ReportsExport`. Guardian بلا تقارير أكاديمية، وCoach بلا مالية/لوحة مالك.
+- migration forward-only `20260928234906_Slice8ReportingIndexes`: ثلاثة فهارس فقط على التحصيل/حالة الدفع/تاريخ الميلاد؛ لا reporting warehouse أو totals table.
+- Demo حتمي أضاف لاعب 2019 وسجل حضور واحد idempotent فقط. لم يكرر تحصيلات، وظل `DemoReferenceDate=2026-09-28` وAcademy B لاختبارات العزل.
 
-## مراجعة الأمن والاتساق
+## الأمن والاتساق
 
-- tenant يُستمد من جلسة الخادم ولا يؤخذ من العميل. كل العلاقات والقراءات والكتابات academy-scoped، وكل قراءة Guardian للاعب تتطلب `GuardianPlayerLink` نشطًا؛ اختبارات Academy B وchild IDOR خضراء.
-- صلاحيات مستقلة للقراءة والإدارة لكل من catalog/nutrition/medical/media؛ DTOs محددة تمنع overposting. `StaffNotes` لا يدخل DTO الخاص بولي الأمر، وCoach محجوب عن الطب وإدارة المحتوى.
-- مراجع الوسائط المقبولة في Slice 7 مقيدة بأصول المشروع المحلية؛ تمنع traversal وURLs الخارجية. هذا ليس بديلًا عن بوابة تخزين Production الخاصة وفحص الملفات والاحتفاظ والروابط المؤقتة.
-- نموذج `Player` ما زال منفصلًا عن `SportEnrollment`؛ أهلية الكتالوج تأتي من التسجيل النشط ولا تكرر الطفل أو الرياضة. وحدات التغذية والكتالوج والطب والمعرض مستقلة ولا تُنشئ أثرًا ماليًا.
-- `OD-008` و`OD-009` و`OD-010` ما زالت **PENDING / NOT APPROVED**؛ ما نُفذ defaults تقنية قابلة للعكس فقط. لم تُخترع موافقة على بائع/شراء أو مصدر غذائي أو سياسة ملفات إنتاجية.
+- tenant يأتي من جلسة الخادم؛ كل report/export/receipt academy-scoped. اختبارات IDOR والعزل والصلاحيات وتلاعب الفلاتر وحدود التاريخ وCSV safety ضمن بوابة Slice 8A.
+- `Dashboard collections total = sum confirmed Collections = receipts sum`، ومجموع الفترة يطابق التقرير والتصدير لنطاقه. Nutrition/catalog/medical/media لا تنشئ أثرًا ماليًا.
+- `OD-001` و`OD-012` ما زالا **PENDING / NOT APPROVED**. ما نُفذ هو نطاق Slice 8A فقط وdefault HTML browser-print قابل للعكس.
 
-## دليل التحقق الحالي
+## دليل التحقق
 
-- `dotnet restore` وRelease build ناجحان: 0 warnings / 0 errors. migration مطبقة محليًا على PostgreSQL، وEF pending-model check أكد عدم وجود تغييرات غير مهاجرة.
-- Backend كامل: **187/187** (`185 integration + 1 unit + 1 architecture`)؛ منها **31/31** اختبار PostgreSQL مخصصًا لـSlice 7، مع بقاء auth/tenancy/subscriptions/payments/attendance/evaluations/guardian خضراء.
-- Frontend: typecheck وlint وproduction build (38 صفحة) ناجحة؛ **50/50** UI tests، و`npm audit --omit=dev` = 0 vulnerabilities.
-- Mobile Chromium E2E: **23/23** في التحقق النهائي، وتشمل كل الرحلات السابقة وأربع رحلات Guardian فعلية لـSlice 7. نتيجة GitHub Actions تُسجل بعد الدفع ولا تُفترض مسبقًا.
+- `dotnet restore` وRelease build ناجحان: **0 warnings / 0 errors**. migration طُبقت على PostgreSQL، وEF pending-model check أكد عدم وجود تغييرات غير مهاجرة.
+- Backend كامل: **219/219** (`217 integration + 1 unit + 1 architecture`)؛ منها **32/32** اختبار PostgreSQL مخصصًا للتقارير/التصدير والأمن والاتساق.
+- Frontend: typecheck وlint وproduction build (**42 صفحة**) ناجحة؛ **64/64** UI tests، و`npm audit --omit=dev` = **0 vulnerabilities**.
+- Mobile Chromium E2E: **27/27** من قاعدة محلية معزولة ونظيفة، وتشمل كل الرحلات السابقة وأربع رحلات Slice 8A الفعلية. نتيجة GitHub Actions تُسجل بعد الدفع ولا تُفترض مسبقًا.
 
 ## مؤجل صراحة
 
-تجارة المنتجات، seller responsibility، favourites/ratings، أي تجارة أو تخصيص للتغذية، مصادر غذائية معتمدة، production media upload/storage، communications/messages، AI/advanced reports، مزود دفع أو SMS حقيقي، Apple Pay، والنشر الإنتاجي. لا production-readiness claim.
+التجميد وتعديل الأيام والإلغاء والخصومات، messages/bot/ranking، PDF generation، تقارير AI/advanced BI، تجارة المنتجات/التغذية، production media، provider/SMS حقيقي، والنشر/production readiness. لا يبدأ Slice 8B أو نطاق آخر هنا.
 
 ## نقطة التوقف
 
-تتوقف المهمة عند Slice 7. لا يبدأ Slice 8، و`main` لا يُدمج أو يُعدل ضمن هذه المهمة.
+تتوقف المهمة عند Slice 8A بعد الدفع ونجاح CI. لا يُدمج أو يُعدل `main`.

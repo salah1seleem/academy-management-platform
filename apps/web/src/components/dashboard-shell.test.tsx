@@ -58,4 +58,20 @@ describe("dashboard navigation governance", () => {
     expect(screen.getByRole("link", { name: "تقييمات اللاعبين" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "التقارير المنشورة" })).toBeVisible();
   });
+
+  it("shows financial reports to administrators", () => {
+    currentPath = "/dashboard/reports/financial";
+    render(<DashboardShell><div>المحتوى</div></DashboardShell>);
+    expect(screen.getByRole("link", { name: "التقارير المالية" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "الإيصالات" })).toBeVisible();
+  });
+
+  it("hides financial reports from coaches while retaining attendance reports", async () => {
+    currentPath = "/dashboard/reports/attendance";
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: "المدرب", role: "Coach" }) });
+    render(<DashboardShell><div>المحتوى</div></DashboardShell>);
+    expect(await screen.findByRole("link", { name: "تقارير الحضور" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "التقارير المالية" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "الإيصالات" })).not.toBeInTheDocument();
+  });
 });

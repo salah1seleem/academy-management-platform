@@ -1,6 +1,5 @@
 "use client";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { LoadingState, PageHeader } from "../../../../../components/dashboard-shell";
-type Receipt = { receiptNumber: string; playerNameSnapshot: string; sportNameSnapshot: string; planNameSnapshot: string; amount: number; currency: string; paidAtUtc: string; paymentMethod: string; providerReference: string };
-export default function Page() { const id = String(useParams().receiptId); const [r, setR] = useState<Receipt | null>(null); useEffect(() => { fetch(`/api/v1/subscriptions/receipts/${id}`).then(x => x.json()).then(setR); }, [id]); return <><PageHeader title="إيصال التحصيل" context="الاشتراكات / التحصيلات / إيصال" />{!r ? <LoadingState /> : <section className="detail-card"><h2>{r.receiptNumber}</h2><dl className="detail-grid"><div><dt>اللاعب</dt><dd>{r.playerNameSnapshot}</dd></div><div><dt>الرياضة والباقة</dt><dd>{r.sportNameSnapshot} — {r.planNameSnapshot}</dd></div><div><dt>المبلغ</dt><dd>{r.amount} {r.currency}</dd></div><div><dt>طريقة الدفع</dt><dd>{r.paymentMethod}</dd></div><div><dt>مرجع provider</dt><dd dir="ltr">{r.providerReference}</dd></div></dl><p className="development-note">إيصال تحصيل؛ ليس فاتورة ضريبية.</p></section>}</>; }
+import { PageHeader } from "../../../../../components/dashboard-shell";
+import { ReceiptPrint } from "../../../../../features/receipt-print";
+export default function Page() { const id = String(useParams().receiptId); return <><PageHeader title="إيصال دفع" context="التقارير / الإيصالات" /><ReceiptPrint endpoint={`/api/v1/subscriptions/receipts/${id}`} /></>; }

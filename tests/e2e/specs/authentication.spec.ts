@@ -10,7 +10,7 @@ test("Arabic mobile owner login is tenant-scoped and logout invalidates the sess
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
 
-  await expect(page.getByRole("heading", { name: "الرئيسية", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "لوحة المالك", level: 1 })).toBeVisible();
 
   const forbidden = await page.evaluate(async () => {
     const csrf = await fetch("/api/v1/auth/csrf").then((response) => response.json()) as { token: string };
