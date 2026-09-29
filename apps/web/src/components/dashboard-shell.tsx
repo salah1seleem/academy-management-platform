@@ -36,6 +36,7 @@ const modules: NavModule[] = [
   { id: "content", title: "المحتوى", group: "الإدارة", icon: Layers3, links: [{ label: "المنتجات الرياضية", href: "/dashboard/content/catalog" }, { label: "التغذية والصحة", href: "/dashboard/content/nutrition" }] },
   { id: "subscriptions", title: "الاشتراكات", group: "التشغيل", icon: CreditCard, links: [
     { label: "الباقات", href: "/dashboard/subscriptions/plans" }, { label: "الاشتراكات الحالية", href: "/dashboard/subscriptions/current" },
+    { label: "تجديد اشتراك", href: "/dashboard/subscriptions/renew/new" },
     { label: "طلبات التجديد", href: "/dashboard/subscriptions/renewals" }, { label: "طلبات الدفع", href: "/dashboard/subscriptions/payments" },
     { label: "التحصيلات", href: "/dashboard/subscriptions/collections" }, { label: "تنتهي قريبًا", href: "/dashboard/subscriptions/expiring" },
     { label: "الاشتراكات المنتهية", href: "/dashboard/subscriptions/expired" },

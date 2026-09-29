@@ -1,7 +1,9 @@
 using Academy.Api.Auth;
+using Academy.Api.Slice3;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice2;
@@ -124,13 +126,31 @@ public static class Slice2DashboardEndpoints
         await db.SaveChangesAsync(); return Results.NoContent();
     }
 
-    private static async Task<IResult> GetPlayer(Guid playerId, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> GetPlayer(Guid playerId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var current = (await tenant.ResolveAsync())!;
         var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == playerId).Select(x => new
         {
             x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive,
-            enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new { e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup.ArabicName, categoryName = e.TrainingGroup.AgeCategory.ArabicName, status = e.Status.ToString() }).ToList()
+            enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
+            {
+                e.Id,
+                sportName = e.Sport.ArabicName,
+                branchName = e.Branch.ArabicName,
+                groupName = e.TrainingGroup.ArabicName,
+                categoryName = e.TrainingGroup.AgeCategory.ArabicName,
+                status = e.Status.ToString(),
+                subscription = db.SubscriptionPeriods.Where(period => period.AcademyId == current.AcademyId && period.SportEnrollmentId == e.Id)
+                    .OrderByDescending(period => period.UpdatedAtUtc)
+                    .Select(period => new
+                    {
+                        period.Id,
+                        plan = period.SubscriptionPlan.ArabicName,
+                        period.StartDate,
+                        period.EndDate,
+                        status = period.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : period.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : period.EndDate < clock.Today || (period.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && period.RemainingSessions <= 0) ? "Expired" : period.StartDate > clock.Today ? "Scheduled" : "Active"
+                    }).FirstOrDefault()
+            }).ToList()
         }).SingleOrDefaultAsync();
         return player is null ? Results.NotFound() : Results.Ok(player);
     }

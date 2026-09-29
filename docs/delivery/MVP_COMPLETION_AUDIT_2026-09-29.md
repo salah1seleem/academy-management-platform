@@ -368,3 +368,14 @@ seed حتمي idempotent، والأسماء/الأصول/السجلات الطب
 النطاق المحدود: (1) إنشاء تجديد Owner/Admin للاعب/التسجيل القائم باستخدام نفس transaction/idempotency/payment rules، (2) ربط quick action الإداري بالرحلة الجديدة، (3) تعريب checkout وplan/status/currency/date display، (4) استبدال root القديمة وتصحيح `manifest.start_url`، (5) إصلاح تحذير form state، (6) إضافة integration/FT/E2E عند 390px لـAdmin renewal وAT-002. لا يبدأ Communications أو provider حقيقي أو Production Gate أو أي OD غير معتمد.
 
 **نقطة التوقف:** لم يبدأ Slice 8D ولم يُنفذ أي application code في فرع التدقيق.
+
+## Post-Audit Slice 8D Closure
+
+هذا ملحق لاحق ولا يغيّر نتائج التدقيق التاريخية أعلاه. نفّذ فرع `codex/14-slice8d-demo-closure` العائقين P0 اللذين حددهما التدقيق:
+
+- `AC-SUB-004`: **IMPLEMENTED**. Owner/Admin ينشئان تجديدًا لتسجيل رياضي قائم عبر خدمة إنشاء مشتركة مع Guardian؛ التحقق tenant/resource-scoped، والإنشاء idempotent ومحمي بقفل transaction، ولا يحدث تحصيل أو إيصال أو فترة قبل تأكيد الدفع. الخصم والدفع وإعادة المحاولة وقواعد early/expired/cancelled تستخدم المسار المالي القائم.
+- `AC-GOV-005`, `AC-PAR-001`, `AC-UX-003`, `AT-002`: أضيفت formatters/mappers عربية مشتركة للعملة والتاريخ والحالات وأنواع الباقة، ونُظفت رحلات Guardian الأساسية، وأصبح `/` يوجّه حسب الجلسة و`manifest.start_url` يساوي `/login`. لا يوجد offline support أو Service Worker.
+- `AT-002`: **PASS** بناءً على اختبارات الواجهة ورحلات Mobile Chromium عند `390×844` التي تغطي الاتجاه العربي، checkout وحالات الدفع/العملة، الجذر وmanifest، مع عدم ظهور enums الإنجليزية المستهدفة.
+- عوائق P0 المتبقية: **0**. الحكم بعد الإغلاق: **READY FOR FINAL DEMO REVIEW**. الحكم الإنتاجي يبقى **NOT PRODUCTION READY**.
+- لا يُغلق `DM-12`؛ يظل **PARTIAL** لأن reset command المقيد بسجلات Demo غير منفذ وخارج نطاق Slice 8D. لذلك يبقى ملخص سيناريوهات الديمو `11 READY / 1 PARTIAL`، مع نجاح قصة التجديد الإداري الجديدة كدليل إضافي لا كبديل لمطلب reset.
+- تبقى عناصر P1 السبعة المسجلة أعلاه مفتوحة للـpilot/بوابات لاحقة؛ لم يبدأ Communications أو provider حقيقي أو Production Gate، ولم تعتمد أي قرارات OD جديدة.

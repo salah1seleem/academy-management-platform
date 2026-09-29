@@ -1,8 +1,19 @@
 # Status
 
-تاريخ التحديث: 2026-09-29. الفرع: `codex/13-mvp-completion-audit`، والأساس المراجع: `a0a27b78e705ba0d43521b9fa0366d64b4a1f554`.
+تاريخ التحديث: 2026-09-29. الفرع: `codex/14-slice8d-demo-closure`، والأساس المعتمد: `9fc885d9c8a10e4832443b060c1ba227de92e099`.
 
-## Full MVP Completion Audit — منفذ
+## Slice 8D — Demo Closure منفذ فعليًا
+
+- أصبح Owner/Admin قادرًا على البحث عن لاعب قائم واختيار `SportEnrollment` قائم وباقة متوافقة ثم إنشاء `RenewalRequest` و`PaymentRequest` فقط. الرحلة لا تنشئ Player أو Guardian link أو Enrollment جديدًا، ولا تنشئ Collection/Receipt/Period قبل نجاح الدفع.
+- جُمعت قواعد الإنشاء في `RenewalCreationService` المشترك بين Guardian وAdmin، مع تحقق tenant/sport، وsnapshot مالي، و`Idempotency-Key`، وقفل PostgreSQL transaction-scoped يمنع طلبين مفتوحين متنافسين للتسجيل نفسه. نجاح `InternalTestPaymentGateway` يعيد استخدام معالج الدفع القائم لإنشاء Collection وReceipt وSubscriptionPeriod ذريًا.
+- أضيفت مداخل التجديد من الاشتراكات الحالية وتفاصيل اللاعب/الفترة والإجراء السريع، وصفحات اختيار/مراجعة ودفع تجريبي للإداري. `AcademyOwner` و`AcademyAdmin` فقط؛ Coach وGuardian ممنوعان، والبحث/التفاصيل tenant-scoped.
+- خصومات Slice 8C متوافقة: ينشئ الإداري الطلب أولًا، ثم يطبق الخصم من شاشة الطلب؛ يُستبدل PaymentRequest المعلق ويظل `FinalAmount` هو مبلغ الدفع والتحصيل والإيصال والتقرير. قواعد التجديد المبكر بعد `EndDate` المعدل والمنتهي/الملغي لم تتغير.
+- أصبحت العملة والتواريخ وأنواع الباقات وحالات الدفع/التجديد/الفترات تعرض عبر formatters عربية مشتركة. أزيلت القيم الإنجليزية الخام من رحلات Guardian الأساسية، وأُصلح input التقييم ومداخل خطة الاشتراك لمنع انتقال uncontrolled/controlled.
+- `/` أصبح مدخلًا واعيًا بالجلسة يوجّه غير المسجل إلى `/login` وGuardian إلى `/guardian` والموظف إلى `/dashboard`. أصبح `manifest.start_url=/login`. لا يوجد Service Worker أو offline support ولا ادعاء بذلك.
+- `AT-002`: **PASS** بعد اختبارات التحويلات العربية، الجذر/manifest، ورحلات Mobile Chromium. `AC-SUB-004`: **IMPLEMENTED**. عوائق الديمو P0 المتبقية: **0**.
+- الحكم الحالي: **READY FOR FINAL DEMO REVIEW**، وليس Production Ready. `DM-12` يبقى **PARTIAL** لأن أمر reset آمن ومقيد بسجلات Demo لم يُنفذ وهو خارج Slice 8D؛ لذلك يظل جرد السيناريوهات `11 READY / 1 PARTIAL`. عناصر P1 المفتوحة من التدقيق: **7**.
+
+## Full MVP Completion Audit — سجل تاريخي سابق لـSlice 8D
 
 - اكتمل تدقيق الأدلة للمتطلبات `117/117` ومعايير القبول `34/34` وسيناريوهات الديمو `12/12`، شاملًا معالجة Premium Dashboard UI، من دون تنفيذ application code أو تغيير baseline.
 - الحكم الحالي: **NOT DEMO READY** حتى تنفيذ admin renewal وإغلاق اتساق العربية/PWA المتبقي؛ والحكم الإنتاجي **NOT PRODUCTION READY**.

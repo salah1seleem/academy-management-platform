@@ -28,7 +28,7 @@ public static class SubscriptionAdjustmentEndpoints
         var period = await db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id)
             .Select(x => new
             {
-                x.Id, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version,
+                x.Id, x.SportEnrollmentId, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version,
                 plan = x.SubscriptionPlan.ArabicName, planType = x.SubscriptionPlan.PlanType,
                 player = x.SportEnrollment.Player.ArabicName, playerCode = x.SportEnrollment.Player.PlayerCode,
                 sport = x.SportEnrollment.Sport.ArabicName, branch = x.SportEnrollment.Branch.ArabicName,
@@ -46,7 +46,7 @@ public static class SubscriptionAdjustmentEndpoints
             }).ToListAsync();
         return Results.Ok(new
         {
-            period.Id, period.player, period.playerCode, period.sport, period.branch, period.group, period.plan,
+            period.Id, period.SportEnrollmentId, period.player, period.playerCode, period.sport, period.branch, period.group, period.plan,
             planType = period.planType.ToString(), period.StartDate, period.EndDate, period.FrozenFromDate,
             period.InitialSessions, period.RemainingSessions, status = status.ToString(), period.Version,
             period.PriceSnapshot, period.CurrencySnapshot, period.receiptId, adjustments = history

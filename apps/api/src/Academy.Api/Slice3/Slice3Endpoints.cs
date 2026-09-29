@@ -32,7 +32,7 @@ public static class Slice3Endpoints
             var t = (await tenant.ResolveAsync())!; var today = clock.Today; var windowEnd = today.AddDays(Math.Clamp(days ?? 7, 1, 90));
             var q = db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
             q = state?.ToLowerInvariant() switch { "active" => q.Where(x => x.Status == SubscriptionPeriodStatus.Frozen || (x.StartDate <= today && (x.EndDate == null || x.EndDate >= today) && x.Status != SubscriptionPeriodStatus.Cancelled && (x.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || x.RemainingSessions > 0))), "expiring" => q.Where(x => x.EndDate >= today && x.EndDate <= windowEnd && x.Status != SubscriptionPeriodStatus.Cancelled), "expired" => q.Where(x => (x.EndDate < today || (x.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && x.RemainingSessions <= 0)) && x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen), _ => q };
-            return Results.Ok(await q.OrderByDescending(x => x.StartDate).Select(x => new { x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.SubscriptionPlan.Sport.ArabicName, plan = x.SubscriptionPlan.ArabicName, planType = x.SubscriptionPlan.PlanType.ToString(), x.StartDate, x.EndDate, x.FrozenFromDate, x.RemainingSessions, status = x.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : x.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : x.EndDate < today || (x.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && x.RemainingSessions <= 0) ? "Expired" : x.StartDate > today ? "Scheduled" : "Active" }).ToListAsync());
+            return Results.Ok(await q.OrderByDescending(x => x.StartDate).Select(x => new { x.Id, sportEnrollmentId = x.SportEnrollmentId, player = x.SportEnrollment.Player.ArabicName, sport = x.SubscriptionPlan.Sport.ArabicName, plan = x.SubscriptionPlan.ArabicName, planType = x.SubscriptionPlan.PlanType.ToString(), x.StartDate, x.EndDate, x.FrozenFromDate, x.RemainingSessions, status = x.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : x.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : x.EndDate < today || (x.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && x.RemainingSessions <= 0) ? "Expired" : x.StartDate > today ? "Scheduled" : "Active" }).ToListAsync());
         });
         admin.MapGet("/renewals", async (CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.RenewalRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.RequestedAtUtc).Select(x => new { x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.SubscriptionPlan.Sport.ArabicName, plan = x.SubscriptionPlan.ArabicName, guardian = db.Users.Where(u => u.Id == x.RequestedByUserId).Select(u => u.DisplayName).FirstOrDefault(), amount = x.FinalAmount, x.OriginalAmount, x.DiscountAmount, x.Currency, status = x.Status.ToString(), x.RequestedAtUtc }).ToListAsync()); });
         admin.MapGet("/payments", async (CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.PaymentRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, reference = x.ProviderReference, player = x.RenewalRequest.SportEnrollment.Player.ArabicName, plan = x.RenewalRequest.SubscriptionPlan.ArabicName, x.Provider, x.Amount, x.Currency, status = x.Status.ToString(), x.CreatedAtUtc, x.ConfirmedAtUtc }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.PaymentRead);
@@ -40,6 +40,11 @@ public static class Slice3Endpoints
         admin.MapGet("/receipts/{receiptId:guid}", async (Guid receiptId, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var receipt = await db.Receipts.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == receiptId).Select(x => new { x.Id, academyName = t.AcademyName, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.OriginalAmount, discountType = x.DiscountType == null ? null : x.DiscountType.ToString(), x.DiscountValue, x.DiscountAmount, x.FinalAmount, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return receipt is null ? Results.NotFound() : Results.Ok(receipt); }).RequireAuthorization(AcademyPermissions.CollectionRead);
         admin.MapGet("/beneficiary-references", async (CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock) => { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.BeneficiaryRenewalReferences.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.SportEnrollment.Player.ArabicName).Select(x => new { x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.SportEnrollment.Sport.ArabicName, x.CodeHint, x.ExpiresAtUtc, isActive = x.RevokedAtUtc == null && x.ExpiresAtUtc > clock.UtcNow }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.SubscriptionPlanManage);
         admin.MapPost("/beneficiary-references/{enrollmentId:guid}/regenerate", RegenerateBeneficiaryReference).RequireAuthorization(AcademyPermissions.SubscriptionPlanManage).AddEndpointFilter<CsrfFilter>();
+        admin.MapGet("/admin-renewals/enrollments", AdminRenewalEnrollments).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage);
+        admin.MapGet("/admin-renewals/enrollments/{enrollmentId:guid}", AdminRenewalEnrollment).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage);
+        admin.MapPost("/admin-renewals", CreateAdminRenewal).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage).AddEndpointFilter<CsrfFilter>();
+        admin.MapGet("/payments/{paymentId:guid}", AdminPayment).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage);
+        admin.MapPost("/payments/{paymentId:guid}/retry", RetryAdminPayment).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage).AddEndpointFilter<CsrfFilter>();
 
         var guardian = api.MapGroup("/guardian/subscriptions").RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
         guardian.MapGet("/enrollments", GuardianEnrollments);
@@ -55,6 +60,7 @@ public static class Slice3Endpoints
         if (app.Environment.IsEnvironment("Demo") || app.Environment.IsEnvironment("Testing"))
         {
             guardian.MapPost("/payments/{paymentId:guid}/simulate", Simulate).AddEndpointFilter<CsrfFilter>();
+            admin.MapPost("/payments/{paymentId:guid}/simulate", SimulateAdmin).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage).AddEndpointFilter<CsrfFilter>();
             api.MapPost("/payments/internal-test/events", async (ProviderEventEnvelope value, PaymentProcessor processor) => { var result = await processor.ProcessAsync(value); return result.Accepted ? Results.Ok(result) : Results.BadRequest(result); });
         }
     }
@@ -94,13 +100,13 @@ public static class Slice3Endpoints
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var enrollment = await OwnEnrollment(db, t.AcademyId, user, enrollmentId); if (enrollment is null) return Results.NotFound();
         return Results.Ok(await db.SubscriptionPlans.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount }).ToListAsync());
     }
-    private static async Task<IResult> CreateRenewal(RenewalCreateRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IPaymentGateway gateway, ISubscriptionClock clock)
+    private static async Task<IResult> CreateRenewal(RenewalCreateRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, RenewalCreationService renewals)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var key = http.Request.Headers["Idempotency-Key"].ToString(); if (string.IsNullOrWhiteSpace(key) || key.Length > 100) return Results.BadRequest(new { message = "Idempotency-Key مطلوب." });
         var existing = await db.RenewalRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == user && x.IdempotencyKey == key).Select(x => new { renewalId = x.Id, paymentId = x.PaymentRequestId }).SingleOrDefaultAsync(); if (existing is not null) return Results.Ok(existing);
         var enrollment = await OwnEnrollment(db, t.AcademyId, user, request.SportEnrollmentId); if (enrollment is null) return Results.NotFound();
         var plan = await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == enrollment.SportId && x.IsActive); if (plan is null) return Results.NotFound();
-        return await CreateRenewalAndPayment(t.AcademyId, user, enrollment, plan, key, db, gateway, clock);
+        return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, enrollment.Id, plan.Id, key, false), false);
     }
     private static async Task<IResult> GuardianPayment(Guid paymentId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
@@ -141,7 +147,7 @@ public static class Slice3Endpoints
         return Results.Ok(new { beneficiary.playerDisplayName, beneficiary.sport, beneficiary.academyName, plans });
     }
 
-    private static async Task<IResult> CreateExternalRenewal(ExternalRenewalRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IPaymentGateway gateway, ISubscriptionClock clock)
+    private static async Task<IResult> CreateExternalRenewal(ExternalRenewalRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, RenewalCreationService renewals, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var key = IdempotencyKey(http); if (key is null) return Results.BadRequest(new { message = "Idempotency-Key مطلوب." });
         var existing = await ExistingRenewal(db, t.AcademyId, user, key); if (existing is not null) return Results.Ok(existing);
@@ -151,10 +157,10 @@ public static class Slice3Endpoints
         if (reference is null) return Results.NotFound(new { message = "كود التجديد غير صالح أو منتهي." });
         var plan = await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == reference.SportEnrollment.SportId && x.IsActive);
         if (plan is null) return Results.NotFound(new { message = "الباقة غير متاحة لهذا التسجيل." });
-        return await CreateRenewalAndPayment(t.AcademyId, user, reference.SportEnrollment, plan, key, db, gateway, clock);
+        return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, reference.SportEnrollment.Id, plan.Id, key, false), false);
     }
 
-    private static async Task<IResult> RetryPayment(Guid paymentId, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IPaymentGateway gateway, ISubscriptionClock clock)
+    private static async Task<IResult> RetryPayment(Guid paymentId, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, RenewalCreationService renewals)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var key = IdempotencyKey(http); if (key is null) return Results.BadRequest(new { message = "Idempotency-Key مطلوب." });
         var existing = await ExistingRenewal(db, t.AcademyId, user, key); if (existing is not null) return Results.Ok(existing);
@@ -162,10 +168,186 @@ public static class Slice3Endpoints
             .SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == paymentId && x.RenewalRequest.RequestedByUserId == user);
         if (old is null) return Results.NotFound();
         if (old.Status is not (PaymentRequestStatus.Failed or PaymentRequestStatus.Cancelled or PaymentRequestStatus.Expired)) return Results.Conflict(new { message = "إعادة المحاولة متاحة للعمليات الفاشلة أو الملغاة أو المنتهية فقط." });
-        return await CreateRenewalAndPayment(t.AcademyId, user, old.RenewalRequest.SportEnrollment, old.RenewalRequest.SubscriptionPlan, key, db, gateway, clock,
-            old.RenewalRequest.OriginalAmount, old.RenewalRequest.DiscountType, old.RenewalRequest.DiscountValue,
-            old.RenewalRequest.DiscountAmount, old.RenewalRequest.FinalAmount, old.RenewalRequest.DiscountReason,
-            old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc);
+        var snapshot = new RenewalFinancialSnapshot(old.RenewalRequest.OriginalAmount, old.RenewalRequest.DiscountType,
+            old.RenewalRequest.DiscountValue, old.RenewalRequest.DiscountAmount, old.RenewalRequest.FinalAmount,
+            old.RenewalRequest.DiscountReason, old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc);
+        return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, old.RenewalRequest.SportEnrollmentId,
+            old.RenewalRequest.SubscriptionPlanId, key, false, snapshot, true), false);
+    }
+
+    private static async Task<IResult> AdminRenewalEnrollments(string? search, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var today = clock.Today;
+        var query = db.SportEnrollments.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.IsActive);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(x =>
+                EF.Functions.ILike(x.Player.ArabicName, $"%{term}%") ||
+                EF.Functions.ILike(x.Player.PlayerCode, $"%{term}%") ||
+                db.GuardianPlayerLinks.Any(link =>
+                    link.AcademyId == t.AcademyId && link.PlayerId == x.PlayerId && link.IsActive &&
+                    link.Guardian.ContactPhone != null && EF.Functions.ILike(link.Guardian.ContactPhone, $"%{term}%")));
+        }
+
+        var rows = await query.OrderBy(x => x.Player.ArabicName).ThenBy(x => x.Sport.ArabicName).Take(50)
+            .Select(x => new
+            {
+                x.Id,
+                x.PlayerId,
+                x.Player.PlayerCode,
+                player = x.Player.ArabicName,
+                sport = x.Sport.ArabicName,
+                branch = x.Branch.ArabicName,
+                group = x.TrainingGroup.ArabicName,
+                guardianPhone = db.GuardianPlayerLinks.Where(link => link.AcademyId == t.AcademyId && link.PlayerId == x.PlayerId && link.IsActive)
+                    .Select(link => link.Guardian.ContactPhone).FirstOrDefault(),
+                period = db.SubscriptionPeriods.Where(period => period.AcademyId == t.AcademyId && period.SportEnrollmentId == x.Id)
+                    .OrderByDescending(period => period.UpdatedAtUtc)
+                    .Select(period => new
+                    {
+                        period.Id,
+                        plan = period.SubscriptionPlan.ArabicName,
+                        period.StartDate,
+                        period.EndDate,
+                        status = period.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : period.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : period.EndDate < today || (period.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && period.RemainingSessions <= 0) ? "Expired" : period.StartDate > today ? "Scheduled" : "Active"
+                    }).FirstOrDefault()
+            }).ToListAsync();
+        return Results.Ok(rows);
+    }
+
+    private static async Task<IResult> AdminRenewalEnrollment(Guid enrollmentId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var resolvedEnrollmentId = await db.SportEnrollments.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.Id == enrollmentId)
+            .Select(x => (Guid?)x.Id).SingleOrDefaultAsync()
+            ?? await db.SubscriptionPeriods.AsNoTracking()
+                .Where(x => x.AcademyId == t.AcademyId && x.Id == enrollmentId)
+                .Select(x => (Guid?)x.SportEnrollmentId).SingleOrDefaultAsync();
+        if (resolvedEnrollmentId is null) return Results.NotFound();
+        var enrollment = await db.SportEnrollments.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.Id == resolvedEnrollmentId && x.IsActive)
+            .Select(x => new
+            {
+                x.Id,
+                x.PlayerId,
+                x.SportId,
+                x.Player.PlayerCode,
+                player = x.Player.ArabicName,
+                sport = x.Sport.ArabicName,
+                branch = x.Branch.ArabicName,
+                group = x.TrainingGroup.ArabicName
+            }).SingleOrDefaultAsync();
+        if (enrollment is null) return Results.NotFound();
+
+        var current = await db.SubscriptionPeriods.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.SportEnrollmentId == resolvedEnrollmentId)
+            .OrderByDescending(x => x.UpdatedAtUtc)
+            .Select(x => new { x.Id, plan = x.SubscriptionPlan.ArabicName, x.StartDate, x.EndDate, status = x.Status.ToString() })
+            .FirstOrDefaultAsync();
+        var latestEligibleEnd = await db.SubscriptionPeriods.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.SportEnrollmentId == resolvedEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.EndDate != null)
+            .MaxAsync(x => x.EndDate);
+        var previewStart = latestEligibleEnd.HasValue && latestEligibleEnd.Value >= clock.Today
+            ? latestEligibleEnd.Value.AddDays(1)
+            : clock.Today;
+        var plans = await db.SubscriptionPlans.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive)
+            .OrderBy(x => x.DisplayOrder).ThenBy(x => x.ArabicName)
+            .Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount })
+            .ToListAsync();
+        return Results.Ok(new { enrollment, current, previewStart, plans });
+    }
+
+    private static async Task<IResult> CreateAdminRenewal(RenewalCreateRequest request, HttpContext http, CurrentTenant tenant,
+        ClaimsPrincipal principal, RenewalCreationService renewals)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var key = IdempotencyKey(http);
+        if (key is null) return Results.BadRequest(new { message = "Idempotency-Key مطلوب." });
+        var result = await renewals.CreateAsync(t.AcademyId, UserId(principal), request.SportEnrollmentId,
+            request.SubscriptionPlanId, key, true);
+        return RenewalResult(result, true);
+    }
+
+    private static async Task<IResult> AdminPayment(Guid paymentId, CurrentTenant tenant, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var payment = await db.PaymentRequests.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.Id == paymentId)
+            .Select(x => new
+            {
+                x.Id,
+                renewalId = x.RenewalRequestId,
+                x.ProviderReference,
+                x.Amount,
+                x.Currency,
+                status = x.Status.ToString(),
+                renewalStatus = x.RenewalRequest.Status.ToString(),
+                player = x.RenewalRequest.SportEnrollment.Player.ArabicName,
+                playerCode = x.RenewalRequest.SportEnrollment.Player.PlayerCode,
+                sport = x.RenewalRequest.SubscriptionPlan.Sport.ArabicName,
+                plan = x.RenewalRequest.SubscriptionPlan.ArabicName,
+                x.RenewalRequest.OriginalAmount,
+                discountType = x.RenewalRequest.DiscountType == null ? null : x.RenewalRequest.DiscountType.ToString(),
+                x.RenewalRequest.DiscountValue,
+                x.RenewalRequest.DiscountAmount,
+                x.RenewalRequest.FinalAmount,
+                x.CreatedAtUtc,
+                x.ConfirmedAtUtc,
+                currentPaymentId = x.RenewalRequest.PaymentRequestId,
+                isCurrent = x.RenewalRequest.PaymentRequestId == x.Id,
+                receiptId = db.Receipts.Where(r => r.AcademyId == t.AcademyId && r.Collection.PaymentRequestId == x.Id).Select(r => (Guid?)r.Id).FirstOrDefault()
+            }).SingleOrDefaultAsync();
+        return payment is null ? Results.NotFound() : Results.Ok(payment);
+    }
+
+    private static async Task<IResult> RetryAdminPayment(Guid paymentId, HttpContext http, CurrentTenant tenant,
+        ClaimsPrincipal principal, FoundationDbContext db, RenewalCreationService renewals)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var key = IdempotencyKey(http);
+        if (key is null) return Results.BadRequest(new { message = "Idempotency-Key مطلوب." });
+        var old = await db.PaymentRequests.AsNoTracking().Include(x => x.RenewalRequest)
+            .SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == paymentId);
+        if (old is null) return Results.NotFound();
+        if (old.Status is not (PaymentRequestStatus.Failed or PaymentRequestStatus.Cancelled or PaymentRequestStatus.Expired))
+            return Results.Conflict(new { message = "إعادة المحاولة متاحة للعمليات الفاشلة أو الملغاة أو المنتهية فقط." });
+        var snapshot = new RenewalFinancialSnapshot(old.RenewalRequest.OriginalAmount, old.RenewalRequest.DiscountType,
+            old.RenewalRequest.DiscountValue, old.RenewalRequest.DiscountAmount, old.RenewalRequest.FinalAmount,
+            old.RenewalRequest.DiscountReason, old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc);
+        var result = await renewals.CreateAsync(t.AcademyId, UserId(principal), old.RenewalRequest.SportEnrollmentId,
+            old.RenewalRequest.SubscriptionPlanId, key, true, snapshot, true);
+        return RenewalResult(result, true);
+    }
+
+    private static async Task<IResult> SimulateAdmin(Guid paymentId, SimulationRequest request, CurrentTenant tenant,
+        FoundationDbContext db, IPaymentGateway gateway, PaymentProcessor processor)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var payment = await db.PaymentRequests.Include(x => x.RenewalRequest)
+            .SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == paymentId);
+        if (payment is null) return Results.NotFound();
+        if (!Enum.TryParse<PaymentEventOutcome>(request.Outcome, true, out var outcome))
+            return Results.BadRequest(new { message = "نتيجة المحاكاة غير صالحة." });
+        var result = await processor.ProcessAsync(gateway.CreateTestEvent(payment, outcome));
+        return result.Accepted ? Results.Ok(result) : Results.BadRequest(result);
+    }
+
+    private static IResult RenewalResult(RenewalCreationResult result, bool admin)
+    {
+        if (result.State == RenewalCreationState.NotFound) return Results.NotFound();
+        if (result.State == RenewalCreationState.OpenRenewalExists)
+            return Results.Conflict(new { message = "يوجد طلب تجديد ودفع جارٍ بالفعل لهذا التسجيل. افتح طلب الدفع الحالي قبل إنشاء طلب آخر." });
+        var body = new { renewalId = result.RenewalId, paymentId = result.PaymentId };
+        if (result.State == RenewalCreationState.Replay) return Results.Ok(body);
+        var location = admin
+            ? $"/api/v1/subscriptions/payments/{result.PaymentId}"
+            : $"/api/v1/guardian/subscriptions/payments/{result.PaymentId}";
+        return Results.Created(location, body);
     }
 
     private static async Task<IResult> RegenerateBeneficiaryReference(Guid enrollmentId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock)
@@ -174,18 +356,6 @@ public static class Slice3Endpoints
         var active = await db.BeneficiaryRenewalReferences.Where(x => x.AcademyId == t.AcademyId && x.SportEnrollmentId == enrollmentId && x.RevokedAtUtc == null).ToListAsync(); foreach (var item in active) { item.RevokedAtUtc = clock.UtcNow; item.UpdatedAtUtc = clock.UtcNow; }
         var raw = BeneficiaryRenewalCodes.Generate(); var entity = new BeneficiaryRenewalReference { Id = Guid.NewGuid(), AcademyId = t.AcademyId, SportEnrollmentId = enrollmentId, CodeHash = BeneficiaryRenewalCodes.Hash(raw), CodeHint = BeneficiaryRenewalCodes.Hint(raw), ExpiresAtUtc = clock.UtcNow.AddYears(1), GeneratedByUserId = UserId(principal), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
         db.BeneficiaryRenewalReferences.Add(entity); await db.SaveChangesAsync(); return Results.Ok(new { reference = raw, entity.CodeHint, entity.ExpiresAtUtc, message = "احفظ الكود الآن؛ لن يظهر كاملًا مرة أخرى." });
-    }
-
-    private static async Task<IResult> CreateRenewalAndPayment(Guid academyId, Guid userId, Academy.Infrastructure.People.SportEnrollment enrollment, SubscriptionPlan plan, string key, FoundationDbContext db, IPaymentGateway gateway, ISubscriptionClock clock,
-        decimal? originalAmount = null, RenewalDiscountType? discountType = null, decimal? discountValue = null,
-        decimal discountAmount = 0m, decimal? finalAmount = null, string? discountReason = null,
-        Guid? discountAppliedByUserId = null, DateTimeOffset? discountAppliedAtUtc = null)
-    {
-        await using var tx = await db.Database.BeginTransactionAsync();
-        var original = originalAmount ?? plan.Price; var final = finalAmount ?? original;
-        var renewal = new RenewalRequest { Id = Guid.NewGuid(), AcademyId = academyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, SubscriptionPlanId = plan.Id, RequestedByUserId = userId, RequestedAtUtc = clock.UtcNow, OriginalAmount = original, DiscountType = discountType, DiscountValue = discountValue, DiscountAmount = discountAmount, FinalAmount = final, DiscountReason = discountReason, DiscountAppliedByUserId = discountAppliedByUserId, DiscountAppliedAtUtc = discountAppliedAtUtc, AmountExpected = final, Currency = plan.Currency, Status = RenewalRequestStatus.PaymentInProgress, IdempotencyKey = key, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
-        var paymentId = Guid.NewGuid(); var session = gateway.CreateCheckout(academyId, paymentId); var payment = new PaymentRequest { Id = paymentId, AcademyId = academyId, RenewalRequestId = renewal.Id, Provider = session.Provider, ProviderEnvironment = "Demo", Amount = final, Currency = plan.Currency, Status = PaymentRequestStatus.Pending, ProviderReference = session.ProviderReference, CheckoutReference = session.CheckoutReference, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
-        renewal.PaymentRequestId = payment.Id; db.RenewalRequests.Add(renewal); db.PaymentRequests.Add(payment); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Created($"/api/v1/guardian/subscriptions/payments/{payment.Id}", new { renewalId = renewal.Id, paymentId = payment.Id });
     }
 
     private static string? IdempotencyKey(HttpContext http) { var key = http.Request.Headers["Idempotency-Key"].ToString(); return string.IsNullOrWhiteSpace(key) || key.Length > 100 ? null : key; }

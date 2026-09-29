@@ -54,11 +54,11 @@ export default function LoginPage() {
         <button className={mode === "staff" ? "active" : ""} onClick={() => setMode("staff")}>فريق الأكاديمية</button>
         <button className={mode === "guardian" ? "active" : ""} onClick={() => setMode("guardian")}>ولي أمر</button>
       </div>
-      {mode === "staff" ? <form onSubmit={(event) => void staffLogin(event)}>
+      {mode === "staff" ? <form key="staff-login" onSubmit={(event) => void staffLogin(event)}>
         <label className="field">البريد الإلكتروني<input name="email" type="email" autoComplete="username" required /></label>
         <label className="field">كلمة المرور<input name="password" type="password" autoComplete="current-password" required /></label>
         <button className="primary-button" disabled={busy}>{busy ? "جارٍ الدخول…" : "دخول آمن"}</button>
-      </form> : <form onSubmit={(event) => void guardianSubmit(event)}>
+      </form> : <form key="guardian-login" onSubmit={(event) => void guardianSubmit(event)}>
         <p className="demo-note">بيئة العرض فقط: لا يتم إرسال رسالة SMS حقيقية.</p>
         <label className="field">رقم الهاتف<input dir="ltr" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="01000000001" required disabled={Boolean(challengeId)} /></label>
         {challengeId && <label className="field">رمز التحقق<input dir="ltr" name="code" inputMode="numeric" required /></label>}

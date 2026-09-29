@@ -35,21 +35,21 @@ async function applyDiscount(page: Page, renewalId: string, type: "نسبة مئ
 test.describe.serial("Slice 8C subscription discount journeys", () => {
   test("Journey A — Admin applies 10 percent and final amount updates", async ({ page }) => {
     const renewal = await startRenewal(page); originalCheckout = renewal.url; await applyDiscount(page, renewal.renewalId, "نسبة مئوية", "10", "خصم إخوة تجريبي");
-    await expect(page.getByText("10% (-90 جنيه)")).toBeVisible(); await expect(page.getByText("810 جنيه", { exact: true })).toBeVisible(); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
+    await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(/10%.*٩٠/); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٨١٠/); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
   });
 
   test("Journey B — Guardian pays the discounted final amount and sees receipt", async ({ page }) => {
     await guardianLogin(page); await page.goto(originalCheckout); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click();
-    await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("10% (-90 EGP)")).toBeVisible(); await expect(page.getByText("810 EGP", { exact: true })).toBeVisible();
+    await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(/10%.*٩٠/); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٨١٠/);
     await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click(); await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
-    await page.getByRole("link", { name: "عرض الإيصال" }).click(); await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("10% (-90 جنيه)")).toBeVisible(); await expect(page.getByText("810 جنيه")).toBeVisible();
+    await page.getByRole("link", { name: "عرض الإيصال" }).click(); await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(/10%.*٩٠/); await expect(page.getByText("المبلغ المدفوع", { exact: true }).locator("..")).toContainText(/٨١٠/);
   });
 
   test("Journey C — Failed discounted payment has no receipt and retry retains amount", async ({ page }) => {
     const renewal = await startRenewal(page); await applyDiscount(page, renewal.renewalId, "مبلغ ثابت", "150", "خصم حالة تشغيلية");
-    await guardianLogin(page); await page.goto(renewal.url); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click(); await expect(page.getByText("750 EGP", { exact: true })).toBeVisible();
+    await guardianLogin(page); await page.goto(renewal.url); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٧٥٠/);
     await page.getByRole("button", { name: "محاكاة فشل الدفع" }).click(); await expect(page.getByText("فشلت عملية الدفع ولم يتم تجديد الاشتراك.")).toBeVisible(); await expect(page.getByRole("link", { name: "عرض الإيصال" })).toHaveCount(0);
-    await page.getByRole("button", { name: "إعادة محاولة الدفع" }).click(); await expect(page.getByText("750 EGP", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "إعادة محاولة الدفع" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٧٥٠/);
   });
 
   test("Journey D — Guardian and Coach cannot mutate discounts", async ({ page }) => {

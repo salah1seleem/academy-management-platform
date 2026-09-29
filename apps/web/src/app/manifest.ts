@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "منصة إدارة الأكاديمية",
     short_name: "الأكاديمية",
     description: "منصة عربية لإدارة الأكاديميات الرياضية.",
-    start_url: "/",
+    start_url: "/login",
     display: "standalone",
     background_color: "#f4f7f6",
     theme_color: "#0f766e",
