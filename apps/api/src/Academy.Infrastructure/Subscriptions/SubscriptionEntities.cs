@@ -9,6 +9,7 @@ public enum RenewalRequestStatus { PendingPayment = 1, PaymentInProgress = 2, Pa
 public enum PaymentRequestStatus { Created = 1, Pending = 2, Confirmed = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentEventOutcome { Success = 1, Failed = 2, Cancelled = 3 }
 public enum SubscriptionAdjustmentType { FreezeStarted = 1, FreezeEnded = 2, DaysAdded = 3, DaysDeducted = 4, Cancelled = 5 }
+public enum RenewalDiscountType { Percentage = 1, FixedAmount = 2 }
 
 public sealed class BeneficiaryRenewalReference : TenantEntity
 {
@@ -79,6 +80,14 @@ public sealed class RenewalRequest : TenantEntity
     public Guid SubscriptionPlanId { get; set; }
     public Guid RequestedByUserId { get; set; }
     public DateTimeOffset RequestedAtUtc { get; set; }
+    public decimal OriginalAmount { get; set; }
+    public RenewalDiscountType? DiscountType { get; set; }
+    public decimal? DiscountValue { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public string? DiscountReason { get; set; }
+    public Guid? DiscountAppliedByUserId { get; set; }
+    public DateTimeOffset? DiscountAppliedAtUtc { get; set; }
     public decimal AmountExpected { get; set; }
     public required string Currency { get; set; }
     public RenewalRequestStatus Status { get; set; }
@@ -86,6 +95,23 @@ public sealed class RenewalRequest : TenantEntity
     public required string IdempotencyKey { get; set; }
     public SportEnrollment SportEnrollment { get; set; } = null!;
     public SubscriptionPlan SubscriptionPlan { get; set; } = null!;
+}
+
+public sealed class RenewalDiscountAdjustment : TenantEntity
+{
+    public Guid RenewalRequestId { get; set; }
+    public RenewalDiscountType? PreviousDiscountType { get; set; }
+    public decimal? PreviousDiscountValue { get; set; }
+    public RenewalDiscountType? NewDiscountType { get; set; }
+    public decimal? NewDiscountValue { get; set; }
+    public decimal PreviousDiscountAmount { get; set; }
+    public decimal NewDiscountAmount { get; set; }
+    public decimal PreviousFinalAmount { get; set; }
+    public decimal NewFinalAmount { get; set; }
+    public required string Reason { get; set; }
+    public Guid PerformedByUserId { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public RenewalRequest RenewalRequest { get; set; } = null!;
 }
 
 public sealed class PaymentRequest : TenantEntity
@@ -146,6 +172,11 @@ public sealed class Receipt : TenantEntity
     public required string PlayerNameSnapshot { get; set; }
     public required string SportNameSnapshot { get; set; }
     public required string PlanNameSnapshot { get; set; }
+    public decimal OriginalAmount { get; set; }
+    public RenewalDiscountType? DiscountType { get; set; }
+    public decimal? DiscountValue { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal FinalAmount { get; set; }
     public decimal Amount { get; set; }
     public required string Currency { get; set; }
     public DateTimeOffset PaidAtUtc { get; set; }

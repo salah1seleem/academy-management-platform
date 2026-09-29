@@ -14,6 +14,7 @@ public static class AcademyPermissions
     public const string SubscriptionPlanManage = "subscription.plan.manage";
     public const string SubscriptionRead = "subscription.read";
     public const string SubscriptionAdjustmentManage = "subscription.adjustment.manage";
+    public const string SubscriptionDiscountManage = "subscription.discount.manage";
     public const string GuardianOwnRenewal = "renewal.guardian.own";
     public const string PaymentRead = "payment.read";
     public const string CollectionRead = "collection.read";
@@ -62,6 +63,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
             AcademyPermissions.SubscriptionPlanManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.SubscriptionRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.SubscriptionAdjustmentManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.SubscriptionDiscountManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.GuardianOwnRenewal => membership.Role == AcademyRole.Guardian,
             AcademyPermissions.PaymentRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.CollectionRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,

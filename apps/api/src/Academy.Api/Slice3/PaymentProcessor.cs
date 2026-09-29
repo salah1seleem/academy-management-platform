@@ -21,7 +21,9 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
         var payment = await db.PaymentRequests.Include(x => x.RenewalRequest).ThenInclude(x => x.SportEnrollment).ThenInclude(x => x.Player)
             .Include(x => x.RenewalRequest).ThenInclude(x => x.SubscriptionPlan).ThenInclude(x => x.Sport)
             .SingleOrDefaultAsync(x => x.Id == value.PaymentRequestId && x.AcademyId == value.AcademyId, ct);
-        if (payment is null || payment.Provider != gateway.Name || payment.ProviderReference != value.ProviderReference || payment.Amount != value.Amount || payment.Currency != value.Currency)
+        if (payment is null || payment.Provider != gateway.Name || payment.ProviderReference != value.ProviderReference ||
+            payment.Id != payment.RenewalRequest.PaymentRequestId || payment.Amount != payment.RenewalRequest.FinalAmount ||
+            payment.Currency != payment.RenewalRequest.Currency || payment.Amount != value.Amount || payment.Currency != value.Currency)
             return new(false, false, "mismatch");
 
         var outcome = value.Status switch { "succeeded" => PaymentEventOutcome.Success, "failed" => PaymentEventOutcome.Failed, "cancelled" => PaymentEventOutcome.Cancelled, _ => (PaymentEventOutcome?)null };
@@ -102,7 +104,10 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             ReceiptNumber = $"RC-{clock.UtcNow:yyyyMMdd}-{collection.Id.ToString("N")[..8].ToUpperInvariant()}",
             PlayerId = payment.RenewalRequest.SportEnrollment.PlayerId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId, SubscriptionPlanId = plan.Id,
             PlayerNameSnapshot = payment.RenewalRequest.SportEnrollment.Player.ArabicName, SportNameSnapshot = plan.Sport.ArabicName,
-            PlanNameSnapshot = plan.ArabicName, Amount = payment.Amount, Currency = payment.Currency, PaidAtUtc = clock.UtcNow,
+            PlanNameSnapshot = plan.ArabicName, OriginalAmount = payment.RenewalRequest.OriginalAmount,
+            DiscountType = payment.RenewalRequest.DiscountType, DiscountValue = payment.RenewalRequest.DiscountValue,
+            DiscountAmount = payment.RenewalRequest.DiscountAmount, FinalAmount = payment.RenewalRequest.FinalAmount,
+            Amount = payment.Amount, Currency = payment.Currency, PaidAtUtc = clock.UtcNow,
             PaymentMethod = "الدفع الإلكتروني", ProviderReference = payment.ProviderReference, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
         };
         db.Receipts.Add(receipt);

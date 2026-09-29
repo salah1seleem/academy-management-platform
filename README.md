@@ -1,6 +1,6 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 8B: تعديلات الاشتراك الموثقة**.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 8C: خصومات التجديد والمبلغ النهائي**.
 
 ## ما الموجود الآن؟
 
@@ -14,6 +14,7 @@
 - باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر لنفس أبنائه أو لمستفيد آخر عبر كود آمن وOnline-first، مع `PaymentRequest` وevents وتحصيل وإيصال ذريين idempotent.
 - `TrainingSession` فعلية مولّدة دون تكرار من الجدول الأسبوعي أو منشأة يدويًا، وحضور لاعبين وجهاز فني منفصلان. `Present` يخصم حصة واحدة فقط من `Sessions/Combined` المؤهل، والتصحيح يعيدها بحركات audit append-only.
 - تعديلات فترة الاشتراك لـOwner/Admin: تجميد/استئناف `Duration` و`Combined`، إضافة/خصم الأيام، وإلغاء فترة واحدة، مع سجل `SubscriptionAdjustment` append-only وidempotency وتعارض متفائل. لا تعديل لتحصيل أو إيصال ولا refund ضمن هذه الإجراءات، وولي الأمر يرى الحالة المبسطة لطفله المرتبط.
+- خصم يدوي واحد لكل `RenewalRequest` بنوع `Percentage` أو `FixedAmount` يطبقه Owner/Admin قبل تأكيد الدفع مع سبب وسجل `RenewalDiscountAdjustment` append-only. تغيير الخصم يلغي طلب الدفع المعلق ويصدر طلبًا جديدًا بالمبلغ النهائي؛ ولي الأمر يرى السعر الأصلي والخصم والإجمالي فقط ولا يستطيع تعديلها.
 - معايير تقييم خاصة بالرياضة، مسودات ودرجات 0–100 ونشر immutable. تقرير كرة القدم يحسب ستة محاور من snapshots الخادم ويعرض radar وقيمًا نصية وتاريخًا لولي الأمر؛ السباحة لها criteria مستقلة بلا radar كرة قدم.
 - رئيسية ولي أمر عربية mobile-first تجمع الطفل مرة واحدة وتعرض رياضاته دون تكرار، مع الإجراءات الثلاثة: اشتراك جديد، تجديد، وتجديد للغير. ملف الطفل يعرض التقرير المنشور والجدول والحضور والاشتراكات من البيانات المحفوظة.
 - `NewEnrollmentRequest` لطلب رياضة جديدة لطفل مرتبط أو طفل جديد؛ الطلب وحده لا ينشئ لاعبًا أو تسجيلًا أو دفعًا. Owner/Admin يراجع ويختار المجموعة ثم ينشئ الرابط والتسجيل ذريًا دون اشتراك مدفوع.
@@ -76,7 +77,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `20260929005032_Slice8BSubscriptionAdjustments`. تضيف `SubscriptionAdjustments` و`SubscriptionPeriods.FrozenFromDate` بقيود tenant/audit/idempotency، ولا تغير جداول التحصيل أو الإيصالات أو المبالغ المدفوعة.
+آخر migration هي `20260929015730_Slice8CSubscriptionDiscounts`. تضيف snapshot ماليًا إلى `RenewalRequests` و`Receipts` وسجل `RenewalDiscountAdjustments`، وتسمح بأكثر من محاولة دفع تاريخية للتجديد الواحد مع بقاء `PaymentRequestId` الحالي هو المرجع الموثوق. ترحيل البيانات القديمة يحفظ مبلغها الأصلي والمدفوع دون تعديل migrations سابقة.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -130,6 +131,8 @@ npm run dev:web -- --hostname 127.0.0.1
 
 لتجربة Slice 8B، ادخل كإداري وافتح «الاشتراكات ← الاشتراكات الحالية» ثم تفاصيل فترة عمر. جرّب التجميد بتاريخ `2026-09-27` ثم سجل حضورًا أثناء التجميد لمشاهدة التحذير بلا خصم، وبعدها الاستئناف بتاريخ `2026-09-28` لمشاهدة تمديد النهاية يومًا. من التفاصيل نفسها جرّب إضافة 5 أيام ثم خصم يومين، وراجع «سجل التعديلات». يمكن إلغاء فترة مريم التاريخية مع بقاء رابط الإيصال وإجمالي التقرير المالي كما هو. كولي أمر افتح ملف الطفل ثم رابط حالة الاشتراك لرؤية الحالة والتاريخ المبسطين دون أسباب أو بيانات الموظف.
 
+لتجربة Slice 8C، ابدأ طلب تجديد كولي الأمر ثم ادخل كـOwner/Admin وافتح «الاشتراكات ← طلبات التجديد ← عرض وإدارة الخصم». طبّق نسبة أو مبلغًا ثابتًا مع سبب؛ سيُلغى checkout القديم ويُنشأ بديل بالمبلغ النهائي. ارجع كولي الأمر إلى checkout الحالي، راجع السعر الأصلي والخصم والإجمالي، نفّذ الدفع التجريبي ثم راجع الإيصال والتقرير المالي. بيانات Demo تشمل تجديدًا مدفوعًا بلا خصم، وآخر مدفوعًا بنسبة، ومعلقًا بمبلغ ثابت، ومحاولة فاشلة بخصم.
+
 صور الكتالوج والتغذية والمعرض الحالية رسوم SVG محلية اصطناعية مملوكة للمشروع لأغراض Demo. لا يوجد upload أو تخزين وسائط production-grade؛ object storage الخاص، الفحص، الاحتفاظ، والروابط المؤقتة جزء من Production gate لاحق.
 
 ## 8. تشغيل الاختبارات
@@ -171,4 +174,4 @@ infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: خصومات أو refunds/payment reversals، تجارة منتجات أو تغذية، production media upload/storage، Communications/bot/ranking/AI Reports أو advanced BI، revision/supersede UI أو مقارنة فترات التقييم، rescheduling متقدم، PDF receipts، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.
+لا يوجد حتى الآن: coupons/campaigns/loyalty أو refunds/payment reversals، تجارة منتجات أو تغذية، production media upload/storage، Communications/bot/ranking/AI Reports أو advanced BI، revision/supersede UI أو مقارنة فترات التقييم، rescheduling متقدم، PDF receipts، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.

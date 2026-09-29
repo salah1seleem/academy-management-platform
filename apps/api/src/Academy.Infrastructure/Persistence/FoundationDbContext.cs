@@ -34,6 +34,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
     public DbSet<SubscriptionAdjustment> SubscriptionAdjustments => Set<SubscriptionAdjustment>();
     public DbSet<RenewalRequest> RenewalRequests => Set<RenewalRequest>();
+    public DbSet<RenewalDiscountAdjustment> RenewalDiscountAdjustments => Set<RenewalDiscountAdjustment>();
     public DbSet<PaymentRequest> PaymentRequests => Set<PaymentRequest>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
     public DbSet<PaymentCollection> Collections => Set<PaymentCollection>();
@@ -295,6 +296,12 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
         builder.Entity<RenewalRequest>(entity =>
         {
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(24);
+            entity.Property(x => x.OriginalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.DiscountValue).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountAmount).HasPrecision(18, 2);
+            entity.Property(x => x.FinalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountReason).HasMaxLength(500);
             entity.Property(x => x.AmountExpected).HasPrecision(18, 2);
             entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
             entity.Property(x => x.IdempotencyKey).HasMaxLength(100);
@@ -302,6 +309,32 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportEnrollmentId });
             entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.SubscriptionPlan).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.DiscountAppliedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RenewalRequests_FinancialAmounts", "\"OriginalAmount\" >= 0 AND \"DiscountAmount\" >= 0 AND \"FinalAmount\" >= 0 AND \"FinalAmount\" <= \"OriginalAmount\" AND \"FinalAmount\" = \"OriginalAmount\" - \"DiscountAmount\"");
+                t.HasCheckConstraint("CK_RenewalRequests_DiscountSnapshot", "(\"DiscountType\" IS NULL AND \"DiscountValue\" IS NULL AND \"DiscountAmount\" = 0) OR (\"DiscountType\" = 'Percentage' AND \"DiscountValue\" > 0 AND \"DiscountValue\" <= 100 AND \"DiscountAmount\" > 0) OR (\"DiscountType\" = 'FixedAmount' AND \"DiscountValue\" > 0 AND \"DiscountValue\" <= \"OriginalAmount\" AND \"DiscountAmount\" = \"DiscountValue\")");
+            });
+        });
+
+        ConfigureTenantEntity<RenewalDiscountAdjustment>(builder, "RenewalDiscountAdjustments");
+        builder.Entity<RenewalDiscountAdjustment>(entity =>
+        {
+            entity.Property(x => x.PreviousDiscountType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.NewDiscountType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.PreviousDiscountValue).HasPrecision(18, 2);
+            entity.Property(x => x.NewDiscountValue).HasPrecision(18, 2);
+            entity.Property(x => x.PreviousDiscountAmount).HasPrecision(18, 2);
+            entity.Property(x => x.NewDiscountAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PreviousFinalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.NewFinalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Reason).HasMaxLength(500);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(x => new { x.AcademyId, x.RenewalRequestId, x.CreatedAtUtc });
+            entity.HasIndex(x => new { x.AcademyId, x.PerformedByUserId, x.IdempotencyKey }).IsUnique();
+            entity.HasOne(x => x.RenewalRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.RenewalRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.PerformedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_RenewalDiscountAdjustments_Amounts", "\"PreviousDiscountAmount\" >= 0 AND \"NewDiscountAmount\" >= 0 AND \"PreviousFinalAmount\" >= 0 AND \"NewFinalAmount\" >= 0"));
         });
 
         ConfigureTenantEntity<PaymentRequest>(builder, "PaymentRequests");
@@ -311,7 +344,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.Amount).HasPrecision(18, 2); entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.ProviderReference).HasMaxLength(100); entity.Property(x => x.CheckoutReference).HasMaxLength(160);
-            entity.HasIndex(x => new { x.AcademyId, x.RenewalRequestId }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.RenewalRequestId });
             entity.HasIndex(x => new { x.AcademyId, x.Status, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.Provider, x.ProviderReference }).IsUnique();
             entity.HasOne(x => x.RenewalRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.RenewalRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -346,11 +379,17 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
         {
             entity.Property(x => x.ReceiptNumber).HasMaxLength(40); entity.Property(x => x.PlayerNameSnapshot).HasMaxLength(180);
             entity.Property(x => x.SportNameSnapshot).HasMaxLength(120); entity.Property(x => x.PlanNameSnapshot).HasMaxLength(160);
+            entity.Property(x => x.OriginalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountType).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.DiscountValue).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountAmount).HasPrecision(18, 2);
+            entity.Property(x => x.FinalAmount).HasPrecision(18, 2);
             entity.Property(x => x.Amount).HasPrecision(18, 2); entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
             entity.Property(x => x.PaymentMethod).HasMaxLength(60); entity.Property(x => x.ProviderReference).HasMaxLength(100);
             entity.HasIndex(x => new { x.AcademyId, x.CollectionId }).IsUnique();
             entity.HasIndex(x => new { x.AcademyId, x.ReceiptNumber }).IsUnique();
             entity.HasOne(x => x.Collection).WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_Receipts_FinancialAmounts", "\"OriginalAmount\" >= 0 AND \"DiscountAmount\" >= 0 AND \"FinalAmount\" >= 0 AND \"FinalAmount\" <= \"OriginalAmount\" AND \"Amount\" = \"FinalAmount\""));
         });
 
         ConfigureTenantEntity<TrainingSession>(builder, "TrainingSessions");
