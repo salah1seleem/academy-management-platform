@@ -81,7 +81,11 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
             .OrderBy(x => x.StartDate).ThenBy(x => x.CreatedAtUtc).ToListAsync(ct);
         var period = periods.FirstOrDefault(x => x.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || x.RemainingSessions is > 0)
             ?? periods.FirstOrDefault();
-        if (period is null) return (false, null, "تم تسجيل الحضور دون خصم: لا توجد فترة اشتراك مؤهلة.");
+        if (period is null)
+        {
+            var frozen = await db.SubscriptionPeriods.AnyAsync(x => x.AcademyId == attendance.AcademyId && x.SportEnrollmentId == attendance.SportEnrollmentId && x.Status == SubscriptionPeriodStatus.Frozen && x.StartDate <= sessionDate && (x.EndDate == null || x.EndDate >= sessionDate), ct);
+            return (false, null, frozen ? "تم تسجيل الحضور دون خصم: الاشتراك مجمد أو غير مؤهل." : "تم تسجيل الحضور دون خصم: لا توجد فترة اشتراك مؤهلة.");
+        }
         if (period.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration) return (false, null, null);
         if (period.RemainingSessions is not > 0) return (false, period.RemainingSessions ?? 0, "تم تسجيل الحضور دون خصم: رصيد الحصص غير كافٍ.");
         var before = period.RemainingSessions.Value; period.RemainingSessions = before - 1; period.UpdatedAtUtc = clock.GetUtcNow();

@@ -72,7 +72,7 @@ builder.Services.AddAuthorization(options =>
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));
     options.AddPolicy(AcademyPermissions.StaffProvision, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.StaffProvision)));
-    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead, AcademyPermissions.AttendanceRead, AcademyPermissions.AttendanceManage, AcademyPermissions.GuardianAttendanceRead, AcademyPermissions.EvaluationRead, AcademyPermissions.EvaluationManage, AcademyPermissions.EvaluationCriteriaManage, AcademyPermissions.GuardianEvaluationRead, AcademyPermissions.EnrollmentRequestRead, AcademyPermissions.EnrollmentRequestManage, AcademyPermissions.GuardianEnrollmentRequestCreate, AcademyPermissions.SportCatalogRead, AcademyPermissions.SportCatalogManage, AcademyPermissions.NutritionRead, AcademyPermissions.NutritionManage, AcademyPermissions.MedicalRecordRead, AcademyPermissions.MedicalRecordManage, AcademyPermissions.PlayerMediaRead, AcademyPermissions.PlayerMediaManage, AcademyPermissions.ReportsFinancialRead, AcademyPermissions.ReportsAttendanceRead, AcademyPermissions.ReportsExport, AcademyPermissions.OwnerDashboardRead })
+    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.SubscriptionAdjustmentManage, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead, AcademyPermissions.AttendanceRead, AcademyPermissions.AttendanceManage, AcademyPermissions.GuardianAttendanceRead, AcademyPermissions.EvaluationRead, AcademyPermissions.EvaluationManage, AcademyPermissions.EvaluationCriteriaManage, AcademyPermissions.GuardianEvaluationRead, AcademyPermissions.EnrollmentRequestRead, AcademyPermissions.EnrollmentRequestManage, AcademyPermissions.GuardianEnrollmentRequestCreate, AcademyPermissions.SportCatalogRead, AcademyPermissions.SportCatalogManage, AcademyPermissions.NutritionRead, AcademyPermissions.NutritionManage, AcademyPermissions.MedicalRecordRead, AcademyPermissions.MedicalRecordManage, AcademyPermissions.PlayerMediaRead, AcademyPermissions.PlayerMediaManage, AcademyPermissions.ReportsFinancialRead, AcademyPermissions.ReportsAttendanceRead, AcademyPermissions.ReportsExport, AcademyPermissions.OwnerDashboardRead })
         options.AddPolicy(permission, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(permission)));
 });
 builder.Services.AddAntiforgery(options =>
@@ -88,6 +88,7 @@ builder.Services.AddScoped<CsrfFilter>();
 builder.Services.AddScoped<ISubscriptionClock, SubscriptionClock>();
 builder.Services.AddScoped<IPaymentGateway, InternalTestPaymentGateway>();
 builder.Services.AddScoped<PaymentProcessor>();
+builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<IEvaluationReportCalculator, EvaluationReportCalculator>();
@@ -259,6 +260,7 @@ app.MapSlice5Endpoints();
 app.MapSlice6Endpoints();
 app.MapSlice7Endpoints();
 app.MapSlice8ReportingEndpoints();
+app.MapSubscriptionAdjustmentEndpoints();
 
 if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
 app.Run();

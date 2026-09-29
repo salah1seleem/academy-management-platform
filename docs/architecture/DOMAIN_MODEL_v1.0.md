@@ -2,7 +2,7 @@
 
 **الحالة: PROPOSED — مفاهيمي، مع تحقق foundation المحدود أدناه.**
 
-**ملاحظة تنفيذ Slice 7:** تحققت كيانات Slice 0–6، وأضيف فعليًا `SportCatalogItem`, `NutritionItem`, `NutritionCategoryLink`, `PlayerMedicalRecord`, و`PlayerMedia`. العلاقات المركبة تحمل `AcademyId`، والنشر/التفعيل يحددان ما يراه ولي الأمر. تخزين الملفات الإنتاجي ما زال مستقبليًا.
+**ملاحظة تنفيذ Slice 8B:** تحققت كيانات Slice 0–8A، وأضيف فعليًا `SubscriptionAdjustment` كسجل append-only مع حالة التجميد على `SubscriptionPeriod`. العلاقات المركبة تحمل `AcademyId`، ولا ينتج عن أي تعديل محو أو عكس مالي.
 
 ## العلاقات الأساسية
 
@@ -66,7 +66,8 @@ erDiagram
 - `TrainingGroup` يجمع الرياضة/الفرع/الفئة؛ `RecurringSchedule` قالب أسبوعي، و`TrainingSession` واقعة مؤرخة بحالة `Scheduled|Held|Cancelled` ومصدر `RecurringSchedule|Manual`. FK مركب يثبت تطابق branch/sport مع المجموعة، وoccurrence فريد على academy+group+date+start.
 - `PlayerAttendance` فريد على academy+session+SportEnrollment، و`StaffAttendance` منفصل ولا يقبل إلا عضوًا مكلفًا بالمجموعة. كلاهما `NotRecorded|Present|Absent`؛ عدم السجل لا يعني غيابًا.
 - `SubscriptionSessionMovement` append-only لـ`AttendanceConsume(-1)` و`AttendanceRestore(+1)`، مرتبط بحضور وفترة محددين. `ConsumedSubscriptionPeriodId` يمثل الأثر الفعال، و`ReversesMovementId` الفريد يمنع استعادة الخصم مرتين. DB تمنع `RemainingSessions < 0`.
-- `SubscriptionPlan` نوعه `Duration|Sessions|Combined` ويحمل العملة/السعر والمدة أو الحصص المنطبقة. `SubscriptionPeriod` تاريخ محفوظ لا يُستبدل بالتجديد. `RenewalRequest` يحتفظ بالمُسدِّد في `RequestedByUserId` والمستفيد في `SportEnrollmentId`، وهو منفصل عن `Collection`; `Receipt` يعكس Collection مؤكدة فقط. `BeneficiaryRenewalReference` يرتبط بتسجيل واحد وأكاديمية واحدة، يخزن hash وتلميحًا فقط مع expiry/revocation، ولا يمثل تفويضًا لملف اللاعب. `SubscriptionAdjustment` append-only للتجميد/الأيام/الإلغاء/التصحيح مع السبب والمنفذ.
+- `SubscriptionPlan` نوعه `Duration|Sessions|Combined` ويحمل العملة/السعر والمدة أو الحصص المنطبقة. `SubscriptionPeriod` تاريخ محفوظ لا يُستبدل بالتجديد. `RenewalRequest` يحتفظ بالمُسدِّد في `RequestedByUserId` والمستفيد في `SportEnrollmentId`، وهو منفصل عن `Collection`; `Receipt` يعكس Collection مؤكدة فقط. `BeneficiaryRenewalReference` يرتبط بتسجيل واحد وأكاديمية واحدة، يخزن hash وتلميحًا فقط مع expiry/revocation، ولا يمثل تفويضًا لملف اللاعب.
+- `SubscriptionAdjustment` tenant-scoped وappend-only بأنواع `FreezeStarted|FreezeEnded|DaysAdded|DaysDeducted|Cancelled`. يحتفظ بتاريخ السريان، فرق الأيام، النهاية القديمة/الجديدة، السبب المنظف، المنفذ ووقت UTC، ويربط `FreezeEnded` ببداية التجميد المقابلة. مفتاح idempotency فريد داخل الأكاديمية+المنفذ+نوع العملية، و`xmin` يحمي من الكتابة فوق تعديل متزامن. لا توجد API لتعديل أو حذف السجل.
 - `EvaluationCriterion` tenant-scoped وsport-scoped، له اسم وترتيب ووزن موجب ومحور كرة قدم اختياري. الإيقاف يمنعه من تقييم جديد ولا يحذف الدرجات القديمة. `PlayerEvaluation` مرتبط بـ`SportEnrollment` ونفس الرياضة والمجموعة بعلاقات مركبة، وبالمقيّم والتاريخ والفترة؛ حالته `Draft|Published|Superseded`. `EvaluationScore` فريد على evaluation+criterion، ودرجته nullable أو 0–100 شاملًا.
 - عند إنشاء المسودة تُنسخ `CriterionNameSnapshot`, `WeightSnapshot`, و`FootballAxisSnapshot` إلى `EvaluationScore`. الحساب والتقرير المنشور يستخدمان snapshots، لذلك تعديل المعيار لاحقًا لا يعيد كتابة التاريخ. التقييم المنشور immutable في Slice 5؛ التصحيح عبر revision/supersede محفوظ في النموذج لكنه مؤجل بدل السماح بالكتابة فوق المنشور.
 - `SportCatalogItem` tenant/sport-scoped ويحمل الاسم والوصف ومرجع أصل مشروع وحالة وترتيبًا، مع display price/currency/discount اختيارية لا تنشئ تجارة أو معاملة مالية. الظهور لولي الأمر يتطلب item فعالًا ورياضة ذات `SportEnrollment` نشط لطفل مرتبط؛ تجميع الرياضة يمنع التكرار بين الأبناء. لا Cart/Order/Inventory/Rating/Favourite.
@@ -108,11 +109,21 @@ stateDiagram-v2
   Active --> Expired
   Scheduled --> Cancelled
   Active --> Cancelled
+  Frozen --> Cancelled
+  Expired --> Cancelled
 ```
 
 وفق `OD-004/005` المعتمدين: `Duration` يتطلب أيامًا فقط، و`Sessions` حصصًا فقط، و`Combined` الاثنين. البداية والنهاية شموليتان؛ النهاية = البداية + الأيام - 1. التجديد المبكر يلي آخر نهاية، والمنتهي يبدأ من تاريخ التأكيد. الانتقال المالي الموثق `Pending -> Confirmed` وحده ينشئ `Collection/Receipt/SubscriptionPeriod` في transaction واحدة. unique constraints على provider event وPayment→Collection وCollection→Receipt/Period، مع idempotency key لطلب التجديد، تمنع الأثر المكرر. الفشل/الإلغاء لا ينشئ أثرًا ماليًا أو اشتراكًا.
 
 حالات `PaymentRequest`: الإنشاء الداخلي ينتج `Pending`، ومنها فقط يسمح `Confirmed|Failed|Cancelled|Expired`. كل الحالات الأربع نهائية لذلك الطلب. إعادة المحاولة بعد فشل/إلغاء/انتهاء تنشئ طلب تجديد ودفع جديدين؛ callback نجاح متأخر للطلب القديم يُحفظ كحدث متجاهل ولا ينشئ تحصيلًا أو إيصالًا أو فترة.
+
+## تعديلات فترة الاشتراك في Slice 8B
+
+- التجميد متاح لفترة `Active` من نوع `Duration` أو `Combined` فقط؛ يسجل `FrozenFromDate` و`FreezeStarted` ولا يغير `EndDate`. `Sessions` بلا مدة يرفض برسالة عربية واضحة. أثناء `Frozen` لا تستهلك الحضور حصة، مع بقاء حقيقة الحضور.
+- الاستئناف يتطلب تاريخًا بعد بداية التجميد. عدد الأيام = الأيام المحلية من بداية التجميد شاملة حتى اليوم السابق للاستئناف؛ يمدد `EndDate` بهذا العدد، يسجل `FreezeEnded` مرتبطًا بالبداية، ولا يعيد ضبط `RemainingSessions`.
+- إضافة/خصم الأيام يغير `EndDate` فقط لـ`Duration/Combined`، بحد أمان تقني 1–365 يومًا لكل أمر. الخصم لا يسمح بنهاية قبل البداية، والحالة المشتقة تصبح `Expired` إن أصبحت النهاية قبل ساعة الأعمال. لا تعيد العملية حساب حضور أو حركات تاريخية.
+- الإلغاء إداري لفترة واحدة فقط، ويحفظ تاريخ السريان والسبب ويضبطها `Cancelled`. لا يلغي فترة مدفوعة لاحقة أو رياضة/شقيقًا آخر، ولا يحذف حضورًا أو حركة حصص. `Collection`, `Receipt`, مبلغ الدفع والسجل المدفوع ثابتة؛ لا refund أو proration أو payment reversal.
+- كل أمر يتطلب سببًا حتى 500 حرف و`Idempotency-Key`، وينفذه Owner/Admin فقط داخل tenant الخادم. Guardian يرى الحالة والتاريخ المبسط لطفل مرتبط بلا معرف موظف أو سبب داخلي، وCoach لا يملك mutation.
 
 ## دورة الحضور ورصيد الحصص
 

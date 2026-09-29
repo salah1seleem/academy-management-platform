@@ -8,6 +8,7 @@ public enum SubscriptionPeriodStatus { Scheduled = 1, Active = 2, Expired = 3, C
 public enum RenewalRequestStatus { PendingPayment = 1, PaymentInProgress = 2, Paid = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentRequestStatus { Created = 1, Pending = 2, Confirmed = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentEventOutcome { Success = 1, Failed = 2, Cancelled = 3 }
+public enum SubscriptionAdjustmentType { FreezeStarted = 1, FreezeEnded = 2, DaysAdded = 3, DaysDeducted = 4, Cancelled = 5 }
 
 public sealed class BeneficiaryRenewalReference : TenantEntity
 {
@@ -45,12 +46,30 @@ public sealed class SubscriptionPeriod : TenantEntity
     public int? InitialSessions { get; set; }
     public int? RemainingSessions { get; set; }
     public SubscriptionPeriodStatus Status { get; set; }
+    public DateOnly? FrozenFromDate { get; set; }
     public decimal PriceSnapshot { get; set; }
     public required string CurrencySnapshot { get; set; }
     public Guid CreatedByUserId { get; set; }
     public SportEnrollment SportEnrollment { get; set; } = null!;
     public SubscriptionPlan SubscriptionPlan { get; set; } = null!;
     public PaymentCollection Collection { get; set; } = null!;
+}
+
+public sealed class SubscriptionAdjustment : TenantEntity
+{
+    public Guid SubscriptionPeriodId { get; set; }
+    public SubscriptionAdjustmentType AdjustmentType { get; set; }
+    public DateOnly EffectiveDate { get; set; }
+    public int? DaysDelta { get; set; }
+    public DateOnly? OldEndDate { get; set; }
+    public DateOnly? NewEndDate { get; set; }
+    public required string Reason { get; set; }
+    public Guid PerformedByUserId { get; set; }
+    public Guid? RelatedAdjustmentId { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public DateTimeOffset PerformedAtUtc { get; set; }
+    public SubscriptionPeriod SubscriptionPeriod { get; set; } = null!;
+    public SubscriptionAdjustment? RelatedAdjustment { get; set; }
 }
 
 public sealed class RenewalRequest : TenantEntity

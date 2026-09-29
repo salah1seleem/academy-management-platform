@@ -66,9 +66,9 @@ public static class ReportingEndpoints
             },
             subscriptions = new
             {
-                active = await periods.CountAsync(x => x.StartDate <= today && (x.EndDate == null || x.EndDate >= today) && x.Status != SubscriptionPeriodStatus.Frozen),
-                expiring = await periods.CountAsync(x => x.EndDate >= today && x.EndDate <= expiringEnd && x.Status != SubscriptionPeriodStatus.Frozen),
-                expired = await periods.CountAsync(x => x.EndDate < today)
+                active = await periods.CountAsync(x => x.StartDate <= today && (x.EndDate == null || x.EndDate >= today) && x.Status != SubscriptionPeriodStatus.Frozen && x.Status != SubscriptionPeriodStatus.Cancelled && (x.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || x.RemainingSessions > 0)),
+                expiring = await periods.CountAsync(x => x.EndDate >= today && x.EndDate <= expiringEnd && x.Status != SubscriptionPeriodStatus.Frozen && x.Status != SubscriptionPeriodStatus.Cancelled),
+                expired = await periods.CountAsync(x => x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen && (x.EndDate < today || (x.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && x.RemainingSessions <= 0)))
             },
             activePlayers = await db.Players.CountAsync(x => x.AcademyId == current.AcademyId && x.IsActive),
             attendance = new

@@ -32,6 +32,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<NewEnrollmentRequest> NewEnrollmentRequests => Set<NewEnrollmentRequest>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
+    public DbSet<SubscriptionAdjustment> SubscriptionAdjustments => Set<SubscriptionAdjustment>();
     public DbSet<RenewalRequest> RenewalRequests => Set<RenewalRequest>();
     public DbSet<PaymentRequest> PaymentRequests => Set<PaymentRequest>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
@@ -268,6 +269,26 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasOne(x => x.SubscriptionPlan).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Collection).WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t => t.HasCheckConstraint("CK_SubscriptionPeriods_RemainingSessions", "\"RemainingSessions\" IS NULL OR \"RemainingSessions\" >= 0"));
+        });
+
+        ConfigureTenantEntity<SubscriptionAdjustment>(builder, "SubscriptionAdjustments");
+        builder.Entity<SubscriptionAdjustment>(entity =>
+        {
+            entity.Property(x => x.AdjustmentType).HasConversion<string>().HasMaxLength(24);
+            entity.Property(x => x.Reason).HasMaxLength(500);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(x => new { x.AcademyId, x.SubscriptionPeriodId, x.PerformedAtUtc });
+            entity.HasIndex(x => new { x.AcademyId, x.PerformedByUserId, x.AdjustmentType, x.IdempotencyKey }).IsUnique();
+            entity.HasOne(x => x.SubscriptionPeriod).WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RelatedAdjustment).WithMany().HasForeignKey(x => new { x.AcademyId, x.RelatedAdjustmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.PerformedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_Type", "\"AdjustmentType\" IN ('FreezeStarted', 'FreezeEnded', 'DaysAdded', 'DaysDeducted', 'Cancelled')");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_DaysDelta", "(\"AdjustmentType\" = 'DaysAdded' AND \"DaysDelta\" > 0) OR (\"AdjustmentType\" = 'DaysDeducted' AND \"DaysDelta\" < 0) OR (\"AdjustmentType\" = 'FreezeEnded' AND \"DaysDelta\" > 0) OR (\"AdjustmentType\" IN ('FreezeStarted', 'Cancelled') AND \"DaysDelta\" IS NULL)");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_EndDates", "(\"AdjustmentType\" IN ('FreezeEnded', 'DaysAdded', 'DaysDeducted') AND \"OldEndDate\" IS NOT NULL AND \"NewEndDate\" IS NOT NULL) OR (\"AdjustmentType\" IN ('FreezeStarted', 'Cancelled') AND \"NewEndDate\" IS NULL)");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_FreezeLink", "(\"AdjustmentType\" = 'FreezeEnded' AND \"RelatedAdjustmentId\" IS NOT NULL) OR (\"AdjustmentType\" <> 'FreezeEnded' AND \"RelatedAdjustmentId\" IS NULL)");
+            });
         });
 
         ConfigureTenantEntity<RenewalRequest>(builder, "RenewalRequests");

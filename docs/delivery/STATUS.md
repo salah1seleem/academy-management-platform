@@ -1,35 +1,36 @@
 # Status
 
-تاريخ التحديث: 2026-09-29. الفرع: `codex/10-slice8a-reports-exports`.
+تاريخ التحديث: 2026-09-29. الفرع: `codex/11-slice8b-subscription-adjustments`.
 
-## Slice 8A — منفذ فعليًا
+## Slice 8B — منفذ فعليًا
 
-- لوحة مالك عربية RTL مشتقة من السجلات المخزنة: التحصيل الكلي/اليومي/الشهري، حالات طلبات الدفع، الاشتراكات الفعالة/القريبة/المنتهية، اللاعبين النشطين، حضور اليوم، breakdown حسب الرياضة والفرع، وأحدث التحصيلات. لا constants مالية ولا trends مختلقة.
-- تقرير مالي Owner/Admin من `Collections` المؤكدة فقط، بفلاتر التاريخ والرياضة والفرع والباقة والمزود/الطريقة والبحث، pagination، ومجموع مطابق للنتيجة. حالات الدفع المعلقة/الفاشلة/الملغاة/المنتهية لا تُحسب إيرادًا.
-- تقرير حضور Owner/Admin، وCoach داخل المجموعات المسندة فقط، مع فصل اللاعبين عن الجهاز الفني وفلاتر الشهر/السنة أو الفترة والفرع والرياضة والمجموعة والحالة والبحث وسنة الميلاد. التغطية `StoredRecordsOnly` ولا يُستنتج الغياب من سجل مفقود.
-- تصدير CSV فعلي مطابق للفلاتر، UTF-8 BOM، أسماء ملفات متوقعة وامتداد صحيح، tenant/resource authorization، حد 5000 صف، وحماية spreadsheet formula injection. لا تُصدّر هواتف أو بيانات طبية أو أسرار دفع.
-- قائمة إيصالات Owner/Admin وقائمة دفع خاصة بولي الأمر، وصفحة «إيصال دفع» عربية تحفظ snapshots التاريخية وتدعم browser print. ليست PDF ولا فاتورة ضريبية.
-- صلاحيات مستقلة: `OwnerDashboardRead`, `ReportsFinancialRead`, `ReportsAttendanceRead`, `ReportsExport`. Guardian بلا تقارير أكاديمية، وCoach بلا مالية/لوحة مالك.
-- migration forward-only `20260928234906_Slice8ReportingIndexes`: ثلاثة فهارس فقط على التحصيل/حالة الدفع/تاريخ الميلاد؛ لا reporting warehouse أو totals table.
-- Demo حتمي أضاف لاعب 2019 وسجل حضور واحد idempotent فقط. لم يكرر تحصيلات، وظل `DemoReferenceDate=2026-09-28` وAcademy B لاختبارات العزل.
+- أضيف `SubscriptionAdjustment` tenant-scoped كسجل append-only لأنواع `FreezeStarted`, `FreezeEnded`, `DaysAdded`, `DaysDeducted`, `Cancelled`، مع السبب والمنفذ والتوقيت والنهاية قبل/بعد وربط الاستئناف ببداية التجميد. أضيف `FrozenFromDate` للفترة وmigration أمامية `20260929005032_Slice8BSubscriptionAdjustments`؛ لم تُعدل migrations سابقة.
+- Owner/Admin فقط يملكان `SubscriptionAdjustmentManage`. كل mutation يحل tenant من الجلسة، يتحقق من الفترة resource-side، يتطلب CSRF وسببًا و`Idempotency-Key`، ويستخدم transaction وPostgreSQL `xmin` optimistic concurrency. Coach وGuardian ممنوعان من التعديل، وIDOR بين الأكاديميات يعيد NotFound.
+- التجميد لفترة `Active` من `Duration/Combined` فقط ولا يغير النهاية. الاستئناف يمدد النهاية بعدد الأيام من بداية التجميد شاملة حتى اليوم السابق للاستئناف ولا يعيد رصيد الحصص. إضافة/خصم الأيام يغير النهاية فقط بحد تقني 1–365 ولا يسمح بتاريخ قبل البداية. `Sessions` بلا مدة يرفض التجميد/الأيام برسائل عربية محددة.
+- الإلغاء يخص الفترة المختارة فقط ويترك الفترات السابقة/اللاحقة والرياضات الأخرى. لا يحذف أو يعدل `Collection`, `Receipt`, `Attendance`, `SubscriptionSessionMovement` أو المبلغ المدفوع، ولا ينشئ refund أو proration أو payment reversal.
+- الحضور أثناء التجميد يبقى حقيقة مسجلة بلا استهلاك ويعيد التحذير «تم تسجيل الحضور دون خصم: الاشتراك مجمد أو غير مؤهل.». بعد الاستئناف يمكن لحضور لاحق استهلاك الحصة، ولا توجد reconciliation رجعية. التجديد المبكر يستخدم `EndDate` المعدلة، والفترة الملغاة لا تمنع تجديدًا جديدًا وتظل في التاريخ.
+- صفحة تفاصيل اشتراك عربية mobile-first تعرض الإجراءات الصالحة فقط، confirmation للتجميد/الخصم/الإلغاء، preview غير موثوق للاستئناف، رابط الإيصال وسجل التعديلات. Guardian يرى Frozen/Cancelled وتاريخًا مبسطًا لطفله المرتبط بلا معرف موظف أو سبب داخلي.
+- Demo seed يضيف تاريخ `DaysAdded` حتميًا لفترة مريم القائمة دون عكس مالي. فترات Duration وCombined النشطة الموجودة تغطي رحلات التجميد والاستئناف؛ seed idempotent ومقيد بـDemo.
 
 ## الأمن والاتساق
 
-- tenant يأتي من جلسة الخادم؛ كل report/export/receipt academy-scoped. اختبارات IDOR والعزل والصلاحيات وتلاعب الفلاتر وحدود التاريخ وCSV safety ضمن بوابة Slice 8A.
-- `Dashboard collections total = sum confirmed Collections = receipts sum`، ومجموع الفترة يطابق التقرير والتصدير لنطاقه. Nutrition/catalog/medical/media لا تنشئ أثرًا ماليًا.
-- `OD-001` و`OD-012` ما زالا **PENDING / NOT APPROVED**. ما نُفذ هو نطاق Slice 8A فقط وdefault HTML browser-print قابل للعكس.
+- اختبارات PostgreSQL تغطي صلاحيات Owner/Admin، منع Coach/Guardian، tenant isolation وIDOR، تجاهل الحقول غير الموثوقة، حدود الأيام، السبب، replay، التعارض المتزامن، وثبات المال/الإيصال/الحضور والحركات والفترات اللاحقة.
+- `SubscriptionAdjustment` بلا edit/delete endpoint. قيود DB تثبت نوع العملية، إشارة `DaysDelta`، وجود نهايات before/after، رابط `FreezeEnded`، FK مركب academy+period، ومفتاح idempotency الفريد.
+- لوحة المالك والتقرير المالي يظلان مبنيين على `Collections` المؤكدة؛ التجميد/الأيام/الإلغاء لا يغير الإيراد. active metric يستبعد Frozen وCancelled والمنتهي/منفد الحصص.
+- `OD-001` ما زال **PENDING / NOT APPROVED**. defaults أعلاه محصورة في Slice 8B ولا تعتمد الخصومات أو demo cut الكامل.
 
 ## دليل التحقق
 
-- `dotnet restore` وRelease build ناجحان: **0 warnings / 0 errors**. migration طُبقت على PostgreSQL، وEF pending-model check أكد عدم وجود تغييرات غير مهاجرة.
-- Backend كامل: **219/219** (`217 integration + 1 unit + 1 architecture`)؛ منها **32/32** اختبار PostgreSQL مخصصًا للتقارير/التصدير والأمن والاتساق.
-- Frontend: typecheck وlint وproduction build (**42 صفحة**) ناجحة؛ **64/64** UI tests، و`npm audit --omit=dev` = **0 vulnerabilities**.
-- Mobile Chromium E2E: **27/27** من قاعدة محلية معزولة ونظيفة، وتشمل كل الرحلات السابقة وأربع رحلات Slice 8A الفعلية. نتيجة GitHub Actions تُسجل بعد الدفع ولا تُفترض مسبقًا.
+- migration طُبقت فعليًا على PostgreSQL schema نظيفة ومعزولة، وEF pending-model check أكد عدم وجود model changes غير مهاجرة.
+- اختبارات Slice 8B PostgreSQL: **45/45** ناجحة، وتشمل التزامن والأمن والتكامل المالي/الحضور/التجديد.
+- Backend كامل: **264/264** (`262 integration + 1 unit + 1 architecture`)؛ Release build ناجح بـ**0 warnings / 0 errors**.
+- Frontend: **79/79** UI tests، مع نجاح typecheck وlint وproduction build لـ**42 صفحة**، و`npm audit --omit=dev` = **0 vulnerabilities**.
+- Mobile Chromium E2E: **31/31** من schema PostgreSQL نظيفة، منها أربع رحلات Slice 8B الفعلية. نتيجة GitHub Actions تُسجل بعد الدفع ولا تُفترض مسبقًا.
 
 ## مؤجل صراحة
 
-التجميد وتعديل الأيام والإلغاء والخصومات، messages/bot/ranking، PDF generation، تقارير AI/advanced BI، تجارة المنتجات/التغذية، production media، provider/SMS حقيقي، والنشر/production readiness. لا يبدأ Slice 8B أو نطاق آخر هنا.
+Discounts، Refunds، payment reversals/chargebacks، Communications/messages، Bot، Ranking، SMS/provider/Apple Pay حقيقي، PDF، production deployment، وSlice 9. لا توجد دلالة refund من الإلغاء.
 
 ## نقطة التوقف
 
-تتوقف المهمة عند Slice 8A بعد الدفع ونجاح CI. لا يُدمج أو يُعدل `main`.
+تتوقف المهمة عند Slice 8B بعد commit/push ونجاح CI. لا يُدمج أو يُعدل `main` ولا يبدأ Slice 9.
