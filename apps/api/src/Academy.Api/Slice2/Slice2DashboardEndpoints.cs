@@ -37,8 +37,19 @@ public static class Slice2DashboardEndpoints
             "branches" => await db.Branches.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
             "sports" => await db.Sports.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
             "categories" => await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.MinimumBirthYear, x.MaximumBirthYear, x.IsActive }).ToListAsync(),
-            "groups" => await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName }).ToListAsync(),
-            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Role == Infrastructure.Tenancy.AcademyRole.Coach).OrderBy(x => x.User.DisplayName).Select(x => new { id = x.Id, arabicName = x.User.DisplayName, x.IsActive, assignedGroups = db.StaffGroupAssignments.Count(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive) }).ToListAsync(),
+            "groups" => await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new
+            {
+                x.Id, x.ArabicName, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName,
+                playerCount = db.SportEnrollments.Count(e => e.AcademyId == current.AcademyId && e.TrainingGroupId == x.Id && e.IsActive),
+                coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.Id && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
+                schedules = db.RecurringSchedules.Where(s => s.AcademyId == current.AcademyId && s.TrainingGroupId == x.Id && s.IsActive).OrderBy(s => s.DayOfWeek).ThenBy(s => s.StartTime).Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime }).ToList()
+            }).ToListAsync(),
+            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Role == Infrastructure.Tenancy.AcademyRole.Coach).OrderBy(x => x.User.DisplayName).Select(x => new
+            {
+                id = x.Id, arabicName = x.User.DisplayName, x.IsActive,
+                assignedGroups = db.StaffGroupAssignments.Count(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive),
+                groups = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive).OrderBy(a => a.TrainingGroup.ArabicName).Select(a => new { id = a.TrainingGroupId, name = a.TrainingGroup.ArabicName, branch = a.TrainingGroup.Branch.ArabicName }).ToList()
+            }).ToListAsync(),
             _ => null
         };
         return result is null ? Results.NotFound() : Results.Ok(result);
@@ -131,7 +142,10 @@ public static class Slice2DashboardEndpoints
         var current = (await tenant.ResolveAsync())!;
         var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == playerId).Select(x => new
         {
-            x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive,
+            x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive, x.PhotoReference,
+            asOfDate = clock.Today,
+            guardians = db.GuardianPlayerLinks.Where(l => l.AcademyId == current.AcademyId && l.PlayerId == x.Id && l.IsActive && l.Guardian.IsActive)
+                .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
             {
                 e.Id,

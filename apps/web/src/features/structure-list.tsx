@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmationDialog, EmptyState, ErrorState, ListSearch, LoadingState, PageHeader, RowActions } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
+import { IdentityMark } from "../components/sports-ui";
+import { StatusBadge } from "../components/dashboard-shell";
 
 type Kind = "branches" | "sports" | "categories" | "groups" | "coaches";
-type Item = { id: string; arabicName: string; englishName?: string; isActive: boolean; branchName?: string; sportName?: string; categoryName?: string; assignedGroups?: number };
+type Item = { id: string; arabicName: string; englishName?: string; isActive: boolean; branchName?: string; sportName?: string; categoryName?: string; assignedGroups?: number; playerCount?: number; coaches?: string[]; groups?: { id: string; name: string; branch: string }[]; schedules?: { dayOfWeek: string; startTime: string; endTime: string }[] };
+const dayNames: Record<string, string> = { Sunday: "الأحد", Monday: "الاثنين", Tuesday: "الثلاثاء", Wednesday: "الأربعاء", Thursday: "الخميس", Friday: "الجمعة", Saturday: "السبت" };
 const config: Record<Kind, { title: string; create: string }> = {
   branches: { title: "الفروع", create: "إضافة فرع" }, sports: { title: "الرياضات", create: "إضافة رياضة" },
   categories: { title: "الفئات العمرية", create: "إضافة فئة عمرية" }, groups: { title: "المجموعات", create: "إنشاء مجموعة" },
@@ -32,7 +35,7 @@ export function StructureList({ kind }: { kind: Kind }) {
       <ListSearch value={search} onChange={setSearch} label={`بحث ${config[kind].title}`} />
       {success && <p className="success-message" role="status">{success}</p>}
       {error && <ErrorState message={error} />}
-      {loading ? <LoadingState /> : filtered.length === 0 ? <EmptyState /> : <div className="data-list">{filtered.map(item => <article className={!item.isActive ? "inactive-record" : ""} key={item.id}><div><strong>{item.arabicName}</strong><small>{kind === "groups" ? `${item.branchName} · ${item.sportName} · ${item.categoryName}` : kind === "coaches" ? `${item.assignedGroups ?? 0} مجموعة مسندة` : item.isActive ? "فعال" : "متوقف"}</small></div><RowActions actions={kind === "coaches" ? [
+      {loading ? <LoadingState /> : filtered.length === 0 ? <EmptyState /> : <div className={kind === "groups" || kind === "coaches" ? "sports-structure-list" : "data-list"}>{filtered.map(item => <article className={`${kind === "groups" || kind === "coaches" ? "sports-structure-card" : ""} ${!item.isActive ? "inactive-record" : ""}`} key={item.id}><div><IdentityMark name={item.arabicName} detail={kind === "groups" ? item.categoryName : kind === "coaches" ? `${item.assignedGroups ?? 0} مجموعة مسندة` : undefined} /><div className="team-chips">{item.branchName && <span className="team-chip">{item.branchName}</span>}{item.sportName && <span className="team-chip">{item.sportName}</span>}<StatusBadge status={item.isActive ? "Active" : "Inactive"} /></div>{kind === "groups" && <div className="structure-context"><span>المدرب: {item.coaches?.join("، ") || "لا يوجد إسناد فعال"}</span>{item.playerCount != null && <span>{item.playerCount} لاعب مسجل</span>}{item.schedules?.length ? item.schedules.map((schedule, i) => <small key={i}>{dayNames[schedule.dayOfWeek] ?? schedule.dayOfWeek} · {schedule.startTime.slice(0, 5)}–{schedule.endTime.slice(0, 5)}</small>) : <small>لا توجد مواعيد دورية مسجلة</small>}</div>}{kind === "coaches" && item.groups?.map(group => <p className="structure-group" key={group.id}>{group.name}<small>{group.branch}</small></p>)}</div><RowActions actions={kind === "coaches" ? [
           { label: "عرض المجموعات", href: `/dashboard/academy/coaches/${item.id}` }, { label: "إسناد مجموعة", href: "/dashboard/academy/coaches/new" },
         ] : [
           { label: "عرض", href: `/dashboard/academy/${kind}/${item.id}` }, { label: "تعديل", href: `/dashboard/academy/${kind}/${item.id}/edit` }, { label: item.isActive ? "إيقاف" : "تفعيل", onClick: () => setTarget(item), tone: item.isActive ? "danger" : "normal" },

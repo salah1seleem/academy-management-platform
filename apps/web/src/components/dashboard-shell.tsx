@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle, BarChart3, Building2, Check, ChevronDown, ChevronLeft,
   CircleDollarSign, ClipboardCheck, CreditCard, FileText, Filter,
-  GraduationCap, LayoutDashboard, Layers3, LoaderCircle, LogOut, Menu,
+  Trophy, LayoutDashboard, Layers3, LoaderCircle, LogOut, Menu,
   MoreHorizontal, Plus, Search, ShieldCheck, Star, UserRound, Users, X,
 } from "lucide-react";
 import {
@@ -121,7 +121,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     <button ref={toggleRef} className="nav-toggle" aria-label={drawerOpen ? "إغلاق القائمة" : "فتح القائمة"} aria-expanded={drawerOpen} aria-controls="staff-sidebar" onClick={() => setDrawerOpen(!drawerOpen)}>{drawerOpen ? <X /> : <Menu />}</button>
     {drawerOpen && <button className="nav-backdrop" aria-label="إغلاق القائمة" onClick={closeDrawer} />}
     <aside ref={sidebarRef} id="staff-sidebar" tabIndex={-1} className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي">
-      <div className="sidebar-brand"><span className="brand-mark" aria-hidden="true"><GraduationCap /></span><span><b>منصة الأكاديمية</b><small>{identity.academyName || "جارٍ تحميل الأكاديمية…"}</small></span></div>
+      <div className="sidebar-brand"><span className="brand-mark" aria-hidden="true"><Trophy /></span><span><b>{identity.academyName || "منصة الأكاديمية"}</b><small>نظام إدارة الأكاديمية</small></span></div>
       <div className="sidebar-account sidebar-account-top"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span><b>{identity.name || "جارٍ تحميل الحساب…"}</b><small className="role-badge"><ShieldCheck />{roleLabels[identity.role] ?? "حساب موظف"}</small></span></div>
       <nav className="sidebar-navigation" aria-label={identity.role === "Coach" ? "مساحة المدرب" : "مساحة الإدارة"}>
         {navigation.map((module, index) => {
@@ -130,10 +130,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           const Icon = module.icon;
           return <div key={module.id}>{showGroup && <p className="nav-group-label">{identity.role === "Coach" && module.group === "التشغيل" ? "مهامك" : module.group}</p>}<section className={`nav-module ${activeModule === module.id ? "current" : ""}`}>
             <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span><Icon aria-hidden="true" />{module.title}</span><ChevronDown className="nav-chevron" aria-hidden="true" /></button>
-            <div id={`nav-${module.id}`} className="submodule-list" hidden={!isExpanded}>{module.links.map(link => {
+            <div className={`nav-reveal ${isExpanded ? "expanded" : ""}`} inert={!isExpanded} aria-hidden={!isExpanded}><div className="nav-reveal-inner"><div id={`nav-${module.id}`} className="submodule-list">{module.links.map(link => {
               const isActive = activeHref === link.href;
               return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "active" : ""} href={link.href} key={link.href} onClick={() => setDrawerOpen(false)}><span>{link.label}</span><ChevronLeft aria-hidden="true" /></Link>;
-            })}</div>
+            })}</div></div></div>
           </section></div>;
         })}
       </nav>
@@ -223,7 +223,7 @@ export function ConfirmationDialog({ open, title, message, confirmLabel, busy, t
   return <div className="dialog-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}><section className={`confirmation-dialog dialog-${tone}`} role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message"><div className="dialog-icon" aria-hidden="true">{tone === "danger" ? <AlertCircle /> : <Check />}</div><div><h2 id="confirmation-title">{title}</h2><p id="confirmation-message">{message}</p></div><div className="form-actions"><Button variant={tone} disabled={busy} onClick={onConfirm}>{busy ? <><LoaderCircle className="spin" /> جارٍ الحفظ…</> : confirmLabel}</Button><button ref={cancelRef} className="button button-secondary" type="button" disabled={busy} onClick={onCancel}>إلغاء</button></div></section></div>;
 }
 
-export function LoadingState({ message = "جارٍ تحميل البيانات…" }: { message?: string }) { return <div className="state-message loading-state" role="status"><LoaderCircle className="spin" aria-hidden="true" /><span>{message}</span></div>; }
+export function LoadingState({ message = "جارٍ تحميل البيانات…" }: { message?: string }) { return <div className="state-message loading-state" role="status"><span>{message}</span><div className="sports-skeleton" aria-hidden="true"><i /><i /><i /></div></div>; }
 export function ErrorState({ message }: { message: string }) { return <div className="state-message error-message" role="alert"><AlertCircle aria-hidden="true" /><span>{message}</span></div>; }
 export function EmptyState({ message = "لا توجد سجلات مطابقة.", title = "لا توجد بيانات", action }: { message?: string; title?: string; action?: ReactNode }) { return <div className="empty-state"><FileText aria-hidden="true" /><h3>{title}</h3><p>{message}</p>{action}</div>; }
 export function preventDefaultSubmit(handler: () => void) { return (event: FormEvent) => { event.preventDefault(); handler(); }; }

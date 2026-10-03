@@ -1,6 +1,8 @@
-# دليل Mobile Demo — checkpoint A فقط
+# دليل Mobile Demo — checkpoint A + Web UI
 
 **ليس تطبيق Flutter جاهزًا للمراجعة بعد.** هذا الدليل يثبت حسابات auth backend الحالية، ولا يدّعي توفر الرحلات أو صور الوجبات. [المعمارية والعقد](MOBILE_ARCHITECTURE_v1.0.md).
+
+تحديث MASTER: اكتمل تصميم لوحة الويب الرياضية قبل Phase B. مراجعة الويب ليست مراجعة native؛ حسابات الويب هي `owner.nogoom@example.test` و`admin.nogoom@example.test` و`coach.nogoom@example.test` بكلمة Demo `Demo-Only-123!` في البيئة التجريبية فقط. ابدأ بلوحة المالك، ثم اللاعبين والباقات والمجموعات والحضور والتقييمات. إضافة مدرب وبيانات كرة القدم النظيفة ما زالتا ضمن B.
 
 شغّل API مع الإعدادات المحلية Demo الموثقة في README وبعد migration. لا تعيد استخدام قاعدة Production. حسابات Demo الاصطناعية المحجوزة:
 

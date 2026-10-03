@@ -5,6 +5,8 @@ using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Tenancy;
+using Academy.Api.Slice3;
+using Academy.Infrastructure.Subscriptions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -86,7 +88,7 @@ public static class Slice2Endpoints
         }).RequireAuthorization(AcademyPermissions.CoachGroupsRead);
     }
 
-    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!;
         var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
@@ -95,7 +97,17 @@ public static class Slice2Endpoints
         if (sportId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.SportId == sportId));
         if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroup.AgeCategoryId == ageCategoryId));
         if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroupId == groupId));
-        return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, x.IsActive, enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active) }).ToListAsync());
+        return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new
+        {
+            x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, x.IsActive, x.PhotoReference,
+            enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active),
+            enrollmentSummaries = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).ThenBy(e => e.Id).Select(e => new
+            {
+                e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup.ArabicName, status = e.Status.ToString(),
+                subscription = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == e.Id).OrderByDescending(p => p.UpdatedAtUtc)
+                    .Select(p => new { plan = p.SubscriptionPlan.ArabicName, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < clock.Today || (p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > clock.Today ? "Scheduled" : "Active" }).FirstOrDefault()
+            }).ToList()
+        }).ToListAsync());
     }
 
     private static async Task<IResult> GuardianChildren(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)

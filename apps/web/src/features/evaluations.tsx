@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminDataTable, ConfirmationDialog, EmptyState, ErrorState, ListSearch, LoadingState, PageHeader, RowActions, StatusBadge } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
+import { IdentityMark, ProgressTrack } from "../components/sports-ui";
 
 const axisLabels: Record<string, string> = { Passing: "التمرير", Dribbling: "المراوغة", Speed: "السرعة", Defending: "الدفاع", Physical: "القوة البدنية", Shooting: "التسديد" };
 const statusLabels: Record<string, string> = { Draft: "مسودة", Published: "منشور", Superseded: "مستبدل" };
@@ -36,13 +37,13 @@ export function EvaluationsList({ publishedOnly = false }: { publishedOnly?: boo
   const [rows, setRows] = useState<EvaluationRow[]>([]); const [search, setSearch] = useState(""); const [status, setStatus] = useState(publishedOnly ? "Published" : ""); const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
   useEffect(() => { const query = new URLSearchParams(); if (search) query.set("search", search); if (status) query.set("status", status); const timer = setTimeout(() => fetch(`/api/v1/evaluations?${query}`).then(async r => { if (!r.ok) throw new Error(); setRows(await r.json() as EvaluationRow[]); }).catch(() => setError("تعذر تحميل التقييمات.")).finally(() => setLoading(false)), 150); return () => clearTimeout(timer); }, [search, status]);
   return <><PageHeader title={publishedOnly ? "التقارير المنشورة" : "تقييمات اللاعبين"} context={`التقييمات / ${publishedOnly ? "التقارير المنشورة" : "تقييمات اللاعبين"}`} description={publishedOnly ? "التقارير المكتملة والمتاحة للعرض بعد النشر." : "تابع مسودات التقييم واكتمال الدرجات قبل النشر."} action={!publishedOnly ? { label: "تقييم جديد", href: "/dashboard/evaluations/new" } : undefined} />{error && <ErrorState message={error} />}<section className="list-card"><div className="player-filters"><ListSearch value={search} onChange={setSearch} placeholder="اسم اللاعب أو الكود" />{!publishedOnly && <select aria-label="حالة التقييم" value={status} onChange={e => setStatus(e.target.value)}><option value="">كل الحالات</option><option value="Draft">مسودة</option><option value="Published">منشور</option></select>}</div>{loading ? <LoadingState /> : rows.length === 0 ? <EmptyState title="لا توجد تقييمات" message="لا توجد تقييمات مطابقة للبحث والحالة المختارة." /> : <AdminDataTable label={publishedOnly ? "التقارير المنشورة" : "تقييمات اللاعبين"} rows={rows} rowKey={row => row.id} columns={[
-    { key: "player", header: "اللاعب", primary: true, width: "minmax(12rem, 1.5fr)", render: row => <><strong>{row.player}</strong><small>{row.sport}</small></> },
-    { key: "group", header: "المجموعة", width: "minmax(11rem, 1.25fr)", render: row => row.group },
-    { key: "date", header: "تاريخ التقييم", width: "minmax(8rem, .9fr)", render: row => row.evaluationDate },
-    { key: "evaluator", header: "المقيّم", width: "minmax(8rem, .9fr)", render: row => row.evaluator },
-    { key: "completion", header: "الاكتمال", width: "minmax(7rem, .75fr)", render: row => <>{row.scoredCriteria}/{row.totalApplicableCriteria}{row.overallScore != null && <small>الإجمالي {row.overallScore}</small>}</> },
-    { key: "status", header: "الحالة", width: "minmax(6rem, .7fr)", render: row => <StatusBadge status={row.status} label={statusLabels[row.status]} /> },
-    { key: "actions", header: "الإجراء", width: "minmax(8rem, .8fr)", render: row => <RowActions actions={row.status === "Draft" ? [{ label: "عرض وتعديل", href: `/dashboard/evaluations/${row.id}/edit` }] : [{ label: "عرض التقرير", href: `/dashboard/evaluations/${row.id}/report` }]} /> },
+    { key: "player", header: "اللاعب", primary: true, width: "minmax(9rem, 1.5fr)", render: row => <IdentityMark name={row.player} detail={row.sport} /> },
+    { key: "group", header: "المجموعة", width: "minmax(8rem, 1.25fr)", render: row => row.group },
+    { key: "date", header: "تاريخ التقييم", width: "minmax(6rem, .9fr)", render: row => row.evaluationDate },
+    { key: "evaluator", header: "المقيّم", width: "minmax(6rem, .9fr)", render: row => row.evaluator },
+    { key: "completion", header: "الاكتمال", width: "minmax(5rem, .75fr)", render: row => <div className="session-completion"><span>{row.scoredCriteria}/{row.totalApplicableCriteria}</span><ProgressTrack value={row.scoredCriteria} total={row.totalApplicableCriteria} label={`اكتمال تقييم ${row.player}`} />{row.overallScore != null && <small>الإجمالي {row.overallScore}</small>}</div> },
+    { key: "status", header: "الحالة", width: "minmax(4.5rem, .7fr)", render: row => <StatusBadge status={row.status} label={statusLabels[row.status]} /> },
+    { key: "actions", header: "الإجراء", width: "minmax(6rem, .8fr)", render: row => <RowActions actions={row.status === "Draft" ? [{ label: "عرض وتعديل", href: `/dashboard/evaluations/${row.id}/edit` }] : [{ label: "عرض التقرير", href: `/dashboard/evaluations/${row.id}/report` }]} /> },
   ]} />}</section></>;
 }
 

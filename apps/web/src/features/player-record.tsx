@@ -3,18 +3,40 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { ErrorState, LoadingState, PageHeader, StatusBadge } from "../components/dashboard-shell";
+import { IdentityMark } from "../components/sports-ui";
 import { csrfRequest } from "./dashboard-api";
 import { formatDateAr, statusLabel } from "../lib/formatters";
 
 type Enrollment = { id: string; sportName: string; branchName: string; groupName: string; categoryName: string; status: string; subscription?: { id: string; plan: string; startDate: string; endDate?: string; status: string } };
-type Player = { id: string; playerCode: string; arabicName: string; englishName?: string; dateOfBirth: string; gender?: number; heightCm?: number; weightKg?: number; preferredFoot?: number; footballPosition?: string; address?: string; isActive: boolean; enrollments: Enrollment[] };
+type Player = { id: string; playerCode: string; arabicName: string; englishName?: string; dateOfBirth: string; gender?: number; heightCm?: number; weightKg?: number; preferredFoot?: number | string; footballPosition?: string; address?: string; isActive: boolean; enrollments: Enrollment[]; photoReference?: string; asOfDate?: string; guardians?: { id: string; displayName: string; relationshipType?: string }[] };
 
 function usePlayer(id: string) { const [player, setPlayer] = useState<Player | null>(null); const [error, setError] = useState(""); useEffect(() => { fetch(`/api/v1/people/players/${id}`).then(async response => { if (!response.ok) throw new Error(); setPlayer(await response.json() as Player); }).catch(() => setError("تعذر تحميل اللاعب أو أنه خارج نطاق الأكاديمية.")); }, [id]); return { player, error, setError }; }
 
 export function PlayerDetails({ id }: { id: string }) {
   const { player, error } = usePlayer(id);
-  return <><PageHeader title="ملف اللاعب" context="اللاعبون / عرض" action={{ label: "تعديل البيانات", href: `/dashboard/players/${id}/edit` }} />{error ? <ErrorState message={error} /> : !player ? <LoadingState /> : <section className="detail-card"><h2>{player.arabicName}</h2><dl className="detail-grid"><div><dt>كود اللاعب</dt><dd dir="ltr">{player.playerCode}</dd></div><div><dt>تاريخ الميلاد</dt><dd>{formatDateAr(player.dateOfBirth)}</dd></div><div><dt>الحالة</dt><dd>{player.isActive ? "فعال" : "متوقف"}</dd></div>{player.footballPosition && <div><dt>المركز</dt><dd>{player.footballPosition}</dd></div>}</dl><div className="linked-list"><h3>التسجيلات الرياضية الحالية</h3>{player.enrollments.length ? player.enrollments.map(enrollment => <article key={enrollment.id}><div><strong>{enrollment.sportName}</strong><small>{enrollment.branchName} · {enrollment.categoryName} · {enrollment.groupName}</small>{enrollment.subscription ? <small>{enrollment.subscription.plan} — {statusLabel(enrollment.subscription.status)} — {formatDateAr(enrollment.subscription.startDate)} إلى {enrollment.subscription.endDate ? formatDateAr(enrollment.subscription.endDate) : "بالحصص"}</small> : <small>لا توجد فترة اشتراك سابقة</small>}</div><div><span className="status-pill">{statusLabel(enrollment.status)}</span>{enrollment.status === "Active" && <Link className="primary-action" href={`/dashboard/subscriptions/renew/new?enrollmentId=${enrollment.id}`}>تجديد الاشتراك</Link>}</div></article>) : <p>لا توجد تسجيلات رياضية.</p>}</div><Link className="back-link" href="/dashboard/players">العودة إلى قائمة اللاعبين</Link></section>}</>;
+  const birth = player ? new Date(`${player.dateOfBirth}T00:00:00Z`) : null;
+  const today = player?.asOfDate ? new Date(`${player.asOfDate}T00:00:00Z`) : new Date();
+  const age = birth ? today.getUTCFullYear() - birth.getUTCFullYear() - (today.getUTCMonth() < birth.getUTCMonth() || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate()) ? 1 : 0) : null;
+  return <><PageHeader title="ملف اللاعب" context="اللاعبون / عرض" action={{ label: "تعديل البيانات", href: `/dashboard/players/${id}/edit` }} />{error ? <ErrorState message={error} /> : !player ? <LoadingState /> : <>
+    <section className="athlete-hero" aria-label="هوية اللاعب">
+      <div><IdentityMark photo={player.photoReference} name={player.arabicName} detail={player.playerCode} large /><div className="team-chips">{player.enrollments.map(enrollment => <span className="team-chip" key={enrollment.id}>{enrollment.sportName} · {enrollment.branchName} · {enrollment.groupName}</span>)}</div></div>
+      <StatusBadge status={player.isActive ? "Active" : "Inactive"} />
+    </section>
+    <section className="detail-card"><h2>بيانات اللاعب</h2><dl className="detail-grid">
+      <div><dt>تاريخ الميلاد</dt><dd>{formatDateAr(player.dateOfBirth)}</dd></div>
+      <div><dt>العمر بتاريخ السجل</dt><dd>{age != null && age >= 0 ? `${age} سنوات` : "غير متاح"}</dd></div>
+      <div><dt>المركز</dt><dd>{player.footballPosition || "غير مسجل"}</dd></div>
+      <div><dt>القدم المفضلة</dt><dd>{({ 1: "اليمنى", 2: "اليسرى", 3: "القدمان", Right: "اليمنى", Left: "اليسرى", Both: "القدمان" } as Record<string, string>)[player.preferredFoot ?? 0] ?? "غير مسجل"}</dd></div>
+      <div><dt>الطول / الوزن</dt><dd>{player.heightCm ? `${player.heightCm} سم` : "الطول غير مسجل"} · {player.weightKg ? `${player.weightKg} كجم` : "الوزن غير مسجل"}</dd></div>
+    </dl><div className="linked-list"><h3>التسجيلات والاشتراكات</h3>{player.enrollments.length ? player.enrollments.map(enrollment => <article key={enrollment.id}>
+      <div><strong>{enrollment.sportName}</strong><small>{enrollment.branchName} · {enrollment.categoryName} · {enrollment.groupName}</small>{enrollment.subscription ? <><small>{enrollment.subscription.plan} · {formatDateAr(enrollment.subscription.startDate)} إلى {enrollment.subscription.endDate ? formatDateAr(enrollment.subscription.endDate) : "بالحصص"}</small><StatusBadge status={enrollment.subscription.status} /></> : <small>لا توجد فترة اشتراك سابقة</small>}</div>
+      <div className="enrollment-actions"><span className="status-pill">{statusLabel(enrollment.status)}</span>{enrollment.subscription && <Link href={`/dashboard/subscriptions/periods/${enrollment.subscription.id}`}>سجل الاشتراك</Link>}{enrollment.status === "Active" && <Link className="primary-action" href={`/dashboard/subscriptions/renew/new?enrollmentId=${enrollment.id}`}>تجديد الاشتراك</Link>}</div>
+    </article>) : <p>لا توجد تسجيلات رياضية.</p>}</div></section>
+    <section className="detail-card"><h2>أولياء الأمور المرتبطون</h2>{player.guardians?.length ? <div className="linked-list">{player.guardians.map(guardian => <article key={guardian.id}><IdentityMark name={guardian.displayName} detail={guardian.relationshipType} /><Link href={`/dashboard/guardians/${guardian.id}`}>عرض ولي الأمر</Link></article>)}</div> : <p>لا توجد روابط فعالة مسجلة.</p>}</section>
+    <section className="detail-card"><h2>المتابعة والتواصل</h2><p>افتح السجل المختص وابحث بكود اللاعب: <b dir="ltr">{player.playerCode}</b>.</p><nav className="profile-record-links" aria-label="سجلات المتابعة"><Link href="/dashboard/attendance/history">سجل الحضور</Link><Link href="/dashboard/evaluations">تقييمات اللاعبين</Link><Link href="/dashboard/guardians">إدارة روابط أولياء الأمور</Link></nav></section>
+    <Link className="back-link" href="/dashboard/players">العودة إلى قائمة اللاعبين</Link>
+  </>}</>;
 }
 
 export function PlayerEdit({ id }: { id: string }) {

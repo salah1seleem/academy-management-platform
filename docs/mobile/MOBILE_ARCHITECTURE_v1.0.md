@@ -1,6 +1,6 @@
 # معمارية Native Mobile v1.0
 
-الحالة: **Phase A — Backend mobile auth منفذ؛ Flutter ومراحل B–H غير مكتملة**. الأساس `a9624dc537f121bd1732ab4c0f692ea753d70724`، الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md).
+الحالة: **Phase A — Backend mobile auth منفذ؛ Sports Dashboard Phase UI منفذ؛ Flutter ومراحل B–H غير مكتملة**. الأساس `a9624dc537f121bd1732ab4c0f692ea753d70724`، الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). أحدث MASTER EXECUTION PROMPT يضع ترتيب التنفيذ: UI ثم B ثم C–H؛ لا يعاد تنفيذ A.
 
 ## تطبيق واحد وخادم قائم
 
@@ -43,6 +43,8 @@ policy scheme يختار mobile عند وجود Authorization؛ bearer خاطئ 
 Migration `20261003214541_NativeMobileSessions` تضيف جدولَي sessions/challenges وتغير uniqueness إلى `(AcademyId,UserId,Role)`. لا تعديل لـmigrations السابقة ولا حذف بيانات. مسارات guardian registration وcoach attendance/seed صارت تختار الدور المعني. Cookies الجديدة تحفظ membership، وsecurity stamp refresh يحتفظ بها؛ legacy cookie بلا membership يُرفض عند تعدد الأدوار بدل الخطأ أو تصعيد الصلاحية. اختيار academy في الويب يرفض حالة تعدد غير محسومة بدل اختيار أعلى دور. Downgrade بعد إنشاء multi-role ليس إجراء تشغيل عاديًا: unique القديم لا يقبل ذلك؛ يلزم قرار ترحيل بيانات صريح، لا حذف تلقائي.
 
 ## التصميم والبيانات والتشغيل المتبقي
+
+الويب يستخدم الآن [نظام Sports Academy](../ui/DASHBOARD_UI_SYSTEM.md). توسعات DTO للقراءة مقيدة بالـtenant نفسه ولا تغير جلسات Phase A أو أوامر الأعمال. هوية اللاعب وروابطه في endpoints الموظفين لا تصبح متاحة للـGuardian أو Coach لمجرد إضافة حقول العرض.
 
 Guardian يتبع صور المحادثة: خلفية داكنة وبطاقات وصور وتبويبات واضحة وRTL، مع الإجراءات الثلاثة. Coach/Owner يستخدمان teal/white المتوافق مع الطلب. التقرير يحتفظ بالمركز وradar الستة وبقية المعايير دون ملعب. الوجبات ستتغير وفق التصحيح المباشر؛ لا تُستورد صور المرجع أو علاماته أو أطفاله.
 

@@ -41,6 +41,7 @@ public static class Slice4Endpoints
         {
             x.Id, x.SessionDate, x.StartTime, x.EndTime, status = x.Status.ToString(), source = x.Source.ToString(), x.TrainingGroupId,
             group = x.TrainingGroup.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName,
+            coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
             playerCount = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.TrainingGroupId == x.TrainingGroupId && e.IsActive),
             recorded = db.PlayerAttendances.Count(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == x.Id && a.Status != AttendanceStatus.NotRecorded)
         }).ToListAsync();

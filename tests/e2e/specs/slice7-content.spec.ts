@@ -15,7 +15,7 @@ test.describe("Slice 7 Guardian content journeys", () => {
   });
 
   test("Journey C — Guardian sees published medical content only", async ({ page }) => {
-    await guardianLogin(page); await openOmar(page); await page.getByRole("link", { name: /الإصابات والاستشارات الطبية/ }).click(); await expect(page.getByText("متابعة إجهاد بسيط بعد التدريب")).toBeVisible(); await expect(page.getByText("مسودة داخلية غير منشورة")).toHaveCount(0); await expect(page.getByText(/ملاحظة داخلية/)).toHaveCount(0); const denied = await page.request.get("http://127.0.0.1:5080/api/v1/guardian/children/36000000-0000-0000-0000-000000000003/medical"); expect(denied.status()).toBe(404);
+    await guardianLogin(page); await openOmar(page); await page.getByRole("link", { name: /الإصابات والاستشارات الطبية/ }).click(); await expect(page.getByText("متابعة إجهاد بسيط بعد التدريب")).toBeVisible(); await expect(page.getByText("مسودة داخلية غير منشورة")).toHaveCount(0); await expect(page.getByText(/ملاحظة داخلية/)).toHaveCount(0); const denied = await page.request.get("/api/v1/guardian/children/36000000-0000-0000-0000-000000000003/medical"); expect(denied.status()).toBe(404);
   });
 
   test("Journey D — child gallery contains published project media only", async ({ page }) => {

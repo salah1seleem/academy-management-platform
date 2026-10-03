@@ -1,11 +1,12 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D**، وبرنامج Native Mobile الإضافي عند **Phase A: mobile auth backend** فقط؛ تطبيق Flutter المرئي لم يُنشأ بعد.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D + Sports Dashboard Phase UI**، وبرنامج Native Mobile الإضافي يتضمن **Phase A: mobile auth backend**؛ تطبيق Flutter المرئي ومراحل B–H لم تُنفذ بعد.
 
 [معمارية الموبايل](docs/mobile/MOBILE_ARCHITECTURE_v1.0.md) · [دليل checkpoint](docs/mobile/MOBILE_DEMO_GUIDE.md) · [النطاق الإضافي](docs/requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). المسار الجديد يدعم OTP لـGuardian/Coach/Owner، جلسات أجهزة مع تدوير وإلغاء، واختيار عضوية/دور صريحًا. cookie/CSRF الويب وواجهاته باقية.
 
 ## ما الموجود الآن؟
 
+- [واجهة أكاديمية رياضية](docs/ui/DASHBOARD_UI_SYSTEM.md): لوحة مالك بمؤشرات ورسوم من البيانات الفعلية، هوية اللاعب/المدرب، بطاقات الباقات والمجموعات، وحضور واضح بالنص والأيقونة. إضافات API للقراءة فقط، بلا تغيير auth/payments أو migration. تفاصيل التحقق في STATUS.
 - ASP.NET Core Web API مع `/health/live` و`/health/ready`.
 - EF Core وNpgsql مع ASP.NET Core Identity وعضويات Academy معزولة وجلسات browser محفوظة على الخادم.
 - Next.js login وauthenticated shell عربيان RTL، mobile-first، مع تبديل Academy مخوّل من الخادم وPWA manifest/icon.

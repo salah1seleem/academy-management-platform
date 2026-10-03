@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Api.Slice2;
 using Academy.Infrastructure.Persistence;
@@ -18,6 +19,65 @@ public sealed class DashboardRemediationTests : IAsyncLifetime
     private Factory factory = null!;
     public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
     public async Task DisposeAsync() => await factory.DisposeAsync();
+
+    [Fact]
+    public async Task Sports_player_list_preserves_distinct_enrollments_and_server_subscription_states()
+    {
+        using var client = factory.CreateClient(); await Login(client, DemoSeed.OwnerEmail);
+        var rows = await client.GetFromJsonAsync<JsonElement>("/api/v1/people/players");
+        Assert.DoesNotContain(rows.EnumerateArray(), row => row.GetProperty("id").GetGuid() == Slice2DemoSeed.AcademyBPlayerId);
+        var omar = rows.EnumerateArray().Single(row => row.GetProperty("id").GetGuid() == Slice2DemoSeed.OmarPlayerId);
+        var details = await client.GetFromJsonAsync<JsonElement>($"/api/v1/people/players/{Slice2DemoSeed.OmarPlayerId}");
+        var enrollmentDetails = details.GetProperty("enrollments").EnumerateArray().ToDictionary(row => row.GetProperty("id").GetGuid());
+        var summaries = omar.GetProperty("enrollmentSummaries").EnumerateArray().ToList();
+        Assert.Equal(enrollmentDetails.Count, summaries.Count);
+        Assert.True(summaries.Count >= 2);
+        foreach (var row in summaries)
+        {
+            var detail = enrollmentDetails[row.GetProperty("id").GetGuid()];
+            Assert.Equal(detail.GetProperty("branchName").GetString(), row.GetProperty("branchName").GetString());
+            Assert.Equal(detail.GetProperty("groupName").GetString(), row.GetProperty("groupName").GetString());
+            Assert.Equal(detail.GetProperty("subscription").ValueKind, row.GetProperty("subscription").ValueKind);
+            if (row.GetProperty("subscription").ValueKind != JsonValueKind.Null)
+                Assert.Equal(detail.GetProperty("subscription").GetProperty("status").GetString(), row.GetProperty("subscription").GetProperty("status").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task Sports_player_profile_returns_only_actual_guardian_links()
+    {
+        using var client = factory.CreateClient(); await Login(client, DemoSeed.OwnerEmail);
+        var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/people/players/{Slice2DemoSeed.OmarPlayerId}");
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var expected = await db.GuardianPlayerLinks.Where(l => l.AcademyId == DemoSeed.NogoomAcademyId && l.PlayerId == Slice2DemoSeed.OmarPlayerId && l.IsActive && l.Guardian.IsActive).Select(l => l.GuardianId).ToListAsync();
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected.Order(), detail.GetProperty("guardians").EnumerateArray().Select(g => g.GetProperty("id").GetGuid()).Order());
+        Assert.True(DateOnly.TryParse(detail.GetProperty("asOfDate").GetString(), out _));
+    }
+
+    [Fact]
+    public async Task Sports_group_cards_use_stored_schedule_coaches_and_enrollment_counts()
+    {
+        using var client = factory.CreateClient(); await Login(client, DemoSeed.OwnerEmail);
+        var rows = await client.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/groups");
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        foreach (var row in rows.EnumerateArray())
+        {
+            var id = row.GetProperty("id").GetGuid();
+            Assert.True(await db.TrainingGroups.AnyAsync(g => g.Id == id && g.AcademyId == DemoSeed.NogoomAcademyId));
+            Assert.Equal(await db.SportEnrollments.CountAsync(e => e.AcademyId == DemoSeed.NogoomAcademyId && e.TrainingGroupId == id && e.IsActive), row.GetProperty("playerCount").GetInt32());
+            Assert.Equal(await db.RecurringSchedules.CountAsync(s => s.AcademyId == DemoSeed.NogoomAcademyId && s.TrainingGroupId == id && s.IsActive), row.GetProperty("schedules").GetArrayLength());
+        }
+    }
+
+    [Fact]
+    public async Task Coach_cannot_read_staff_identity_and_relationship_projections()
+    {
+        using var client = factory.CreateClient(); await Login(client, DemoSeed.CoachEmail);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/people/players")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/manage/structure/coaches")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v1/people/players/{Slice2DemoSeed.OmarPlayerId}")).StatusCode);
+    }
 
     [Fact]
     public async Task Owner_can_update_same_tenant_branch()

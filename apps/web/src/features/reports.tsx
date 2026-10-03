@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, CalendarClock, CircleX, Clock3, CreditCard, ReceiptText, RefreshCcw, UserPlus, UsersRound, WalletCards } from "lucide-react";
+import { Activity, CalendarClock, CircleX, Clock3, CreditCard, ReceiptText, UsersRound, WalletCards } from "lucide-react";
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import { AdminDataTable, EmptyState, ErrorState, LoadingState, MetricCard, PageHeader, SectionCard } from "../components/dashboard-shell";
+import { ProgressTrack, SportsHero, SportsQuickActions } from "../components/sports-ui";
 
 type OwnerSummary = { asOfDate: string; currency: string; collections: { total: number; today: number; month: number }; payments: { confirmed: number; failed: number; pending: number; cancelled: number; expired: number }; subscriptions: { active: number; expiring: number; expired: number }; activePlayers: number; attendance: { sessions: number; present: number; absent: number; notRecorded: number }; bySport: { name: string; amount: number; count: number }[]; byBranch: { name: string; amount: number; count: number }[]; latest: { receiptId: string; receiptNumber: string; player: string; amount: number; currency: string; confirmedAtUtc: string }[] };
 type Option = { id: string; arabicName: string; branchId?: string; sportId?: string };
@@ -18,27 +19,23 @@ const statusLabels: Record<string, string> = { Present: "حاضر", Absent: "غ�
 
 export function OwnerDashboard() {
   const [role, setRole] = useState(""); const [data, setData] = useState<OwnerSummary | null>(null); const [error, setError] = useState("");
-  useEffect(() => { fetch("/api/v1/me").then(r => r.json()).then((me: { role: string }) => { setRole(me.role); if (me.role === "AcademyOwner") return fetch("/api/v1/reports/owner-summary").then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(setData); }).catch(() => setError("تعذر تحميل لوحة المتابعة.")); }, []);
+  const [identity, setIdentity] = useState({ name: "", academy: "" });
+  useEffect(() => { fetch("/api/v1/me").then(r => { if (!r.ok) throw new Error(); return r.json(); }).then((me: { role: string; displayName?: string; academyName?: string }) => { setRole(me.role); setIdentity({ name: me.displayName ?? "", academy: me.academyName ?? "" }); if (me.role === "AcademyOwner") return fetch("/api/v1/reports/owner-summary").then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(setData); }).catch(() => setError("تعذر تحميل لوحة المتابعة.")); }, []);
   if (error) return <><PageHeader title="الرئيسية" context="لوحة الإدارة" /><ErrorState message={error} /></>;
   if (!role || role === "AcademyOwner" && !data) return <><PageHeader title="لوحة المالك" context="الرئيسية" /><LoadingState /></>;
   if (role !== "AcademyOwner") return <>
-    <PageHeader title="الرئيسية" context="لوحة الإدارة" description="وصول سريع إلى مهام التشغيل اليومية للأكاديمية." action={{ label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }} />
+    <PageHeader title="الرئيسية" context={role === "Coach" ? "مساحة المدرب" : "لوحة الإدارة"} description="وصول سريع إلى مهام التشغيل اليومية للأكاديمية." />
+    <SportsHero name={identity.name} academy={identity.academy} />
     <section className="dashboard-card admin-home-card">
       <div className="admin-home-intro"><h2>مرحبًا بك في مساحة الإدارة</h2><p>اختر المهمة التي تريد تنفيذها، أو استخدم القائمة للوصول إلى بقية وحدات الأكاديمية.</p></div>
-      <nav className="admin-quick-actions" aria-label="الإجراءات التشغيلية السريعة">
-        <Link href="/dashboard/players/new"><UserPlus />تسجيل لاعب جديد</Link>
-        <Link href="/dashboard/enrollment-requests"><UsersRound />طلبات الاشتراك</Link>
-        <Link href="/dashboard/attendance/sessions"><CalendarClock />جلسات التدريب</Link>
-        <Link href="/dashboard/attendance/history"><Activity />سجل الحضور</Link>
-        <Link href="/dashboard/subscriptions/renewals"><RefreshCcw />طلبات التجديد</Link>
-        <Link href="/dashboard/players"><UsersRound />البحث عن لاعب</Link>
-      </nav>
+      <SportsQuickActions coach={role === "Coach"} />
     </section>
   </>;
 
   const owner = data!;
   return <>
     <PageHeader title="لوحة المالك" context="الرئيسية / نظرة عامة" description={`ملخص أداء الأكاديمية من السجلات المحفوظة حتى ${owner.asOfDate}.`} action={{ label: "التقرير المالي", href: "/dashboard/reports/financial" }} />
+    <SportsHero name={identity.name} academy={identity.academy} date={owner.asOfDate}><Link className="hero-action" href="/dashboard/attendance/sessions"><CalendarClock aria-hidden="true" />انتقل إلى أرض التدريب</Link></SportsHero>
     <section className="owner-primary-metrics" aria-label="المؤشرات الأساسية">
       <MetricCard label="تحصيل اليوم" value={money(owner.collections.today, owner.currency)} icon={<WalletCards />} emphasis="primary" />
       <MetricCard label="تحصيل الشهر" value={money(owner.collections.month, owner.currency)} icon={<ReceiptText />} emphasis="primary" />
@@ -51,10 +48,14 @@ export function OwnerDashboard() {
       <MetricCard label="مدفوعات فاشلة" value={owner.payments.failed} icon={<CircleX />} />
       <MetricCard label="اللاعبون النشطون" value={owner.activePlayers} icon={<UsersRound />} />
       <MetricCard label="حضور اليوم" value={`${owner.attendance.present} حاضر`} icon={<Activity />} detail={`${owner.attendance.absent} غائب · ${owner.attendance.sessions} حصة`} />
+      <MetricCard label="الاشتراكات المنتهية" value={owner.subscriptions.expired} icon={<Clock3 />} />
     </section>
+    <SectionCard title="خطوتك التالية" description="كل ما تحتاجه لإدارة يوم الأكاديمية"><SportsQuickActions /></SectionCard>
     <div className="owner-business-grid">
-      <Breakdown title="التحصيل حسب الرياضة" rows={owner.bySport} currency={owner.currency} />
       <Breakdown title="التحصيل حسب الفرع" rows={owner.byBranch} currency={owner.currency} />
+      <SectionCard title="حضور اليوم" description="نسبة الحضور من سجلات اليوم المحفوظة فقط"><AttendanceRing attendance={owner.attendance} /></SectionCard>
+      <SectionCard title="الاشتراكات حسب الحالة" description="مؤشرات مستقلة؛ قد تتداخل حالات الفعالية والانتهاء القريب"><div className="subscription-state-bars">{[{ name: "فعالة", count: owner.subscriptions.active, tone: "success" }, { name: "تنتهي قريبًا", count: owner.subscriptions.expiring, tone: "warning" }, { name: "منتهية", count: owner.subscriptions.expired, tone: "danger" }].map(item => <div key={item.name} data-tone={item.tone}><div><span>{item.name}</span><b>{item.count}</b></div><ProgressTrack value={item.count} total={Math.max(owner.subscriptions.active, owner.subscriptions.expiring, owner.subscriptions.expired)} label={`اشتراكات ${item.name}`} /></div>)}</div></SectionCard>
+      <Breakdown title="التحصيل حسب الرياضة" rows={owner.bySport} currency={owner.currency} />
     </div>
     <SectionCard title="أحدث التحصيلات" description="آخر العمليات المؤكدة المسجلة في الأكاديمية">
       {owner.latest.length === 0 ? <EmptyState message="لا توجد تحصيلات مؤكدة." /> : <AdminDataTable label="أحدث التحصيلات" rows={owner.latest} rowKey={row => row.receiptId} columns={[
@@ -64,18 +65,18 @@ export function OwnerDashboard() {
         { key: "actions", header: "الإجراء", width: "minmax(7rem, .6fr)", render: row => <Link className="small-link" href={`/dashboard/subscriptions/receipts/${row.receiptId}`}>عرض الإيصال</Link> },
       ]} />}
     </SectionCard>
-    <nav className="owner-quick-actions" aria-label="إجراءات سريعة للمالك">
-      <Link href="/dashboard/players/new"><UserPlus />تسجيل لاعب</Link>
-      <Link href="/dashboard/subscriptions/plans/new"><CreditCard />إضافة باقة</Link>
-      <Link href="/dashboard/attendance/sessions"><CalendarClock />فتح الحضور</Link>
-      <Link href="/dashboard/reports/financial"><ReceiptText />التقرير المالي</Link>
-    </nav>
   </>;
+}
+
+function AttendanceRing({ attendance }: { attendance: OwnerSummary["attendance"] }) {
+  const total = attendance.present + attendance.absent + attendance.notRecorded;
+  if (!total) return <EmptyState title="لا توجد سجلات حضور لليوم" message="ابدأ بتسجيل حضور الحصة؛ ستظهر النتائج هنا من السجلات المحفوظة." />;
+  return <div className="attendance-visual"><div className="performance-ring" style={{ "--ring-angle": `${attendance.present / total * 360}deg` } as CSSProperties} aria-label={`${attendance.present} حاضر من ${total} سجل`}><div><b>{attendance.present}</b><span>حاضر من {total}</span></div></div><dl><div><dt>حاضر</dt><dd>{attendance.present}</dd></div><div><dt>غائب</dt><dd>{attendance.absent}</dd></div><div><dt>لم يُسجل</dt><dd>{attendance.notRecorded}</dd></div></dl></div>;
 }
 
 function Breakdown({ title, rows, currency }: { title: string; rows: OwnerSummary["bySport"]; currency: string }) {
   const maximum = Math.max(...rows.map(row => row.amount), 1);
-  return <SectionCard title={title}>{rows.length === 0 ? <EmptyState /> : <div className="breakdown-list">{rows.map(row => <div className="breakdown-item" key={row.name}><div><span>{row.name}</span><b>{money(row.amount, currency)} · {row.count} عملية</b></div><div className="breakdown-track" aria-hidden="true"><span style={{ "--bar-width": `${Math.max(4, row.amount / maximum * 100)}%` } as CSSProperties} /></div></div>)}</div>}</SectionCard>;
+  return <SectionCard title={title}>{rows.length === 0 ? <EmptyState /> : <div className="breakdown-list">{rows.map(row => <div className="breakdown-item" key={row.name}><div><span>{row.name}</span><b>{money(row.amount, currency)} · {row.count} عملية</b></div><div className="breakdown-track" aria-hidden="true"><span style={{ "--bar-width": `${Math.max(0, row.amount / maximum * 100)}%` } as CSSProperties} /></div></div>)}</div>}</SectionCard>;
 }
 
 export function FinancialReport() {
@@ -84,7 +85,7 @@ export function FinancialReport() {
   function load(next = query) { setError(""); setData(null); fetch(`/api/v1/reports/financial${next ? `?${next}` : ""}`).then(async r => { if (!r.ok) throw new Error(); const value = await r.json() as FinancialResponse; setData(value); setFilters(current => ({ from: current.from || value.from, to: current.to || value.to, ...current })); }).catch(() => setError("تعذر تحميل التقرير المالي.")); }
   useEffect(() => { fetch("/api/v1/reports/financial").then(async r => { if (!r.ok) throw new Error(); const value = await r.json() as FinancialResponse; setData(value); setFilters(current => ({ ...current, from: value.from, to: value.to })); }).catch(() => setError("تعذر تحميل التقرير المالي.")); fetch("/api/v1/manage/structure/options").then(r => r.ok ? r.json() : Promise.reject()).then(setOptions).catch(() => undefined); fetch("/api/v1/subscriptions/plans").then(r => r.ok ? r.json() : Promise.reject()).then((rows: { id: string; arabicName: string }[]) => setPlans(rows)).catch(() => undefined); }, []);
   function submit(e: FormEvent) { e.preventDefault(); load(); }
-  return <><PageHeader title="التقارير المالية" context="التقارير / التحصيلات المؤكدة" /><form className="report-filters" onSubmit={submit}><DateField label="من تاريخ" value={filters.from} set={v => setFilters({ ...filters, from: v })} /><DateField label="إلى تاريخ" value={filters.to} set={v => setFilters({ ...filters, to: v })} /><SelectFilter label="الرياضة" value={filters.sportId} set={v => setFilters({ ...filters, sportId: v })} options={options.sports} /><SelectFilter label="الفرع" value={filters.branchId} set={v => setFilters({ ...filters, branchId: v })} options={options.branches} /><SelectFilter label="الباقة" value={filters.planId} set={v => setFilters({ ...filters, planId: v })} options={plans} /><label>طريقة/مزود الدفع<input value={filters.provider ?? ""} onChange={e => setFilters({ ...filters, provider: e.target.value })} /></label><label>بحث اللاعب أو الإيصال<input value={filters.search ?? ""} onChange={e => setFilters({ ...filters, search: e.target.value })} /></label><button className="primary-button">تطبيق الفلاتر</button><a className="secondary-button export-link" href={`/api/v1/reports/financial/export${query ? `?${query}` : ""}`} download>تصدير CSV</a></form>{error && <ErrorState message={error} />}{!data && !error ? <LoadingState /> : data && <section className="list-card"><div className="report-total"><span>إجمالي التحصيل المؤكد</span><strong>{money(data.totalAmount, data.currency)}</strong><small>{data.totalCount} عملية — لا تشمل المدفوعات الفاشلة أو المعلقة</small></div>{data.items.length === 0 ? <EmptyState message="لا توجد تحصيلات مؤكدة ضمن الفلاتر." /> : <div className="report-table">{data.items.map(row => <article key={row.collectionId}><div><strong>{row.receiptNumber} — {row.player}</strong><small>{row.sport} · {row.branch} · {row.group} · {row.plan}</small><small>{row.paymentMethod} / {row.provider} · {new Date(row.confirmedAtUtc).toLocaleString("ar-EG")}</small></div><b>{money(row.amount, row.currency)}</b><Link className="small-link" href={`/dashboard/subscriptions/receipts/${row.receiptId}`}>الإيصال</Link></article>)}</div>}</section>}</>;
+  return <><PageHeader title="التقارير المالية" context="التقارير / التحصيلات المؤكدة" /><form className="report-filters" onSubmit={submit}><DateField label="من تاريخ" value={filters.from} set={v => setFilters({ ...filters, from: v })} /><DateField label="إلى تاريخ" value={filters.to} set={v => setFilters({ ...filters, to: v })} /><SelectFilter label="الرياضة" value={filters.sportId} set={v => setFilters({ ...filters, sportId: v })} options={options.sports} /><SelectFilter label="الفرع" value={filters.branchId} set={v => setFilters({ ...filters, branchId: v })} options={options.branches} /><SelectFilter label="الباقة" value={filters.planId} set={v => setFilters({ ...filters, planId: v })} options={plans} /><label>طريقة/مزود الدفع<input value={filters.provider ?? ""} onChange={e => setFilters({ ...filters, provider: e.target.value })} /></label><label>بحث اللاعب أو الإيصال<input value={filters.search ?? ""} onChange={e => setFilters({ ...filters, search: e.target.value })} /></label><button className="primary-button">تطبيق الفلاتر</button><a className="secondary-button export-link" href={`/api/v1/reports/financial/export${query ? `?${query}` : ""}`} download>تصدير CSV</a></form>{error && <ErrorState message={error} />}{!data && !error ? <LoadingState /> : data && <section className="list-card"><div className="report-total"><span>إجمالي التحصيل المؤكد</span><strong>{money(data.totalAmount, data.currency)}</strong><small>{data.totalCount} عملية — لا تشمل المدفوعات الفاشلة أو المعلقة</small></div>{data.items.length === 0 ? <EmptyState message="لا توجد تحصيلات مؤكدة ضمن الفلاتر." /> : <div className="report-table">{data.items.map(row => <article key={row.collectionId}><div><strong>{row.receiptNumber} — {row.player}</strong><small>{row.sport} · {row.branch} · {row.group} · {row.plan}</small><small>{row.paymentMethod === "Online" ? "دفع إلكتروني" : row.paymentMethod} / {row.provider === "InternalTest" || row.provider === "Internal" ? "بوابة الاختبار الداخلية" : row.provider} · {new Date(row.confirmedAtUtc).toLocaleString("ar-EG")}</small></div><b>{money(row.amount, row.currency)}</b><Link className="small-link" href={`/dashboard/subscriptions/receipts/${row.receiptId}`}>الإيصال</Link></article>)}</div>}</section>}</>;
 }
 
 export function AttendanceReport() {
