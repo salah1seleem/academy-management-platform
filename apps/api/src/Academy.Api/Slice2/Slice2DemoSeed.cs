@@ -45,7 +45,7 @@ public static class Slice2DemoSeed
         await AddIfMissing(db, new TrainingGroup { Id = JuniorGroupId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "براعم 2018 — مجموعة أ", BranchId = ZagazigBranchId, SportId = FootballId, AgeCategoryId = U8Id, Capacity = 20, CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         foreach (var day in new[] { DayOfWeek.Sunday, DayOfWeek.Tuesday, DayOfWeek.Thursday }) await AddIfMissing(db, new RecurringSchedule { Id = Deterministic($"schedule-{day}"), AcademyId = DemoSeed.NogoomAcademyId, TrainingGroupId = FootballGroupId, DayOfWeek = day, StartTime = new TimeOnly(18, 0), EndTime = new TimeOnly(19, 30), CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
 
-        var coachMembership = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.UserId == coachUserId, ct);
+        var coachMembership = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.UserId == coachUserId && x.Role == AcademyRole.Coach, ct);
         await AddIfMissing(db, new StaffGroupAssignment { Id = Guid.Parse("37000000-0000-0000-0000-000000000001"), AcademyId = DemoSeed.NogoomAcademyId, AcademyMembershipId = coachMembership.Id, TrainingGroupId = FootballGroupId, CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         await AddIfMissing(db, new GuardianProfile { Id = MainGuardianId, AcademyId = DemoSeed.NogoomAcademyId, UserId = guardianUserId, DisplayName = "سارة محمود", ContactPhone = DemoSeed.GuardianPhone, CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         await AddIfMissing(db, Player(OmarPlayerId, DemoSeed.NogoomAcademyId, "NG-0001", "عمر أحمد محمود", new DateOnly(2016, 4, 12), now), ct);

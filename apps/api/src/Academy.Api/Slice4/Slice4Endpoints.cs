@@ -115,7 +115,7 @@ public static class Slice4Endpoints
         if (request.Items is null) return Validation("items", "قائمة حضور الجهاز الفني مطلوبة.");
         if (t.Role == AcademyRole.Coach)
         {
-            var own = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.UserId == user && x.IsActive).Select(x => x.Id).SingleAsync(); if (request.Items.Any(x => x.AcademyMembershipId != own)) return Results.NotFound();
+            var own = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.UserId == user && x.IsActive && x.Role == AcademyRole.Coach).Select(x => x.Id).SingleAsync(); if (request.Items.Any(x => x.AcademyMembershipId != own)) return Results.NotFound();
         }
         try { return Results.Ok(new { items = await service.SaveStaffAsync(t.AcademyId, id, user, request.Items) }); }
         catch (AttendanceValidationException e) { return Validation("items", e.Message); } catch (AttendanceConflictException e) { return Results.Conflict(new { message = e.Message }); } catch (AttendanceNotFoundException) { return Results.NotFound(); }

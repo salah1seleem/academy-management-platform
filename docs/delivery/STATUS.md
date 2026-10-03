@@ -1,6 +1,24 @@
 # Status
 
-تاريخ التحديث: 2026-09-29. الفرع: `codex/14-slice8d-demo-closure`، والأساس المعتمد: `9fc885d9c8a10e4832443b060c1ba227de92e099`.
+تاريخ التحديث: 2026-10-04. الفرع الحالي: `codex/15-native-mobile-app`، أساسه الكامل `a9624dc537f121bd1732ab4c0f692ea753d70724` من `codex/14-slice8d-demo-closure`.
+
+## Native Mobile — checkpoint A، البرنامج الكامل PARTIAL
+
+- أُضيف auth backend للموبايل: phone OTP محروس ببيئة Demo، تطبيع الأرقام العربية/المحلية، انتهاء واستهلاك مرة واحدة وحدود محاولات/طلبات. لا SMS حقيقي.
+- `MobileSessions` تخزن hash للـaccess والـrefresh، بعمر 10 دقائق/30 يومًا، مع تدوير ذري وlogout جهاز وrevoke-all وفحص المستخدم/العضوية/الأكاديمية/security stamp. التزامن لا يصدر نجاحين لنفس OTP أو refresh.
+- أدوار متعددة للهوية نفسها مع اختيار membership صريح، دون أعلى صلاحية تلقائية أو دمج أدوار. cookies الويب تحفظ membership، وtenant resolution يفشل بأمان عند الغموض. bearer غير صالح لا يرجع إلى cookie، وCSRF يبقى مطلوبًا للويب.
+- Migration الجديدة فقط: `20261003214541_NativeMobileSessions`. طُبقت على قاعدتي اختبارات مستقلتين محليًا بـPostgreSQL **17.11**، لا على قاعدة العرض القديمة. لا pending model changes. لا تغييرات migrations قديمة أو reset أو وصول لبيانات منتج آخر.
+- Seed أضاف أرقام Owner/Coach الاصطناعية إلى الهويات الموجودة عندما يكون الهاتف فارغًا، بلا استبدال هوية أو كلمة مرور أو رقم معدّل. هذا ليس تنظيف Demo Phase B.
+- [معمارية الموبايل](../mobile/MOBILE_ARCHITECTURE_v1.0.md)، [دليل checkpoint](../mobile/MOBILE_DEMO_GUIDE.md)، و[تفويض النطاق الإضافي](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md) توثق ما نُفذ وما لم يُنفذ. الـbaseline وapproval الأصليان بلا تعديل.
+- تحقق محلي مكتمل: backend **362/362** (360 integration + 1 unit + 1 architecture)، منها **30** حالة mobile auth جديدة؛ اختبارات الويب **107/107**، typecheck وlint وproduction build ناجحة؛ `npm audit --omit=dev`: **0 vulnerabilities**؛ روابط الوثائق الجديدة و`git diff --check` سليمة. لا pending EF model changes. نتيجة CI تُراجع بعد push لهذا checkpoint؛ لا ندعيها مسبقًا.
+- خدمات العرض القديمة على 5080/3000 لم تُوقف أو يُدّعَ أنها تشغّل إصدار native الجديد. لم يُشغّل E2E محليًا على قاعدة العرض الملوثة؛ التحقق المعزول مطلوب في CI.
+- لا تطبيق `apps/mobile` بعد، ولا native build أو Simulator journey أو visual review أو صور وجبات جديدة أو تغذية توصيات منفذة. لذلك **NOT NATIVE DEMO READY / NOT PRODUCTION READY**.
+
+المتبقي بالترتيب: **B** تنظيف Demo كرة القدم وreset آمن/Create Coach؛ **C** Flutter/auth/secure storage؛ **D** Guardian؛ **E** التغذية والوجبات والصور والمصادر والقواعد؛ **F** Coach؛ **G** Owner؛ **H** Flutter CI والاختبارات والمراجعة المرئية. آخر تصحيح واجب: نفس تصميم صور Guardian مع وجبات أطفال مختلفة **بلا شكشوكة أو كشري**، وبلا تجارة أو تشخيص غذائي. ملف مصادر التغذية يُنشأ عند تنفيذ E، لا توجد قيم جديدة ندعي توثيقها الآن. Android SDK غير مثبت، بينما Flutter وXcode/iOS Simulator متاحان. نقطة المتابعة التالية هي Phase B، وليس إعادة كتابة auth أو اعتماد الديمو كاملًا.
+
+## سجل التسليم السابق
+
+Slice 8D أُنجز على `codex/14-slice8d-demo-closure`؛ أساسه التاريخي `9fc885d9c8a10e4832443b060c1ba227de92e099`، وناتجه الكامل هو أساس برنامج native أعلاه. الأحكام أدناه تخص الويب وقت تسليمها، لا اكتمال برنامج native.
 
 ## Slice 8D — Demo Closure منفذ فعليًا
 

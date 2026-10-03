@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using Academy.Api.Auth;
+using Academy.Api.Mobile;
 using Academy.Api.Slice2;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
@@ -45,10 +47,24 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     }).AddSignInManager().AddEntityFrameworkStores<FoundationDbContext>();
 builder.Services.AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+        options.DefaultAuthenticateScheme = "Academy.Client";
+        options.DefaultChallengeScheme = "Academy.Client";
         options.DefaultSignInScheme = IdentityConstants.ApplicationScheme;
     }).AddIdentityCookies();
+builder.Services.AddAuthentication()
+    .AddPolicyScheme("Academy.Client", "Cookie or native session", options =>
+        options.ForwardDefaultSelector = context => context.Request.Headers.ContainsKey("Authorization")
+            ? MobileAuthenticationHandler.SchemeName : IdentityConstants.ApplicationScheme)
+    .AddScheme<AuthenticationSchemeOptions, MobileAuthenticationHandler>(MobileAuthenticationHandler.SchemeName, _ => { });
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+        await context.HttpContext.Response.WriteAsJsonAsync(new { title = "محاولات كثيرة، يرجى الانتظار ثم المحاولة مجددًا", status = 429 }, cancellationToken);
+    options.AddPolicy("mobile-auth", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
     options.ValidationInterval = TimeSpan.FromMinutes(5);
@@ -57,6 +73,9 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
         var academyClaim = context.CurrentPrincipal?.FindFirst("academy_id");
         if (academyClaim is not null && context.NewPrincipal?.Identity is ClaimsIdentity identity)
             identity.AddClaim(academyClaim);
+        var membershipClaim = context.CurrentPrincipal?.FindFirst("membership_id");
+        if (membershipClaim is not null && context.NewPrincipal?.Identity is ClaimsIdentity memberIdentity)
+            memberIdentity.AddClaim(membershipClaim);
         return Task.CompletedTask;
     };
 });
@@ -68,6 +87,7 @@ builder.Services.AddScoped<CurrentTenant>();
 builder.Services.AddScoped<IAuthorizationHandler, TenantPermissionHandler>();
 builder.Services.AddAuthorization(options =>
 {
+    options.AddPolicy("mobile-session", policy => policy.AddAuthenticationSchemes(MobileAuthenticationHandler.SchemeName).RequireAuthenticatedUser());
     options.AddPolicy(AcademyPermissions.TenantAccess, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));
     options.AddPolicy(AcademyPermissions.StaffProvision, policy => policy.RequireAuthenticatedUser()
@@ -101,7 +121,9 @@ DemoSeed.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IO
 InternalTestPaymentGateway.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<InternalTestPaymentOptions>>().Value);
 app.UseExceptionHandler();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
+app.MapMobileAuth();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false, ResponseWriter = HealthResponseWriter.WriteAsync });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready"), ResponseWriter = HealthResponseWriter.WriteAsync });
@@ -126,7 +148,7 @@ api.MapPost("/auth/login", async (LoginRequest request, UserManager<ApplicationU
         .OrderBy(x => x.CreatedAtUtc).FirstOrDefaultAsync();
     if (membership is null) return Results.Problem(statusCode: 403, title: "الحساب غير متاح");
     await context.SignOutAsync(IdentityConstants.ApplicationScheme);
-    await Program.SignInAsync(context, user, membership.AcademyId);
+    await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
     return Results.Ok(new { authenticated = true });
 }).AddEndpointFilter<CsrfFilter>();
 
@@ -169,7 +191,7 @@ api.MapPost("/auth/guardian/otp/verify", async (GuardianOtpVerifyRequest request
     challenge.ConsumedAtUtc = clock.GetUtcNow();
     await db.SaveChangesAsync();
     await context.SignOutAsync(IdentityConstants.ApplicationScheme);
-    await Program.SignInAsync(context, user, membership.AcademyId);
+    await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
     return Results.Ok(new { authenticated = true });
 }).AddEndpointFilter<CsrfFilter>();
 
@@ -202,14 +224,18 @@ api.MapGet("/my-academies", async (ClaimsPrincipal principal, FoundationDbContex
 api.MapPost("/session/academy", async (SelectAcademyRequest request, ClaimsPrincipal principal,
     UserManager<ApplicationUser> users, FoundationDbContext db, HttpContext context) =>
 {
+    if (principal.Identity?.AuthenticationType == MobileAuthenticationHandler.SchemeName) return Results.Forbid();
     var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    var ownsMembership = await db.AcademyMemberships.AsNoTracking()
-        .AnyAsync(x => x.UserId == userId && x.AcademyId == request.AcademyId && x.IsActive && x.Academy.IsActive);
-    if (!ownsMembership) return Results.Forbid();
+    var memberships = await db.AcademyMemberships.AsNoTracking()
+        .Where(x => x.UserId == userId && x.AcademyId == request.AcademyId && x.IsActive && x.Academy.IsActive).ToListAsync();
+    var selectedId = principal.FindFirstValue("membership_id");
+    var membership = memberships.FirstOrDefault(x => x.Id.ToString() == selectedId)
+        ?? (memberships.Count == 1 ? memberships[0] : null);
+    if (membership is null) return Results.Forbid();
     var user = await users.FindByIdAsync(userId.ToString());
     if (user is null || !user.IsActive) return Results.Unauthorized();
     await context.SignOutAsync(IdentityConstants.ApplicationScheme);
-    await Program.SignInAsync(context, user, request.AcademyId);
+    await Program.SignInAsync(context, user, request.AcademyId, membership.Id);
     return Results.NoContent();
 }).RequireAuthorization().AddEndpointFilter<CsrfFilter>();
 
@@ -242,7 +268,7 @@ api.MapPost("/staff", async (CreateStaffRequest request, CurrentTenant tenant, U
         if (!created.Succeeded)
             return Results.ValidationProblem(new Dictionary<string, string[]> { ["account"] = created.Errors.Select(x => x.Description).ToArray() });
     }
-    if (await db.AcademyMemberships.AnyAsync(x => x.AcademyId == current.AcademyId && x.UserId == user.Id))
+    if (await db.AcademyMemberships.AnyAsync(x => x.AcademyId == current.AcademyId && x.UserId == user.Id && x.Role == request.Role))
         return Results.Conflict(new { message = "العضوية موجودة بالفعل." });
     db.AcademyMemberships.Add(new AcademyMembership
     {
@@ -276,13 +302,14 @@ public sealed record CreateStaffRequest(string Email, string DisplayName, string
 
 public partial class Program
 {
-    public static async Task SignInAsync(HttpContext context, ApplicationUser user, Guid academyId)
+    public static async Task SignInAsync(HttpContext context, ApplicationUser user, Guid academyId, Guid membershipId)
     {
         var identity = new ClaimsIdentity(IdentityConstants.ApplicationScheme, ClaimTypes.Name, ClaimTypes.Role);
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
         identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName ?? user.Id.ToString()));
         identity.AddClaim(new Claim("AspNet.Identity.SecurityStamp", user.SecurityStamp ?? string.Empty));
         identity.AddClaim(new Claim("academy_id", academyId.ToString()));
+        identity.AddClaim(new Claim("membership_id", membershipId.ToString()));
         var principal = new ClaimsPrincipal(identity);
         await context.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties
         {

@@ -19,6 +19,8 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<AcademyMembership> AcademyMemberships => Set<AcademyMembership>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<GuardianOtpChallenge> GuardianOtpChallenges => Set<GuardianOtpChallenge>();
+    public DbSet<MobileSession> MobileSessions => Set<MobileSession>();
+    public DbSet<MobileOtpChallenge> MobileOtpChallenges => Set<MobileOtpChallenge>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<Sport> Sports => Set<Sport>();
     public DbSet<AgeCategory> AgeCategories => Set<AgeCategory>();
@@ -88,7 +90,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.ToTable("AcademyMemberships");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Role).HasConversion<string>().HasMaxLength(32);
-            entity.HasIndex(x => new { x.AcademyId, x.UserId }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.UserId, x.Role }).IsUnique();
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id });
             entity.HasIndex(x => new { x.UserId, x.IsActive });
             entity.HasOne(x => x.Academy).WithMany().HasForeignKey(x => x.AcademyId).OnDelete(DeleteBehavior.Restrict);
@@ -110,6 +112,26 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PhoneNumberNormalized).HasMaxLength(32);
             entity.HasIndex(x => new { x.PhoneNumberNormalized, x.ExpiresAtUtc });
+        });
+
+        builder.Entity<MobileSession>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AccessTokenHash).HasMaxLength(64);
+            entity.Property(x => x.RefreshTokenHash).HasMaxLength(64);
+            entity.Property(x => x.SecurityStamp).HasMaxLength(256);
+            entity.Property(x => x.DeviceName).HasMaxLength(100);
+            entity.HasIndex(x => x.AccessTokenHash).IsUnique();
+            entity.HasIndex(x => x.RefreshTokenHash).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Membership).WithMany().HasForeignKey(x => x.MembershipId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<MobileOtpChallenge>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PhoneNumberNormalized).HasMaxLength(32);
+            entity.HasIndex(x => new { x.PhoneNumberNormalized, x.CreatedAtUtc });
         });
 
         ConfigureTenantEntity<Branch>(builder, "Branches");

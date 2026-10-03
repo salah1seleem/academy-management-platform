@@ -16,10 +16,19 @@ public sealed class CurrentTenant(IHttpContextAccessor accessor, FoundationDbCon
         var academyIdText = principal?.FindFirstValue("academy_id");
         if (!Guid.TryParse(userIdText, out var userId) || !Guid.TryParse(academyIdText, out var academyId)) return null;
 
-        return await db.AcademyMemberships.AsNoTracking()
-            .Where(x => x.UserId == userId && x.AcademyId == academyId && x.IsActive && x.Academy.IsActive)
+        var query = db.AcademyMemberships.AsNoTracking()
+            .Where(x => x.UserId == userId && x.User.IsActive && x.AcademyId == academyId && x.IsActive && x.Academy.IsActive);
+        var membershipText = principal?.FindFirstValue("membership_id");
+        if (membershipText is not null)
+        {
+            if (!Guid.TryParse(membershipText, out var membershipId)) return null;
+            query = query.Where(x => x.Id == membershipId);
+        }
+        // Legacy cookies without a selected role must not implicitly acquire another role.
+        var memberships = await query
             .Select(x => new TenantMembership(x.AcademyId, x.Academy.ArabicName, x.Role))
-            .SingleOrDefaultAsync(cancellationToken);
+            .Take(2).ToListAsync(cancellationToken);
+        return memberships.Count == 1 ? memberships[0] : null;
     }
 
 }

@@ -1,6 +1,8 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الحالة الحالية هي **Slice 8D: إغلاق جاهزية الديمو للتجديد الإداري واتساق العربية/PWA**.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D**، وبرنامج Native Mobile الإضافي عند **Phase A: mobile auth backend** فقط؛ تطبيق Flutter المرئي لم يُنشأ بعد.
+
+[معمارية الموبايل](docs/mobile/MOBILE_ARCHITECTURE_v1.0.md) · [دليل checkpoint](docs/mobile/MOBILE_DEMO_GUIDE.md) · [النطاق الإضافي](docs/requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). المسار الجديد يدعم OTP لـGuardian/Coach/Owner، جلسات أجهزة مع تدوير وإلغاء، واختيار عضوية/دور صريحًا. cookie/CSRF الويب وواجهاته باقية.
 
 ## ما الموجود الآن؟
 
@@ -78,7 +80,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `20260929015730_Slice8CSubscriptionDiscounts`. تضيف snapshot ماليًا إلى `RenewalRequests` و`Receipts` وسجل `RenewalDiscountAdjustments`، وتسمح بأكثر من محاولة دفع تاريخية للتجديد الواحد مع بقاء `PaymentRequestId` الحالي هو المرجع الموثوق. ترحيل البيانات القديمة يحفظ مبلغها الأصلي والمدفوع دون تعديل migrations سابقة.
+آخر migration هي `20261003214541_NativeMobileSessions`: تضيف `MobileSessions` و`MobileOtpChallenges` وتتيح عضويات أدوار متعددة مع uniqueness على academy/user/role. Migration السابقة `20260929015730_Slice8CSubscriptionDiscounts` تبقى كما هي بمكوناتها المالية. لا تعدّل migrations مطبقة أو تحذف بيانات لتسهيل downgrade.
 
 ## 5. تشغيل Demo آمن محليًا
 

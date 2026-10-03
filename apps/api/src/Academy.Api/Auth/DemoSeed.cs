@@ -22,6 +22,8 @@ public static class DemoSeed
     public const string AdminEmail = "admin.nogoom@example.test";
     public const string CoachEmail = "coach.nogoom@example.test";
     public const string GuardianPhone = "+201000000001";
+    public const string OwnerPhone = "+201000000010";
+    public const string CoachPhone = "+201000000020";
     public const string FutureOwnerEmail = "owner.future@example.test";
 
     public static void ValidateEnvironment(IHostEnvironment environment, DemoOptions options)
@@ -61,9 +63,9 @@ public static class DemoSeed
             Slug = "future-demo", TimeZone = "Africa/Cairo", DefaultCurrency = "EGP", CreatedAtUtc = now, UpdatedAtUtc = now
         }, cancellationToken);
 
-        var owner = await UpsertUser(users, OwnerEmail, null, "أحمد محمد", options.StaffPassword, now);
+        var owner = await UpsertUser(users, OwnerEmail, OwnerPhone, "أحمد محمد", options.StaffPassword, now);
         var admin = await UpsertUser(users, AdminEmail, null, "منى السيد", options.StaffPassword, now);
-        var coach = await UpsertUser(users, CoachEmail, null, "كريم حسن", options.StaffPassword, now);
+        var coach = await UpsertUser(users, CoachEmail, CoachPhone, "كريم حسن", options.StaffPassword, now);
         var guardian = await UpsertUser(users, null, GuardianPhone, "سارة محمود", null, now);
         var futureOwner = await UpsertUser(users, FutureOwnerEmail, null, "محمود علي", options.StaffPassword, now);
 
@@ -95,7 +97,17 @@ public static class DemoSeed
     private static async Task<ApplicationUser> UpsertUser(UserManager<ApplicationUser> manager, string? email, string? phone, string name, string? password, DateTimeOffset now)
     {
         ApplicationUser? user = email is not null ? await manager.FindByEmailAsync(email) : manager.Users.SingleOrDefault(x => x.PhoneNumber == phone);
-        if (user is not null) return user;
+        if (user is not null)
+        {
+            // Add native Demo login to the existing identity; never overwrite a configured phone.
+            if (phone is not null && user.PhoneNumber is null)
+            {
+                user.PhoneNumber = phone; user.PhoneNumberConfirmed = true;
+                var updated = await manager.UpdateAsync(user);
+                if (!updated.Succeeded) throw new InvalidOperationException("Unable to assign the reserved Demo phone.");
+            }
+            return user;
+        }
         user = new ApplicationUser
         {
             Id = Guid.NewGuid(), UserName = email ?? phone, Email = email, EmailConfirmed = email is not null,

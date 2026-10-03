@@ -5,6 +5,7 @@ using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice4;
@@ -49,7 +50,7 @@ public static class Slice4DemoSeed
         await PlayerAttendance(db, Guid.Parse("64000000-0000-0000-0000-000000000001"), YesterdayFootballSessionId, Slice2DemoSeed.FootballGroupId, omarFootball.Id, AttendanceStatus.Present, ownerUserId, now, ct);
         await PlayerAttendance(db, Guid.Parse("64000000-0000-0000-0000-000000000002"), YesterdayFootballSessionId, Slice2DemoSeed.FootballGroupId, otherFootball.Id, AttendanceStatus.Absent, ownerUserId, now, ct);
 
-        var coachMembership = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.UserId == coachUserId, ct);
+        var coachMembership = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.UserId == coachUserId && x.Role == AcademyRole.Coach, ct);
         if (!await db.StaffAttendances.AnyAsync(x => x.Id == Guid.Parse("65000000-0000-0000-0000-000000000001"), ct))
         {
             db.StaffAttendances.Add(new StaffAttendance
