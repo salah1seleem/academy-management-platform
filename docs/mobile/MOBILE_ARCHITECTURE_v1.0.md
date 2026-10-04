@@ -6,7 +6,7 @@
 
 Flutter iOS/Android عميل أصلي في `apps/mobile`، لا WebView ولا استبدال Next.js. يتصل بنفس ASP.NET Core API/PostgreSQL؛ لا backend ثانٍ أو deployment لكل دور. منطق التجديد والتحصيل والإيصال والخصم والحضور والتقييم يبقى على الخادم. الويب يستمر بجلسة cookie وCSRF، والموبايل يرسل bearer مستقلًا. مرحلة C تنفذ المصادقة وrole shell؛ شاشات الأعمال تأتي لاحقًا.
 
-الهيكل: `lib/app` للتطبيق وتوجيه الدور، `core/{api,auth,storage,theme,widgets}` و`features/auth`؛ بقية features تُضاف عند تنفيذها دون هياكل فارغة. لا تختزن الواجهات قواعد الصلاحيات أو الأرقام المالية. Flutter **3.47.2 stable**/Dart **3.13.2**، و`flutter_secure_storage 11.2.0` مع lockfile. تبعية التخزين [موثقة لدى ناشرها](https://pub.dev/packages/flutter_secure_storage) وثُبتت واختُبرت على iOS. Cairo محلي مع OFL، وHTTP client من Dart SDK بلا framework إضافي. build iOS Simulator ناجح؛ Android SDK غير متاح ولم يُختبر Android.
+الهيكل: `lib/app` للتطبيق وتوجيه الدور، `core/{api,auth,storage,theme,widgets}` و`features/{auth,guardian}`؛ Coach وOwner يضافان عند تنفيذهما دون هياكل فارغة. لا تختزن الواجهات قواعد الصلاحيات أو الأرقام المالية. Flutter **3.47.2 stable**/Dart **3.13.2**، و`flutter_secure_storage 11.2.0` و`flutter_svg 2.3.0` مع lockfile. التخزين الآمن مثبت ومختبر على iOS؛ SVG يعرض أصول Demo محلية allowlisted فقط ولا يجلب مرجع وسائط خارجيًا مع bearer. Cairo محلي مع OFL. build iOS Simulator ناجح؛ Android SDK غير متاح ولم يُختبر Android.
 
 ## العقد المنفذ: `/api/v1/mobile/auth`
 
@@ -46,11 +46,11 @@ Migration `20261003214541_NativeMobileSessions` تضيف جدولَي sessions/c
 
 الويب يستخدم الآن [نظام Sports Academy](../ui/DASHBOARD_UI_SYSTEM.md). توسعات DTO للقراءة مقيدة بالـtenant نفسه ولا تغير جلسات Phase A أو أوامر الأعمال. هوية اللاعب وروابطه في endpoints الموظفين لا تصبح متاحة للـGuardian أو Coach لمجرد إضافة حقول العرض.
 
-Guardian يتبع صور المحادثة: خلفية داكنة وبطاقات وصور وتبويبات واضحة وRTL، مع الإجراءات الثلاثة. Coach/Owner يستخدمان teal/white المتوافق مع الطلب. التقرير يحتفظ بالمركز وradar الستة وبقية المعايير دون ملعب. الوجبات ستتغير وفق التصحيح المباشر؛ لا تُستورد صور المرجع أو علاماته أو أطفاله.
+Guardian المنفذ يتبع صور المحادثة: خلفية داكنة وبطاقات وتبويبات واضحة وRTL، مع الإجراءات الثلاثة. Navigator داخلي معزول بعمر `membershipId` ويُهدم عند logout أو تبديل العضوية. التقرير يعرض نتيجة الخادم ويحفظ المركز وradar الستة وبقية المعايير دون ملعب، ولا يحول missing إلى صفر. طلبات التسجيل/التجديد تستخدم idempotency key ثابتًا للعملية، والكتابة لا تُعاد تلقائيًا بعد عطل مبهم. Coach/Owner يستخدمان teal/white في F/G. الوجبات ستتغير وفق التصحيح المباشر في E؛ لا تُستورد صور المرجع أو علاماته أو أطفاله.
 
 Phase B يستخدم tenant عرض محجوزًا ذا علامة مخزنة، وreset CLI صريح داخل transaction، لا HTTP endpoint ولا drop database. تبقى الهويات العامة وعضويات الأكاديميات الأخرى؛ reset ينظف سجلات tenant العرض فقط. profile الاختبارات `LegacyRegression` منفصل عن `Football` الافتراضي. `POST /api/v1/manage/coaches` يحمي Owner/Admin وCSRF، ويطبّع الهاتف ويقفل إنشاء هويته المتزامن، ويحفظ الهوية/عضوية Coach/الإسناد ذريًا دون إعادة كتابة بيانات شخص موجود أو منح وصاية. تفاصيل التشغيل والحدود في [الدليل](MOBILE_DEMO_GUIDE.md).
 
-Flutter/auth في C؛ Guardian في D؛ وجبات مصورة مع مصدر وحصة وقواعد معلوماتية غير طبية في E؛ Coach/Owner في F/G؛ CI Flutter ومراجعة iOS ومقاسات الهاتف في H. لا يعني نجاح auth أن أي شاشة native جاهزة.
+Flutter/auth في C وGuardian في D منفذان؛ وجبات مصورة مع مصدر وحصة وقواعد معلوماتية غير طبية في E؛ Coach/Owner في F/G؛ regression وCI ومراجعة المقاسات النهائية في H. نجاح D لا يجعل التطبيق كاملًا أو Production Ready.
 
 اختبارات Phase A تعمل على قواعد PostgreSQL 17 مستقلة؛ لا reset لقاعدة العرض أو قواعد أخرى. HTTPS إلزامي للنشر الحقيقي، وHTTP loopback للديمو فقط؛ reverse proxy الموثوق وتخزين الأسرار وSMS والتوقيع والمتاجر والخصوصية والنسخ الاحتياطي والمراقبة وبوابة الأمان غير منجزة. يُمنع الادعاء بجاهزية الإنتاج أو حسابات المتاجر.
 

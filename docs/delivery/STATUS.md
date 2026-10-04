@@ -2,7 +2,14 @@
 
 تاريخ التحديث: 2026-10-04. الفرع الحالي: `codex/15-native-mobile-app`، أساسه الكامل `a9624dc537f121bd1732ab4c0f692ea753d70724` من `codex/14-slice8d-demo-closure`.
 
-## Master Execution — checkpoint C؛ البرنامج الكامل PARTIAL
+## Master Execution — checkpoint D؛ البرنامج الكامل PARTIAL
+
+- Phase D تضيف Guardian Flutter أصليًا بدون WebView: الرئيسية الداكنة RTL، ثلاثة إجراءات فقط، أطفال بلا تكرار، كتالوج رياضي عرض فقط، ملف الطفل والتدريب والحضور والاشتراك، التقرير المنشور مع موضع اللاعب والمحاور الستة وكل المعايير وملاحظات المدرب، والسجلات الطبية/المعرض بأذونات الخادم القائمة.
+- نُفذت طلبات الاشتراك والتجديد واختيار الباقة والمراجعة والدفع التجريبي والإيصال، وتجديد الغير بالكود opaque. لا بحث باسم طفل ولا إنشاء `GuardianPlayerLink`، ولا إعادة حساب Flutter للدرجات أو الرصيد أو المال. أوامر الكتابة بمفتاح idempotency ثابت للشاشة، بلا replay آلي؛ محاكاة الدفع ظاهرة في Demo فقط.
+- Navigator معزول بعمر الجلسة ويُهدم عند logout/تبديل العضوية. الصور تقبل فقط أصول Demo المحلية المسموح بها ولا تجلب روابط عشوائية بالتوكن. التغذية لا تزال محتوى B المؤقت (3 أمثلة، بلا قيم مختلقة) حتى E؛ لا أسعار/تقييم/كمية/سلة/طلب غذائي، ولا AI Reports أو Intensive Courses أو مخطط ملعب.
+- Flutter analyze ناجح وFlutter unit/widget **30/30**. غطت الاختبارات 360×800 و390×844 و412×915، الأشقاء، logout/deep routes، IDOR-safe failures، missing/zero evaluation values، منع تجارة التغذية، منع محاكاة الدفع في Production، التجديد للغير، وidempotency. رحلة iOS Simulator الحقيقية **1/1 PASS** على API/PostgreSQL: OTP ثم Home/profile/report/training/nutrition/medical/gallery/attendance، طلب تسجيل validation، تجديد كامل ودفع Demo وإيصال، logout، ثم تجديد للغير مع فشل/retry/نجاح وإيصال، والتحقق أن الدفع لم يضف الطفل للحساب. أضيفت سجلات مالية Demo فقط.
+- فُحصت screenshots فعلية للرئيسية والملف والتقرير والتغذية والتفاصيل والمعرض ومراجعة التجديد والإيصال؛ RTL/Cairo والمسافات والبطاقات بلا overflow ظاهر على iPhone 17 Pro Max، مع مطابقة مرجع Guardian في الثيم والبنية ودون نسخ أصوله. مراجعة المقاسات النهائية الكاملة لكل أدوار D–G تبقى في H. iOS debug build وEF no-pending-model-changes ناجحان. نتيجة CI تسجل بعد push.
+- لا migration أو تغيير backend/business rules أو baseline/main. Phase E التالية تستبدل وجبات التغذية المؤقتة بمكتبة موثقة وصور ومحرك توصيات deterministic غير طبي.
 
 - حُفظت كل أعمال `cb7ff342164d02530a6f222d5bebd957b833752e`. Phase B مدفوعة بالـcommit `4076bcddf1ca087b30d495e1190cf1ad173d3fe4`؛ [CI الخاص بها](https://github.com/salah1seleem/academy-management-platform/actions/runs/37168028902) نجح في backend/frontend/e2e بما فيه رحلتا Create Coach الجديدتان.
 - `apps/mobile` تطبيق Flutter أصلي: **3.47.2 stable / Dart 3.13.2**، Cairo محلي مع OFL، RTL وtheme/widgets مشتركة، هاتف/OTP وعضوية/دور صريح وواجهة جلسة حقيقية. شاشات الأعمال D/F/G لا تُحاكى؛ shell الحالي يوضح أنها لم تُنفذ بعد.

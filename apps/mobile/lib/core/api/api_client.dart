@@ -51,6 +51,7 @@ abstract interface class ApiTransport {
     String path, {
     Object? body,
     String? token,
+    String? idempotencyKey,
   });
 }
 
@@ -65,6 +66,7 @@ class HttpApiTransport implements ApiTransport {
     String path, {
     Object? body,
     String? token,
+    String? idempotencyKey,
   }) async {
     if (!path.startsWith('/api/v1/') || path.contains('..')) {
       throw const ApiFailure(0, 'مسار غير صالح.');
@@ -75,6 +77,9 @@ class HttpApiTransport implements ApiTransport {
           .timeout(const Duration(seconds: 20));
       request.followRedirects =
           false; // Do not forward bearer credentials to redirects.
+      if (idempotencyKey != null) {
+        request.headers.set('Idempotency-Key', idempotencyKey);
+      }
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       if (token != null) {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');

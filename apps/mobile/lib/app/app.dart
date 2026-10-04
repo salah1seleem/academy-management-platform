@@ -7,6 +7,8 @@ import '../core/auth/session.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/app_widgets.dart';
 import '../features/auth/login_page.dart';
+import '../features/guardian/guardian_home.dart';
+import '../features/guardian/guardian_ui.dart';
 
 class AcademyApp extends StatelessWidget {
   final AuthController auth;
@@ -53,13 +55,54 @@ class AcademyApp extends StatelessWidget {
           }
           return LoginPage(auth: auth, environment: environment);
         }
-        return RoleFoundation(
-          key: ValueKey('${auth.session!.membershipId}'),
+        // Session-scoped nested navigator: logout/role selection disposes every
+        // private route, not only home. No child data survives account switching.
+        return SessionNavigation(
+          key: ValueKey(auth.session!.membershipId),
           auth: auth,
+          environment: environment,
         );
       },
     ),
   );
+}
+
+class SessionNavigation extends StatefulWidget {
+  final AuthController auth;
+  final String environment;
+  const SessionNavigation({
+    super.key,
+    required this.auth,
+    required this.environment,
+  });
+  @override
+  State<SessionNavigation> createState() => _SessionNavigationState();
+}
+
+class _SessionNavigationState extends State<SessionNavigation> {
+  final navigator = GlobalKey<NavigatorState>();
+  @override
+  Widget build(BuildContext context) {
+    final guardian = widget.auth.session!.selected?.role == 'Guardian';
+    return Theme(
+      data: guardian ? guardianTheme() : AcademyTheme.light(),
+      child: NavigatorPopHandler<Object?>(
+        onPopWithResult: (result) => navigator.currentState!.pop(result),
+        child: Navigator(
+          key: navigator,
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => guardian
+                ? GuardianHome(
+                    auth: widget.auth,
+                    environment: widget.environment,
+                    accountPage: RoleFoundation(auth: widget.auth),
+                  )
+                : RoleFoundation(auth: widget.auth),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // Real authenticated role/context shell. Business screens are added in D/F/G, not simulated here.

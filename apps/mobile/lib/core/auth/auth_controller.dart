@@ -106,7 +106,12 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<Object?> request(String method, String path, {Object? body}) async {
+  Future<Object?> request(
+    String method,
+    String path, {
+    Object? body,
+    String? idempotencyKey,
+  }) async {
     if (busy) throw const ApiFailure(409, 'انتظر اكتمال تحديث الجلسة.');
     final epoch = _epoch;
     if (session == null) throw const ApiFailure(401, 'سجل الدخول أولًا.');
@@ -125,6 +130,7 @@ class AuthController extends ChangeNotifier {
         path,
         body: body,
         token: token,
+        idempotencyKey: idempotencyKey,
       );
       if (epoch != _epoch || session == null) {
         throw const ApiFailure(401, 'تغيرت الجلسة.');

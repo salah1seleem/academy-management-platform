@@ -13,6 +13,15 @@ void main() {
       final api = FakeApi(
         (method, path, body, token) async => path.endsWith('/request')
             ? {'challengeId': 'challenge'}
+            : path.endsWith('/home')
+            ? {
+                'guardianName': 'حساب تجريبي',
+                'academyName': 'أكاديمية العرض',
+                'today': '2026-09-28',
+                'children': [],
+              }
+            : path.endsWith('/catalog')
+            ? []
             : credentials(),
       );
       final auth = AuthController(api, MemoryStore())..restoring = false;
@@ -24,12 +33,14 @@ void main() {
       await tester.enterText(find.byType(TextFormField).last, '246810');
       await tester.tap(find.text('تأكيد الدخول'));
       await tester.pumpAndSettle();
-      expect(find.text('ولي أمر'), findsOneWidget);
+      expect(find.text('الأكاديمية'), findsOneWidget);
       expect(find.text('أهلًا، حساب تجريبي'), findsOneWidget);
       expect(
-        Directionality.of(tester.element(find.text('ولي أمر'))),
+        Directionality.of(tester.element(find.text('الأكاديمية'))),
         TextDirection.rtl,
       );
+      await tester.tap(find.byTooltip('الحساب'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('تسجيل الخروج'));
       await tester.pumpAndSettle();
       expect(find.text('رقم الهاتف'), findsOneWidget);

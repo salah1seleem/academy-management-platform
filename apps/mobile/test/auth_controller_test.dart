@@ -28,6 +28,7 @@ typedef Handler = Future<Object?> Function(String, String, Object?, String?);
 class FakeApi implements ApiTransport {
   final Handler handler;
   final List<String> paths = [];
+  final List<String?> keys = [];
   FakeApi(this.handler);
   @override
   Future<Object?> send(
@@ -35,8 +36,10 @@ class FakeApi implements ApiTransport {
     String path, {
     Object? body,
     String? token,
+    String? idempotencyKey,
   }) {
     paths.add(path);
+    keys.add(idempotencyKey);
     return handler(method, path, body, token);
   }
 }
