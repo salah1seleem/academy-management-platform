@@ -2,7 +2,17 @@
 
 تاريخ التحديث: 2026-10-04. الفرع الحالي: `codex/15-native-mobile-app`، أساسه الكامل `a9624dc537f121bd1732ab4c0f692ea753d70724` من `codex/14-slice8d-demo-closure`.
 
-## Master Execution — checkpoint D؛ البرنامج الكامل PARTIAL
+## Native Mobile — Phase H مكتملة محليًا؛ READY FOR DEMO REVIEW
+
+- اكتملت D–G: Guardian native التجاري، مكتبة Youth Football Nutrition واقتراحاتها الحتمية، Coach attendance/evaluations، وOwner executive dashboard/read-only reports. لا WebView ولا إعادة حساب لقواعد الخادم، ولا بيانات مالية عند Coach أو اتجاهات وهمية عند Owner.
+- أُصلح قص أصول التغذية الـ18 بعد المراجعة البصرية، ونسختها المحلية متطابقة في Flutter وWeb. لا شكشوكة أو كشري ولا أسعار/تقييمات/كمية/سلة/طلب/دفع للتغذية.
+- التحقق الشامل المحلي: backend **381/381 PASS** (`379` integration + `1` unit + `1` architecture)، Web **120/120 PASS** مع typecheck/lint/production build، و`npm audit --omit=dev` = **0 vulnerabilities**. Web Mobile Chromium E2E **48/48 PASS** على قاعدة Demo مستقلة بعد تطبيق سلسلة migrations كما هي.
+- Flutter: `flutter analyze` و**33/33** unit/widget PASS، وiOS Simulator debug build PASS. الرحلات الحقيقية **3/3 PASS** على API/PostgreSQL: Guardian من OTP حتى الملف/التقرير/التغذية/تفاصيل الوجبة/التجديد/الدفع/الإيصال وتجديد الغير؛ Coach حتى المجموعة والحضور والتصحيح والتقييم والنشر؛ Owner حتى اللوحة والتقارير.
+- فُحصت لقطات Login/Home/Profile/Report/Nutrition/Meal/Renewal وCoach Home/Group/Attendance/Evaluation وOwner Dashboard/Reports. غطت اختبارات الواجهات 360×800 و390×844 و412×915، والمراجعة الفعلية على iPhone 17 Pro Max؛ RTL/Cairo والتباعد والبطاقات والتنقل بلا overflow ظاهر. قورنت Guardian/Nutrition بالمراجع المرفقة دون نسخ بياناتها أو عناصر تجارة التغذية.
+- Migration الأخيرة `20261004030006_YouthFootballNutrition`، ولا pending EF model changes. لا تعديل للـbaseline أو `main` أو قواعد الإنتاج. تُضاف نتيجة CI النهائية ورابطها بعد push ولا تُفترض مسبقًا.
+- الحكم: **NATIVE MOBILE DEMO READY** فقط. غير الجاهز للإنتاج: SMS والدفع/Apple Pay الحقيقي، signing والمتاجر، أسرار الإنتاج، monitoring/backups، media storage، وبوابات الأمن والإصدار. Android لم يُبنَ محليًا لغياب SDK.
+
+## Master Execution — سجل checkpoint D التاريخي
 
 - Phase D تضيف Guardian Flutter أصليًا بدون WebView: الرئيسية الداكنة RTL، ثلاثة إجراءات فقط، أطفال بلا تكرار، كتالوج رياضي عرض فقط، ملف الطفل والتدريب والحضور والاشتراك، التقرير المنشور مع موضع اللاعب والمحاور الستة وكل المعايير وملاحظات المدرب، والسجلات الطبية/المعرض بأذونات الخادم القائمة.
 - نُفذت طلبات الاشتراك والتجديد واختيار الباقة والمراجعة والدفع التجريبي والإيصال، وتجديد الغير بالكود opaque. لا بحث باسم طفل ولا إنشاء `GuardianPlayerLink`، ولا إعادة حساب Flutter للدرجات أو الرصيد أو المال. أوامر الكتابة بمفتاح idempotency ثابت للشاشة، بلا replay آلي؛ محاكاة الدفع ظاهرة في Demo فقط.

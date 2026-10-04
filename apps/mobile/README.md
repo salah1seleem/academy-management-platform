@@ -1,6 +1,6 @@
-# Academy Native — checkpoint D
+# Academy Native — Demo program complete
 
-Flutter أصلي لـiOS/Android على API الأكاديمية القائم، وليس WebView. المنفذ: هاتف/OTP والجلسة الآمنة، وتجربة ولي الأمر كاملة: الرئيسية والإجراءات الثلاثة، الأبناء والملف، التقرير والمحاور، المواعيد والحضور، التغذية الحالية، الطب والمعرض، طلب الاشتراك، التجديد والتجديد للغير، الدفع التجريبي والإيصال. Coach/Owner التجاريان يأتيان في F/G.
+Flutter أصلي لـiOS/Android على API الأكاديمية القائم، وليس WebView. تجربة ولي الأمر تشمل الرئيسية والإجراءات الثلاثة، الأبناء والملف والتقرير والمواعيد والحضور ومكتبة التغذية واقتراحات اليوم والطب والمعرض والاشتراك والتجديد والدفع التجريبي والإيصال. تجربة المدرب تشمل المجموعات والجلسات والحضور والتقييم، وتجربة المالك تعرض لوحة تنفيذية وتقارير قراءة من بيانات الخادم الفعلية.
 
 ## التشغيل
 
@@ -28,6 +28,8 @@ flutter analyze
 flutter test
 flutter build ios --simulator --debug --dart-define=APP_ENV=Demo --dart-define=API_BASE_URL=http://127.0.0.1:5190
 flutter test integration_test/auth_smoke_test.dart -d <simulator-id> --dart-define=API_BASE_URL=http://127.0.0.1:5190
+flutter drive --driver=test_driver/visual_driver.dart --target=integration_test/guardian_journey_test.dart -d <simulator-id> --dart-define=API_BASE_URL=http://127.0.0.1:5190 --dart-define=CAPTURE_VISUALS=true
+flutter drive --driver=test_driver/visual_driver.dart --target=integration_test/staff_journeys_test.dart -d <simulator-id> --dart-define=API_BASE_URL=http://127.0.0.1:5190 --dart-define=CAPTURE_VISUALS=true
 ```
 
-اختبار auth integration يستخدم مفتاح Keychain منفصلًا. واختبار Guardian الحقيقي يشغّل OTP ثم الرئيسية والملف والتقرير والمحتوى والتجديد والدفع والإيصال والتجديد للغير على API/PostgreSQL فعليين؛ لذلك يضيف سجلات دفع/تحصيل Demo فقط ولا يُشغّل على إنتاج. يمكن التقاط شاشات المراجعة إلى `tmp/mobile-visuals` عبر `flutter drive` و`CAPTURE_VISUALS=true`. Android SDK غير متاح محليًا: لا ادعاء ببناء/اختبار Android. التوقيع والمتاجر والإنتاج غير جاهزة.
+اختبار auth integration يستخدم مفتاح Keychain منفصلًا. رحلات Guardian/Coach/Owner الحقيقية تعمل على API/PostgreSQL فعليين وتغيّر سجلات Demo فقط؛ لا تُشغّل على إنتاج. يلتقط `flutter drive` الشاشات إلى `tmp/mobile-visuals` للمراجعة البشرية، ولا تعد لقطة الشاشة نجاحًا بصريًا بذاتها. Android SDK غير متاح محليًا: لا ادعاء ببناء/اختبار Android. SMS والدفع الحقيقيان والتوقيع والمتاجر وأبواب تشغيل الإنتاج ليست جاهزة.

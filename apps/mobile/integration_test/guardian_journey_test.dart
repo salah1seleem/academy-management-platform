@@ -61,7 +61,7 @@ void main() {
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
       await tester.pumpAndSettle();
       // Dedicated synthetic guardian avoids coupling this journey to auth_smoke's rate window.
-      await tester.enterText(find.byType(TextFormField).first, '01099900108');
+      await tester.enterText(find.byType(TextFormField).first, '01099900110');
       await tap('إرسال رمز التحقق');
       await waitFor(find.text('رمز التحقق'));
       await tester.enterText(find.byType(TextFormField).last, '246810');
@@ -141,7 +141,7 @@ void main() {
       await auth.logout();
       await tester.pumpAndSettle();
       expect(find.text('رقم الهاتف'), findsOneWidget);
-      await tester.enterText(find.byType(TextFormField).first, '01099900108');
+      await tester.enterText(find.byType(TextFormField).first, '01099900110');
       await tap('إرسال رمز التحقق');
       await waitFor(find.text('رمز التحقق'));
       await tester.enterText(find.byType(TextFormField).last, '246810');
