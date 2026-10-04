@@ -10,6 +10,7 @@ import '../features/auth/login_page.dart';
 import '../features/guardian/guardian_home.dart';
 import '../features/guardian/guardian_ui.dart';
 import '../features/coach/coach_home.dart';
+import '../features/owner/owner_dashboard.dart';
 
 class AcademyApp extends StatelessWidget {
   final AuthController auth;
@@ -101,6 +102,11 @@ class _SessionNavigationState extends State<SessionNavigation> {
                   )
                 : role == 'Coach'
                 ? CoachHome(
+                    auth: widget.auth,
+                    accountPage: RoleFoundation(auth: widget.auth),
+                  )
+                : role == 'AcademyOwner'
+                ? OwnerDashboard(
                     auth: widget.auth,
                     accountPage: RoleFoundation(auth: widget.auth),
                   )
