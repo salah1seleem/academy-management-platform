@@ -207,7 +207,7 @@ public sealed class TenantAuthenticationTests : IAsyncLifetime
         {
             builder.UseEnvironment("Demo");
             builder.UseSetting("ConnectionStrings:Default", connection);
-            builder.UseSetting("Demo:SeedEnabled", "true");
+            builder.UseSetting("Demo:SeedProfile", "LegacyRegression"); builder.UseSetting("Demo:SeedEnabled", "true");
             builder.UseSetting("Demo:FixedOtpEnabled", "true");
             builder.UseSetting("Demo:FixedOtp", "246810");
             builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!");

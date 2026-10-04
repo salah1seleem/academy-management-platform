@@ -53,14 +53,14 @@ public static class Slice5DemoSeed
         await Evaluation(db, AcademyBEvaluationId, bEnrollment, futureOwnerUserId, new DateOnly(2026, 9, 28), "سبتمبر 2026", EvaluationStatus.Published, "بيانات أكاديمية ثانية لاختبار العزل.", [bCriterion], [75], now, ct);
     }
 
-    private static async Task<EvaluationCriterion> Criterion(FoundationDbContext db, Guid academyId, Guid sportId, string name, int order, FootballAxis? axis, DateTimeOffset now, CancellationToken ct)
+    internal static async Task<EvaluationCriterion> Criterion(FoundationDbContext db, Guid academyId, Guid sportId, string name, int order, FootballAxis? axis, DateTimeOffset now, CancellationToken ct)
     {
         var id = Deterministic($"criterion:{academyId}:{sportId}:{name}"); var existing = await db.EvaluationCriteria.SingleOrDefaultAsync(x => x.Id == id, ct); if (existing is not null) return existing;
         var item = new EvaluationCriterion { Id = id, AcademyId = academyId, SportId = sportId, ArabicName = name, DisplayOrder = order, IsActive = true, Weight = 1m, FootballAxis = axis, CreatedAtUtc = now, UpdatedAtUtc = now };
         db.EvaluationCriteria.Add(item); await db.SaveChangesAsync(ct); return item;
     }
 
-    private static async Task Evaluation(FoundationDbContext db, Guid id, SportEnrollment enrollment, Guid evaluator, DateOnly date, string period, EvaluationStatus status, string notes, IReadOnlyList<EvaluationCriterion> criteria, IReadOnlyList<int?> values, DateTimeOffset now, CancellationToken ct)
+    internal static async Task Evaluation(FoundationDbContext db, Guid id, SportEnrollment enrollment, Guid evaluator, DateOnly date, string period, EvaluationStatus status, string notes, IReadOnlyList<EvaluationCriterion> criteria, IReadOnlyList<int?> values, DateTimeOffset now, CancellationToken ct)
     {
         if (await db.PlayerEvaluations.AnyAsync(x => x.Id == id, ct)) return;
         var evaluation = new PlayerEvaluation { Id = id, AcademyId = enrollment.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, TrainingGroupId = enrollment.TrainingGroupId, EvaluatedByUserId = evaluator, EvaluationDate = date, ReportingPeriod = period, Status = status, GeneralNotes = notes, PublishedAtUtc = status == EvaluationStatus.Published ? now : null, PublishedByUserId = status == EvaluationStatus.Published ? evaluator : null, CreatedAtUtc = now, UpdatedAtUtc = now };

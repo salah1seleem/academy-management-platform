@@ -2,7 +2,21 @@
 
 تاريخ التحديث: 2026-10-04. الفرع الحالي: `codex/15-native-mobile-app`، أساسه الكامل `a9624dc537f121bd1732ab4c0f692ea753d70724` من `codex/14-slice8d-demo-closure`.
 
-## Master Execution — checkpoint UI، البرنامج الكامل PARTIAL
+## Master Execution — checkpoint B (من الأساس المصحح cb7ff34)
+
+Phase UI مكتملة ومحفوظة؛ لم يُنفذ reset/revert/rebase ولم يُعاد تصميم اللوحة. أضيفت فقط واجهة إنشاء المدرب ضمن النظام البصري الحالي وبيانات العرض الكروي.
+
+- `Football` هو profile العرض الافتراضي؛ tenant جديد محجوز بعلامة ثابتة، لا حذف للأكاديميات القديمة. رياضة واحدة، 3 فروع بالأسماء المطلوبة، 6 مجموعات، 4 مدربين و30 لاعبًا فريدًا مع 29 ولي أمر. الحضور والتقييمات والاشتراكات والمدفوعات والإيصالات سجلات مترابطة، وتاريخ مرجعي صريح. اختبارات الانحدار والعزل تختار `LegacyRegression` صراحة ولا تعطل دعم multi-sport.
+- DM-12: أمر `--reset-football-demo` مع تأكيد `football-demo-only`، بيئة Demo حصراً، ID/slug/marker ثابتة، transaction + advisory lock، حذف child-first لبيانات tenant المعروف فقط وإعادة seed. يحافظ على المستخدمين وكلمات مرورهم وأي أكاديمية أخرى، ويزيل جلسات tenant العرض. لا HTTP reset endpoint ولا drop/truncate. نُفذ CLI فعليًا على قاعدة العرض الجديدة فقط؛ قواعد المستخدم السابقة محفوظة.
+- Create Coach: Owner/Admin فقط، CSRF، هاتف مطبع، حساب فردي بلا كلمة مرور مشتركة، إعادة استخدام هوية متطابقة دون تعديلها، عضوية وإسناد مجموعات داخل الأكاديمية ذريًا، ومنع تكرار الطلب المتزامن. المدرب الجديد النشط مؤهل لمسار OTP القائم؛ SMS الحقيقي غير منفذ.
+- تحقق backend: الجولة الشاملة **375 integration + 1 unit + 1 architecture PASS**، ثم مجموعة B النهائية **13/13 PASS** بعد إضافة اختبارَي التزامن وإعادة استخدام الهوية. الإجمالي الفريد المغطى **379**. لم تُخفَ المحاولات الأولى: صُححت توقعات endpoint/رفض OTP للحساب المعطل وanalyzer الاختبار قبل النجاح.
+- Web: **120/120 PASS** باستخدام عاملَي اختبار محليًا بعد timeout أولي تحت ضغط التوازي؛ typecheck/lint/production build PASS، و`npm audit --omit=dev`: صفر vulnerabilities. رحلة B الجديدة **2/2 E2E PASS** على 1440 و390، مع OTP للمدرب ورفض تقرير المالك. فُحصت screenshots فعليًا وصُححت أحجام checkboxes في النموذج الجديد ثم أُعيد التحقق.
+- لا migration جديدة ولا pending EF model changes؛ آخر migration تبقى `20261003214541_NativeMobileSessions`. لا تغيير baseline/approval أو main، ولا ملفات أسرار/صور أطفال/بيانات حقيقية.
+- التغذية في B **ثلاثة أمثلة مؤقتة فقط**، SVG توضيحي وقيم null و`DemoUnreviewed`؛ ليست مكتبة أطفال مصورة مدروسة ولا محرك توصيات. البحث والتوثيق والصور والحصص في E، ولا شكشوكة/كشري أو تجارة تغذية.
+
+Web E2E الشامل **48/48 PASS** على قاعدة اختبار مستقلة ومنافذ 5191/3191؛ مع حالتَي B يصبح الإجمالي **50/50**. استُخدمت نسخة production محلية بعد رفض Next تشغيل dev ثانٍ؛ خادم المستخدم 3000 لم يُوقف. CI يُراجع بعد push دون ادعاء نجاح مسبق. المتبقي: **C ثم D ثم E ثم F ثم G ثم H**. لا Flutter أو native visual review بعد في هذا checkpoint؛ **NOT NATIVE DEMO READY / NOT PRODUCTION READY**. [الحسابات وreset والحدود](../mobile/MOBILE_DEMO_GUIDE.md).
+
+## Master Execution — سجل checkpoint UI السابق
 
 أساس هذه الدفعة `d90063912632cbdbcf9976f5944738bf349b5175` (Phase A المكتمل). لم تُعد كتابة mobile auth. التالي هو **Phase B**، وليس تسليم Native كامل.
 

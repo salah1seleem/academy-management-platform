@@ -1,6 +1,6 @@
 # معمارية Native Mobile v1.0
 
-الحالة: **Phase A — Backend mobile auth منفذ؛ Sports Dashboard Phase UI منفذ؛ Flutter ومراحل B–H غير مكتملة**. الأساس `a9624dc537f121bd1732ab4c0f692ea753d70724`، الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). أحدث MASTER EXECUTION PROMPT يضع ترتيب التنفيذ: UI ثم B ثم C–H؛ لا يعاد تنفيذ A.
+الحالة: **Phase A وSports Dashboard Phase UI وPhase B منفذة؛ Flutter ومراحل C–H غير مكتملة**. أساس Phase B المعتمد `cb7ff342164d02530a6f222d5bebd957b833752e` محفوظ دون reset/rebase؛ الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). لا يعاد تنفيذ A أو UI.
 
 ## تطبيق واحد وخادم قائم
 
@@ -48,7 +48,9 @@ Migration `20261003214541_NativeMobileSessions` تضيف جدولَي sessions/c
 
 Guardian يتبع صور المحادثة: خلفية داكنة وبطاقات وصور وتبويبات واضحة وRTL، مع الإجراءات الثلاثة. Coach/Owner يستخدمان teal/white المتوافق مع الطلب. التقرير يحتفظ بالمركز وradar الستة وبقية المعايير دون ملعب. الوجبات ستتغير وفق التصحيح المباشر؛ لا تُستورد صور المرجع أو علاماته أو أطفاله.
 
-Demo عرض كرة قدم نظيف وreset وCoach creation في Phase B؛ Flutter/auth في C؛ Guardian في D؛ وجبات مصورة مع مصدر وحصة وقواعد معلوماتية غير طبية في E؛ Coach/Owner في F/G؛ CI Flutter ومراجعة iOS ومقاسات الهاتف في H. لا يعني نجاح auth أن أي شاشة native جاهزة.
+Phase B يستخدم tenant عرض محجوزًا ذا علامة مخزنة، وreset CLI صريح داخل transaction، لا HTTP endpoint ولا drop database. تبقى الهويات العامة وعضويات الأكاديميات الأخرى؛ reset ينظف سجلات tenant العرض فقط. profile الاختبارات `LegacyRegression` منفصل عن `Football` الافتراضي. `POST /api/v1/manage/coaches` يحمي Owner/Admin وCSRF، ويطبّع الهاتف ويقفل إنشاء هويته المتزامن، ويحفظ الهوية/عضوية Coach/الإسناد ذريًا دون إعادة كتابة بيانات شخص موجود أو منح وصاية. تفاصيل التشغيل والحدود في [الدليل](MOBILE_DEMO_GUIDE.md).
+
+Flutter/auth في C؛ Guardian في D؛ وجبات مصورة مع مصدر وحصة وقواعد معلوماتية غير طبية في E؛ Coach/Owner في F/G؛ CI Flutter ومراجعة iOS ومقاسات الهاتف في H. لا يعني نجاح auth أن أي شاشة native جاهزة.
 
 اختبارات Phase A تعمل على قواعد PostgreSQL 17 مستقلة؛ لا reset لقاعدة العرض أو قواعد أخرى. HTTPS إلزامي للنشر الحقيقي، وHTTP loopback للديمو فقط؛ reverse proxy الموثوق وتخزين الأسرار وSMS والتوقيع والمتاجر والخصوصية والنسخ الاحتياطي والمراقبة وبوابة الأمان غير منجزة. يُمنع الادعاء بجاهزية الإنتاج أو حسابات المتاجر.
 

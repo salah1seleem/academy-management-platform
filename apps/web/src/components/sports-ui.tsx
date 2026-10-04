@@ -29,6 +29,7 @@ export function SportsQuickActions({ coach = false }: { coach?: boolean }) {
     { label: "إنشاء تقييم", detail: "تابع تطور اللاعبين", href: "/dashboard/evaluations/new", icon: ClipboardList },
   ] : [
     { label: "تسجيل لاعب", detail: "انضمام جديد للأكاديمية", href: "/dashboard/players/new", icon: UserPlus },
+    { label: "إضافة مدرب", detail: "حساب فردي وإسناد مجموعات", href: "/dashboard/academy/coaches/create", icon: UserPlus },
     { label: "تجديد اشتراك", detail: "استمرار رحلة التدريب", href: "/dashboard/subscriptions/renew/new", icon: RefreshCcw },
     { label: "تسجيل حضور", detail: "متابعة حصص اليوم", href: "/dashboard/attendance/sessions", icon: Activity },
     { label: "إنشاء تقييم", detail: "قياس الأداء والتطور", href: "/dashboard/evaluations/new", icon: ClipboardList },

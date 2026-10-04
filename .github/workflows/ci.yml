@@ -84,3 +84,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Build football demo web
+        run: npm run build:web
+        env:
+          API_INTERNAL_URL: http://127.0.0.1:5190
+      - name: Football demo and coach provisioning E2E
+        run: npx playwright test --config tests/e2e/playwright.football.config.ts

@@ -489,6 +489,12 @@ footer {
 .adjustment-form textarea { min-height: 6rem; resize: vertical; }
 .adjustment-preview { padding: .75rem; color: #7a4a00; background: #fff5df; border-radius: .7rem; }
 .adjustment-history { display: grid; gap: .7rem; }
+.coach-create fieldset { min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--border); border-radius: .85rem; align-self: start; }
+.coach-create legend { color: var(--primary); font-weight: 800; padding-inline: .35rem; }
+.coach-create fieldset > label { margin-block-end: .7rem; }
+.coach-create fieldset p { color: var(--muted); font-size: .85rem; line-height: 1.8; }
+.coach-create label.coach-check { display: flex; align-items: center; gap: .65rem; min-height: 2.75rem; padding: .4rem; cursor: pointer; }
+.coach-create .coach-check input[type="checkbox"] { flex: 0 0 1.2rem; width: 1.2rem; height: 1.2rem; min-height: 1.2rem; padding: 0; margin: 0; accent-color: var(--primary); }
 .adjustment-history article { display: grid; gap: .4rem; padding: .9rem; background: #fbfdfd; border: 1px solid var(--border); border-radius: .8rem; }
 .adjustment-history article p { margin: 0; line-height: 1.65; }
 .adjustment-history article small { color: var(--muted); }

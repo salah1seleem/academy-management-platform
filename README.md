@@ -1,6 +1,6 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D + Sports Dashboard Phase UI**، وبرنامج Native Mobile الإضافي يتضمن **Phase A: mobile auth backend**؛ تطبيق Flutter المرئي ومراحل B–H لم تُنفذ بعد.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D + Sports Dashboard Phase UI**، وبرنامج Native Mobile يتضمن **Phase A: mobile auth backend وPhase B: الديمو الكروي/reset وإنشاء المدرب**؛ تطبيق Flutter المرئي ومراحل C–H لم تُنفذ بعد في هذا checkpoint.
 
 [معمارية الموبايل](docs/mobile/MOBILE_ARCHITECTURE_v1.0.md) · [دليل checkpoint](docs/mobile/MOBILE_DEMO_GUIDE.md) · [النطاق الإضافي](docs/requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). المسار الجديد يدعم OTP لـGuardian/Coach/Owner، جلسات أجهزة مع تدوير وإلغاء، واختيار عضوية/دور صريحًا. cookie/CSRF الويب وواجهاته باقية.
 
@@ -11,7 +11,7 @@
 - EF Core وNpgsql مع ASP.NET Core Identity وعضويات Academy معزولة وجلسات browser محفوظة على الخادم.
 - Next.js login وauthenticated shell عربيان RTL، mobile-first، مع تبديل Academy مخوّل من الخادم وPWA manifest/icon.
 - PostgreSQL 17 محلي عبر Docker Compose.
-- Demo seed حتمي لأكاديميتين، وOTP ثابت محروس ببيئة `Demo` فقط، واختبارات عزل backend وE2E.
+- Demo كروي مستقل حتمي وreset صريح محروس، وprofile متعدد الرياضات منفصل لاختبارات الانحدار والعزل؛ OTP ثابت في `Demo` فقط.
 - فروع ورياضات وفئات ومجموعات وجداول أسبوعية وإسناد مدرب، مع Player مستقل عن `SportEnrollment` وروابط وصاية صريحة.
 - Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
 - باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر لنفس أبنائه أو لمستفيد آخر عبر كود آمن وOnline-first، مع `PaymentRequest` وevents وتحصيل وإيصال ذريين idempotent.
@@ -85,11 +85,12 @@ dotnet ef database update \
 
 ## 5. تشغيل Demo آمن محليًا
 
-بيانات العرض الصناعية موثقة في [`docs/demo/SLICE1_DEMO_ACCOUNTS.md`](docs/demo/SLICE1_DEMO_ACCOUNTS.md). لا تنسخها إلى Production. عدّل `.env` محليًا فقط:
+العرض الافتراضي الآن هو الديمو الكروي المنفصل الموثق في [دليل Mobile Demo](docs/mobile/MOBILE_DEMO_GUIDE.md): رياضة واحدة، 3 فروع، 4 مدربين و30 لاعبًا. بيانات الشرائح السابقة في `LegacyRegression` للاختبارات فقط، وليست رحلة العرض الحالية. لا تنسخ حسابات Demo إلى Production. عدّل `.env` محليًا فقط:
 
 ```bash
 ASPNETCORE_ENVIRONMENT=Demo
 Demo__SeedEnabled=true
+Demo__SeedProfile=Football
 Demo__FixedOtpEnabled=true
 Demo__FixedOtp=246810
 Demo__StaffPassword='Demo-Only-123!'
@@ -129,7 +130,9 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. ادخل كولي الأمر «سارة محمود» بالهاتف التجريبي، وشاهد عمر مرة واحدة مع كرة القدم والسباحة، ثم كتالوج الرياضتين مرة واحدة بلا أزرار شراء. افتح ملف عمر ثم «التغذية والصحة» لعرض التبويبات والشكشوكة وحالة البيانات، و«الإصابات والاستشارات الطبية» لعرض السجل المنشور فقط، و«الصور والفيديوهات» لعرض الرسومات المحلية المنشورة. مريم تعرض الحالات الفارغة الطبية/المعرض. ادخل كإداري وافتح «المحتوى» لإدارة الكتالوج والتغذية، و«اللاعبون» لإدارة السجلات الطبية وmetadata المعرض. `OD-008` و`OD-009` و`OD-010` ما زالت غير معتمدة.
+افتح `http://127.0.0.1:3000/login`. مالك العرض `owner.football@example.test` والإداري `admin.football@example.test` بكلمة Demo `Demo-Only-123!`. ولي الأمر الأول `01099900100`/OTP `246810` لديه طفل واحد؛ الثاني `01099900101` لديه طفلان. افتح لوحة المالك ثم اللاعبين والمجموعات، و«الأكاديمية ← المدربون ← إضافة مدرب». التغذية في checkpoint B ثلاثة أمثلة مؤقتة بلا قيم مختلقة، وليست مكتبة Phase E المكتملة. لا شكشوكة/كشري ولا شراء للتغذية. `OD-008` و`OD-009` و`OD-010` لا تتغير بهذا العمل.
+
+الفقرات التالية توثق رحلات الشرائح التاريخية على `Demo__SeedProfile=LegacyRegression` في قاعدة اختبار مستقلة. أسماء عمر/مريم والرياضات المتعددة فيها ليست بيانات العرض الكروي الجديد:
 
 لتجربة Slice 8A، ادخل كمالك وافتح «لوحة المالك»، ثم «التقرير المالي» لتصفية التحصيلات المؤكدة حسب الفترة/الرياضة/الفرع/الباقة وتنزيل CSV عربي حقيقي. كإداري افتح «التقارير ← تقارير الحضور»، اختر سبتمبر 2026 وسنة الميلاد 2019 ومجموعة كرة القدم، ثم صدّر CSV؛ يعرض التقرير سجلات الحضور المحفوظة فقط ولا يستنتج الغياب من سجل مفقود. كولي أمر افتح «الإيصالات»، اختر إيصالًا واضغط «طباعة الإيصال» لاستخدام طباعة المتصفح العربية؛ لا يتم إنشاء PDF أو فاتورة ضريبية.
 

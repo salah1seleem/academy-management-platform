@@ -63,12 +63,12 @@ public static class Slice3DemoSeed
         await db.SaveChangesAsync(ct);
     }
 
-    private static async Task Incomplete(FoundationDbContext db, Guid root, Academy.Infrastructure.People.SportEnrollment enrollment, Guid planId, Guid user, PaymentRequestStatus paymentStatus, RenewalRequestStatus renewalStatus, DateTimeOffset at, CancellationToken ct)
+    internal static async Task Incomplete(FoundationDbContext db, Guid root, Academy.Infrastructure.People.SportEnrollment enrollment, Guid planId, Guid user, PaymentRequestStatus paymentStatus, RenewalRequestStatus renewalStatus, DateTimeOffset at, CancellationToken ct)
     {
         var paymentId = Change(root, 1); if (await db.PaymentRequests.AnyAsync(x => x.Id == paymentId, ct)) return; var plan = await db.SubscriptionPlans.SingleAsync(x => x.Id == planId, ct); var renewalId = Change(root, 2);
         db.AddRange(new RenewalRequest { Id = renewalId, AcademyId = enrollment.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, SubscriptionPlanId = plan.Id, RequestedByUserId = user, RequestedAtUtc = at, OriginalAmount = plan.Price, FinalAmount = plan.Price, AmountExpected = plan.Price, Currency = plan.Currency, Status = renewalStatus, PaymentRequestId = paymentId, IdempotencyKey = $"seed-{root:N}", CreatedAtUtc = at, UpdatedAtUtc = at }, new PaymentRequest { Id = paymentId, AcademyId = enrollment.AcademyId, RenewalRequestId = renewalId, Provider = InternalTestPaymentGateway.ProviderName, ProviderEnvironment = "Demo", Amount = plan.Price, Currency = plan.Currency, Status = paymentStatus, ProviderReference = $"ITP-{paymentId:N}", CheckoutReference = $"seed-{paymentId:N}", CreatedAtUtc = at, UpdatedAtUtc = at }); await db.SaveChangesAsync(ct);
     }
-    private static async Task Reference(FoundationDbContext db, Guid id, Academy.Infrastructure.People.SportEnrollment enrollment, string code, Guid actor, DateTimeOffset now, CancellationToken ct)
+    internal static async Task Reference(FoundationDbContext db, Guid id, Academy.Infrastructure.People.SportEnrollment enrollment, string code, Guid actor, DateTimeOffset now, CancellationToken ct)
     {
         if (await db.BeneficiaryRenewalReferences.AnyAsync(x => x.Id == id, ct)) return;
         db.Add(new BeneficiaryRenewalReference { Id = id, AcademyId = enrollment.AcademyId, SportEnrollmentId = enrollment.Id, CodeHash = BeneficiaryRenewalCodes.Hash(code), CodeHint = BeneficiaryRenewalCodes.Hint(code), ExpiresAtUtc = now.AddYears(2), GeneratedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now }); await db.SaveChangesAsync(ct);

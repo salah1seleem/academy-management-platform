@@ -1,0 +1,30 @@
+import { expect, test } from "@playwright/test";
+
+for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  await page.goto("/login");
+  await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");
+  await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
+  await page.getByRole("button", { name: "دخول آمن" }).click(); await expect(page).toHaveURL(/dashboard/);
+  const sports = await page.request.get("/api/v1/manage/structure/sports");
+  expect((await sports.json()).map((s: { arabicName: string }) => s.arabicName)).toEqual(["كرة القدم"]);
+  await page.goto("/dashboard/academy/coaches");
+  await page.getByRole("link", { name: "إضافة مدرب", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "إضافة مدرب", exact: true })).toBeVisible();
+  await expect(page.getByLabel("براعم 2018 — مجموعة أ")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+  const screenshot = info.outputPath(`create-coach-${width}.png`);
+  await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" }); await info.attach("Coach create form", { path: screenshot, contentType: "image/png" });
+  const phone = `011${String(Date.now()).slice(-8)}`;
+  await page.getByLabel("الاسم بالعربية").fill(`مدرب رحلة عرض ${width}`);
+  await page.getByLabel("رقم الهاتف المصري").fill(phone);
+  await page.getByLabel("براعم 2018 — مجموعة أ").check();
+  await page.getByRole("button", { name: "حفظ المدرب", exact: true }).click();
+  await expect(page).toHaveURL(/\/academy\/coaches\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: `مدرب رحلة عرض ${width}` })).toBeVisible();
+  await expect(page.getByText("براعم 2018 — مجموعة أ", { exact: true })).toBeVisible();
+  const request = await page.request.post("/api/v1/mobile/auth/otp/request", { data: { phoneNumber: phone } }); expect(request.status()).toBe(202);
+  const verified = await page.request.post("/api/v1/mobile/auth/otp/verify", { data: { phoneNumber: phone, challengeId: (await request.json()).challengeId, code: "246810", deviceName: "Coach web flow E2E" } }); expect(verified.ok()).toBeTruthy();
+  const credentials = await verified.json();
+  const denied = await page.request.get("/api/v1/reports/owner-summary", { headers: { Authorization: `Bearer ${credentials.accessToken}` } }); expect(denied.status()).toBe(403);
+});

@@ -12,7 +12,7 @@ const dayNames: Record<string, string> = { Sunday: "الأحد", Monday: "الا
 const config: Record<Kind, { title: string; create: string }> = {
   branches: { title: "الفروع", create: "إضافة فرع" }, sports: { title: "الرياضات", create: "إضافة رياضة" },
   categories: { title: "الفئات العمرية", create: "إضافة فئة عمرية" }, groups: { title: "المجموعات", create: "إنشاء مجموعة" },
-  coaches: { title: "المدربون", create: "إسناد مجموعة" },
+  coaches: { title: "المدربون", create: "إضافة مدرب" },
 };
 
 export function StructureList({ kind }: { kind: Kind }) {
@@ -30,7 +30,7 @@ export function StructureList({ kind }: { kind: Kind }) {
   async function changeStatus() { if (!target) return; setSaving(true); setError(""); try { await csrfRequest(`/api/v1/manage/structure/${kind}/${target.id}/status`, "PUT", { isActive: !target.isActive }); const response = await fetch(`/api/v1/manage/structure/${kind}`); if (!response.ok) throw new Error("تعذر تحديث القائمة."); setItems(await response.json() as Item[]); setSuccess(target.isActive ? `تم إيقاف «${target.arabicName}».` : `تم تفعيل «${target.arabicName}».`); setTarget(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تغيير الحالة."); } finally { setSaving(false); } }
 
   return <>
-    <PageHeader title={config[kind].title} context={`الأكاديمية / ${config[kind].title}`} action={{ label: config[kind].create, href: `/dashboard/academy/${kind}/new` }} />
+    <PageHeader title={config[kind].title} context={`الأكاديمية / ${config[kind].title}`} action={{ label: config[kind].create, href: `/dashboard/academy/${kind}/${kind === "coaches" ? "create" : "new"}` }} />
     <section className="list-card">
       <ListSearch value={search} onChange={setSearch} label={`بحث ${config[kind].title}`} />
       {success && <p className="success-message" role="status">{success}</p>}

@@ -48,6 +48,13 @@ public static class DemoSeed
         if (!options.SeedEnabled) return;
         if (options.StaffPassword.Length < 12) throw new InvalidOperationException("Demo:StaffPassword must be at least 12 characters.");
 
+        if (options.SeedProfile == "Football")
+        {
+            await Academy.Api.Demo.FootballDemoSeed.RunAsync(scope.ServiceProvider, false, cancellationToken);
+            return;
+        }
+        if (options.SeedProfile != "LegacyRegression") throw new InvalidOperationException("Unknown Demo seed profile.");
+
         var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var now = DateTimeOffset.Parse("2026-09-28T06:00:00Z");

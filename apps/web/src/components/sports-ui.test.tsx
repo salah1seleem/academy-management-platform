@@ -16,10 +16,10 @@ describe("sports dashboard presentation", () => {
     expect(screen.getAllByRole("link")).toHaveLength(2);
     expect(screen.queryByRole("link", { name: /المالي|تجديد|تسجيل لاعب/ })).not.toBeInTheDocument();
   });
-  it("does not expose an unimplemented coach provisioning shortcut", () => {
+  it("exposes the implemented coach provisioning shortcut", () => {
     render(<SportsQuickActions />);
-    expect(screen.getAllByRole("link")).toHaveLength(5);
-    expect(screen.queryByRole("link", { name: /إضافة مدرب/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(6);
+    expect(screen.getByRole("link", { name: /إضافة مدرب/ })).toHaveAttribute("href", "/dashboard/academy/coaches/create");
   });
   it("renders real progress and keeps zero empty", () => {
     const { rerender } = render(<ProgressTrack value={2} total={5} label="الحضور" />);

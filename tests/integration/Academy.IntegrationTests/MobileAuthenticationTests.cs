@@ -327,7 +327,7 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment(environment); builder.UseSetting("ConnectionStrings:Default", connection);
-            builder.UseSetting("Demo:SeedEnabled", (environment == "Demo").ToString());
+            builder.UseSetting("Demo:SeedProfile", "LegacyRegression"); builder.UseSetting("Demo:SeedEnabled", (environment == "Demo").ToString());
             builder.UseSetting("Demo:FixedOtpEnabled", (environment == "Demo").ToString());
             builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!");
             builder.UseSetting("Payments:InternalTest:Enabled", "false");

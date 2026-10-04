@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using Academy.Api.Auth;
 using Academy.Api.Mobile;
+using Academy.Api.Demo;
 using Academy.Api.Slice2;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
@@ -281,6 +282,7 @@ api.MapPost("/staff", async (CreateStaffRequest request, CurrentTenant tenant, U
 }).RequireAuthorization(AcademyPermissions.StaffProvision).AddEndpointFilter<CsrfFilter>();
 
 app.MapSlice2Endpoints();
+app.MapCoachProvisioning();
 app.MapSlice2DashboardEndpoints();
 app.MapSlice3Endpoints();
 app.MapSlice4Endpoints();
@@ -291,6 +293,12 @@ app.MapSlice8ReportingEndpoints();
 app.MapSubscriptionAdjustmentEndpoints();
 app.MapSubscriptionDiscountEndpoints();
 
+if (args.Contains("--reset-football-demo"))
+{
+    await using var resetScope = app.Services.CreateAsyncScope();
+    await FootballDemoSeed.RunAsync(resetScope.ServiceProvider, true);
+    return;
+}
 if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
 app.Run();
 
