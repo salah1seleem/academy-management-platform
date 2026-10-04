@@ -131,3 +131,11 @@ Slice 8D أُنجز على `codex/14-slice8d-demo-closure`؛ أساسه التا
 - Migration الجديدة: `20261004030006_YouthFootballNutrition`. طُبقت على قاعدة المراجعة المحلية PostgreSQL 17 دون تعديل migrations قديمة، وEF أكد عدم وجود pending model changes.
 - التحقق المرحلي: build backend PASS؛ اختبارات Football **15/15 PASS** ومنها determinism والتدريب/الراحة وIDOR؛ `flutter analyze` PASS؛ `flutter test` **30/30 PASS**؛ `git diff --check` PASS. المراجعة الشاملة وSimulator/CI تتكرر في Phase H.
 - لا تغيير baseline أو business rules المالية أو `main`. المحتوى ما يزال Demo/معلومات عامة ويحتاج مراجعة محلية قبل إنتاج حقيقي. التالي Phase F: Coach Native.
+# Native Mobile — Phase F (Coach) مكتملة محليًا
+
+- أضيفت تجربة Coach أصلية بهاتف + OTP عبر auth القائم: الرئيسية تعرض اسم المدرب وحصصه ومجموعاته المسندة والقادم فقط، ولا تعرض أي بيانات مالية.
+- شاشة المجموعة تعرض الفرع والجدول وعدد اللاعبين وقائمتهم. الوصول يأتي من `/coach/groups` وattendance/evaluation projections المقيدة بتكليف المدرب على الخادم؛ لا يعتمد التطبيق على إخفاء الواجهة كحاجز أمني.
+- الحضور يعرض `Present / Absent / NotRecorded` بالعربية، ويحفظ دفعة roster القائمة ويدعم التصحيح من خلال `AttendanceService` نفسه؛ لم تتغير قواعد استهلاك/استرجاع رصيد الحصص.
+- التقييم ينشئ Draft من enrollment متاح للمدرب، ويعرض كل معايير كرة القدم 0–100 وملاحظات، ثم يحفظ كمسودة أو ينشر. النتيجة والتقرير يظلان بحساب الخادم.
+- تحقق Flutter المرحلي: `flutter analyze` PASS و**32/32** اختبار PASS، ومنها منع مؤشرات المال في Coach وحفظ الحالات الثلاث. لا migration أو backend/business-rule change في F؛ رحلة Simulator الحقيقية والتراجع الشامل في H.
+- التالي Phase G: Owner Native read-only dashboard/reports. التطبيق **ليس Production Ready**.

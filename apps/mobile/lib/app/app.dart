@@ -9,6 +9,7 @@ import '../core/widgets/app_widgets.dart';
 import '../features/auth/login_page.dart';
 import '../features/guardian/guardian_home.dart';
 import '../features/guardian/guardian_ui.dart';
+import '../features/coach/coach_home.dart';
 
 class AcademyApp extends StatelessWidget {
   final AuthController auth;
@@ -83,7 +84,8 @@ class _SessionNavigationState extends State<SessionNavigation> {
   final navigator = GlobalKey<NavigatorState>();
   @override
   Widget build(BuildContext context) {
-    final guardian = widget.auth.session!.selected?.role == 'Guardian';
+    final role = widget.auth.session!.selected?.role;
+    final guardian = role == 'Guardian';
     return Theme(
       data: guardian ? guardianTheme() : AcademyTheme.light(),
       child: NavigatorPopHandler<Object?>(
@@ -95,6 +97,11 @@ class _SessionNavigationState extends State<SessionNavigation> {
                 ? GuardianHome(
                     auth: widget.auth,
                     environment: widget.environment,
+                    accountPage: RoleFoundation(auth: widget.auth),
+                  )
+                : role == 'Coach'
+                ? CoachHome(
+                    auth: widget.auth,
                     accountPage: RoleFoundation(auth: widget.auth),
                   )
                 : RoleFoundation(auth: widget.auth),
