@@ -1,10 +1,12 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D + Sports Dashboard Phase UI**، وبرنامج Native Mobile يتضمن **Phase A: mobile auth backend وPhase B: الديمو الكروي/reset وإنشاء المدرب**؛ تطبيق Flutter المرئي ومراحل C–H لم تُنفذ بعد في هذا checkpoint.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D + Sports Dashboard Phase UI**، وبرنامج Native Mobile يتضمن **A: auth backend، B: الديمو الكروي/reset وإنشاء المدرب، C: أساس Flutter ومصادقة آمنة**. شاشات الأعمال native ومراحل D–H لم تكتمل بعد؛ لا ادعاء Demo native كامل.
 
 [معمارية الموبايل](docs/mobile/MOBILE_ARCHITECTURE_v1.0.md) · [دليل checkpoint](docs/mobile/MOBILE_DEMO_GUIDE.md) · [النطاق الإضافي](docs/requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). المسار الجديد يدعم OTP لـGuardian/Coach/Owner، جلسات أجهزة مع تدوير وإلغاء، واختيار عضوية/دور صريحًا. cookie/CSRF الويب وواجهاته باقية.
 
 ## ما الموجود الآن؟
+
+- [Flutter Foundation](apps/mobile/README.md): هاتف/OTP، اختيار الدور، استعادة الجلسة وتدويرها وlogout، Keychain/Keystore، واجهة Cairo عربية RTL وبيئات قابلة للضبط. شاشات الأدوار الحالية توضح أنها أساس مصادقة وليست وظائف D/F/G المكتملة.
 
 - [واجهة أكاديمية رياضية](docs/ui/DASHBOARD_UI_SYSTEM.md): لوحة مالك بمؤشرات ورسوم من البيانات الفعلية، هوية اللاعب/المدرب، بطاقات الباقات والمجموعات، وحضور واضح بالنص والأيقونة. إضافات API للقراءة فقط، بلا تغيير auth/payments أو migration. تفاصيل التحقق في STATUS.
 - ASP.NET Core Web API مع `/health/live` و`/health/ready`.

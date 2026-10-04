@@ -2,7 +2,19 @@
 
 تاريخ التحديث: 2026-10-04. الفرع الحالي: `codex/15-native-mobile-app`، أساسه الكامل `a9624dc537f121bd1732ab4c0f692ea753d70724` من `codex/14-slice8d-demo-closure`.
 
-## Master Execution — checkpoint B (من الأساس المصحح cb7ff34)
+## Master Execution — checkpoint C؛ البرنامج الكامل PARTIAL
+
+- حُفظت كل أعمال `cb7ff342164d02530a6f222d5bebd957b833752e`. Phase B مدفوعة بالـcommit `4076bcddf1ca087b30d495e1190cf1ad173d3fe4`؛ [CI الخاص بها](https://github.com/salah1seleem/academy-management-platform/actions/runs/37168028902) نجح في backend/frontend/e2e بما فيه رحلتا Create Coach الجديدتان.
+- `apps/mobile` تطبيق Flutter أصلي: **3.47.2 stable / Dart 3.13.2**، Cairo محلي مع OFL، RTL وtheme/widgets مشتركة، هاتف/OTP وعضوية/دور صريح وواجهة جلسة حقيقية. شاشات الأعمال D/F/G لا تُحاكى؛ shell الحالي يوضح أنها لم تُنفذ بعد.
+- `flutter_secure_storage 11.2.0` مثبت مع lockfile. refresh وحده في Keychain (this-device-only)/Keystore، access والبيانات في الذاكرة؛ فصل مفاتيح البيئة/origin، single-flight refresh، حفظ قبل قبول التدوير، epoch ضد الردود المتأخرة، لا retry آلي للكتابة. network failure لا يمحو جلسة محفوظة؛ logout يمسح محليًا مع تنبيه إذا تعذر الإلغاء البعيد، وفشل مسح التخزين ليس نجاحًا وهميًا.
+- إعداد API صريح؛ Production افتراضي ويتطلب HTTPS. HTTP المحلي فقط في Demo/Development ولعناوين loopback/LAN الخاصة المتحققة؛ لا fallback سري لـlocalhost ولا إعادة توجيه تحمل bearer. Android backup معطل. إعدادات iOS Keychain موصولة بالبناء.
+- **flutter analyze PASS، Flutter unit/widget 16/16 PASS**، **iOS Simulator debug build PASS**. اختبار integration أصلي واحد غطى **Guardian + Coach + Owner** على API/PostgreSQL حقيقي: OTP، تخزين Keychain، restore/rotation، `/me` بالدور الصحيح، logout ومسح التخزين؛ نجح وأعيد بعد تقوية حماية الردود المتأخرة. فُحصت شاشة الدخول Cairo/RTL فعليًا على iPhone 17 Pro Max/iOS 26.2؛ هذه ليست المراجعة المرئية الكاملة للشاشات والمقاسات في H.
+- أضيف job Flutter إلى CI مع الإبقاء على jobs الويب/backend؛ نتيجته تُراجع بعد push. لا إعادة اختبار كاملة للويب بسبب C وحدها: لم يتغير كود الويب/backend بعد checkpoint B ذي 379 اختبار backend مغطى و120 Web و50 E2E. لا migration أو تغيير baseline/main/بيانات الإنتاج.
+- API المخصص للتحقق يعمل على 5190 بقاعدة `academy_football_review_20261004`، دون مساس بخدمات 5080/3000 القديمة أو قواعد المستخدم. لا Android build/test لأن SDK غير مثبت. التوقيع والمتاجر وSMS والدفع الحقيقي ووسائط الإنتاج خارج الجاهزية.
+
+**نقطة التسليم عند حد هذه الدفعة: B ثم C محفوظتان؛ المتبقي D → E → F → G → H.** لم يُنفذ Guardian native التجاري أو وجبات Phase E وصورها/مصادرها ومحركها أو Coach/Owner native التجاري. التغذية ما زالت 3 أمثلة مؤقتة غير مراجعة، بلا قيم مختلقة أو تجارة. **NOT NATIVE DEMO READY / NOT PRODUCTION READY**. لا يُعاد A أو UI أو B أو C؛ تبدأ المتابعة من D على HEAD الحالي دون reset/rebase. [دليل التشغيل](../../apps/mobile/README.md).
+
+## Master Execution — سجل checkpoint B (من الأساس المصحح cb7ff34)
 
 Phase UI مكتملة ومحفوظة؛ لم يُنفذ reset/revert/rebase ولم يُعاد تصميم اللوحة. أضيفت فقط واجهة إنشاء المدرب ضمن النظام البصري الحالي وبيانات العرض الكروي.
 

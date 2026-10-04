@@ -1,12 +1,12 @@
 # معمارية Native Mobile v1.0
 
-الحالة: **Phase A وSports Dashboard Phase UI وPhase B منفذة؛ Flutter ومراحل C–H غير مكتملة**. أساس Phase B المعتمد `cb7ff342164d02530a6f222d5bebd957b833752e` محفوظ دون reset/rebase؛ الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). لا يعاد تنفيذ A أو UI.
+الحالة: **A وUI وB وC منفذة؛ مراحل D–H غير مكتملة**. أساس Phase B المعتمد `cb7ff342164d02530a6f222d5bebd957b833752e` محفوظ دون reset/rebase؛ الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). لا يعاد تنفيذ A أو UI.
 
 ## تطبيق واحد وخادم قائم
 
-Flutter iOS/Android عميل أصلي، لا WebView ولا استبدال Next.js. يتصل بنفس ASP.NET Core API/PostgreSQL؛ لا backend ثانٍ أو deployment لكل دور. منطق التجديد والتحصيل والإيصال والخصم والحضور والتقييم يبقى على الخادم. الويب يستمر بجلسة cookie وCSRF، والموبايل يرسل bearer مستقلًا. لم تُنشأ `apps/mobile` في هذه المرحلة.
+Flutter iOS/Android عميل أصلي في `apps/mobile`، لا WebView ولا استبدال Next.js. يتصل بنفس ASP.NET Core API/PostgreSQL؛ لا backend ثانٍ أو deployment لكل دور. منطق التجديد والتحصيل والإيصال والخصم والحضور والتقييم يبقى على الخادم. الويب يستمر بجلسة cookie وCSRF، والموبايل يرسل bearer مستقلًا. مرحلة C تنفذ المصادقة وrole shell؛ شاشات الأعمال تأتي لاحقًا.
 
-الهيكل المستهدف: `lib/app` للـrouter والتطبيق، `core/api` و`core/auth` و`core/storage` و`core/theme` و`core/widgets` للمشترك، و`features/{auth,guardian,coach,owner,nutrition,subscriptions,evaluations,attendance}`. لا تختزن الواجهات قواعد الصلاحيات أو الأرقام المالية. Flutter المثبت محليًا `3.47.2`/Dart `3.13.2`؛ التثبيت موجود وليس دليل CI أو build تطبيق. تثبيت واعتماد packages وlockfile ضمن Phase C فقط. Xcode/iOS Simulator متاحان؛ Android SDK غير موجود محليًا.
+الهيكل: `lib/app` للتطبيق وتوجيه الدور، `core/{api,auth,storage,theme,widgets}` و`features/auth`؛ بقية features تُضاف عند تنفيذها دون هياكل فارغة. لا تختزن الواجهات قواعد الصلاحيات أو الأرقام المالية. Flutter **3.47.2 stable**/Dart **3.13.2**، و`flutter_secure_storage 11.2.0` مع lockfile. تبعية التخزين [موثقة لدى ناشرها](https://pub.dev/packages/flutter_secure_storage) وثُبتت واختُبرت على iOS. Cairo محلي مع OFL، وHTTP client من Dart SDK بلا framework إضافي. build iOS Simulator ناجح؛ Android SDK غير متاح ولم يُختبر Android.
 
 ## العقد المنفذ: `/api/v1/mobile/auth`
 
@@ -34,7 +34,7 @@ OTP صالح خمس دقائق، يُستهلك مرة واحدة. إعادة ا
 
 Refresh يسلسل الرمز والجلسة داخل transaction ثم يعيد فحص العضويات؛ فوز واحد فقط للطلبين المتزامنين. إعادة استعمال refresh سابق تفشل ولا تعيد credentials جديدة. إلغاء الجلسة يمنع access وrefresh فورًا. إذا فُقد رد ناجح بعد التدوير ولم يصل الرمز الجديد للجهاز، فالاسترداد الآمن الحالي هو OTP جديد؛ لا نافذة replay مخفية.
 
-Flutter لاحقًا يخزن refresh في Keychain/Keystore-backed secure storage فقط، وaccess في الذاكرة. عند التشغيل يقرأ refresh ويجدده ثم يوجه للدور؛ لا SharedPreferences للأسرار. استخدام refresh واحد جارٍ داخل العميل، وتحديث التخزين ذرّيًا قبل استبدال الحالة، ورفض retry آلي لعملية مالية دون مفتاح idempotency محفوظ. Logout يمسح التخزين والـcache حتى إن فشلت الشبكة مع عرض أن الإلغاء البعيد لم يتأكد؛ تغيير الحساب يمسح بيانات الأطفال السابقة. التطبيق يحترم 401/403 وينهي الجلسة/يعيد اختيار الدور، ولا يعرض بيانات cache لحساب آخر.
+Flutter الآن يخزن refresh في Keychain/Keystore-backed secure storage فقط، وaccess في الذاكرة. عند التشغيل يقرأ refresh ويجدده ثم يوجه للدور؛ لا SharedPreferences للأسرار. استخدام refresh واحد جارٍ داخل العميل، وتحديث التخزين ذرّيًا قبل استبدال الحالة، ورفض retry آلي لعملية مالية دون مفتاح idempotency محفوظ. Logout يمسح التخزين والـcache حتى إن فشلت الشبكة مع عرض أن الإلغاء البعيد لم يتأكد؛ تغيير الحساب يمسح بيانات الأطفال السابقة. التطبيق يحترم 401/403 وينهي الجلسة/يعيد اختيار الدور، ولا يعرض بيانات cache لحساب آخر.
 
 ## توافق الويب وmigration
 

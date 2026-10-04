@@ -1,6 +1,6 @@
-# دليل Mobile Demo — checkpoint B
+# دليل Mobile Demo — checkpoint C
 
-**Flutter ومراحل C–H لم تُنفذ بعد في هذا checkpoint.** Phase A auth وPhase UI محفوظتان، وPhase B يضيف الديمو الكروي وإنشاء المدرب. [عقد الموبايل](MOBILE_ARCHITECTURE_v1.0.md).
+**أساس Flutter والمصادقة منفذان؛ شاشات الأعمال D–H غير مكتملة.** Phase A وUI محفوظتان، وB يضيف الديمو الكروي وإنشاء المدرب. [التشغيل والاختبارات native](../../apps/mobile/README.md) · [العقد](MOBILE_ARCHITECTURE_v1.0.md).
 
 ## بيئة العرض
 
@@ -22,7 +22,7 @@
 
 رحلة الويب: المالك ← لوحة المالك ← اللاعبون/الفروع/المجموعات ← المدربون ← إضافة مدرب. الاسم والهاتف إلزاميان؛ البريد والإسناد اختياريان. إنشاء المدرب يحفظ الهوية والعضوية والإسناد ذريًا، ويتيح OTP للموبايل عند نشاط الحساب. لا كلمة مرور مشتركة ولا تغيير لهوية موجودة. نفس الهاتف normalized يعيد استخدام الهوية فقط عند تطابق البيانات؛ أي اختلاف يتطلب مراجعة ولا يكشف بيانات الأكاديمية الأخرى. تكرار الحفظ المطابق لا يكرر العضوية. لإدارة الإسناد لاحقًا استخدم «إسناد مجموعة» القائمة.
 
-رحلة backend native الحالية: request OTP ← verify ← membership selection عند التعدد ← API الدور ← refresh ← logout/revoke. هذه ليست رحلة Flutter مصورة بعد. إعداد SMS الحقيقي غير متوفر؛ خارج Demo يرجع `501`.
+رحلة Flutter المنفذة: هاتف ← OTP ← اختيار عضوية عند التعدد ← shell الدور الحقيقي ← refresh/restore ← logout. اختُبرت على iOS Simulator للأدوار الثلاثة مع PostgreSQL/API فعلي وKeychain، وفُحصت شاشة الدخول فعليًا. هذه ليست رحلات Guardian/Coach/Owner التجارية الكاملة. إعداد SMS الحقيقي غير متوفر؛ خارج Demo يرجع `501`.
 
 ## إعادة تهيئة آمنة — DM-12
 
@@ -39,10 +39,9 @@ Demo__ResetConfirmation=football-demo-only dotnet run \
 
 ## ما يزال مطلوبًا
 
-- C: Flutter، secure storage، OTP وrole routing.
 - D: Guardian native حسب المرجع، الأفعال الثلاثة، الملف والتقرير والتجديد والإيصال.
 - E: البحث الغذائي والصور والحصص والقيم الموثقة ومحرك الاقتراحات. الموجود الآن **3 أمثلة مؤقتة غير مراجعة**، بلا ادعاءات طبية أو تجارة أو قيم عشوائية.
 - F/G: Coach native وOwner native.
 - H: Flutter tests وiOS Simulator والرحلات والمراجعة المرئية وCI النهائي.
 
-لا native build أو رابط متجر بعد؛ Android SDK غير مثبت محليًا. SMS والدفع الحقيقي وApple Pay والتوقيع والمتاجر والوسائط الإنتاجية بوابات لاحقة. **NOT NATIVE DEMO READY / NOT PRODUCTION READY**.
+بناء iOS Simulator متاح، وليس إصدار متجر. Android SDK غير مثبت محليًا ولم يُختبر Android. SMS والدفع الحقيقي وApple Pay والتوقيع والمتاجر والوسائط الإنتاجية بوابات لاحقة. **NOT NATIVE DEMO READY / NOT PRODUCTION READY**.
