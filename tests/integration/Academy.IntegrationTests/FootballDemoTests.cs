@@ -91,7 +91,7 @@ public sealed class FootballDemoTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Financial_attendance_and_evaluation_history_is_connected_and_nutrition_not_fabricated()
+    public async Task Financial_attendance_evaluation_and_reviewed_nutrition_are_connected()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var today = new DateOnly(2026, 9, 28);
@@ -100,7 +100,36 @@ public sealed class FootballDemoTests : IAsyncLifetime
         Assert.Equal(30, await db.Collections.CountAsync(c => c.AcademyId == AcademyId));
         Assert.Equal(24, await db.TrainingSessions.CountAsync(c => c.AcademyId == AcademyId));
         var meals = await db.NutritionItems.Where(m => m.AcademyId == AcademyId).ToArrayAsync();
-        Assert.Equal(3, meals.Length); Assert.All(meals, m => { Assert.Null(m.Calories); Assert.DoesNotContain("شكشوكة", m.ArabicName); Assert.DoesNotContain("كشري", m.ArabicName); });
+        Assert.Equal(24, meals.Length);
+        Assert.Equal(18, await db.NutritionCategoryLinks.CountAsync(x => x.AcademyId == AcademyId));
+        Assert.All(meals, m =>
+        {
+            Assert.Equal(Academy.Infrastructure.Content.NutritionDataStatus.Reviewed, m.DataStatus);
+            Assert.NotNull(m.Calories); Assert.NotNull(m.ServingProfile); Assert.NotNull(m.SourceReference);
+            Assert.DoesNotContain("شكشوكة", m.ArabicName); Assert.DoesNotContain("كشري", m.ArabicName);
+        });
+    }
+
+    [Fact]
+    public async Task Guardian_nutrition_recommendations_are_deterministic_and_use_training_context()
+    {
+        using var guardian = await MobileLogin(FootballDemoSeed.Phone(100));
+        var player = FootballDemoSeed.Id("player/0");
+        var path = $"/api/v1/guardian/children/{player}/nutrition/recommendations?date=2026-09-28";
+        var first = await guardian.GetFromJsonAsync<JsonElement>(path); var second = await guardian.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal(first.ToString(), second.ToString()); Assert.True(first.GetProperty("isTrainingDay").GetBoolean());
+        Assert.Equal("Small", first.GetProperty("servingProfile").GetString());
+        Assert.True(first.TryGetProperty("preTraining", out var pre) && pre.ValueKind == JsonValueKind.Object);
+        Assert.DoesNotContain("weightStatus", first.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Guardian_nutrition_recommendations_enforce_child_link_and_rest_day()
+    {
+        using var guardian = await MobileLogin(FootballDemoSeed.Phone(100));
+        Assert.Equal(HttpStatusCode.NotFound, (await guardian.GetAsync($"/api/v1/guardian/children/{FootballDemoSeed.Id("player/2")}/nutrition/recommendations?date=2026-09-29")).StatusCode);
+        var rest = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{FootballDemoSeed.Id("player/0")}/nutrition/recommendations?date=2026-09-29");
+        Assert.False(rest.GetProperty("isTrainingDay").GetBoolean()); Assert.Equal(JsonValueKind.Null, rest.GetProperty("preTraining").ValueKind);
     }
 
     [Theory]
@@ -195,6 +224,15 @@ public sealed class FootballDemoTests : IAsyncLifetime
         var client = factory.CreateClient(); var token = (await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login") { Content = JsonContent.Create(new { email = $"{role}.football@example.test", password = "Demo-Only-123!" }) };
         request.Headers.Add("X-CSRF-TOKEN", token); (await client.SendAsync(request)).EnsureSuccessStatusCode(); return client;
+    }
+    private async Task<HttpClient> MobileLogin(string phone)
+    {
+        var client = factory.CreateClient();
+        var challenge = await client.PostAsJsonAsync("/api/v1/mobile/auth/otp/request", new { phoneNumber = phone }); challenge.EnsureSuccessStatusCode();
+        var id = (await challenge.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid();
+        var verified = await client.PostAsJsonAsync("/api/v1/mobile/auth/otp/verify", new { phoneNumber = phone, challengeId = id, code = "246810", deviceName = "Nutrition test" }); verified.EnsureSuccessStatusCode();
+        var token = (await verified.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accessToken").GetString();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token); return client;
     }
     private static async Task<HttpResponseMessage> Post(HttpClient client, object body)
     {

@@ -85,7 +85,10 @@ class ChildProfile extends StatelessWidget {
           GLink(
             'التغذية والصحة',
             Icons.restaurant_outlined,
-            () => openPage(context, NutritionLibrary(auth: auth)),
+            () => openPage(
+              context,
+              NutritionLibrary(auth: auth, playerId: playerId, today: today),
+            ),
           ),
           GLink(
             'الإصابات والاستشارات الطبية',

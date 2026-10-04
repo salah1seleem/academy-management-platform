@@ -6,6 +6,7 @@ namespace Academy.Infrastructure.Content;
 
 public enum NutritionCategory { Breakfast = 1, Lunch = 2, Dinner = 3 }
 public enum NutritionDataStatus { DemoUnreviewed = 1, Reviewed = 2 }
+public enum NutritionServingProfile { Small = 1, Medium = 2, Large = 3 }
 public enum MedicalRecordType { Injury = 1, Consultation = 2 }
 public enum MedicalRecordStatus { Open = 1, Monitoring = 2, Resolved = 3 }
 public enum PlayerMediaType { Image = 1, Video = 2 }
@@ -36,6 +37,15 @@ public sealed class NutritionItem : TenantEntity
     public decimal? FatGrams { get; set; }
     public NutritionDataStatus DataStatus { get; set; }
     public string? SourceDescription { get; set; }
+    public string? SourceReference { get; set; }
+    public decimal? ServingWeightGrams { get; set; }
+    public int? MinimumAge { get; set; }
+    public int? MaximumAge { get; set; }
+    public NutritionServingProfile? ServingProfile { get; set; }
+    public bool SuitableForTrainingDay { get; set; }
+    public bool SuitableForRestDay { get; set; }
+    public bool SuitablePreTraining { get; set; }
+    public bool SuitablePostTraining { get; set; }
     public ICollection<NutritionCategoryLink> Categories { get; set; } = [];
 }
 

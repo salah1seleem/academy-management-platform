@@ -122,3 +122,12 @@ Slice 8D أُنجز على `codex/14-slice8d-demo-closure`؛ أساسه التا
 ## نقطة التوقف
 
 تتوقف المهمة عند Slice 8C بعد commit/push ونجاح CI. لا يُدمج أو يُعدل `main` ولا يبدأ Slice 9.
+# Native Mobile — Phase E (Youth Nutrition) مكتملة محليًا
+
+- استُبدلت أمثلة Football المؤقتة بمكتبة جاهزة: **18 وجبة رئيسية مراجعة** (6 إفطار + 6 غداء + 6 عشاء) و**6 خيارات توقيت تدريب**، بلا شكشوكة أو كشري وبلا حقول/واجهات سعر أو تقييم أو كمية أو سلة أو طلب أو دفع.
+- كل سجل يحمل الحصة ووزنها التقريبي والقيم الغذائية والفئة العمرية و`Small/Medium/Large` وسياق التدريب ومصدره وحالة المراجعة. القيم موثقة في [بيانات تغذية ناشئي الكرة](../nutrition/YOUTH_FOOTBALL_NUTRITION_DEMO_DATA.md) بالاستناد إلى USDA FoodData Central وHealthyChildren/AAP وSports Dietitians Australia، مع تنبيه واضح أنها تقديرية وليست وصفة طبية.
+- أضيف endpoint آمن للطفل المرتبط يختار اقتراحات اليوم حتميًا من العمر و`TrainingSession` الفعلية. لا يقبل tenant من العميل، ولا يصنف الوزن أو يقدم تشخيصًا؛ يوم التدريب يضيف خيار قبل/بعد، ويوم الراحة يعرض الوجبات الرئيسية.
+- Flutter يعرض اقتراحات اليوم، التصنيفات الثلاثة، تفاصيل الحصة والقيم والمصدر، مع **18 صورة طعام Demo أصلية محلية** مولدة لهذه المكتبة فقط، بلا أشخاص أو شعارات أو بيانات حقيقية. مراجع الصور allowlisted ولا تُحمّل من شبكة خارجية.
+- Migration الجديدة: `20261004030006_YouthFootballNutrition`. طُبقت على قاعدة المراجعة المحلية PostgreSQL 17 دون تعديل migrations قديمة، وEF أكد عدم وجود pending model changes.
+- التحقق المرحلي: build backend PASS؛ اختبارات Football **15/15 PASS** ومنها determinism والتدريب/الراحة وIDOR؛ `flutter analyze` PASS؛ `flutter test` **30/30 PASS**؛ `git diff --check` PASS. المراجعة الشاملة وSimulator/CI تتكرر في Phase H.
+- لا تغيير baseline أو business rules المالية أو `main`. المحتوى ما يزال Demo/معلومات عامة ويحتاج مراجعة محلية قبل إنتاج حقيقي. التالي Phase F: Coach Native.

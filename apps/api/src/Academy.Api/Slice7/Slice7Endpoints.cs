@@ -16,6 +16,7 @@ public static class Slice7Endpoints
         guardian.MapGet("/catalog", GuardianCatalog);
         guardian.MapGet("/nutrition", GuardianNutrition);
         guardian.MapGet("/nutrition/{id:guid}", GuardianNutritionDetails);
+        guardian.MapGet("/children/{playerId:guid}/nutrition/recommendations", GuardianNutritionRecommendations);
         guardian.MapGet("/children/{playerId:guid}/medical", GuardianMedical);
         guardian.MapGet("/children/{playerId:guid}/media", GuardianMedia);
 
@@ -63,14 +64,39 @@ public static class Slice7Endpoints
         var t = (await tenant.ResolveAsync())!; var parsed = ParseCategory(category);
         var query = db.NutritionCategoryLinks.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.NutritionItem.IsActive);
         if (parsed.HasValue) query = query.Where(x => x.Category == parsed.Value);
-        return Results.Ok(await query.OrderBy(x => x.Category).ThenBy(x => x.DisplayOrder).Select(x => new { x.NutritionItem.Id, x.NutritionItem.ArabicName, x.NutritionItem.ArabicDescription, x.NutritionItem.ImageReference, category = x.Category.ToString(), dataStatus = x.NutritionItem.DataStatus.ToString() }).ToListAsync());
+        return Results.Ok(await query.OrderBy(x => x.Category).ThenBy(x => x.DisplayOrder).Select(x => new { x.NutritionItem.Id, x.NutritionItem.ArabicName, x.NutritionItem.ArabicDescription, x.NutritionItem.ImageReference, category = x.Category.ToString(), servingProfile = x.NutritionItem.ServingProfile == null ? null : x.NutritionItem.ServingProfile.ToString(), dataStatus = x.NutritionItem.DataStatus.ToString() }).ToListAsync());
     }
 
     private static async Task<IResult> GuardianNutritionDetails(Guid id, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!;
-        var row = await db.NutritionItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive).Select(x => new { x.Id, x.ArabicName, x.ArabicDescription, x.ImageReference, x.ServingDescription, x.Calories, x.ProteinGrams, x.CarbohydratesGrams, x.FatGrams, dataStatus = x.DataStatus.ToString(), x.SourceDescription, categories = x.Categories.OrderBy(c => c.Category).Select(c => c.Category.ToString()).ToList() }).SingleOrDefaultAsync();
+        var row = await db.NutritionItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive).Select(x => new { x.Id, x.ArabicName, x.ArabicDescription, x.ImageReference, x.ServingDescription, x.ServingWeightGrams, x.Calories, x.ProteinGrams, x.CarbohydratesGrams, x.FatGrams, x.MinimumAge, x.MaximumAge, servingProfile = x.ServingProfile == null ? null : x.ServingProfile.ToString(), x.SuitableForTrainingDay, x.SuitableForRestDay, x.SuitablePreTraining, x.SuitablePostTraining, dataStatus = x.DataStatus.ToString(), x.SourceDescription, x.SourceReference, categories = x.Categories.OrderBy(c => c.Category).Select(c => c.Category.ToString()).ToList() }).SingleOrDefaultAsync();
         return row is null ? Results.NotFound() : Results.Ok(row);
+    }
+
+    private static async Task<IResult> GuardianNutritionRecommendations(Guid playerId, DateOnly? date, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        if (!await Linked(db, t.AcademyId, UserId(principal), playerId)) return Results.NotFound();
+        var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == playerId)
+            .Select(x => new { x.DateOfBirth, x.HeightCm, x.WeightKg }).SingleAsync();
+        var day = date ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var age = day.Year - player.DateOfBirth.Year - (day < player.DateOfBirth.AddYears(day.Year - player.DateOfBirth.Year) ? 1 : 0);
+        if (age is < 6 or > 18) return Results.ValidationProblem(new Dictionary<string, string[]> { ["playerId"] = ["الاقتراحات التجريبية متاحة للأعمار من 6 إلى 18 سنة فقط."] });
+        var profile = age <= 9 ? NutritionServingProfile.Small : age <= 13 ? NutritionServingProfile.Medium : NutritionServingProfile.Large;
+        var groups = db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive && x.Status == EnrollmentStatus.Active && x.Sport.EnglishName == "Football").Select(x => x.TrainingGroupId);
+        if (!await groups.AnyAsync()) return Results.NotFound();
+        var session = await db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && groups.Contains(x.TrainingGroupId) && x.SessionDate == day && x.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled)
+            .OrderBy(x => x.StartTime).Select(x => new { x.StartTime, x.EndTime }).FirstOrDefaultAsync();
+        var trainingDay = session is not null;
+        var meals = await db.NutritionItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.DataStatus == NutritionDataStatus.Reviewed && x.MinimumAge <= age && x.MaximumAge >= age && x.ServingProfile == profile && (trainingDay ? x.SuitableForTrainingDay : x.SuitableForRestDay))
+            .OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.ImageReference, x.ServingDescription, x.Calories, x.ProteinGrams, x.CarbohydratesGrams, x.FatGrams, x.SuitablePreTraining, x.SuitablePostTraining, categories = x.Categories.Select(c => c.Category.ToString()).ToList() }).ToListAsync();
+        object? Pick(string category)
+        {
+            var options = meals.Where(x => x.categories.Contains(category)).OrderBy(x => x.Id).ToArray();
+            return options.Length == 0 ? null : options[Math.Abs(day.DayNumber) % options.Length];
+        }
+        return Results.Ok(new { date = day, isTrainingDay = trainingDay, trainingTime = session?.StartTime, ageBand = age <= 9 ? "6-9" : age <= 13 ? "10-13" : "14-18", servingProfile = profile.ToString(), context = new { age, player.HeightCm, player.WeightKg, sport = "Football", note = "تُستخدم القياسات كسياق عام فقط ولا يتم تصنيف الوزن أو تقديم تشخيص." }, breakfast = Pick("Breakfast"), lunch = Pick("Lunch"), dinner = Pick("Dinner"), preTraining = trainingDay ? meals.FirstOrDefault(x => x.SuitablePreTraining) : null, postTraining = trainingDay ? meals.FirstOrDefault(x => x.SuitablePostTraining) : null, disclaimer = "اقتراحات غذائية مناسبة للعمر والنشاط وليست وصفة طبية. القيم الغذائية تقديرية حسب الحصة الموضحة." });
     }
 
     private static async Task<IResult> GuardianMedical(Guid playerId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)

@@ -5,7 +5,13 @@ import 'guardian_ui.dart';
 
 class NutritionLibrary extends StatefulWidget {
   final AuthController auth;
-  const NutritionLibrary({super.key, required this.auth});
+  final String playerId, today;
+  const NutritionLibrary({
+    super.key,
+    required this.auth,
+    required this.playerId,
+    required this.today,
+  });
   @override
   State<NutritionLibrary> createState() => _NutritionLibraryState();
 }
@@ -22,6 +28,64 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
           child: Text(
             'مكتبة معلومات عامة، وليست وصفة أو خطة علاجية.',
             textAlign: TextAlign.center,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: GCard(
+            child: RemoteBody(
+              auth: widget.auth,
+              path:
+                  '/api/v1/guardian/children/${widget.playerId}/nutrition/recommendations?date=${widget.today}',
+              builder: (context, value) {
+                final d = obj(value);
+                final suggestions = [
+                  ('الإفطار', d['breakfast']),
+                  ('الغداء', d['lunch']),
+                  ('العشاء', d['dinner']),
+                  if (d['preTraining'] != null)
+                    ('قبل التدريب', d['preTraining']),
+                  if (d['postTraining'] != null)
+                    ('بعد التدريب', d['postTraining']),
+                ];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Heading('اقتراحات اليوم'),
+                    Text(
+                      d['isTrainingDay'] == true
+                          ? 'يوم تدريب · الحصة ${label(d['servingProfile'])}'
+                          : 'يوم راحة · الحصة ${label(d['servingProfile'])}',
+                    ),
+                    const SizedBox(height: 8),
+                    for (final suggestion in suggestions)
+                      if (suggestion.$2 is Map)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(suggestion.$1),
+                          subtitle: Text(
+                            textOf(obj(suggestion.$2)['arabicName']),
+                          ),
+                          trailing: const Icon(Icons.chevron_left),
+                          onTap: () => openPage(
+                            context,
+                            MealDetails(
+                              auth: widget.auth,
+                              id: textOf(obj(suggestion.$2)['id']),
+                            ),
+                          ),
+                        ),
+                    Text(
+                      textOf(d['disclaimer']),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white60,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
         Padding(
@@ -111,6 +175,8 @@ class MealDetails extends StatelessWidget {
           Text(textOf(d['arabicDescription'])),
           const SizedBox(height: 14),
           Text('الحصة: ${d['servingDescription']}'),
+          if (d['servingWeightGrams'] != null)
+            Text('وزن الحصة التقريبي: ${d['servingWeightGrams']} جم'),
           const Heading('القيم الغذائية'),
           Facts([
             ('سعرات حرارية', textOf(d['calories'])),
@@ -119,12 +185,21 @@ class MealDetails extends StatelessWidget {
             ('دهون · جرام', textOf(d['fatGrams'])),
           ]),
           const Text('القيم الغذائية تقديرية حسب الحصة الموضحة'),
+          if (d['minimumAge'] != null)
+            Text(
+              'الفئة العمرية: ${d['minimumAge']}–${d['maximumAge']} سنة · ${label(d['servingProfile'])}',
+            ),
           Text(
             d['dataStatus'] == 'DemoUnreviewed'
                 ? 'بيانات تجريبية غير مراجعة'
                 : 'بيانات مراجعة وفق المصدر المسجل',
           ),
           if (d['sourceDescription'] != null) Text(d['sourceDescription']),
+          if (d['sourceReference'] != null)
+            const Text(
+              'المصادر: USDA FoodData Central · HealthyChildren/AAP · Sports Dietitians Australia',
+              style: TextStyle(fontSize: 11, color: Colors.white60),
+            ),
         ]);
       },
     ),

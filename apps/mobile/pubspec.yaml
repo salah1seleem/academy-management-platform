@@ -25,6 +25,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/demo/
+    - assets/demo/nutrition/
   fonts:
     - family: Cairo
       fonts:

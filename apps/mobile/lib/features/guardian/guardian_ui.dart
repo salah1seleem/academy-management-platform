@@ -59,6 +59,9 @@ String label(Object? value) =>
       'Thursday': 'الخميس',
       'Friday': 'الجمعة',
       'Saturday': 'السبت',
+      'Small': 'صغيرة',
+      'Medium': 'متوسطة',
+      'Large': 'كبيرة',
     }[value] ??
     'غير محدد';
 int? ageOn(Object? birth, Object? today) {
@@ -271,12 +274,21 @@ class DemoImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final path = reference?.toString() ?? '';
     final name = path.split('/').last;
+    final nutritionPhoto = RegExp(
+      r'^/demo-assets/nutrition/(breakfast|lunch|dinner)-[1-6]\.jpg$',
+    ).hasMatch(path);
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: SizedBox(
         height: height,
         width: double.infinity,
-        child: path == '/demo-assets/$name' && allowed.contains(name)
+        child: nutritionPhoto
+            ? Image.asset(
+                'assets/demo/nutrition/$name',
+                fit: BoxFit.cover,
+                semanticLabel: 'صورة وجبة تجريبية',
+              )
+            : path == '/demo-assets/$name' && allowed.contains(name)
             ? SvgPicture.asset(
                 'assets/demo/$name',
                 fit: BoxFit.cover,

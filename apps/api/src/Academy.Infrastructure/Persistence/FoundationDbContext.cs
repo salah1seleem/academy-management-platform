@@ -542,8 +542,15 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.FatGrams).HasPrecision(8, 2);
             entity.Property(x => x.DataStatus).HasConversion<string>().HasMaxLength(24);
             entity.Property(x => x.SourceDescription).HasMaxLength(500);
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.Property(x => x.ServingWeightGrams).HasPrecision(8, 2);
+            entity.Property(x => x.ServingProfile).HasConversion<string>().HasMaxLength(16);
             entity.HasIndex(x => new { x.AcademyId, x.ArabicName }).IsUnique();
-            entity.ToTable(t => t.HasCheckConstraint("CK_NutritionItems_Values", "(\"Calories\" IS NULL OR \"Calories\" >= 0) AND (\"ProteinGrams\" IS NULL OR \"ProteinGrams\" >= 0) AND (\"CarbohydratesGrams\" IS NULL OR \"CarbohydratesGrams\" >= 0) AND (\"FatGrams\" IS NULL OR \"FatGrams\" >= 0)"));
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_NutritionItems_Values", "(\"Calories\" IS NULL OR \"Calories\" >= 0) AND (\"ProteinGrams\" IS NULL OR \"ProteinGrams\" >= 0) AND (\"CarbohydratesGrams\" IS NULL OR \"CarbohydratesGrams\" >= 0) AND (\"FatGrams\" IS NULL OR \"FatGrams\" >= 0) AND (\"ServingWeightGrams\" IS NULL OR \"ServingWeightGrams\" > 0)");
+                t.HasCheckConstraint("CK_NutritionItems_AgeRange", "(\"MinimumAge\" IS NULL AND \"MaximumAge\" IS NULL) OR (\"MinimumAge\" >= 0 AND \"MaximumAge\" >= \"MinimumAge\")");
+            });
         });
 
         builder.Entity<NutritionCategoryLink>(entity =>
