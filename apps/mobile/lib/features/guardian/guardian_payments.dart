@@ -118,20 +118,21 @@ class ExternalRenewal extends StatefulWidget {
 }
 
 class _ExternalRenewalState extends State<ExternalRenewal> {
-  final reference = TextEditingController();
+  final name = TextEditingController();
+  List<Json> results = const [];
   bool busy = false;
   String? error;
   @override
   void dispose() {
-    reference.dispose();
+    name.dispose();
     super.dispose();
   }
 
-  Future<void> resolve() async {
+  Future<void> search() async {
     if (busy) return;
-    final code = reference.text.trim();
-    if (code.isEmpty) {
-      setState(() => error = 'أدخل كود التجديد.');
+    final query = name.text.trim();
+    if (query.length < 3) {
+      setState(() => error = 'اكتب 3 أحرف على الأقل من اسم اللاعب.');
       return;
     }
     setState(() {
@@ -141,9 +142,30 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
     try {
       final d = obj(
         await widget.auth.request(
+          'GET',
+          '/api/v1/guardian/subscriptions/external/search?query=${Uri.encodeQueryComponent(query)}',
+        ),
+      );
+      if (mounted) setState(() => results = rows(d['items']));
+    } on ApiFailure catch (e) {
+      if (mounted) setState(() => error = e.message);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> select(Json candidate) async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final d = obj(
+        await widget.auth.request(
           'POST',
-          '/api/v1/guardian/subscriptions/external/resolve',
-          body: {'reference': code},
+          '/api/v1/guardian/subscriptions/external/select',
+          body: {'candidateId': candidate['candidateId']},
         ),
       );
       if (!mounted) return;
@@ -152,19 +174,13 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
         PlanPicker(
           auth: widget.auth,
           environment: widget.environment,
-          childName: d['playerDisplayName'],
-          reference: code,
+          childName: textOf(d['playerDisplayName']),
+          reference: textOf(d['reference']),
           plans: rows(d['plans']),
         ),
       );
     } on ApiFailure catch (e) {
-      if (mounted) {
-        setState(
-          () => error = e.status == 404
-              ? 'كود التجديد غير صالح أو منتهي.'
-              : e.message,
-        );
-      }
+      if (mounted) setState(() => error = e.message);
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -174,23 +190,37 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
   Widget build(BuildContext context) => GuardianPage(
     title: 'تجديد اشتراك لغيره',
     child: gList([
-      const Heading('هدية تدعم رحلة لاعب'),
+      const Heading('ابحث عن اللاعب'),
       const Text(
-        'اطلب كود التجديد الخاص من ولي الأمر أو الأكاديمية. لا يوجد بحث عام بأسماء الأطفال، والدفع لا يتيح الوصول إلى الملف.',
+        'اكتب اسم اللاعب واختر الرياضة الصحيحة. تظهر نتائج الأكاديمية الحالية فقط، والدفع لا يتيح الوصول إلى ملف اللاعب.',
       ),
       const SizedBox(height: 24),
       TextField(
-        controller: reference,
+        controller: name,
         enabled: !busy,
-        textDirection: TextDirection.ltr,
-        decoration: const InputDecoration(labelText: 'كود التجديد'),
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => search(),
+        decoration: const InputDecoration(
+          labelText: 'اسم اللاعب',
+          prefixIcon: Icon(Icons.search),
+        ),
       ),
       if (error != null) Text(error!),
       const SizedBox(height: 16),
       FilledButton(
-        onPressed: busy ? null : resolve,
-        child: Text(busy ? 'جارٍ التحقق…' : 'التحقق من الكود'),
+        onPressed: busy ? null : search,
+        child: Text(busy ? 'جارٍ البحث…' : 'بحث'),
       ),
+      if (!busy && results.isEmpty && name.text.trim().length >= 3)
+        const EmptyMessage('لا توجد نتائج مطابقة داخل الأكاديمية.'),
+      for (final candidate in results)
+        GLink(
+          textOf(candidate['playerDisplayName']),
+          Icons.sports_soccer,
+          () => select(candidate),
+          subtitle:
+              '${textOf(candidate['sport'])} · ${textOf(candidate['branch'])} · ${textOf(candidate['group'])}',
+        ),
     ]),
   );
 }

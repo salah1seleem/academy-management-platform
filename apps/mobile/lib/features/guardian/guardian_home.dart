@@ -6,6 +6,7 @@ import 'guardian_ui.dart';
 import 'guardian_profile.dart';
 import 'guardian_payments.dart';
 import 'enrollment_requests.dart';
+import 'guardian_content.dart';
 
 class GuardianHome extends StatelessWidget {
   final AuthController auth;
@@ -27,36 +28,38 @@ class GuardianHome extends StatelessWidget {
         icon: const Icon(Icons.person_outline, color: AcademyTheme.gold),
       ),
     ],
-    bottom: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        action(
-          'اشتراك جديد',
-          Icons.person_add_alt,
-          () => openPage(
+    bottom: NavigationBar(
+      selectedIndex: 0,
+      onDestinationSelected: (index) {
+        if (index == 1) {
+          openPage(
             context,
-            EnrollmentForm(auth: auth, environment: environment),
-          ),
-          primary: true,
-        ),
-        const SizedBox(width: 8),
-        action(
-          'تجديد الاشتراك',
-          Icons.autorenew,
-          () => openPage(
+            GuardianChildrenHub(auth: auth, environment: environment),
+          );
+        } else if (index == 2) {
+          openPage(
             context,
-            RenewalPicker(auth: auth, environment: environment),
-          ),
+            GuardianTrainingHub(auth: auth, environment: environment),
+          );
+        } else if (index == 3) {
+          openPage(context, accountPage);
+        }
+      },
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: 'الرئيسية',
         ),
-        const SizedBox(width: 8),
-        action(
-          'تجديد اشتراك لغيره',
-          Icons.card_giftcard,
-          () => openPage(
-            context,
-            ExternalRenewal(auth: auth, environment: environment),
-          ),
+        NavigationDestination(
+          icon: Icon(Icons.family_restroom_outlined),
+          label: 'الأبناء',
         ),
+        NavigationDestination(
+          icon: Icon(Icons.event_available_outlined),
+          label: 'التدريب',
+        ),
+        NavigationDestination(icon: Icon(Icons.person_outline), label: 'حسابي'),
       ],
     ),
     child: RemoteBody(
@@ -77,6 +80,39 @@ class GuardianHome extends StatelessWidget {
           const Text(
             'رحلة أبنائك الرياضية، خطوة بخطوة',
             style: TextStyle(color: Colors.white60),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              action(
+                'اشتراك جديد',
+                Icons.person_add_alt,
+                () => openPage(
+                  context,
+                  EnrollmentForm(auth: auth, environment: environment),
+                ),
+                primary: true,
+              ),
+              const SizedBox(width: 8),
+              action(
+                'تجديد الاشتراك',
+                Icons.autorenew,
+                () => openPage(
+                  context,
+                  RenewalPicker(auth: auth, environment: environment),
+                ),
+              ),
+              const SizedBox(width: 8),
+              action(
+                'تجديد اشتراك لغيره',
+                Icons.card_giftcard,
+                () => openPage(
+                  context,
+                  ExternalRenewal(auth: auth, environment: environment),
+                ),
+              ),
+            ],
           ),
           const Heading('أبنائي'),
           if (children.isEmpty)
@@ -140,11 +176,23 @@ class GuardianHome extends StatelessWidget {
                 ],
               ),
             ),
+          const Heading('غذاء اليوم'),
+          for (final child in children)
+            TodayNutritionCard(
+              auth: auth,
+              playerId: textOf(child['id']),
+              playerName: textOf(child['arabicName']),
+              today: textOf(home['today']),
+              onTap: () => openPage(
+                context,
+                NutritionLibrary(
+                  auth: auth,
+                  playerId: textOf(child['id']),
+                  today: textOf(home['today']),
+                ),
+              ),
+            ),
           const Heading('منتجات الرياضة'),
-          const Text(
-            'كتالوج للعرض فقط · بدون طلبات شراء',
-            style: TextStyle(fontSize: 12, color: Colors.white60),
-          ),
           CatalogSections(auth: auth),
           GLink(
             'طلبات الاشتراك',
@@ -176,7 +224,7 @@ class GuardianHome extends StatelessWidget {
         onTap: tap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 84),
+          constraints: const BoxConstraints(minHeight: 78),
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
           decoration: BoxDecoration(
             color: primary ? AcademyTheme.red : AcademyTheme.card,
@@ -203,6 +251,91 @@ class GuardianHome extends StatelessWidget {
           ),
         ),
       ),
+    ),
+  );
+}
+
+class GuardianChildrenHub extends StatelessWidget {
+  final AuthController auth;
+  final String environment;
+  const GuardianChildrenHub({
+    super.key,
+    required this.auth,
+    required this.environment,
+  });
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: 'الأبناء',
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/guardian/home',
+      builder: (context, value) {
+        final home = obj(value);
+        final children = rows(home['children']);
+        return gList([
+          const Heading('ملفات الأبناء'),
+          if (children.isEmpty)
+            const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
+          for (final child in children)
+            GLink(
+              textOf(child['arabicName']),
+              Icons.sports_soccer,
+              () => openPage(
+                context,
+                ChildProfile(
+                  auth: auth,
+                  environment: environment,
+                  playerId: textOf(child['id']),
+                  today: textOf(home['today']),
+                ),
+              ),
+              subtitle: rows(child['sports'])
+                  .map((x) => textOf(x['sport']))
+                  .join(' · '),
+            ),
+        ]);
+      },
+    ),
+  );
+}
+
+class GuardianTrainingHub extends StatelessWidget {
+  final AuthController auth;
+  final String environment;
+  const GuardianTrainingHub({
+    super.key,
+    required this.auth,
+    required this.environment,
+  });
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: 'التدريب والحضور',
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/guardian/home',
+      builder: (context, value) {
+        final home = obj(value);
+        final children = rows(home['children']);
+        return gList([
+          const Text('اختر اللاعب لعرض مواعيد التدريب والحضور المسجل.'),
+          const SizedBox(height: 12),
+          for (final child in children)
+            GLink(
+              textOf(child['arabicName']),
+              Icons.event_available_outlined,
+              () => openPage(
+                context,
+                ChildProfile(
+                  auth: auth,
+                  environment: environment,
+                  playerId: textOf(child['id']),
+                  today: textOf(home['today']),
+                ),
+              ),
+              subtitle: 'التدريبات · المواعيد · الحضور',
+            ),
+        ]);
+      },
     ),
   );
 }
@@ -250,30 +383,47 @@ class _CatalogSectionsState extends State<CatalogSections> {
             const EmptyMessage('لا توجد منتجات منشورة لرياضات الأبناء.'),
           for (final section in sections) ...[
             Heading(textOf(section['sport'])),
-            for (final item in rows(section['items']))
-              GCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DemoImage(item['imageReference']),
-                    const SizedBox(height: 10),
-                    Text(
-                      textOf(item['arabicName']),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
+            SizedBox(
+              height: 280,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: rows(section['items']).length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final item = rows(section['items'])[index];
+                  return SizedBox(
+                    width: 190,
+                    child: GCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          DemoImage(item['imageReference'], height: 135),
+                          const SizedBox(height: 10),
+                          Text(
+                            textOf(item['arabicName']),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (item['displayPrice'] != null)
+                            Text(
+                              money(item['displayPrice'], item['currency']),
+                              style: const TextStyle(
+                                color: AcademyTheme.gold,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    if (item['arabicDescription'] != null)
-                      Text(item['arabicDescription']),
-                    if (item['displayPrice'] != null)
-                      Text(
-                        money(item['displayPrice'], item['currency']),
-                        style: const TextStyle(color: AcademyTheme.gold),
-                      ),
-                  ],
-                ),
+                  );
+                },
               ),
+            ),
           ],
         ],
       );

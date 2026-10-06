@@ -50,6 +50,8 @@ public static class Slice3Endpoints
         guardian.MapGet("/enrollments", GuardianEnrollments);
         guardian.MapGet("/enrollments/{enrollmentId:guid}/plans", GuardianPlans);
         guardian.MapPost("/renewals", CreateRenewal).AddEndpointFilter<CsrfFilter>();
+        guardian.MapGet("/external/search", SearchExternalBeneficiaries).RequireRateLimiting("external-renewal-search");
+        guardian.MapPost("/external/select", SelectExternalBeneficiary).AddEndpointFilter<CsrfFilter>();
         guardian.MapPost("/external/resolve", ResolveExternalBeneficiary).AddEndpointFilter<CsrfFilter>();
         guardian.MapPost("/external/renewals", CreateExternalRenewal).AddEndpointFilter<CsrfFilter>();
         guardian.MapGet("/payments/{paymentId:guid}", GuardianPayment);
@@ -145,6 +147,52 @@ public static class Slice3Endpoints
         if (beneficiary is null) return Results.NotFound(new { message = "كود التجديد غير صالح أو منتهي." });
         var plans = await db.SubscriptionPlans.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportId == beneficiary.sportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount }).ToListAsync();
         return Results.Ok(new { beneficiary.playerDisplayName, beneficiary.sport, beneficiary.academyName, plans });
+    }
+
+    private static async Task<IResult> SearchExternalBeneficiaries(string? query, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var user = UserId(principal);
+        var term = query?.Trim();
+        if (string.IsNullOrWhiteSpace(term) || term.Length < 3 || term.Length > 80)
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["query"] = ["اكتب 3 أحرف على الأقل من اسم اللاعب."] });
+
+        var escaped = term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        var ownPlayerIds = db.GuardianPlayerLinks.Where(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.IsActive).Select(x => x.PlayerId);
+        var results = await db.SportEnrollments.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.IsActive && !ownPlayerIds.Contains(x.PlayerId) && EF.Functions.ILike(x.Player.ArabicName, $"%{escaped}%", "\\"))
+            .OrderBy(x => x.Player.ArabicName).ThenBy(x => x.Sport.ArabicName).Take(8)
+            .Select(x => new { candidateId = x.Id, playerDisplayName = x.Player.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName, group = x.TrainingGroup.ArabicName })
+            .ToListAsync();
+        return Results.Ok(new { items = results });
+    }
+
+    private static async Task<IResult> SelectExternalBeneficiary(ExternalCandidateRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var user = UserId(principal);
+        var candidate = await db.SportEnrollments.AsNoTracking()
+            .Where(x => x.AcademyId == t.AcademyId && x.Id == request.CandidateId && x.IsActive && !db.GuardianPlayerLinks.Any(link => link.AcademyId == t.AcademyId && link.Guardian.UserId == user && link.PlayerId == x.PlayerId && link.IsActive))
+            .Select(x => new { x.Id, playerDisplayName = x.Player.ArabicName, sport = x.Sport.ArabicName, x.SportId })
+            .SingleOrDefaultAsync();
+        if (candidate is null) return Results.NotFound();
+
+        var raw = BeneficiaryRenewalCodes.Generate();
+        db.BeneficiaryRenewalReferences.Add(new BeneficiaryRenewalReference
+        {
+            Id = Guid.NewGuid(),
+            AcademyId = t.AcademyId,
+            SportEnrollmentId = candidate.Id,
+            CodeHash = BeneficiaryRenewalCodes.Hash(raw),
+            CodeHint = BeneficiaryRenewalCodes.Hint(raw),
+            ExpiresAtUtc = clock.UtcNow.AddMinutes(15),
+            GeneratedByUserId = user,
+            CreatedAtUtc = clock.UtcNow,
+            UpdatedAtUtc = clock.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var plans = await db.SubscriptionPlans.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportId == candidate.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount }).ToListAsync();
+        return Results.Ok(new { reference = raw, candidate.playerDisplayName, candidate.sport, academyName = t.AcademyName, plans });
     }
 
     private static async Task<IResult> CreateExternalRenewal(ExternalRenewalRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, RenewalCreationService renewals, ISubscriptionClock clock)
@@ -370,3 +418,4 @@ public sealed record RenewalCreateRequest(Guid SportEnrollmentId, Guid Subscript
 public sealed record SimulationRequest(string Outcome);
 public sealed record ExternalReferenceRequest(string Reference);
 public sealed record ExternalRenewalRequest(string Reference, Guid SubscriptionPlanId);
+public sealed record ExternalCandidateRequest(Guid CandidateId);

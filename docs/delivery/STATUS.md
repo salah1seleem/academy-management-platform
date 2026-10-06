@@ -1,6 +1,17 @@
 # Status
 
-تاريخ التحديث: 2026-10-04. الفرع الحالي: `codex/15-native-mobile-app`، أساسه الكامل `a9624dc537f121bd1732ab4c0f692ea753d70724` من `codex/14-slice8d-demo-closure`.
+تاريخ التحديث: 2026-10-06. الفرع الحالي: `codex/16-unified-native-experience`، أساسه `086a52f4eb409b55c9d36c6846a499c71e61312c` من `codex/15-native-mobile-app`.
+
+## تصحيح Guardian والهوية الموحدة — منفذ جزئيًا، بوابة التجارة مفتوحة
+
+- توحد Flutter على theme داكن عربي واحد للـGuardian وCoach وOwner وAdmin/login. أعيد ترتيب Guardian Home: الإجراءات الثلاثة، بطاقات الأبناء، اقتراح غذاء اليوم لكل طفل، منتجات أفقية، وbottom navigation للرئيسية/الأبناء/التدريب/الحساب.
+- جُمعت صورة اللاعب والـoverall والرادار الخادمي في Hero التقرير، ثم الحقائق وكل المعايير التفصيلية. لم تُضف معادلة Flutter؛ محاور `EvaluationReportCalculator` وmissing-value rules القائمة هي المصدر.
+- حُذفت العبارتان المطلوبتان من واجهتي التغذية والمنتجات. صغرت اقتراحات اليوم، ورفعت tabs الإفطار/الغداء/العشاء. التغذية بقيت معلومات بلا تجارة أو ادعاء علاجي.
+- أصبح التجديد للغير بحثًا بالاسم داخل tenant مع حد أدنى 3 أحرف، 8 نتائج كحد أقصى، واستبعاد أطفال الحساب، وrate limit. اختيار النتيجة يولد reference عشوائيًا صالحًا 15 دقيقة؛ التجديد لا ينشئ `GuardianPlayerLink` ولا يمنح profile access.
+- التحقق المنفذ: API وIntegration-test projects يبنيان بـ0 warnings/errors؛ `flutter analyze` بلا ملاحظات؛ Flutter **33/33 PASS**؛ `git diff --check` سليم. اختبارات `ExternalRenewalTests` لم تُشغّل فعليًا لأن `.env` يشير إلى PostgreSQL على `127.0.0.1:5433` وهو غير عامل؛ المحاولة توقفت عند `Connection refused` ولم تستخدم قاعدة Demo على 5432.
+- غير منفذ عمدًا: شراء/دفع Production للمنتجات، order/inventory/delivery/refund، أو دفع طلب تسجيل طفل قبل اعتماد المجموعة. هذه تتطلب حسم OD-008/OD-006 ومزود الدفع وأسراره؛ لم يُنشأ checkout وهمي ولم تُخلط المنتجات مع `SubscriptionPlan`.
+
+التصحيح مسجل في [GUARDIAN_EXPERIENCE_CHANGE_2026-10-06.md](../requirements/GUARDIAN_EXPERIENCE_CHANGE_2026-10-06.md). لا migration جديدة، ولا تعديل للـbaseline/approval أو `main`.
 
 ## Native Mobile — Phase H مكتملة محليًا؛ READY FOR DEMO REVIEW
 

@@ -64,6 +64,43 @@ public sealed class ExternalRenewalTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Guardian_can_search_same_academy_unlinked_player_by_name_and_select_minimal_candidate()
+    {
+        using var client = await GuardianClient();
+        var search = await client.GetAsync($"/api/v1/guardian/subscriptions/external/search?query={Uri.EscapeDataString("عمر")}");
+        search.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await search.Content.ReadAsStringAsync());
+        var item = json.RootElement.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("playerDisplayName").GetString() == "عمر أحمد حسن");
+        Assert.DoesNotContain("phone", item.GetRawText().ToLowerInvariant());
+        Assert.DoesNotContain("dateofbirth", item.GetRawText().ToLowerInvariant());
+
+        var selected = await Post(client, "/api/v1/guardian/subscriptions/external/select", new { candidateId = item.GetProperty("candidateId").GetGuid() }, await Csrf(client));
+        selected.EnsureSuccessStatusCode();
+        var resolved = await selected.Content.ReadFromJsonAsync<Selected>();
+        Assert.Equal("عمر أحمد حسن", resolved!.PlayerDisplayName);
+        Assert.StartsWith("RNW-", resolved.Reference);
+        Assert.NotEmpty(resolved.Plans);
+    }
+
+    [Fact]
+    public async Task Guardian_name_search_excludes_linked_children_and_other_academies()
+    {
+        using var client = await GuardianClient();
+        var own = await client.GetFromJsonAsync<SearchResults>($"/api/v1/guardian/subscriptions/external/search?query={Uri.EscapeDataString("آدم")}");
+        Assert.Empty(own!.Items);
+        var sameNameAcrossTenants = await client.GetFromJsonAsync<SearchResults>($"/api/v1/guardian/subscriptions/external/search?query={Uri.EscapeDataString("عمر")}");
+        Assert.Single(sameNameAcrossTenants!.Items);
+        Assert.Equal("عمر أحمد حسن", sameNameAcrossTenants.Items[0].PlayerDisplayName);
+    }
+
+    [Fact]
+    public async Task External_name_search_requires_meaningful_query()
+    {
+        using var client = await GuardianClient();
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/v1/guardian/subscriptions/external/search?query=ع")).StatusCode);
+    }
+
+    [Fact]
     public async Task Payer_cannot_access_beneficiary_player_after_payment()
     {
         using var client = await GuardianClient();
@@ -245,6 +282,9 @@ public sealed class ExternalRenewalTests : IAsyncLifetime
     private sealed record Challenge(Guid ChallengeId);
     private sealed record Created(Guid PaymentId);
     private sealed record Resolved(string PlayerDisplayName, string Sport, string AcademyName, List<PlanView> Plans);
+    private sealed record Selected(string Reference, string PlayerDisplayName, string Sport, string AcademyName, List<PlanView> Plans);
+    private sealed record SearchResults(List<SearchCandidate> Items);
+    private sealed record SearchCandidate(Guid CandidateId, string PlayerDisplayName, string Sport, string Branch, string Group);
     private sealed record PlanView(Guid Id, string ArabicName, decimal Price, string Currency);
     private sealed record PaymentState(string Status, Guid? ReceiptId);
     private sealed record ReceiptView(string PlayerNameSnapshot, decimal Amount, string Currency, string ProviderReference);

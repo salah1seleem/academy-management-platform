@@ -55,51 +55,85 @@ class PlayerReport extends StatelessWidget {
             ],
           ),
           GCard(
-            child: Row(
-              children: [
-                PlayerAvatar(textOf(d['player']), size: 74),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        textOf(d['player']),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (d['isFootballReport'] == true)
+            child: LayoutBuilder(
+              builder: (context, constraints) => Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PlayerAvatar(textOf(d['player']), size: 76),
+                        const SizedBox(height: 10),
                         Text(
-                          textOf(d['footballPosition']),
-                          style: const TextStyle(color: Colors.greenAccent),
+                          textOf(d['player']),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      Text(
-                        textOf(d['overallScore']),
-                        style: const TextStyle(
-                          fontSize: 38,
-                          fontWeight: FontWeight.bold,
+                        if (d['isFootballReport'] == true)
+                          Text(
+                            textOf(d['footballPosition']),
+                            style: const TextStyle(color: Colors.greenAccent),
+                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              textOf(d['overallScore']),
+                              style: const TextStyle(
+                                fontSize: 42,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 4, right: 6),
+                              child: Text(
+                                'باور اللاعب',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white60,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const Text(
-                        'التقييم العام',
-                        style: TextStyle(color: Colors.white60),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  if (d['isFootballReport'] == true)
+                    SizedBox(
+                      width: constraints.maxWidth * .53,
+                      child: RadarChart(rows(d['axes']), height: 190),
+                    ),
+                ],
+              ),
             ),
           ),
           if (d['isFootballReport'] == true) ...[
-            RadarChart(rows(d['axes'])),
             Wrap(
               spacing: 12,
               runSpacing: 8,
               children: [
                 for (final a in rows(d['axes']))
-                  Text('${label(a['axis'])}: ${textOf(a['value'])}'),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AcademyTheme.card,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${label(a['axis'])}: ${textOf(a['value'])}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
               ],
             ),
           ],
@@ -115,28 +149,57 @@ class PlayerReport extends StatelessWidget {
             style: const TextStyle(fontSize: 12, color: Colors.white60),
           ),
           const Heading('المعايير التفصيلية'),
-          for (final c in rows(d['criteria']))
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: Text(textOf(c['name']))),
-                      Text(
-                        textOf(c['score']),
-                        style: TextStyle(
-                          fontSize: 23,
-                          fontWeight: FontWeight.bold,
-                          color: scoreColor(c['score']),
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final c in rows(d['criteria']))
+                  SizedBox(
+                    width: (constraints.maxWidth - 10) / 2,
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 112),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scoreColor(c['score']).withValues(alpha: .09),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: scoreColor(c['score']).withValues(alpha: .18),
                         ),
                       ),
-                    ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            textOf(c['score']),
+                            style: TextStyle(
+                              fontSize: 25,
+                              fontWeight: FontWeight.w900,
+                              color: scoreColor(c['score']),
+                            ),
+                          ),
+                          Text(
+                            textOf(c['name']),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (c['notes'] != null)
+                            Text(
+                              c['notes'],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.white60,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                  if (c['notes'] != null) Text(c['notes']),
-                ],
-              ),
+              ],
             ),
+          ),
           const Heading('ملاحظات المدرب'),
           Text(d['generalNotes'] ?? 'لا توجد ملاحظات منشورة.'),
           Text(
@@ -161,12 +224,13 @@ Color scoreColor(Object? score) => score == null
 
 class RadarChart extends StatelessWidget {
   final List<Json> axes;
-  const RadarChart(this.axes, {super.key});
+  final double height;
+  const RadarChart(this.axes, {super.key, this.height = 240});
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'رسم المحاور الستة؛ القيم موضحة نصيًا أسفله',
     child: SizedBox(
-      height: 240,
+      height: height,
       child: CustomPaint(painter: _RadarPainter(axes)),
     ),
   );

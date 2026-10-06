@@ -62,6 +62,8 @@ String label(Object? value) =>
       'Small': 'صغيرة',
       'Medium': 'متوسطة',
       'Large': 'كبيرة',
+      'Training': 'يوم تدريب',
+      'Rest': 'يوم راحة',
     }[value] ??
     'غير محدد';
 int? ageOn(Object? birth, Object? today) {
@@ -79,38 +81,7 @@ String commandKey() => List.generate(
 Future<T?> openPage<T>(BuildContext context, Widget page) =>
     Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => page));
 
-ThemeData guardianTheme() => ThemeData(
-  brightness: Brightness.dark,
-  useMaterial3: true,
-  fontFamily: 'Cairo',
-  colorScheme: const ColorScheme.dark(
-    primary: AcademyTheme.gold,
-    secondary: AcademyTheme.red,
-    surface: AcademyTheme.card,
-  ),
-  scaffoldBackgroundColor: AcademyTheme.night,
-  appBarTheme: const AppBarTheme(
-    backgroundColor: AcademyTheme.night,
-    centerTitle: true,
-  ),
-  inputDecorationTheme: InputDecorationTheme(
-    filled: true,
-    fillColor: AcademyTheme.card,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-  ),
-  filledButtonTheme: FilledButtonThemeData(
-    style: FilledButton.styleFrom(
-      backgroundColor: AcademyTheme.red,
-      foregroundColor: Colors.white,
-      minimumSize: const Size.fromHeight(50),
-    ),
-  ),
-  cardTheme: CardThemeData(
-    color: AcademyTheme.card,
-    elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-  ),
-);
+ThemeData guardianTheme() => AcademyTheme.app();
 
 class GuardianPage extends StatelessWidget {
   final String title;
@@ -133,13 +104,18 @@ class GuardianPage extends StatelessWidget {
       ),
       actions: actions,
     ),
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 650),
-          child: child,
+    body: Stack(
+      children: [
+        const Positioned.fill(child: _AcademyBackdrop()),
+        SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 650),
+              child: child,
+            ),
+          ),
         ),
-      ),
+      ],
     ),
     bottomNavigationBar: bottom == null
         ? null
@@ -151,6 +127,42 @@ class GuardianPage extends StatelessWidget {
             ),
           ),
   );
+}
+
+class _AcademyBackdrop extends StatelessWidget {
+  const _AcademyBackdrop();
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topRight,
+        end: Alignment.bottomLeft,
+        colors: [Color(0xFF111523), AcademyTheme.night, Color(0xFF090C15)],
+      ),
+    ),
+    child: CustomPaint(painter: _StripePainter()),
+  );
+}
+
+class _StripePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withValues(alpha: .025);
+    for (double y = -size.width; y < size.height + size.width; y += 96) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(0, y)
+          ..lineTo(size.width, y - 72)
+          ..lineTo(size.width, y - 42)
+          ..lineTo(0, y + 30)
+          ..close(),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class GCard extends StatelessWidget {

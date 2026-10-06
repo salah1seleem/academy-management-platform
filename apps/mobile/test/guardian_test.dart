@@ -302,14 +302,28 @@ void main() {
     );
   });
   testWidgets(
-    'External reference uses only opaque resolve, never links or name search',
+    'External renewal searches by name then exchanges selection for an opaque reference',
     (tester) async {
       final calls = <String>[];
-      Object? sent;
+      final sent = <Object?>[];
       final auth = await logged((m, p, b, t) async {
         calls.add(p);
-        sent = b;
-        return {
+        sent.add(b);
+        if (p.contains('/external/search')) {
+          return {
+            'items': [
+              {
+                'candidateId': 'candidate',
+                'playerDisplayName': 'مستفيد',
+                'sport': 'كرة القدم',
+                'branch': 'مدينة نصر',
+                'group': 'براعم',
+              },
+            ],
+          };
+        }
+        return <String, Object?>{
+          'reference': 'opaque-reference',
           'playerDisplayName': 'مستفيد',
           'plans': [plan()],
         };
@@ -317,11 +331,14 @@ void main() {
       await tester.pumpWidget(
         shell(ExternalRenewal(auth: auth, environment: 'Demo')),
       );
-      await tester.enterText(find.byType(TextField), 'opaque-code');
-      await tester.tap(find.text('التحقق من الكود'));
+      await tester.enterText(find.byType(TextField), 'مستفيد');
+      await tester.tap(find.text('بحث'));
       await tester.pumpAndSettle();
-      expect(calls, ['/api/v1/guardian/subscriptions/external/resolve']);
-      expect(sent, {'reference': 'opaque-code'});
+      await tester.tap(find.widgetWithText(ListTile, 'مستفيد'));
+      await tester.pumpAndSettle();
+      expect(calls.first, contains('/external/search?query='));
+      expect(calls.last, '/api/v1/guardian/subscriptions/external/select');
+      expect(sent.last, {'candidateId': 'candidate'});
       expect(find.textContaining('لا يمنحك'), findsOneWidget);
     },
   );

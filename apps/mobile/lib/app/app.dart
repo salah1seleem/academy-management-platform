@@ -8,7 +8,6 @@ import '../core/theme/app_theme.dart';
 import '../core/widgets/app_widgets.dart';
 import '../features/auth/login_page.dart';
 import '../features/guardian/guardian_home.dart';
-import '../features/guardian/guardian_ui.dart';
 import '../features/coach/coach_home.dart';
 import '../features/owner/owner_dashboard.dart';
 
@@ -23,7 +22,7 @@ class AcademyApp extends StatelessWidget {
     locale: const Locale('ar'),
     supportedLocales: const [Locale('ar')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: AcademyTheme.light(),
+    theme: AcademyTheme.app(),
     home: ListenableBuilder(
       listenable: auth,
       builder: (context, _) {
@@ -88,7 +87,7 @@ class _SessionNavigationState extends State<SessionNavigation> {
     final role = widget.auth.session!.selected?.role;
     final guardian = role == 'Guardian';
     return Theme(
-      data: guardian ? guardianTheme() : AcademyTheme.light(),
+      data: AcademyTheme.app(),
       child: NavigatorPopHandler<Object?>(
         onPopWithResult: (result) => navigator.currentState!.pop(result),
         child: Navigator(
