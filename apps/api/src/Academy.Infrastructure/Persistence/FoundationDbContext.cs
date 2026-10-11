@@ -446,6 +446,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureTenantEntity<PlayerAttendance>(builder, "PlayerAttendances");
         builder.Entity<PlayerAttendance>(entity =>
         {
+            entity.ToTable(t => t.HasCheckConstraint("CK_PlayerAttendance_States", "\"Status\" IN ('NotRecorded','Present','Absent','Late','Excused')"));
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.Notes).HasMaxLength(500);
             entity.HasIndex(x => new { x.AcademyId, x.TrainingSessionId, x.SportEnrollmentId }).IsUnique();
@@ -457,6 +458,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureTenantEntity<StaffAttendance>(builder, "StaffAttendances");
         builder.Entity<StaffAttendance>(entity =>
         {
+            entity.ToTable(t => t.HasCheckConstraint("CK_StaffAttendance_States", "\"Status\" IN ('NotRecorded','Present','Absent','Late','Excused')"));
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(x => x.Notes).HasMaxLength(500);
             entity.HasIndex(x => new { x.AcademyId, x.TrainingSessionId, x.AcademyMembershipId }).IsUnique();

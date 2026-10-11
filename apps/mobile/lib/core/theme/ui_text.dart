@@ -303,6 +303,8 @@ const _english = <String, String>{
   'مؤكد': 'Confirmed',
   'فشل الدفع': 'Payment failed',
   'حاضر': 'Present',
+  'متأخر': 'Late',
+  'معتذر': 'Excused',
   'غائب': 'Absent',
   'لم يُسجل': 'Not recorded',
   'بدون اشتراك': 'No subscription',

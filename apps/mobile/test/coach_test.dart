@@ -72,6 +72,7 @@ void main() {
               'arabicName': 'آدم',
               'playerCode': 'DEMO',
               'attendanceStatus': 'NotRecorded',
+              'version': 9104,
             },
           ],
         };
@@ -121,10 +122,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('يتولى الإداري'), findsOneWidget);
       expect(find.text('حفظ الحضور'), findsNothing);
-      final selector = tester.widget<SegmentedButton<String>>(
-        find.byType(SegmentedButton<String>),
-      );
-      expect(selector.onSelectionChanged, isNull);
+      expect(find.byType(ChoiceChip), findsNothing);
       expect(writes, 0);
       auth.dispose();
     });
@@ -184,43 +182,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Coach attendance supports three states and correction save', (
-    tester,
-  ) async {
-    Object? sent;
-    final auth = await coach((m, p, b, t) async {
-      if (m == 'PUT') {
-        sent = b;
-        return {'items': []};
-      }
-      return {
-        'canManageAttendance': true,
-        'session': {
-          'group': 'براعم',
-          'sessionDate': '2026-09-28',
-          'startTime': '15:00',
-        },
-        'players': [
-          {
-            'sportEnrollmentId': 'e1',
-            'arabicName': 'آدم',
-            'playerCode': 'FB-001',
-            'attendanceStatus': 'NotRecorded',
+  testWidgets(
+    'Explicitly authorized attendance supports five states and correction save',
+    (tester) async {
+      Object? sent;
+      final auth = await coach((m, p, b, t) async {
+        if (m == 'PUT') {
+          sent = b;
+          return {'items': []};
+        }
+        return {
+          'canManageAttendance': true,
+          'session': {
+            'group': 'براعم',
+            'sessionDate': '2026-09-28',
+            'startTime': '15:00',
           },
-        ],
-      };
-    });
-    await tester.pumpWidget(
-      shell(CoachAttendance(auth: auth, sessionId: 's1')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('حاضر'), findsOneWidget);
-    expect(find.text('غائب'), findsOneWidget);
-    expect(find.text('لم يُسجل'), findsOneWidget);
-    await tester.tap(find.text('حاضر'));
-    await tester.tap(find.text('حفظ الحضور'));
-    await tester.pumpAndSettle();
-    expect(sent.toString(), contains('Present'));
-    expect(find.textContaining('يمكن تصحيحه'), findsOneWidget);
-  });
+          'players': [
+            {
+              'sportEnrollmentId': 'e1',
+              'arabicName': 'آدم',
+              'playerCode': 'FB-001',
+              'attendanceStatus': 'NotRecorded',
+              'version': 9104,
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        shell(CoachAttendance(auth: auth, sessionId: 's1')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('حاضر'), findsOneWidget);
+      expect(find.text('غائب'), findsOneWidget);
+      expect(find.text('متأخر'), findsOneWidget);
+      expect(find.text('معتذر'), findsOneWidget);
+      expect(find.text('لم يُسجل'), findsOneWidget);
+      await tester.tap(find.text('متأخر'));
+      await tester.tap(find.text('حفظ الحضور'));
+      await tester.pumpAndSettle();
+      expect(sent.toString(), contains('Late'));
+      expect(sent.toString(), contains('expectedVersion: 9104'));
+      expect(find.textContaining('يمكن تصحيحه'), findsOneWidget);
+    },
+  );
 }

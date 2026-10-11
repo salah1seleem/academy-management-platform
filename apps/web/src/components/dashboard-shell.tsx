@@ -236,6 +236,7 @@ export function FilterToolbar({ children, resultCount, onReset }: { children: Re
 
 type StatusTone = "success" | "warning" | "danger" | "info" | "neutral";
 const statusMap: Record<string, { label: string; tone: StatusTone }> = {
+  Late: { label: "متأخر", tone: "warning" }, Excused: { label: "معتذر", tone: "info" },
   Active: { label: "فعال", tone: "success" }, Confirmed: { label: "مؤكد", tone: "success" }, Paid: { label: "مدفوع", tone: "success" }, Approved: { label: "مقبول", tone: "success" }, Present: { label: "حاضر", tone: "success" }, Published: { label: "منشور", tone: "success" }, Held: { label: "تمت", tone: "success" }, Reviewed: { label: "بيانات مراجعة", tone: "success" },
   Expiring: { label: "ينتهي قريبًا", tone: "warning" }, Pending: { label: "قيد الانتظار", tone: "warning" }, UnderReview: { label: "قيد المراجعة", tone: "warning" }, Frozen: { label: "مجمد", tone: "warning" }, PaymentInProgress: { label: "جارٍ الدفع", tone: "warning" }, DemoUnreviewed: { label: "بيانات تجريبية غير مراجعة", tone: "warning" },
   Expired: { label: "منتهي", tone: "danger" }, Rejected: { label: "مرفوض", tone: "danger" }, Absent: { label: "غائب", tone: "danger" }, Cancelled: { label: "ملغي", tone: "danger" }, Failed: { label: "فشل", tone: "danger" },

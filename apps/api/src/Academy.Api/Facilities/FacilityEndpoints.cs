@@ -67,7 +67,7 @@ public static class FacilityEndpoints
             orderby b.StartTime, r.Name
             select new { b.Id, b.ResourceId, resource = r.Name, space = s.Name, facility = f.Name, b.Date, b.StartTime, b.EndTime, b.ReservedSeats, r.Capacity, b.Exclusive, b.ServiceKind, b.TrainingGroupId, groupName = g == null ? null : g.ArabicName, coach = c == null ? null : c.User.DisplayName, b.TrainingSessionId,
                 expectedPlayers = b.TrainingGroupId.HasValue ? db.SportEnrollments.Count(e => e.IsActive && e.Status == EnrollmentStatus.Active && (b.TrainingSessionId.HasValue ? FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, b.TrainingSessionId.GetValueOrDefault()) : FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, b.Date) == b.TrainingGroupId)) : 0,
-                present = b.TrainingSessionId.HasValue ? db.PlayerAttendances.Count(p => p.TrainingSessionId == b.TrainingSessionId && p.Status == AttendanceStatus.Present) : 0,
+                present = b.TrainingSessionId.HasValue ? db.PlayerAttendances.Count(p => p.TrainingSessionId == b.TrainingSessionId && (p.Status == AttendanceStatus.Present || p.Status == AttendanceStatus.Late)) : 0,
                 absent = b.TrainingSessionId.HasValue ? db.PlayerAttendances.Count(p => p.TrainingSessionId == b.TrainingSessionId && p.Status == AttendanceStatus.Absent) : 0
             }).ToListAsync();
         return Results.Ok(new { date = day, refreshedAtUtc = time.GetUtcNow(), bookings, closures = await db.ResourceClosures.AsNoTracking().Where(c => c.FromDate <= day && c.ToDate >= day && (!branchId.HasValue || c.BranchId == branchId)).ToListAsync() });

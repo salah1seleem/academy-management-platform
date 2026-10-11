@@ -35,6 +35,8 @@ String label(Object? value) =>
       'Confirmed': 'مؤكد',
       'Failed': 'فشل الدفع',
       'Present': 'حاضر',
+      'Late': 'متأخر',
+      'Excused': 'معتذر',
       'Absent': 'غائب',
       'NotRecorded': 'لم يُسجل',
       'Right': 'اليمنى',

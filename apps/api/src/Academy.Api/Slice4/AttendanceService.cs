@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice4;
 
-public sealed record PlayerAttendanceChange(Guid SportEnrollmentId, AttendanceStatus Status);
-public sealed record StaffAttendanceChange(Guid AcademyMembershipId, AttendanceStatus Status);
+public sealed record PlayerAttendanceChange(Guid SportEnrollmentId, AttendanceStatus Status, uint? ExpectedVersion = null);
+public sealed record StaffAttendanceChange(Guid AcademyMembershipId, AttendanceStatus Status, uint? ExpectedVersion = null);
 public sealed record AttendanceSaveResult(Guid SubjectId, string Status, bool SessionConsumed, int? RemainingSessions, string? Warning);
 
 public sealed partial class AttendanceService(FoundationDbContext db, TimeProvider clock)
@@ -26,12 +26,13 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
         foreach (var player in enrollments.Select(e => e.PlayerId).Distinct().Order()) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Players\" WHERE \"AcademyId\"={academyId} AND \"Id\"={player} FOR UPDATE", ct);
         var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, session.Id) && x.IsActive, ct);
         if (valid != ids.Length) throw new AttendanceNotFoundException();
-        var presentIds = changes.Where(c => c.Status == AttendanceStatus.Present).Select(c => c.SportEnrollmentId).ToArray();
+        var presentIds = changes.Where(c => AttendanceRules.Attended(c.Status)).Select(c => c.SportEnrollmentId).ToArray();
         if (await db.CompensationGrants.AnyAsync(g => g.AcademyId == academyId && presentIds.Contains(g.SportEnrollmentId) && g.SourceSessionId == sessionId, ct)) throw new AttendanceConflictException("الحصة الأصلية لها تعويض معتمد؛ لا نثبت حضورًا وخدمة تعويضية لنفس الواقعة.");
         var results = new List<AttendanceSaveResult>();
         foreach (var change in changes.OrderBy(x => x.SportEnrollmentId))
         {
             var attendance = await db.PlayerAttendances.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.TrainingSessionId == sessionId && x.SportEnrollmentId == change.SportEnrollmentId, ct);
+            if (change.ExpectedVersion.HasValue && change.ExpectedVersion != (attendance?.Version ?? 0) && change.Status != attendance?.Status) throw new AttendanceConflictException("تغير حضور أحد اللاعبين منذ آخر مزامنة؛ أعد تحميل الكشف وراجع الحالة قبل الحفظ. لم يُحفظ أي تغيير من هذه الدفعة.");
             var previous = attendance?.Status ?? AttendanceStatus.NotRecorded;
             if (attendance is null)
             {
@@ -39,17 +40,17 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
                 db.PlayerAttendances.Add(attendance);
             }
             int? remaining = null; string? warning = null; var consumed = attendance.ConsumedSubscriptionPeriodId is not null;
-            if (previous == AttendanceStatus.Present && change.Status != AttendanceStatus.Present) await RestoreCompensation(attendance, actorId, ct);
-            if (previous == AttendanceStatus.Present && change.Status != AttendanceStatus.Present && attendance.ConsumedSubscriptionPeriodId is Guid consumedPeriod)
+            if (AttendanceRules.Attended(previous) && !AttendanceRules.Attended(change.Status)) await RestoreCompensation(attendance, actorId, ct);
+            if (AttendanceRules.Attended(previous) && !AttendanceRules.Attended(change.Status) && attendance.ConsumedSubscriptionPeriodId is Guid consumedPeriod)
             {
                 remaining = await RestoreAsync(attendance, consumedPeriod, actorId, ct); consumed = false;
             }
-            if (previous != AttendanceStatus.Present && change.Status == AttendanceStatus.Present)
+            if (!AttendanceRules.Attended(previous) && AttendanceRules.Attended(change.Status))
             {
                 if (await ConsumeCompensation(attendance, session.SessionDate, actorId, ct)) warning = "حضور بتعويض معتمد؛ لا خصم من رصيد الاشتراك الأصلي.";
                 else { var effect = await ConsumeAsync(attendance, session.SessionDate, actorId, ct); consumed = effect.consumed; remaining = effect.remaining; warning = effect.warning; }
             }
-            attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow();
+            if (previous != change.Status || db.Entry(attendance).State == EntityState.Added) { attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow(); }
             results.Add(new AttendanceSaveResult(change.SportEnrollmentId, change.Status.ToString(), consumed, remaining, warning));
         }
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return results;
@@ -71,12 +72,13 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
         foreach (var change in changes.OrderBy(x => x.AcademyMembershipId))
         {
             var attendance = await db.StaffAttendances.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.TrainingSessionId == sessionId && x.AcademyMembershipId == change.AcademyMembershipId, ct);
+            if (change.ExpectedVersion.HasValue && change.ExpectedVersion != (attendance?.Version ?? 0) && change.Status != attendance?.Status) throw new AttendanceConflictException("تغير حضور الجهاز الفني منذ آخر مزامنة؛ أعد تحميل الكشف وراجع الحالة. لم يُحفظ أي تغيير من هذه الدفعة.");
             if (attendance is null)
             {
                 attendance = new StaffAttendance { Id = Guid.NewGuid(), AcademyId = academyId, TrainingSessionId = sessionId, TrainingGroupId = session.TrainingGroupId, AcademyMembershipId = change.AcademyMembershipId, CreatedAtUtc = clock.GetUtcNow() };
                 db.StaffAttendances.Add(attendance);
             }
-            attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow();
+            if (attendance.Status != change.Status || db.Entry(attendance).State == EntityState.Added) { attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow(); }
             output.Add(new AttendanceSaveResult(change.AcademyMembershipId, change.Status.ToString(), false, null, null));
         }
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return output;

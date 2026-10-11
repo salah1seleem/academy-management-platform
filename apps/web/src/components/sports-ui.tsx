@@ -45,5 +45,6 @@ export function ProgressTrack({ value, total, label }: { value: number; total: n
 
 export function AttendanceChoice({ value, selected, onClick }: { value: string; selected: boolean; onClick: () => void }) {
   const Icon = value === "Present" ? Check : value === "Absent" ? X : CircleHelp;
-  return <button type="button" data-status={value} className={selected ? "selected" : ""} aria-pressed={selected} onClick={onClick}><Icon aria-hidden="true" />{value === "Present" ? "حاضر" : value === "Absent" ? "غائب" : "لم يُسجل"}</button>;
+  const labels: Record<string, string> = { Present: "حاضر", Late: "متأخر", Absent: "غائب", Excused: "معتذر", NotRecorded: "لم يُسجل" };
+  return <button type="button" data-status={value} className={selected ? "selected" : ""} aria-pressed={selected} onClick={onClick}><Icon aria-hidden="true" />{labels[value] ?? "حالة غير معروفة"}</button>;
 }

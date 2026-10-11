@@ -7,7 +7,12 @@ namespace Academy.Infrastructure.Attendance;
 
 public enum TrainingSessionStatus { Scheduled = 1, Held = 2, Cancelled = 3 }
 public enum TrainingSessionSource { RecurringSchedule = 1, Manual = 2 }
-public enum AttendanceStatus { NotRecorded = 1, Present = 2, Absent = 3 }
+public enum AttendanceStatus { NotRecorded = 1, Present = 2, Absent = 3, Late = 4, Excused = 5 }
+public static class AttendanceRules
+{
+    // Late is a delivered session, not a second session or an absent child.
+    public static bool Attended(AttendanceStatus status) => status is AttendanceStatus.Present or AttendanceStatus.Late;
+}
 public enum SessionMovementType { AttendanceConsume = 1, AttendanceRestore = 2 }
 
 public sealed class TrainingSession : TenantEntity

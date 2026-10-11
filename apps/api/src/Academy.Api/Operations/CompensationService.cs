@@ -37,11 +37,11 @@ public sealed partial class GroupPlacementService
         if (s.SessionDate > today) conflicts.Add("اعتماد التعويض بعد واقعة اليوم أو الماضي فقط.");
         if (!await db.SportEnrollments.Where(e => e.Id == enrollment).Select(e => FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)).SingleAsync()) conflicts.Add("الحصة ليست ضمن مواعيد هذا التسجيل.");
         var attendance = await db.PlayerAttendances.AsNoTracking().SingleOrDefaultAsync(a => a.SportEnrollmentId == enrollment && a.TrainingSessionId == s.Id);
-        if (attendance?.Status == AttendanceStatus.Present || attendance?.ConsumedSubscriptionPeriodId is not null) conflicts.Add("الحصة لها حضور أو استهلاك قائم؛ صحح السجل المعني أولًا.");
+        if (attendance is not null && AttendanceRules.Attended(attendance.Status) || attendance?.ConsumedSubscriptionPeriodId is not null) conflicts.Add("الحصة لها حضور أو استهلاك قائم؛ صحح السجل المعني أولًا.");
         var staff = await db.StaffAttendances.AsNoTracking().Where(a => a.TrainingSessionId == s.Id).OrderBy(a => a.Id).Select(a => new { a.Id, a.Status, a.Version }).ToArrayAsync();
         if (b.Cause == CompensationCause.CancelledSession && s.Status != TrainingSessionStatus.Cancelled) conflicts.Add("سبب الإلغاء يحتاج حصة ملغاة فعليًا، وليس غياب طفل.");
-        if (b.Cause == CompensationCause.CoachAbsent && (!staff.Any(a => a.Status == AttendanceStatus.Absent) || staff.Any(a => a.Status == AttendanceStatus.Present))) conflicts.Add("راجع غياب الجهاز الفني؛ لا تمنح تعويضًا من غياب مدرب مع وجود مدرب حاضر.");
-        if (b.Cause == CompensationCause.ApprovedAbsence && attendance?.Status != AttendanceStatus.Absent) conflicts.Add("التعويض عن غياب معتمد يحتاج واقعة غياب مسجلة للطفل.");
+        if (b.Cause == CompensationCause.CoachAbsent && (!staff.Any(a => a.Status == AttendanceStatus.Absent) || staff.Any(a => AttendanceRules.Attended(a.Status)))) conflicts.Add("راجع غياب الجهاز الفني؛ لا تمنح تعويضًا من غياب مدرب مع وجود مدرب حاضر.");
+        if (b.Cause == CompensationCause.ApprovedAbsence && attendance?.Status is not (AttendanceStatus.Absent or AttendanceStatus.Excused)) conflicts.Add("التعويض عن غياب معتمد يحتاج واقعة غياب أو اعتذار مسجلة للطفل.");
         var periods = await db.SubscriptionPeriods.AsNoTracking().Include(p => p.SubscriptionPlan).Where(p => p.SportEnrollmentId == enrollment && p.IsActive && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= s.SessionDate && (p.EndDate == null || p.EndDate >= s.SessionDate)).OrderBy(p => p.StartDate).ThenBy(p => p.Id).ToArrayAsync();
         var period = periods.FirstOrDefault(p => (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && PlanCatalog.FormatMatches(e.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat));
         if (period is null) conflicts.Add("لا توجد فترة تدريب مؤهلة للحصة الأصلية.");
@@ -111,7 +111,7 @@ public sealed partial class GroupPlacementService
         var slot = await db.TrainingSessions.AsNoTracking().SingleAsync(s => s.Id == row.TrainingSessionId); await LockCompensation(t.AcademyId, row.SportEnrollmentId, [slot]); await db.Entry(row).ReloadAsync();
         if (row.State == CompensationBookingState.Cancelled) return new { row.Id, replayed = true };
         if (row.Version != b.Version) throw new FacilityRejected("تغير الحجز؛ أعد تحميل الملف.");
-        if (await db.CompensationMovements.Where(m => m.BookingId == id).SumAsync(m => (int?)m.Units) is > 0 || await db.PlayerAttendances.AnyAsync(a => a.TrainingSessionId == row.TrainingSessionId && a.SportEnrollmentId == row.SportEnrollmentId && a.Status == AttendanceStatus.Present)) throw new FacilityRejected("الحصة لها حضور قائم؛ صحح الحضور قبل تحرير الحجز.");
+        if (await db.CompensationMovements.Where(m => m.BookingId == id).SumAsync(m => (int?)m.Units) is > 0 || await db.PlayerAttendances.AnyAsync(a => a.TrainingSessionId == row.TrainingSessionId && a.SportEnrollmentId == row.SportEnrollmentId && (a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late))) throw new FacilityRejected("الحصة لها حضور قائم؛ صحح الحضور قبل تحرير الحجز.");
         row.State = CompensationBookingState.Cancelled; row.CancelledByUserId = db.RequestUserId; row.CancelledAtUtc = time.GetUtcNow(); row.UpdatedAtUtc = time.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, replayed = false };
     }
     public async Task<object> CompensationOptions(Guid enrollment)

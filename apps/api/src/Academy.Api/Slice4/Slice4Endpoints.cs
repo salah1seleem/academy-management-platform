@@ -93,7 +93,9 @@ public static class Slice4Endpoints
             coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == academyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
             playerCount = db.SportEnrollments.Count(e => e.AcademyId == academyId && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, x.Id) && e.IsActive),
             recorded = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status != AttendanceStatus.NotRecorded),
-            present = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status == AttendanceStatus.Present),
+            present = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && (a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late)),
+            late = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status == AttendanceStatus.Late),
+            excused = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status == AttendanceStatus.Excused),
             absent = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status == AttendanceStatus.Absent),
             staff = db.StaffGroupAssignments.Where(a => a.AcademyId == academyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).Select(a => new { id = a.AcademyMembershipId, name = a.AcademyMembership.User.DisplayName, attendanceStatus = db.StaffAttendances.Where(s => s.AcademyId == academyId && s.TrainingSessionId == x.Id && s.AcademyMembershipId == a.AcademyMembershipId).Select(s => s.Status.ToString()).FirstOrDefault() ?? "NotRecorded" }).ToList()
         }).ToListAsync();
@@ -143,7 +145,7 @@ public static class Slice4Endpoints
         } catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
     }
 
-    private static async Task<IResult> PlayerRoster(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization)
+    private static async Task<IResult> PlayerRoster(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; var session = await AccessibleSession(id, tenant, principal, db); if (session is null) return Results.NotFound();
         var enrollments = await db.SportEnrollments.AsNoTracking().Include(x => x.Player).Where(x => x.AcademyId == t.AcademyId && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, session.Id) && x.IsActive).OrderBy(x => x.Player.ArabicName).ToListAsync();
@@ -154,11 +156,11 @@ public static class Slice4Endpoints
         var rows = enrollments.Select(e =>
         {
             attendance.TryGetValue(e.Id, out var record); var candidates = periods.Where(x => x.SportEnrollmentId == e.Id && (x.ServiceKindSnapshot ?? x.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && PlanCatalog.FormatMatches(e.RegistrationFormat, x.TrainingFormatSnapshot ?? x.SubscriptionPlan.TrainingFormat)).ToList(); var period = candidates.FirstOrDefault(x => (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || x.RemainingSessions is > 0) ?? candidates.FirstOrDefault(); var type = period?.SubscriptionPlan.PlanType;
-            return new { sportEnrollmentId = e.Id, playerId = e.PlayerId, e.Player.PlayerCode, e.Player.ArabicName, e.Player.PhotoReference, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString(), subscriptionPlan = period?.SubscriptionPlan.ArabicName, subscriptionType = type?.ToString(), remainingSessions = type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined ? period?.RemainingSessions : null, sessionConsumed = record?.ConsumedSubscriptionPeriodId is not null, compensatory = compensation.Contains(e.Id), warning = compensation.Contains(e.Id) ? "حصة تعويضية معتمدة؛ لا خصم من الرصيد الأصلي" : period is null ? "لا يوجد اشتراك مؤهل" : type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined && period.RemainingSessions == 0 ? "الرصيد غير كافٍ" : null };
+            return new { sportEnrollmentId = e.Id, playerId = e.PlayerId, e.Player.PlayerCode, e.Player.ArabicName, e.Player.PhotoReference, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString(), version = record?.Version ?? 0, subscriptionPlan = period?.SubscriptionPlan.ArabicName, subscriptionType = type?.ToString(), remainingSessions = type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined ? period?.RemainingSessions : null, sessionConsumed = record?.ConsumedSubscriptionPeriodId is not null, compensatory = compensation.Contains(e.Id), warning = compensation.Contains(e.Id) ? "حصة تعويضية معتمدة؛ لا خصم من الرصيد الأصلي" : period is null ? "لا يوجد اشتراك مؤهل" : type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined && period.RemainingSessions == 0 ? "الرصيد غير كافٍ" : null };
         });
         var canManageAttendance = (await authorization.AuthorizeAsync(principal, AcademyPermissions.AttendanceManage)).Succeeded;
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
-        return Results.Ok(new { canManageAttendance, canEvaluate, session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
+        return Results.Ok(new { canManageAttendance, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
     }
 
     private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service)
@@ -174,7 +176,9 @@ public static class Slice4Endpoints
         var t = (await tenant.ResolveAsync())!; var session = await AccessibleSession(id, tenant, principal, db); if (session is null) return Results.NotFound(); var user = UserId(principal);
         var query = db.StaffGroupAssignments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == session.TrainingGroupId && x.IsActive && x.AcademyMembership.IsActive);
         if (t.Role == AcademyRole.Coach) query = query.Where(x => x.AcademyMembership.UserId == user);
-        return Results.Ok(await query.OrderBy(x => x.AcademyMembership.User.DisplayName).Select(x => new { academyMembershipId = x.AcademyMembershipId, name = x.AcademyMembership.User.DisplayName, role = x.AcademyMembership.Role.ToString(), attendanceStatus = db.StaffAttendances.Where(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == id && a.AcademyMembershipId == x.AcademyMembershipId).Select(a => a.Status.ToString()).FirstOrDefault() ?? AttendanceStatus.NotRecorded.ToString() }).ToListAsync());
+        var members = await query.OrderBy(x => x.AcademyMembership.User.DisplayName).Select(x => new { x.AcademyMembershipId, name = x.AcademyMembership.User.DisplayName, role = x.AcademyMembership.Role.ToString() }).ToListAsync();
+        var records = await db.StaffAttendances.AsNoTracking().Where(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == id).ToDictionaryAsync(a => a.AcademyMembershipId);
+        return Results.Ok(members.Select(x => { records.TryGetValue(x.AcademyMembershipId, out var record); return new { academyMembershipId = x.AcademyMembershipId, x.name, x.role, version = record?.Version ?? 0, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString() }; }));
     }
 
     private static async Task<IResult> SaveStaffAttendance(Guid id, StaffAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service)

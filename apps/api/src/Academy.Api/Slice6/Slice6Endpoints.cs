@@ -252,7 +252,7 @@ public static class Slice6Endpoints
         var attendance = await db.PlayerAttendances.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == playerId && x.Status != AttendanceStatus.NotRecorded && x.TrainingSession.Status != TrainingSessionStatus.Cancelled).OrderByDescending(x => x.TrainingSession.SessionDate).Take(20).Select(x => new { x.Id, x.TrainingSession.SessionDate, sport = x.TrainingSession.Sport.ArabicName, group = x.TrainingSession.TrainingGroup.ArabicName, status = x.Status.ToString() }).ToListAsync();
         var evaluations = await db.PlayerEvaluations.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == playerId && x.Status == EvaluationStatus.Published).OrderByDescending(x => x.EvaluationDate).Select(x => new { x.Id, sport = x.Sport.ArabicName, x.EvaluationDate, x.ReportingPeriod }).ToListAsync();
         var compensations = await Academy.Api.Operations.CompensationReadModel.Load(db, t.AcademyId, enrollments.Select(e => e.Id).ToArray());
-        return Results.Ok(new { player, enrollments, compensations, attendance, attendanceSummary = new { present = attendance.Count(x => x.status == "Present"), absent = attendance.Count(x => x.status == "Absent") }, evaluations });
+        return Results.Ok(new { player, enrollments, compensations, attendance, attendanceSummary = new { present = attendance.Count(x => x.status is "Present" or "Late"), late = attendance.Count(x => x.status == "Late"), excused = attendance.Count(x => x.status == "Excused"), absent = attendance.Count(x => x.status == "Absent") }, evaluations });
     }
 
     private static Guid UserId(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);

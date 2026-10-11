@@ -31,7 +31,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
     load();
   }
 
-  Future<void> load() async {
+  Future<bool> load() async {
     try {
       final next = obj(
         await widget.auth.request(
@@ -51,13 +51,15 @@ class _CoachAttendanceState extends State<CoachAttendance> {
           error = null;
         });
       }
+      return true;
     } on ApiFailure catch (e) {
       if (mounted) setState(() => error = e.message);
+      return false;
     }
   }
 
   Future<void> save() async {
-    if (data?['canManageAttendance'] != true) return;
+    if (data?['canManageAttendance'] != true || busy) return;
     setState(() {
       busy = true;
       error = null;
@@ -69,14 +71,22 @@ class _CoachAttendanceState extends State<CoachAttendance> {
         '/api/v1/attendance/sessions/${widget.sessionId}/players',
         body: {
           'items': statuses.entries
-              .map((e) => {'sportEnrollmentId': e.key, 'status': e.value})
+              .map(
+                (e) => {
+                  'sportEnrollmentId': e.key,
+                  'status': e.value,
+                  'expectedVersion': rows(data!['players']).firstWhere(
+                    (p) => textOf(p['sportEnrollmentId']) == e.key,
+                  )['version'],
+                },
+              )
               .toList(),
         },
       );
-      if (mounted) {
+      final synchronized = await load();
+      if (mounted && synchronized) {
         setState(() => message = 'تم حفظ الحضور ويمكن تصحيحه بأمان.');
       }
-      await load();
     } on ApiFailure catch (e) {
       if (mounted) setState(() => error = e.message);
     } finally {
@@ -101,6 +111,8 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                   '${obj(data!['session'])['group']} · ${day(obj(data!['session'])['sessionDate'])} · ${obj(data!['session'])['startTime']}',
                 ),
               ),
+              if (data!['lastSynchronizedAtUtc'] != null)
+                UiText('آخر مزامنة مؤكدة: ${data!['lastSynchronizedAtUtc']}'),
               if (message != null)
                 UiText(message!, style: const TextStyle(color: Colors.green)),
               if (error != null) ErrorNotice(error!),
@@ -141,35 +153,39 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                               ),
                             ),
                           ),
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(
-                              value: 'Present',
-                              label: UiText('حاضر'),
-                            ),
-                            ButtonSegment(
-                              value: 'Absent',
-                              label: UiText('غائب'),
-                            ),
-                            ButtonSegment(
-                              value: 'NotRecorded',
-                              label: UiText('لم يُسجل'),
-                            ),
-                          ],
-                          selected: {
-                            statuses[textOf(player['sportEnrollmentId'])]!,
-                          },
-                          onSelectionChanged:
-                              data!['canManageAttendance'] != true
-                              ? null
-                              : (v) => setState(
-                                  () =>
+                        if (data!['canManageAttendance'] != true)
+                          Chip(label: UiText(label(player['attendanceStatus'])))
+                        else
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final state in const {
+                                'Present': 'حاضر',
+                                'Late': 'متأخر',
+                                'Absent': 'غائب',
+                                'Excused': 'معتذر',
+                                'NotRecorded': 'لم يُسجل',
+                              }.entries)
+                                ChoiceChip(
+                                  label: UiText(state.value),
+                                  selected:
                                       statuses[textOf(
-                                            player['sportEnrollmentId'],
-                                          )] =
-                                          v.single,
+                                        player['sportEnrollmentId'],
+                                      )] ==
+                                      state.key,
+                                  onSelected: busy
+                                      ? null
+                                      : (_) => setState(
+                                          () =>
+                                              statuses[textOf(
+                                                    player['sportEnrollmentId'],
+                                                  )] =
+                                                  state.key,
+                                        ),
                                 ),
-                        ),
+                            ],
+                          ),
                         if (player['warning'] != null)
                           UiText(
                             textOf(player['warning']),

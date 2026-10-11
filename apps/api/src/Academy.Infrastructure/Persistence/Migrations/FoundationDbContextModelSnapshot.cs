@@ -83,7 +83,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingSessionId", "TrainingGroupId");
 
-                    b.ToTable("PlayerAttendances", (string)null);
+                    b.ToTable("PlayerAttendances", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlayerAttendance_States", "\"Status\" IN ('NotRecorded','Present','Absent','Late','Excused')");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Attendance.StaffAttendance", b =>
@@ -144,7 +147,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingSessionId", "TrainingGroupId");
 
-                    b.ToTable("StaffAttendances", (string)null);
+                    b.ToTable("StaffAttendances", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_StaffAttendance_States", "\"Status\" IN ('NotRecorded','Present','Absent','Late','Excused')");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Attendance.SubscriptionSessionMovement", b =>
