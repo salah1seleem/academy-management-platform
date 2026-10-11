@@ -206,6 +206,12 @@ class ProfileRecords extends StatelessWidget {
                         group: textOf(transfer['group']),
                         date: day(transfer['effectiveDate']),
                       ),
+                    for (final move in rows(e['sessionMoves']))
+                      GroupTransferNotice(
+                        group: textOf(move['group']),
+                        date: day(move['date']),
+                        occurrence: true,
+                      ),
                     const Heading('الجلسات القادمة'),
                     if (rows(e['upcoming']).isEmpty)
                       const EmptyMessage('لا توجد جلسات قادمة منشورة.'),

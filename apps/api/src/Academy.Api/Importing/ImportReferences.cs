@@ -25,7 +25,8 @@ public sealed record ImportReferences(Guid AcademyId, string Currency, IReadOnly
         values.AddRange(await db.TrainingGroups.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive && g.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && g.Branch.IsActive && g.Sport.IsActive && g.AgeCategory.IsActive)
             .Select(g => new ImportReference("group", g.Id, g.ArabicName, g.BranchId, g.SportId, g.AgeCategoryId, g.AgeCategory.MinimumBirthYear, g.AgeCategory.MaximumBirthYear, g.Capacity,
                 0, 0, null, false, null)).ToListAsync());
-        var scheduledGroups = await db.EnrollmentGroupTransfers.Where(tr => tr.EffectiveDate >= today).Select(tr => tr.TargetGroupId).Distinct().ToArrayAsync();
+        var scheduledGroups = await db.EnrollmentGroupTransfers.Where(tr => tr.EffectiveDate >= today).Select(tr => tr.TargetGroupId)
+            .Union(db.EnrollmentSessionMoves.Where(m => db.TrainingSessions.Any(s => s.Id == m.TargetSessionId && s.SessionDate >= today)).Select(m => m.TargetGroupId)).Distinct().ToArrayAsync();
         for (var i = 0; i < values.Count; i++)
             if (values[i].Kind == "group") values[i] = values[i] with { Occupied = scheduledGroups.Contains(values[i].Id) ? (await Academy.Api.Operations.DatedGroupRoster.Forecast(db, values[i].Id, today)).Max(x => x.Count) : roster.GetValueOrDefault(values[i].Id) };
         var plans = await db.SubscriptionPlans.TrainingOnly().ForRegistrationFormat(Academy.Infrastructure.People.TrainingRegistrationFormat.Group).AsNoTracking().Include(p => p.BranchPublications).Where(p => p.AcademyId == academy && p.IsActive).OrderBy(p => p.Id).ToListAsync();

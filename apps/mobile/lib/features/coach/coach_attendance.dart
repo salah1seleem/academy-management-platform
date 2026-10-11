@@ -5,6 +5,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
+import 'coach_evaluation.dart';
 
 class CoachAttendance extends StatefulWidget {
   final AuthController auth;
@@ -119,6 +120,27 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         UiText(textOf(player['playerCode'])),
+                        if (data!['canEvaluate'] == true)
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.assessment_outlined),
+                            label: const UiText('تقييم اللاعب'),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => CoachEvaluation(
+                                  auth: widget.auth,
+                                  enrollment: {
+                                    'id': player['sportEnrollmentId'],
+                                    'player': player['arabicName'],
+                                    'group': obj(data!['session'])['group'],
+                                    'sessionId': widget.sessionId,
+                                    'evaluationDate': obj(
+                                      data!['session'],
+                                    )['sessionDate'],
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
                         SegmentedButton<String>(
                           segments: const [
                             ButtonSegment(

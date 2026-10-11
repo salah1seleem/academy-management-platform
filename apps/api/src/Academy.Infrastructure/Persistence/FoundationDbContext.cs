@@ -67,6 +67,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureFacilities(builder);
         ConfigurePlacement(builder);
         ConfigureGroupTransfers(builder);
+        ConfigureSessionMoves(builder);
         ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>

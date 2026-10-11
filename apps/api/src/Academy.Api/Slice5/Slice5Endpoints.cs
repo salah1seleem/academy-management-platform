@@ -107,8 +107,24 @@ public static class Slice5Endpoints
 
     private static async Task<IResult> CreateEvaluation(CreateEvaluationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
-        var t = (await tenant.ResolveAsync())!; var enrollment = await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db, request.EvaluationDate); if (enrollment is null) return Results.NotFound();
-        var datedGroup = await db.SportEnrollments.Where(e => e.Id == enrollment.Id).Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, request.EvaluationDate)).SingleAsync();
+        var t = (await tenant.ResolveAsync())!;
+        // Session context proves actual dated membership, including a one-off replacement.
+        // Without it a coach remains confined to the recurring, date-effective group.
+        Guid? sessionGroup = null;
+        if (request.TrainingSessionId is Guid sessionId)
+        {
+            var user = UserId(principal);
+            sessionGroup = await db.TrainingSessions.Where(s => s.AcademyId == t.AcademyId && s.Id == sessionId && s.SessionDate == request.EvaluationDate && s.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled &&
+                db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.Id == request.SportEnrollmentId && e.IsActive && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)) &&
+                (t.Role != AcademyRole.Coach || db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == s.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive)))
+                .Select(s => (Guid?)s.TrainingGroupId).SingleOrDefaultAsync();
+            if (sessionGroup is null) return Results.NotFound();
+        }
+        var enrollment = request.TrainingSessionId.HasValue
+            ? await db.SportEnrollments.SingleOrDefaultAsync(e => e.AcademyId == t.AcademyId && e.Id == request.SportEnrollmentId && e.IsActive)
+            : await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db, request.EvaluationDate);
+        if (enrollment is null) return Results.NotFound();
+        var datedGroup = sessionGroup ?? await db.SportEnrollments.Where(e => e.Id == enrollment.Id).Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, request.EvaluationDate)).SingleAsync();
         if (datedGroup is not Guid groupId) return Results.Conflict(new { message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
         if (enrollment.GroupAssignedFrom > request.EvaluationDate) return Results.Conflict(new { message = "تاريخ التقييم يسبق إسناد اللاعب للمجموعة." });
         var criteria = await db.EvaluationCriteria.Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).ToListAsync();
@@ -214,7 +230,7 @@ public static class Slice5Endpoints
 
 public sealed record CriterionRequest(Guid SportId, string ArabicName, string? EnglishName, string? Description, int DisplayOrder, bool IsActive, decimal Weight, FootballAxis? FootballAxis, uint Version = 0);
 public sealed record CriterionStatusRequest(bool IsActive, uint Version);
-public sealed record CreateEvaluationRequest(Guid SportEnrollmentId, DateOnly EvaluationDate, string ReportingPeriod, string? GeneralNotes);
+public sealed record CreateEvaluationRequest(Guid SportEnrollmentId, DateOnly EvaluationDate, string ReportingPeriod, string? GeneralNotes, Guid? TrainingSessionId = null);
 public sealed record EvaluationScoreRequest(Guid CriterionId, int? Score, string? Notes);
 public sealed record UpdateEvaluationRequest(string ReportingPeriod, string? GeneralNotes, uint Version, IReadOnlyList<EvaluationScoreRequest> Scores);
 public sealed record PublishEvaluationRequest(uint Version);

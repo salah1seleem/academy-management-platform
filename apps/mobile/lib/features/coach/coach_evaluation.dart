@@ -37,7 +37,11 @@ class _CoachEvaluationState extends State<CoachEvaluation> {
           '/api/v1/evaluations',
           body: {
             'sportEnrollmentId': widget.enrollment['id'],
-            'evaluationDate': DateTime.now().toIso8601String().split('T').first,
+            'evaluationDate':
+                widget.enrollment['evaluationDate'] ??
+                DateTime.now().toIso8601String().split('T').first,
+            if (widget.enrollment['sessionId'] != null)
+              'trainingSessionId': widget.enrollment['sessionId'],
             'reportingPeriod': 'تقييم دوري',
             'generalNotes': null,
           },

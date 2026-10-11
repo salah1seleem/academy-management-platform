@@ -46,6 +46,51 @@ Widget shell(Widget page) => MaterialApp(
 );
 
 void main() {
+  testWidgets(
+    'Replacement roster opens evaluation with the actual session and date, never attendance write',
+    (tester) async {
+      Object? sent;
+      final auth = await coach((m, p, b, t) async {
+        if (p == '/api/v1/evaluations' && m == 'POST') {
+          sent = b;
+          return {'id': 'evaluation'};
+        }
+        if (p == '/api/v1/evaluations/evaluation') {
+          return {'player': 'آدم', 'group': 'الحصة البديلة', 'scores': []};
+        }
+        return {
+          'canManageAttendance': false,
+          'canEvaluate': true,
+          'session': {
+            'group': 'الحصة البديلة',
+            'sessionDate': '2026-11-15',
+            'startTime': '17:00',
+          },
+          'players': [
+            {
+              'sportEnrollmentId': 'e1',
+              'arabicName': 'آدم',
+              'playerCode': 'DEMO',
+              'attendanceStatus': 'NotRecorded',
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        shell(CoachAttendance(auth: auth, sessionId: 'replacement')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('حفظ الحضور'), findsNothing);
+      await tester.tap(find.text('تقييم اللاعب'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('بدء تقييم جديد'));
+      await tester.pumpAndSettle();
+      expect(sent, containsPair('trainingSessionId', 'replacement'));
+      expect(sent, containsPair('evaluationDate', '2026-11-15'));
+      expect(sent, containsPair('sportEnrollmentId', 'e1'));
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final allowed in [false, null]) {
     testWidgets('Coach attendance fails closed when capability is $allowed', (
       tester,

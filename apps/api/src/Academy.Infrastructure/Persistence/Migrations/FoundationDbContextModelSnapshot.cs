@@ -3593,6 +3593,99 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.People.EnrollmentSessionMove", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SourceGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "TargetGroupId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestKey");
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "SourceSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "TargetSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "BranchId", "SportId");
+
+                    b.HasIndex("AcademyId", "SourceSessionId", "SourceGroupId", "BranchId", "SportId");
+
+                    b.HasIndex("AcademyId", "TargetSessionId", "TargetGroupId", "BranchId", "SportId");
+
+                    b.ToTable("EnrollmentSessionMoves", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SessionMove_DifferentSessions", "\"SourceSessionId\" <> \"TargetSessionId\"");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.People.GuardianPlayerLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7687,6 +7780,42 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "TargetGroupId", "BranchId", "SportId")
                         .HasPrincipalKey("AcademyId", "Id", "BranchId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.People.EnrollmentSessionMove", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.SportEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportEnrollmentId", "BranchId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "BranchId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Attendance.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SourceSessionId", "SourceGroupId", "BranchId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingGroupId", "BranchId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Attendance.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TargetSessionId", "TargetGroupId", "BranchId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingGroupId", "BranchId", "SportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

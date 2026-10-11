@@ -4,6 +4,30 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('A replacement session does not imply a recurring group change', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('ar'),
+        supportedLocales: [Locale('ar')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: Scaffold(
+          body: GroupTransferNotice(
+            group: 'مجموعة ب',
+            date: '2026-12-01',
+            occurrence: true,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('حصة بديلة'), findsOneWidget);
+    expect(
+      find.text('هذا الموعد فقط؛ المجموعة الأساسية كما هي.'),
+      findsOneWidget,
+    );
+    expect(find.text('نقل مجموعة مجدول'), findsNothing);
+  });
   testWidgets(
     'Guardian sees the effective date and target without an editable assignment',
     (tester) async {

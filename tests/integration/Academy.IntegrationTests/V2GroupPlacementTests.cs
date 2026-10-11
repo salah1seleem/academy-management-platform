@@ -17,9 +17,9 @@ public sealed partial class V2PlanPublicationTests
 {
     private sealed record PlacementFixture(Guid Branch, Guid OtherBranch, Guid Group, Guid First, Guid Second, Guid Level, Guid Coach, Guid Past, Guid Next);
     private static DateOnly PlacementToday => FacilityDay.AddDays(-20);
-    private async Task<PlacementFixture> PlacementReady(HttpClient owner, int capacity = 2, bool secondPaid = true)
+    private async Task<PlacementFixture> PlacementReady(HttpClient owner, int capacity = 2, bool secondPaid = true, SubscriptionPlanType planType = SubscriptionPlanType.Duration)
     {
-        var f = await Fixture(); var planResponse = await Write(owner, "/api/v1/subscriptions/plans", Body(f.A, "استحقاق تسكين اصطناعي " + Guid.NewGuid().ToString("N")[..8], type: SubscriptionPlanType.Duration) with { DurationDays = 365 }); planResponse.EnsureSuccessStatusCode(); var plan = (await planResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var f = await Fixture(); var planResponse = await Write(owner, "/api/v1/subscriptions/plans", Body(f.A, "استحقاق تسكين اصطناعي " + Guid.NewGuid().ToString("N")[..8], type: planType) with { DurationDays = 365 }); planResponse.EnsureSuccessStatusCode(); var plan = (await planResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var coach = await ScheduleCoach(owner, f.Group); var player = Guid.NewGuid(); var second = Guid.NewGuid(); var past = Guid.NewGuid(); var next = Guid.NewGuid();
         await using (var scope = factory.Services.CreateAsyncScope())
         {

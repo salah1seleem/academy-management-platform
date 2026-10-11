@@ -11,11 +11,11 @@ namespace Academy.IntegrationTests;
 
 internal static class MobileCoachTestSession
 {
-    public static async Task SignInAsync(HttpClient client, IServiceProvider services)
+    public static async Task SignInAsync(HttpClient client, IServiceProvider services, string email = DemoSeed.CoachEmail)
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var user = await db.Users.SingleAsync(x => x.NormalizedEmail == DemoSeed.CoachEmail.ToUpperInvariant());
+        var user = await db.Users.SingleAsync(x => x.NormalizedEmail == email.ToUpperInvariant());
         var membership = await db.AcademyMemberships.SingleAsync(x => x.UserId == user.Id &&
             x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.Coach && x.IsActive);
         var accessToken = MobileAuthenticationHandler.NewToken();

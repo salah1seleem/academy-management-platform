@@ -62,7 +62,9 @@ public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityS
     }
     public async Task<int> CheckRosterSlot(Guid academy, Guid group, DateOnly date, TimeOnly start, TimeOnly end, Guid? session = null, bool checkBookedSeats = true)
     {
-        var roster = db.SportEnrollments.Where(e => e.AcademyId == academy && e.IsActive && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group);
+        var persisted = session.HasValue && await db.TrainingSessions.AnyAsync(s => s.Id == session);
+        var sessionId = session.GetValueOrDefault();
+        var roster = db.SportEnrollments.Where(e => e.AcademyId == academy && e.IsActive && (persisted ? FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, sessionId) : FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group));
         var count = await roster.CountAsync();
         var capacity = await db.TrainingGroups.Where(g => g.Id == group).Select(g => g.Capacity).SingleAsync();
         if (capacity.HasValue && count > capacity.Value) throw new FacilityRejected("عدد أعضاء المجموعة المؤرخ يتجاوز سعتها في هذا اليوم.");
@@ -70,11 +72,12 @@ public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityS
         if (checkBookedSeats && seats.HasValue && count > seats.Value) throw new FacilityRejected("حجز المورد لا يكفي عدد الأعضاء في تاريخ الحصة.");
         var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]).Where(e => e.AcademyId == academy && e.IsActive);
         var allSessions = db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).Where(s => s.AcademyId == academy && s.Id != session && s.TrainingGroupId != group && s.SessionDate == date && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < end && start < s.EndTime);
-        if (await roster.AnyAsync(e => allEnrollments.Any(other => other.PlayerId == e.PlayerId && other.Id != e.Id && allSessions.Any(s => FoundationDbContext.AssignedGroupAt(other.AcademyId, other.Id, date) == s.TrainingGroupId)))) throw new FacilityRejected("أحد اللاعبين لديه حصة أخرى متعارضة في هذا الموعد.");
+        if (await roster.AnyAsync(e => allEnrollments.Any(other => other.PlayerId == e.PlayerId && other.IsActive && allSessions.Any(s => FoundationDbContext.IsSessionAssigned(other.AcademyId, other.Id, s.Id))))) throw new FacilityRejected("أحد اللاعبين لديه حصة أخرى متعارضة في هذا الموعد.");
         return count;
     }
     public async Task CancelBookings(TrainingSession session, Guid actor)
     {
+        if (await db.EnrollmentSessionMoves.AnyAsync(m => m.SourceSessionId == session.Id || m.TargetSessionId == session.Id)) throw new FacilityRejected("الحصة مرتبطة بنقل لاعب معتمد؛ راجع نقل الحصص قبل الإلغاء.");
         var rows = await db.ResourceBookings.Where(x => x.TrainingSessionId == session.Id && x.State == ResourceBookingState.Reserved).ToListAsync();
         if (rows.Count == 0) return;
         await facilities.Authority("Edit");

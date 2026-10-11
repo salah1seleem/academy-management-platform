@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { monthToDate } from "../lib/date-range";
 import { csrfRequest } from "./dashboard-api";
+import { PlayerSessionChange } from "./player-session-change";
 type Group = { id: string; arabicName: string; sportId: string; branchId: string; registrationFormat?: string };
 type Slot = { id: string; sessionDate: string; startTime: string; endTime: string };
 type Preview = { fingerprint: string; effectiveDate: string; sourceGroup: string; targetGroup: string; conflicts: string[]; removedSessions: Slot[]; addedSessions: Slot[]; effect: string };
@@ -28,7 +29,7 @@ export function PlayerGroupChange({ enrollmentId, groupId, onSaved }: { enrollme
     try { await csrfRequest(`/api/v1/people/enrollments/${enrollmentId}/group-transfer`, "POST", { groupId: selected, effectiveDate: date, fingerprint: preview.fingerprint }, { "Idempotency-Key": key }); setMessage("تم حفظ نقل المجموعة حسب التاريخ المحدد."); if (onSaved) onSaved(); else window.location.reload(); }
     catch (c) { setPreview(undefined); setMessage(c instanceof Error ? c.message : "تعذر حفظ النقل؛ أعد المعاينة."); } finally { setBusy(false); }
   }
-  return <details className="placement-level"><summary>تعديل المجموعة</summary><div className="form-shell">
+  return <><details className="placement-level"><summary>تعديل المجموعة</summary><div className="form-shell">
     <div className="form-grid"><label>المجموعة الجديدة<select aria-label="تعديل المجموعة" disabled={busy} value={selected} onChange={e => { setSelected(e.target.value); invalidate(); }}>{groups.map(g => <option value={g.id} key={g.id}>{g.arabicName}</option>)}</select></label>
       <label>بدء النقل<input aria-label="بدء النقل" type="date" min={monthToDate().to} value={date} disabled={busy} onChange={e => { setDate(e.target.value); invalidate(); }} /></label></div>
     <p className="muted">كل الحصص من بداية اليوم المحدد. يبقى الماضي محفوظًا، ولا ينشئ النقل تحصيلًا أو حضورًا أو يخصم رصيدًا.</p>
@@ -38,5 +39,5 @@ export function PlayerGroupChange({ enrollmentId, groupId, onSaved }: { enrollme
       <details><summary>المواعيد الجديدة</summary>{preview.addedSessions.map(s => <p key={s.id}>{s.sessionDate} · {s.startTime.slice(0, 5)} — {s.endTime.slice(0, 5)}</p>)}</details>
       <button disabled={busy || preview.conflicts.length > 0} onClick={() => void move()}>تأكيد نقل المجموعة</button></section>}
     {message && <p role="status">{message}</p>}
-  </div></details>;
+  </div></details><PlayerSessionChange enrollmentId={enrollmentId} groups={groups} onSaved={onSaved} /></>;
 }

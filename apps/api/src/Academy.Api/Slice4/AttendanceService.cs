@@ -24,7 +24,7 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
         var ids = changes.Select(x => x.SportEnrollmentId).ToArray();
         var enrollments = await db.SportEnrollments.FromSqlInterpolated($"SELECT *, xmin FROM \"SportEnrollments\" WHERE \"AcademyId\"={academyId} AND \"Id\"=ANY({ids}) ORDER BY \"Id\" FOR UPDATE").AsNoTracking().ToArrayAsync(ct);
         foreach (var player in enrollments.Select(e => e.PlayerId).Distinct().Order()) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Players\" WHERE \"AcademyId\"={academyId} AND \"Id\"={player} FOR UPDATE", ct);
-        var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, session.SessionDate) == session.TrainingGroupId && x.IsActive, ct);
+        var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, session.Id) && x.IsActive, ct);
         if (valid != ids.Length) throw new AttendanceNotFoundException();
         var results = new List<AttendanceSaveResult>();
         foreach (var change in changes.OrderBy(x => x.SportEnrollmentId))

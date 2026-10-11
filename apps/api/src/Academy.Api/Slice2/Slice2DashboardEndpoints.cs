@@ -108,7 +108,7 @@ public static class Slice2DashboardEndpoints
                     !await db.Sports.AnyAsync(x => x.AcademyId == current.AcademyId && x.Id == request.SportId && x.IsActive) ||
                     !await db.AgeCategories.AnyAsync(x => x.AcademyId == current.AcademyId && x.Id == request.AgeCategoryId && x.IsActive))
                     return Results.UnprocessableEntity(new { message = "اختيارات المجموعة غير صالحة." });
-                var hasEnrollments = await db.SportEnrollments.AnyAsync(x => x.AcademyId == current.AcademyId && x.TrainingGroupId == id) || await db.EnrollmentGroupTransfers.AnyAsync(x => x.SourceGroupId == id || x.TargetGroupId == id);
+                var hasEnrollments = await db.SportEnrollments.AnyAsync(x => x.AcademyId == current.AcademyId && x.TrainingGroupId == id) || await db.EnrollmentGroupTransfers.AnyAsync(x => x.SourceGroupId == id || x.TargetGroupId == id) || await db.EnrollmentSessionMoves.AnyAsync(x => x.SourceGroupId == id || x.TargetGroupId == id);
                 if (hasEnrollments && (group.BranchId != request.BranchId || group.SportId != request.SportId))
                     return Results.Conflict(new { message = "لا يمكن تغيير فرع أو رياضة مجموعة مرتبطة بتسجيلات قائمة." });
                 if (request.Capacity.HasValue && request.Capacity < (await DatedGroupRoster.Forecast(db, id, await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, clock))).Select(x => x.Count).DefaultIfEmpty(0).Max()) return Results.Conflict(new { message = "السعة أقل من أعضاء المجموعة الحاليين أو النقل المجدول." });
@@ -177,6 +177,7 @@ public static class Slice2DashboardEndpoints
                 groupName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة",
                 categoryName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.AgeCategory.ArabicName).FirstOrDefault() ?? "غير محددة",
                 transfers = db.EnrollmentGroupTransfers.Where(tr => tr.SportEnrollmentId == e.Id).OrderByDescending(tr => tr.EffectiveDate).Select(tr => new { tr.EffectiveDate, groupName = db.TrainingGroups.Where(g => g.Id == tr.TargetGroupId).Select(g => g.ArabicName).FirstOrDefault() }).ToList(),
+                sessionMoves = db.EnrollmentSessionMoves.Where(m => m.SportEnrollmentId == e.Id).OrderByDescending(m => m.CreatedAtUtc).Select(m => new { date = db.TrainingSessions.Where(s => s.Id == m.TargetSessionId).Select(s => s.SessionDate).First(), group = db.TrainingGroups.Where(g => g.Id == m.TargetGroupId).Select(g => g.ArabicName).First() }).ToList(),
                 status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(period => period.AcademyId == current.AcademyId && period.SportEnrollmentId == e.Id)
                     .OrderByDescending(period => period.UpdatedAtUtc)
