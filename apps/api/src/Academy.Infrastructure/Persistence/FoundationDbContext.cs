@@ -65,6 +65,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureDiscountPricing(builder);
         ConfigureImports(builder);
         ConfigureFacilities(builder);
+        ConfigurePlacement(builder);
         ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>

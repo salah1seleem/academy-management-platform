@@ -108,6 +108,7 @@ public static class Slice5Endpoints
     {
         var t = (await tenant.ResolveAsync())!; var enrollment = await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db); if (enrollment is null) return Results.NotFound();
         if (enrollment.TrainingGroupId is not Guid groupId) return Results.Conflict(new { message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
+        if (enrollment.GroupAssignedFrom > request.EvaluationDate) return Results.Conflict(new { message = "تاريخ التقييم يسبق إسناد اللاعب للمجموعة." });
         var criteria = await db.EvaluationCriteria.Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).ToListAsync();
         if (criteria.Count == 0) return Results.Conflict(new { message = "لا توجد معايير فعالة لهذه الرياضة." });
         if (request.EvaluationDate == default) return Validation("evaluationDate", "تاريخ التقييم مطلوب.");

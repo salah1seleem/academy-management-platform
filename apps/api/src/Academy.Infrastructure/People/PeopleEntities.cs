@@ -42,6 +42,10 @@ public sealed class GuardianPlayerLink : TenantEntity
 
 public sealed class SportEnrollment : TenantEntity
 {
+    public Guid? TrainingLevelId { get; set; }
+    public Guid? LevelReviewedByUserId { get; set; }
+    public DateTimeOffset? LevelReviewedAtUtc { get; set; }
+    public DateOnly? GroupAssignedFrom { get; set; }
     public Guid PlayerId { get; set; }
     public Guid SportId { get; set; }
     public Guid BranchId { get; set; }

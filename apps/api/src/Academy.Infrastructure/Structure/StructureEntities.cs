@@ -34,6 +34,7 @@ public sealed class AgeCategory : TenantEntity
 
 public sealed class TrainingGroup : TenantEntity
 {
+    public Guid? TrainingLevelId { get; set; }
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }
     public Guid BranchId { get; set; }

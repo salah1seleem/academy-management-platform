@@ -133,6 +133,7 @@ builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
+builder.Services.AddScoped<GroupPlacementService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceSessionCoordinator>();
 builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
 builder.Services.AddAuthorization(options => {
@@ -333,6 +334,7 @@ app.MapAssetEndpoints();
 app.MapDiscountRuleEndpoints();
 app.MapGroupOperations();
 app.MapUnassignedEnrollments();
+app.MapGroupPlacement();
 app.MapManualPayments();
 app.MapExperience();
 app.MapMatches();
@@ -372,6 +374,7 @@ if (app.Environment.IsEnvironment("Demo"))
             if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ResourceTimetableSeedEnabled")) await Academy.Api.Facilities.ResourceTimetableDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:UnassignedEnrollmentSeedEnabled")) await UnassignedEnrollmentDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

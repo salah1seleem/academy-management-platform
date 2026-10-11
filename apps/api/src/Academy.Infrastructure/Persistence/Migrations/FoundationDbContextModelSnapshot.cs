@@ -4052,8 +4052,17 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateOnly?>("GroupAssignedFrom")
+                        .HasColumnType("date");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LevelReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LevelReviewedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("PlayerId")
                         .HasColumnType("uuid");
@@ -4069,6 +4078,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("TrainingGroupId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TrainingLevelId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -4080,11 +4092,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LevelReviewedByUserId");
+
                     b.HasIndex("AcademyId", "BranchId");
 
                     b.HasIndex("AcademyId", "IsActive");
 
                     b.HasIndex("AcademyId", "SportId");
+
+                    b.HasIndex("AcademyId", "TrainingLevelId", "SportId");
 
                     b.HasIndex("AcademyId", "PlayerId", "SportId", "BranchId")
                         .IsUnique()
@@ -4188,6 +4204,73 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "IsActive");
 
                     b.ToTable("Branches", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Structure.GroupPlacementRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Placed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("TrainingGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "TrainingGroupId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestKey")
+                        .IsUnique();
+
+                    b.ToTable("GroupPlacementRevisions", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Structure.RecurringSchedule", b =>
@@ -4362,6 +4445,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SportId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TrainingLevelId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -4384,7 +4470,57 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "SportId");
 
+                    b.HasIndex("AcademyId", "TrainingLevelId", "SportId");
+
                     b.ToTable("TrainingGroups", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Structure.TrainingLevel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArabicName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "SportId", "ArabicName")
+                        .IsUnique();
+
+                    b.ToTable("TrainingLevels", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TrainingLevel_Rank", "\"Rank\" BETWEEN 0 AND 1000");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.BeneficiaryRenewalReference", b =>
@@ -7631,6 +7767,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("LevelReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Academy.Infrastructure.Structure.Branch", "Branch")
                         .WithMany()
                         .HasForeignKey("AcademyId", "BranchId")
@@ -7651,6 +7792,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Structure.TrainingGroup", "TrainingGroup")
                         .WithMany()
@@ -7681,6 +7828,28 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
                         .WithMany()
                         .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Structure.GroupPlacementRevision", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingGroup", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingGroupId")
+                        .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -7768,11 +7937,33 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AgeCategory");
 
                     b.Navigation("Branch");
 
                     b.Navigation("Sport");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Structure.TrainingLevel", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Sport", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.BeneficiaryRenewalReference", b =>

@@ -22,7 +22,7 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
         if (session.Status == TrainingSessionStatus.Cancelled) throw new AttendanceConflictException("لا يمكن تسجيل الحضور لحصة ملغاة.");
         if (session.SessionDate > await AttendanceCalendar.TodayAsync(academyId, db, clock, ct)) throw new AttendanceValidationException("لا يمكن تسجيل الحضور بتاريخ مستقبلي.");
         var ids = changes.Select(x => x.SportEnrollmentId).ToArray();
-        var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && x.TrainingGroupId == session.TrainingGroupId && x.IsActive, ct);
+        var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && x.TrainingGroupId == session.TrainingGroupId && x.IsActive && (x.GroupAssignedFrom == null || x.GroupAssignedFrom <= session.SessionDate), ct);
         if (valid != ids.Length) throw new AttendanceNotFoundException();
         var results = new List<AttendanceSaveResult>();
         foreach (var change in changes.OrderBy(x => x.SportEnrollmentId))

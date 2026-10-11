@@ -12,7 +12,7 @@ export async function csrfRequest(path: string, method: "PUT" | "POST", body: un
     const validation = problem?.errors ? Object.values(problem.errors).flat().join(" ") : "";
     throw new Error(problem?.message ?? problem?.detail ?? (validation || problem?.title || "تعذر حفظ التغييرات."));
   }
-  if (!path.endsWith("registration-quote") && !path.endsWith("/external/resolve") && !path.endsWith("/external/search") && !path.endsWith("/timetable/preview")) {
+  if (!path.endsWith("registration-quote") && !path.endsWith("/external/resolve") && !path.endsWith("/external/search") && !path.endsWith("/timetable/preview") && !path.endsWith("/placement/preview")) {
     announceSaveSuccess(method === "PUT" ? "تم حفظ التعديلات بنجاح." : response.status === 201 ? "تم الإنشاء بنجاح." : "تم حفظ العملية بنجاح.");
   }
   return response;
