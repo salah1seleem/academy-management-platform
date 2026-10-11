@@ -8,7 +8,7 @@ import { csrfRequest } from "./dashboard-api";
 import SessionsPage from "../app/dashboard/academy/groups/sessions/page";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: vi.fn() }), usePathname: () => "/dashboard/academy/groups/group", useSearchParams: () => new URLSearchParams("tab=schedule") }));
 const response = (value: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(value), { status }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); push.mockClear(); });
 

@@ -14,6 +14,7 @@ import '../features/guardian/guardian_home.dart';
 import '../features/guardian/guardian_ui.dart';
 import '../features/coach/coach_home.dart';
 import '../features/owner/owner_dashboard.dart';
+import '../features/admin/admin_home.dart';
 import '../features/shared/role_navigation.dart';
 import '../features/shared/academy_news.dart';
 
@@ -152,6 +153,7 @@ class _SessionNavigationState extends State<SessionNavigation> {
               : NativeRoleTabs(
                   auth: widget.auth,
                   role: role,
+                  environment: widget.environment,
                   account: RoleFoundation(auth: widget.auth),
                   home: guardian
                       ? GuardianHome(
@@ -169,6 +171,8 @@ class _SessionNavigationState extends State<SessionNavigation> {
                           auth: widget.auth,
                           accountPage: RoleFoundation(auth: widget.auth),
                         )
+                      : role == 'AcademyAdmin'
+                      ? AdminHome(auth: widget.auth)
                       : RoleFoundation(auth: widget.auth),
                 ),
         ),

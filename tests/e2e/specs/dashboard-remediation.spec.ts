@@ -10,8 +10,8 @@ test("Demo Admin uses accordion, searches, opens, edits and changes a branch sta
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.getByRole("button", { name: "فتح القائمة" }).click();
-  await page.getByRole("button", { name: /الأكاديمية/ }).click();
-  await expect(page.getByRole("button", { name: /الأكاديمية/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: "التشغيل اليومي" }).click();
+  await expect(page.getByRole("button", { name: "التشغيل اليومي" })).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("link", { name: "الفروع" }).click();
   await expect(page.getByRole("heading", { name: "الفروع" })).toBeVisible();
   await page.getByRole("link", { name: "إضافة فرع" }).click();

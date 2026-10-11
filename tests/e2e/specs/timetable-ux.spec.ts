@@ -12,7 +12,7 @@ for (const journey of [
     const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
     const groupResponse = await page.request.post("/api/v1/manage/groups", { headers: { "X-CSRF-TOKEN": csrf.token }, data: { arabicName: `مجموعة اختبار الواجهة ${journey.width} ${Date.now()}`, branchId: original.branchId, sportId: original.sportId, ageCategoryId: original.ageCategoryId } });
     expect(groupResponse.ok()).toBeTruthy(); const id = await groupResponse.json() as string;
-    await page.goto(`/dashboard/academy/groups/${id}`); await page.getByText("إنشاء الحصص / تعديل الجدول", { exact: true }).click();
+    await page.goto(`/dashboard/academy/groups/${id}?tab=schedule`); await page.getByText("إنشاء الحصص / تعديل الجدول", { exact: true }).click();
     await expect(page.getByRole("checkbox").first()).toHaveAccessibleName("السبت");
     for (const day of journey.days) { await page.getByRole("checkbox", { name: day, exact: true }).click(); await expect(page.getByRole("checkbox", { name: day, exact: true })).toBeChecked(); }
     const dayTiles = await page.locator(".weekday-choice").evaluateAll(labels => labels.map(label => ({ height: label.getBoundingClientRect().height, color: getComputedStyle(label).color, background: getComputedStyle(label).backgroundColor, selected: label.classList.contains("selected"), checkboxOpacity: getComputedStyle(label.querySelector("input")!).opacity })));
@@ -29,7 +29,7 @@ for (const journey of [
     expect(colors.text).toBe("rgb(255, 255, 255)"); expect(colors.background).not.toBe(colors.text);
     await page.screenshot({ path: testInfo.outputPath(`timetable-${journey.width}.png`), fullPage: true });
     await save.click(); await page.waitForURL("**/dashboard/academy/groups"); await expect(page.locator(".save-notice")).toContainText("تم حفظ الجدول وإنشاء");
-    await page.goto(`/dashboard/academy/groups/${id}`); await page.getByText("إنشاء الحصص / تعديل الجدول", { exact: true }).click();
+    await page.goto(`/dashboard/academy/groups/${id}`); await page.getByRole("tab", { name: "الجدول", exact: true }).click(); await page.getByText("إنشاء الحصص / تعديل الجدول", { exact: true }).click();
     for (const day of journey.days) await expect(page.getByRole("checkbox", { name: day, exact: true })).toBeChecked();
     const details = await page.request.get(`/api/v1/manage/groups/${id}/details`).then(r => r.json());
     expect(details.schedules.map((x: { dayOfWeek: string }) => x.dayOfWeek).sort()).toEqual([...journey.values].sort());

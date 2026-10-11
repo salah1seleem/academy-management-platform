@@ -21,7 +21,7 @@ type NavModule = {
   links: { label: string; href: string }[];
 };
 
-const modules: NavModule[] = [
+const existingModules: NavModule[] = [
   { id: "home", title: "الرئيسية", group: "الأساس", icon: LayoutDashboard, links: [{ label: "الرئيسية", href: "/dashboard" }] },
   { id: "academy", title: "الأكاديمية", group: "الإدارة", icon: Building2, links: [
     { label: "الفروع", href: "/dashboard/academy/branches" }, { label: "الرياضات", href: "/dashboard/academy/sports" },
@@ -53,8 +53,19 @@ const modules: NavModule[] = [
   { id: "matches", title: "المباريات", group: "التشغيل", icon: Trophy, links: [{ label: "المباريات والبطولات", href: "/dashboard/matches" }] },
   { id: "settings", title: "إعدادات الأكاديمية", group: "الإدارة", icon: Building2, links: [{ label: "إعدادات الأكاديمية", href: "/dashboard/settings" }] },
 ];
-const order = ["home", "academy", "players", "plans", "attendance", "evaluations", "reports", "payroll", "matches", "catalog", "nutrition", "news", "discounts", "settings", "staff"];
-modules.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+// Reorganize navigation, not capabilities or routes. Every existing destination
+// retains its server permission and remains reachable in one of seven workspaces.
+const linksOf = (...ids: string[]) => ids.flatMap(id => existingModules.find(m => m.id === id)?.links ?? []);
+const modules: NavModule[] = [
+  existingModules[0],
+  { id: "players", title: "الأعضاء والاشتراكات", group: "الإدارة", icon: Users, links: linksOf("players", "plans", "discounts") },
+  { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), ...linksOf("attendance", "matches")] },
+  { id: "development", title: "الفريق والتطوير", group: "التشغيل", icon: Star, links: [...linksOf("academy").filter(l => l.href.endsWith("/coaches")), ...linksOf("evaluations", "nutrition")] },
+  { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
+  { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
+  { id: "analytics", title: "التحليل والقرارات", group: "التحليل", icon: BarChart3, links: linksOf("reports").filter(l => l.href.endsWith("/attendance")) },
+  { id: "settings", title: "الإعدادات والمساعدة", group: "الإدارة", icon: ShieldCheck, links: linksOf("settings", "staff") },
+];
 
 const roleLabels: Record<string, string> = { AcademyOwner: "مالك", AcademyAdmin: "إداري", Coach: "مدرب" };
 
@@ -92,7 +103,7 @@ function currentModule(path: string) {
 
 function visibleModules(role: string) {
   if (role !== "Coach") return modules;
-  return modules.filter(module => ["attendance", "evaluations", "reports"].includes(module.id)).map(module => ({
+  return modules.filter(module => ["operations", "development", "analytics"].includes(module.id)).map(module => ({
     ...module,
     links: module.links.filter(link => link.href !== "/dashboard/evaluations/criteria" && (!link.href.includes("/reports") || link.href === "/dashboard/reports/attendance")),
   }));
@@ -121,7 +132,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const openModule = navOverride?.path === path ? navOverride.id : activeModule;
-  const navigation = useMemo(() => visibleModules(identity.role).filter(m => m.id !== "staff" || identity.role === "AcademyOwner").map(m => ({ ...m, links: m.links.filter(l => l.href === "/dashboard/academy/groups/sessions" ? identity.role === "AcademyOwner" || ["structure.manage", "people.manage", "attendance.read"].every(p => permissions.includes(p)) : identity.role === "AcademyOwner" || m.id === "settings" && brand.platformBrandOperator || linkPermission(l.href) === null || permissions.includes(linkPermission(l.href)!)) })).filter(m => m.links.length > 0), [identity.role, permissions, brand.platformBrandOperator]);
+  const navigation = useMemo(() => visibleModules(identity.role).map(m => ({ ...m, links: m.links.filter(l => {
+    if (l.href.startsWith("/dashboard/staff") && identity.role !== "AcademyOwner") return false;
+    if (l.href === "/dashboard/academy/groups/sessions") return identity.role === "AcademyOwner" || ["structure.manage", "people.manage", "attendance.read"].every(p => permissions.includes(p));
+    return identity.role === "AcademyOwner" || l.href === "/dashboard/settings" && brand.platformBrandOperator || linkPermission(l.href) === null || permissions.includes(linkPermission(l.href)!);
+  }) })).filter(m => m.links.length > 0), [identity.role, permissions, brand.platformBrandOperator]);
   const activeHref = useMemo(() => navigation.flatMap(module => module.links).filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`))).sort((a, b) => b.href.length - a.href.length)[0]?.href, [navigation, path]);
 
   useEffect(() => {
@@ -156,7 +171,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   return <div className="dashboard-shell" style={{ "--staff-primary-950": secondary, "--staff-primary-900": secondary, "--staff-primary-800": `color-mix(in srgb, ${primary}, black 25%)`, "--staff-primary-700": primary, "--staff-primary-600": primary, "--staff-primary-100": `color-mix(in srgb, ${primary}, white 92%)`, "--staff-primary-50": `color-mix(in srgb, ${primary}, white 97%)` } as CSSProperties}>
     <button ref={toggleRef} className="nav-toggle" aria-label={drawerOpen ? "إغلاق القائمة" : "فتح القائمة"} aria-expanded={drawerOpen} aria-controls="staff-sidebar" onClick={() => setDrawerOpen(!drawerOpen)}>{drawerOpen ? <X /> : <Menu />}</button>
     {drawerOpen && <button className="nav-backdrop" aria-label="إغلاق القائمة" onClick={closeDrawer} />}
-    <aside ref={sidebarRef} id="staff-sidebar" tabIndex={-1} className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي">
+    <aside ref={sidebarRef} id="staff-sidebar" tabIndex={-1} className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي" data-workspace={activeModule}>
       {brand.logoUrl && <div className="sidebar-watermark" aria-hidden="true" style={{ backgroundImage: `url(${brand.logoUrl})` }} />}
       <div className="sidebar-brand">{brand.logoUrl ? <Image unoptimized width={52} height={64} className="academy-logo" src={brand.logoUrl} alt={brand.displayName ?? identity.academyName} /> : <span className="brand-mark" aria-hidden="true"><Trophy /></span>}<span><b>{brand.displayName || identity.academyName || "منصة الأكاديمية"}</b><small>نظام إدارة الأكاديمية</small></span></div>
       <div className="sidebar-account sidebar-account-top"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span><b>{identity.name || "جارٍ تحميل الحساب…"}</b><small className="role-badge"><ShieldCheck />{roleLabels[identity.role] ?? "حساب موظف"}</small></span></div>
@@ -230,10 +245,22 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
 
 export type DataColumn<T> = { key: string; header: string; width?: string; primary?: boolean; render: (row: T) => ReactNode };
 export function AdminDataTable<T>({ columns, rows, rowKey, rowClassName, label }: { columns: DataColumn<T>[]; rows: T[]; rowKey: (row: T) => string; rowClassName?: (row: T) => string; label: string }) {
-  const template = columns.map(column => column.width ?? "minmax(0, 1fr)").join(" ");
-  return <div className="admin-data-table" role="table" aria-label={label} style={{ "--table-columns": template } as CSSProperties}>
-    <div className="admin-data-header" role="row">{columns.map(column => <div role="columnheader" key={column.key}>{column.header}</div>)}</div>
-    <div className="admin-data-body" role="rowgroup">{rows.map(row => <article className={`admin-data-row ${rowClassName?.(row) ?? ""}`.trim()} role="row" key={rowKey(row)}>{columns.map(column => <div className={column.primary ? "data-primary" : ""} role="cell" data-label={column.header} key={column.key}>{column.render(row)}</div>)}</article>)}</div>
+  const [pageSize, setPageSize] = useState(25);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const signature = rows.map(rowKey).join("|");
+  const [position, setPosition] = useState({ signature, page: 0 });
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const page = position.signature === signature ? Math.min(position.page, pages - 1) : 0;
+  const visible = columns.filter(column => column.primary || !hidden.includes(column.key));
+  const template = visible.map(column => column.width ?? "minmax(0, 1fr)").join(" ");
+  const first = page * pageSize;
+  return <div className="data-workspace">
+    <div className="table-controls"><span>{rows.length} سجل</span><details className="table-columns"><summary>الأعمدة</summary><div>{columns.map(column => <label key={column.key}><input type="checkbox" aria-label={`إظهار عمود ${column.header}`} checked={visible.includes(column)} disabled={column.primary || visible.length === 1 && visible.includes(column)} onChange={event => setHidden(event.target.checked ? hidden.filter(key => key !== column.key) : [...hidden, column.key])} />إظهار عمود {column.header}</label>)}</div></details></div>
+    <div className="admin-data-table" role="table" aria-label={label} aria-rowcount={rows.length + 1} aria-colcount={visible.length} style={{ "--table-columns": template } as CSSProperties}>
+      <div className="admin-data-header" role="row" aria-rowindex={1}>{visible.map(column => <div role="columnheader" key={column.key}>{column.header}</div>)}</div>
+      <div className="admin-data-body" role="rowgroup">{rows.slice(first, first + pageSize).map((row, index) => <article className={`admin-data-row ${rowClassName?.(row) ?? ""}`.trim()} role="row" aria-rowindex={first + index + 2} key={rowKey(row)}>{visible.map(column => <div className={column.primary ? "data-primary" : ""} role="cell" data-label={column.header} key={column.key}>{column.render(row)}</div>)}</article>)}</div>
+    </div>
+    <nav className="table-pagination" aria-label={`صفحات ${label}`}><label>صفوف الصفحة<select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPosition({ signature, page: 0 }); }}>{[10, 25, 50].map(size => <option key={size} value={size}>{size}</option>)}</select></label><span role="status">{rows.length ? first + 1 : 0}–{Math.min(first + pageSize, rows.length)} من {rows.length}</span><button type="button" disabled={page === 0} onClick={() => setPosition({ signature, page: page - 1 })} aria-label="الصفحة السابقة"><ChevronDown style={{ transform: "rotate(-90deg)" }} /></button><button type="button" disabled={page === pages - 1} onClick={() => setPosition({ signature, page: page + 1 })} aria-label="الصفحة التالية"><ChevronDown style={{ transform: "rotate(90deg)" }} /></button></nav>
   </div>;
 }
 

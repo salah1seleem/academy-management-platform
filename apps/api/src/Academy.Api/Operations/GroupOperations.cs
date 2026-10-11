@@ -22,6 +22,7 @@ public static class GroupOperations
         var t = (await tenant.ResolveAsync())!;
         if (!await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id)) return Results.NotFound();
         return Results.Ok(new {
+            coaches = await db.StaffGroupAssignments.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == id && x.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.User.IsActive).OrderBy(x => x.AcademyMembership.User.DisplayName).Select(x => new { id = x.AcademyMembershipId, name = x.AcademyMembership.User.DisplayName }).ToListAsync(),
             players = await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == id && x.IsActive).OrderBy(x => x.Player.ArabicName).Select(x => new { x.Id, x.PlayerId, x.Player.ArabicName, x.Player.PhotoReference }).ToListAsync(),
             schedules = await db.RecurringSchedules.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == id && x.IsActive).OrderBy(x => ((int)x.DayOfWeek + 1) % 7).Select(x => new { x.DayOfWeek, x.StartTime, x.EndTime, x.ValidFrom, x.ValidTo }).ToListAsync(),
             sessions = await db.TrainingSessions.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == id && x.Status != TrainingSessionStatus.Cancelled).OrderByDescending(x => x.SessionDate).ThenBy(x => x.StartTime).Take(200).Select(x => new { x.Id, x.SessionDate, x.StartTime, x.EndTime }).ToListAsync()

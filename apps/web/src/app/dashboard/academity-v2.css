@@ -1,0 +1,50 @@
+/* Academity V2 semantic palette: tenant branding remains a separate accent. */
+.dashboard-shell {
+  --staff-bg: #f3f6fc;
+  --staff-text: #17243d;
+  --staff-text-secondary: #455571;
+  --staff-text-muted: #5d6d85;
+  --v2-primary: #315de6;
+  --v2-finance-bg: #e9f7f0;
+  --v2-finance: #146b49;
+  --v2-members-bg: #ebf0ff;
+  --v2-members: #2949ad;
+  --v2-training-bg: #e8f7fa;
+  --v2-training: #17677a;
+  --v2-team-bg: #f2ecff;
+  --v2-team: #6741a5;
+  font-size: 16px;
+}
+.dashboard-shell :is(.module-toggle,.submodule-list a,.row-primary-action,.row-menu-action,button,select) { min-height: 44px; }
+.dashboard-shell .sidebar-navigation { padding-block: 12px; }
+.dashboard-shell .sidebar[data-workspace=finance] .nav-module.current { --staff-primary-700: #146b49; --staff-primary-800: #104f37; }
+.dashboard-shell .sidebar[data-workspace=development] .nav-module.current { --staff-primary-700: #6741a5; --staff-primary-800: #4e3080; }
+.dashboard-shell .sidebar[data-workspace=operations] .nav-module.current { --staff-primary-700: #17677a; --staff-primary-800: #124e5d; }
+.dashboard-shell .command-card:not(.requests-card) { background: var(--v2-finance-bg); border-color: #c7e7d5; }
+.dashboard-shell .command-card:not(.requests-card) .command-value { color: var(--v2-finance); }
+.dashboard-shell .requests-card { background: var(--v2-members-bg); border-color: #cfdbfb; }
+.dashboard-shell .requests-card .command-value { color: var(--v2-members); }
+.dashboard-shell .table-controls,.dashboard-shell .table-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 4px; color: var(--staff-text-secondary); font-size: 14px; }
+.dashboard-shell .table-controls > span { margin-inline-end: auto; }
+.dashboard-shell .table-columns { position: relative; }
+.dashboard-shell .table-columns summary { cursor: pointer; min-height: 44px; padding: 10px; border: 1px solid var(--staff-border); background: white; border-radius: 10px; }
+.dashboard-shell .table-columns > div { position: absolute; z-index: 10; inset-inline-end: 0; width: max-content; max-width: 260px; padding: 12px; border: 1px solid var(--staff-border); border-radius: 14px; background: white; box-shadow: var(--staff-shadow-md); }
+.dashboard-shell .table-columns label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.dashboard-shell .table-columns input { width: 18px; height: 18px; min-height: 18px; accent-color: var(--v2-primary); }
+.dashboard-shell .table-pagination label { display: flex; align-items: center; gap: 8px; }
+.dashboard-shell .table-pagination select { width: auto; min-width: 70px; padding: 8px; border: 1px solid var(--staff-border); border-radius: 10px; background: white; color: var(--staff-text); }
+.dashboard-shell .table-pagination > span { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+.dashboard-shell .table-pagination button { display: grid; width: 44px; place-items: center; border: 1px solid var(--staff-border); border-radius: 10px; background: white; color: var(--staff-text); }
+.dashboard-shell .table-pagination button:disabled { opacity: .45; cursor: default; }
+.dashboard-shell .admin-data-row { min-height: 64px; padding-block: 10px; }
+.dashboard-shell .admin-data-row:hover { background: #f6f8fe; }
+.dashboard-shell .admin-data-row :is(small,.data-label) { font-size: 14px; }
+.dashboard-shell .record-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; margin-block: 16px; border: 1px solid var(--staff-border); border-radius: 18px; background: white; }
+.dashboard-shell .record-tabs button { flex: 1 1 auto; padding: 12px 16px; border: 0; border-radius: 12px; background: transparent; color: var(--staff-text-secondary); font-weight: 650; }
+.dashboard-shell .record-tabs button[aria-selected=true] { color: var(--v2-members); background: var(--v2-members-bg); box-shadow: inset 0 -3px var(--v2-primary); }
+.dashboard-shell [role=tabpanel] { min-width: 0; }
+@media(max-width: 600px) {
+  .dashboard-shell .record-tabs button { flex-basis: calc(50% - 8px); padding-inline: 8px; }
+  .dashboard-shell .table-pagination { gap: 8px; }
+}
+@media(prefers-reduced-motion: reduce) { .dashboard-shell * { transition: none !important; animation: none !important; } }

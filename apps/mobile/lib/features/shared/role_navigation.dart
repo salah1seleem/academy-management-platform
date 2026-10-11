@@ -8,20 +8,25 @@ import '../guardian/guardian_content.dart';
 import '../guardian/guardian_profile.dart';
 import '../guardian/guardian_report.dart';
 import '../coach/coach_home.dart';
+import '../coach/coach_evaluation.dart';
+import '../admin/admin_home.dart';
 import '../owner/owner_reports.dart';
 import 'academy_news.dart';
 import 'matches.dart';
+import 'staff_amounts.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
   final Widget home, account;
   final String role;
+  final String environment;
   const NativeRoleTabs({
     super.key,
     required this.auth,
     required this.home,
     required this.account,
     required this.role,
+    this.environment = 'Production',
   });
   @override
   State<NativeRoleTabs> createState() => _NativeRoleTabsState();
@@ -32,51 +37,61 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
   @override
   Widget build(BuildContext context) {
     final guardian = widget.role == 'Guardian',
-        owner = widget.role == 'AcademyOwner';
+        owner = widget.role == 'AcademyOwner',
+        admin = widget.role == 'AcademyAdmin';
     final destinations = guardian
         ? [
             ('الرئيسية', 'Home', Icons.home_outlined),
-            ('التغذية', 'Nutrition', Icons.restaurant_outlined),
-            ('التقييمات', 'Progress', Icons.insights),
-            ('المواعيد', 'Schedule', Icons.calendar_month_outlined),
-            ('حسابي', 'Account', Icons.person_outline),
+            ('أبنائي', 'Children', Icons.family_restroom_outlined),
+            ('التقويم', 'Calendar', Icons.calendar_month_outlined),
+            ('المزيد', 'More', Icons.grid_view_outlined),
           ]
         : owner
         ? [
             ('الرئيسية', 'Home', Icons.home_outlined),
+            ('القرارات', 'Decisions', Icons.task_alt_outlined),
+            ('المالية', 'Finance', Icons.account_balance_wallet_outlined),
+            ('المزيد', 'More', Icons.grid_view_outlined),
+          ]
+        : admin
+        ? [
+            ('الرئيسية', 'Home', Icons.home_outlined),
+            ('الحضور', 'Attendance', Icons.fact_check_outlined),
             ('الطلبات', 'Requests', Icons.receipt_long_outlined),
-            ('التقارير', 'Reports', Icons.analytics_outlined),
-            ('الأخبار', 'News', Icons.newspaper_outlined),
-            ('حسابي', 'Account', Icons.person_outline),
+            ('المزيد', 'More', Icons.grid_view_outlined),
           ]
         : [
             ('الرئيسية', 'Home', Icons.home_outlined),
-            ('مجموعاتي', 'Groups', Icons.groups_outlined),
-            ('الأخبار', 'News', Icons.newspaper_outlined),
-            ('حسابي', 'Account', Icons.person_outline),
+            ('جدولي', 'Schedule', Icons.calendar_month_outlined),
+            ('اللاعبون', 'Players', Icons.groups_outlined),
+            ('المزيد', 'More', Icons.grid_view_outlined),
           ];
     final Widget page = selected == 0
         ? widget.home
         : selected == destinations.length - 1
-        ? widget.account
+        ? NativeMore(
+            auth: widget.auth,
+            role: widget.role,
+            account: widget.account,
+            environment: widget.environment,
+          )
         : guardian
         ? GuardianHub(
             auth: widget.auth,
-            section: selected == 1
-                ? 'nutrition'
-                : selected == 2
-                ? 'evaluations'
-                : 'schedule',
+            section: selected == 1 ? 'children' : 'schedule',
+            environment: widget.environment,
           )
         : owner
         ? selected == 1
               ? NativePaymentRequests(auth: widget.auth)
-              : selected == 2
-              ? OwnerReports(auth: widget.auth)
-              : AcademyNewsPage(auth: widget.auth)
+              : OwnerReports(auth: widget.auth)
+        : admin
+        ? selected == 1
+              ? NativeSessions(auth: widget.auth)
+              : NativePaymentRequests(auth: widget.auth)
         : selected == 1
-        ? CoachGroupsPage(auth: widget.auth)
-        : AcademyNewsPage(auth: widget.auth);
+        ? NativeSessions(auth: widget.auth)
+        : CoachPlayers(auth: widget.auth);
     return Scaffold(
       body: KeyedSubtree(
         key: ValueKey('$selected-${widget.role}'),
@@ -99,20 +114,123 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
   }
 }
 
+class NativeMore extends StatelessWidget {
+  final AuthController auth;
+  final String role, environment;
+  final Widget account;
+  const NativeMore({
+    super.key,
+    required this.auth,
+    required this.role,
+    required this.account,
+    required this.environment,
+  });
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(context, 'المزيد', 'More'),
+    child: gList([
+      if (role == 'Guardian') ...[
+        GLink(
+          localized(context, 'التغذية والوجبات', 'Nutrition & meals'),
+          Icons.restaurant_outlined,
+          () => openPage(
+            context,
+            GuardianHub(
+              auth: auth,
+              section: 'nutrition',
+              environment: environment,
+            ),
+          ),
+        ),
+        GLink(
+          localized(context, 'تقدم أبنائي', 'Children’s progress'),
+          Icons.insights_outlined,
+          () => openPage(
+            context,
+            GuardianHub(
+              auth: auth,
+              section: 'evaluations',
+              environment: environment,
+            ),
+          ),
+        ),
+      ],
+      if (role == 'Coach')
+        GLink(
+          localized(context, 'مجموعاتي', 'My groups'),
+          Icons.groups_outlined,
+          () => openPage(context, CoachGroupsPage(auth: auth)),
+        ),
+      if (role == 'Coach' || role == 'AcademyAdmin')
+        GLink(
+          localized(context, 'طلب مبلغ إضافي', 'Request extra amount'),
+          Icons.add_card_outlined,
+          () => openPage(context, StaffAmounts(auth: auth)),
+        ),
+      GLink(
+        localized(context, 'الأخبار', 'News'),
+        Icons.newspaper_outlined,
+        () => openPage(context, AcademyNewsPage(auth: auth)),
+      ),
+      GLink(
+        localized(context, 'الحساب والإعدادات', 'Account & settings'),
+        Icons.settings_outlined,
+        () => openPage(context, account),
+      ),
+    ]),
+  );
+}
+
+class CoachPlayers extends StatelessWidget {
+  final AuthController auth;
+  const CoachPlayers({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(context, 'لاعبو مجموعاتي', 'My groups’ players'),
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/evaluations/options',
+      builder: (context, value) {
+        final players = rows(obj(value)['enrollments']);
+        return gList([
+          for (final p in players)
+            GLink(
+              '${p['player']} · ${p['group'] ?? p['sport'] ?? ""}',
+              Icons.person_outline,
+              () =>
+                  openPage(context, CoachEvaluation(auth: auth, enrollment: p)),
+            ),
+          if (players.isEmpty) const EmptyMessage(),
+        ]);
+      },
+    ),
+  );
+}
+
 class GuardianHub extends StatelessWidget {
   final AuthController auth;
   final String section;
-  const GuardianHub({super.key, required this.auth, required this.section});
+  final String environment;
+  const GuardianHub({
+    super.key,
+    required this.auth,
+    required this.section,
+    this.environment = 'Production',
+  });
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(
       context,
-      section == 'nutrition'
+      section == 'children'
+          ? 'أبنائي'
+          : section == 'nutrition'
           ? 'التغذية والوجبات'
           : section == 'evaluations'
           ? 'تقدم أبنائي'
           : 'المواعيد والحضور',
-      section == 'nutrition'
+      section == 'children'
+          ? 'Children'
+          : section == 'nutrition'
           ? 'Nutrition & meals'
           : section == 'evaluations'
           ? 'Children’s progress'
@@ -156,7 +274,14 @@ class GuardianHub extends StatelessWidget {
                   FilledButton.tonal(
                     onPressed: () => openPage(
                       context,
-                      section == 'nutrition'
+                      section == 'children'
+                          ? ChildProfile(
+                              auth: auth,
+                              environment: environment,
+                              playerId: textOf(c['id']),
+                              today: textOf(d['today']),
+                            )
+                          : section == 'nutrition'
                           ? NutritionLibrary(
                               auth: auth,
                               playerId: c['id'],
