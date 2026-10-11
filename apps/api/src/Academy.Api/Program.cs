@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using Academy.Api.Auth;
+using Academy.Api.Configuration;
 using Academy.Api.Mobile;
 using Academy.Api.Demo;
 using Academy.Api.Operations;
@@ -90,6 +91,7 @@ builder.Services.AddSingleton<DatabaseTicketStore>();
 builder.Services.AddSingleton<IPostConfigureOptions<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>, IdentityCookieOptions>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentTenant>();
+builder.Services.AddScoped<AcademyConfigurationService>();
 builder.Services.AddScoped<IAuthorizationHandler, TenantPermissionHandler>();
 builder.Services.AddAuthorization(options =>
 {
@@ -130,8 +132,13 @@ DemoSeed.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IO
 InternalTestPaymentGateway.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<InternalTestPaymentOptions>>().Value);
 app.UseExceptionHandler();
 app.UseAuthentication();
+app.Use(async (context, next) => {
+    if (context.User.Identity?.IsAuthenticated == true) context.Response.Headers.CacheControl = "private, no-store";
+    await next(context);
+});
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseMiddleware<AcademyFeatureGateMiddleware>();
 app.MapMobileAuth();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false, ResponseWriter = HealthResponseWriter.WriteAsync });
@@ -314,6 +321,7 @@ app.MapNews();
 app.MapStaffManagement();
 app.MapDailyStaffAttendance();
 app.MapPayroll();
+app.MapVersionedConfiguration();
 
 if (args.Contains("--reset-football-demo"))
 {
@@ -321,7 +329,17 @@ if (args.Contains("--reset-football-demo"))
     await FootballDemoSeed.RunAsync(resetScope.ServiceProvider, true);
     return;
 }
-if (app.Environment.IsEnvironment("Demo")) await DemoSeed.SeedAsync(app.Services);
+if (app.Environment.IsEnvironment("Demo"))
+{
+    await DemoSeed.SeedAsync(app.Services);
+    if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedEnabled)
+    {
+        await using var configSeed = app.Services.CreateAsyncScope();
+        var db = configSeed.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var ids = await db.Academies.Where(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId || x.Id == FootballDemoSeed.AcademyId).Select(x => x.Id).ToListAsync();
+        await AcademyConfigurationService.SeedDemo(db, ids);
+    }
+}
 app.Run();
 
 public sealed record LoginRequest(string Email, string Password);

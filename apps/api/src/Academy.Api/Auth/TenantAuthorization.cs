@@ -1,4 +1,5 @@
 using Academy.Infrastructure.Tenancy;
+using Academy.Api.Configuration;
 using Academy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
@@ -50,7 +51,7 @@ public static class AcademyPermissions
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
 
-public sealed class TenantPermissionHandler(CurrentTenant currentTenant, FoundationDbContext db)
+public sealed class TenantPermissionHandler(CurrentTenant currentTenant, FoundationDbContext db, AcademyConfigurationService configuration)
     : AuthorizationHandler<TenantPermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, TenantPermissionRequirement requirement)
@@ -106,6 +107,16 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
         }
         if (allowed && membership.Role == AcademyRole.Coach && requirement.Permission == AcademyPermissions.AttendanceManage)
             allowed = await db.AcademyExperiences.AnyAsync(x => x.AcademyId == membership.AcademyId && x.CoachAttendancePolicyConfirmed && x.CoachAttendanceEnabled);
+        var feature = requirement.Permission switch {
+            AcademyPermissions.AttendanceRead or AcademyPermissions.AttendanceManage or AcademyPermissions.GuardianAttendanceRead or AcademyPermissions.EvaluationRead or AcademyPermissions.EvaluationManage or AcademyPermissions.EvaluationCriteriaManage or AcademyPermissions.GuardianEvaluationRead or AcademyPermissions.SubscriptionPlanManage or AcademyPermissions.SubscriptionRenewManage or AcademyPermissions.GuardianOwnRenewal or AcademyPermissions.GuardianEnrollmentRequestCreate => "training",
+            AcademyPermissions.NutritionRead or AcademyPermissions.NutritionManage => "nutrition",
+            AcademyPermissions.SportCatalogRead or AcademyPermissions.SportCatalogManage => "catalog",
+            AcademyPermissions.MedicalRecordRead or AcademyPermissions.MedicalRecordManage => "medical",
+            AcademyPermissions.PlayerMediaRead or AcademyPermissions.PlayerMediaManage => "media",
+            AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage => "payroll",
+            _ => null
+        };
+        if (allowed && feature is not null) allowed = await configuration.Enabled(membership.AcademyId, feature);
         if (allowed) context.Succeed(requirement);
     }
 }

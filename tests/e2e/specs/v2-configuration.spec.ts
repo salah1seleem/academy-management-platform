@@ -1,0 +1,32 @@
+import { expect, test } from "@playwright/test";
+
+test("Owner previews and activates a version; disabled feature rejects API; reactivation restores access", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
+  await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
+  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.waitForURL("**/dashboard");
+  await page.goto("/dashboard/settings");
+  const panel = page.locator("section").filter({ has: page.getByRole("heading", { name: "إصدارات إعدادات التشغيل", exact: true }) });
+  await expect(panel.getByRole("checkbox", { name: /إعلانات المجتمع/ })).toBeDisabled();
+  await panel.getByRole("checkbox", { name: "التغذية", exact: true }).uncheck();
+  await panel.getByRole("button", { name: "حفظ إصدار مسودة" }).click();
+  const draft = panel.locator("article").filter({ hasText: "مسودة" }).first();
+  await expect(draft).toContainText("التغذية: إيقاف");
+  expect((await page.request.get("/api/v1/content/nutrition/")).status()).toBe(200);
+  await draft.getByRole("button", { name: "التحقق", exact: true }).click();
+  await panel.getByRole("button", { name: "تجهيز التفعيل", exact: true }).first().click();
+  await panel.getByRole("button", { name: "تفعيل الآن", exact: true }).first().click();
+  await expect(page.getByRole("dialog")).toContainText("التغذية: إيقاف");
+  await page.getByRole("dialog").getByRole("button", { name: "تأكيد الاعتماد" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect((await page.request.get("/api/v1/content/nutrition/")).status()).toBe(403);
+  await panel.getByRole("checkbox", { name: "التغذية", exact: true }).check();
+  await panel.getByRole("button", { name: "حفظ إصدار مسودة" }).click();
+  await panel.getByRole("button", { name: "التحقق", exact: true }).first().click();
+  await panel.getByRole("button", { name: "تجهيز التفعيل", exact: true }).first().click();
+  await panel.getByRole("button", { name: "تفعيل الآن", exact: true }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "تأكيد الاعتماد" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect((await page.request.get("/api/v1/content/nutrition/")).status()).toBe(200);
+});

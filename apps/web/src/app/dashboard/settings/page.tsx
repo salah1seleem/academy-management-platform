@@ -1,2 +1,3 @@
 import { AcademySettings } from "../../../features/academy-settings";
-export default function Page() { return <AcademySettings />; }
+import { VersionedConfiguration } from "../../../features/versioned-configuration";
+export default function Page() { return <><AcademySettings /><VersionedConfiguration /></>; }

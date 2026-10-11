@@ -8,8 +8,9 @@ export async function csrfRequest(path: string, method: "PUT" | "POST", body: un
   const { token } = await csrfResponse.json() as { token: string };
   const response = await fetch(path, { method, headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": token, ...extraHeaders }, body: JSON.stringify(body) });
   if (!response.ok) {
-    const problem = await response.json().catch(() => null) as { message?: string; detail?: string } | null;
-    throw new Error(problem?.message ?? problem?.detail ?? "تعذر حفظ التغييرات.");
+    const problem = await response.json().catch(() => null) as { message?: string; detail?: string; title?: string; errors?: Record<string, string[]> } | null;
+    const validation = problem?.errors ? Object.values(problem.errors).flat().join(" ") : "";
+    throw new Error(problem?.message ?? problem?.detail ?? (validation || problem?.title || "تعذر حفظ التغييرات."));
   }
   if (!path.endsWith("registration-quote") && !path.endsWith("/external/resolve") && !path.endsWith("/external/search")) {
     announceSaveSuccess(method === "PUT" ? "تم حفظ التعديلات بنجاح." : response.status === 201 ? "تم الإنشاء بنجاح." : "تم حفظ العملية بنجاح.");

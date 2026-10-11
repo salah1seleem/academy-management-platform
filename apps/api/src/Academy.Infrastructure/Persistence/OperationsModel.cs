@@ -30,6 +30,7 @@ public sealed partial class FoundationDbContext
 
     private static void ConfigureOperations(ModelBuilder b)
     {
+        ConfigureVersionedSettings(b);
         ConfigureMatches(b);
         ConfigurePayroll(b);
         Tenant<AcademyExperience>(b);

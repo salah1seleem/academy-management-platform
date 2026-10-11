@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
+using Academy.Api.Configuration;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
@@ -102,10 +103,11 @@ public static class AssetEndpoints
             return await Assigned(db, t.AcademyId, user, asset.TrainingGroupId.Value) || await db.PrivateAssetAudiences.AnyAsync(x => x.AcademyId == t.AcademyId && x.AssetId == asset.Id && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.PlayerId && l.Guardian.UserId == user && l.IsActive && l.Guardian.IsActive && l.Player.IsActive));
         return false;
     }
-    private static async Task<IResult> Download(Guid id, HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock)
+    private static async Task<IResult> Download(Guid id, HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, AcademyConfigurationService features)
     {
         var t = (await tenant.ResolveAsync())!;
         var asset = await db.PrivateAssets.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
+        if (asset is not null && asset.Purpose is "Media" or "News" && !await features.Enabled(t.AcademyId, asset.Purpose == "News" ? "news" : "media")) return Results.NotFound();
         if (asset is null || !await CanRead(asset, t, context.User, db, authorization, clock)) return Results.NotFound();
         var path = Path.Combine(Root(config, env), asset.StorageName); if (!File.Exists(path)) return Results.NotFound();
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
