@@ -54,6 +54,9 @@ public sealed partial class FoundationDbContext
         BranchFilter<GroupPlacementRevision>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<EnrollmentGroupTransfer>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<EnrollmentSessionMove>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CompensationGrant>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CompensationBooking>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CompensationMovement>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<Employee>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<MatchTeam>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ProductSale>(b, x => x.BranchId.HasValue && RequestBranchIds.Contains(x.BranchId.Value));
@@ -130,7 +133,7 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
-        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove && e.State is EntityState.Modified or EntityState.Deleted))
+        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
         foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))
             if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot), nameof(IPlanTermsSnapshot.DurationMonthsSnapshot), nameof(IPlanTermsSnapshot.ServiceKindSnapshot), nameof(IPlanTermsSnapshot.TrainingFormatSnapshot) }.Any(p => entry.Property(p).IsModified))

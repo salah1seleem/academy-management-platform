@@ -10,7 +10,7 @@ public sealed record PlayerAttendanceChange(Guid SportEnrollmentId, AttendanceSt
 public sealed record StaffAttendanceChange(Guid AcademyMembershipId, AttendanceStatus Status);
 public sealed record AttendanceSaveResult(Guid SubjectId, string Status, bool SessionConsumed, int? RemainingSessions, string? Warning);
 
-public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock)
+public sealed partial class AttendanceService(FoundationDbContext db, TimeProvider clock)
 {
     public async Task<IReadOnlyList<AttendanceSaveResult>> SavePlayersAsync(Guid academyId, Guid sessionId, Guid actorId, IReadOnlyList<PlayerAttendanceChange> changes, CancellationToken ct = default)
     {
@@ -26,6 +26,8 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
         foreach (var player in enrollments.Select(e => e.PlayerId).Distinct().Order()) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Players\" WHERE \"AcademyId\"={academyId} AND \"Id\"={player} FOR UPDATE", ct);
         var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, session.Id) && x.IsActive, ct);
         if (valid != ids.Length) throw new AttendanceNotFoundException();
+        var presentIds = changes.Where(c => c.Status == AttendanceStatus.Present).Select(c => c.SportEnrollmentId).ToArray();
+        if (await db.CompensationGrants.AnyAsync(g => g.AcademyId == academyId && presentIds.Contains(g.SportEnrollmentId) && g.SourceSessionId == sessionId, ct)) throw new AttendanceConflictException("الحصة الأصلية لها تعويض معتمد؛ لا نثبت حضورًا وخدمة تعويضية لنفس الواقعة.");
         var results = new List<AttendanceSaveResult>();
         foreach (var change in changes.OrderBy(x => x.SportEnrollmentId))
         {
@@ -37,13 +39,15 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
                 db.PlayerAttendances.Add(attendance);
             }
             int? remaining = null; string? warning = null; var consumed = attendance.ConsumedSubscriptionPeriodId is not null;
+            if (previous == AttendanceStatus.Present && change.Status != AttendanceStatus.Present) await RestoreCompensation(attendance, actorId, ct);
             if (previous == AttendanceStatus.Present && change.Status != AttendanceStatus.Present && attendance.ConsumedSubscriptionPeriodId is Guid consumedPeriod)
             {
                 remaining = await RestoreAsync(attendance, consumedPeriod, actorId, ct); consumed = false;
             }
             if (previous != AttendanceStatus.Present && change.Status == AttendanceStatus.Present)
             {
-                var effect = await ConsumeAsync(attendance, session.SessionDate, actorId, ct); consumed = effect.consumed; remaining = effect.remaining; warning = effect.warning;
+                if (await ConsumeCompensation(attendance, session.SessionDate, actorId, ct)) warning = "حضور بتعويض معتمد؛ لا خصم من رصيد الاشتراك الأصلي.";
+                else { var effect = await ConsumeAsync(attendance, session.SessionDate, actorId, ct); consumed = effect.consumed; remaining = effect.remaining; warning = effect.warning; }
             }
             attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow();
             results.Add(new AttendanceSaveResult(change.SportEnrollmentId, change.Status.ToString(), consumed, remaining, warning));

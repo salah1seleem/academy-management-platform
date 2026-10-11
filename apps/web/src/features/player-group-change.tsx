@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { monthToDate } from "../lib/date-range";
 import { csrfRequest } from "./dashboard-api";
 import { PlayerSessionChange } from "./player-session-change";
+import { PlayerCompensation } from "./player-compensation";
 type Group = { id: string; arabicName: string; sportId: string; branchId: string; registrationFormat?: string };
 type Slot = { id: string; sessionDate: string; startTime: string; endTime: string };
 type Preview = { fingerprint: string; effectiveDate: string; sourceGroup: string; targetGroup: string; conflicts: string[]; removedSessions: Slot[]; addedSessions: Slot[]; effect: string };
@@ -39,5 +40,5 @@ export function PlayerGroupChange({ enrollmentId, groupId, onSaved }: { enrollme
       <details><summary>المواعيد الجديدة</summary>{preview.addedSessions.map(s => <p key={s.id}>{s.sessionDate} · {s.startTime.slice(0, 5)} — {s.endTime.slice(0, 5)}</p>)}</details>
       <button disabled={busy || preview.conflicts.length > 0} onClick={() => void move()}>تأكيد نقل المجموعة</button></section>}
     {message && <p role="status">{message}</p>}
-  </div></details><PlayerSessionChange enrollmentId={enrollmentId} groups={groups} onSaved={onSaved} /></>;
+  </div></details><PlayerSessionChange enrollmentId={enrollmentId} groups={groups} onSaved={onSaved} /><PlayerCompensation enrollmentId={enrollmentId} onSaved={onSaved} /></>;
 }

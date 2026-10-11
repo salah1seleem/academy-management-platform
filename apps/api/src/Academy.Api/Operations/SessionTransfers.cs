@@ -45,6 +45,7 @@ public sealed partial class GroupPlacementService
         if (slots.Any(s => s.Status != TrainingSessionStatus.Scheduled || !s.TrainingGroup.IsActive)) conflicts.Add("الحصة الملغاة أو المنفذة أو المجموعة الموقوفة غير متاحة للنقل.");
         if (await db.PlayerAttendances.AnyAsync(a => a.SportEnrollmentId == enrollment && ids.Contains(a.TrainingSessionId))) conflicts.Add("إحدى الحصص لها سجل حضور؛ يبقى التاريخ محفوظًا.");
         if (await db.EnrollmentSessionMoves.AnyAsync(m => m.SportEnrollmentId == enrollment && (ids.Contains(m.SourceSessionId) || ids.Contains(m.TargetSessionId)))) conflicts.Add("إحدى الحصص لها نقل معتمد؛ لا نعيد نقلها أو نستبدل القرار بصمت.");
+        if (await db.CompensationBookings.AnyAsync(c => c.SportEnrollmentId == enrollment && ids.Contains(c.TrainingSessionId) && c.State == Academy.Infrastructure.People.CompensationBookingState.Reserved)) conflicts.Add("الحصة لها تعويض محجوز؛ راجعه قبل النقل.");
         var impacts = new List<SessionTransferImpact>(); var eligibility = new List<object>();
         var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]);
         foreach (var p in pairs)

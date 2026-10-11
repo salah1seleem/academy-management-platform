@@ -78,6 +78,7 @@ public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityS
     public async Task CancelBookings(TrainingSession session, Guid actor)
     {
         if (await db.EnrollmentSessionMoves.AnyAsync(m => m.SourceSessionId == session.Id || m.TargetSessionId == session.Id)) throw new FacilityRejected("الحصة مرتبطة بنقل لاعب معتمد؛ راجع نقل الحصص قبل الإلغاء.");
+        if (await db.CompensationBookings.AnyAsync(b => b.TrainingSessionId == session.Id && b.State == Academy.Infrastructure.People.CompensationBookingState.Reserved)) throw new FacilityRejected("الحصة لها حجز تعويضي؛ حرره بمراجعة قبل الإلغاء.");
         var rows = await db.ResourceBookings.Where(x => x.TrainingSessionId == session.Id && x.State == ResourceBookingState.Reserved).ToListAsync();
         if (rows.Count == 0) return;
         await facilities.Authority("Edit");

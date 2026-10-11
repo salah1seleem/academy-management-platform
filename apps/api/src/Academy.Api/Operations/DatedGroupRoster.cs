@@ -14,7 +14,7 @@ public static class DatedGroupRoster
         var counts = await dates.OrderBy(d => d).Take(1001).Select(date => new DatedRosterCount(date, db.SportEnrollments.Count(e => e.IsActive && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group))).ToArrayAsync();
         if (counts.Length > 1000) throw new FacilityRejected("نطاق جدول المجموعة أكبر من حد فحص المقاعد؛ راجعه قبل الإضافة.");
         var occurrences = await db.TrainingSessions.Where(s => s.TrainingGroupId == group && s.SessionDate >= from && s.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled)
-            .Where(s => db.EnrollmentSessionMoves.Any(m => m.SourceSessionId == s.Id || m.TargetSessionId == s.Id))
+            .Where(s => db.EnrollmentSessionMoves.Any(m => m.SourceSessionId == s.Id || m.TargetSessionId == s.Id) || db.CompensationBookings.Any(b => b.TrainingSessionId == s.Id && b.State == Academy.Infrastructure.People.CompensationBookingState.Reserved))
             .OrderBy(s => s.SessionDate).ThenBy(s => s.Id).Take(1001).Select(s => new DatedRosterCount(s.SessionDate, db.SportEnrollments.Count(e => e.IsActive && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)))).ToArrayAsync();
         if (occurrences.Length > 1000) throw new FacilityRejected("عدد الحصص المنقولة يتجاوز حد فحص السعة.");
         return counts.Concat(occurrences).ToArray();

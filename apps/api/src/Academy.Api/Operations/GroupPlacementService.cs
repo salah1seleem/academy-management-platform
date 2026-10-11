@@ -54,12 +54,12 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         if (b.EnrollmentIds is null || b.EnrollmentIds.Length is < 1 or > 100 || b.EnrollmentIds.Any(x => x == Guid.Empty) || b.EnrollmentIds.Distinct().Count() != b.EnrollmentIds.Length) throw new FacilityRejected("اختر من لاعب واحد إلى 100 تسجيل مختلف.", 422);
         return b.EnrollmentIds.OrderBy(x => x).ToArray();
     }
-    private async Task<PlacementPreview> Inspect(TrainingGroup g, Guid[] ids, bool assessBatch = true, DateOnly? effectiveDate = null, bool transfer = false, Guid? occurrence = null)
+    private async Task<PlacementPreview> Inspect(TrainingGroup g, Guid[] ids, bool assessBatch = true, DateOnly? effectiveDate = null, bool transfer = false, Guid? occurrence = null, bool compensation = false)
     {
         var today = effectiveDate ?? await AttendanceCalendar.TodayAsync(g.AcademyId, db, time);
         var rows = await db.SportEnrollments.AsNoTracking().Include(x => x.Player).Where(x => ids.Contains(x.Id)).OrderBy(x => x.Id).ToListAsync();
         if (rows.Count != ids.Length) throw new FacilityRejected("أحد التسجيلات غير متاح في نطاقك.", 404);
-        var roster = await db.SportEnrollments.AsNoTracking().Where(x => x.IsActive && (occurrence.HasValue ? FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, occurrence.GetValueOrDefault()) : FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, today) == g.Id)).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version }).ToArrayAsync();
+        var roster = await db.SportEnrollments.AsNoTracking().Where(x => x.IsActive && (!compensation || !ids.Contains(x.Id)) && (occurrence.HasValue ? FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, occurrence.GetValueOrDefault()) : FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, today) == g.Id)).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version }).ToArrayAsync();
         var level = g.TrainingLevelId.HasValue ? await db.TrainingLevels.AsNoTracking().SingleOrDefaultAsync(x => x.Id == g.TrainingLevelId && x.IsActive && x.SportId == g.SportId) : null;
         var levels = await db.TrainingLevels.AsNoTracking().Where(x => x.SportId == g.SportId && x.IsActive).ToDictionaryAsync(x => x.Id);
         var coaches = await db.StaffGroupAssignments.AsNoTracking().Where(x => x.TrainingGroupId == g.Id && x.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.User.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.AcademyMembershipId, x.Version, memberUpdated = x.AcademyMembership.UpdatedAtUtc }).ToArrayAsync();
@@ -107,7 +107,7 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
             if (e.RegistrationFormat != g.RegistrationFormat) reasons.Add("نوع تسجيل اللاعب لا يطابق نمط تدريب المجموعة.");
             if (g.AgeCategory.MinimumBirthYear > e.Player.DateOfBirth.Year || g.AgeCategory.MaximumBirthYear < e.Player.DateOfBirth.Year || e.Player.DateOfBirth > today) reasons.Add("الفئة العمرية لا تناسب اللاعب.");
             if (level is null || e.TrainingLevelId != level.Id || e.LevelReviewedByUserId is null || e.LevelReviewedAtUtc is null) reasons.Add("راجع مستوى اللاعب؛ المستوى المعتمد يجب أن يطابق المجموعة.");
-            if (!periods.Any(p => p.SportEnrollmentId == e.Id && (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && Academy.Api.Slice3.PlanCatalog.FormatMatches(g.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions is > 0))) reasons.Add("لا يوجد استحقاق تدريب سارٍ مطابق للنوع؛ يبقى اللاعب في الانتظار دون حضور مدفوع.");
+            if (!compensation && !periods.Any(p => p.SportEnrollmentId == e.Id && (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && Academy.Api.Slice3.PlanCatalog.FormatMatches(g.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions is > 0))) reasons.Add("لا يوجد استحقاق تدريب سارٍ مطابق للنوع؛ يبقى اللاعب في الانتظار دون حضور مدفوع.");
             if (sessions.Length > 0)
             {
                 var samePlayerEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]).Where(other => other.AcademyId == g.AcademyId && other.PlayerId == e.PlayerId && other.Id != e.Id && other.IsActive);

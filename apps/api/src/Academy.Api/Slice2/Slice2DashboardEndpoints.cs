@@ -103,6 +103,7 @@ public static class Slice2DashboardEndpoints
             case "groups":
                 var group = await db.TrainingGroups.SingleOrDefaultAsync(x => x.AcademyId == current.AcademyId && x.Id == id);
                 if (group is null) return Results.NotFound();
+                if (group.AgeCategoryId != request.AgeCategoryId && await db.CompensationBookings.AnyAsync(b => b.TrainingGroupId == id && b.State == Academy.Infrastructure.People.CompensationBookingState.Reserved)) return Results.Conflict(new { message = "حرر حجوزات التعويض قبل تغيير فئة المجموعة." });
                 if (request.BranchId is null || request.SportId is null || request.AgeCategoryId is null ||
                     !await db.Branches.AnyAsync(x => x.AcademyId == current.AcademyId && x.Id == request.BranchId && x.IsActive) ||
                     !await db.Sports.AnyAsync(x => x.AcademyId == current.AcademyId && x.Id == request.SportId && x.IsActive) ||

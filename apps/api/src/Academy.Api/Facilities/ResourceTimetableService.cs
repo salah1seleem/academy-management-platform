@@ -8,6 +8,7 @@ using Academy.Api.Slice4;
 using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.Facilities;
 using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.People;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,7 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         var roster = await db.SportEnrollments.Where(x => FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, b.From) == group.Id && x.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version, x.Status }).ToListAsync();
         var conflicts = new List<ScheduleConflict>(); FacilityResource? resource = null;
         if (await db.EnrollmentSessionMoves.AnyAsync(m => removed.Contains(m.SourceSessionId) || removed.Contains(m.TargetSessionId))) conflicts.Add(new(b.From, "الجدول يتضمن نقل حصص معتمدًا؛ لا نلغي مواعيد اللاعبين المنقولين بصمت."));
+        if (await db.CompensationBookings.AnyAsync(c => removed.Contains(c.TrainingSessionId) && c.State == CompensationBookingState.Reserved)) conflicts.Add(new(b.From, "الجدول يتضمن حجز تعويض؛ حرره صراحة قبل استبدال الموعد."));
         var datedRoster = new List<object>();
         foreach (var day in dates)
             try { var count = await coordinator.CheckRosterSlot(group.AcademyId, group.Id, day, b.StartTime, b.EndTime, checkBookedSeats: false); datedRoster.Add(new { day, count }); if (plan.Value is { } reservation && count > reservation.Seats) conflicts.Add(new(day, "المقاعد المطلوبة لا تكفي أعضاء المجموعة في هذا التاريخ.")); }
