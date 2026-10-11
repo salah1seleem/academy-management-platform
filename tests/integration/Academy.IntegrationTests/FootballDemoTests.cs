@@ -22,7 +22,16 @@ public sealed class FootballDemoTests : IAsyncLifetime
     private static Guid AcademyId => FootballDemoSeed.AcademyId;
     public async Task InitializeAsync() { _ = factory.CreateClient(); await Reset(); }
     public async Task DisposeAsync() => await factory.DisposeAsync();
-    private async Task Reset() { await using var scope = factory.Services.CreateAsyncScope(); await FootballDemoSeed.RunAsync(scope.ServiceProvider, true); }
+    private async Task Reset()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        // Reset only this fixture's reserved synthetic OTP history. Production throttling
+        // remains unchanged; rapid reruns must not share a prior test's 15-minute quota.
+        var phones = Enumerable.Range(100, 29).Select(FootballDemoSeed.Phone).ToArray();
+        await db.MobileOtpChallenges.Where(x => phones.Contains(x.PhoneNumberNormalized)).ExecuteDeleteAsync();
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider, true);
+    }
 
     [Fact]
     public async Task Payroll_demo_is_synthetic_linked_repeatable_and_keeps_manual_salary_edits()

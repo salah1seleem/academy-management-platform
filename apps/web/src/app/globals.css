@@ -30,6 +30,24 @@
 .platform-shell .form-shell > button, .platform-shell .form-shell > p { grid-column: 1 / -1; }
 .platform-shell .form-shell > button { justify-self: start; }
 .platform-shell .form-shell > p { margin: 0; }
+.access-editor { max-width: none; }
+.access-editor .section-heading { align-items: start; }
+.access-editor .section-heading > button { width: auto; }
+.access-branches { border: 1px solid var(--border); border-radius: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; }
+.access-branches label, .access-branch-options label { display: flex; gap: .6rem; align-items: center; min-height: 44px; }
+.access-branches input { width: 1.2rem; height: 1.2rem; accent-color: var(--primary); }
+.access-branch-options { display: flex; flex-wrap: wrap; gap: 1rem; flex-basis: 100%; }
+.access-table-scroll { overflow-x: auto; margin-block: 1rem; border: 1px solid var(--border); border-radius: 1rem; }
+.access-table { width: 100%; border-collapse: collapse; text-align: start; }
+.access-table caption { text-align: start; font-weight: 700; padding: 1rem; }
+.access-table th, .access-table td { padding: .6rem; border-bottom: 1px solid var(--border); }
+.access-table thead { background: var(--primary-soft); }
+.access-table th[scope="row"] { font-size: .85rem; min-width: 10rem; }
+.access-table input[role="switch"] { appearance: none; width: 44px; height: 26px; border: 1px solid #9ba9b6; border-radius: 20px; background: #e7ebef; position: relative; cursor: pointer; vertical-align: middle; margin: 9px 0; }
+.access-table input[role="switch"]::after { content: ""; width: 18px; height: 18px; position: absolute; top: 3px; inset-inline-start: 3px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }
+.access-table input[role="switch"]:checked { background: var(--primary); border-color: var(--primary); }
+.access-table input[role="switch"]:checked::after { inset-inline-start: 21px; }
+.access-table input[role="switch"]:focus-visible { outline: 3px solid #f0b44b; outline-offset: 2px; }
 .platform-academies { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
 .platform-academy { flex-direction: column; align-items: start !important; padding: 1.15rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 1rem; text-align: start; }
 .platform-academy[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }

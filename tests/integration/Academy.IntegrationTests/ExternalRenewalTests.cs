@@ -20,8 +20,9 @@ public sealed class ExternalRenewalTests : IAsyncLifetime
     private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
     private Factory factory = null!;
 
-    public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
-    public async Task DisposeAsync() => await factory.DisposeAsync();
+    private InternalGatewayRouteScope route = null!;
+    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); route = await InternalGatewayRouteScope.Begin(factory.Services); }
+    public async Task DisposeAsync() { await route.DisposeAsync(); await factory.DisposeAsync(); }
 
     [Fact]
     public async Task Payer_can_resolve_valid_same_academy_reference()

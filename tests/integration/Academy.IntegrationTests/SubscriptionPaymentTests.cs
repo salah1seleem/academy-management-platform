@@ -18,8 +18,9 @@ public sealed class SubscriptionPaymentTests : IAsyncLifetime
 {
     private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
     private Factory factory = null!;
-    public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
-    public async Task DisposeAsync() => await factory.DisposeAsync();
+    private InternalGatewayRouteScope route = null!;
+    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); route = await InternalGatewayRouteScope.Begin(factory.Services); }
+    public async Task DisposeAsync() { await route.DisposeAsync(); await factory.DisposeAsync(); }
 
     [Fact] public async Task Payment_success_creates_exactly_one_collection() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); await Simulate(p, "Success"); Assert.Equal(1, await Count<PaymentCollection>(x => x.PaymentRequestId == p)); }
     [Fact] public async Task Duplicate_success_callback_still_creates_one_collection() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); await Simulate(p, "Success"); await Simulate(p, "Success"); Assert.Equal(1, await Count<PaymentCollection>(x => x.PaymentRequestId == p)); }

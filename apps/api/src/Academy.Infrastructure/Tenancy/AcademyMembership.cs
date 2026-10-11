@@ -10,6 +10,8 @@ public sealed class AcademyMembership
     public AcademyRole Role { get; set; }
     public string? JobTitle { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool AllBranches { get; set; } = true;
+    public bool UseActionGrants { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public Academy Academy { get; set; } = null!;

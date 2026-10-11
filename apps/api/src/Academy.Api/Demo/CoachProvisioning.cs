@@ -59,6 +59,12 @@ public static class CoachProvisioning
         membership = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = current.AcademyId, UserId = user.Id,
             Role = AcademyRole.Coach, IsActive = request.IsActive, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() };
         db.AcademyMemberships.Add(membership);
+        // Keep an unassigned coach visible to the branches that provisioned the account.
+        // This is administration affinity only: coach resource access still requires group assignment.
+        if (db.BranchScopeRestricted)
+            foreach (var branch in db.RequestBranchIds)
+                db.MembershipBranchAccesses.Add(new MembershipBranchAccess { Id = Guid.NewGuid(), AcademyId = current.AcademyId,
+                    MembershipId = membership.Id, BranchId = branch, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
         foreach (var group in groups) db.StaffGroupAssignments.Add(new StaffGroupAssignment { Id = Guid.NewGuid(), AcademyId = current.AcademyId,
             AcademyMembershipId = membership.Id, TrainingGroupId = group, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
         await db.SaveChangesAsync(); await transaction.CommitAsync();

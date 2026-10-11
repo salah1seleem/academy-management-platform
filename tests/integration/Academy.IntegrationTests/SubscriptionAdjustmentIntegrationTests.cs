@@ -28,7 +28,8 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
     private readonly List<Guid> createdSessionIds = [];
     private Factory factory = null!;
 
-    public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
+    private InternalGatewayRouteScope route = null!;
+    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); route = await InternalGatewayRouteScope.Begin(factory.Services); }
     public async Task DisposeAsync()
     {
         if (createdPlayerIds.Count > 0)
@@ -55,7 +56,7 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
             await db.SubscriptionPlans.Where(x => createdPlanIds.Contains(x.Id)).ExecuteDeleteAsync();
             await db.Players.Where(x => players.Contains(x.Id)).ExecuteDeleteAsync();
         }
-        await factory.DisposeAsync();
+        await route.DisposeAsync(); await factory.DisposeAsync();
     }
 
     [Fact] public async Task Owner_can_freeze_active_duration_period()

@@ -35,7 +35,7 @@ public static class StaffManagement
         await using var tx = await db.Database.BeginTransactionAsync();
         var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = body.Email.Trim(), Email = body.Email.Trim(), PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = body.Name.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
         var result = await users.CreateAsync(user, body.TemporaryPassword); if (!result.Succeeded) return Results.UnprocessableEntity(new { message = "تعذر إنشاء الحساب. استخدم كلمة مرور قوية وبريدًا صحيحًا." });
-        var member = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = body.Role, JobTitle = body.JobTitle?.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.AcademyMemberships.Add(member); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { member.Id });
+        var member = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = body.Role, JobTitle = body.JobTitle?.Trim(), IsActive = true, AllBranches = body.Role != AcademyRole.AcademyAdmin, UseActionGrants = body.Role == AcademyRole.AcademyAdmin, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.AcademyMemberships.Add(member); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { member.Id });
     }
     private static async Task<IResult> Grants(Guid id, GrantWrite body, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {

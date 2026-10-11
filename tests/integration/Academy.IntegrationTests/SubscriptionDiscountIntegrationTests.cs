@@ -23,7 +23,8 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
     private readonly List<Guid> renewals = [];
     private Factory factory = null!;
 
-    public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
+    private InternalGatewayRouteScope route = null!;
+    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); route = await InternalGatewayRouteScope.Begin(factory.Services); }
     public async Task DisposeAsync()
     {
         await using var scope = Scope(); var db = Db(scope); var ids = renewals.Distinct().ToArray();
@@ -42,7 +43,7 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
             await db.PaymentRequests.Where(x => payments.Contains(x.Id)).ExecuteDeleteAsync();
             await db.RenewalRequests.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
         }
-        await factory.DisposeAsync();
+        await route.DisposeAsync(); await factory.DisposeAsync();
     }
 
     [Fact] public async Task Admin_applies_percentage_discount() { var s = await NewRenewal(); using var c = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.OK, (await ApplyHttp(c, s, "Percentage", 10)).StatusCode); }

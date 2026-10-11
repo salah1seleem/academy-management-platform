@@ -127,7 +127,7 @@ public sealed class DashboardRemediationTests : IAsyncLifetime
         using var client = factory.CreateClient(); await Login(client, DemoSeed.OwnerEmail);
         (await client.GetAsync($"/api/v1/people/players/{Slice2DemoSeed.OmarPlayerId}")).EnsureSuccessStatusCode();
         (await client.GetAsync($"/api/v1/people/guardians/{Slice2DemoSeed.MainGuardianId}")).EnsureSuccessStatusCode();
-        await using var scope = factory.Services.CreateAsyncScope(); var coachId = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.Coach).Select(x => x.Id).SingleAsync();
+        await using var scope = factory.Services.CreateAsyncScope(); var coachId = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.Coach && x.User.Email == DemoSeed.CoachEmail).Select(x => x.Id).SingleAsync();
         (await client.GetAsync($"/api/v1/manage/structure/coaches/{coachId}")).EnsureSuccessStatusCode();
     }
 
@@ -145,7 +145,7 @@ public sealed class DashboardRemediationTests : IAsyncLifetime
     {
         using var client = factory.CreateClient(); await Login(client, DemoSeed.AdminEmail);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var coachId = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.Coach).Select(x => x.Id).SingleAsync();
+        var coachId = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.Coach && x.User.Email == DemoSeed.CoachEmail).Select(x => x.Id).SingleAsync();
         var targets = new[] { ("branches", Slice2DemoSeed.CityBranchId), ("sports", Slice2DemoSeed.FootballId), ("groups", Slice2DemoSeed.FootballGroupId), ("coaches", coachId) };
         foreach (var (kind, id) in targets)
         {

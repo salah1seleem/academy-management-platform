@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Academy.Api.Auth;
+using Academy.Api.Configuration;
 using Academy.Api.Slice3;
 using Academy.Api.Slice5;
 using Academy.Infrastructure.Attendance;
@@ -104,6 +105,9 @@ public static class FootballDemoSeed
         await SeedReviewExtensions(db, now, ct);
         await SeedExperience(services, db, ct);
         await PayrollDemoSeed.AddOnce(db, ct);
+        // A deliberate synthetic reset removes tenant configuration too. Restore its
+        // known demo grants within the same transaction, not a fail-open API fallback.
+        await AcademyConfigurationService.SeedDemo(db, [AcademyId]);
         await transaction.CommitAsync(ct);
     }
 

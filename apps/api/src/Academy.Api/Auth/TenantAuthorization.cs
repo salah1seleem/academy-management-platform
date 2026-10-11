@@ -104,6 +104,17 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
         if (allowed && membership.Role == AcademyRole.AcademyAdmin) {
             var grant = await db.StaffGrants.AsNoTracking().Where(x => x.AcademyId == membership.AcademyId && x.MembershipId == membership.MembershipId && x.Permission == requirement.Permission && x.IsActive).Select(x => (bool?)x.Allowed).SingleOrDefaultAsync();
             allowed = grant ?? requirement.Permission is not (AcademyPermissions.ReportsFinancialRead or AcademyPermissions.ReportsAttendanceRead or AcademyPermissions.ReportsExport or AcademyPermissions.OwnerDashboardRead or AcademyPermissions.AcademySettingsManage or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage);
+            if (requirement.Permission != AcademyPermissions.TenantAccess && await db.AcademyMemberships.AnyAsync(x => x.Id == membership.MembershipId && x.UseActionGrants))
+            {
+                // Some legacy endpoints reused a broad policy (e.g. news used media).
+                // Explicit V2 grants use the actual endpoint module, not that legacy alias.
+                var module = context.Resource is HttpContext request ? StaffAccessRules.ForPath(request.Request.Path.Value ?? "") : null;
+                module ??= StaffAccessRules.ForPermission(requirement.Permission);
+                allowed = module is not null && await db.StaffActionGrants.AnyAsync(x => x.MembershipId == membership.MembershipId && x.IsActive && x.Module == module && x.Read);
+            }
+            if (!allowed && requirement.Permission == AcademyPermissions.StructureManage && context.Resource is HttpContext { Request.Method: "GET" } http && http.Request.Path.Value?.TrimEnd('/') == "/api/v1/manage/structure/options")
+                allowed = await db.AcademyMemberships.AnyAsync(x => x.Id == membership.MembershipId && x.UseActionGrants)
+                    && await db.StaffActionGrants.AnyAsync(x => x.AcademyId == membership.AcademyId && x.MembershipId == membership.MembershipId && x.IsActive && x.Read && (x.Module == "players" || x.Module == "subscriptions" || x.Module == "attendance" || x.Module == "evaluations"));
         }
         if (allowed && membership.Role == AcademyRole.Coach && requirement.Permission == AcademyPermissions.AttendanceManage)
             allowed = await db.AcademyExperiences.AnyAsync(x => x.AcademyId == membership.AcademyId && x.CoachAttendancePolicyConfirmed && x.CoachAttendanceEnabled);

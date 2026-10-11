@@ -57,7 +57,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var original = await db.TrainingGroups.FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SportId == Slice2DemoSeed.FootballId && x.IsActive);
         var guardian = await db.GuardianProfiles.FirstAsync(x => x.AcademyId == original.AcademyId && x.User.PhoneNumber == DemoSeed.GuardianPhone);
-        var coach = await db.AcademyMemberships.FirstAsync(x => x.AcademyId == original.AcademyId && x.Role == AcademyRole.Coach && x.IsActive);
+        var coach = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == original.AcademyId && x.Role == AcademyRole.Coach && x.User.Email == DemoSeed.CoachEmail && x.IsActive);
         var owner = await db.Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync();
         var group = new TrainingGroup { Id = Guid.NewGuid(), AcademyId = original.AcademyId, ArabicName = "مجموعة اختبار أيام " + Guid.NewGuid().ToString("N"), BranchId = original.BranchId, SportId = original.SportId, AgeCategoryId = original.AgeCategoryId };
         var player = new Player { Id = Guid.NewGuid(), AcademyId = original.AcademyId, ArabicName = "لاعب اختبار أيام", PlayerCode = "UX-" + Guid.NewGuid().ToString("N")[..16], DateOfBirth = new DateOnly(2017, 5, 1) };
@@ -158,12 +158,21 @@ public sealed class TimetableUxTests : IAsyncLifetime
         (await Send(owner, $"/api/v1/manage/groups/{f.Group}/timetable", Timetable())).EnsureSuccessStatusCode();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var session = await db.TrainingSessions.Where(x => x.TrainingGroupId == f.Group && x.SessionDate > new DateOnly(2026, 10, 8)).OrderBy(x => x.SessionDate).FirstAsync();
-        foreach (var client in new[] { owner, admin, coach })
+        var policy = await db.AcademyExperiences.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId);
+        var previous = (policy.CoachAttendanceEnabled, policy.CoachAttendancePolicyConfirmed);
+        policy.CoachAttendanceEnabled = true; policy.CoachAttendancePolicyConfirmed = true; await db.SaveChangesAsync();
+        try
         {
-            Assert.Equal(HttpStatusCode.BadRequest, (await Put(client, $"/api/v1/attendance/sessions/{session.Id}/players", new { items = new[] { new { sportEnrollmentId = f.Enrollment, status = 2 } } })).StatusCode);
-            Assert.Equal(HttpStatusCode.BadRequest, (await Put(client, $"/api/v1/attendance/sessions/{session.Id}/staff", new { items = new[] { new { academyMembershipId = f.Coach, status = 2 } } })).StatusCode);
+            // Exercise date validation even for a coach explicitly authorized by the owner.
+            // Default-deny is covered independently by V2AttendancePolicyTests.
+            foreach (var client in new[] { owner, admin, coach })
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, (await Put(client, $"/api/v1/attendance/sessions/{session.Id}/players", new { items = new[] { new { sportEnrollmentId = f.Enrollment, status = 2 } } })).StatusCode);
+                Assert.Equal(HttpStatusCode.BadRequest, (await Put(client, $"/api/v1/attendance/sessions/{session.Id}/staff", new { items = new[] { new { academyMembershipId = f.Coach, status = 2 } } })).StatusCode);
+            }
+            Assert.False(await db.PlayerAttendances.AnyAsync(x => x.TrainingSessionId == session.Id)); Assert.False(await db.StaffAttendances.AnyAsync(x => x.TrainingSessionId == session.Id));
         }
-        Assert.False(await db.PlayerAttendances.AnyAsync(x => x.TrainingSessionId == session.Id)); Assert.False(await db.StaffAttendances.AnyAsync(x => x.TrainingSessionId == session.Id));
+        finally { policy.CoachAttendanceEnabled = previous.CoachAttendanceEnabled; policy.CoachAttendancePolicyConfirmed = previous.CoachAttendancePolicyConfirmed; await db.SaveChangesAsync(); }
     }
 
     [Fact]

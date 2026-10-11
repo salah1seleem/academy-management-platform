@@ -59,6 +59,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
     {
         base.OnModelCreating(builder);
         ConfigurePlatformIdentity(builder);
+        ConfigureStaffAccess(builder);
         ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>
@@ -589,6 +590,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
+        ConfigureRequestIsolation(builder);
     }
 
     private static void ConfigureTenantEntity<TEntity>(ModelBuilder builder, string table) where TEntity : TenantEntity
