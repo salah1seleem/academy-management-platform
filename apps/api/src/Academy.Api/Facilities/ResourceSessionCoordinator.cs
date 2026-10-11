@@ -52,12 +52,26 @@ public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityS
     public async Task Reserve(TrainingSession session, Guid actor)
     {
         await CheckCoachSlot(session.AcademyId, session.TrainingGroupId, session.SessionDate, session.StartTime, session.EndTime, session.Id);
+        await CheckRosterSlot(session.AcademyId, session.TrainingGroupId, session.SessionDate, session.StartTime, session.EndTime, session.Id);
         var plan = await db.GroupResourceSchedules.AsNoTracking().SingleOrDefaultAsync(x => x.TrainingGroupId == session.TrainingGroupId && x.IsActive);
         if (plan is null) return;
         await facilities.Authority("Add");
         if (session.SessionDate < plan.ValidFrom || session.SessionDate > plan.ValidTo) throw new FacilityRejected("الحصة خارج فترة حجز المجموعة. عدّل جدول المورد أولًا.", 422);
         if (await db.ResourceBookings.AnyAsync(x => x.TrainingSessionId == session.Id && x.State == ResourceBookingState.Reserved)) return;
         await facilities.ReserveLocked(new(plan.ResourceId, session.SessionDate, session.StartTime, session.EndTime, plan.ReservedSeats, plan.Exclusive, "Training", session.TrainingGroupId, plan.CoachMembershipId, session.Id), "session-" + Guid.NewGuid().ToString("N"), session.AcademyId, actor);
+    }
+    public async Task<int> CheckRosterSlot(Guid academy, Guid group, DateOnly date, TimeOnly start, TimeOnly end, Guid? session = null, bool checkBookedSeats = true)
+    {
+        var roster = db.SportEnrollments.Where(e => e.AcademyId == academy && e.IsActive && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group);
+        var count = await roster.CountAsync();
+        var capacity = await db.TrainingGroups.Where(g => g.Id == group).Select(g => g.Capacity).SingleAsync();
+        if (capacity.HasValue && count > capacity.Value) throw new FacilityRejected("عدد أعضاء المجموعة المؤرخ يتجاوز سعتها في هذا اليوم.");
+        var seats = await db.GroupResourceSchedules.Where(g => g.TrainingGroupId == group && g.IsActive).Select(g => (int?)g.ReservedSeats).SingleOrDefaultAsync();
+        if (checkBookedSeats && seats.HasValue && count > seats.Value) throw new FacilityRejected("حجز المورد لا يكفي عدد الأعضاء في تاريخ الحصة.");
+        var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]).Where(e => e.AcademyId == academy && e.IsActive);
+        var allSessions = db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).Where(s => s.AcademyId == academy && s.Id != session && s.TrainingGroupId != group && s.SessionDate == date && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < end && start < s.EndTime);
+        if (await roster.AnyAsync(e => allEnrollments.Any(other => other.PlayerId == e.PlayerId && other.Id != e.Id && allSessions.Any(s => FoundationDbContext.AssignedGroupAt(other.AcademyId, other.Id, date) == s.TrainingGroupId)))) throw new FacilityRejected("أحد اللاعبين لديه حصة أخرى متعارضة في هذا الموعد.");
+        return count;
     }
     public async Task CancelBookings(TrainingSession session, Guid actor)
     {

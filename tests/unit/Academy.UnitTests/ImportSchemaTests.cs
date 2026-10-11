@@ -38,6 +38,14 @@ public sealed class ImportSchemaTests
         Assert.Equal(bytes, ImportXlsx.Write(source)); // byte-stable template, not ZIP wall-clock timestamps
     }
     [Theory]
+    [InlineData(3000)]
+    public void Large_tenant_reference_sheet_roundtrips_without_weakening_upload_limits(int count)
+    {
+        var refs = Refs(); var many = refs with { Values = refs.Values.Concat(Enumerable.Range(0, count).Select(i => new ImportReference("group", Guid.NewGuid(), "مجموعة اختبار صناعية " + i, Branch, Sport, Capacity: 30))).ToArray() };
+        var book = Filled(many, 1000); var bytes = ImportXlsx.Write(book); var parsed = ImportXlsx.Read(bytes);
+        Assert.Equal(count + refs.Values.Count + 1, parsed.Sheet("References").Rows.Count); Assert.Equal(1001, parsed.Sheet("Enrollments").Rows.Count);
+    }
+    [Theory]
     [InlineData("GuardianPhone", "1000000001", false)]
     [InlineData("DateOfBirth", "17/01/2017", true)]
     [InlineData("DateOfBirth", "2001-01-01", true)]

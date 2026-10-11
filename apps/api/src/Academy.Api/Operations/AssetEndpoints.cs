@@ -24,7 +24,7 @@ public static class AssetEndpoints
     private static Task<bool> Linked(FoundationDbContext db, Guid academy, Guid user, Guid player) => db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == academy && x.Guardian.UserId == user && x.PlayerId == player && x.IsActive && x.Guardian.IsActive && x.Player.IsActive);
     private static Task<bool> Assigned(FoundationDbContext db, Guid academy, Guid user, Guid group) => db.StaffGroupAssignments.AnyAsync(x => x.AcademyId == academy && x.AcademyMembership.UserId == user && x.TrainingGroupId == group && x.IsActive && x.AcademyMembership.IsActive && x.TrainingGroup.IsActive);
 
-    private static async Task<IResult> Upload(HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock)
+    private static async Task<IResult> Upload(HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, TimeProvider time)
     {
         if (!context.Request.HasFormContentType) return Results.BadRequest(new { message = "اختر ملف صورة أو فيديو." });
         IFormCollection form;
@@ -67,7 +67,8 @@ public static class AssetEndpoints
         db.PrivateAssets.Add(asset);
         if (purpose == "Media" && groupId.HasValue)
         {
-            var roster = await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == groupId && x.IsActive && x.Player.IsActive).Select(x => x.PlayerId).Distinct().ToListAsync();
+            var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
+            var roster = await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) == groupId && x.IsActive && x.Player.IsActive).Select(x => x.PlayerId).Distinct().ToListAsync();
             db.PrivateAssetAudiences.AddRange(roster.Select(id => new PrivateAssetAudience { Id = Guid.NewGuid(), AcademyId = t.AcademyId, AssetId = asset.Id, PlayerId = id, CreatedAtUtc = now, UpdatedAtUtc = now }));
         }
         if (purpose == "Photo")

@@ -30,7 +30,7 @@ public static class ManualPayments
         api.MapPost("/people/players/{id:guid}/refunds", Refund).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
     }
     private static Guid Actor(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private static async Task<IResult> CollectStaff(Guid id, CollectWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService service)
+    private static async Task<IResult> CollectStaff(Guid id, CollectWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService service, TimeProvider time)
     {
         if (body.PaymentMethod is not ("Cash" or "Online")) return Results.UnprocessableEntity();
         var t = (await tenant.ResolveAsync())!; var actor = Actor(principal);
@@ -41,7 +41,8 @@ public static class ManualPayments
         if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.UserId == p.RenewalRequest.RequestedByUserId && (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin))) return Results.Forbid();
         if (await db.PaymentProofs.AnyAsync(x => x.AcademyId == t.AcademyId && x.PaymentRequestId == id)) return Results.Conflict(new { message = "استخدم مراجعة إثبات الدفع لهذا الطلب." });
         if (p.Status == PaymentRequestStatus.Confirmed) { var existing = await db.Receipts.Where(x => x.AcademyId == t.AcademyId && x.Collection.PaymentRequestId == id).Select(x => x.Id).SingleAsync(); return Results.Ok(new { receiptId = existing, replay = true }); }
-        if (p.Status != PaymentRequestStatus.Pending || p.RenewalRequest.PaymentRequestId != id || p.RenewalRequest.SportEnrollment.TrainingGroup?.IsActive != true) return Results.Conflict();
+        var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
+        if (p.Status != PaymentRequestStatus.Pending || p.RenewalRequest.PaymentRequestId != id || !await db.TrainingGroups.AnyAsync(g => g.Id == FoundationDbContext.AssignedGroupAt(t.AcademyId, p.RenewalRequest.SportEnrollmentId, day) && g.IsActive)) return Results.Conflict();
         if (!PlanCatalog.FormatMatches(p.RenewalRequest.SportEnrollment.RegistrationFormat, PlanTerms.From(p.RenewalRequest, p.RenewalRequest.SubscriptionPlan).Format)) return Results.Conflict(new { message = "الباقة المحفوظة لا تطابق نوع التسجيل." });
         p.Provider = "Manual"; p.ProviderEnvironment = "Manual";
         var receipt = await service.ConfirmAsync(t.AcademyId, actor, id, body.PaymentMethod); await tx.CommitAsync(); return Results.Ok(new { receiptId = receipt });
@@ -116,7 +117,7 @@ public static class ManualPayments
     }
     private static async Task<IResult> GetProof(Guid id, CurrentTenant tenant, FoundationDbContext db)
     { var t = (await tenant.ResolveAsync())!; var row = await db.PaymentProofs.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.PaymentRequestId == id).Select(x => new { x.Id, x.Status, x.ReviewReason, x.ReviewedAtUtc, url = "/api/v1/assets/" + x.AssetId }).SingleOrDefaultAsync(); return row is null ? Results.NotFound() : Results.Ok(row); }
-    private static async Task<IResult> Review(Guid id, ReviewWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService collections, ISubscriptionClock clock, GroupPlacementService placement)
+    private static async Task<IResult> Review(Guid id, ReviewWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService collections, ISubscriptionClock clock, GroupPlacementService placement, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var user = Actor(principal);
         if (body.Reason?.Length > 500) return Results.UnprocessableEntity();
@@ -132,16 +133,18 @@ public static class ManualPayments
         {
             if (body.GroupId is not Guid groupId) return Results.UnprocessableEntity(new { message = "اختر مجموعة اللاعب قبل القبول." });
             var enrollment = payment.RenewalRequest.SportEnrollment;
+            var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
+            var assignedGroup = await db.SportEnrollments.Where(e => e.Id == enrollment.Id).Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, day)).SingleAsync();
+            if (assignedGroup.HasValue && assignedGroup != groupId) return Results.Conflict(new { message = "استخدم النقل المؤرخ أولًا؛ قبول الدفع لا يغير مجموعة اللاعب." });
             var group = await db.TrainingGroups.Include(x => x.AgeCategory).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
             if (group is null || group.SportId != enrollment.SportId || group.BranchId != enrollment.BranchId || group.RegistrationFormat != enrollment.RegistrationFormat || !PlanCatalog.FormatMatches(enrollment.RegistrationFormat, PlanTerms.From(payment.RenewalRequest, payment.RenewalRequest.SubscriptionPlan).Format)) return Results.UnprocessableEntity(new { message = "المجموعة أو الباقة غير متوافقة مع نوع التسجيل." });
             var birthYear = await db.Players.Where(x => x.AcademyId == t.AcademyId && x.Id == enrollment.PlayerId).Select(x => x.DateOfBirth.Year).SingleAsync();
             if (group.AgeCategory.MinimumBirthYear > birthYear || group.AgeCategory.MaximumBirthYear < birthYear) return Results.UnprocessableEntity(new { message = "عمر اللاعب غير مناسب للمجموعة." });
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-capacity:{t.AcademyId}:{group.Id}"}, 0))");
-            if (group.Id != enrollment.TrainingGroupId && group.Capacity.HasValue && await db.SportEnrollments.CountAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == group.Id && x.IsActive) >= group.Capacity.Value) return Results.Conflict(new { message = "المجموعة مكتملة العدد." });
+            if (!assignedGroup.HasValue && !await DatedGroupRoster.CanAdd(db, group.Id, day, group.Capacity)) return Results.Conflict(new { message = "المجموعة مكتملة العدد في الفترة الحالية أو في نقل مجدول." });
             var specialAdmission = group.RegistrationFormat != TrainingRegistrationFormat.Group && enrollment.TrainingGroupId is null;
-            if (group.RegistrationFormat != TrainingRegistrationFormat.Group && enrollment.TrainingGroupId.HasValue && enrollment.TrainingGroupId != groupId) return Results.Conflict(new { message = "جدد في المجموعة الحالية؛ نقل التدريب الخاص يحتاج معاينة نقل مستقلة." });
             if (specialAdmission) { try { group = await placement.PrepareSpecialAdmission(group.Id); } catch (Academy.Api.Facilities.FacilityRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); } }
-            else enrollment.TrainingGroupId = groupId;
+            else if (!enrollment.TrainingGroupId.HasValue) enrollment.TrainingGroupId = groupId;
             enrollment.UpdatedAtUtc = clock.UtcNow;
             receipt = await collections.ConfirmAsync(t.AcademyId, user, id, "Online");
             if (specialAdmission) { try { await placement.FinishSpecialAdmission(group, enrollment); } catch (Academy.Api.Facilities.FacilityRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); } }

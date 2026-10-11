@@ -234,16 +234,16 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     {
         using var c = await Owner(); Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/v1/assets/{Guid.NewGuid()}")).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/v1/people/players/{Slice2DemoSeed.AcademyBPlayerId}/refunds")).StatusCode);
     }
-    [Fact] public async Task Group_transfer_keeps_subscription_and_dated_history()
+    [Fact] public async Task Legacy_group_transfer_cannot_bypass_review_and_keeps_subscription_and_history_unchanged()
     {
         using var c = await Owner(); var record = await Register(c); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var enrollment = await db.SportEnrollments.Include(x => x.TrainingGroup).SingleAsync(x => x.Id == record.Enrollment); var old = Assert.IsType<TrainingGroup>(enrollment.TrainingGroup);
         var g = new TrainingGroup { Id = Guid.NewGuid(), AcademyId = old.AcademyId, ArabicName = "مجموعة نقل اختبار " + Guid.NewGuid(), BranchId = old.BranchId, SportId = old.SportId, AgeCategoryId = old.AgeCategoryId, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow }; db.TrainingGroups.Add(g); await db.SaveChangesAsync();
         var session = await db.TrainingSessions.FirstAsync(x => x.AcademyId == old.AcademyId && x.TrainingGroupId == old.Id);
         var attendance = new PlayerAttendance { Id = Guid.NewGuid(), AcademyId = old.AcademyId, TrainingSessionId = session.Id, TrainingGroupId = old.Id, SportEnrollmentId = enrollment.Id, Status = AttendanceStatus.Present, RecordedByUserId = await db.Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync() }; db.PlayerAttendances.Add(attendance); await db.SaveChangesAsync();
-        Assert.Equal(HttpStatusCode.NoContent, (await Send(c, $"/api/v1/people/enrollments/{record.Enrollment}/group", new { groupId = g.Id }, put: true)).StatusCode);
-        await db.Entry(enrollment).ReloadAsync(); Assert.Equal(g.Id, enrollment.TrainingGroupId); Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(x => x.SportEnrollmentId == record.Enrollment));
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(c, $"/api/v1/people/enrollments/{record.Enrollment}/group", new { groupId = g.Id }, put: true)).StatusCode);
+        await db.Entry(enrollment).ReloadAsync(); Assert.Equal(old.Id, enrollment.TrainingGroupId); Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(x => x.SportEnrollmentId == record.Enrollment)); Assert.False(await db.EnrollmentGroupTransfers.AnyAsync(x => x.SportEnrollmentId == record.Enrollment));
         var historical = await db.PlayerAttendances.AsNoTracking().SingleAsync(x => x.Id == attendance.Id); Assert.Equal(old.Id, historical.TrainingGroupId); Assert.Equal(session.Id, historical.TrainingSessionId); Assert.Equal(AttendanceStatus.Present, historical.Status);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(c, $"/api/v1/people/enrollments/{record.Enrollment}/group", new { groupId = Slice2DemoSeed.SwimmingGroupId }, put: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(c, $"/api/v1/people/enrollments/{record.Enrollment}/group", new { groupId = Slice2DemoSeed.SwimmingGroupId }, put: true)).StatusCode);
     }
     [Fact] public async Task Timetable_is_group_scoped_repeatable_and_supports_six_months()
     {

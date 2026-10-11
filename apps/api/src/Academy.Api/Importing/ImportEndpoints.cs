@@ -25,16 +25,16 @@ public static class ImportEndpoints
     {
         var api = app.MapGroup("/api/v1/people/import").RequireAuthorization(AcademyPermissions.PeopleManage);
         api.MapGet("/schema", () => Results.Ok(new { version = ImportSchema.Version, maxRows = ImportSchema.MaxRows, columns = ImportSchema.Enrollments, balances = ImportSchema.OpenBalances }));
-        api.MapGet("/template", async (CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock) => {
+        api.MapGet("/template", async (CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time) => {
             var t = (await tenant.ResolveAsync())!;
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
-            var references = await ImportReferences.Load(db, t.AcademyId);
+            var references = await ImportReferences.Load(db, t.AcademyId, time);
             var bytes = ImportXlsx.Write(references.Template(clock.Today)); await tx.CommitAsync();
             return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "academity-import-v2.xlsx");
         });
-        api.MapGet("/demo-sample", async (IHostEnvironment env, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock) => {
+        api.MapGet("/demo-sample", async (IHostEnvironment env, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time) => {
             if (!env.IsEnvironment("Demo")) return Results.NotFound();
-            var t = (await tenant.ResolveAsync())!; var sample = ImportDemoFile.Create(await ImportReferences.Load(db, t.AcademyId), clock);
+            var t = (await tenant.ResolveAsync())!; var sample = ImportDemoFile.Create(await ImportReferences.Load(db, t.AcademyId, time), clock);
             return sample is null ? Results.NotFound() : Results.File(ImportXlsx.Write(sample), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "academity-synthetic-demo.xlsx");
         });
         api.MapPost("/preview", Preview).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("import");
@@ -61,7 +61,7 @@ public static class ImportEndpoints
                                      select new PublishedRow(m.LegacyPlayerId, m.LegacyEnrollmentId, p.Id, p.ArabicName, p.PlayerCode, e.Sport.ArabicName, e.Branch.ArabicName, e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName, period.StartDate, period.EndDate, period.RemainingSessions, period.PriceSnapshot, period.CurrencySnapshot)).ToListAsync());
         });
     }
-    private static async Task<IResult> Preview(HttpRequest request, CurrentTenant tenant, FoundationDbContext db, CancellationToken ct)
+    private static async Task<IResult> Preview(HttpRequest request, CurrentTenant tenant, FoundationDbContext db, TimeProvider time, CancellationToken ct)
     {
         if (request.ContentLength > ImportXlsx.MaxFileBytes + 64 * 1024) return Results.Problem(statusCode: 413, title: "الملف أكبر من 5 ميجابايت.");
         if (!request.HasFormContentType) return Results.Problem(statusCode: 422, title: "اختر ملف Excel من زر الاستيراد.");
@@ -73,7 +73,7 @@ public static class ImportEndpoints
             using var bytes = new MemoryStream(); await file.CopyToAsync(bytes, ct); var content = bytes.ToArray();
             var book = ImportXlsx.Read(content); var t = (await tenant.ResolveAsync())!;
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
-            var references = await ImportReferences.Load(db, t.AcademyId);
+            var references = await ImportReferences.Load(db, t.AcademyId, time);
             var preview = ImportPreview.Validate(book, references, Convert.ToHexString(SHA256.HashData(content)), await ImportCommitService.ExistingIds(db, t.AcademyId, book));
             if (preview.CanApprove) preview = preview with { GuardianMatches = await ImportCommitService.Matches(db, t.AcademyId, preview) };
             await tx.CommitAsync(ct);
@@ -114,7 +114,7 @@ public static class ImportEndpoints
                 return Results.Ok(JobView(existing));
             }
             if (await db.AcademyImportJobs.CountAsync(j => j.ActorUserId == actor && (j.State == ImportJobState.Queued || j.State == ImportJobState.Running), ct) >= 2) return Results.Problem(statusCode: 429, title: "انتظر اكتمال الدفعات الحالية قبل رفع دفعة أخرى.");
-            var preview = ImportPreview.Validate(book, await ImportReferences.Load(db, t.AcademyId), hash, await ImportCommitService.ExistingIds(db, t.AcademyId, book));
+            var preview = ImportPreview.Validate(book, await ImportReferences.Load(db, t.AcademyId, time), hash, await ImportCommitService.ExistingIds(db, t.AcademyId, book));
             if (!preview.CanApprove || form["ExpectedFileHash"] != hash || form["ExpectedReferenceStamp"] != preview.ReferenceStamp) throw new ImportRejected("stale");
             var balances = ImportCommitService.Balances(book); var balanceApproval = form["OpeningBalancesApproved"] == "true";
             if (balances.Length > 0 && !balanceApproval || preview.FinanciallyIncomplete > 0 && form["AcceptFinancialReview"] != "true") return Results.Problem(statusCode: 422, title: "اعتمد الأرصدة وسندها، وأقر مراجعة البيانات المالية الناقصة إن وجدت.");

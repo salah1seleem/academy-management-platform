@@ -89,18 +89,19 @@ public static class Slice2Endpoints
         }).RequireAuthorization(AcademyPermissions.CoachGroupsRead);
     }
 
-    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, string? subscriptionState, DateOnly? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, string? subscriptionState, DateOnly? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var date = asOf ?? clock.Today;
+        var groupDate = asOf ?? await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         if (subscriptionState is not (null or "" or "active" or "expiring" or "expired" or "subscribed" or "stable" or "other")) return Results.UnprocessableEntity();
         var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.ArabicName.Contains(search) || x.PlayerCode.Contains(search) || db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.Id && l.Guardian.ContactPhone == EgyptPhoneNormalizer.Normalize(search)));
         if (branchId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.BranchId == branchId));
         if (sportId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.SportId == sportId));
-        if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroup != null && e.TrainingGroup.AgeCategoryId == ageCategoryId));
-        if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroupId == groupId));
-        var eligible = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen);
-        var subscribed = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled);
+        if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && db.TrainingGroups.Any(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate) && g.AgeCategoryId == ageCategoryId)));
+        if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate) == groupId));
+        var eligible = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || FoundationDbContext.AssignedGroupAt(p.AcademyId, p.SportEnrollmentId, groupDate) == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen);
+        var subscribed = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || FoundationDbContext.AssignedGroupAt(p.AcademyId, p.SportEnrollmentId, groupDate) == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled);
         var activePeriods = eligible.Where(p => p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0));
         var expiredPeriods = eligible.Where(p => p.EndDate < date || (p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0);
         if (subscriptionState == "subscribed") query = query.Where(x => subscribed.Any(p => p.SportEnrollment.PlayerId == x.Id));
@@ -116,7 +117,7 @@ public static class Slice2Endpoints
             enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active),
             enrollmentSummaries = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).ThenBy(e => e.Id).Select(e => new
             {
-                e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName, status = e.Status.ToString(),
+                e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة", status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == e.Id).OrderByDescending(p => p.UpdatedAtUtc)
                     .Select(p => new { plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < date || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > date ? "Scheduled" : "Active" }).FirstOrDefault()
             }).ToList()
@@ -130,7 +131,7 @@ public static class Slice2Endpoints
         return Results.Ok(children);
     }
 
-    private static async Task<IResult> RegisterPlayer(RegistrationRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock, CollectionService collections, DiscountRules discounts, Academy.Api.Operations.GroupPlacementService placement)
+    private static async Task<IResult> RegisterPlayer(RegistrationRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock, CollectionService collections, DiscountRules discounts, Academy.Api.Operations.GroupPlacementService placement, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var actorId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var group = await db.TrainingGroups.AsNoTracking().Include(x => x.AgeCategory).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.GroupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
@@ -168,7 +169,7 @@ public static class Slice2Endpoints
         }
         if (group.AgeCategory.MinimumBirthYear > player.DateOfBirth.Year || group.AgeCategory.MaximumBirthYear < player.DateOfBirth.Year || player.DateOfBirth > DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)) return Results.UnprocessableEntity(new { message = "عمر اللاعب غير مناسب للمجموعة." });
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-capacity:{t.AcademyId}:{group.Id}"}, 0))");
-        if (group.Capacity.HasValue && await db.SportEnrollments.CountAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == group.Id && x.IsActive) >= group.Capacity.Value) return Results.Conflict(new { message = "المجموعة مكتملة العدد." });
+        if (!await DatedGroupRoster.CanAdd(db, group.Id, await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time), group.Capacity)) return Results.Conflict(new { message = "المجموعة مكتملة العدد في الفترة الحالية أو في نقل مجدول." });
         if (await db.SportEnrollments.AnyAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == player.Id && x.SportId == request.SportId && x.RegistrationFormat == group.RegistrationFormat && x.BranchId == group.BranchId && x.Status == EnrollmentStatus.Active)) return Results.Conflict(new { message = "للاعب تسجيل نشط في هذه الرياضة بالفعل." });
         GuardianProfile guardian;
         if (request.ExistingGuardianId is Guid guardianId)

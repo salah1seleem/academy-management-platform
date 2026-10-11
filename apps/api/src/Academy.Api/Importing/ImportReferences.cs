@@ -13,15 +13,21 @@ public sealed record ImportReference(string Kind, Guid Id, string Name, Guid? Br
 public sealed record ImportReferences(Guid AcademyId, string Currency, IReadOnlyList<ImportReference> Values, string Stamp)
 {
     public ImportReference? Find(string kind, string code) => Guid.TryParse(code, out var id) ? Values.FirstOrDefault(v => v.Kind == kind && v.Id == id) : null;
-    public static async Task<ImportReferences> Load(FoundationDbContext db, Guid academy)
+    public static async Task<ImportReferences> Load(FoundationDbContext db, Guid academy, TimeProvider? time = null)
     {
+        var today = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(academy, db, time ?? TimeProvider.System);
+        var roster = await db.SportEnrollments.Where(e => e.AcademyId == academy && e.IsActive && e.Status == Academy.Infrastructure.People.EnrollmentStatus.Active)
+            .GroupBy(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, today)).Where(g => g.Key != null).Select(g => new { Group = g.Key!.Value, Count = g.Count() }).ToDictionaryAsync(g => g.Group, g => g.Count);
         var currency = await db.Academies.Where(a => a.Id == academy).Select(a => a.DefaultCurrency).SingleAsync();
         var values = new List<ImportReference>();
         values.AddRange(await db.Branches.AsNoTracking().Where(b => b.AcademyId == academy && b.IsActive).Select(b => new ImportReference("branch", b.Id, b.ArabicName, null, null, null, null, null, null, 0, 0, null, false, null)).ToListAsync());
         values.AddRange(await db.Sports.AsNoTracking().Where(b => b.AcademyId == academy && b.IsActive).Select(b => new ImportReference("sport", b.Id, b.ArabicName, null, null, null, null, null, null, 0, 0, null, false, null)).ToListAsync());
         values.AddRange(await db.TrainingGroups.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive && g.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && g.Branch.IsActive && g.Sport.IsActive && g.AgeCategory.IsActive)
             .Select(g => new ImportReference("group", g.Id, g.ArabicName, g.BranchId, g.SportId, g.AgeCategoryId, g.AgeCategory.MinimumBirthYear, g.AgeCategory.MaximumBirthYear, g.Capacity,
-                db.SportEnrollments.Count(e => e.AcademyId == academy && e.TrainingGroupId == g.Id && e.IsActive && e.Status == Academy.Infrastructure.People.EnrollmentStatus.Active), 0, null, false, null)).ToListAsync());
+                0, 0, null, false, null)).ToListAsync());
+        var scheduledGroups = await db.EnrollmentGroupTransfers.Where(tr => tr.EffectiveDate >= today).Select(tr => tr.TargetGroupId).Distinct().ToArrayAsync();
+        for (var i = 0; i < values.Count; i++)
+            if (values[i].Kind == "group") values[i] = values[i] with { Occupied = scheduledGroups.Contains(values[i].Id) ? (await Academy.Api.Operations.DatedGroupRoster.Forecast(db, values[i].Id, today)).Max(x => x.Count) : roster.GetValueOrDefault(values[i].Id) };
         var plans = await db.SubscriptionPlans.TrainingOnly().ForRegistrationFormat(Academy.Infrastructure.People.TrainingRegistrationFormat.Group).AsNoTracking().Include(p => p.BranchPublications).Where(p => p.AcademyId == academy && p.IsActive).OrderBy(p => p.Id).ToListAsync();
         values.AddRange(plans.Select(p => new ImportReference("product", p.Id, p.ArabicName, Sport: p.SportId, Revision: p.Revision, PlanType: p.PlanType, AllBranches: p.AllBranches, Branches: p.BranchPublications.Where(b => b.IsActive).Select(b => b.BranchId).Order().ToArray())));
         var ordered = values.OrderBy(v => v.Kind).ThenBy(v => v.Id).ToArray();

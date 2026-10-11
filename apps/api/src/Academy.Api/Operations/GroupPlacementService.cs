@@ -54,23 +54,25 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         if (b.EnrollmentIds is null || b.EnrollmentIds.Length is < 1 or > 100 || b.EnrollmentIds.Any(x => x == Guid.Empty) || b.EnrollmentIds.Distinct().Count() != b.EnrollmentIds.Length) throw new FacilityRejected("اختر من لاعب واحد إلى 100 تسجيل مختلف.", 422);
         return b.EnrollmentIds.OrderBy(x => x).ToArray();
     }
-    private async Task<PlacementPreview> Inspect(TrainingGroup g, Guid[] ids, bool assessBatch = true)
+    private async Task<PlacementPreview> Inspect(TrainingGroup g, Guid[] ids, bool assessBatch = true, DateOnly? effectiveDate = null, bool transfer = false)
     {
-        var today = await AttendanceCalendar.TodayAsync(g.AcademyId, db, time);
+        var today = effectiveDate ?? await AttendanceCalendar.TodayAsync(g.AcademyId, db, time);
         var rows = await db.SportEnrollments.AsNoTracking().Include(x => x.Player).Where(x => ids.Contains(x.Id)).OrderBy(x => x.Id).ToListAsync();
         if (rows.Count != ids.Length) throw new FacilityRejected("أحد التسجيلات غير متاح في نطاقك.", 404);
-        var roster = await db.SportEnrollments.AsNoTracking().Where(x => x.TrainingGroupId == g.Id && x.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version }).ToArrayAsync();
+        var roster = await db.SportEnrollments.AsNoTracking().Where(x => FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, today) == g.Id && x.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version }).ToArrayAsync();
         var level = g.TrainingLevelId.HasValue ? await db.TrainingLevels.AsNoTracking().SingleOrDefaultAsync(x => x.Id == g.TrainingLevelId && x.IsActive && x.SportId == g.SportId) : null;
         var levels = await db.TrainingLevels.AsNoTracking().Where(x => x.SportId == g.SportId && x.IsActive).ToDictionaryAsync(x => x.Id);
         var coaches = await db.StaffGroupAssignments.AsNoTracking().Where(x => x.TrainingGroupId == g.Id && x.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.User.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.AcademyMembershipId, x.Version, memberUpdated = x.AcademyMembership.UpdatedAtUtc }).ToArrayAsync();
         var sessions = await db.TrainingSessions.AsNoTracking().Where(x => x.TrainingGroupId == g.Id && x.SessionDate >= today && x.Status == TrainingSessionStatus.Scheduled).OrderBy(x => x.Id).ToArrayAsync();
+        var futureCounts = await DatedGroupRoster.Forecast(db, g.Id, today);
+        var highestRoster = Math.Max(roster.Length, futureCounts.Select(x => x.Count).DefaultIfEmpty(0).Max());
         var binding = await db.GroupResourceSchedules.AsNoTracking().SingleOrDefaultAsync(x => x.TrainingGroupId == g.Id && x.IsActive);
         var bookings = await db.ResourceBookings.AsNoTracking().Where(x => x.TrainingGroupId == g.Id && x.Date >= today && x.State == Academy.Infrastructure.Facilities.ResourceBookingState.Reserved).OrderBy(x => x.Id).ToArrayAsync();
         var periods = await db.SubscriptionPeriods.AsNoTracking().Include(x => x.SubscriptionPlan).Where(x => ids.Contains(x.SportEnrollmentId) && x.IsActive && x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen && x.StartDate <= today && (x.EndDate == null || x.EndDate >= today)).OrderBy(x => x.Id).ToArrayAsync();
         var conflicts = new List<string>();
         if (level is null) conflicts.Add("حدد مستوى تدريب معتمدًا للمجموعة قبل التسكين.");
         if (g.Capacity is null or <= 0) conflicts.Add("حدد سعة المجموعة قبل التسكين.");
-        else if (assessBatch && roster.Length + rows.Count > g.Capacity) conflicts.Add("عدد اللاعبين المختار يتجاوز المقاعد المتاحة؛ لم يُحفظ أي لاعب.");
+        else if (assessBatch && highestRoster + rows.Count > g.Capacity) conflicts.Add("عدد اللاعبين المختار يتجاوز المقاعد المتاحة؛ لم يُحفظ أي لاعب.");
         if (coaches.Length == 0) conflicts.Add("أسند مدربًا فعالًا للمجموعة أولًا.");
         if (sessions.Length == 0) conflicts.Add("أنشئ حصص المجموعة القادمة قبل التسكين.");
         if (sessions.Length > 1000) conflicts.Add("جدول المجموعة أكبر من الحد المسموح لهذه المعاينة.");
@@ -83,7 +85,7 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         uint? resourceVersion = null;
         if (binding is not null)
         {
-            var requiredSeats = roster.Length + (assessBatch ? rows.Count : 0);
+            var requiredSeats = highestRoster + (assessBatch ? rows.Count : 0);
             var payload = await db.AcademyConfigurationVersions.AsNoTracking().Where(x => x.State == ConfigurationState.Active).Select(x => x.Payload).SingleOrDefaultAsync();
             if (payload is null || !AcademyRuntimeSettings.Read(payload).Features.GetValueOrDefault("facilities") || !await db.AcademyFeatureEntitlements.AnyAsync(x => x.Feature == "facilities" && x.IsActive && x.Enabled)) conflicts.Add("ميزة المرافق المرتبطة بهذه المجموعة غير متاحة.");
             if (requiredSeats > binding.ReservedSeats) conflicts.Add("المقاعد المحجوزة في الحارة لا تكفي؛ راجع حجز المجموعة.");
@@ -99,22 +101,22 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         {
             var reasons = new List<string>();
             if (!e.IsActive || !e.Player.IsActive || e.Status != EnrollmentStatus.Active) reasons.Add("التسجيل أو اللاعب غير فعال.");
-            if (!assessBatch && (g.Capacity is null || roster.Length >= g.Capacity || binding is not null && roster.Length >= binding.ReservedSeats)) reasons.Add("لا يوجد مقعد متاح حاليًا.");
-            if (e.TrainingGroupId.HasValue) reasons.Add("التسجيل مسكن بالفعل؛ استخدم نقل المجموعة بدل الإضافة.");
+            if (!assessBatch && (g.Capacity is null || highestRoster >= g.Capacity || binding is not null && highestRoster >= binding.ReservedSeats)) reasons.Add("لا يوجد مقعد متاح حاليًا.");
+            if (!transfer && e.TrainingGroupId.HasValue) reasons.Add("التسجيل مسكن بالفعل؛ استخدم نقل المجموعة بدل الإضافة.");
             if (e.SportId != g.SportId || e.BranchId != g.BranchId) reasons.Add("الرياضة أو الفرع لا يطابق المجموعة.");
             if (e.RegistrationFormat != g.RegistrationFormat) reasons.Add("نوع تسجيل اللاعب لا يطابق نمط تدريب المجموعة.");
             if (g.AgeCategory.MinimumBirthYear > e.Player.DateOfBirth.Year || g.AgeCategory.MaximumBirthYear < e.Player.DateOfBirth.Year || e.Player.DateOfBirth > today) reasons.Add("الفئة العمرية لا تناسب اللاعب.");
             if (level is null || e.TrainingLevelId != level.Id || e.LevelReviewedByUserId is null || e.LevelReviewedAtUtc is null) reasons.Add("راجع مستوى اللاعب؛ المستوى المعتمد يجب أن يطابق المجموعة.");
             if (!periods.Any(p => p.SportEnrollmentId == e.Id && (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && Academy.Api.Slice3.PlanCatalog.FormatMatches(g.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions is > 0))) reasons.Add("لا يوجد استحقاق تدريب سارٍ مطابق للنوع؛ يبقى اللاعب في الانتظار دون حضور مدفوع.");
-            var otherGroups = await db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]).Where(x => x.AcademyId == g.AcademyId && x.PlayerId == e.PlayerId && x.Id != e.Id && x.IsActive && x.TrainingGroupId != null).Select(x => x.TrainingGroupId!.Value).ToArrayAsync();
-            if (otherGroups.Length > 0 && sessions.Length > 0)
+            if (sessions.Length > 0)
             {
-                var otherSessions = await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).AsNoTracking().Where(x => x.AcademyId == g.AcademyId && otherGroups.Contains(x.TrainingGroupId) && x.SessionDate >= today && x.Status == TrainingSessionStatus.Scheduled).ToArrayAsync();
+                var samePlayerEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]).Where(other => other.AcademyId == g.AcademyId && other.PlayerId == e.PlayerId && other.Id != e.Id && other.IsActive);
+                var otherSessions = await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).AsNoTracking().Where(s => s.AcademyId == g.AcademyId && s.SessionDate >= today && s.Status == TrainingSessionStatus.Scheduled && samePlayerEnrollments.Any(other => FoundationDbContext.AssignedGroupAt(other.AcademyId, other.Id, s.SessionDate) == s.TrainingGroupId)).ToArrayAsync();
                 if (sessions.Any(s => otherSessions.Any(o => o.SessionDate == s.SessionDate && o.StartTime < s.EndTime && s.StartTime < o.EndTime))) reasons.Add("موعد اللاعب يتعارض مع حصة أخرى؛ لا يمكن تجاوز التعارض.");
             }
             players.Add(new(e.Id, e.PlayerId, e.Player.ArabicName, e.Player.PlayerCode, e.TrainingLevelId, e.TrainingLevelId.HasValue ? levels.GetValueOrDefault(e.TrainingLevelId.Value)?.ArabicName : null, reasons.ToArray()));
         }
-        var fingerprint = AcademyConfigurationService.Hash(JsonSerializer.Serialize(new { today, group = new { g.Id, g.Version, g.TrainingLevelId, g.Capacity, ageVersion = g.AgeCategory.Version }, levelVersion = level?.Version, roster, coaches, sessions = sessions.Select(x => new { x.Id, x.Version }), bindingVersion = binding?.Version, resourceVersion, bookings = bookings.Select(x => new { x.Id, x.Version }), periods = periods.Select(x => new { x.Id, x.Version }), enrollments = rows.Select(x => new { x.Id, x.Version, playerVersion = x.Player.Version }), conflicts, players }));
+        var fingerprint = AcademyConfigurationService.Hash(JsonSerializer.Serialize(new { today, transfer, group = new { g.Id, g.Version, g.TrainingLevelId, g.Capacity, ageVersion = g.AgeCategory.Version }, levelVersion = level?.Version, roster, futureCounts, coaches, sessions = sessions.Select(x => new { x.Id, x.Version }), bindingVersion = binding?.Version, resourceVersion, bookings = bookings.Select(x => new { x.Id, x.Version }), periods = periods.Select(x => new { x.Id, x.Version }), enrollments = rows.Select(x => new { x.Id, x.Version, playerVersion = x.Player.Version }), conflicts, players }));
         return new(fingerprint, today, roster.Length, g.Capacity, rows.Count, conflicts.ToArray(), players.ToArray());
     }
     public async Task<object> Candidates(Guid groupId, string? search, int offset, Guid? enrollmentId = null)

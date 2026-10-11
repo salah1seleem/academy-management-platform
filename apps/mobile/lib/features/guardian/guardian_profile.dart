@@ -6,6 +6,7 @@ import 'guardian_ui.dart';
 import 'guardian_report.dart';
 import 'guardian_content.dart';
 import 'guardian_payments.dart';
+import 'group_transfer_notice.dart';
 
 class ChildProfile extends StatelessWidget {
   final AuthController auth;
@@ -197,13 +198,21 @@ class ProfileRecords extends StatelessWidget {
                     Heading(textOf(e['sport'])),
                     UiText(trainingRegistrationLabel(e['registrationFormat'])),
                     UiText('${e['branch']} · ${e['group']}'),
+                    for (final transfer
+                        in e['transfers'] is List
+                            ? rows(e['transfers'])
+                            : <Json>[])
+                      GroupTransferNotice(
+                        group: textOf(transfer['group']),
+                        date: day(transfer['effectiveDate']),
+                      ),
                     const Heading('الجلسات القادمة'),
                     if (rows(e['upcoming']).isEmpty)
                       const EmptyMessage('لا توجد جلسات قادمة منشورة.'),
                     for (final s in rows(e['upcoming']))
                       GCard(
                         child: UiText(
-                          '${day(s['sessionDate'])}\n${s['startTime']} — ${s['endTime']}',
+                          '${s['group'] ?? e['group']}\n${day(s['sessionDate'])}\n${s['startTime']} — ${s['endTime']}',
                         ),
                       ),
                     const Heading('المواعيد الدورية'),

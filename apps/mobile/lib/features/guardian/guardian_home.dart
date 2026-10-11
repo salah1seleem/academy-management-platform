@@ -479,7 +479,7 @@ class NextSessionCard extends StatelessWidget {
                   '${textOf(session['startTime']).substring(0, 5)} — ${textOf(session['endTime']).substring(0, 5)}',
                 ),
                 UiText(
-                  '${sport['group']} · ${sport['branch']}',
+                  '${session['group'] ?? sport['group']} · ${sport['branch']}',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
                 if (session['resource'] != null)

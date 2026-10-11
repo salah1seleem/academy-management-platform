@@ -53,6 +53,11 @@ public sealed partial class V2PlanPublicationTests
         Assert.Equal(cash, await db.Collections.CountAsync()); Assert.Equal(people, await db.Players.CountAsync()); await db.Entry(group).ReloadAsync(); Assert.Equal("تسكين تجريبي — تعديل محفوظ", group.ArabicName);
         Assert.Equal(2, await db.SubscriptionPeriods.CountAsync(x => x.SubscriptionPlanId == GroupPlacementDemoSeed.Id(5))); Assert.False(await db.SubscriptionPeriods.AnyAsync(x => x.SportEnrollmentId == GroupPlacementDemoSeed.Id(31))); Assert.False(await db.SportEnrollments.Where(x => x.Id == GroupPlacementDemoSeed.Id(31)).AnyAsync(x => x.TrainingGroupId != null));
         Assert.Equal(new DateOnly(2017, 1, 1), await db.Players.Where(x => x.Id == GroupPlacementDemoSeed.Id(10)).Select(x => x.DateOfBirth).SingleAsync());
+        await GroupTransferDemoSeed.Seed(db);
+        var target = await db.TrainingGroups.SingleAsync(x => x.Id == GroupPlacementDemoSeed.Id(50)); target.ArabicName = "موعد النقل — تعديل محفوظ"; await db.SaveChangesAsync();
+        var sessions = await db.TrainingSessions.CountAsync(); await GroupTransferDemoSeed.Seed(db); await db.Entry(target).ReloadAsync();
+        Assert.Equal("موعد النقل — تعديل محفوظ", target.ArabicName); Assert.Equal(sessions, await db.TrainingSessions.CountAsync()); Assert.Equal(cash, await db.Collections.CountAsync());
+        Assert.False(await db.EnrollmentGroupTransfers.AnyAsync(x => x.TargetGroupId == target.Id));
     }
     [Fact]
     public async Task Bulk_placement_is_reviewed_atomic_idempotent_and_creates_neither_payment_nor_past_attendance()

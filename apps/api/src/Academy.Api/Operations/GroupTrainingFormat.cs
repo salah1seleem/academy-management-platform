@@ -26,7 +26,7 @@ public sealed partial class GroupPlacementService
     {
         if (!Enum.IsDefined(b.RegistrationFormat)) throw new FacilityRejected("نمط التدريب غير صالح.", 422);
         await using var tx = await db.Database.BeginTransactionAsync(); var (_, group) = await Group(id, true);
-        if (b.RegistrationFormat != group.RegistrationFormat && await db.SportEnrollments.AnyAsync(e => e.TrainingGroupId == id && e.IsActive)) throw new FacilityRejected("لا تغير نمط مجموعة لها أعضاء؛ أنشئ مجموعة بالنمط المطلوب وانقلهم بمراجعة.");
+        if (b.RegistrationFormat != group.RegistrationFormat && (await db.SportEnrollments.AnyAsync(e => e.TrainingGroupId == id && e.IsActive) || await db.EnrollmentGroupTransfers.AnyAsync(e => e.TargetGroupId == id))) throw new FacilityRejected("لا تغير نمط مجموعة لها أعضاء أو نقل مؤرخ؛ أنشئ مجموعة بالنمط المطلوب وانقلهم بمراجعة.");
         if (b.RegistrationFormat != TrainingRegistrationFormat.Group && (!b.CapacityReviewed || group.Capacity is null or <= 0)) throw new FacilityRejected("حدد السعة وراجعها صراحة لهذا النمط؛ لا نستنتج السعة من اسم Private أو شبه خاص.", 422);
         group.RegistrationFormat = b.RegistrationFormat; group.FormatReviewedByUserId = b.CapacityReviewed ? db.RequestUserId : null; group.FormatReviewedAtUtc = b.CapacityReviewed ? time.GetUtcNow() : null; group.UpdatedAtUtc = time.GetUtcNow();
         await db.SaveChangesAsync(); await tx.CommitAsync(); return new { group.Id, registrationFormat = group.RegistrationFormat.ToString(), group.FormatReviewedAtUtc };

@@ -84,7 +84,7 @@ public static class Slice7Endpoints
         var age = day.Year - player.DateOfBirth.Year - (day < player.DateOfBirth.AddYears(day.Year - player.DateOfBirth.Year) ? 1 : 0);
         if (age is < 6 or > 18) return Results.ValidationProblem(new Dictionary<string, string[]> { ["playerId"] = ["الاقتراحات التجريبية متاحة للأعمار من 6 إلى 18 سنة فقط."] });
         var profile = age <= 9 ? NutritionServingProfile.Small : age <= 13 ? NutritionServingProfile.Medium : NutritionServingProfile.Large;
-        var groups = db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive && x.Status == EnrollmentStatus.Active && x.Sport.EnglishName == "Football").Select(x => x.TrainingGroupId);
+        var groups = db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive && x.Status == EnrollmentStatus.Active && x.Sport.EnglishName == "Football").Select(x => FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day));
         if (!await groups.AnyAsync()) return Results.NotFound();
         var session = await db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && groups.Contains(x.TrainingGroupId) && x.SessionDate == day && x.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled)
             .OrderBy(x => x.StartTime).Select(x => new { x.StartTime, x.EndTime }).FirstOrDefaultAsync();

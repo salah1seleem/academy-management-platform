@@ -81,12 +81,13 @@ public static class Slice5Endpoints
         return Results.Ok(new { entity.Version });
     }
 
-    private static async Task<IResult> Options(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
+    private static async Task<IResult> Options(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
+        var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var enrollments = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
-        if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
-        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = x.TrainingGroupId, group = x.TrainingGroup == null ? "في انتظار المجموعة" : x.TrainingGroup.ArabicName }).ToListAsync();
+        if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) && a.AcademyMembership.UserId == user && a.IsActive));
+        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة" }).ToListAsync();
         var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
         var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
@@ -106,8 +107,9 @@ public static class Slice5Endpoints
 
     private static async Task<IResult> CreateEvaluation(CreateEvaluationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
-        var t = (await tenant.ResolveAsync())!; var enrollment = await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db); if (enrollment is null) return Results.NotFound();
-        if (enrollment.TrainingGroupId is not Guid groupId) return Results.Conflict(new { message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
+        var t = (await tenant.ResolveAsync())!; var enrollment = await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db, request.EvaluationDate); if (enrollment is null) return Results.NotFound();
+        var datedGroup = await db.SportEnrollments.Where(e => e.Id == enrollment.Id).Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, request.EvaluationDate)).SingleAsync();
+        if (datedGroup is not Guid groupId) return Results.Conflict(new { message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
         if (enrollment.GroupAssignedFrom > request.EvaluationDate) return Results.Conflict(new { message = "تاريخ التقييم يسبق إسناد اللاعب للمجموعة." });
         var criteria = await db.EvaluationCriteria.Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).ToListAsync();
         if (criteria.Count == 0) return Results.Conflict(new { message = "لا توجد معايير فعالة لهذه الرياضة." });
@@ -188,10 +190,10 @@ public static class Slice5Endpoints
         return query.Include(x => x.SportEnrollment).ThenInclude(x => x.Player).Include(x => x.Sport).Include(x => x.TrainingGroup).Include(x => x.EvaluatedByUser);
     }
 
-    private static async Task<SportEnrollment?> AccessibleEnrollment(Guid id, TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db)
+    private static async Task<SportEnrollment?> AccessibleEnrollment(Guid id, TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db, DateOnly date)
     {
         var user = UserId(principal); var query = db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive);
-        if (t.Role == AcademyRole.Coach) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
+        if (t.Role == AcademyRole.Coach) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, date) && a.AcademyMembership.UserId == user && a.IsActive));
         return await query.SingleOrDefaultAsync();
     }
 

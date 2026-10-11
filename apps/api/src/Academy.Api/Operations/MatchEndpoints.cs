@@ -27,13 +27,14 @@ public static class MatchEndpoints
         manage.MapPut("/{id:guid}", Save).AddEndpointFilter<CsrfFilter>();
         app.MapGet("/api/v1/my-matches", Mine).RequireAuthorization(AcademyPermissions.TenantAccess);
     }
-    private static async Task<IResult> Options(CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> Options(CurrentTenant tenant, FoundationDbContext db, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var a = t.AcademyId;
+        var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(a, db, time);
         return Results.Ok(new {
             tournaments = await db.AcademyTournaments.Where(x => x.AcademyId == a).OrderBy(x => x.Name).ToListAsync(),
             teams = await db.MatchTeams.Where(x => x.AcademyId == a).OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.SportId, x.BranchId, x.AgeCategoryId, x.CoachMembershipId, x.IsActive, enrollmentIds = db.MatchTeamPlayers.Where(p => p.AcademyId == a && p.TeamId == x.Id && p.IsActive).Select(p => p.EnrollmentId).ToList() }).ToListAsync(),
-            players = await db.SportEnrollments.Where(x => x.AcademyId == a && x.IsActive && x.Player.IsActive && x.Sport.IsActive && x.Branch.IsActive).OrderBy(x => x.Player.ArabicName).Take(1000).Select(x => new { x.Id, playerId = x.PlayerId, name = x.Player.ArabicName, birthYear = x.Player.DateOfBirth.Year, x.SportId, x.BranchId, x.TrainingGroupId }).ToListAsync(),
+            players = await db.SportEnrollments.Where(x => x.AcademyId == a && x.IsActive && x.Player.IsActive && x.Sport.IsActive && x.Branch.IsActive).OrderBy(x => x.Player.ArabicName).Take(1000).Select(x => new { x.Id, playerId = x.PlayerId, name = x.Player.ArabicName, birthYear = x.Player.DateOfBirth.Year, x.SportId, x.BranchId, trainingGroupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, groupDate) }).ToListAsync(),
             coaches = await db.AcademyMemberships.Where(x => x.AcademyId == a && x.IsActive && x.Role == AcademyRole.Coach && x.User.IsActive).Select(x => new { x.Id, name = x.User.DisplayName }).ToListAsync()
         });
     }

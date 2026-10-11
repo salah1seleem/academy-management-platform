@@ -30,9 +30,10 @@ public static class Slice2DashboardEndpoints
         people.MapPut("/guardians/{guardianId:guid}", UpdateGuardian).AddEndpointFilter<CsrfFilter>();
     }
 
-    private static async Task<IResult> ListStructure(string kind, Guid? branchId, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> ListStructure(string kind, Guid? branchId, CurrentTenant tenant, FoundationDbContext db, TimeProvider time)
     {
         var current = (await tenant.ResolveAsync())!;
+        var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, time);
         object? result = kind switch
         {
             "branches" => await db.Branches.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
@@ -41,7 +42,7 @@ public static class Slice2DashboardEndpoints
             "groups" => await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new
             {
                 x.Id, x.ArabicName, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName,
-                playerCount = db.SportEnrollments.Count(e => e.AcademyId == current.AcademyId && e.TrainingGroupId == x.Id && e.IsActive),
+                playerCount = db.SportEnrollments.Count(e => e.AcademyId == current.AcademyId && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate) == x.Id && e.IsActive),
                 coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.Id && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
                 schedules = db.RecurringSchedules.Where(s => s.AcademyId == current.AcademyId && s.TrainingGroupId == x.Id && s.IsActive).OrderBy(s => ((int)s.DayOfWeek + 1) % 7).ThenBy(s => s.StartTime).Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime }).ToList()
             }).ToListAsync(),
@@ -107,10 +108,10 @@ public static class Slice2DashboardEndpoints
                     !await db.Sports.AnyAsync(x => x.AcademyId == current.AcademyId && x.Id == request.SportId && x.IsActive) ||
                     !await db.AgeCategories.AnyAsync(x => x.AcademyId == current.AcademyId && x.Id == request.AgeCategoryId && x.IsActive))
                     return Results.UnprocessableEntity(new { message = "اختيارات المجموعة غير صالحة." });
-                var hasEnrollments = await db.SportEnrollments.AnyAsync(x => x.AcademyId == current.AcademyId && x.TrainingGroupId == id);
+                var hasEnrollments = await db.SportEnrollments.AnyAsync(x => x.AcademyId == current.AcademyId && x.TrainingGroupId == id) || await db.EnrollmentGroupTransfers.AnyAsync(x => x.SourceGroupId == id || x.TargetGroupId == id);
                 if (hasEnrollments && (group.BranchId != request.BranchId || group.SportId != request.SportId))
                     return Results.Conflict(new { message = "لا يمكن تغيير فرع أو رياضة مجموعة مرتبطة بتسجيلات قائمة." });
-                if (request.Capacity.HasValue && request.Capacity < await db.SportEnrollments.CountAsync(x => x.TrainingGroupId == id && x.IsActive)) return Results.Conflict(new { message = "السعة أقل من عدد أعضاء المجموعة الحاليين." });
+                if (request.Capacity.HasValue && request.Capacity < (await DatedGroupRoster.Forecast(db, id, await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, clock))).Select(x => x.Count).DefaultIfEmpty(0).Max()) return Results.Conflict(new { message = "السعة أقل من أعضاء المجموعة الحاليين أو النقل المجدول." });
                 if (group.Capacity != request.Capacity && group.RegistrationFormat != Academy.Infrastructure.People.TrainingRegistrationFormat.Group) { group.FormatReviewedAtUtc = null; group.FormatReviewedByUserId = null; }
                 group.ArabicName = request.ArabicName.Trim(); group.EnglishName = Clean(request.EnglishName); group.BranchId = request.BranchId.Value; group.SportId = request.SportId.Value; group.AgeCategoryId = request.AgeCategoryId.Value; group.Capacity = request.Capacity; group.UpdatedAtUtc = now;
                 break;
@@ -155,9 +156,10 @@ public static class Slice2DashboardEndpoints
         await db.SaveChangesAsync(); return Results.NoContent();
     }
 
-    private static async Task<IResult> GetPlayer(Guid playerId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> GetPlayer(Guid playerId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time)
     {
         var current = (await tenant.ResolveAsync())!;
+        var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, time);
         var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == playerId).Select(x => new
         {
             x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive, x.PhotoReference,
@@ -167,13 +169,14 @@ public static class Slice2DashboardEndpoints
                 .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
             {
-                e.Id, e.TrainingGroupId, e.SportId, e.BranchId, registrationFormat = e.RegistrationFormat.ToString(), e.TrainingLevelId, e.GroupAssignedFrom,
+                e.Id, trainingGroupId = FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate), e.SportId, e.BranchId, registrationFormat = e.RegistrationFormat.ToString(), e.TrainingLevelId, e.GroupAssignedFrom,
                 levelName = db.TrainingLevels.Where(l => l.Id == e.TrainingLevelId).Select(l => l.ArabicName).FirstOrDefault(),
                 placement = e.TrainingGroupId == null ? "Unassigned" : "Assigned",
                 sportName = e.Sport.ArabicName,
                 branchName = e.Branch.ArabicName,
-                groupName = e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName,
-                categoryName = e.TrainingGroup == null ? "غير محددة" : e.TrainingGroup.AgeCategory.ArabicName,
+                groupName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة",
+                categoryName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.AgeCategory.ArabicName).FirstOrDefault() ?? "غير محددة",
+                transfers = db.EnrollmentGroupTransfers.Where(tr => tr.SportEnrollmentId == e.Id).OrderByDescending(tr => tr.EffectiveDate).Select(tr => new { tr.EffectiveDate, groupName = db.TrainingGroups.Where(g => g.Id == tr.TargetGroupId).Select(g => g.ArabicName).FirstOrDefault() }).ToList(),
                 status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(period => period.AcademyId == current.AcademyId && period.SportEnrollmentId == e.Id)
                     .OrderByDescending(period => period.UpdatedAtUtc)

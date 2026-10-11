@@ -49,7 +49,7 @@ public sealed class ImportCommitService(FoundationDbContext db, UserManager<Appl
         var book = ImportXlsx.Read(job.StagedFile);
         if (Convert.ToHexString(SHA256.HashData(job.StagedFile)) != job.FileHash || Source(book) != job.SourceSystem) throw new ImportRejected("validation");
         var mappings = await db.ImportedEnrollments.IgnoreQueryFilters().Where(x => x.AcademyId == job.AcademyId && x.SourceSystem == job.SourceSystem).ToListAsync(token);
-        var initially = ImportPreview.Validate(book, await ImportReferences.Load(db, job.AcademyId), job.FileHash, mappings.Select(m => m.LegacyEnrollmentId).ToHashSet());
+        var initially = ImportPreview.Validate(book, await ImportReferences.Load(db, job.AcademyId, time), job.FileHash, mappings.Select(m => m.LegacyEnrollmentId).ToHashSet());
         if (!initially.CanApprove || initially.ReferenceStamp != job.ReferenceStamp) throw new ImportRejected("stale");
         foreach (var group in initially.Rows.Select(r => r.GroupId).Distinct().Order())
         {
@@ -57,7 +57,7 @@ public sealed class ImportCommitService(FoundationDbContext db, UserManager<Appl
             await db.TrainingGroups.FromSqlInterpolated($"SELECT *, xmin FROM \"TrainingGroups\" WHERE \"AcademyId\" = {job.AcademyId} AND \"Id\" = {group} FOR UPDATE").SingleAsync(token);
         }
         foreach (var plan in initially.Rows.Select(r => r.ProductId).Distinct().Order()) await PlanCatalog.LockAsync(db, job.AcademyId, plan);
-        var preview = ImportPreview.Validate(book, await ImportReferences.Load(db, job.AcademyId), job.FileHash, mappings.Select(m => m.LegacyEnrollmentId).ToHashSet());
+        var preview = ImportPreview.Validate(book, await ImportReferences.Load(db, job.AcademyId, time), job.FileHash, mappings.Select(m => m.LegacyEnrollmentId).ToHashSet());
         if (!preview.CanApprove || preview.ReferenceStamp != job.ReferenceStamp) throw new ImportRejected("stale");
         if (preview.Rows.Any(r => !approved.Contains(r.BranchId))) throw new ImportRejected("authority");
         var balances = Balances(book); if (balances.Length > 0 && !job.OpeningBalancesApproved) throw new ImportRejected("authority");

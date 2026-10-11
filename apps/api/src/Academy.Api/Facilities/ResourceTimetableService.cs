@@ -68,8 +68,12 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         var dates = new List<DateOnly>();
         for (var day = b.From; day <= b.To; day = day.AddDays(1)) if (b.Days.Contains(day.DayOfWeek) && !sessions.Any(s => preserved.Contains(s.Id) && s.SessionDate == day && s.StartTime == b.StartTime)) dates.Add(day);
         if (dates.Count == 0 && !sessions.Any(s => preserved.Contains(s.Id) && s.SessionDate <= b.To && b.Days.Contains(s.SessionDate.DayOfWeek) && s.StartTime == b.StartTime)) throw new FacilityRejected("لا يوجد موعد يطابق الأيام المختارة داخل الفترة. راجع الأيام والتواريخ.", 422);
-        var roster = await db.SportEnrollments.Where(x => x.TrainingGroupId == group.Id && x.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version, x.Status }).ToListAsync();
+        var roster = await db.SportEnrollments.Where(x => FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, b.From) == group.Id && x.IsActive).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version, x.Status }).ToListAsync();
         var conflicts = new List<ScheduleConflict>(); FacilityResource? resource = null;
+        var datedRoster = new List<object>();
+        foreach (var day in dates)
+            try { var count = await coordinator.CheckRosterSlot(group.AcademyId, group.Id, day, b.StartTime, b.EndTime, checkBookedSeats: false); datedRoster.Add(new { day, count }); if (plan.Value is { } reservation && count > reservation.Seats) conflicts.Add(new(day, "المقاعد المطلوبة لا تكفي أعضاء المجموعة في هذا التاريخ.")); }
+            catch (FacilityRejected e) { conflicts.Add(new(day, e.Message)); }
         if (plan.Value is { } p)
         {
             resource = await db.FacilityResources.AsNoTracking().SingleOrDefaultAsync(x => x.Id == p.ResourceId) ?? throw new FacilityRejected("المورد غير متاح.", 404);
@@ -88,7 +92,7 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         var externalBookings = await db.ResourceBookings.IgnoreQueryFilters(["trusted-branches"]).Where(x => x.AcademyId == group.AcademyId && x.Date >= b.From && (x.ResourceId == (plan.Value == null ? Guid.Empty : plan.Value.ResourceId) || coach.HasValue && x.CoachMembershipId == coach)).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version }).ToListAsync();
         var resourceId = plan.Value?.ResourceId ?? Guid.Empty;
         var closureVersions = await db.ResourceClosures.Where(x => x.ResourceId == resourceId).OrderBy(x => x.Id).Select(x => new { x.Id, x.Version }).ToListAsync();
-        var fingerprint = AcademyConfigurationService.Hash(JsonSerializer.Serialize(new { intent = Intent(group.Id, b), today, group.Version, plan = plan.Stored?.Version, resourceVersion = resource?.Version, roster, sessions = sessions.Select(x => new { x.Id, x.Version }), preserved = preserved.OrderBy(x => x), coachGroups, externalSessions, externalBookings, closureVersions }));
+        var fingerprint = AcademyConfigurationService.Hash(JsonSerializer.Serialize(new { intent = Intent(group.Id, b), today, group.Version, plan = plan.Stored?.Version, resourceVersion = resource?.Version, roster, datedRoster, sessions = sessions.Select(x => new { x.Id, x.Version }), preserved = preserved.OrderBy(x => x), coachGroups, externalSessions, externalBookings, closureVersions }));
         return (new(fingerprint, dates.Count, sessions.Count(x => !preserved.Contains(x.Id) && x.Status != TrainingSessionStatus.Cancelled), preserved.Count, bookings.Count, roster.Count, resource?.Name, conflicts), sessions, preserved, dates, bookings);
     }
     public async Task<object> Preview(Guid groupId, TimetableWrite b)
