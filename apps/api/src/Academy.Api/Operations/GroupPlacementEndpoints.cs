@@ -43,7 +43,9 @@ public static class GroupPlacementEndpoints
             }
             row.TrainingLevelId = b.LevelId; row.LevelReviewedByUserId = b.LevelId.HasValue ? db.RequestUserId : null; row.LevelReviewedAtUtc = b.LevelId.HasValue ? time.GetUtcNow() : null; row.UpdatedAtUtc = time.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, row.TrainingLevelId, row.LevelReviewedAtUtc };
         })).AddEndpointFilter<CsrfFilter>();
-        manage.MapGet("/groups/{id:guid}/placement-candidates", async (Guid id, string? search, int? offset, GroupPlacementService service) => await Run(() => service.Candidates(id, search, offset ?? 0))).RequireAuthorization(AcademyPermissions.PeopleManage);
+        manage.MapGet("/groups/{id:guid}/placement-candidates", async (Guid id, string? search, int? offset, Guid? enrollmentId, GroupPlacementService service) => await Run(() => service.Candidates(id, search, offset ?? 0, enrollmentId))).RequireAuthorization(AcademyPermissions.PeopleManage);
+        players.MapGet("/enrollments/{id:guid}/placement-preferences", async (Guid id, GroupPlacementService service) => await Run(() => service.PreferenceOptions(id))).RequireAuthorization(AcademyPermissions.StructureManage);
+        players.MapPost("/enrollments/{id:guid}/placement-recommendations", async (Guid id, PlacementPreferences body, GroupPlacementService service) => await Run(() => service.Recommend(id, body))).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
         manage.MapPost("/groups/{id:guid}/placement/preview", async (Guid id, PlacementWrite body, GroupPlacementService service) => await Run(() => service.Preview(id, body))).RequireAuthorization(AcademyPermissions.PeopleManage).AddEndpointFilter<CsrfFilter>();
         manage.MapPost("/groups/{id:guid}/placement", async (Guid id, PlacementWrite body, GroupPlacementService service, HttpRequest request) => await Run(() => service.Save(id, body, request.Headers["Idempotency-Key"].ToString()))).RequireAuthorization(AcademyPermissions.PeopleManage).AddEndpointFilter<CsrfFilter>();
     }

@@ -34,3 +34,15 @@ it("shows failed persistence truthfully and preserves idempotency key on transpo
 it("reviews the sport-specific level only after explicit confirmation", async () => {
   const calls = setup(); const onSaved = vi.fn(); render(<EnrollmentLevelReview enrollmentId="e1" sportId="sport" onSaved={onSaved} />); fireEvent.click(screen.getByText("مراجعة مستوى اللاعب")); await screen.findByRole("option", { name: "مبتدئ" }); expect(screen.queryByRole("option", { name: "رياضة أخرى" })).not.toBeInTheDocument(); fireEvent.change(screen.getByRole("combobox"), { target: { value: "level" } }); expect(calls).toHaveLength(0); fireEvent.submit(screen.getByRole("button", { name: "اعتماد المراجعة" }).closest("form")!); await waitFor(() => expect(onSaved).toHaveBeenCalledOnce()); expect(calls[0].path).toBe("/api/v1/people/enrollments/e1/placement-level"); expect(calls[0].body).toEqual({ levelId: "level" });
 });
+it("keeps the suggested enrollment focused and selected without automatically previewing or saving", async () => {
+  const calls = setup(); render(<GroupPlacement id="group" sportId="sport" onSaved={vi.fn()} focusEnrollmentId="e1" />);
+  expect(await screen.findByRole("checkbox", { name: /لاعب اصطناعي/ })).toBeChecked();
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("enrollmentId=e1")); expect(calls).toHaveLength(0);
+  expect(screen.queryByRole("button", { name: "تأكيد تسكين الدفعة" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "عرض كل المنتظرين بدل اللاعب المحدد" }));
+  await waitFor(() => expect(global.fetch).toHaveBeenLastCalledWith(expect.not.stringContaining("enrollmentId="))); expect(screen.getByRole("checkbox")).not.toBeChecked();
+});
+it("does not select a focused enrollment that no longer meets hard constraints", async () => {
+  setup({ candidates: { ...candidates, players: [{ ...candidate, reasons: ["لا يوجد مقعد متاح حاليًا."] }] } }); render(<GroupPlacement id="group" sportId="sport" onSaved={vi.fn()} focusEnrollmentId="e1" />);
+  const box = await screen.findByRole("checkbox"); expect(box).not.toBeChecked(); expect(box).toBeDisabled(); expect(screen.getByRole("button", { name: "معاينة التسكين" })).toBeDisabled();
+});

@@ -19,7 +19,7 @@ public sealed record PlacementPreview(string Fingerprint, DateOnly EffectiveDate
 public sealed record PlacementLevelWrite(Guid? LevelId);
 public sealed record TrainingLevelWrite(Guid SportId, string ArabicName, int Rank);
 
-public sealed class GroupPlacementService(FoundationDbContext db, CurrentTenant tenant, ResourceSessionCoordinator coordinator, TimeProvider time)
+public sealed partial class GroupPlacementService(FoundationDbContext db, CurrentTenant tenant, ResourceSessionCoordinator coordinator, TimeProvider time)
 {
     internal async Task<TenantMembership> Authority(string module, string action, Guid? branch = null)
     {
@@ -115,11 +115,12 @@ public sealed class GroupPlacementService(FoundationDbContext db, CurrentTenant 
         var fingerprint = AcademyConfigurationService.Hash(JsonSerializer.Serialize(new { today, group = new { g.Id, g.Version, g.TrainingLevelId, g.Capacity, ageVersion = g.AgeCategory.Version }, levelVersion = level?.Version, roster, coaches, sessions = sessions.Select(x => new { x.Id, x.Version }), bindingVersion = binding?.Version, resourceVersion, bookings = bookings.Select(x => new { x.Id, x.Version }), periods = periods.Select(x => new { x.Id, x.Version }), enrollments = rows.Select(x => new { x.Id, x.Version, playerVersion = x.Player.Version }), conflicts, players }));
         return new(fingerprint, today, roster.Length, g.Capacity, rows.Count, conflicts.ToArray(), players.ToArray());
     }
-    public async Task<object> Candidates(Guid groupId, string? search, int offset)
+    public async Task<object> Candidates(Guid groupId, string? search, int offset, Guid? enrollmentId = null)
     {
         if (offset < 0 || offset > 100000 || search?.Length > 100) throw new FacilityRejected("فلاتر غير صالحة.", 422);
         await using var tx = await db.Database.BeginTransactionAsync(); var (_, g) = await Group(groupId, false);
         var q = db.SportEnrollments.AsNoTracking().Where(e => e.IsActive && e.Player.IsActive && e.TrainingGroupId == null && e.SportId == g.SportId && e.BranchId == g.BranchId);
+        if (enrollmentId.HasValue) q = q.Where(e => e.Id == enrollmentId);
         if (!string.IsNullOrWhiteSpace(search)) q = q.Where(e => e.Player.ArabicName.Contains(search.Trim()) || e.Player.PlayerCode.Contains(search.Trim()));
         var ids = await q.OrderBy(x => x.Player.ArabicName).ThenBy(x => x.Id).Skip(offset).Take(100).Select(x => x.Id).ToArrayAsync();
         var preview = await Inspect(g, ids, false);
