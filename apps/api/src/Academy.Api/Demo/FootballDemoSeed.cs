@@ -297,6 +297,9 @@ public static class FootballDemoSeed
     private static async Task ClearMarkedTenant(FoundationDbContext db, CancellationToken ct)
     {
         // The caller verified environment, fixed ID, slug, marker and explicit confirmation inside this transaction.
+        // SET LOCAL expires on commit/rollback and cannot leak through the connection pool.
+        // The database trigger additionally verifies the one reserved synthetic tenant and its marker.
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('academy.reset_demo_tenant', {AcademyId.ToString()}, true)", ct);
         await db.UserSessions.Where(s => s.ActiveAcademyId == AcademyId).ExecuteDeleteAsync(ct);
         await db.MobileSessions.Where(s => s.MembershipId != null && db.AcademyMemberships.Any(m => m.Id == s.MembershipId && m.AcademyId == AcademyId)).ExecuteDeleteAsync(ct);
         // Child-first FK order, including future tenant tables. Never delete global users or Academy itself.

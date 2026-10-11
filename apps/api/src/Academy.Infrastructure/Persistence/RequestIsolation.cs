@@ -56,6 +56,10 @@ public sealed partial class FoundationDbContext
         BranchFilter<StaffAttendance>(b, x => TrainingSessions.Any(s => s.Id == x.TrainingSessionId));
         BranchFilter<SubscriptionSessionMovement>(b, x => SubscriptionPeriods.Any(p => p.Id == x.SubscriptionPeriodId));
         BranchFilter<SubscriptionPeriod>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<SubscriptionPlan>(b, x => x.AllBranches || PlanBranchPublications.Any(p => p.SubscriptionPlanId == x.Id && p.IsActive)
+            || RenewalRequests.Any(r => r.SubscriptionPlanId == x.Id) || SubscriptionPeriods.Any(p => p.SubscriptionPlanId == x.Id));
+        BranchFilter<PlanBranchPublication>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<PlanPriceVersion>(b, x => SubscriptionPlans.Any(p => p.Id == x.SubscriptionPlanId));
         BranchFilter<ReceivableDocument>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ReceivableMovement>(b, x => ReceivableDocuments.Any(d => d.Id == x.DocumentId));
         BranchFilter<SubscriptionAdjustment>(b, x => SubscriptionPeriods.Any(p => p.Id == x.SubscriptionPeriodId));
@@ -110,8 +114,11 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
-        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement && e.State is EntityState.Modified or EntityState.Deleted))
+        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
+        foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))
+            if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot) }.Any(p => entry.Property(p).IsModified))
+                throw new InvalidOperationException("شروط الاشتراك محفوظة عند الطلب ولا يمكن استبدالها بشروط باقة جديدة.");
         if (!RequestScopeEnabled) return;
         ChangeTracker.DetectChanges();
         var entries = ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted && e.Metadata.FindProperty("AcademyId") is not null).ToArray();
@@ -119,6 +126,13 @@ public sealed partial class FoundationDbContext
         {
             if (entry.Property("AcademyId").CurrentValue is not Guid academy || academy != RequestAcademyId) throw new ResourceScopeException();
             if (!BranchScopeRestricted) continue;
+            if (entry.Entity is SubscriptionPlan plan)
+            {
+                if (plan.AllBranches || entry.State != EntityState.Added && (bool)entry.Property(nameof(SubscriptionPlan.AllBranches)).OriginalValue!) throw new ResourceScopeException();
+                // Reading a shared product is not authority to change other branches' prices.
+                if (entry.State != EntityState.Added && await PlanBranchPublications.IgnoreQueryFilters()
+                    .AnyAsync(p => p.AcademyId == RequestAcademyId && p.SubscriptionPlanId == plan.Id && !RequestBranchIds.Contains(p.BranchId), token)) throw new ResourceScopeException();
+            }
             if (entry.Entity is Branch scopedBranch && !RequestBranchIds.Contains(scopedBranch.Id)) throw new ResourceScopeException();
             foreach (var name in new[] { "BranchId", "PreferredBranchId" })
                 if (entry.Metadata.FindProperty(name) is not null && entry.Property(name).CurrentValue is Guid branch && !RequestBranchIds.Contains(branch)) throw new ResourceScopeException();

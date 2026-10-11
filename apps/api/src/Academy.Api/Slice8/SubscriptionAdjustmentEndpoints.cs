@@ -29,7 +29,7 @@ public static class SubscriptionAdjustmentEndpoints
             .Select(x => new
             {
                 x.Id, x.SportEnrollmentId, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version,
-                plan = x.SubscriptionPlan.ArabicName, planType = x.SubscriptionPlan.PlanType,
+                plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType),
                 player = x.SportEnrollment.Player.ArabicName, playerCode = x.SportEnrollment.Player.PlayerCode,
                 sport = x.SportEnrollment.Sport.ArabicName, branch = x.SportEnrollment.Branch.ArabicName,
                 group = x.SportEnrollment.TrainingGroup.ArabicName, x.PriceSnapshot, x.CurrencySnapshot,
@@ -59,7 +59,7 @@ public static class SubscriptionAdjustmentEndpoints
         var actor = UserId(principal);
         var period = await db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id &&
                 db.GuardianPlayerLinks.Any(link => link.AcademyId == current.AcademyId && link.Guardian.UserId == actor && link.PlayerId == x.SportEnrollment.PlayerId && link.IsActive))
-            .Select(x => new { x.Id, x.StartDate, x.EndDate, x.FrozenFromDate, x.RemainingSessions, x.Status, planType = x.SubscriptionPlan.PlanType, plan = x.SubscriptionPlan.ArabicName, sport = x.SportEnrollment.Sport.ArabicName })
+            .Select(x => new { x.Id, x.StartDate, x.EndDate, x.FrozenFromDate, x.RemainingSessions, x.Status, planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType), plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), sport = x.SportEnrollment.Sport.ArabicName })
             .SingleOrDefaultAsync();
         if (period is null) return Results.NotFound();
         var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, clock.Today);

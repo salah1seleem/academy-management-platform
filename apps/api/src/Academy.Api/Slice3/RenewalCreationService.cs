@@ -64,10 +64,12 @@ public sealed class RenewalCreationService(
         if (enrollment is null)
             return new(RenewalCreationState.NotFound);
 
-        var plan = await db.SubscriptionPlans.SingleOrDefaultAsync(
+        await PlanCatalog.LockAsync(db, academyId, planId);
+        var plan = await db.SubscriptionPlans.ForBranch(enrollment.BranchId).SingleOrDefaultAsync(
             x => x.AcademyId == academyId && x.Id == planId && x.SportId == enrollment.SportId && (allowInactivePlan || x.IsActive), ct);
         if (plan is null)
             return new(RenewalCreationState.NotFound);
+        await db.Entry(plan).ReloadAsync(ct);
 
         if (preventParallelOpenRenewal)
         {
@@ -112,6 +114,7 @@ public sealed class RenewalCreationService(
             UpdatedAtUtc = clock.UtcNow
         };
         var paymentId = Guid.NewGuid();
+        PlanTerms.From(plan).Capture(renewal);
         var manual = !environment.IsEnvironment("Demo") && !environment.IsEnvironment("Testing") || await db.AcademyTransferSettings.AnyAsync(x => x.AcademyId == academyId && x.IsActive, ct);
         var session = manual ? new CheckoutSession("Manual", $"manual-{paymentId:N}", $"manual-{paymentId:N}", ["التحويل للأكاديمية"]) : gateway.CreateCheckout(academyId, paymentId);
         var payment = new PaymentRequest

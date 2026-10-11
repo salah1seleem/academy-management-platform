@@ -349,7 +349,10 @@ if (app.Environment.IsEnvironment("Demo"))
         var ids = await db.Academies.Where(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId || x.Id == FootballDemoSeed.AcademyId).Select(x => x.Id).ToListAsync();
         await AcademyConfigurationService.SeedDemo(db, ids);
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
+        {
             await ReceivableDemoSeed.SeedAsync(db);
+            await PlanPublicationDemoSeed.SeedAsync(db);
+        }
         await PlatformIdentity.SeedDemo(app.Services);
     }
 }

@@ -23,7 +23,7 @@ public static class SubscriptionDiscountEndpoints
             .Select(x => new
             {
                 x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.SubscriptionPlan.Sport.ArabicName,
-                plan = x.SubscriptionPlan.ArabicName, x.OriginalAmount, discountType = x.DiscountType == null ? null : x.DiscountType.ToString(),
+                plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), x.OriginalAmount, discountType = x.DiscountType == null ? null : x.DiscountType.ToString(),
                 x.DiscountValue, x.DiscountAmount, x.FinalAmount, x.Currency, status = x.Status.ToString(),
                 x.DiscountReason, discountAppliedBy = x.DiscountAppliedByUserId == null ? null : db.Users.Where(u => u.Id == x.DiscountAppliedByUserId).Select(u => u.DisplayName).Single(),
                 x.DiscountAppliedAtUtc, x.PaymentRequestId, paymentStatus = db.PaymentRequests.Where(p => p.AcademyId == current.AcademyId && p.Id == x.PaymentRequestId).Select(p => p.Status.ToString()).Single(),

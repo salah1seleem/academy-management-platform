@@ -17,7 +17,7 @@ public sealed class DiscountRules(FoundationDbContext db, ISubscriptionClock clo
         // Shared guardian alone is insufficient: another child must have a current paid period.
         var guardians = db.GuardianProfiles.Where(g => g.AcademyId == academy && g.IsActive && (g.Id == guardianId || db.GuardianPlayerLinks.Any(l => l.AcademyId == academy && l.PlayerId == playerId && l.IsActive && l.GuardianId == g.Id))).Select(g => g.Id);
         var siblings = db.GuardianPlayerLinks.Where(l => l.AcademyId == academy && l.PlayerId != playerId && l.IsActive && l.Player.IsActive && guardians.Contains(l.GuardianId)).Select(l => l.PlayerId);
-        if (await db.SubscriptionPeriods.AnyAsync(p => p.AcademyId == academy && siblings.Contains(p.SportEnrollment.PlayerId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= clock.Today && (p.EndDate == null || p.EndDate >= clock.Today) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)))
+        if (await db.SubscriptionPeriods.AnyAsync(p => p.AcademyId == academy && siblings.Contains(p.SportEnrollment.PlayerId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= clock.Today && (p.EndDate == null || p.EndDate >= clock.Today) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)))
         {
             var sibling = await db.DiscountRules.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == academy && x.IsSiblingOffer);
             if (sibling is null) rules.Add(new DiscountRule { AcademyId = academy, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي" });
@@ -45,6 +45,7 @@ public static class DiscountRuleEndpoints
             var t = (await tenant.ResolveAsync())!;
             var plan = await db.SubscriptionPlans.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.PlanId && x.IsActive);
             if (plan is null || body.DiscountRuleId.HasValue && !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer)) return Results.NotFound();
+            if (body.BranchId.HasValue && (!await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.BranchId && x.IsActive) || !await db.SubscriptionPlans.ForBranch(body.BranchId.Value).AnyAsync(x => x.Id == plan.Id))) return Results.UnprocessableEntity(new { message = "الباقة غير منشورة لهذا الفرع." });
             var phone = EgyptPhoneNormalizer.Normalize(body.GuardianPhone);
             var guardian = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.ContactPhone == phone).Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
             var price = await rules.CalculateAsync(t.AcademyId, Guid.Empty, plan.Price, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), guardian, body.DiscountRuleId);
@@ -81,4 +82,4 @@ public static class DiscountRuleEndpoints
 }
 public sealed record RuleWrite(string ArabicName, decimal Percentage, bool IsSiblingOffer, bool IsActive, string Reason);
 public sealed record PlayerRuleWrite(Guid DiscountRuleId, bool IsActive);
-public sealed record RegistrationQuote(Guid PlanId, string? GuardianPhone, Guid? DiscountRuleId);
+public sealed record RegistrationQuote(Guid PlanId, string? GuardianPhone, Guid? DiscountRuleId, Guid? BranchId = null);

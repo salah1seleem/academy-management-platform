@@ -85,26 +85,27 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
         };
         db.Collections.Add(collection);
         var plan = payment.RenewalRequest.SubscriptionPlan;
+        var terms = PlanTerms.From(payment.RenewalRequest, plan);
         var latestEnd = await db.SubscriptionPeriods.Where(x => x.AcademyId == payment.AcademyId && x.SportEnrollmentId == payment.RenewalRequest.SportEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.EndDate != null)
             .MaxAsync(x => x.EndDate, ct);
         var start = latestEnd.HasValue && latestEnd.Value >= clock.Today ? latestEnd.Value.AddDays(1) : clock.Today;
-        var end = plan.DurationDays is int days ? start.AddDays(days - 1) : (DateOnly?)null;
+        var end = terms.Days is int days ? start.AddDays(days - 1) : (DateOnly?)null;
         var period = new SubscriptionPeriod
         {
             Id = Guid.NewGuid(), AcademyId = payment.AcademyId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId, SportId = payment.RenewalRequest.SportId,
-            SubscriptionPlanId = plan.Id, CollectionId = collection.Id, StartDate = start, EndDate = end, InitialSessions = plan.SessionCount,
-            RemainingSessions = plan.SessionCount, Status = start > clock.Today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active,
+            SubscriptionPlanId = plan.Id, CollectionId = collection.Id, StartDate = start, EndDate = end, InitialSessions = terms.Sessions,
+            RemainingSessions = terms.Sessions, Status = start > clock.Today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active,
             PriceSnapshot = payment.Amount, CurrencySnapshot = payment.Currency, CreatedByUserId = payment.RenewalRequest.RequestedByUserId,
             CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
         };
-        db.SubscriptionPeriods.Add(period);
+        terms.Capture(period); db.SubscriptionPeriods.Add(period);
         var receipt = new Receipt
         {
             Id = Guid.NewGuid(), AcademyId = payment.AcademyId, CollectionId = collection.Id,
             ReceiptNumber = $"RC-{clock.UtcNow:yyyyMMdd}-{collection.Id.ToString("N")[..8].ToUpperInvariant()}",
             PlayerId = payment.RenewalRequest.SportEnrollment.PlayerId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId, SubscriptionPlanId = plan.Id,
             PlayerNameSnapshot = payment.RenewalRequest.SportEnrollment.Player.ArabicName, SportNameSnapshot = plan.Sport.ArabicName,
-            PlanNameSnapshot = plan.ArabicName, OriginalAmount = payment.RenewalRequest.OriginalAmount,
+            PlanNameSnapshot = terms.Name, OriginalAmount = payment.RenewalRequest.OriginalAmount,
             DiscountType = payment.RenewalRequest.DiscountType, DiscountValue = payment.RenewalRequest.DiscountValue,
             DiscountAmount = payment.RenewalRequest.DiscountAmount, FinalAmount = payment.RenewalRequest.FinalAmount,
             Amount = payment.Amount, Currency = payment.Currency, PaidAtUtc = clock.UtcNow,

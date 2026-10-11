@@ -59,6 +59,70 @@ Widget shell(Widget page) => MaterialApp(
 );
 void main() {
   testWidgets(
+    'Enrollment packages follow sport and branch publication and clear stale selection',
+    (tester) async {
+      final auth = await logged(
+        (m, p, b, t) async => {
+          'children': [],
+          'sports': [
+            {'id': 'swim', 'name': 'السباحة'},
+          ],
+          'branches': [
+            {'id': 'a', 'name': 'مدينة نصر'},
+            {'id': 'b', 'name': 'التجمع'},
+          ],
+          'plans': [
+            {
+              'id': 'p',
+              'sportId': 'swim',
+              'arabicName': 'سباحة الفرع فقط',
+              'price': '600.00',
+              'currency': 'EGP',
+              'allBranches': false,
+              'branchIds': ['a'],
+            },
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        shell(EnrollmentForm(auth: auth, environment: 'Demo')),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>).first,
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('السباحة').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('مدينة نصر').last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>).at(2),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('سباحة الفرع فقط').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('سباحة الفرع فقط'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byType(DropdownButtonFormField<String>).at(1),
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('التجمع').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('سباحة الفرع فقط'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'An uncertain renewal retries only explicitly with the same idempotency key and body',
     (tester) async {
       var attempts = 0;

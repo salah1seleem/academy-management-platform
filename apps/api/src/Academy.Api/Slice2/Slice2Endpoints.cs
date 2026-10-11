@@ -101,24 +101,24 @@ public static class Slice2Endpoints
         if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroupId == groupId));
         var eligible = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen);
         var subscribed = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled);
-        var activePeriods = eligible.Where(p => p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0));
-        var expiredPeriods = eligible.Where(p => p.EndDate < date || p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0);
+        var activePeriods = eligible.Where(p => p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0));
+        var expiredPeriods = eligible.Where(p => p.EndDate < date || (p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0);
         if (subscriptionState == "subscribed") query = query.Where(x => subscribed.Any(p => p.SportEnrollment.PlayerId == x.Id));
         if (subscriptionState == "stable") query = query.Where(x => activePeriods.Any(p => p.SportEnrollment.PlayerId == x.Id) && !activePeriods.Any(p => p.SportEnrollment.PlayerId == x.Id && p.EndDate <= date.AddDays(7)));
         if (subscriptionState == "other") query = query.Where(x => subscribed.Any(p => p.SportEnrollment.PlayerId == x.Id) && !activePeriods.Any(p => p.SportEnrollment.PlayerId == x.Id) && !expiredPeriods.Any(p => p.SportEnrollment.PlayerId == x.Id));
-        if (subscriptionState == "active") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
-        if (subscriptionState == "expiring") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && p.EndDate >= date && p.EndDate <= date.AddDays(7) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
-        if (subscriptionState == "expired") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && (p.EndDate < date || p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0)) && !eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
+        if (subscriptionState == "active") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
+        if (subscriptionState == "expiring") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && p.EndDate >= date && p.EndDate <= date.AddDays(7) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
+        if (subscriptionState == "expired") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && (p.EndDate < date || (p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0)) && !eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
         return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new
         {
             x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, x.IsActive, x.PhotoReference,
-            hasActiveSubscription = eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
+            hasActiveSubscription = eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
             enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active),
             enrollmentSummaries = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).ThenBy(e => e.Id).Select(e => new
             {
                 e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup.ArabicName, status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == e.Id).OrderByDescending(p => p.UpdatedAtUtc)
-                    .Select(p => new { plan = p.SubscriptionPlan.ArabicName, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < date || (p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > date ? "Scheduled" : "Active" }).FirstOrDefault()
+                    .Select(p => new { plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < date || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > date ? "Scheduled" : "Active" }).FirstOrDefault()
             }).ToList()
         }).ToListAsync());
     }
@@ -145,7 +145,8 @@ public static class Slice2Endpoints
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"registration:{t.AcademyId}:{actorId}:{key}"}, 0))");
             var prior = await db.RenewalRequests.Where(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actorId && x.IdempotencyKey == key).Select(x => new { playerId = x.SportEnrollment.PlayerId, x.RegistrationPayloadHash }).SingleOrDefaultAsync();
             if (prior is not null) return prior.RegistrationPayloadHash == payloadHash ? Results.Ok(new { prior.playerId, subscriptionCreated = true, replay = true }) : Results.Conflict(new { message = "بيانات الطلب تغيرت. استخدم عملية تسجيل جديدة." });
-            if (!await db.SubscriptionPlans.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId && x.SportId == group.SportId && x.IsActive)) return Results.UnprocessableEntity(new { message = "اختر باقة فعالة مطابقة للرياضة." });
+            await PlanCatalog.LockAsync(db, t.AcademyId, request.PlanId.Value);
+            if (!await db.SubscriptionPlans.ForBranch(group.BranchId).AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId && x.SportId == group.SportId && x.IsActive)) return Results.UnprocessableEntity(new { message = "اختر باقة فعالة مطابقة للرياضة والفرع." });
         }
         Player player;
         if (request.ExistingPlayerId is Guid playerId)

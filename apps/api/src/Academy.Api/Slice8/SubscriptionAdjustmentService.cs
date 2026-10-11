@@ -37,7 +37,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
     public Task<SubscriptionAdjustmentResult> FreezeAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly effectiveDate, string? reason, uint expectedVersion, string key, CancellationToken ct = default)
         => ExecuteAsync(academyId, actorId, periodId, SubscriptionAdjustmentType.FreezeStarted, expectedVersion, key, reason, async period =>
         {
-            if (period.SubscriptionPlan.PlanType == SubscriptionPlanType.Sessions || period.EndDate is null)
+            if ((period.PlanTypeSnapshot ?? period.SubscriptionPlan.PlanType) == SubscriptionPlanType.Sessions || period.EndDate is null)
                 throw new AdjustmentValidationException("تجميد الباقة بالحصة فقط غير مدعوم في هذا الإصدار.");
             var status = Current(period);
             if (status == SubscriptionPeriodStatus.Frozen) throw new AdjustmentConflictException("الاشتراك مجمد بالفعل.");
@@ -65,7 +65,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
             var newEnd = oldEnd.AddDays(frozenDays);
             period.EndDate = newEnd;
             period.FrozenFromDate = null;
-            period.Status = SubscriptionPeriodState.Resolve(SubscriptionPeriodStatus.Active, period.StartDate, newEnd, period.SubscriptionPlan.PlanType, period.RemainingSessions, clock.Today);
+            period.Status = SubscriptionPeriodState.Resolve(SubscriptionPeriodStatus.Active, period.StartDate, newEnd, (period.PlanTypeSnapshot ?? period.SubscriptionPlan.PlanType), period.RemainingSessions, clock.Today);
             return new AdjustmentDraft(resumeDate, frozenDays, oldEnd, newEnd, freezeStart.Id);
         }, ct);
 
@@ -74,7 +74,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
         {
             if (days is < 1 or > 365) throw new AdjustmentValidationException("عدد الأيام يجب أن يكون من 1 إلى 365.");
             if (period.Status == SubscriptionPeriodStatus.Cancelled) throw new AdjustmentConflictException("لا يمكن تعديل مدة اشتراك ملغي.");
-            if (period.SubscriptionPlan.PlanType == SubscriptionPlanType.Sessions || period.EndDate is null)
+            if ((period.PlanTypeSnapshot ?? period.SubscriptionPlan.PlanType) == SubscriptionPlanType.Sessions || period.EndDate is null)
                 throw new AdjustmentValidationException("هذه الباقة تعتمد على عدد الحصص ولا تحتوي مدة زمنية قابلة للتعديل.");
             var oldEnd = period.EndDate.Value;
             var delta = add ? days : -days;
@@ -82,7 +82,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
             if (newEnd < period.StartDate) throw new AdjustmentValidationException("لا يمكن أن يصبح تاريخ النهاية قبل تاريخ البداية.");
             period.EndDate = newEnd;
             if (period.Status != SubscriptionPeriodStatus.Frozen)
-                period.Status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, newEnd, period.SubscriptionPlan.PlanType, period.RemainingSessions, clock.Today);
+                period.Status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, newEnd, (period.PlanTypeSnapshot ?? period.SubscriptionPlan.PlanType), period.RemainingSessions, clock.Today);
             return Task.FromResult(new AdjustmentDraft(clock.Today, delta, oldEnd, newEnd, null));
         }, ct);
 
@@ -148,7 +148,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
     }
 
     private SubscriptionPeriodStatus Current(SubscriptionPeriod period)
-        => SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.SubscriptionPlan.PlanType, period.RemainingSessions, clock.Today);
+        => SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, (period.PlanTypeSnapshot ?? period.SubscriptionPlan.PlanType), period.RemainingSessions, clock.Today);
 
     private static string NormalizeReason(string? reason)
     {

@@ -2932,6 +2932,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("Currency")
                         .HasColumnType("text");
 
+                    b.Property<int?>("DurationDaysSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("ExistingPlayerId")
                         .HasColumnType("uuid");
 
@@ -2972,6 +2975,17 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PaymentRequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PlanNameSnapshot")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int?>("PlanRevisionSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanTypeSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<Guid>("PreferredBranchId")
                         .HasColumnType("uuid");
 
@@ -2991,6 +3005,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ReviewedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("SessionCountSnapshot")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("SportId")
                         .HasColumnType("uuid");
@@ -3789,6 +3806,131 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("PaymentRequests", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.PlanBranchPublication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("SubscriptionPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "SubscriptionPlanId", "BranchId")
+                        .IsUnique();
+
+                    b.ToTable("PlanBranchPublications", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.PlanPriceVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllBranches")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ArabicName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("BranchIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<int?>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("EffectiveAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlanType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("Published")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SessionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubscriptionPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "SubscriptionPlanId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("PlanPriceVersions", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.Receipt", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4229,6 +4371,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<int?>("DurationDaysSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("FinalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4248,6 +4393,17 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PaymentRequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PlanNameSnapshot")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int?>("PlanRevisionSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanTypeSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("RegistrationPayloadHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -4257,6 +4413,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("RequestedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("SessionCountSnapshot")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("SportEnrollmentId")
                         .HasColumnType("uuid");
@@ -4414,6 +4573,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("character(3)")
                         .IsFixedLength();
 
+                    b.Property<int?>("DurationDaysSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
@@ -4426,11 +4588,25 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PlanNameSnapshot")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int?>("PlanRevisionSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanTypeSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<decimal>("PriceSnapshot")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<int?>("RemainingSessions")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SessionCountSnapshot")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("SportEnrollmentId")
@@ -4487,6 +4663,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AcademyId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AllBranches")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("ArabicName")
                         .IsRequired()
                         .HasMaxLength(160)
@@ -4522,6 +4703,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("SessionCount")
                         .HasColumnType("integer");
@@ -6359,6 +6543,54 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Navigation("RenewalRequest");
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.PlanBranchPublication", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPlan", "SubscriptionPlan")
+                        .WithMany("BranchPublications")
+                        .HasForeignKey("AcademyId", "SubscriptionPlanId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("SubscriptionPlan");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.PlanPriceVersion", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPlan", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SubscriptionPlanId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.Receipt", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -6739,6 +6971,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerEvaluation", b =>
                 {
                     b.Navigation("Scores");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.SubscriptionPlan", b =>
+                {
+                    b.Navigation("BranchPublications");
                 });
 #pragma warning restore 612, 618
         }

@@ -33,11 +33,19 @@ public sealed class SubscriptionPlan : TenantEntity
     public int? DurationDays { get; set; }
     public int? SessionCount { get; set; }
     public int DisplayOrder { get; set; }
+    public bool AllBranches { get; set; } = true;
+    public int Revision { get; set; }
+    public ICollection<PlanBranchPublication> BranchPublications { get; set; } = [];
     public Sport Sport { get; set; } = null!;
 }
 
-public sealed class SubscriptionPeriod : TenantEntity
+public sealed class SubscriptionPeriod : TenantEntity, IPlanTermsSnapshot
 {
+    public string? PlanNameSnapshot { get; set; }
+    public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
+    public int? DurationDaysSnapshot { get; set; }
+    public int? SessionCountSnapshot { get; set; }
+    public int? PlanRevisionSnapshot { get; set; }
     public Guid SportEnrollmentId { get; set; }
     public Guid SportId { get; set; }
     public Guid SubscriptionPlanId { get; set; }
@@ -73,8 +81,13 @@ public sealed class SubscriptionAdjustment : TenantEntity
     public SubscriptionAdjustment? RelatedAdjustment { get; set; }
 }
 
-public sealed class RenewalRequest : TenantEntity
+public sealed class RenewalRequest : TenantEntity, IPlanTermsSnapshot
 {
+    public string? PlanNameSnapshot { get; set; }
+    public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
+    public int? DurationDaysSnapshot { get; set; }
+    public int? SessionCountSnapshot { get; set; }
+    public int? PlanRevisionSnapshot { get; set; }
     public string? RegistrationPayloadHash { get; set; }
     public Guid SportEnrollmentId { get; set; }
     public Guid SportId { get; set; }

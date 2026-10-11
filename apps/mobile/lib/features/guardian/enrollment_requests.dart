@@ -167,7 +167,10 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                     'الفرع المفضل',
                     rows(d['branches']),
                     branch,
-                    (v) => setState(() => branch = v),
+                    (v) => setState(() {
+                      branch = v;
+                      plan = null;
+                    }),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -182,12 +185,14 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
               ),
             ),
             DropdownButtonFormField<String>(
-              key: ValueKey('plan-$sport'),
+              key: ValueKey('plan-$sport-$branch'),
               initialValue: plan,
               decoration: InputDecoration(labelText: ui(context, 'الباقة')),
               items: [
                 for (final p in rows(d['plans'] ?? []))
-                  if (p['sportId'] == sport)
+                  if (p['sportId'] == sport &&
+                      (p['allBranches'] != false ||
+                          (p['branchIds'] as List? ?? []).contains(branch)))
                     DropdownMenuItem(
                       value: textOf(p['id']),
                       child: UiText(

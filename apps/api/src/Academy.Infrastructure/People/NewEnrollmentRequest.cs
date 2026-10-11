@@ -1,13 +1,19 @@
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Subscriptions;
 
 namespace Academy.Infrastructure.People;
 
 public enum NewEnrollmentRequestType { ExistingChildNewSport = 1, NewChild = 2 }
 public enum NewEnrollmentRequestStatus { Pending = 1, UnderReview = 2, Approved = 3, Rejected = 4, Cancelled = 5 }
 
-public sealed class NewEnrollmentRequest : TenantEntity
+public sealed class NewEnrollmentRequest : TenantEntity, IPlanTermsSnapshot
 {
+    public string? PlanNameSnapshot { get; set; }
+    public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
+    public int? DurationDaysSnapshot { get; set; }
+    public int? SessionCountSnapshot { get; set; }
+    public int? PlanRevisionSnapshot { get; set; }
     public Guid RequestedByGuardianUserId { get; set; }
     public NewEnrollmentRequestType RequestType { get; set; }
     public Guid? ExistingPlayerId { get; set; }

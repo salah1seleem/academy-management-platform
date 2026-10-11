@@ -6,6 +6,7 @@ using Academy.Api.Auth;
 using Academy.Api.Demo;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
+using Academy.Infrastructure.Subscriptions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +83,21 @@ public sealed class FootballDemoTests : IAsyncLifetime
         Assert.Equal(30, await db.Receipts.CountAsync(x => x.AcademyId == AcademyId));
         Assert.Equal(90, await db.PlayerAttendances.CountAsync(x => x.AcademyId == AcademyId));
         Assert.Equal(31, await db.PlayerEvaluations.CountAsync(x => x.AcademyId == AcademyId));
+    }
+
+    [Fact]
+    public async Task Explicit_demo_reset_clears_only_marked_synthetic_price_history_and_restores_immutable_guard()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var plan = await db.SubscriptionPlans.FirstAsync(x => x.AcademyId == AcademyId);
+        db.PlanPriceVersions.Add(PlanPriceVersion.Create(plan, [], null, DateTimeOffset.UtcNow)); await db.SaveChangesAsync();
+        var other = await db.PlanPriceVersions.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync();
+        await Reset(); db.ChangeTracker.Clear();
+        Assert.Empty(await db.PlanPriceVersions.Where(x => x.AcademyId == AcademyId).ToArrayAsync());
+        Assert.Equal(other.Order(), (await db.PlanPriceVersions.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync()).Order());
+        var fresh = await db.SubscriptionPlans.FirstAsync(x => x.AcademyId == AcademyId);
+        var version = PlanPriceVersion.Create(fresh, [], null, DateTimeOffset.UtcNow); db.PlanPriceVersions.Add(version); await db.SaveChangesAsync();
+        var error = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"PlanPriceVersions\" WHERE \"Id\" = {version.Id}")); Assert.Equal("23514", error.SqlState);
     }
 
     [Fact]

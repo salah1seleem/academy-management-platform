@@ -152,7 +152,7 @@ public static class Slice2DashboardEndpoints
         {
             x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive, x.PhotoReference,
             asOfDate = clock.Today,
-            hasActiveSubscription = db.SubscriptionPeriods.Any(p => p.AcademyId == current.AcademyId && p.SportEnrollment.PlayerId == x.Id && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= clock.Today && (p.EndDate == null || p.EndDate >= clock.Today) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
+            hasActiveSubscription = db.SubscriptionPeriods.Any(p => p.AcademyId == current.AcademyId && p.SportEnrollment.PlayerId == x.Id && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= clock.Today && (p.EndDate == null || p.EndDate >= clock.Today) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
             guardians = db.GuardianPlayerLinks.Where(l => l.AcademyId == current.AcademyId && l.PlayerId == x.Id && l.IsActive && l.Guardian.IsActive)
                 .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
@@ -168,10 +168,10 @@ public static class Slice2DashboardEndpoints
                     .Select(period => new
                     {
                         period.Id,
-                        plan = period.SubscriptionPlan.ArabicName,
+                        plan = (period.PlanNameSnapshot ?? period.SubscriptionPlan.ArabicName),
                         period.StartDate,
                         period.EndDate,
-                        status = period.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : period.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : period.EndDate < clock.Today || (period.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && period.RemainingSessions <= 0) ? "Expired" : period.StartDate > clock.Today ? "Scheduled" : "Active"
+                        status = period.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : period.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : period.EndDate < clock.Today || ((period.PlanTypeSnapshot ?? period.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && period.RemainingSessions <= 0) ? "Expired" : period.StartDate > clock.Today ? "Scheduled" : "Active"
                     }).FirstOrDefault()
             }).ToList()
         }).SingleOrDefaultAsync();
