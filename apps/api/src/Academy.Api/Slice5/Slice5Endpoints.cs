@@ -86,7 +86,7 @@ public static class Slice5Endpoints
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
         var enrollments = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
-        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = x.TrainingGroupId, group = x.TrainingGroup.ArabicName }).ToListAsync();
+        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = x.TrainingGroupId, group = x.TrainingGroup == null ? "في انتظار المجموعة" : x.TrainingGroup.ArabicName }).ToListAsync();
         var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
         var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
@@ -107,11 +107,12 @@ public static class Slice5Endpoints
     private static async Task<IResult> CreateEvaluation(CreateEvaluationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; var enrollment = await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db); if (enrollment is null) return Results.NotFound();
+        if (enrollment.TrainingGroupId is not Guid groupId) return Results.Conflict(new { message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
         var criteria = await db.EvaluationCriteria.Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).ToListAsync();
         if (criteria.Count == 0) return Results.Conflict(new { message = "لا توجد معايير فعالة لهذه الرياضة." });
         if (request.EvaluationDate == default) return Validation("evaluationDate", "تاريخ التقييم مطلوب.");
         var now = clock.GetUtcNow(); var id = Guid.NewGuid();
-        var entity = new PlayerEvaluation { Id = id, AcademyId = t.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, TrainingGroupId = enrollment.TrainingGroupId, EvaluatedByUserId = UserId(principal), EvaluationDate = request.EvaluationDate, ReportingPeriod = string.IsNullOrWhiteSpace(request.ReportingPeriod) ? "تقييم دوري" : request.ReportingPeriod.Trim(), Status = EvaluationStatus.Draft, GeneralNotes = Clean(request.GeneralNotes), CreatedAtUtc = now, UpdatedAtUtc = now };
+        var entity = new PlayerEvaluation { Id = id, AcademyId = t.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, TrainingGroupId = groupId, EvaluatedByUserId = UserId(principal), EvaluationDate = request.EvaluationDate, ReportingPeriod = string.IsNullOrWhiteSpace(request.ReportingPeriod) ? "تقييم دوري" : request.ReportingPeriod.Trim(), Status = EvaluationStatus.Draft, GeneralNotes = Clean(request.GeneralNotes), CreatedAtUtc = now, UpdatedAtUtc = now };
         entity.Scores = criteria.Select(c => new EvaluationScore { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerEvaluationId = id, EvaluationCriterionId = c.Id, SportId = c.SportId, Score = null, CriterionNameSnapshot = c.ArabicName, WeightSnapshot = c.Weight, FootballAxisSnapshot = c.FootballAxis, CreatedAtUtc = now, UpdatedAtUtc = now }).ToList();
         db.PlayerEvaluations.Add(entity); await db.SaveChangesAsync();
         return Results.Created($"/api/v1/evaluations/{id}", new { id });

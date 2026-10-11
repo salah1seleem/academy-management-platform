@@ -122,7 +122,7 @@ public static class Slice3Endpoints
     {
         var t = (await tenant.ResolveAsync())!; var payer = UserId(principal); var term = request.Name?.Trim();
         if (string.IsNullOrWhiteSpace(term) || term.Length is < 3 or > 100) return Results.UnprocessableEntity(new { message = "اكتب ثلاثة أحرف على الأقل من اسم اللاعب." });
-        var matches = await db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.Player.IsActive && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.Player.ArabicName.Contains(term)).OrderBy(x => x.Player.ArabicName).ThenBy(x => x.Sport.ArabicName).Take(10).Select(x => new { x.Id, name = x.Player.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName }).ToListAsync();
+        var matches = await db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.Player.IsActive && x.TrainingGroup != null && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.Player.ArabicName.Contains(term)).OrderBy(x => x.Player.ArabicName).ThenBy(x => x.Sport.ArabicName).Take(10).Select(x => new { x.Id, name = x.Player.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName }).ToListAsync();
         return Results.Ok(matches.Select(x => new { x.name, x.sport, x.branch, reference = scoped.Create(t.AcademyId, payer, x.Id) }));
     }
     private static async Task<IResult> ResolveExternalBeneficiary(ExternalReferenceRequest request, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, ClaimsPrincipal principal, ScopedRenewalReferences scoped)
@@ -130,7 +130,7 @@ public static class Slice3Endpoints
         var t = (await tenant.ResolveAsync())!;
         if (request.Reference?.StartsWith("SR1.", StringComparison.Ordinal) == true) {
             var target = scoped.Resolve(request.Reference, t.AcademyId, UserId(principal));
-            var enrollment = target.HasValue ? await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == target && x.IsActive && x.Player.IsActive && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { playerDisplayName = x.Player.ArabicName, sport = x.Sport.ArabicName, x.SportId, x.BranchId }).SingleOrDefaultAsync() : null;
+            var enrollment = target.HasValue ? await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == target && x.IsActive && x.Player.IsActive && x.TrainingGroup != null && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { playerDisplayName = x.Player.ArabicName, sport = x.Sport.ArabicName, x.SportId, x.BranchId }).SingleOrDefaultAsync() : null;
             if (enrollment is null) return Results.NotFound(new { message = "انتهى الاختيار أو تغير التسجيل. أعد البحث." });
             var available = await db.SubscriptionPlans.TrainingOnly().ForBranch(enrollment.BranchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount }).ToListAsync();
             return Results.Ok(new { enrollment.playerDisplayName, enrollment.sport, academyName = t.AcademyName, plans = available });
@@ -151,7 +151,7 @@ public static class Slice3Endpoints
         if (string.IsNullOrWhiteSpace(request.Reference)) return Results.NotFound(new { message = "كود التجديد غير صالح أو منتهي." });
         if (request.Reference.StartsWith("SR1.", StringComparison.Ordinal)) {
             var target = scoped.Resolve(request.Reference, t.AcademyId, user);
-            var eligible = target.HasValue ? await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == target && x.IsActive && x.Player.IsActive && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { x.Id, x.SportId }).SingleOrDefaultAsync() : null;
+            var eligible = target.HasValue ? await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == target && x.IsActive && x.Player.IsActive && x.TrainingGroup != null && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { x.Id, x.SportId }).SingleOrDefaultAsync() : null;
             if (eligible is null || !await db.SubscriptionPlans.TrainingOnly().AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == eligible.SportId && x.IsActive)) return Results.NotFound(new { message = "انتهى الاختيار أو تغيرت الباقة. أعد البحث." });
             return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, eligible.Id, request.SubscriptionPlanId, key, false), false);
         }
@@ -204,7 +204,7 @@ public static class Slice3Endpoints
                 player = x.Player.ArabicName,
                 sport = x.Sport.ArabicName,
                 branch = x.Branch.ArabicName,
-                group = x.TrainingGroup.ArabicName,
+                group = x.TrainingGroup == null ? "في انتظار المجموعة" : x.TrainingGroup.ArabicName,
                 guardianPhone = db.GuardianPlayerLinks.Where(link => link.AcademyId == t.AcademyId && link.PlayerId == x.PlayerId && link.IsActive)
                     .Select(link => link.Guardian.ContactPhone).FirstOrDefault(),
                 period = db.SubscriptionPeriods.Where(period => period.AcademyId == t.AcademyId && period.SportEnrollmentId == x.Id)
@@ -243,7 +243,7 @@ public static class Slice3Endpoints
                 player = x.Player.ArabicName,
                 sport = x.Sport.ArabicName,
                 branch = x.Branch.ArabicName,
-                group = x.TrainingGroup.ArabicName
+                group = x.TrainingGroup == null ? "في انتظار المجموعة" : x.TrainingGroup.ArabicName
             }).SingleOrDefaultAsync();
         if (enrollment is null) return Results.NotFound();
 

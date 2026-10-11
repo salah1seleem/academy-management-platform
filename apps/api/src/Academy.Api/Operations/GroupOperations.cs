@@ -44,6 +44,7 @@ public static class GroupOperations
         var enrollment = await db.SportEnrollments.Include(x => x.Player).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive);
         var group = await db.TrainingGroups.Include(x => x.AgeCategory).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.GroupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive);
         if (enrollment is null || group is null) return Results.NotFound();
+        if (enrollment.TrainingGroupId is null) return Results.Conflict(new { message = "استخدم مسار التسكين المراجع؛ تعديل المجموعة مخصص للتسجيل المسكن بالفعل." });
         if (group.SportId != enrollment.SportId || group.BranchId != enrollment.BranchId || group.AgeCategory.MinimumBirthYear > enrollment.Player.DateOfBirth.Year || group.AgeCategory.MaximumBirthYear < enrollment.Player.DateOfBirth.Year) return Results.UnprocessableEntity(new { message = "المجموعة لا تطابق رياضة وفرع وعمر اللاعب." });
         if (group.Id != enrollment.TrainingGroupId && group.Capacity.HasValue && await db.SportEnrollments.CountAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == group.Id && x.IsActive) >= group.Capacity) return Results.Conflict(new { message = "المجموعة مكتملة العدد." });
         enrollment.TrainingGroupId = group.Id; enrollment.UpdatedAtUtc = clock.UtcNow; await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.NoContent();

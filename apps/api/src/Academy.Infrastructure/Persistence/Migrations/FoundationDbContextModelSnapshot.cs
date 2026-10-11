@@ -4066,7 +4066,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<Guid>("TrainingGroupId")
+                    b.Property<Guid?>("TrainingGroupId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
@@ -4085,6 +4085,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "IsActive");
 
                     b.HasIndex("AcademyId", "SportId");
+
+                    b.HasIndex("AcademyId", "PlayerId", "SportId", "BranchId")
+                        .IsUnique()
+                        .HasFilter("\"TrainingGroupId\" IS NULL AND \"IsActive\"");
 
                     b.HasIndex("AcademyId", "PlayerId", "SportId", "TrainingGroupId")
                         .IsUnique();
@@ -7652,8 +7656,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "TrainingGroupId", "BranchId", "SportId")
                         .HasPrincipalKey("AcademyId", "Id", "BranchId", "SportId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Branch");
 

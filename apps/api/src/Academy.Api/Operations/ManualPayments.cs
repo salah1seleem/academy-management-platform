@@ -41,7 +41,7 @@ public static class ManualPayments
         if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.UserId == p.RenewalRequest.RequestedByUserId && (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin))) return Results.Forbid();
         if (await db.PaymentProofs.AnyAsync(x => x.AcademyId == t.AcademyId && x.PaymentRequestId == id)) return Results.Conflict(new { message = "استخدم مراجعة إثبات الدفع لهذا الطلب." });
         if (p.Status == PaymentRequestStatus.Confirmed) { var existing = await db.Receipts.Where(x => x.AcademyId == t.AcademyId && x.Collection.PaymentRequestId == id).Select(x => x.Id).SingleAsync(); return Results.Ok(new { receiptId = existing, replay = true }); }
-        if (p.Status != PaymentRequestStatus.Pending || p.RenewalRequest.PaymentRequestId != id || !p.RenewalRequest.SportEnrollment.TrainingGroup.IsActive) return Results.Conflict();
+        if (p.Status != PaymentRequestStatus.Pending || p.RenewalRequest.PaymentRequestId != id || p.RenewalRequest.SportEnrollment.TrainingGroup?.IsActive != true) return Results.Conflict();
         p.Provider = "Manual"; p.ProviderEnvironment = "Manual";
         var receipt = await service.ConfirmAsync(t.AcademyId, actor, id, body.PaymentMethod); await tx.CommitAsync(); return Results.Ok(new { receiptId = receipt });
     }

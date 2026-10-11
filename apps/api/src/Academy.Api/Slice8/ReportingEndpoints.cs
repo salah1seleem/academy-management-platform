@@ -194,7 +194,7 @@ public static partial class ReportingEndpoints
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.PlayerNameSnapshot).Single(),
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.SportNameSnapshot).Single(),
         x.SportEnrollment.Branch.ArabicName,
-        x.SportEnrollment.TrainingGroup.ArabicName,
+        x.SportEnrollment.TrainingGroup == null ? "في انتظار المجموعة" : x.SportEnrollment.TrainingGroup.ArabicName,
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.PlanNameSnapshot).Single(),
         x.Amount, x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc,
         db.CollectionRefunds.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Sum(r => (decimal?)r.Amount) ?? 0, "Subscription"));

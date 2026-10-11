@@ -32,7 +32,7 @@ public static class SubscriptionAdjustmentEndpoints
                 plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType),
                 player = x.SportEnrollment.Player.ArabicName, playerCode = x.SportEnrollment.Player.PlayerCode,
                 sport = x.SportEnrollment.Sport.ArabicName, branch = x.SportEnrollment.Branch.ArabicName,
-                group = x.SportEnrollment.TrainingGroup.ArabicName, x.PriceSnapshot, x.CurrencySnapshot,
+                group = x.SportEnrollment.TrainingGroup == null ? "في انتظار المجموعة" : x.SportEnrollment.TrainingGroup.ArabicName, x.PriceSnapshot, x.CurrencySnapshot,
                 receiptId = db.Receipts.Where(r => r.AcademyId == current.AcademyId && r.CollectionId == x.CollectionId).Select(r => (Guid?)r.Id).SingleOrDefault()
             }).SingleOrDefaultAsync();
         if (period is null) return Results.NotFound();

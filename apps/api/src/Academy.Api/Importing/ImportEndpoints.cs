@@ -58,7 +58,7 @@ public static class ImportEndpoints
                                      join e in db.SportEnrollments on m.SportEnrollmentId equals e.Id
                                      join period in db.SubscriptionPeriods on m.SubscriptionPeriodId equals period.Id
                                      orderby m.LegacyEnrollmentId
-                                     select new PublishedRow(m.LegacyPlayerId, m.LegacyEnrollmentId, p.Id, p.ArabicName, p.PlayerCode, e.Sport.ArabicName, e.Branch.ArabicName, e.TrainingGroup.ArabicName, period.StartDate, period.EndDate, period.RemainingSessions, period.PriceSnapshot, period.CurrencySnapshot)).ToListAsync());
+                                     select new PublishedRow(m.LegacyPlayerId, m.LegacyEnrollmentId, p.Id, p.ArabicName, p.PlayerCode, e.Sport.ArabicName, e.Branch.ArabicName, e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName, period.StartDate, period.EndDate, period.RemainingSessions, period.PriceSnapshot, period.CurrencySnapshot)).ToListAsync());
         });
     }
     private static async Task<IResult> Preview(HttpRequest request, CurrentTenant tenant, FoundationDbContext db, CancellationToken ct)

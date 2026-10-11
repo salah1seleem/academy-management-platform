@@ -18,7 +18,7 @@ public static class RenewalOpportunityEndpoints
 {
     public sealed record Filters(Guid? BranchId, Guid? SportId, Guid? GroupId, Guid? PlayerId, string? Search);
     public sealed record Row(Guid EnrollmentId, Guid PlayerId, string Player, string PlayerCode, Guid BranchId, string Branch,
-        Guid SportId, string Sport, Guid GroupId, string Group, DateOnly? LastEndDate, Guid PlanId, string Plan,
+        Guid SportId, string Sport, Guid? GroupId, string Group, DateOnly? LastEndDate, Guid PlanId, string Plan,
         bool RequiresPlanSelection, int? PlanRevision, Guid? DiscountRuleId, int? DiscountRuleRevision, string? DiscountReason,
         [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] decimal? BasePrice,
         [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] decimal? Discount,
@@ -104,7 +104,7 @@ public static class RenewalOpportunityEndpoints
         foreach (var (e, last, plan) in candidates)
         {
             var quote = quotes.GetValueOrDefault(e.Id);
-            rows.Add(new(e.Id, e.PlayerId, e.Player.ArabicName, e.Player.PlayerCode, e.BranchId, e.Branch.ArabicName, e.SportId, e.Sport.ArabicName, e.TrainingGroupId, e.TrainingGroup.ArabicName,
+            rows.Add(new(e.Id, e.PlayerId, e.Player.ArabicName, e.Player.PlayerCode, e.BranchId, e.Branch.ArabicName, e.SportId, e.Sport.ArabicName, e.TrainingGroupId, e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName,
                 last.EndDate, last.SubscriptionPlanId, plan?.ArabicName ?? last.PlanNameSnapshot ?? last.SubscriptionPlan.ArabicName, plan is null, plan?.Revision,
                 quote?.DiscountRuleId, quote?.DiscountRuleRevision, quote?.DiscountReason, quote?.OriginalAmount, quote?.DiscountAmount, quote?.FinalAmount, currency));
         }

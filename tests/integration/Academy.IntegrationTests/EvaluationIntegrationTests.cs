@@ -28,7 +28,14 @@ public sealed class EvaluationIntegrationTests : IAsyncLifetime
     { await using var scope = factory.Services.CreateAsyncScope(); var sport = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Sports.Where(x => x.AcademyId == DemoSeed.FutureAcademyId).Select(x => x.Id).FirstAsync(); using var client = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.NotFound, (await Post(client, "/api/v1/evaluations/criteria", new { sportId = sport, arabicName = "معيار مرفوض", displayOrder = 1, isActive = true, weight = 1, footballAxis = "Passing" })).StatusCode); }
 
     [Fact] public async Task Coach_sees_assigned_group_players_only()
-    { using var client = await Staff(DemoSeed.CoachEmail); var json = await client.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options"); var rows = json.GetProperty("enrollments").EnumerateArray().ToArray(); Assert.NotEmpty(rows); Assert.All(rows, x => Assert.Equal(Slice2DemoSeed.FootballGroupId, x.GetProperty("groupId").GetGuid())); }
+    {
+        using var client = await Staff(DemoSeed.CoachEmail);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var assigned = await db.StaffGroupAssignments.Where(a => a.AcademyId == DemoSeed.NogoomAcademyId && a.AcademyMembership.User.Email == DemoSeed.CoachEmail && a.IsActive && a.AcademyMembership.IsActive).Select(a => a.TrainingGroupId).ToArrayAsync();
+        var json = await client.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options"); var rows = json.GetProperty("enrollments").EnumerateArray().ToArray();
+        Assert.NotEmpty(rows); Assert.All(rows, x => Assert.Contains(x.GetProperty("groupId").GetGuid(), assigned));
+        Assert.DoesNotContain(rows, x => x.GetProperty("groupId").ValueKind == JsonValueKind.Null);
+    }
 
     [Fact] public async Task Coach_cannot_evaluate_unrelated_group()
     { await using var scope = factory.Services.CreateAsyncScope(); var enrollment = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().SportEnrollments.Where(x => x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.SwimmingId).Select(x => x.Id).SingleAsync(); using var client = await Staff(DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.NotFound, (await Post(client, "/api/v1/evaluations", new { sportEnrollmentId = enrollment, evaluationDate = "2026-09-28", reportingPeriod = "اختبار" })).StatusCode); }

@@ -45,10 +45,10 @@ public sealed class SportEnrollment : TenantEntity
     public Guid PlayerId { get; set; }
     public Guid SportId { get; set; }
     public Guid BranchId { get; set; }
-    public Guid TrainingGroupId { get; set; }
+    public Guid? TrainingGroupId { get; set; }
     public EnrollmentStatus Status { get; set; } = EnrollmentStatus.Active;
     public Player Player { get; set; } = null!;
     public Sport Sport { get; set; } = null!;
     public Branch Branch { get; set; } = null!;
-    public TrainingGroup TrainingGroup { get; set; } = null!;
+    public TrainingGroup? TrainingGroup { get; set; }
 }

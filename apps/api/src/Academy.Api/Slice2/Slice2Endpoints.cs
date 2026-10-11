@@ -97,7 +97,7 @@ public static class Slice2Endpoints
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.ArabicName.Contains(search) || x.PlayerCode.Contains(search) || db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.Id && l.Guardian.ContactPhone == EgyptPhoneNormalizer.Normalize(search)));
         if (branchId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.BranchId == branchId));
         if (sportId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.SportId == sportId));
-        if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroup.AgeCategoryId == ageCategoryId));
+        if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroup != null && e.TrainingGroup.AgeCategoryId == ageCategoryId));
         if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroupId == groupId));
         var eligible = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen);
         var subscribed = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled);
@@ -116,7 +116,7 @@ public static class Slice2Endpoints
             enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active),
             enrollmentSummaries = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).ThenBy(e => e.Id).Select(e => new
             {
-                e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup.ArabicName, status = e.Status.ToString(),
+                e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName, status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == e.Id).OrderByDescending(p => p.UpdatedAtUtc)
                     .Select(p => new { plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < date || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > date ? "Scheduled" : "Active" }).FirstOrDefault()
             }).ToList()

@@ -157,11 +157,12 @@ public static class Slice2DashboardEndpoints
                 .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
             {
-                e.Id, e.TrainingGroupId,
+                e.Id, e.TrainingGroupId, e.SportId, e.BranchId,
+                placement = e.TrainingGroupId == null ? "Unassigned" : "Assigned",
                 sportName = e.Sport.ArabicName,
                 branchName = e.Branch.ArabicName,
-                groupName = e.TrainingGroup.ArabicName,
-                categoryName = e.TrainingGroup.AgeCategory.ArabicName,
+                groupName = e.TrainingGroup == null ? "في انتظار المجموعة" : e.TrainingGroup.ArabicName,
+                categoryName = e.TrainingGroup == null ? "غير محددة" : e.TrainingGroup.AgeCategory.ArabicName,
                 status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(period => period.AcademyId == current.AcademyId && period.SportEnrollmentId == e.Id)
                     .OrderByDescending(period => period.UpdatedAtUtc)

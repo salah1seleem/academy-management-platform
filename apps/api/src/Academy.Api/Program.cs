@@ -332,6 +332,7 @@ app.MapSubscriptionDiscountEndpoints();
 app.MapAssetEndpoints();
 app.MapDiscountRuleEndpoints();
 app.MapGroupOperations();
+app.MapUnassignedEnrollments();
 app.MapManualPayments();
 app.MapExperience();
 app.MapMatches();
@@ -370,6 +371,7 @@ if (app.Environment.IsEnvironment("Demo"))
             await RenewalOpportunityDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ResourceTimetableSeedEnabled")) await Academy.Api.Facilities.ResourceTimetableDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:UnassignedEnrollmentSeedEnabled")) await UnassignedEnrollmentDemoSeed.Seed(db);
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }
