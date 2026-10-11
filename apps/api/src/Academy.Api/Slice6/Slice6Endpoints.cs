@@ -63,7 +63,7 @@ public static class Slice6Endpoints
         var children = await db.GuardianPlayerLinks.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.IsActive && x.Player.IsActive).OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.PlayerId, name = x.Player.ArabicName }).ToListAsync();
         var sports = await db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
         var branches = await db.Branches.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
-        var plans = await db.SubscriptionPlans.Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.SportId, x.ArabicName, x.Price, x.Currency, x.DurationDays, x.SessionCount, x.AllBranches, branchIds = x.BranchPublications.Where(p => p.IsActive && p.Branch.IsActive).Select(p => p.BranchId).ToArray() }).ToListAsync();
+        var plans = await db.SubscriptionPlans.TrainingOnly().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.SportId, x.ArabicName, x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount, x.AllBranches, branchIds = x.BranchPublications.Where(p => p.IsActive && p.Branch.IsActive).Select(p => p.BranchId).ToArray() }).ToListAsync();
         return Results.Ok(new { children, sports, branches, plans });
     }
 
@@ -102,7 +102,7 @@ public static class Slice6Endpoints
         else return Validation("requestType", "نوع الطلب غير صالح.");
         if (request.SubscriptionPlanId.HasValue) {
             await PlanCatalog.LockAsync(db, t.AcademyId, request.SubscriptionPlanId.Value);
-            var plan = await db.SubscriptionPlans.ForBranch(request.PreferredBranchId).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == request.SportId && x.IsActive);
+            var plan = await db.SubscriptionPlans.TrainingOnly().ForBranch(request.PreferredBranchId).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == request.SportId && x.IsActive);
             if (plan is null) return Validation("plan", "اختر باقة فعالة مطابقة للرياضة.");
             var guardianId = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.UserId == user && x.IsActive).Select(x => (Guid?)x.Id).SingleOrDefaultAsync();
             var quote = await discounts.CalculateAsync(t.AcademyId, entity.ExistingPlayerId ?? Guid.Empty, plan.Price, user, guardianId);
@@ -201,7 +201,7 @@ public static class Slice6Endpoints
             if (entity.SubscriptionPlanId.HasValue) {
                 var original = entity.OriginalAmount!.Value; var amount = entity.FinalAmount!.Value; var discount = original - amount;
                 var snapshot = new RenewalFinancialSnapshot(original, discount > 0 ? RenewalDiscountType.Percentage : null, discount > 0 && original > 0 ? discount * 100 / original : null, discount, amount, discount > 0 ? "عرض محفوظ عند طلب الاشتراك" : null, discount > 0 ? UserId(principal) : null, discount > 0 ? clock.UtcNow : null);
-                var capturedPlan = await db.SubscriptionPlans.SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == entity.SubscriptionPlanId);
+                var capturedPlan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == entity.SubscriptionPlanId);
                 entity.PaymentRequestId = await collections.CreateCashAsync(t.AcademyId, UserId(principal), enrollment.Id, entity.SubscriptionPlanId.Value, "enroll-" + id.ToString("N"), "Online", entity.RequestedByGuardianUserId, snapshot, fixedTerms: PlanTerms.From(entity, capturedPlan));
                 db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, Message = "تم قبول طلب الاشتراك وتفعيل الباقة. مواعيد المجموعة والإيصال متاحة في ملف الطفل.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
                 await db.SaveChangesAsync();

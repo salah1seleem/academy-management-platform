@@ -146,7 +146,7 @@ public static class Slice2Endpoints
             var prior = await db.RenewalRequests.Where(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actorId && x.IdempotencyKey == key).Select(x => new { playerId = x.SportEnrollment.PlayerId, x.RegistrationPayloadHash }).SingleOrDefaultAsync();
             if (prior is not null) return prior.RegistrationPayloadHash == payloadHash ? Results.Ok(new { prior.playerId, subscriptionCreated = true, replay = true }) : Results.Conflict(new { message = "بيانات الطلب تغيرت. استخدم عملية تسجيل جديدة." });
             await PlanCatalog.LockAsync(db, t.AcademyId, request.PlanId.Value);
-            if (!await db.SubscriptionPlans.ForBranch(group.BranchId).AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId && x.SportId == group.SportId && x.IsActive)) return Results.UnprocessableEntity(new { message = "اختر باقة فعالة مطابقة للرياضة والفرع." });
+            if (!await db.SubscriptionPlans.TrainingOnly().ForBranch(group.BranchId).AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId && x.SportId == group.SportId && x.IsActive)) return Results.UnprocessableEntity(new { message = "اختر باقة فعالة مطابقة للرياضة والفرع." });
         }
         Player player;
         if (request.ExistingPlayerId is Guid playerId)
@@ -191,7 +191,7 @@ public static class Slice2Endpoints
         }
         await db.SaveChangesAsync();
         if (request.PlanId.HasValue && request.ExpectedAmount.HasValue) {
-            var price = await db.SubscriptionPlans.Where(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId).Select(x => x.Price).SingleAsync();
+            var price = await db.SubscriptionPlans.TrainingOnly().Where(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId).Select(x => x.Price).SingleAsync();
             var quote = await discounts.CalculateAsync(t.AcademyId, player.Id, price, actorId);
             if (quote.FinalAmount != request.ExpectedAmount.Value) return Results.Conflict(new { message = "تغير المبلغ المستحق. راجع السعر قبل التحصيل." });
         }

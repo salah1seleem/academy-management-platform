@@ -23,7 +23,7 @@ public sealed class V2PlanPublicationTests : IAsyncLifetime
     private Factory factory = null!;
     public Task InitializeAsync() { factory = new(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Isolated database required")); _ = factory.CreateClient(); return Task.CompletedTask; }
     public async Task DisposeAsync() => await factory.DisposeAsync();
-    private async Task<(Guid A, Guid B, Guid Group, Guid Enrollment, Guid Owner, int BirthYear)> Fixture()
+    private async Task<(Guid A, Guid B, Guid Group, Guid Enrollment, Guid Owner, int BirthYear)> Fixture(bool linkedGuardian = true)
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var age = await db.AgeCategories.FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.IsActive);
@@ -35,11 +35,55 @@ public sealed class V2PlanPublicationTests : IAsyncLifetime
         db.Players.Add(new() { Id = player, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "لاعب اختبار نشر الباقات", PlayerCode = "PUB-" + player.ToString("N")[..12], DateOfBirth = new(birthYear, 1, 1) });
         db.SportEnrollments.Add(new() { Id = enrollment, AcademyId = DemoSeed.NogoomAcademyId, PlayerId = player, SportId = Slice2DemoSeed.SwimmingId, BranchId = a, TrainingGroupId = group });
         var guardian = await db.GuardianProfiles.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.User.PhoneNumber == DemoSeed.GuardianPhone).Select(x => x.Id).SingleAsync();
-        db.GuardianPlayerLinks.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, GuardianId = guardian, PlayerId = player, CreatedByUserId = owner });
+        if (linkedGuardian) db.GuardianPlayerLinks.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, GuardianId = guardian, PlayerId = player, CreatedByUserId = owner });
         await db.SaveChangesAsync(); return (a, b, group, enrollment, owner, birthYear);
     }
     private static PlanRequest Body(Guid branch, string name, decimal price = 600, int? revision = null, SubscriptionPlanType type = SubscriptionPlanType.Combined) => new(name, null, Slice2DemoSeed.SwimmingId, type, price, type == SubscriptionPlanType.Sessions ? null : 30, type == SubscriptionPlanType.Duration ? null : 8, AllBranches: false, BranchIds: [branch], ExpectedRevision: revision);
     private async Task<Guid> CreatePlan(HttpClient owner, Guid branch) { var r = await Write(owner, "/api/v1/subscriptions/plans", Body(branch, "سباحة اختبار " + Guid.NewGuid().ToString("N")[..8])); r.EnsureSuccessStatusCode(); return (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Golden_season_is_2400_cash_for_five_calendar_months_and_preserves_terms(bool manual)
+    {
+        await using var route = await InternalGatewayRouteScope.Begin(factory.Services);
+        var f = await Fixture(false); using var owner = await Staff();
+        var body = Body(f.A, "موسم اختبار " + Guid.NewGuid().ToString("N")[..8], 2400, type: SubscriptionPlanType.Duration)
+            with { DurationDays = null, DurationMonths = 5, TrainingFormat = TrainingFormat.Season, ReferenceMonthlyPrice = 600, ChargedMonths = 4 };
+        var created = await Write(owner, "/api/v1/subscriptions/plans", body); created.EnsureSuccessStatusCode(); var plan = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var r = await Write(owner, "/api/v1/subscriptions/admin-renewals", new { sportEnrollmentId = f.Enrollment, subscriptionPlanId = plan }); r.EnsureSuccessStatusCode(); var payment = (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("paymentId").GetGuid();
+        (await Write(owner, $"/api/v1/subscriptions/plans/{plan}", body with { ExpectedRevision = 1, DurationMonths = 6, ReferenceMonthlyPrice = 700, Price = 2800 }, true)).EnsureSuccessStatusCode();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            if (manual) { await using var tx = await db.Database.BeginTransactionAsync(); await scope.ServiceProvider.GetRequiredService<CollectionService>().ConfirmAsync(DemoSeed.NogoomAcademyId, f.Owner, payment, "Online"); await tx.CommitAsync(); }
+            else { var p = await db.PaymentRequests.SingleAsync(x => x.Id == payment); var gateway = scope.ServiceProvider.GetRequiredService<IPaymentGateway>(); Assert.True((await scope.ServiceProvider.GetRequiredService<PaymentProcessor>().ProcessAsync(gateway.CreateTestEvent(p, PaymentEventOutcome.Success))).Accepted); }
+        }
+        await using var verify = factory.Services.CreateAsyncScope(); var v = verify.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var period = await v.SubscriptionPeriods.SingleAsync(x => x.Collection.PaymentRequestId == payment);
+        Assert.Equal(2400m, period.PriceSnapshot); Assert.Equal(5, period.DurationMonthsSnapshot); Assert.Equal(TrainingFormat.Season, period.TrainingFormatSnapshot);
+        Assert.Equal(period.StartDate.AddMonths(5).AddDays(-1), period.EndDate); Assert.Null(period.InitialSessions);
+        Assert.Equal(480m, period.PriceSnapshot / period.DurationMonthsSnapshot!.Value);
+        Assert.Single(await v.Collections.Where(x => x.PaymentRequestId == payment).ToListAsync());
+        Assert.Equal(2400m, (await v.Receipts.SingleAsync(x => x.CollectionId == period.CollectionId)).Amount);
+        await using var rollback = await v.Database.BeginTransactionAsync();
+        var error = await Assert.ThrowsAsync<PostgresException>(() => v.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"SubscriptionPeriods\" SET \"DurationMonthsSnapshot\" = 1 WHERE \"Id\" = {period.Id}")); Assert.Equal("23514", error.SqlState);
+    }
+
+    [Fact]
+    public async Task Non_training_services_are_separate_and_cannot_activate_training_or_appear_in_its_options()
+    {
+        var f = await Fixture(); using var owner = await Staff(); using var guardian = await Guardian();
+        var body = Body(f.A, "زيارة مسبح " + Guid.NewGuid().ToString("N")[..8], 100, type: SubscriptionPlanType.Duration) with { ServiceKind = AcademyServiceKind.DayPass, DurationDays = 1 };
+        var created = await Write(owner, "/api/v1/subscriptions/plans", body); created.EnsureSuccessStatusCode(); var plan = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var detail = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/plans/{plan}"); Assert.Equal("DayPass", detail.GetProperty("serviceKind").GetString());
+        var options = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/subscriptions/enrollments/{f.Enrollment}/plans"); Assert.DoesNotContain(options.EnumerateArray(), x => x.GetProperty("id").GetGuid() == plan);
+        var newOptions = await guardian.GetFromJsonAsync<JsonElement>("/api/v1/guardian/enrollment-request-options"); Assert.DoesNotContain(newOptions.GetProperty("plans").EnumerateArray(), x => x.GetProperty("id").GetGuid() == plan);
+        Assert.Equal(HttpStatusCode.NotFound, (await Write(owner, "/api/v1/subscriptions/admin-renewals", new { sportEnrollmentId = f.Enrollment, subscriptionPlanId = plan })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Write(owner, "/api/v1/people/registration-quote", new { planId = plan, branchId = f.A })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, "/api/v1/subscriptions/plans", body with { ServiceKind = AcademyServiceKind.Training, TrainingFormat = TrainingFormat.Season, DurationDays = null, DurationMonths = 5, ReferenceMonthlyPrice = 600, ChargedMonths = 4, Price = 2399 })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, "/api/v1/subscriptions/plans", body with { ServiceKind = (AcademyServiceKind)999 })).StatusCode);
+    }
 
     [Fact]
     public async Task ENR_01_branch_published_swimming_plan_appears_in_correct_options_quote_and_registration()

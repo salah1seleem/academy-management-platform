@@ -9,6 +9,9 @@ public enum NewEnrollmentRequestStatus { Pending = 1, UnderReview = 2, Approved 
 
 public sealed class NewEnrollmentRequest : TenantEntity, IPlanTermsSnapshot
 {
+    public int? DurationMonthsSnapshot { get; set; }
+    public AcademyServiceKind? ServiceKindSnapshot { get; set; }
+    public TrainingFormat? TrainingFormatSnapshot { get; set; }
     public string? PlanNameSnapshot { get; set; }
     public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
     public int? DurationDaysSnapshot { get; set; }

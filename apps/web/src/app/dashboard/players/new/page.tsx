@@ -5,7 +5,7 @@ import { ErrorState, PageHeader } from "../../../../components/dashboard-shell";
 import { csrfRequest, uploadAsset } from "../../../../features/dashboard-api";
 import { formatMoneyAr } from "../../../../lib/formatters";
 type Item = { id: string; arabicName: string; branchId?: string; sportId?: string; ageCategoryId?: string };
-type Plan = Item & { price: number; currency: string; isActive: boolean; allBranches?: boolean; branchIds?: string[] };
+type Plan = Item & { price: number; currency: string; isActive: boolean; serviceKind?: string; allBranches?: boolean; branchIds?: string[] };
 type Options = { branches: Item[]; sports: Item[]; categories: Item[]; groups: Item[] };
 type Quote = { originalAmount: number; discountAmount: number; finalAmount: number; discountReason?: string; currency: string };
 export default function NewPlayerPage() {
@@ -16,7 +16,7 @@ export default function NewPlayerPage() {
   useEffect(() => { fetch("/api/v1/discount-rules/").then(async r => { if (r.ok) { const d = await r.json(); setRules(d.items.filter((x: { isActive: boolean; isSiblingOffer: boolean }) => x.isActive && !x.isSiblingOffer)); } }); }, []);
   useEffect(() => { Promise.all([fetch("/api/v1/manage/structure/options"), fetch("/api/v1/subscriptions/plans")]).then(async ([o, p]) => { if (!o.ok || !p.ok) throw new Error(); setOptions(await o.json()); setPlans(await p.json()); }).catch(() => setError("تعذر تحميل المجموعات والباقات.")); }, []);
   const groups = options.groups.filter(g => g.branchId === branchId && g.sportId === sportId && g.ageCategoryId === categoryId);
-  const availablePlans = plans.filter(p => p.isActive && (!sportId || p.sportId === sportId) && (!branchId || p.allBranches !== false || p.branchIds?.includes(branchId)));
+  const availablePlans = plans.filter(p => p.isActive && (!p.serviceKind || p.serviceKind === "Training") && (!sportId || p.sportId === sportId) && (!branchId || p.allBranches !== false || p.branchIds?.includes(branchId)));
   const selectedPlan = availablePlans.find(p => p.id === planId && p.sportId === sportId);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy || !selectedPlan || !quote) return;

@@ -11,6 +11,9 @@ public sealed partial class FoundationDbContext
     public DbSet<PlanPriceVersion> PlanPriceVersions => Set<PlanPriceVersion>();
     private static void ConfigurePlanPublication(ModelBuilder b)
     {
+        b.Entity<SubscriptionPlan>().Property(x => x.ServiceKind).HasConversion<string>().HasMaxLength(24).HasDefaultValue(AcademyServiceKind.Training);
+        b.Entity<SubscriptionPlan>().Property(x => x.TrainingFormat).HasConversion<string>().HasMaxLength(24).HasDefaultValue(TrainingFormat.Group);
+        b.Entity<SubscriptionPlan>().Property(x => x.ReferenceMonthlyPrice).HasPrecision(18, 2);
         Tenant<PlanBranchPublication>(b); Tenant<PlanPriceVersion>(b);
         b.Entity<SubscriptionPlan>().Property(x => x.AllBranches).HasDefaultValue(true);
         b.Entity<PlanBranchPublication>(e => {
@@ -22,6 +25,9 @@ public sealed partial class FoundationDbContext
             e.HasIndex(x => new { x.AcademyId, x.SubscriptionPlanId, x.Revision }).IsUnique();
             e.Property(x => x.ArabicName).HasMaxLength(160); e.Property(x => x.PlanType).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Price).HasPrecision(18, 2); e.Property(x => x.Currency).HasMaxLength(3);
+            e.Property(x => x.ServiceKind).HasConversion<string>().HasMaxLength(24).HasDefaultValue(AcademyServiceKind.Training);
+            e.Property(x => x.TrainingFormat).HasConversion<string>().HasMaxLength(24).HasDefaultValue(TrainingFormat.Group);
+            e.Property(x => x.ReferenceMonthlyPrice).HasPrecision(18, 2);
             e.HasOne<SubscriptionPlan>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -31,5 +37,7 @@ public sealed partial class FoundationDbContext
     {
         b.Entity<T>().Property(x => x.PlanNameSnapshot).HasMaxLength(160);
         b.Entity<T>().Property(x => x.PlanTypeSnapshot).HasConversion<string>().HasMaxLength(20);
+        b.Entity<T>().Property(x => x.ServiceKindSnapshot).HasConversion<string>().HasMaxLength(24);
+        b.Entity<T>().Property(x => x.TrainingFormatSnapshot).HasConversion<string>().HasMaxLength(24);
     }
 }

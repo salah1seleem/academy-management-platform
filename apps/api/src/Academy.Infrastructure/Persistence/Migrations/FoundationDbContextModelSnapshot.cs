@@ -2935,6 +2935,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<int?>("DurationDaysSnapshot")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("DurationMonthsSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("ExistingPlayerId")
                         .HasColumnType("uuid");
 
@@ -3006,6 +3009,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ReviewedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ServiceKindSnapshot")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
                     b.Property<int?>("SessionCountSnapshot")
                         .HasColumnType("integer");
 
@@ -3019,6 +3026,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("SubscriptionPlanId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TrainingFormatSnapshot")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -3872,6 +3883,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("ChargedMonths")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -3881,6 +3895,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(3)");
 
                     b.Property<int?>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DurationMonths")
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("EffectiveAtUtc")
@@ -3901,14 +3918,32 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Published")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("ReferenceMonthlyPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("Revision")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ServiceKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("Training");
 
                     b.Property<int?>("SessionCount")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("SubscriptionPlanId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TrainingFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("Group");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -4374,6 +4409,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<int?>("DurationDaysSnapshot")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("DurationMonthsSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("FinalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4414,6 +4452,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RequestedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ServiceKindSnapshot")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
                     b.Property<int?>("SessionCountSnapshot")
                         .HasColumnType("integer");
 
@@ -4430,6 +4472,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("SubscriptionPlanId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TrainingFormatSnapshot")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -4576,6 +4622,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<int?>("DurationDaysSnapshot")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("DurationMonthsSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
@@ -4606,6 +4655,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<int?>("RemainingSessions")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ServiceKindSnapshot")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
                     b.Property<int?>("SessionCountSnapshot")
                         .HasColumnType("integer");
 
@@ -4625,6 +4678,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("SubscriptionPlanId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TrainingFormatSnapshot")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -4673,6 +4730,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)");
 
+                    b.Property<int?>("ChargedMonths")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -4686,6 +4746,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int?>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DurationMonths")
                         .HasColumnType("integer");
 
                     b.Property<string>("EnglishName")
@@ -4704,14 +4767,32 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal?>("ReferenceMonthlyPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("Revision")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ServiceKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("Training");
 
                     b.Property<int?>("SessionCount")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("SportId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TrainingFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("Group");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");

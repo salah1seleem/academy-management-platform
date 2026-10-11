@@ -12,6 +12,7 @@ public static class PlanCatalog
 {
     public static IQueryable<SubscriptionPlan> ForBranch(this IQueryable<SubscriptionPlan> plans, Guid branch) =>
         plans.Where(p => p.AllBranches || p.BranchPublications.Any(b => b.BranchId == branch && b.IsActive && b.Branch.IsActive));
+    public static IQueryable<SubscriptionPlan> TrainingOnly(this IQueryable<SubscriptionPlan> plans) => plans.Where(p => p.ServiceKind == AcademyServiceKind.Training);
     public static Task LockAsync(FoundationDbContext db, Guid academy, Guid plan) =>
         db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"plan-publication:{academy}:{plan}"}, 0))");
     public static async Task<IResult> Detail(Guid id, CurrentTenant tenant, FoundationDbContext db)
@@ -21,13 +22,19 @@ public static class PlanCatalog
         if (plan is null) return Results.NotFound();
         var branches = await db.PlanBranchPublications.Where(x => x.AcademyId == t.AcademyId && x.SubscriptionPlanId == id && x.IsActive).Select(x => x.BranchId).ToArrayAsync();
         var versions = await db.PlanPriceVersions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SubscriptionPlanId == id).OrderByDescending(x => x.Revision)
-            .Select(x => new { x.Revision, x.ArabicName, price = x.Price.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, planType = x.PlanType.ToString(), x.DurationDays, x.SessionCount, x.Published, x.EffectiveAtUtc }).Take(50).ToListAsync();
-        return Results.Ok(new { plan.Id, plan.ArabicName, plan.EnglishName, plan.SportId, sport = plan.Sport.ArabicName, planType = plan.PlanType.ToString(), price = plan.Price.ToString("0.00", CultureInfo.InvariantCulture), plan.Currency, plan.DurationDays, plan.SessionCount, plan.DisplayOrder, plan.IsActive, plan.AllBranches, branchIds = branches, plan.Revision, versions });
+            .Select(x => new { x.Revision, x.ArabicName, price = x.Price.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, planType = x.PlanType.ToString(), x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount, referenceMonthlyPrice = x.ReferenceMonthlyPrice.HasValue ? x.ReferenceMonthlyPrice.Value.ToString("0.00", CultureInfo.InvariantCulture) : null, x.ChargedMonths, x.Published, x.EffectiveAtUtc }).Take(50).ToListAsync();
+        return Results.Ok(new { plan.Id, plan.ArabicName, plan.EnglishName, plan.SportId, sport = plan.Sport.ArabicName, planType = plan.PlanType.ToString(), price = plan.Price.ToString("0.00", CultureInfo.InvariantCulture), plan.Currency, plan.DurationDays, plan.DurationMonths, serviceKind = plan.ServiceKind.ToString(), trainingFormat = plan.TrainingFormat.ToString(), referenceMonthlyPrice = plan.ReferenceMonthlyPrice.HasValue ? plan.ReferenceMonthlyPrice.Value.ToString("0.00", CultureInfo.InvariantCulture) : null, plan.ChargedMonths, plan.SessionCount, plan.DisplayOrder, plan.IsActive, plan.AllBranches, branchIds = branches, plan.Revision, versions });
     }
     public static async Task<IResult> Save(Guid? id, PlanRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!; var branches = (request.BranchIds ?? []).Distinct().ToArray();
-        var validType = request.PlanType switch { SubscriptionPlanType.Duration => request.DurationDays is > 0 and <= 3660 && request.SessionCount is null, SubscriptionPlanType.Sessions => request.DurationDays is null && request.SessionCount is > 0 and <= 10000, SubscriptionPlanType.Combined => request.DurationDays is > 0 and <= 3660 && request.SessionCount is > 0 and <= 10000, _ => false };
+        var validDuration = request.DurationDays is > 0 and <= 3660 && request.DurationMonths is null || request.DurationMonths is > 0 and <= 120 && request.DurationDays is null;
+        var validType = request.PlanType switch { SubscriptionPlanType.Duration => validDuration && request.SessionCount is null, SubscriptionPlanType.Sessions => request.DurationDays is null && request.DurationMonths is null && request.SessionCount is > 0 and <= 10000, SubscriptionPlanType.Combined => validDuration && request.SessionCount is > 0 and <= 10000, _ => false };
+        var season = request.ServiceKind == AcademyServiceKind.Training && request.TrainingFormat == TrainingFormat.Season;
+        var validSeason = !season ? request.ReferenceMonthlyPrice is null && request.ChargedMonths is null
+            : request.DurationMonths.HasValue && request.ReferenceMonthlyPrice is > 0 and <= 999999999m && decimal.Round(request.ReferenceMonthlyPrice.Value, 2) == request.ReferenceMonthlyPrice && request.ChargedMonths is > 0 && request.ChargedMonths <= request.DurationMonths && request.Price == request.ReferenceMonthlyPrice * request.ChargedMonths;
+        if (!Enum.IsDefined(request.ServiceKind) || !Enum.IsDefined(request.TrainingFormat) || !validSeason || request.ServiceKind != AcademyServiceKind.Training && request.TrainingFormat != TrainingFormat.Group)
+            return Results.UnprocessableEntity(new { message = "تحقق من نوع الخدمة. الموسم يحتاج أشهر خدمة وسعرًا شهريًا مرجعيًا وعدد أشهر مدفوعة متطابقًا مع الإجمالي." });
         if (string.IsNullOrWhiteSpace(request.ArabicName) || request.ArabicName.Trim().Length > 160 || request.EnglishName?.Length > 160 || request.Price <= 0 || request.Price > 999999999m || decimal.Round(request.Price, 2) != request.Price || !validType || branches.Length > 200 || (!request.AllBranches && branches.Length == 0))
             return Results.ValidationProblem(new Dictionary<string, string[]> { ["plan"] = ["أكمل اسم الباقة وسعرًا صحيحًا وحدود الخدمة والفروع المتاحة."] });
         if (db.BranchScopeRestricted && (request.AllBranches || branches.Any(b => !db.RequestBranchIds.Contains(b)))) return Results.Forbid();
@@ -40,13 +47,15 @@ public static class PlanCatalog
         var plan = id.HasValue ? await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id) : null;
         if (id.HasValue && plan is null) return Results.NotFound();
         if (plan is not null && request.ExpectedRevision.HasValue && plan.Revision != request.ExpectedRevision.Value) return Results.Conflict(new { message = "عدّل مستخدم آخر هذه الباقة. أعد تحميلها قبل الحفظ." });
-        if (plan is not null && plan.SportId != request.SportId && (await db.RenewalRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id) || await db.NewEnrollmentRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id)))
+        if (plan is not null && (plan.SportId != request.SportId || plan.ServiceKind != request.ServiceKind) && (await db.RenewalRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id) || await db.NewEnrollmentRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id)))
             return Results.Conflict(new { message = "الباقة مستخدمة. أنشئ باقة منفصلة للرياضة الأخرى مع حفظ التاريخ." });
         var currency = await db.Academies.Where(x => x.Id == t.AcademyId).Select(x => x.DefaultCurrency).SingleAsync();
         plan ??= new SubscriptionPlan { Id = planId, AcademyId = t.AcademyId, ArabicName = "", Currency = currency, CreatedAtUtc = clock.UtcNow };
         if (!id.HasValue) db.SubscriptionPlans.Add(plan);
         plan.ArabicName = request.ArabicName.Trim(); plan.EnglishName = request.EnglishName?.Trim(); plan.SportId = request.SportId;
         plan.PlanType = request.PlanType; plan.Price = request.Price; plan.DurationDays = request.DurationDays; plan.SessionCount = request.SessionCount;
+        plan.ServiceKind = request.ServiceKind; plan.TrainingFormat = request.TrainingFormat; plan.DurationMonths = request.DurationMonths;
+        plan.ReferenceMonthlyPrice = request.ReferenceMonthlyPrice; plan.ChargedMonths = request.ChargedMonths;
         plan.DisplayOrder = request.DisplayOrder; plan.AllBranches = request.AllBranches; plan.Revision++; plan.UpdatedAtUtc = clock.UtcNow;
         var old = await db.PlanBranchPublications.Where(x => x.AcademyId == t.AcademyId && x.SubscriptionPlanId == planId).ToListAsync();
         foreach (var row in old) row.IsActive = branches.Contains(row.BranchId);

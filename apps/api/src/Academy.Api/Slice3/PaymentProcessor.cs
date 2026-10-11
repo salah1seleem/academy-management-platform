@@ -89,7 +89,7 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
         var latestEnd = await db.SubscriptionPeriods.Where(x => x.AcademyId == payment.AcademyId && x.SportEnrollmentId == payment.RenewalRequest.SportEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.EndDate != null)
             .MaxAsync(x => x.EndDate, ct);
         var start = latestEnd.HasValue && latestEnd.Value >= clock.Today ? latestEnd.Value.AddDays(1) : clock.Today;
-        var end = terms.Days is int days ? start.AddDays(days - 1) : (DateOnly?)null;
+        var end = terms.EndDate(start);
         var period = new SubscriptionPeriod
         {
             Id = Guid.NewGuid(), AcademyId = payment.AcademyId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId, SportId = payment.RenewalRequest.SportId,

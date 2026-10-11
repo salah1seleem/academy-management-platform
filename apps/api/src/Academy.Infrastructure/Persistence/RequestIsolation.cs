@@ -117,7 +117,7 @@ public sealed partial class FoundationDbContext
         if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
         foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))
-            if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot) }.Any(p => entry.Property(p).IsModified))
+            if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot), nameof(IPlanTermsSnapshot.DurationMonthsSnapshot), nameof(IPlanTermsSnapshot.ServiceKindSnapshot), nameof(IPlanTermsSnapshot.TrainingFormatSnapshot) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("شروط الاشتراك محفوظة عند الطلب ولا يمكن استبدالها بشروط باقة جديدة.");
         if (!RequestScopeEnabled) return;
         ChangeTracker.DetectChanges();

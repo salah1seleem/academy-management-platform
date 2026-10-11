@@ -62,7 +62,7 @@ public static class Slice3Endpoints
 
     private static async Task<IResult> Plans(CurrentTenant tenant, FoundationDbContext db)
     {
-        var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.SubscriptionPlans.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.DisplayOrder).ThenBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, sport = x.Sport.ArabicName, x.SportId, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount, x.IsActive, x.AllBranches, x.Revision, branchIds = x.BranchPublications.Where(p => p.IsActive && p.Branch.IsActive).Select(p => p.BranchId).ToArray() }).ToListAsync());
+        var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.SubscriptionPlans.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.DisplayOrder).ThenBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, sport = x.Sport.ArabicName, x.SportId, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount, x.IsActive, x.AllBranches, x.Revision, branchIds = x.BranchPublications.Where(p => p.IsActive && p.Branch.IsActive).Select(p => p.BranchId).ToArray() }).ToListAsync());
     }
 
     private static Task<IResult> CreatePlan(PlanRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock) => PlanCatalog.Save(null, request, tenant, principal, db, clock);
@@ -78,7 +78,7 @@ public static class Slice3Endpoints
     private static async Task<IResult> GuardianPlans(Guid enrollmentId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var enrollment = await OwnEnrollment(db, t.AcademyId, user, enrollmentId); if (enrollment is null) return Results.NotFound();
-        return Results.Ok(await db.SubscriptionPlans.AsNoTracking().ForBranch(enrollment.BranchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount }).ToListAsync());
+        return Results.Ok(await db.SubscriptionPlans.TrainingOnly().AsNoTracking().ForBranch(enrollment.BranchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount }).ToListAsync());
     }
     private static async Task<IResult> CreateRenewal(RenewalCreateRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, RenewalCreationService renewals)
     {
@@ -88,7 +88,7 @@ public static class Slice3Endpoints
             ? Results.Conflict(new { message = "مفتاح الطلب مستخدم لتسجيل أو باقة مختلفة." })
             : Results.Ok(new { renewalId = existing.Id, paymentId = existing.PaymentRequestId });
         var enrollment = await OwnEnrollment(db, t.AcademyId, user, request.SportEnrollmentId); if (enrollment is null) return Results.NotFound();
-        var plan = await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == enrollment.SportId && x.IsActive); if (plan is null) return Results.NotFound();
+        var plan = await db.SubscriptionPlans.TrainingOnly().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == enrollment.SportId && x.IsActive); if (plan is null) return Results.NotFound();
         return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, enrollment.Id, plan.Id, key, false), false);
     }
     private static async Task<IResult> GuardianPayment(Guid paymentId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
@@ -132,7 +132,7 @@ public static class Slice3Endpoints
             var target = scoped.Resolve(request.Reference, t.AcademyId, UserId(principal));
             var enrollment = target.HasValue ? await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == target && x.IsActive && x.Player.IsActive && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { playerDisplayName = x.Player.ArabicName, sport = x.Sport.ArabicName, x.SportId, x.BranchId }).SingleOrDefaultAsync() : null;
             if (enrollment is null) return Results.NotFound(new { message = "انتهى الاختيار أو تغير التسجيل. أعد البحث." });
-            var available = await db.SubscriptionPlans.ForBranch(enrollment.BranchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount }).ToListAsync();
+            var available = await db.SubscriptionPlans.TrainingOnly().ForBranch(enrollment.BranchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount }).ToListAsync();
             return Results.Ok(new { enrollment.playerDisplayName, enrollment.sport, academyName = t.AcademyName, plans = available });
         }
         if (string.IsNullOrWhiteSpace(request.Reference)) return Results.NotFound(new { message = "كود التجديد غير صالح أو منتهي." });
@@ -140,7 +140,7 @@ public static class Slice3Endpoints
         var beneficiary = await db.BeneficiaryRenewalReferences.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.CodeHash == codeHash && x.IsActive && x.RevokedAtUtc == null && x.ExpiresAtUtc > clock.UtcNow && x.SportEnrollment.IsActive)
             .Select(x => new { playerDisplayName = x.SportEnrollment.Player.ArabicName, sport = x.SportEnrollment.Sport.ArabicName, academyName = t.AcademyName, sportId = x.SportEnrollment.SportId, branchId = x.SportEnrollment.BranchId }).SingleOrDefaultAsync();
         if (beneficiary is null) return Results.NotFound(new { message = "كود التجديد غير صالح أو منتهي." });
-        var plans = await db.SubscriptionPlans.AsNoTracking().ForBranch(beneficiary.branchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == beneficiary.sportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount }).ToListAsync();
+        var plans = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().ForBranch(beneficiary.branchId).Where(x => x.AcademyId == t.AcademyId && x.SportId == beneficiary.sportId && x.IsActive).OrderBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount }).ToListAsync();
         return Results.Ok(new { beneficiary.playerDisplayName, beneficiary.sport, beneficiary.academyName, plans });
     }
 
@@ -152,13 +152,13 @@ public static class Slice3Endpoints
         if (request.Reference.StartsWith("SR1.", StringComparison.Ordinal)) {
             var target = scoped.Resolve(request.Reference, t.AcademyId, user);
             var eligible = target.HasValue ? await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.Id == target && x.IsActive && x.Player.IsActive && x.TrainingGroup.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { x.Id, x.SportId }).SingleOrDefaultAsync() : null;
-            if (eligible is null || !await db.SubscriptionPlans.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == eligible.SportId && x.IsActive)) return Results.NotFound(new { message = "انتهى الاختيار أو تغيرت الباقة. أعد البحث." });
+            if (eligible is null || !await db.SubscriptionPlans.TrainingOnly().AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == eligible.SportId && x.IsActive)) return Results.NotFound(new { message = "انتهى الاختيار أو تغيرت الباقة. أعد البحث." });
             return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, eligible.Id, request.SubscriptionPlanId, key, false), false);
         }
         var codeHash = BeneficiaryRenewalCodes.Hash(request.Reference);
         var reference = await db.BeneficiaryRenewalReferences.Include(x => x.SportEnrollment).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.CodeHash == codeHash && x.IsActive && x.RevokedAtUtc == null && x.ExpiresAtUtc > clock.UtcNow && x.SportEnrollment.IsActive);
         if (reference is null) return Results.NotFound(new { message = "كود التجديد غير صالح أو منتهي." });
-        var plan = await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == reference.SportEnrollment.SportId && x.IsActive);
+        var plan = await db.SubscriptionPlans.TrainingOnly().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == reference.SportEnrollment.SportId && x.IsActive);
         if (plan is null) return Results.NotFound(new { message = "الباقة غير متاحة لهذا التسجيل." });
         return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, reference.SportEnrollment.Id, plan.Id, key, false), false);
     }
@@ -258,10 +258,10 @@ public static class Slice3Endpoints
         var previewStart = latestEligibleEnd.HasValue && latestEligibleEnd.Value >= clock.Today
             ? latestEligibleEnd.Value.AddDays(1)
             : clock.Today;
-        var plans = await db.SubscriptionPlans.AsNoTracking().ForBranch(enrollment.BranchId)
+        var plans = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().ForBranch(enrollment.BranchId)
             .Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive)
             .OrderBy(x => x.DisplayOrder).ThenBy(x => x.ArabicName)
-            .Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.SessionCount })
+            .Select(x => new { x.Id, x.ArabicName, planType = x.PlanType.ToString(), x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount })
             .ToListAsync();
         return Results.Ok(new { enrollment, current, previewStart, plans });
     }
@@ -374,7 +374,9 @@ public static class Slice3Endpoints
     private static Guid UserId(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }
 
-public sealed record PlanRequest(string ArabicName, string? EnglishName, Guid SportId, SubscriptionPlanType PlanType, [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal Price, int? DurationDays, int? SessionCount, int DisplayOrder = 0, bool AllBranches = true, Guid[]? BranchIds = null, int? ExpectedRevision = null);
+public sealed record PlanRequest(string ArabicName, string? EnglishName, Guid SportId, SubscriptionPlanType PlanType, [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal Price, int? DurationDays, int? SessionCount, int DisplayOrder = 0, bool AllBranches = true, Guid[]? BranchIds = null, int? ExpectedRevision = null,
+    AcademyServiceKind ServiceKind = AcademyServiceKind.Training, TrainingFormat TrainingFormat = TrainingFormat.Group, int? DurationMonths = null,
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal? ReferenceMonthlyPrice = null, int? ChargedMonths = null);
 public sealed record PlanStatusRequest(bool IsActive);
 public sealed record RenewalCreateRequest(Guid SportEnrollmentId, Guid SubscriptionPlanId);
 public sealed record SimulationRequest(string Outcome);

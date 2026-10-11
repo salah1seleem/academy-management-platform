@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PlanForm } from "./plan-editor";
+import { PlanForm, seasonPrice } from "./plan-editor";
 import NewPlayerPage from "../app/dashboard/players/new/page";
 const push = vi.fn(); vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 const options = { sports: [{ id: "swim", arabicName: "السباحة" }], branches: [{ id: "a", arabicName: "مدينة نصر" }, { id: "b", arabicName: "التجمع" }], categories: [], groups: [] };
@@ -9,6 +9,15 @@ const ok = (data: unknown) => new Response(JSON.stringify(data), { status: 200, 
 function mock(restricted = false) { global.fetch = vi.fn(async (input, init) => { const url = String(input); if (url.endsWith("/auth/csrf")) return ok({ token: "csrf" }); if (url.includes("structure/options")) return ok(options); if (url.includes("my-access")) return ok({ allBranches: !restricted }); if (init?.method === "PUT") return new Response(null, { status: 204 }); return ok(plan); }) as typeof fetch; }
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe("plan publication and captured terms", () => {
+  it("calculates season totals without floating point money", () => {
+    expect(seasonPrice("600.00", 4)).toBe("2400.00"); expect(seasonPrice("0.29", 3)).toBe("0.87"); expect(seasonPrice("100.001", 3)).toBe(""); expect(seasonPrice("1e6", 2)).toBe("");
+  });
+  it("saves five calendar service months with four paid months and no duplicate day duration", async () => {
+    mock(); render(<PlanForm id="p" />); await screen.findByDisplayValue("سباحة شهرية"); fireEvent.change(screen.getByLabelText("طريقة التدريب"), { target: { value: "Season" } });
+    fireEvent.change(screen.getByLabelText("السعر الشهري المرجعي"), { target: { value: "600.00" } }); fireEvent.change(screen.getByLabelText("عدد الأشهر المدفوعة"), { target: { value: "4" } }); expect(screen.getByLabelText("أشهر الخدمة")).toHaveValue(5); expect(screen.getByLabelText(/السعر \(/)).toHaveValue("2400.00"); expect(screen.queryByLabelText("عدد الأيام")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "حفظ الباقة" })); await waitFor(() => expect(push).toHaveBeenCalled());
+    const call = vi.mocked(fetch).mock.calls.find(c => c[1]?.method === "PUT")!; expect(JSON.parse(String(call[1]?.body))).toMatchObject({ price: "2400.00", referenceMonthlyPrice: "600.00", chargedMonths: 4, durationMonths: 5, durationDays: null, sessionCount: null, trainingFormat: 4, serviceKind: 1 });
+  });
   it("edits a branch-specific plan with preserved names, price string and expected revision", async () => {
     mock(); render(<PlanForm id="p" />); await screen.findByDisplayValue("سباحة شهرية"); expect(screen.getByLabelText("الاسم الإنجليزي — اختياري")).toHaveValue("Swim"); expect(screen.getByLabelText("مدينة نصر")).toBeChecked(); expect(screen.getByLabelText("التجمع")).not.toBeChecked();
     fireEvent.click(screen.getByLabelText("التجمع")); fireEvent.click(screen.getByRole("button", { name: "حفظ الباقة" })); await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/subscriptions/plans"));

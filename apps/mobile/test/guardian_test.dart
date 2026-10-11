@@ -81,6 +81,15 @@ void main() {
               'allBranches': false,
               'branchIds': ['a'],
             },
+            {
+              'id': 'day',
+              'sportId': 'swim',
+              'arabicName': 'زيارة يومية ليست تدريبًا',
+              'serviceKind': 'DayPass',
+              'price': '100.00',
+              'currency': 'EGP',
+              'allBranches': true,
+            },
           ],
         },
       );
@@ -108,6 +117,7 @@ void main() {
       );
       await tester.tap(find.byType(DropdownButtonFormField<String>).at(2));
       await tester.pumpAndSettle();
+      expect(find.textContaining('زيارة يومية ليست تدريبًا'), findsNothing);
       await tester.tap(find.textContaining('سباحة الفرع فقط').last);
       await tester.pumpAndSettle();
       expect(find.textContaining('سباحة الفرع فقط'), findsOneWidget);

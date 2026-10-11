@@ -191,6 +191,8 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
               items: [
                 for (final p in rows(d['plans'] ?? []))
                   if (p['sportId'] == sport &&
+                      (p['serviceKind'] == null ||
+                          p['serviceKind'] == 'Training') &&
                       (p['allBranches'] != false ||
                           (p['branchIds'] as List? ?? []).contains(branch)))
                     DropdownMenuItem(

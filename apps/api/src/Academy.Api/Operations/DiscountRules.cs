@@ -43,9 +43,9 @@ public static class DiscountRuleEndpoints
         api.MapPut("/{id:guid}", Update).AddEndpointFilter<CsrfFilter>();
         app.MapPost("/api/v1/people/registration-quote", async (RegistrationQuote body, CurrentTenant tenant, FoundationDbContext db, DiscountRules rules, ClaimsPrincipal principal) => {
             var t = (await tenant.ResolveAsync())!;
-            var plan = await db.SubscriptionPlans.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.PlanId && x.IsActive);
+            var plan = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.PlanId && x.IsActive);
             if (plan is null || body.DiscountRuleId.HasValue && !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer)) return Results.NotFound();
-            if (body.BranchId.HasValue && (!await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.BranchId && x.IsActive) || !await db.SubscriptionPlans.ForBranch(body.BranchId.Value).AnyAsync(x => x.Id == plan.Id))) return Results.UnprocessableEntity(new { message = "الباقة غير منشورة لهذا الفرع." });
+            if (body.BranchId.HasValue && (!await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.BranchId && x.IsActive) || !await db.SubscriptionPlans.TrainingOnly().ForBranch(body.BranchId.Value).AnyAsync(x => x.Id == plan.Id))) return Results.UnprocessableEntity(new { message = "الباقة غير منشورة لهذا الفرع." });
             var phone = EgyptPhoneNormalizer.Normalize(body.GuardianPhone);
             var guardian = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.ContactPhone == phone).Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
             var price = await rules.CalculateAsync(t.AcademyId, Guid.Empty, plan.Price, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), guardian, body.DiscountRuleId);

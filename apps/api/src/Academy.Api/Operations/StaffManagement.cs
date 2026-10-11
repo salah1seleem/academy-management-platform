@@ -43,6 +43,8 @@ public static class StaffManagement
         var member = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.AcademyAdmin); if (member is null) return Results.NotFound();
         if (body.Grants is null || body.Grants.Length > Permissions.Length || body.Grants.Select(x => x.Permission).Distinct().Count() != body.Grants.Length || body.Grants.Any(x => !Permissions.Contains(x.Permission))) return Results.UnprocessableEntity();
         await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{id}"}, 0))");
+        await db.Entry(member).ReloadAsync();
+        if (member.UseActionGrants) return Results.Conflict(new { message = "هذا الموظف يستخدم مصفوفة صلاحيات الوحدات والفروع؛ عدّل الصلاحيات من شاشة صلاحيات الموظف." });
         var rows = await db.StaffGrants.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == id).ToListAsync();
         foreach (var input in body.Grants) { var row = rows.SingleOrDefault(x => x.Permission == input.Permission); if (row is null) { row = new StaffGrant { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, Permission = input.Permission, CreatedAtUtc = clock.UtcNow }; db.StaffGrants.Add(row); } row.Allowed = input.Allowed; row.IsActive = true; row.UpdatedAtUtc = clock.UtcNow; }
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();

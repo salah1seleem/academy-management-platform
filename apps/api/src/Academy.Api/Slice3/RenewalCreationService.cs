@@ -65,7 +65,7 @@ public sealed class RenewalCreationService(
             return new(RenewalCreationState.NotFound);
 
         await PlanCatalog.LockAsync(db, academyId, planId);
-        var plan = await db.SubscriptionPlans.ForBranch(enrollment.BranchId).SingleOrDefaultAsync(
+        var plan = await db.SubscriptionPlans.TrainingOnly().ForBranch(enrollment.BranchId).SingleOrDefaultAsync(
             x => x.AcademyId == academyId && x.Id == planId && x.SportId == enrollment.SportId && (allowInactivePlan || x.IsActive), ct);
         if (plan is null)
             return new(RenewalCreationState.NotFound);

@@ -24,6 +24,11 @@ public sealed class BeneficiaryRenewalReference : TenantEntity
 
 public sealed class SubscriptionPlan : TenantEntity
 {
+    public AcademyServiceKind ServiceKind { get; set; } = AcademyServiceKind.Training;
+    public TrainingFormat TrainingFormat { get; set; } = TrainingFormat.Group;
+    public int? DurationMonths { get; set; }
+    public decimal? ReferenceMonthlyPrice { get; set; }
+    public int? ChargedMonths { get; set; }
     public Guid SportId { get; set; }
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }
@@ -41,6 +46,9 @@ public sealed class SubscriptionPlan : TenantEntity
 
 public sealed class SubscriptionPeriod : TenantEntity, IPlanTermsSnapshot
 {
+    public int? DurationMonthsSnapshot { get; set; }
+    public AcademyServiceKind? ServiceKindSnapshot { get; set; }
+    public TrainingFormat? TrainingFormatSnapshot { get; set; }
     public string? PlanNameSnapshot { get; set; }
     public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
     public int? DurationDaysSnapshot { get; set; }
@@ -83,6 +91,9 @@ public sealed class SubscriptionAdjustment : TenantEntity
 
 public sealed class RenewalRequest : TenantEntity, IPlanTermsSnapshot
 {
+    public int? DurationMonthsSnapshot { get; set; }
+    public AcademyServiceKind? ServiceKindSnapshot { get; set; }
+    public TrainingFormat? TrainingFormatSnapshot { get; set; }
     public string? PlanNameSnapshot { get; set; }
     public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
     public int? DurationDaysSnapshot { get; set; }

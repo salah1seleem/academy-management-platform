@@ -47,6 +47,9 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         await db.StaffDailyAttendances.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
         await db.StaffWorkSchedules.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
         await db.StaffGrants.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
+        await db.StaffActionGrants.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
+        await db.MembershipBranchAccesses.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
+        await db.StaffAccessAudits.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
         await db.UserSessions.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
         await db.AcademyMemberships.Where(x => members.Contains(x.Id)).ExecuteDeleteAsync();
         await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
@@ -165,9 +168,16 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/owner-summary")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/manage/staff/")).StatusCode);
-        (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/grants", new { grants = new[] { new { permission = AcademyPermissions.ReportsFinancialRead, allowed = true }, new { permission = AcademyPermissions.OwnerDashboardRead, allowed = true }, new { permission = AcademyPermissions.PeopleManage, allowed = false } } }, put: true)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/grants", new { grants = new[] { new { permission = AcademyPermissions.ReportsFinancialRead, allowed = true }, new { permission = AcademyPermissions.OwnerDashboardRead, allowed = true }, new { permission = AcademyPermissions.PeopleManage, allowed = false } } }, put: true)).StatusCode);
+        // V2 newly created staff remain default-deny: legacy read flags cannot bypass the CRUD matrix.
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
+        (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/access", new StaffAccessWrite(true, [], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, m == "finance", false, false, false)).ToArray()), put: true)).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode); Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/reports/owner-summary")).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/people/players")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, $"/api/v1/manage/staff/{staff.Id}/grants", new { grants = Array.Empty<object>() }, put: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/grants", new { grants = new[] { new { permission = AcademyPermissions.ReportsFinancialRead, allowed = false } } }, put: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
+        (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/access", new StaffAccessWrite(true, [], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, false, false, false, false)).ToArray()), put: true)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
     }
     [Fact] public async Task Daily_coach_absence_and_lateness_are_reported_from_the_same_stored_record()
     {
