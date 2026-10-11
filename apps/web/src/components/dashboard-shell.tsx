@@ -64,13 +64,14 @@ const modules: NavModule[] = [
   { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
   { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
   { id: "analytics", title: "التحليل والقرارات", group: "التحليل", icon: BarChart3, links: linksOf("reports").filter(l => l.href.endsWith("/attendance")) },
-  { id: "settings", title: "الإعدادات والمساعدة", group: "الإدارة", icon: ShieldCheck, links: linksOf("settings", "staff") },
+  { id: "settings", title: "الإعدادات والمساعدة", group: "الإدارة", icon: ShieldCheck, links: [...linksOf("settings", "staff"), { label: "استيراد البيانات", href: "/dashboard/import" }] },
 ];
 
 const roleLabels: Record<string, string> = { AcademyOwner: "مالك", AcademyAdmin: "إداري", Coach: "مدرب" };
 
 function linkPermission(href: string) {
   if (href === "/dashboard") return null; // The basic task home remains available without financial metrics.
+  if (href === "/dashboard/import") return "people.manage";
   if (href.includes("/settings")) return "academy.settings.manage";
   if (href.includes("/payroll") || href.includes("/staff/employees")) return "payroll.read";
   if (href.includes("/matches")) return "structure.manage";

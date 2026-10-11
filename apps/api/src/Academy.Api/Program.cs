@@ -73,6 +73,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("renewal-search", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("import", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
@@ -333,6 +336,7 @@ app.MapPayroll();
 app.MapVersionedConfiguration();
 app.MapReceivables();
 app.MapRenewalOpportunities();
+Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 
 if (args.Contains("--reset-football-demo"))
 {
