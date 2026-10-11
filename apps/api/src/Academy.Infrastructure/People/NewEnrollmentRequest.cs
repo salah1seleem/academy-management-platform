@@ -27,6 +27,12 @@ public sealed class NewEnrollmentRequest : TenantEntity, IPlanTermsSnapshot
     public Guid? SubscriptionPlanId { get; set; }
     public decimal? OriginalAmount { get; set; }
     public decimal? FinalAmount { get; set; }
+    public Guid? DiscountRuleIdSnapshot { get; set; }
+    public int? DiscountRuleRevisionSnapshot { get; set; }
+    public RenewalDiscountType? DiscountType { get; set; }
+    public decimal? DiscountValue { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public string? DiscountReason { get; set; }
     public string? Currency { get; set; }
     public Guid? ProofAssetId { get; set; }
     public Guid? PaymentRequestId { get; set; }

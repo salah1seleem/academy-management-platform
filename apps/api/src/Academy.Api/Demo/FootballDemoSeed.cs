@@ -118,7 +118,9 @@ public static class FootballDemoSeed
         var markerId = Id("owner-review/sibling-offer");
         if (await db.DiscountRules.AnyAsync(x => x.AcademyId == AcademyId && x.Id == markerId, ct)) return;
         if (await db.DiscountRules.AnyAsync(x => x.AcademyId == AcademyId && x.IsSiblingOffer, ct)) return;
-        db.DiscountRules.Add(new Academy.Infrastructure.Operations.DiscountRule { Id = markerId, AcademyId = AcademyId, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي", CreatedAtUtc = now, UpdatedAtUtc = now });
+        var siblingRule = new Academy.Infrastructure.Operations.DiscountRule { Id = markerId, AcademyId = AcademyId, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي", CreatedAtUtc = now, UpdatedAtUtc = now };
+        db.DiscountRules.Add(siblingRule);
+        db.DiscountRuleVersions.Add(Academy.Infrastructure.Operations.DiscountRuleVersion.Create(siblingRule, null, now));
         var product = await db.SportCatalogItems.SingleOrDefaultAsync(x => x.AcademyId == AcademyId && x.Id == Id("catalog"), ct);
         if (product is not null && product.DisplayPrice is null && product.StockQuantity == 0 && !await db.ProductSales.AnyAsync(x => x.AcademyId == AcademyId && x.ProductId == product.Id, ct))
         {

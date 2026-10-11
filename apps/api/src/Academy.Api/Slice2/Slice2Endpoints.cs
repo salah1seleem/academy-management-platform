@@ -191,8 +191,8 @@ public static class Slice2Endpoints
         }
         await db.SaveChangesAsync();
         if (request.PlanId.HasValue && request.ExpectedAmount.HasValue) {
-            var price = await db.SubscriptionPlans.TrainingOnly().Where(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId).Select(x => x.Price).SingleAsync();
-            var quote = await discounts.CalculateAsync(t.AcademyId, player.Id, price, actorId);
+            var plan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId);
+            var quote = await discounts.CalculateAsync(t.AcademyId, player.Id, plan.Price, actorId, plan: plan, branchId: enrollment.BranchId);
             if (quote.FinalAmount != request.ExpectedAmount.Value) return Results.Conflict(new { message = "تغير المبلغ المستحق. راجع السعر قبل التحصيل." });
         }
         if (request.PlanId.HasValue) await collections.CreateCashAsync(t.AcademyId, actorId, enrollment.Id, request.PlanId.Value, key, request.PaymentMethod!, registrationPayloadHash: payloadHash);
@@ -206,4 +206,5 @@ public sealed record AgeCategoryRequest(string ArabicName, int? MinimumBirthYear
 public sealed record GroupRequest(string ArabicName, Guid BranchId, Guid SportId, Guid AgeCategoryId, int? Capacity);
 public sealed record ScheduleRequest(DayOfWeek DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
 public sealed record CoachAssignmentRequest(Guid MembershipId);
-public sealed record RegistrationRequest(Guid? ExistingPlayerId, string? PlayerArabicName, DateOnly? DateOfBirth, Gender? Gender, Guid? ExistingGuardianId, string? GuardianName, string? GuardianPhone, string? RelationshipType, Guid BranchId, Guid SportId, Guid GroupId, Guid? PlanId = null, string? PaymentMethod = null, Guid? DiscountRuleId = null, decimal? ExpectedAmount = null);
+public sealed record RegistrationRequest(Guid? ExistingPlayerId, string? PlayerArabicName, DateOnly? DateOfBirth, Gender? Gender, Guid? ExistingGuardianId, string? GuardianName, string? GuardianPhone, string? RelationshipType, Guid BranchId, Guid SportId, Guid GroupId, Guid? PlanId = null, string? PaymentMethod = null, Guid? DiscountRuleId = null,
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal? ExpectedAmount = null);

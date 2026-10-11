@@ -91,6 +91,8 @@ public sealed class SubscriptionAdjustment : TenantEntity
 
 public sealed class RenewalRequest : TenantEntity, IPlanTermsSnapshot
 {
+    public Guid? DiscountRuleIdSnapshot { get; set; }
+    public int? DiscountRuleRevisionSnapshot { get; set; }
     public int? DurationMonthsSnapshot { get; set; }
     public AcademyServiceKind? ServiceKindSnapshot { get; set; }
     public TrainingFormat? TrainingFormatSnapshot { get; set; }
@@ -124,6 +126,8 @@ public sealed class RenewalRequest : TenantEntity, IPlanTermsSnapshot
 
 public sealed class RenewalDiscountAdjustment : TenantEntity
 {
+    public Guid? PreviousDiscountRuleId { get; set; }
+    public int? PreviousDiscountRuleRevision { get; set; }
     public Guid RenewalRequestId { get; set; }
     public RenewalDiscountType? PreviousDiscountType { get; set; }
     public decimal? PreviousDiscountValue { get; set; }
@@ -189,6 +193,9 @@ public sealed class PaymentCollection : TenantEntity
 
 public sealed class Receipt : TenantEntity
 {
+    public Guid? DiscountRuleIdSnapshot { get; set; }
+    public int? DiscountRuleRevisionSnapshot { get; set; }
+    public string? DiscountReason { get; set; }
     public Guid CollectionId { get; set; }
     public required string ReceiptNumber { get; set; }
     public Guid PlayerId { get; set; }

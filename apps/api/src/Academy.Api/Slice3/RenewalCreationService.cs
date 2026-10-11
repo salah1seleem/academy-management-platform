@@ -20,7 +20,9 @@ public sealed record RenewalFinancialSnapshot(
     decimal FinalAmount,
     string? DiscountReason,
     Guid? DiscountAppliedByUserId,
-    DateTimeOffset? DiscountAppliedAtUtc);
+    DateTimeOffset? DiscountAppliedAtUtc,
+    Guid? DiscountRuleId = null,
+    int? DiscountRuleRevision = null);
 
 public sealed class RenewalCreationService(
     FoundationDbContext db,
@@ -37,7 +39,8 @@ public sealed class RenewalCreationService(
         bool preventParallelOpenRenewal,
         RenewalFinancialSnapshot? financialSnapshot = null,
         bool allowInactivePlan = false,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        PlanTerms? fixedTerms = null)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
 
@@ -86,7 +89,7 @@ public sealed class RenewalCreationService(
                 return new(RenewalCreationState.OpenRenewalExists);
         }
 
-        financialSnapshot ??= await rules.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorUserId);
+        financialSnapshot ??= await rules.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorUserId, plan: plan, branchId: enrollment.BranchId);
         var originalAmount = financialSnapshot.OriginalAmount;
         var finalAmount = financialSnapshot?.FinalAmount ?? originalAmount;
         var renewal = new RenewalRequest
@@ -106,6 +109,8 @@ public sealed class RenewalCreationService(
             DiscountReason = financialSnapshot?.DiscountReason,
             DiscountAppliedByUserId = financialSnapshot?.DiscountAppliedByUserId,
             DiscountAppliedAtUtc = financialSnapshot?.DiscountAppliedAtUtc,
+            DiscountRuleIdSnapshot = financialSnapshot?.DiscountRuleId,
+            DiscountRuleRevisionSnapshot = financialSnapshot?.DiscountRuleRevision,
             AmountExpected = finalAmount,
             Currency = plan.Currency,
             Status = RenewalRequestStatus.PaymentInProgress,
@@ -114,7 +119,7 @@ public sealed class RenewalCreationService(
             UpdatedAtUtc = clock.UtcNow
         };
         var paymentId = Guid.NewGuid();
-        PlanTerms.From(plan).Capture(renewal);
+        (fixedTerms ?? PlanTerms.From(plan)).Capture(renewal);
         var manual = !environment.IsEnvironment("Demo") && !environment.IsEnvironment("Testing") || await db.AcademyTransferSettings.AnyAsync(x => x.AcademyId == academyId && x.IsActive, ct);
         var session = manual ? new CheckoutSession("Manual", $"manual-{paymentId:N}", $"manual-{paymentId:N}", ["التحويل للأكاديمية"]) : gateway.CreateCheckout(academyId, paymentId);
         var payment = new PaymentRequest

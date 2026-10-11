@@ -69,13 +69,19 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         await db.TrainingSessions.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
         await db.RecurringSchedules.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
         await db.TrainingGroups.Where(x => groups.Contains(x.Id)).ExecuteDeleteAsync();
-        await db.DiscountRules.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName.StartsWith("مدرسة اختبار ")).ExecuteDeleteAsync();
+        // Posted rule versions are permanent, including synthetic test history. Archive only our rules.
+        foreach (var rule in await db.DiscountRules.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.IsActive && x.ArabicName.StartsWith("مدرسة اختبار ")).ToListAsync())
+        {
+            rule.IsActive = false; rule.Revision++;
+            db.DiscountRuleVersions.Add(DiscountRuleVersion.Create(rule, null, DateTimeOffset.UtcNow));
+        }
+        await db.SaveChangesAsync();
     }
     private async Task<HttpClient> Owner() { var c = factory.CreateClient(); var r = await Send(c, "/api/v1/auth/login", new { email = DemoSeed.OwnerEmail, password = "Demo-Only-123!" }); Assert.Equal(HttpStatusCode.OK, r.StatusCode); return c; }
     private static async Task<HttpResponseMessage> Send(HttpClient c, string path, object body, string? key = null, bool put = false) { var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) request.Headers.Add("Idempotency-Key", key); return await c.SendAsync(request); }
     private async Task<(Guid Player, Guid Enrollment, Guid Collection)> Register(HttpClient c)
     {
-        var key = Guid.NewGuid().ToString(); var options = await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/options"); var group = options.GetProperty("groups").EnumerateArray().First(x => x.GetProperty("sportId").GetGuid() == Slice2DemoSeed.FootballId);
+        var key = Guid.NewGuid().ToString(); var options = await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/options"); var group = options.GetProperty("groups").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == Slice2DemoSeed.FootballGroupId);
         var body = new { playerArabicName = "لاعب اختبار التسجيل " + key[..8], dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = group.GetProperty("branchId").GetGuid(), sportId = Slice2DemoSeed.FootballId, groupId = group.GetProperty("id").GetGuid(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Cash" };
         var response = await Send(c, "/api/v1/people/registrations", body, key); Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var player = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("playerId").GetGuid();
@@ -246,7 +252,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     [Fact] public async Task Linked_siblings_get_highest_non_stacking_discount()
     {
         using var c = await Owner(); var record = await Register(c); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var rules = scope.ServiceProvider.GetRequiredService<DiscountRules>();
-        var best = new DiscountRule { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "مدرسة اختبار " + Guid.NewGuid(), Reason = "اتفاق مدرسة", Percentage = 25, IsActive = true }; db.DiscountRules.Add(best); db.PlayerDiscountLinks.Add(new PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, PlayerId = record.Player, DiscountRuleId = best.Id }); await db.SaveChangesAsync();
+        var best = new DiscountRule { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "مدرسة اختبار " + Guid.NewGuid(), Reason = "اتفاق مدرسة", Percentage = 25, IsActive = true }; db.DiscountRules.Add(best); db.DiscountRuleVersions.Add(DiscountRuleVersion.Create(best, null, DateTimeOffset.UtcNow)); db.PlayerDiscountLinks.Add(new PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, PlayerId = record.Player, DiscountRuleId = best.Id }); await db.SaveChangesAsync();
         var actor = await db.Users.Where(x => x.NormalizedEmail == DemoSeed.OwnerEmail.ToUpperInvariant()).Select(x => x.Id).SingleAsync(); var price = await rules.CalculateAsync(DemoSeed.NogoomAcademyId, record.Player, 1000, actor); Assert.Equal(250m, price.DiscountAmount); Assert.Equal(750m, price.FinalAmount);
     }
     private sealed class Factory(string connection) : WebApplicationFactory<Program> { public List<string> Errors { get; } = []; private readonly string mediaRoot = Path.Combine(Path.GetTempPath(), "academy-owner-review-" + Guid.NewGuid().ToString("N")); protected override void ConfigureWebHost(IWebHostBuilder b) { b.ConfigureLogging(l => l.AddProvider(new ErrorLoggerProvider(Errors))); b.UseEnvironment("Demo"); b.UseSetting("Media:PrivateRoot", mediaRoot); b.UseSetting("ConnectionStrings:Default", connection); b.UseSetting("Demo:SeedProfile", "LegacyRegression"); b.UseSetting("Demo:SeedEnabled", "true"); b.UseSetting("Demo:FixedOtpEnabled", "true"); b.UseSetting("Demo:FixedOtp", "246810"); b.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); b.UseSetting("Demo:ReferenceDate", "2026-09-28"); } public override async ValueTask DisposeAsync() { await base.DisposeAsync(); if (Directory.Exists(mediaRoot)) Directory.Delete(mediaRoot, true); } }

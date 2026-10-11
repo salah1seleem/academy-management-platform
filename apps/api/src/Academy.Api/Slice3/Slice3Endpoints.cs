@@ -173,9 +173,9 @@ public static class Slice3Endpoints
         if (old.Status is not (PaymentRequestStatus.Failed or PaymentRequestStatus.Cancelled or PaymentRequestStatus.Expired)) return Results.Conflict(new { message = "إعادة المحاولة متاحة للعمليات الفاشلة أو الملغاة أو المنتهية فقط." });
         var snapshot = new RenewalFinancialSnapshot(old.RenewalRequest.OriginalAmount, old.RenewalRequest.DiscountType,
             old.RenewalRequest.DiscountValue, old.RenewalRequest.DiscountAmount, old.RenewalRequest.FinalAmount,
-            old.RenewalRequest.DiscountReason, old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc);
+            old.RenewalRequest.DiscountReason, old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc, old.RenewalRequest.DiscountRuleIdSnapshot, old.RenewalRequest.DiscountRuleRevisionSnapshot);
         return RenewalResult(await renewals.CreateAsync(t.AcademyId, user, old.RenewalRequest.SportEnrollmentId,
-            old.RenewalRequest.SubscriptionPlanId, key, false, snapshot, true), false);
+            old.RenewalRequest.SubscriptionPlanId, key, false, snapshot, true, fixedTerms: PlanTerms.From(old.RenewalRequest, old.RenewalRequest.SubscriptionPlan)), false);
     }
 
     private static async Task<IResult> AdminRenewalEnrollments(string? search, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
@@ -320,16 +320,16 @@ public static class Slice3Endpoints
         var t = (await tenant.ResolveAsync())!;
         var key = IdempotencyKey(http);
         if (key is null) return Results.BadRequest(new { message = "Idempotency-Key مطلوب." });
-        var old = await db.PaymentRequests.AsNoTracking().Include(x => x.RenewalRequest)
+        var old = await db.PaymentRequests.AsNoTracking().Include(x => x.RenewalRequest).ThenInclude(x => x.SubscriptionPlan)
             .SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == paymentId);
         if (old is null) return Results.NotFound();
         if (old.Status is not (PaymentRequestStatus.Failed or PaymentRequestStatus.Cancelled or PaymentRequestStatus.Expired))
             return Results.Conflict(new { message = "إعادة المحاولة متاحة للعمليات الفاشلة أو الملغاة أو المنتهية فقط." });
         var snapshot = new RenewalFinancialSnapshot(old.RenewalRequest.OriginalAmount, old.RenewalRequest.DiscountType,
             old.RenewalRequest.DiscountValue, old.RenewalRequest.DiscountAmount, old.RenewalRequest.FinalAmount,
-            old.RenewalRequest.DiscountReason, old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc);
+            old.RenewalRequest.DiscountReason, old.RenewalRequest.DiscountAppliedByUserId, old.RenewalRequest.DiscountAppliedAtUtc, old.RenewalRequest.DiscountRuleIdSnapshot, old.RenewalRequest.DiscountRuleRevisionSnapshot);
         var result = await renewals.CreateAsync(t.AcademyId, UserId(principal), old.RenewalRequest.SportEnrollmentId,
-            old.RenewalRequest.SubscriptionPlanId, key, true, snapshot, true);
+            old.RenewalRequest.SubscriptionPlanId, key, true, snapshot, true, fixedTerms: PlanTerms.From(old.RenewalRequest, old.RenewalRequest.SubscriptionPlan));
         return RenewalResult(result, true);
     }
 

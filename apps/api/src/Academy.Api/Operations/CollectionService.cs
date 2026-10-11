@@ -30,6 +30,9 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         var period = new SubscriptionPeriod { Id = Guid.NewGuid(), AcademyId = academyId, SportEnrollmentId = r.SportEnrollmentId, SportId = r.SportId, SubscriptionPlanId = plan.Id, CollectionId = c.Id, StartDate = start, EndDate = terms.EndDate(start), InitialSessions = terms.Sessions, RemainingSessions = terms.Sessions, Status = start > clock.Today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active, PriceSnapshot = payment.Amount, CurrencySnapshot = payment.Currency, CreatedByUserId = actorId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
         terms.Capture(period); db.SubscriptionPeriods.Add(period);
         var receipt = new Receipt { Id = Guid.NewGuid(), AcademyId = academyId, CollectionId = c.Id, ReceiptNumber = $"RC-{clock.Today:yyyyMMdd}-{c.Id.ToString("N")[..8]}", PlayerId = r.SportEnrollment.PlayerId, SportEnrollmentId = r.SportEnrollmentId, SubscriptionPlanId = plan.Id, PlayerNameSnapshot = r.SportEnrollment.Player.ArabicName, SportNameSnapshot = plan.Sport.ArabicName, PlanNameSnapshot = terms.Name, OriginalAmount = r.OriginalAmount, DiscountType = r.DiscountType, DiscountValue = r.DiscountValue, DiscountAmount = r.DiscountAmount, FinalAmount = r.FinalAmount, Amount = c.Amount, Currency = c.Currency, PaidAtUtc = clock.UtcNow, PaymentMethod = method, ProviderReference = c.ProviderReference, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+        receipt.DiscountRuleIdSnapshot = r.DiscountRuleIdSnapshot;
+        receipt.DiscountRuleRevisionSnapshot = r.DiscountRuleRevisionSnapshot;
+        receipt.DiscountReason = r.DiscountReason;
         db.Receipts.Add(receipt); await db.SaveChangesAsync(); return receipt.Id;
     }
     public async Task<Guid> CreateCashAsync(Guid academyId, Guid actorId, Guid enrollmentId, Guid planId, string key, string method, Guid? requestedBy = null, RenewalFinancialSnapshot? fixedSnapshot = null, string? registrationPayloadHash = null, PlanTerms? fixedTerms = null)
@@ -40,10 +43,12 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         var enrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == academyId && x.Id == enrollmentId && x.SportId == plan.SportId);
         if (fixedTerms is null && !await db.SubscriptionPlans.TrainingOnly().ForBranch(enrollment.BranchId).AnyAsync(x => x.Id == planId)) throw new InvalidOperationException("الباقة غير متاحة لهذا الفرع.");
         var now = clock.UtcNow; var pid = Guid.NewGuid();
-        var snapshot = fixedSnapshot ?? await discounts.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorId);
+        var snapshot = fixedSnapshot ?? await discounts.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorId, plan: plan, branchId: enrollment.BranchId);
         var r = new RenewalRequest { Id = Guid.NewGuid(), AcademyId = academyId, SportEnrollmentId = enrollmentId, SportId = enrollment.SportId, SubscriptionPlanId = planId, RequestedByUserId = requestedBy ?? actorId, RequestedAtUtc = now, OriginalAmount = plan.Price, DiscountType = snapshot.DiscountType, DiscountValue = snapshot.DiscountValue, DiscountAmount = snapshot.DiscountAmount, DiscountReason = snapshot.DiscountReason, DiscountAppliedByUserId = snapshot.DiscountAppliedByUserId, DiscountAppliedAtUtc = snapshot.DiscountAppliedAtUtc, FinalAmount = snapshot.FinalAmount, AmountExpected = snapshot.FinalAmount, Currency = plan.Currency, Status = RenewalRequestStatus.PaymentInProgress, IdempotencyKey = key, PaymentRequestId = pid, CreatedAtUtc = now, UpdatedAtUtc = now };
         var p = new PaymentRequest { Id = pid, AcademyId = academyId, RenewalRequestId = r.Id, Provider = "Manual", ProviderEnvironment = "Manual", Amount = snapshot.FinalAmount, Currency = plan.Currency, Status = PaymentRequestStatus.Pending, ProviderReference = $"manual-{pid:N}", CheckoutReference = $"manual-{pid:N}", CreatedAtUtc = now, UpdatedAtUtc = now };
         r.RegistrationPayloadHash = registrationPayloadHash;
+        r.DiscountRuleIdSnapshot = snapshot.DiscountRuleId;
+        r.DiscountRuleRevisionSnapshot = snapshot.DiscountRuleRevision;
         r.OriginalAmount = snapshot.OriginalAmount;
         (fixedTerms ?? PlanTerms.From(plan)).Capture(r);
         db.RenewalRequests.Add(r); db.PaymentRequests.Add(p); await db.SaveChangesAsync();

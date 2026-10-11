@@ -105,8 +105,11 @@ public static class Slice6Endpoints
             var plan = await db.SubscriptionPlans.TrainingOnly().ForBranch(request.PreferredBranchId).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.SubscriptionPlanId && x.SportId == request.SportId && x.IsActive);
             if (plan is null) return Validation("plan", "اختر باقة فعالة مطابقة للرياضة.");
             var guardianId = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.UserId == user && x.IsActive).Select(x => (Guid?)x.Id).SingleOrDefaultAsync();
-            var quote = await discounts.CalculateAsync(t.AcademyId, entity.ExistingPlayerId ?? Guid.Empty, plan.Price, user, guardianId);
+            var quote = await discounts.CalculateAsync(t.AcademyId, entity.ExistingPlayerId ?? Guid.Empty, plan.Price, user, guardianId, plan: plan, branchId: request.PreferredBranchId);
             entity.SubscriptionPlanId = plan.Id; entity.OriginalAmount = quote.OriginalAmount; entity.FinalAmount = quote.FinalAmount; entity.Currency = plan.Currency;
+            entity.DiscountType = quote.DiscountType; entity.DiscountValue = quote.DiscountValue;
+            entity.DiscountAmount = quote.DiscountAmount; entity.DiscountReason = quote.DiscountReason;
+            entity.DiscountRuleIdSnapshot = quote.DiscountRuleId; entity.DiscountRuleRevisionSnapshot = quote.DiscountRuleRevision;
             PlanTerms.From(plan).Capture(entity);
         }
         db.NewEnrollmentRequests.Add(entity);
@@ -200,7 +203,11 @@ public static class Slice6Endpoints
             await db.SaveChangesAsync();
             if (entity.SubscriptionPlanId.HasValue) {
                 var original = entity.OriginalAmount!.Value; var amount = entity.FinalAmount!.Value; var discount = original - amount;
-                var snapshot = new RenewalFinancialSnapshot(original, discount > 0 ? RenewalDiscountType.Percentage : null, discount > 0 && original > 0 ? discount * 100 / original : null, discount, amount, discount > 0 ? "عرض محفوظ عند طلب الاشتراك" : null, discount > 0 ? UserId(principal) : null, discount > 0 ? clock.UtcNow : null);
+                // Pre-V2 requests captured only final money, not a percentage. Preserve that amount honestly.
+                var snapshot = new RenewalFinancialSnapshot(original, entity.DiscountType ?? (discount > 0 ? RenewalDiscountType.FixedAmount : null),
+                    entity.DiscountValue ?? (discount > 0 ? discount : null), discount, amount,
+                    entity.DiscountReason ?? (discount > 0 ? "عرض محفوظ عند طلب الاشتراك" : null),
+                    discount > 0 ? UserId(principal) : null, discount > 0 ? clock.UtcNow : null, entity.DiscountRuleIdSnapshot, entity.DiscountRuleRevisionSnapshot);
                 var capturedPlan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == entity.SubscriptionPlanId);
                 entity.PaymentRequestId = await collections.CreateCashAsync(t.AcademyId, UserId(principal), enrollment.Id, entity.SubscriptionPlanId.Value, "enroll-" + id.ToString("N"), "Online", entity.RequestedByGuardianUserId, snapshot, fixedTerms: PlanTerms.From(entity, capturedPlan));
                 db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, Message = "تم قبول طلب الاشتراك وتفعيل الباقة. مواعيد المجموعة والإيصال متاحة في ملف الطفل.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });

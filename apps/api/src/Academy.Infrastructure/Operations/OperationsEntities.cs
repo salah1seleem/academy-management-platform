@@ -1,4 +1,5 @@
 using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Subscriptions;
 
 namespace Academy.Infrastructure.Operations;
 
@@ -39,8 +40,32 @@ public sealed class DiscountRule : TenantEntity
 {
     public required string ArabicName { get; set; }
     public decimal Percentage { get; set; }
+    public RenewalDiscountType Type { get; set; } = RenewalDiscountType.Percentage;
+    public decimal? FixedAmount { get; set; }
+    public decimal? MaximumAmount { get; set; }
+    public string Currency { get; set; } = "EGP";
+    public Guid? BranchId { get; set; }
+    public Guid? SportId { get; set; }
+    public Guid? SubscriptionPlanId { get; set; }
+    public DateOnly? StartsOn { get; set; }
+    public DateOnly? EndsOn { get; set; }
+    public int Priority { get; set; }
+    public int Revision { get; set; }
     public bool IsSiblingOffer { get; set; }
     public required string Reason { get; set; }
+}
+public sealed class DiscountRuleVersion : TenantEntity
+{
+    public Guid DiscountRuleId { get; set; }
+    public int Revision { get; set; }
+    public required string Payload { get; set; }
+    public Guid? ActorUserId { get; set; }
+    public static DiscountRuleVersion Create(DiscountRule r, Guid? actor, DateTimeOffset now) => new()
+    {
+        Id = Guid.NewGuid(), AcademyId = r.AcademyId, DiscountRuleId = r.Id, Revision = r.Revision, ActorUserId = actor,
+        CreatedAtUtc = now, UpdatedAtUtc = now,
+        Payload = System.Text.Json.JsonSerializer.Serialize(new { r.ArabicName, type = r.Type.ToString(), percentage = r.Percentage.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), fixedAmount = r.FixedAmount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), maximumAmount = r.MaximumAmount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), r.Currency, r.BranchId, r.SportId, r.SubscriptionPlanId, r.StartsOn, r.EndsOn, r.Priority, r.IsSiblingOffer, r.IsActive, r.Reason }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+    };
 }
 public sealed class PlayerDiscountLink : TenantEntity
 {

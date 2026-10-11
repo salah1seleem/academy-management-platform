@@ -1706,8 +1706,25 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("EGP");
+
+                    b.Property<DateOnly?>("EndsOn")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("FixedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -1715,13 +1732,39 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsSiblingOffer")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("MaximumAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal>("Percentage")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("SubscriptionPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Percentage");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1737,7 +1780,59 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "ArabicName")
                         .IsUnique();
 
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "SportId");
+
+                    b.HasIndex("AcademyId", "SubscriptionPlanId");
+
                     b.ToTable("DiscountRules", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.DiscountRuleVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DiscountRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.ToTable("DiscountRuleVersions", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.Employee", b =>
@@ -2932,6 +3027,28 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("Currency")
                         .HasColumnType("text");
 
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("DiscountReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("DiscountRuleIdSnapshot")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DiscountRuleRevisionSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DiscountType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("DiscountValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int?>("DurationDaysSnapshot")
                         .HasColumnType("integer");
 
@@ -3067,6 +3184,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "SubscriptionPlanId");
 
                     b.HasIndex("AcademyId", "CreatedSportEnrollmentId", "SportId");
+
+                    b.HasIndex("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot");
 
                     b.HasIndex("AcademyId", "RequestedByGuardianUserId", "IdempotencyKey")
                         .IsUnique();
@@ -3995,6 +4114,16 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("DiscountReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("DiscountRuleIdSnapshot")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DiscountRuleRevisionSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DiscountType")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -4076,6 +4205,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "ReceiptNumber")
                         .IsUnique();
+
+                    b.HasIndex("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot");
 
                     b.ToTable("Receipts", null, t =>
                         {
@@ -4314,6 +4445,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("PreviousDiscountRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PreviousDiscountRuleRevision")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PreviousDiscountType")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -4397,6 +4534,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("DiscountReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("DiscountRuleIdSnapshot")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DiscountRuleRevisionSnapshot")
+                        .HasColumnType("integer");
 
                     b.Property<string>("DiscountType")
                         .HasMaxLength(20)
@@ -4491,6 +4634,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("DiscountAppliedByUserId");
 
                     b.HasIndex("AcademyId", "IsActive");
+
+                    b.HasIndex("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot");
 
                     b.HasIndex("AcademyId", "RequestedByUserId", "IdempotencyKey")
                         .IsUnique();
@@ -5832,6 +5977,45 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Structure.Sport", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPlan", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SubscriptionPlanId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.DiscountRuleVersion", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.DiscountRule", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "DiscountRuleId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.Employee", b =>
@@ -6357,6 +6541,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id", "SportId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Academy.Infrastructure.Operations.DiscountRuleVersion", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot")
+                        .HasPrincipalKey("AcademyId", "DiscountRuleId", "Revision")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("ApprovedPlayer");
 
                     b.Navigation("CreatedSportEnrollment");
@@ -6687,6 +6877,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Academy.Infrastructure.Operations.DiscountRuleVersion", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot")
+                        .HasPrincipalKey("AcademyId", "DiscountRuleId", "Revision")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Collection");
                 });
 
@@ -6795,6 +6991,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("DiscountAppliedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.DiscountRuleVersion", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot")
+                        .HasPrincipalKey("AcademyId", "DiscountRuleId", "Revision")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.People.SportEnrollment", "SportEnrollment")

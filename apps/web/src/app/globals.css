@@ -404,6 +404,13 @@ footer {
 .linked-list { margin-block: 1.25rem; }
 .linked-list article { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .8rem 0; border-block-end: 1px solid var(--border); }
 .linked-list small { display: block; margin-block-start: .25rem; color: var(--muted); }
+.discount-summary, .discount-toolbar, .discount-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.discount-summary { border-inline-start: 4px solid var(--primary); margin-block-end: 1rem; }
+.discount-summary h2 { margin-block: .3rem; }
+.discount-summary p { color: var(--muted); max-width: 36rem; }
+.discount-editor .form-hint { grid-column: 1 / -1; margin: 0; }
+.discount-editor .discount-active { display: flex; align-items: center; gap: .5rem; }
+.discount-rule-list article { flex-wrap: wrap; }
 .back-link { display: inline-flex; margin-block-start: 1rem; color: var(--primary); font-weight: 800; }
 .status-pill { padding: .3rem .55rem; color: var(--primary); background: var(--primary-soft); border-radius: 999px; font-size: .8rem; }
 .attendance-toolbar { display: flex; flex-wrap: wrap; gap: .65rem; margin-block-end: 1rem; }

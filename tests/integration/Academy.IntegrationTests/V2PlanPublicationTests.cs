@@ -18,7 +18,7 @@ using Npgsql;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class V2PlanPublicationTests : IAsyncLifetime
+public sealed partial class V2PlanPublicationTests : IAsyncLifetime
 {
     private Factory factory = null!;
     public Task InitializeAsync() { factory = new(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Isolated database required")); _ = factory.CreateClient(); return Task.CompletedTask; }
@@ -95,7 +95,7 @@ public sealed class V2PlanPublicationTests : IAsyncLifetime
         Assert.False(option.GetProperty("allBranches").GetBoolean()); Assert.Equal([f.A], option.GetProperty("branchIds").EnumerateArray().Select(x => x.GetGuid()));
         var phone = "010" + Random.Shared.Next(10000000, 99999999);
         var quote = await Write(owner, "/api/v1/people/registration-quote", new { planId = plan, branchId = f.A, guardianPhone = phone }); quote.EnsureSuccessStatusCode();
-        var value = await quote.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal(600m, value.GetProperty("finalAmount").GetDecimal());
+        var value = await quote.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal("600.00", value.GetProperty("finalAmount").GetString());
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, "/api/v1/people/registration-quote", new { planId = plan, branchId = f.B, guardianPhone = phone })).StatusCode);
         var registration = await Write(owner, "/api/v1/people/registrations", new { playerArabicName = "لاعب سباحة جديد اصطناعي", dateOfBirth = $"{f.BirthYear}-01-02", guardianName = "ولي أمر اختبار", guardianPhone = phone, branchId = f.A, sportId = Slice2DemoSeed.SwimmingId, groupId = f.Group, planId = plan, paymentMethod = "Cash", expectedAmount = 600 });
         registration.EnsureSuccessStatusCode();

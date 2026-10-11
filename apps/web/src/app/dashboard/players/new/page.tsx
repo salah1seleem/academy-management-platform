@@ -7,7 +7,7 @@ import { formatMoneyAr } from "../../../../lib/formatters";
 type Item = { id: string; arabicName: string; branchId?: string; sportId?: string; ageCategoryId?: string };
 type Plan = Item & { price: number; currency: string; isActive: boolean; serviceKind?: string; allBranches?: boolean; branchIds?: string[] };
 type Options = { branches: Item[]; sports: Item[]; categories: Item[]; groups: Item[] };
-type Quote = { originalAmount: number; discountAmount: number; finalAmount: number; discountReason?: string; currency: string };
+type Quote = { originalAmount: string | number; discountAmount: string | number; finalAmount: string | number; discountReason?: string; currency: string };
 export default function NewPlayerPage() {
   const router = useRouter(); const key = useRef("");
   const [options, setOptions] = useState<Options>({ branches: [], sports: [], categories: [], groups: [] });

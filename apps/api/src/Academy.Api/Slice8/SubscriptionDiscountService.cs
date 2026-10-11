@@ -82,6 +82,7 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
         {
             Id = Guid.NewGuid(), AcademyId = academyId, RenewalRequestId = renewal.Id,
             PreviousDiscountType = renewal.DiscountType, PreviousDiscountValue = renewal.DiscountValue,
+            PreviousDiscountRuleId = renewal.DiscountRuleIdSnapshot, PreviousDiscountRuleRevision = renewal.DiscountRuleRevisionSnapshot,
             NewDiscountType = type, NewDiscountValue = value,
             PreviousDiscountAmount = renewal.DiscountAmount, NewDiscountAmount = discount,
             PreviousFinalAmount = renewal.FinalAmount, NewFinalAmount = final,
@@ -102,6 +103,8 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
             CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
         });
         renewal.DiscountType = type;
+        renewal.DiscountRuleIdSnapshot = null;
+        renewal.DiscountRuleRevisionSnapshot = null;
         renewal.DiscountValue = value;
         renewal.DiscountAmount = discount;
         renewal.FinalAmount = final;

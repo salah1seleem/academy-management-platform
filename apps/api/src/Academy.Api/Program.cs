@@ -352,6 +352,7 @@ if (app.Environment.IsEnvironment("Demo"))
         {
             await ReceivableDemoSeed.SeedAsync(db);
             await PlanPublicationDemoSeed.SeedAsync(db);
+            await DiscountPricingDemoSeed.SeedAsync(db);
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

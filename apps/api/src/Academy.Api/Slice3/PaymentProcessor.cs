@@ -108,6 +108,9 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             PlanNameSnapshot = terms.Name, OriginalAmount = payment.RenewalRequest.OriginalAmount,
             DiscountType = payment.RenewalRequest.DiscountType, DiscountValue = payment.RenewalRequest.DiscountValue,
             DiscountAmount = payment.RenewalRequest.DiscountAmount, FinalAmount = payment.RenewalRequest.FinalAmount,
+            DiscountRuleIdSnapshot = payment.RenewalRequest.DiscountRuleIdSnapshot,
+            DiscountRuleRevisionSnapshot = payment.RenewalRequest.DiscountRuleRevisionSnapshot,
+            DiscountReason = payment.RenewalRequest.DiscountReason,
             Amount = payment.Amount, Currency = payment.Currency, PaidAtUtc = clock.UtcNow,
             PaymentMethod = "الدفع الإلكتروني", ProviderReference = payment.ProviderReference, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
         };

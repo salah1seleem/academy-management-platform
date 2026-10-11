@@ -62,6 +62,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureStaffAccess(builder);
         ConfigureReceivables(builder);
         ConfigurePlanPublication(builder);
+        ConfigureDiscountPricing(builder);
         ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>
