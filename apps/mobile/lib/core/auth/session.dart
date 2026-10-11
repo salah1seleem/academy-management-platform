@@ -11,6 +11,7 @@ class Membership {
     'Guardian' => 'ولي أمر',
     'Coach' => 'مدرب',
     'AcademyOwner' => 'مالك',
+    'AcademyAdmin' => 'إداري',
     _ => 'دور غير مدعوم',
   };
 }

@@ -56,6 +56,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
   }
 
   Future<void> save() async {
+    if (data?['canManageAttendance'] != true) return;
     setState(() {
       busy = true;
       error = null;
@@ -102,6 +103,10 @@ class _CoachAttendanceState extends State<CoachAttendance> {
               if (message != null)
                 UiText(message!, style: const TextStyle(color: Colors.green)),
               if (error != null) ErrorNotice(error!),
+              if (data!['canManageAttendance'] != true)
+                const UiText(
+                  'الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.',
+                ),
               for (final player in rows(data!['players']))
                 Card(
                   child: Padding(
@@ -132,11 +137,16 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                           selected: {
                             statuses[textOf(player['sportEnrollmentId'])]!,
                           },
-                          onSelectionChanged: (v) => setState(
-                            () =>
-                                statuses[textOf(player['sportEnrollmentId'])] =
-                                    v.single,
-                          ),
+                          onSelectionChanged:
+                              data!['canManageAttendance'] != true
+                              ? null
+                              : (v) => setState(
+                                  () =>
+                                      statuses[textOf(
+                                            player['sportEnrollmentId'],
+                                          )] =
+                                          v.single,
+                                ),
                         ),
                         if (player['warning'] != null)
                           UiText(
@@ -149,10 +159,11 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                     ),
                   ),
                 ),
-              FilledButton(
-                onPressed: busy ? null : save,
-                child: UiText(busy ? 'جارٍ الحفظ…' : 'حفظ الحضور'),
-              ),
+              if (data!['canManageAttendance'] == true)
+                FilledButton(
+                  onPressed: busy ? null : save,
+                  child: UiText(busy ? 'جارٍ الحفظ…' : 'حفظ الحضور'),
+                ),
             ],
           ),
   );

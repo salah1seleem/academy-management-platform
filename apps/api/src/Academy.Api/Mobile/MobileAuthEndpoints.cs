@@ -53,7 +53,7 @@ public static class MobileAuthEndpoints
     private static Guid SessionId(ClaimsPrincipal p) => Guid.Parse(p.FindFirstValue("mobile_session_id")!);
     private static IQueryable<AcademyMembership> Eligible(FoundationDbContext db, Guid user) =>
         db.AcademyMemberships.Where(x => x.UserId == user && x.IsActive && x.User.IsActive && x.Academy.IsActive &&
-            (x.Role == AcademyRole.Guardian || x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyOwner));
+            (x.Role == AcademyRole.Guardian || x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin));
     private static Task<List<MobileMembership>> Memberships(FoundationDbContext db, Guid user) =>
         Eligible(db, user).OrderBy(x => x.Academy.ArabicName).ThenBy(x => x.Id)
             .Select(x => new MobileMembership(x.Id, x.AcademyId, x.Academy.ArabicName, x.Role.ToString())).ToListAsync();

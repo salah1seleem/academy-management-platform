@@ -90,7 +90,7 @@ class CoachHome extends StatelessWidget {
                   trailing: UiText(
                     '${session['recorded']}/${session['playerCount']}',
                   ),
-                  onTap: BrandScope.maybeOf(context)?.coachAttendance == false
+                  onTap: BrandScope.maybeOf(context)?.coachAttendance != true
                       ? null
                       : () => openPage(
                           context,
@@ -186,7 +186,7 @@ class CoachGroup extends StatelessWidget {
           icon: const Icon(Icons.add_photo_alternate_outlined),
           label: const UiText('رفع صور وفيديوهات للحصة'),
         ),
-        if (BrandScope.maybeOf(context)?.coachAttendance != false)
+        if (BrandScope.maybeOf(context)?.coachAttendance == true)
           FilledButton.icon(
             onPressed: sessions.isEmpty
                 ? null

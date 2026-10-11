@@ -35,7 +35,7 @@ public sealed class MobileAuthenticationHandler(
             return AuthenticateResult.Fail("Expired or revoked mobile session");
         if (session.MembershipId is not null && (session.Membership is null || !session.Membership.IsActive ||
             !session.Membership.Academy.IsActive || session.Membership.UserId != session.UserId ||
-            session.Membership.Role is not (AcademyRole.Guardian or AcademyRole.Coach or AcademyRole.AcademyOwner)))
+            session.Membership.Role is not (AcademyRole.Guardian or AcademyRole.Coach or AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)))
             return AuthenticateResult.Fail("Inactive mobile membership");
         var identity = new ClaimsIdentity(SchemeName, ClaimTypes.Name, ClaimTypes.Role);
         identity.AddClaim(new(ClaimTypes.NameIdentifier, session.UserId.ToString()));

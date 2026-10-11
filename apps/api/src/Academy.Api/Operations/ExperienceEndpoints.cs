@@ -19,6 +19,7 @@ public static partial class ExperienceEndpoints
         api.MapGet("/academy/experience", Get);
         api.MapGet("/academy/branding/logo", Logo);
         api.MapPut("/manage/academy/experience", Policy).RequireAuthorization(AcademyPermissions.AcademySettingsManage).AddEndpointFilter<CsrfFilter>();
+        api.MapGet("/manage/academy/policy-audit", PolicyHistory).RequireAuthorization(AcademyPermissions.AcademySettingsManage);
         api.MapGet("/platform/academies", Academies);
         api.MapPut("/platform/academies/{id:guid}/branding", Branding).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/platform/academies/{id:guid}/logo", UploadLogo).AddEndpointFilter<CsrfFilter>();
@@ -27,7 +28,7 @@ public static partial class ExperienceEndpoints
     {
         var t = (await tenant.ResolveAsync())!;
         var x = await db.AcademyExperiences.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId);
-        return Results.Ok(new { displayName = x?.DisplayName ?? t.AcademyName, primaryColor = x?.PrimaryColor ?? "#D71935", secondaryColor = x?.SecondaryColor ?? "#171923", logoUrl = x?.Logo == null ? null : "/api/v1/academy/branding/logo", coachAttendanceEnabled = x?.CoachAttendanceEnabled ?? true, platformBrandOperator = await Operator(user, db) });
+        return Results.Ok(new { displayName = x?.DisplayName ?? t.AcademyName, primaryColor = x?.PrimaryColor ?? "#D71935", secondaryColor = x?.SecondaryColor ?? "#171923", logoUrl = x?.Logo == null ? null : "/api/v1/academy/branding/logo", coachAttendanceEnabled = x is { CoachAttendancePolicyConfirmed: true, CoachAttendanceEnabled: true }, platformBrandOperator = await Operator(user, db) });
     }
     private static async Task<IResult> Logo(CurrentTenant tenant, FoundationDbContext db, HttpContext context)
     {
@@ -37,10 +38,23 @@ public static partial class ExperienceEndpoints
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(x.Logo, x.LogoContentType!);
     }
-    private static async Task<IResult> Policy(AttendancePolicy body, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> Policy(AttendancePolicy body, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock)
     {
-        var t = (await tenant.ResolveAsync())!; var row = await Row(t.AcademyId, db, clock);
-        row.CoachAttendanceEnabled = body.CoachAttendanceEnabled; row.UpdatedAtUtc = clock.UtcNow; await db.SaveChangesAsync(); return Results.NoContent();
+        var t = (await tenant.ResolveAsync())!;
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"attendance-policy:{t.AcademyId}"}, 0))");
+        var row = await Row(t.AcademyId, db, clock);
+        var before = row.CoachAttendancePolicyConfirmed && row.CoachAttendanceEnabled;
+        if (!row.CoachAttendancePolicyConfirmed || before != body.CoachAttendanceEnabled)
+            db.AcademyPolicyAudits.Add(new AcademyPolicyAudit { Id = Guid.NewGuid(), AcademyId = t.AcademyId, ActorUserId = Actor(user), Policy = "coach.player-attendance", Before = before, After = body.CoachAttendanceEnabled, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        row.CoachAttendancePolicyConfirmed = true;
+        row.CoachAttendanceEnabled = body.CoachAttendanceEnabled; row.UpdatedAtUtc = clock.UtcNow;
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
+    }
+    private static async Task<IResult> PolicyHistory(CurrentTenant tenant, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        return Results.Ok(await db.AcademyPolicyAudits.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.Policy, x.Before, x.After, atUtc = x.CreatedAtUtc }).ToListAsync());
     }
     private static async Task<IResult> Academies(ClaimsPrincipal user, FoundationDbContext db)
     {

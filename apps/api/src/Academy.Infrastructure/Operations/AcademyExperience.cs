@@ -9,7 +9,17 @@ public sealed class AcademyExperience : TenantEntity
     public string SecondaryColor { get; set; } = "#171923";
     public byte[]? Logo { get; set; }
     public string? LogoContentType { get; set; }
-    public bool CoachAttendanceEnabled { get; set; } = true;
+    public bool CoachAttendanceEnabled { get; set; }
+    // A legacy default of true is not an explicit permission grant.
+    public bool CoachAttendancePolicyConfirmed { get; set; }
+}
+
+public sealed class AcademyPolicyAudit : TenantEntity
+{
+    public Guid ActorUserId { get; set; }
+    public required string Policy { get; set; }
+    public bool Before { get; set; }
+    public bool After { get; set; }
 }
 
 // Global, narrowly scoped operator grant. Never issued by academy owners or client claims.

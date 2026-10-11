@@ -14,6 +14,7 @@ public sealed partial class FoundationDbContext
     public DbSet<AcademyExperience> AcademyExperiences => Set<AcademyExperience>();
     public DbSet<PlatformBrandOperator> PlatformBrandOperators => Set<PlatformBrandOperator>();
     public DbSet<BrandingAudit> BrandingAudits => Set<BrandingAudit>();
+    public DbSet<AcademyPolicyAudit> AcademyPolicyAudits => Set<AcademyPolicyAudit>();
     public DbSet<PrivateAssetAudience> PrivateAssetAudiences => Set<PrivateAssetAudience>();
     public DbSet<AcademyTransferSettings> AcademyTransferSettings => Set<AcademyTransferSettings>();
     public DbSet<PaymentProof> PaymentProofs => Set<PaymentProof>();
@@ -32,6 +33,9 @@ public sealed partial class FoundationDbContext
         ConfigureMatches(b);
         ConfigurePayroll(b);
         Tenant<AcademyExperience>(b);
+        Tenant<AcademyPolicyAudit>(b);
+        b.Entity<AcademyPolicyAudit>().Property(x => x.Policy).HasMaxLength(80);
+        b.Entity<AcademyPolicyAudit>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<AcademyExperience>().HasIndex(x => x.AcademyId).IsUnique();
         b.Entity<AcademyExperience>().Property(x => x.DisplayName).HasMaxLength(120);
         b.Entity<AcademyExperience>().Property(x => x.PrimaryColor).HasMaxLength(7);

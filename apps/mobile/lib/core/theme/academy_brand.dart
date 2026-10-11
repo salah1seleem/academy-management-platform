@@ -9,7 +9,7 @@ class AcademyBrand extends ChangeNotifier {
   String name = 'The Professional Academy';
   Color primary = const Color(0xFFD71935), secondary = const Color(0xFF171923);
   Uint8List? logo;
-  bool signedIn = false, coachAttendance = true;
+  bool signedIn = false, coachAttendance = false;
   String? _membership;
   int _epoch = 0;
   AcademyBrand(this.auth) {

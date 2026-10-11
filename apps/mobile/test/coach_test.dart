@@ -46,6 +46,44 @@ Widget shell(Widget page) => MaterialApp(
 );
 
 void main() {
+  for (final allowed in [false, null]) {
+    testWidgets('Coach attendance fails closed when capability is $allowed', (
+      tester,
+    ) async {
+      var writes = 0;
+      final auth = await coach((m, p, b, t) async {
+        if (m == 'PUT') writes++;
+        return {
+          'canManageAttendance': allowed,
+          'session': {
+            'group': 'مجموعة اختبار',
+            'sessionDate': '2026-10-11',
+            'startTime': '17:00',
+          },
+          'players': [
+            {
+              'sportEnrollmentId': 'e',
+              'arabicName': 'لاعب اختبار',
+              'playerCode': 'P-TEST',
+              'attendanceStatus': 'NotRecorded',
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        shell(CoachAttendance(auth: auth, sessionId: 's')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('يتولى الإداري'), findsOneWidget);
+      expect(find.text('حفظ الحضور'), findsNothing);
+      final selector = tester.widget<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      );
+      expect(selector.onSelectionChanged, isNull);
+      expect(writes, 0);
+      auth.dispose();
+    });
+  }
   testWidgets('Coach home exposes assigned work and no finance', (
     tester,
   ) async {
@@ -109,6 +147,7 @@ void main() {
         return {'items': []};
       }
       return {
+        'canManageAttendance': true,
         'session': {
           'group': 'براعم',
           'sessionDate': '2026-09-28',

@@ -80,7 +80,7 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
     private void Bearer(string token) => client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
     [Theory]
-    [InlineData(AcademyRole.Guardian)] [InlineData(AcademyRole.Coach)] [InlineData(AcademyRole.AcademyOwner)]
+    [InlineData(AcademyRole.Guardian)] [InlineData(AcademyRole.Coach)] [InlineData(AcademyRole.AcademyOwner)] [InlineData(AcademyRole.AcademyAdmin)]
     public async Task Each_supported_role_can_verify_phone_and_access_trusted_tenant(AcademyRole role)
     {
         var member = await AddRole(role); var credentials = await Login();
@@ -97,11 +97,23 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Unknown_phone_and_admin_only_account_are_rejected()
+    public async Task Unknown_phone_and_account_without_active_membership_are_rejected()
     {
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync(Root + "/otp/request", new { phoneNumber = phone })).StatusCode);
-        await AddRole(AcademyRole.AcademyAdmin);
+        var member = await AddRole(AcademyRole.AcademyAdmin);
+        await Mutate(async db => (await db.AcademyMemberships.SingleAsync(x => x.Id == member)).IsActive = false);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync(Root + "/otp/request", new { phoneNumber = phone })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Native_administrator_keeps_operational_permissions_without_owner_financial_privileges()
+    {
+        await AddRole(AcademyRole.AcademyAdmin); await Login();
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/attendance/sessions")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/manage/payment-requests")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/reports/owner-summary")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/reports/financial")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/manage/academy/policy-audit")).StatusCode);
     }
 
     [Fact]

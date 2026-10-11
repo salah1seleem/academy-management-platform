@@ -105,7 +105,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
             allowed = grant ?? requirement.Permission is not (AcademyPermissions.ReportsFinancialRead or AcademyPermissions.ReportsAttendanceRead or AcademyPermissions.ReportsExport or AcademyPermissions.OwnerDashboardRead or AcademyPermissions.AcademySettingsManage or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage);
         }
         if (allowed && membership.Role == AcademyRole.Coach && requirement.Permission == AcademyPermissions.AttendanceManage)
-            allowed = await db.AcademyExperiences.Where(x => x.AcademyId == membership.AcademyId).Select(x => (bool?)x.CoachAttendanceEnabled).SingleOrDefaultAsync() ?? true;
+            allowed = await db.AcademyExperiences.AnyAsync(x => x.AcademyId == membership.AcademyId && x.CoachAttendancePolicyConfirmed && x.CoachAttendanceEnabled);
         if (allowed) context.Succeed(requirement);
     }
 }
