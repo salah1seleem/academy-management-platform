@@ -24,7 +24,7 @@ public static class GroupOperations
         var t = (await tenant.ResolveAsync())!;
         if (!await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id)) return Results.NotFound();
         return Results.Ok(new {
-            group = await db.TrainingGroups.Where(x => x.Id == id).Select(x => new { x.Id, x.BranchId, x.SportId, x.Capacity, x.ArabicName, x.TrainingLevelId }).SingleAsync(),
+            group = await db.TrainingGroups.Where(x => x.Id == id).Select(x => new { x.Id, x.BranchId, x.SportId, x.Capacity, x.ArabicName, x.TrainingLevelId, registrationFormat = x.RegistrationFormat.ToString(), x.FormatReviewedAtUtc }).SingleAsync(),
             coaches = await db.StaffGroupAssignments.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == id && x.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.User.IsActive).OrderBy(x => x.AcademyMembership.User.DisplayName).Select(x => new { id = x.AcademyMembershipId, name = x.AcademyMembership.User.DisplayName }).ToListAsync(),
             players = await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == id && x.IsActive).OrderBy(x => x.Player.ArabicName).Select(x => new { x.Id, x.PlayerId, x.Player.ArabicName, x.Player.PhotoReference }).ToListAsync(),
             resourcePlan = await db.GroupResourceSchedules.Where(x => x.TrainingGroupId == id && x.IsActive).Select(x => new { x.ResourceId, x.CoachMembershipId, seats = x.ReservedSeats, x.Exclusive }).SingleOrDefaultAsync(),
@@ -48,6 +48,8 @@ public static class GroupOperations
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Players\" WHERE \"AcademyId\"={t.AcademyId} AND \"Id\"={enrollment.PlayerId} FOR UPDATE");
         try { await placement.Authority("players", "Edit", group.BranchId); } catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
         if (enrollment.TrainingGroupId is null) return Results.Conflict(new { message = "استخدم مسار التسكين المراجع؛ تعديل المجموعة مخصص للتسجيل المسكن بالفعل." });
+        if (enrollment.RegistrationFormat != group.RegistrationFormat) return Results.Conflict(new { message = "نمط تدريب المجموعة لا يطابق نوع التسجيل." });
+        if (group.RegistrationFormat != Academy.Infrastructure.People.TrainingRegistrationFormat.Group && group.Id != enrollment.TrainingGroupId) return Results.Conflict(new { message = "نقل التدريب الخاص وشبه الخاص يحتاج معاينة النقل المؤرخة؛ لا يتاح عبر مسار النقل القديم." });
         if (group.SportId != enrollment.SportId || group.BranchId != enrollment.BranchId || group.AgeCategory.MinimumBirthYear > enrollment.Player.DateOfBirth.Year || group.AgeCategory.MaximumBirthYear < enrollment.Player.DateOfBirth.Year) return Results.UnprocessableEntity(new { message = "المجموعة لا تطابق رياضة وفرع وعمر اللاعب." });
         if (group.TrainingLevelId.HasValue && (enrollment.TrainingLevelId != group.TrainingLevelId || enrollment.LevelReviewedByUserId is null || enrollment.LevelReviewedAtUtc is null)) return Results.Conflict(new { message = "مستوى اللاعب المعتمد لا يطابق المجموعة." });
         if (group.Id != enrollment.TrainingGroupId && group.Capacity.HasValue && await db.SportEnrollments.CountAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == group.Id && x.IsActive) >= group.Capacity) return Results.Conflict(new { message = "المجموعة مكتملة العدد." });

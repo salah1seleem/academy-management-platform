@@ -12,6 +12,11 @@ const enrollment = { id: "e1", trainingGroupId: "group-1", sportName: "كرة ا
 const player = { id: "p1", arabicName: "عمر خالد", playerCode: "NG-001", dateOfBirth: "2016-04-01", isActive: true, preferredFoot: "Left", footballPosition: "وسط", asOfDate: "2026-09-28" };
 
 describe("sports read-model presentation", () => {
+  it("allows buying a compatible subscription for a waiting registration without exposing attendance or evaluation actions", async () => {
+    tab = "subscriptions";
+    global.fetch = vi.fn(input => String(input).includes("discount-rules/players") ? response([]) : String(input).includes("discount-rules") ? response({ items: [] }) : String(input).includes("refunds") ? response({ collections: [], refunds: [] }) : response({ ...player, enrollments: [{ ...enrollment, registrationFormat: "Private", trainingGroupId: null, subscription: null }] })) as typeof fetch;
+    render(<PlayerDetails id="p1" />); expect(await screen.findByRole("link", { name: "تسجيل الاشتراك" })).toHaveAttribute("href", "/dashboard/subscriptions/renew/new?enrollmentId=e1"); expect(screen.queryByRole("link", { name: "تسجيل الحضور" })).not.toBeInTheDocument(); expect(screen.queryByRole("link", { name: "تقييم جديد" })).not.toBeInTheDocument();
+  });
   it("shows each enrollment context without issuing per-player queries", async () => {
     global.fetch = vi.fn(input => String(input).includes("structure/options") ? response({ branches: [], sports: [], categories: [], groups: [] }) : response([{ ...player, enrollments: 2, enrollmentSummaries: [enrollment, { ...enrollment, id: "e2", sportName: "السباحة", branchName: "فرع الشروق", groupName: "سباحة أ" }] }])) as typeof fetch;
     render(<PlayersPage />);

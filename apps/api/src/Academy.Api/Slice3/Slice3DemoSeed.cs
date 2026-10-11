@@ -37,7 +37,7 @@ public static class Slice3DemoSeed
         await Incomplete(db, Guid.Parse("54000000-0000-0000-0000-000000000002"), omarSwimming, SwimmingMonthlyId, guardianUserId, PaymentRequestStatus.Pending, RenewalRequestStatus.PaymentInProgress, now, ct);
         var otherFootball = await Enrollment(db, Slice2DemoSeed.OtherPlayerId, Slice2DemoSeed.FootballId, ct);
         await Reference(db, Guid.Parse("55000000-0000-0000-0000-000000000001"), otherFootball, ExternalRenewalCode, guardianUserId, now, ct);
-        var academyBEnrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.FutureAcademyId && x.PlayerId == Slice2DemoSeed.AcademyBPlayerId, ct);
+        var academyBEnrollment = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.FutureAcademyId && x.PlayerId == Slice2DemoSeed.AcademyBPlayerId, ct);
         var academyBOwner = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.FutureAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.AcademyOwner).Select(x => x.UserId).SingleAsync(ct);
         await Reference(db, Guid.Parse("55000000-0000-0000-0000-000000000002"), academyBEnrollment, FutureAcademyRenewalCode, academyBOwner, now, ct);
     }
@@ -47,7 +47,7 @@ public static class Slice3DemoSeed
         if (await db.SubscriptionPlans.AnyAsync(x => x.Id == id, ct)) return;
         db.Add(new SubscriptionPlan { Id = id, AcademyId = academy, SportId = sport, ArabicName = name, PlanType = type, Price = price, Currency = "EGP", DurationDays = days, SessionCount = sessions, DisplayOrder = order, CreatedAtUtc = now, UpdatedAtUtc = now }); await db.SaveChangesAsync(ct);
     }
-    private static Task<Academy.Infrastructure.People.SportEnrollment> Enrollment(FoundationDbContext db, Guid player, Guid sport, CancellationToken ct) => db.SportEnrollments.SingleAsync(x => x.PlayerId == player && x.SportId == sport, ct);
+    private static Task<Academy.Infrastructure.People.SportEnrollment> Enrollment(FoundationDbContext db, Guid player, Guid sport, CancellationToken ct) => db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.PlayerId == player && x.SportId == sport, ct);
 
     internal static async Task Confirmed(FoundationDbContext db, Guid root, Academy.Infrastructure.People.SportEnrollment enrollment, Guid planId, Guid user, DateOnly start, DateOnly end, DateTimeOffset paid, DateTimeOffset now, CancellationToken ct)
     {

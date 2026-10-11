@@ -41,14 +41,14 @@ public static class Slice5DemoSeed
         var swimming = new List<EvaluationCriterion>();
         for (var i = 0; i < SwimmingCriteria.Length; i++) swimming.Add(await Criterion(db, DemoSeed.NogoomAcademyId, Slice2DemoSeed.SwimmingId, SwimmingCriteria[i], i + 1, null, now, ct));
 
-        var footballEnrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
-        var swimmingEnrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.SwimmingId, ct);
+        var footballEnrollment = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
+        var swimmingEnrollment = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.SwimmingId, ct);
         await Evaluation(db, PriorFootballEvaluationId, footballEnrollment, coachUserId, new DateOnly(2026, 8, 28), "أغسطس 2026", EvaluationStatus.Published, "بداية جيدة مع حاجة لمزيد من الثبات تحت الضغط.", football, FootballCriteria.Select(x => (int?)(x.Score - 6)).ToArray(), now.AddMonths(-1), ct);
         await Evaluation(db, CurrentFootballEvaluationId, footballEnrollment, coachUserId, new DateOnly(2026, 9, 28), "سبتمبر 2026", EvaluationStatus.Published, "تطور ملحوظ في السرعة والتمرير. بيانات عرض خيالية.", football, FootballCriteria.Select(x => (int?)x.Score).ToArray(), now, ct);
         await Evaluation(db, DraftFootballEvaluationId, footballEnrollment, coachUserId, new DateOnly(2026, 9, 29), "متابعة تدريبية", EvaluationStatus.Draft, "مسودة لا تظهر لولي الأمر.", football, football.Select((_, i) => i < 2 ? (int?)70 + i : null).ToArray(), now.AddHours(1), ct);
         await Evaluation(db, SwimmingEvaluationId, swimmingEnrollment, ownerUserId, new DateOnly(2026, 9, 26), "سبتمبر 2026", EvaluationStatus.Published, "أداء متوازن في أساسيات السباحة.", swimming, [78, 81, 76, 80, 74, 72, 75], now.AddDays(-2), ct);
 
-        var bEnrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.FutureAcademyId && x.PlayerId == Slice2DemoSeed.AcademyBPlayerId, ct);
+        var bEnrollment = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.FutureAcademyId && x.PlayerId == Slice2DemoSeed.AcademyBPlayerId, ct);
         var bCriterion = await Criterion(db, DemoSeed.FutureAcademyId, bEnrollment.SportId, "دقة التمرير", 1, FootballAxis.Passing, now, ct);
         await Evaluation(db, AcademyBEvaluationId, bEnrollment, futureOwnerUserId, new DateOnly(2026, 9, 28), "سبتمبر 2026", EvaluationStatus.Published, "بيانات أكاديمية ثانية لاختبار العزل.", [bCriterion], [75], now, ct);
     }

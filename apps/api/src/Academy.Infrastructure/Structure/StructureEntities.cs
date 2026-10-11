@@ -34,6 +34,9 @@ public sealed class AgeCategory : TenantEntity
 
 public sealed class TrainingGroup : TenantEntity
 {
+    public Academy.Infrastructure.People.TrainingRegistrationFormat RegistrationFormat { get; set; } = Academy.Infrastructure.People.TrainingRegistrationFormat.Group;
+    public Guid? FormatReviewedByUserId { get; set; }
+    public DateTimeOffset? FormatReviewedAtUtc { get; set; }
     public Guid? TrainingLevelId { get; set; }
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }

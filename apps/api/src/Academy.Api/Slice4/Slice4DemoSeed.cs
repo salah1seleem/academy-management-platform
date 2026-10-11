@@ -26,7 +26,7 @@ public static class Slice4DemoSeed
         await Slice3DemoSeed.Plan(db, SessionPackagePlanId, DemoSeed.NogoomAcademyId, Slice2DemoSeed.FootballId,
             "باقة العرض — 5 حصص", SubscriptionPlanType.Sessions, 500m, null, 5, 5, now, ct);
 
-        var sessionEnrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OtherPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
+        var sessionEnrollment = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OtherPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
         await Slice3DemoSeed.Confirmed(db, Guid.Parse("63000000-0000-0000-0000-000000000001"), sessionEnrollment,
             SessionPackagePlanId, ownerUserId, referenceDate.AddDays(-7), referenceDate.AddDays(60), now.AddDays(-7), now, ct);
 
@@ -45,8 +45,8 @@ public static class Slice4DemoSeed
         await Session(db, AcademyBSessionId, DemoSeed.FutureAcademyId, academyBGroup.Id,
             referenceDate, new TimeOnly(18, 0), new TimeOnly(19, 0), TrainingSessionStatus.Scheduled, futureOwnerUserId, now, ct);
 
-        var omarFootball = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
-        var otherFootball = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OtherPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
+        var omarFootball = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
+        var otherFootball = await db.SportEnrollments.SingleAsync(x => x.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == Slice2DemoSeed.OtherPlayerId && x.SportId == Slice2DemoSeed.FootballId, ct);
         await PlayerAttendance(db, Guid.Parse("64000000-0000-0000-0000-000000000001"), YesterdayFootballSessionId, Slice2DemoSeed.FootballGroupId, omarFootball.Id, AttendanceStatus.Present, ownerUserId, now, ct);
         await PlayerAttendance(db, Guid.Parse("64000000-0000-0000-0000-000000000002"), YesterdayFootballSessionId, Slice2DemoSeed.FootballGroupId, otherFootball.Id, AttendanceStatus.Absent, ownerUserId, now, ct);
 

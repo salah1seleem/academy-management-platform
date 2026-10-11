@@ -74,6 +74,7 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         if (coaches.Length == 0) conflicts.Add("أسند مدربًا فعالًا للمجموعة أولًا.");
         if (sessions.Length == 0) conflicts.Add("أنشئ حصص المجموعة القادمة قبل التسكين.");
         if (sessions.Length > 1000) conflicts.Add("جدول المجموعة أكبر من الحد المسموح لهذه المعاينة.");
+        if (g.RegistrationFormat != TrainingRegistrationFormat.Group && (g.FormatReviewedByUserId is null || g.FormatReviewedAtUtc is null || binding is null)) conflicts.Add("التدريب الخاص وشبه الخاص يحتاج اعتماد السعة وحجز مورد ومدرب قبل التسكين.");
         foreach (var session in sessions.Take(1000))
         {
             try { await coordinator.CheckCoachSlot(g.AcademyId, g.Id, session.SessionDate, session.StartTime, session.EndTime, session.Id); }
@@ -101,9 +102,10 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
             if (!assessBatch && (g.Capacity is null || roster.Length >= g.Capacity || binding is not null && roster.Length >= binding.ReservedSeats)) reasons.Add("لا يوجد مقعد متاح حاليًا.");
             if (e.TrainingGroupId.HasValue) reasons.Add("التسجيل مسكن بالفعل؛ استخدم نقل المجموعة بدل الإضافة.");
             if (e.SportId != g.SportId || e.BranchId != g.BranchId) reasons.Add("الرياضة أو الفرع لا يطابق المجموعة.");
+            if (e.RegistrationFormat != g.RegistrationFormat) reasons.Add("نوع تسجيل اللاعب لا يطابق نمط تدريب المجموعة.");
             if (g.AgeCategory.MinimumBirthYear > e.Player.DateOfBirth.Year || g.AgeCategory.MaximumBirthYear < e.Player.DateOfBirth.Year || e.Player.DateOfBirth > today) reasons.Add("الفئة العمرية لا تناسب اللاعب.");
             if (level is null || e.TrainingLevelId != level.Id || e.LevelReviewedByUserId is null || e.LevelReviewedAtUtc is null) reasons.Add("راجع مستوى اللاعب؛ المستوى المعتمد يجب أن يطابق المجموعة.");
-            if (!periods.Any(p => p.SportEnrollmentId == e.Id && (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions is > 0))) reasons.Add("لا يوجد استحقاق تدريب سارٍ؛ يبقى اللاعب في الانتظار دون حضور مدفوع.");
+            if (!periods.Any(p => p.SportEnrollmentId == e.Id && (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && Academy.Api.Slice3.PlanCatalog.FormatMatches(g.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions is > 0))) reasons.Add("لا يوجد استحقاق تدريب سارٍ مطابق للنوع؛ يبقى اللاعب في الانتظار دون حضور مدفوع.");
             var otherGroups = await db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]).Where(x => x.AcademyId == g.AcademyId && x.PlayerId == e.PlayerId && x.Id != e.Id && x.IsActive && x.TrainingGroupId != null).Select(x => x.TrainingGroupId!.Value).ToArrayAsync();
             if (otherGroups.Length > 0 && sessions.Length > 0)
             {
@@ -119,7 +121,7 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
     {
         if (offset < 0 || offset > 100000 || search?.Length > 100) throw new FacilityRejected("فلاتر غير صالحة.", 422);
         await using var tx = await db.Database.BeginTransactionAsync(); var (_, g) = await Group(groupId, false);
-        var q = db.SportEnrollments.AsNoTracking().Where(e => e.IsActive && e.Player.IsActive && e.TrainingGroupId == null && e.SportId == g.SportId && e.BranchId == g.BranchId);
+        var q = db.SportEnrollments.AsNoTracking().Where(e => e.IsActive && e.Player.IsActive && e.TrainingGroupId == null && e.SportId == g.SportId && e.BranchId == g.BranchId && e.RegistrationFormat == g.RegistrationFormat);
         if (enrollmentId.HasValue) q = q.Where(e => e.Id == enrollmentId);
         if (!string.IsNullOrWhiteSpace(search)) q = q.Where(e => e.Player.ArabicName.Contains(search.Trim()) || e.Player.PlayerCode.Contains(search.Trim()));
         var ids = await q.OrderBy(x => x.Player.ArabicName).ThenBy(x => x.Id).Skip(offset).Take(100).Select(x => x.Id).ToArrayAsync();

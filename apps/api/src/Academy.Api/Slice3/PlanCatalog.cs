@@ -13,6 +13,9 @@ public static class PlanCatalog
     public static IQueryable<SubscriptionPlan> ForBranch(this IQueryable<SubscriptionPlan> plans, Guid branch) =>
         plans.Where(p => p.AllBranches || p.BranchPublications.Any(b => b.BranchId == branch && b.IsActive && b.Branch.IsActive));
     public static IQueryable<SubscriptionPlan> TrainingOnly(this IQueryable<SubscriptionPlan> plans) => plans.Where(p => p.ServiceKind == AcademyServiceKind.Training);
+    public static IQueryable<SubscriptionPlan> ForRegistrationFormat(this IQueryable<SubscriptionPlan> plans, Academy.Infrastructure.People.TrainingRegistrationFormat format) =>
+        plans.Where(p => format == Academy.Infrastructure.People.TrainingRegistrationFormat.Group ? p.TrainingFormat == TrainingFormat.Group || p.TrainingFormat == TrainingFormat.Season : format == Academy.Infrastructure.People.TrainingRegistrationFormat.Private ? p.TrainingFormat == TrainingFormat.Private : p.TrainingFormat == TrainingFormat.SemiPrivate);
+    public static bool FormatMatches(Academy.Infrastructure.People.TrainingRegistrationFormat format, TrainingFormat plan) => format switch { Academy.Infrastructure.People.TrainingRegistrationFormat.Group => plan is TrainingFormat.Group or TrainingFormat.Season, Academy.Infrastructure.People.TrainingRegistrationFormat.Private => plan == TrainingFormat.Private, Academy.Infrastructure.People.TrainingRegistrationFormat.SemiPrivate => plan == TrainingFormat.SemiPrivate, _ => false };
     public static Task LockAsync(FoundationDbContext db, Guid academy, Guid plan) =>
         db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"plan-publication:{academy}:{plan}"}, 0))");
     public static async Task<IResult> Detail(Guid id, CurrentTenant tenant, FoundationDbContext db)

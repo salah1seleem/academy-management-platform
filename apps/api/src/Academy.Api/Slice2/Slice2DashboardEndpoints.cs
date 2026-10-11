@@ -111,6 +111,7 @@ public static class Slice2DashboardEndpoints
                 if (hasEnrollments && (group.BranchId != request.BranchId || group.SportId != request.SportId))
                     return Results.Conflict(new { message = "لا يمكن تغيير فرع أو رياضة مجموعة مرتبطة بتسجيلات قائمة." });
                 if (request.Capacity.HasValue && request.Capacity < await db.SportEnrollments.CountAsync(x => x.TrainingGroupId == id && x.IsActive)) return Results.Conflict(new { message = "السعة أقل من عدد أعضاء المجموعة الحاليين." });
+                if (group.Capacity != request.Capacity && group.RegistrationFormat != Academy.Infrastructure.People.TrainingRegistrationFormat.Group) { group.FormatReviewedAtUtc = null; group.FormatReviewedByUserId = null; }
                 group.ArabicName = request.ArabicName.Trim(); group.EnglishName = Clean(request.EnglishName); group.BranchId = request.BranchId.Value; group.SportId = request.SportId.Value; group.AgeCategoryId = request.AgeCategoryId.Value; group.Capacity = request.Capacity; group.UpdatedAtUtc = now;
                 break;
             default: return Results.NotFound();
@@ -166,7 +167,7 @@ public static class Slice2DashboardEndpoints
                 .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
             {
-                e.Id, e.TrainingGroupId, e.SportId, e.BranchId, e.TrainingLevelId, e.GroupAssignedFrom,
+                e.Id, e.TrainingGroupId, e.SportId, e.BranchId, registrationFormat = e.RegistrationFormat.ToString(), e.TrainingLevelId, e.GroupAssignedFrom,
                 levelName = db.TrainingLevels.Where(l => l.Id == e.TrainingLevelId).Select(l => l.ArabicName).FirstOrDefault(),
                 placement = e.TrainingGroupId == null ? "Unassigned" : "Assigned",
                 sportName = e.Sport.ArabicName,

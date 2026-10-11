@@ -25,6 +25,7 @@ public static class UnassignedEnrollments
     private static async Task<IResult> Create(Guid id, UnassignedEnrollmentWrite body, CurrentTenant tenant, FoundationDbContext db, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!;
+        if (!Enum.IsDefined(body.RegistrationFormat)) return Results.UnprocessableEntity(new { message = "نوع التسجيل غير صالح." });
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"}, 0))");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + t.AcademyId}, 0))");
@@ -39,13 +40,13 @@ public static class UnassignedEnrollments
         }
         if (!await db.Players.AnyAsync(x => x.Id == id && x.IsActive) || !await db.Branches.AnyAsync(x => x.Id == body.BranchId && x.IsActive) || !await db.Sports.AnyAsync(x => x.Id == body.SportId && x.IsActive)) return Results.NotFound();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"intake:{t.AcademyId}:{id}:{body.SportId}:{body.BranchId}"}, 0))");
-        var existing = await db.SportEnrollments.AsNoTracking().Where(x => x.PlayerId == id && x.SportId == body.SportId && x.BranchId == body.BranchId && x.IsActive).OrderBy(x => x.Id).ToListAsync();
+        var existing = await db.SportEnrollments.AsNoTracking().Where(x => x.PlayerId == id && x.SportId == body.SportId && x.BranchId == body.BranchId && x.RegistrationFormat == body.RegistrationFormat && x.IsActive).OrderBy(x => x.Id).ToListAsync();
         if (existing.Any(x => x.TrainingGroupId.HasValue)) return Results.Conflict(new { message = "للاعب تسجيل مسكن بالفعل في هذه الرياضة والفرع. استخدم نقل المجموعة بدل تكرار التسجيل." });
         if (existing.Count != 0) return Results.Ok(new { id = existing[0].Id, playerId = id, placement = "Unassigned", subscriptionCreated = false, replayed = true });
-        var row = new SportEnrollment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = id, SportId = body.SportId, BranchId = body.BranchId, TrainingGroupId = null, Status = EnrollmentStatus.Active, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
+        var row = new SportEnrollment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = id, SportId = body.SportId, BranchId = body.BranchId, RegistrationFormat = body.RegistrationFormat, TrainingGroupId = null, Status = EnrollmentStatus.Active, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
         db.SportEnrollments.Add(row);
         await db.SaveChangesAsync(); await tx.CommitAsync();
         return Results.Created($"/api/v1/people/players/{id}", new { row.Id, playerId = id, placement = "Unassigned", subscriptionCreated = false, replayed = false });
     }
 }
-public sealed record UnassignedEnrollmentWrite(Guid SportId, Guid BranchId);
+public sealed record UnassignedEnrollmentWrite(Guid SportId, Guid BranchId, TrainingRegistrationFormat RegistrationFormat = TrainingRegistrationFormat.Group);

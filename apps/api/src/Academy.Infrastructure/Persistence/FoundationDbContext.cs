@@ -230,7 +230,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         {
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.SportId, x.TrainingGroupId }).IsUnique();
-            entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.SportId, x.BranchId }).IsUnique().HasFilter("\"TrainingGroupId\" IS NULL AND \"IsActive\"");
+            entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.SportId, x.BranchId, x.RegistrationFormat }).IsUnique().HasFilter("\"TrainingGroupId\" IS NULL AND \"IsActive\"");
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
             entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

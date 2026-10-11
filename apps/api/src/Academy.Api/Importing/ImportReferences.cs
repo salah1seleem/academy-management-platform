@@ -19,10 +19,10 @@ public sealed record ImportReferences(Guid AcademyId, string Currency, IReadOnly
         var values = new List<ImportReference>();
         values.AddRange(await db.Branches.AsNoTracking().Where(b => b.AcademyId == academy && b.IsActive).Select(b => new ImportReference("branch", b.Id, b.ArabicName, null, null, null, null, null, null, 0, 0, null, false, null)).ToListAsync());
         values.AddRange(await db.Sports.AsNoTracking().Where(b => b.AcademyId == academy && b.IsActive).Select(b => new ImportReference("sport", b.Id, b.ArabicName, null, null, null, null, null, null, 0, 0, null, false, null)).ToListAsync());
-        values.AddRange(await db.TrainingGroups.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive && g.Branch.IsActive && g.Sport.IsActive && g.AgeCategory.IsActive)
+        values.AddRange(await db.TrainingGroups.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive && g.RegistrationFormat == Academy.Infrastructure.People.TrainingRegistrationFormat.Group && g.Branch.IsActive && g.Sport.IsActive && g.AgeCategory.IsActive)
             .Select(g => new ImportReference("group", g.Id, g.ArabicName, g.BranchId, g.SportId, g.AgeCategoryId, g.AgeCategory.MinimumBirthYear, g.AgeCategory.MaximumBirthYear, g.Capacity,
                 db.SportEnrollments.Count(e => e.AcademyId == academy && e.TrainingGroupId == g.Id && e.IsActive && e.Status == Academy.Infrastructure.People.EnrollmentStatus.Active), 0, null, false, null)).ToListAsync());
-        var plans = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().Include(p => p.BranchPublications).Where(p => p.AcademyId == academy && p.IsActive).OrderBy(p => p.Id).ToListAsync();
+        var plans = await db.SubscriptionPlans.TrainingOnly().ForRegistrationFormat(Academy.Infrastructure.People.TrainingRegistrationFormat.Group).AsNoTracking().Include(p => p.BranchPublications).Where(p => p.AcademyId == academy && p.IsActive).OrderBy(p => p.Id).ToListAsync();
         values.AddRange(plans.Select(p => new ImportReference("product", p.Id, p.ArabicName, Sport: p.SportId, Revision: p.Revision, PlanType: p.PlanType, AllBranches: p.AllBranches, Branches: p.BranchPublications.Where(b => b.IsActive).Select(b => b.BranchId).Order().ToArray())));
         var ordered = values.OrderBy(v => v.Kind).ThenBy(v => v.Id).ToArray();
         var stamp = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { academy, currency, values = ordered })));

@@ -21,6 +21,11 @@ public sealed partial class FoundationDbContext
         b.Entity<TrainingGroup>().HasOne<TrainingLevel>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingLevelId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<SportEnrollment>().HasOne<TrainingLevel>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingLevelId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<SportEnrollment>().HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.LevelReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<SportEnrollment>().Property(x => x.RegistrationFormat).HasConversion<string>().HasMaxLength(20).HasDefaultValue(TrainingRegistrationFormat.Group);
+        b.Entity<SportEnrollment>().ToTable(t => t.HasCheckConstraint("CK_Enrollment_RegistrationFormat", "\"RegistrationFormat\" IN ('Group','Private','SemiPrivate')"));
+        b.Entity<TrainingGroup>().Property(x => x.RegistrationFormat).HasConversion<string>().HasMaxLength(20).HasDefaultValue(TrainingRegistrationFormat.Group);
+        b.Entity<TrainingGroup>().ToTable(t => t.HasCheckConstraint("CK_Group_RegistrationFormat", "\"RegistrationFormat\" IN ('Group','Private','SemiPrivate')"));
+        b.Entity<TrainingGroup>().HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.FormatReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GroupPlacementRevision>(e => {
             e.Property(x => x.RequestKey).HasMaxLength(100); e.Property(x => x.RequestHash).HasMaxLength(64); e.Property(x => x.Snapshot).HasColumnType("jsonb");
             e.HasIndex(x => new { x.AcademyId, x.ActorUserId, x.RequestKey }).IsUnique();

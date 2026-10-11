@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+String trainingRegistrationLabel(Object? value) => switch (value) {
+  'Private' => 'تدريب خاص',
+  'SemiPrivate' => 'تدريب شبه خاص',
+  _ => 'تدريب جماعي',
+};
+
 // Translate interface vocabulary only. Names, notes and other academy content
 // remain exactly as entered; they are not sent to an external translation service.
 String ui(BuildContext context, String value) {
@@ -58,6 +64,9 @@ class UiText extends StatelessWidget {
 }
 
 const _english = <String, String>{
+  'تدريب خاص': 'Private training',
+  'تدريب شبه خاص': 'Semi-private training',
+  'تدريب جماعي': 'Group training',
   'أكاديميتي': 'My Academy',
   'الأكاديمية': 'Academy',
   'الرئيسية': 'Home',

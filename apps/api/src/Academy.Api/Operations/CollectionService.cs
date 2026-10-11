@@ -19,6 +19,7 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         if (payment.Status != PaymentRequestStatus.Pending) throw new InvalidOperationException("طلب الدفع غير قابل للتحصيل.");
         var r = payment.RenewalRequest; var plan = r.SubscriptionPlan;
         var terms = PlanTerms.From(r, plan);
+        if (!PlanCatalog.FormatMatches(r.SportEnrollment.RegistrationFormat, terms.Format)) throw new InvalidOperationException("الباقة المحفوظة لا تطابق نوع التسجيل.");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"collection-enrollment:{academyId}:{r.SportEnrollmentId}"}, 0))");
         if (payment.Id != r.PaymentRequestId || payment.Amount != r.FinalAmount) throw new InvalidOperationException("طلب الدفع تغير. أعد تحميله.");
         payment.Status = PaymentRequestStatus.Confirmed; payment.ConfirmedAtUtc = clock.UtcNow; payment.UpdatedAtUtc = clock.UtcNow;
@@ -41,6 +42,7 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         var plan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == academyId && x.Id == planId && (fixedTerms != null || x.IsActive));
         await db.Entry(plan).ReloadAsync();
         var enrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == academyId && x.Id == enrollmentId && x.SportId == plan.SportId);
+        if (!PlanCatalog.FormatMatches(enrollment.RegistrationFormat, (fixedTerms ?? PlanTerms.From(plan)).Format)) throw new InvalidOperationException("الباقة لا تطابق نوع التسجيل.");
         if (fixedTerms is null && !await db.SubscriptionPlans.TrainingOnly().ForBranch(enrollment.BranchId).AnyAsync(x => x.Id == planId)) throw new InvalidOperationException("الباقة غير متاحة لهذا الفرع.");
         var now = clock.UtcNow; var pid = Guid.NewGuid();
         var snapshot = fixedSnapshot ?? await discounts.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorId, plan: plan, branchId: enrollment.BranchId);

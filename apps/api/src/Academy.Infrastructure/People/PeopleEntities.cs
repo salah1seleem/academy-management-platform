@@ -6,6 +6,8 @@ namespace Academy.Infrastructure.People;
 public enum Gender { Male = 1, Female = 2 }
 public enum PreferredFoot { Right = 1, Left = 2, Both = 3 }
 public enum EnrollmentStatus { Active = 1, Inactive = 2, Archived = 3 }
+// Season is a commercial offer for group training, not a second player identity.
+public enum TrainingRegistrationFormat { Group = 1, Private = 2, SemiPrivate = 3 }
 
 public sealed class GuardianProfile : TenantEntity
 {
@@ -42,6 +44,7 @@ public sealed class GuardianPlayerLink : TenantEntity
 
 public sealed class SportEnrollment : TenantEntity
 {
+    public TrainingRegistrationFormat RegistrationFormat { get; set; } = TrainingRegistrationFormat.Group;
     public Guid? TrainingLevelId { get; set; }
     public Guid? LevelReviewedByUserId { get; set; }
     public DateTimeOffset? LevelReviewedAtUtc { get; set; }

@@ -13,7 +13,7 @@ it("adds a sport without a group or payment and refreshes only after server conf
   await screen.findByRole("option", { name: "سباحة" });
   fireEvent.change(screen.getByLabelText("رياضة التسجيل"), { target: { value: "s" } }); fireEvent.change(screen.getByLabelText("فرع التسجيل"), { target: { value: "b" } });
   fireEvent.click(screen.getByRole("button", { name: "حفظ في انتظار التسكين" })); await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
-  expect(requests).toEqual([{ url: "/api/v1/people/players/p/unassigned-enrollments", body: { sportId: "s", branchId: "b" } }]);
+  expect(requests).toEqual([{ url: "/api/v1/people/players/p/unassigned-enrollments", body: { sportId: "s", branchId: "b", registrationFormat: 1 } }]);
 });
 it("does not signal saved when the tenant or branch denies the request", async () => {
   const onCreated = vi.fn(); vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("options") ? Response.json({ branches: [], sports: [] }) : url.endsWith("csrf") ? Response.json({ token: "t" }) : Response.json({ title: "الفرع غير متاح" }, { status: 403 })));

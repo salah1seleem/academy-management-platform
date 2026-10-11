@@ -81,6 +81,8 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
         var periods = await db.SubscriptionPeriods.Include(x => x.SubscriptionPlan)
             .Where(x => x.AcademyId == attendance.AcademyId && x.SportEnrollmentId == attendance.SportEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen && x.StartDate <= sessionDate && (x.EndDate == null || x.EndDate >= sessionDate))
             .OrderBy(x => x.StartDate).ThenBy(x => x.CreatedAtUtc).ToListAsync(ct);
+        var format = await db.SportEnrollments.Where(e => e.Id == attendance.SportEnrollmentId).Select(e => e.RegistrationFormat).SingleAsync(ct);
+        periods = periods.Where(p => (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && Academy.Api.Slice3.PlanCatalog.FormatMatches(format, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat)).ToList();
         var period = periods.FirstOrDefault(x => (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || x.RemainingSessions is > 0)
             ?? periods.FirstOrDefault();
         if (period is null)

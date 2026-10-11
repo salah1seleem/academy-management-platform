@@ -74,6 +74,11 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             return new(true, false, providerEvent.ProcessingResult);
         }
 
+        if (!PlanCatalog.FormatMatches(payment.RenewalRequest.SportEnrollment.RegistrationFormat, PlanTerms.From(payment.RenewalRequest, payment.RenewalRequest.SubscriptionPlan).Format))
+        {
+            providerEvent.ProcessedAtUtc = clock.UtcNow; providerEvent.ProcessingResult = "registration-format-conflict";
+            await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return new(false, false, providerEvent.ProcessingResult);
+        }
         payment.Status = PaymentRequestStatus.Confirmed; payment.ConfirmedAtUtc = clock.UtcNow;
         payment.RenewalRequest.Status = RenewalRequestStatus.Paid; payment.RenewalRequest.UpdatedAtUtc = clock.UtcNow;
         var collection = new PaymentCollection

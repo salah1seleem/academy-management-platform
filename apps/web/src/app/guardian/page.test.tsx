@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import GuardianPage from "./page";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 beforeEach(() => {
   global.fetch = vi.fn(async url => new Response(JSON.stringify(String(url).endsWith("/receivables") ? { outstanding: "0.00", overpaymentCredit: "0.00", items: [] } : { academyName: "أكاديمية النجوم الرياضية", guardianName: "سارة محمود", today: "2026-09-28", children: [], sportContexts: [] }), { status: 200 }));

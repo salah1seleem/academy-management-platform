@@ -55,6 +55,7 @@ class ChildProfile extends StatelessWidget {
                 UiText('${ageOn(player['dateOfBirth'], today) ?? '—'} سنوات'),
                 for (final e in enrollments) ...[
                   UiText('${e['sport']} · ${e['branch']}'),
+                  UiText(trainingRegistrationLabel(e['registrationFormat'])),
                   if (e['period'] != null)
                     UiText(
                       '${day(e['period']['startDate'])} — ${day(e['period']['endDate'])}',
@@ -127,6 +128,7 @@ class ChildProfile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   UiText('${e['sport']} · ${e['group']}'),
+                  UiText(trainingRegistrationLabel(e['registrationFormat'])),
                   if (e['period'] != null) ...[
                     StatusPill(e['period']['status']),
                     UiText(textOf(e['period']['plan'])),
@@ -193,6 +195,7 @@ class ProfileRecords extends StatelessWidget {
               ? [
                   for (final e in rows(d['enrollments'])) ...[
                     Heading(textOf(e['sport'])),
+                    UiText(trainingRegistrationLabel(e['registrationFormat'])),
                     UiText('${e['branch']} · ${e['group']}'),
                     const Heading('الجلسات القادمة'),
                     if (rows(e['upcoming']).isEmpty)

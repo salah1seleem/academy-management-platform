@@ -4067,6 +4067,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PlayerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("RegistrationFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Group");
+
                     b.Property<Guid>("SportId")
                         .HasColumnType("uuid");
 
@@ -4102,16 +4109,19 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingLevelId", "SportId");
 
-                    b.HasIndex("AcademyId", "PlayerId", "SportId", "BranchId")
-                        .IsUnique()
-                        .HasFilter("\"TrainingGroupId\" IS NULL AND \"IsActive\"");
-
                     b.HasIndex("AcademyId", "PlayerId", "SportId", "TrainingGroupId")
                         .IsUnique();
 
                     b.HasIndex("AcademyId", "TrainingGroupId", "BranchId", "SportId");
 
-                    b.ToTable("SportEnrollments", (string)null);
+                    b.HasIndex("AcademyId", "PlayerId", "SportId", "BranchId", "RegistrationFormat")
+                        .IsUnique()
+                        .HasFilter("\"TrainingGroupId\" IS NULL AND \"IsActive\"");
+
+                    b.ToTable("SportEnrollments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Enrollment_RegistrationFormat", "\"RegistrationFormat\" IN ('Group','Private','SemiPrivate')");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Structure.AgeCategory", b =>
@@ -4439,8 +4449,21 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(180)
                         .HasColumnType("character varying(180)");
 
+                    b.Property<DateTimeOffset?>("FormatReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("FormatReviewedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("RegistrationFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Group");
 
                     b.Property<Guid>("SportId")
                         .HasColumnType("uuid");
@@ -4459,6 +4482,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FormatReviewedByUserId");
+
                     b.HasIndex("AcademyId", "AgeCategoryId");
 
                     b.HasIndex("AcademyId", "ArabicName")
@@ -4472,7 +4497,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingLevelId", "SportId");
 
-                    b.ToTable("TrainingGroups", (string)null);
+                    b.ToTable("TrainingGroups", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Group_RegistrationFormat", "\"RegistrationFormat\" IN ('Group','Private','SemiPrivate')");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Structure.TrainingLevel", b =>
@@ -7915,6 +7943,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("FormatReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Structure.AgeCategory", "AgeCategory")
                         .WithMany()
