@@ -2,8 +2,9 @@ namespace Academy.Api.Auth;
 
 public static class StaffAccessRules
 {
-    public static readonly string[] Modules = ["academy", "players", "subscriptions", "payments", "attendance", "evaluations", "catalog", "nutrition", "medical", "media", "finance", "reports", "payroll", "settings", "staff", "news", "matches"];
+    public static readonly string[] Modules = ["academy", "players", "subscriptions", "payments", "attendance", "evaluations", "catalog", "nutrition", "medical", "media", "finance", "reports", "payroll", "settings", "staff", "news", "matches", "facilities"];
     public static string? ForPermission(string permission) => permission switch {
+        AcademyPermissions.FacilitiesRead or AcademyPermissions.FacilitiesManage => "facilities",
         AcademyPermissions.StructureManage or AcademyPermissions.CoachGroupsRead => "academy",
         AcademyPermissions.PeopleManage => "players",
         AcademyPermissions.SubscriptionPlanManage or AcademyPermissions.SubscriptionRead or AcademyPermissions.SubscriptionRenewManage or AcademyPermissions.SubscriptionAdjustmentManage or AcademyPermissions.SubscriptionDiscountManage => "subscriptions",
@@ -24,6 +25,7 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        if (path.StartsWith("/api/v1/facilities")) return "facilities";
         if (path.StartsWith("/api/v1/finance/")) return "finance";
         if (path.StartsWith("/api/v1/reports/owner-summary") || path.StartsWith("/api/v1/reports/financial")) return "finance";
         if (path.StartsWith("/api/v1/reports/")) return "reports";

@@ -132,6 +132,10 @@ builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
+builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
+builder.Services.AddAuthorization(options => {
+    foreach (var p in new[] { AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage }) options.AddPolicy(p, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(p)));
+});
 builder.Services.AddScoped<Academy.Api.Importing.ImportCommitService>();
 if (builder.Configuration.GetValue("Imports:WorkerEnabled", true)) builder.Services.AddHostedService<Academy.Api.Importing.ImportWorker>();
 builder.Services.AddScoped<IEvaluationReportCalculator, EvaluationReportCalculator>();
@@ -339,6 +343,7 @@ app.MapVersionedConfiguration();
 app.MapReceivables();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
+Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
 
 if (args.Contains("--reset-football-demo"))
 {
@@ -361,6 +366,7 @@ if (app.Environment.IsEnvironment("Demo"))
             await PlanPublicationDemoSeed.SeedAsync(db);
             await DiscountPricingDemoSeed.SeedAsync(db);
             await RenewalOpportunityDemoSeed.SeedAsync(db);
+            if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

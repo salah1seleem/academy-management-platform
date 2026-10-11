@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ConfirmationDialog, ErrorState, LoadingState } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
 
-export const accessModuleLabels: Record<string, string> = { academy: "الهيكل والمجموعات والحصص", players: "اللاعبون وأولياء الأمور", subscriptions: "الباقات والاشتراكات والخصومات", payments: "طلبات الدفع والتحصيل", attendance: "الحضور", evaluations: "التقييمات", catalog: "المنتجات الرياضية", nutrition: "التغذية", medical: "السجلات الطبية", media: "الوسائط", finance: "الرئيسية والتقارير المالية", reports: "التقارير والتصدير", payroll: "الموظفون والرواتب", settings: "إعدادات الأكاديمية", staff: "إنشاء حسابات الفريق", news: "الأخبار", matches: "المباريات" };
+export const accessModuleLabels: Record<string, string> = { academy: "الهيكل والمجموعات والحصص", players: "اللاعبون وأولياء الأمور", subscriptions: "الباقات والاشتراكات والخصومات", payments: "طلبات الدفع والتحصيل", attendance: "الحضور", evaluations: "التقييمات", catalog: "المنتجات الرياضية", nutrition: "التغذية", medical: "السجلات الطبية", media: "الوسائط", finance: "الرئيسية والتقارير المالية", reports: "التقارير والتصدير", payroll: "الموظفون والرواتب", settings: "إعدادات الأكاديمية", staff: "إنشاء حسابات الفريق", news: "الأخبار", matches: "المباريات", facilities: "المرافق والحارات والحجوزات" };
 type Action = { module: string; read: boolean; add: boolean; edit: boolean; delete: boolean };
 type Access = { allBranches: boolean; useActionGrants: boolean; modules: string[]; branches: { id: string; name: string }[]; selectedBranches: string[]; actions: Action[]; history: { createdAtUtc: string }[] };
 const actionLabels = { read: "قراءة", add: "إضافة", edit: "تعديل", delete: "حذف" } as const;

@@ -12,6 +12,8 @@ public static class AcademyPermissions
     public const string AcademySettingsManage = "academy.settings.manage";
     public const string StaffProvision = "staff.provision";
     public const string StructureManage = "structure.manage";
+    public const string FacilitiesRead = "facilities.read";
+    public const string FacilitiesManage = "facilities.manage";
     public const string PeopleManage = "people.manage";
     public const string GuardianChildrenRead = "guardian.children.read";
     public const string CoachGroupsRead = "coach.groups.read";
@@ -65,6 +67,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
             AcademyPermissions.AcademySettingsManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.StaffProvision => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.StructureManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.FacilitiesRead or AcademyPermissions.FacilitiesManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.PeopleManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.GuardianChildrenRead => membership.Role == AcademyRole.Guardian,
             AcademyPermissions.CoachGroupsRead => membership.Role == AcademyRole.Coach,
@@ -103,7 +106,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
         };
         if (allowed && membership.Role == AcademyRole.AcademyAdmin) {
             var grant = await db.StaffGrants.AsNoTracking().Where(x => x.AcademyId == membership.AcademyId && x.MembershipId == membership.MembershipId && x.Permission == requirement.Permission && x.IsActive).Select(x => (bool?)x.Allowed).SingleOrDefaultAsync();
-            allowed = grant ?? requirement.Permission is not (AcademyPermissions.ReportsFinancialRead or AcademyPermissions.ReportsAttendanceRead or AcademyPermissions.ReportsExport or AcademyPermissions.OwnerDashboardRead or AcademyPermissions.AcademySettingsManage or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage);
+            allowed = grant ?? requirement.Permission is not (AcademyPermissions.ReportsFinancialRead or AcademyPermissions.ReportsAttendanceRead or AcademyPermissions.ReportsExport or AcademyPermissions.OwnerDashboardRead or AcademyPermissions.AcademySettingsManage or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage or AcademyPermissions.FacilitiesRead or AcademyPermissions.FacilitiesManage);
             if (requirement.Permission != AcademyPermissions.TenantAccess && await db.AcademyMemberships.AnyAsync(x => x.Id == membership.MembershipId && x.UseActionGrants))
             {
                 // Some legacy endpoints reused a broad policy (e.g. news used media).
@@ -123,6 +126,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
         if (allowed && membership.Role == AcademyRole.Coach && requirement.Permission == AcademyPermissions.AttendanceManage)
             allowed = await db.AcademyExperiences.AnyAsync(x => x.AcademyId == membership.AcademyId && x.CoachAttendancePolicyConfirmed && x.CoachAttendanceEnabled);
         var feature = requirement.Permission switch {
+            AcademyPermissions.FacilitiesRead or AcademyPermissions.FacilitiesManage => "facilities",
             AcademyPermissions.AttendanceRead or AcademyPermissions.AttendanceManage or AcademyPermissions.GuardianAttendanceRead or AcademyPermissions.EvaluationRead or AcademyPermissions.EvaluationManage or AcademyPermissions.EvaluationCriteriaManage or AcademyPermissions.GuardianEvaluationRead or AcademyPermissions.SubscriptionPlanManage or AcademyPermissions.SubscriptionRenewManage or AcademyPermissions.GuardianOwnRenewal or AcademyPermissions.GuardianEnrollmentRequestCreate => "training",
             AcademyPermissions.NutritionRead or AcademyPermissions.NutritionManage => "nutrition",
             AcademyPermissions.SportCatalogRead or AcademyPermissions.SportCatalogManage => "catalog",

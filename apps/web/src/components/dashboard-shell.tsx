@@ -59,7 +59,7 @@ const linksOf = (...ids: string[]) => ids.flatMap(id => existingModules.find(m =
 const modules: NavModule[] = [
   existingModules[0],
   { id: "players", title: "الأعضاء والاشتراكات", group: "الإدارة", icon: Users, links: linksOf("players", "plans", "discounts") },
-  { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), ...linksOf("attendance", "matches")] },
+  { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), { label: "المرافق والحارات", href: "/dashboard/facilities" }, ...linksOf("attendance", "matches")] },
   { id: "development", title: "الفريق والتطوير", group: "التشغيل", icon: Star, links: [...linksOf("academy").filter(l => l.href.endsWith("/coaches")), ...linksOf("evaluations", "nutrition")] },
   { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
   { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
@@ -72,6 +72,7 @@ const roleLabels: Record<string, string> = { AcademyOwner: "مالك", AcademyAd
 function linkPermission(href: string) {
   if (href === "/dashboard") return null; // The basic task home remains available without financial metrics.
   if (href === "/dashboard/import") return "people.manage";
+  if (href === "/dashboard/facilities") return "facilities.read";
   if (href.includes("/settings")) return "academy.settings.manage";
   if (href.includes("/payroll") || href.includes("/staff/employees")) return "payroll.read";
   if (href.includes("/matches")) return "structure.manage";

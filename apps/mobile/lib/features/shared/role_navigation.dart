@@ -14,6 +14,7 @@ import '../owner/owner_reports.dart';
 import 'academy_news.dart';
 import 'matches.dart';
 import 'staff_amounts.dart';
+import 'facility_board.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
@@ -155,6 +156,8 @@ class NativeMore extends StatelessWidget {
           ),
         ),
       ],
+      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
+        FacilityBoardLink(auth: auth),
       if (role == 'Coach')
         GLink(
           localized(context, 'مجموعاتي', 'My groups'),

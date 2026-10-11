@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Facilities;
 using Academy.Infrastructure.Content;
 using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.Operations;
@@ -43,6 +44,11 @@ public sealed partial class FoundationDbContext
         BranchFilter<TrainingGroup>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<SportEnrollment>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<TrainingSession>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<Facility>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<FacilitySpace>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<FacilityResource>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ResourceBooking>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ResourceClosure>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<Employee>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<MatchTeam>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ProductSale>(b, x => x.BranchId.HasValue && RequestBranchIds.Contains(x.BranchId.Value));
