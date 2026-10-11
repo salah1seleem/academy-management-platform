@@ -2903,6 +2903,136 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("TournamentPayments", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.People.AcademyImportJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovedBranches")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("CutoffDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("FinanciallyIncomplete")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("GuardianLinksApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("GuardianResolutions")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LeaseUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<string[]>("LegacyEnrollmentIds")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<Guid>("MembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("OpeningBalancesApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PublishedRows")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReferenceStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("ReplayedRows")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<byte[]>("StagedFile")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "MembershipId");
+
+                    b.HasIndex("State", "CreatedAtUtc");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SourceSystem", "FileHash")
+                        .IsUnique()
+                        .HasFilter("\"State\" IN ('Queued', 'Running', 'Completed')");
+
+                    b.ToTable("AcademyImportJobs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ImportJob_Approval", "\"GuardianLinksApproved\" AND (\"State\" <> 'Completed' OR (\"StagedFile\" IS NULL AND \"CompletedAtUtc\" IS NOT NULL AND \"PublishedRows\" + \"ReplayedRows\" = \"RowCount\"))");
+
+                            t.HasCheckConstraint("CK_ImportJob_Counts", "\"RowCount\" BETWEEN 1 AND 1000 AND \"PublishedRows\" >= 0 AND \"ReplayedRows\" >= 0 AND \"PublishedRows\" + \"ReplayedRows\" <= \"RowCount\"");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.People.GuardianPlayerLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3000,6 +3130,160 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("GuardianProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.People.ImportedEnrollment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgreementSnapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GuardianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LegacyEnrollmentId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("LegacyPlayerId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PlayerIdentityHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RowHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SubscriptionPeriodId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "GuardianId");
+
+                    b.HasIndex("AcademyId", "JobId");
+
+                    b.HasIndex("AcademyId", "PlayerId");
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId");
+
+                    b.HasIndex("AcademyId", "SubscriptionPeriodId");
+
+                    b.HasIndex("AcademyId", "SourceSystem", "LegacyEnrollmentId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SourceSystem", "LegacyPlayerId");
+
+                    b.ToTable("ImportedEnrollments", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.People.ImportedHousehold", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GuardianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HouseholdKey")
+                        .IsRequired()
+                        .HasMaxLength(84)
+                        .HasColumnType("character varying(84)");
+
+                    b.Property<string>("IdentityHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "GuardianId");
+
+                    b.HasIndex("AcademyId", "JobId");
+
+                    b.HasIndex("AcademyId", "SourceSystem", "HouseholdKey")
+                        .IsUnique();
+
+                    b.ToTable("ImportedHouseholds", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.People.NewEnrollmentRequest", b =>
@@ -4254,6 +4538,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("ImportJobId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -4302,6 +4589,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ActorUserId");
 
+                    b.HasIndex("AcademyId", "ImportJobId");
+
                     b.HasIndex("AcademyId", "PlanId");
 
                     b.HasIndex("AcademyId", "PlayerId");
@@ -4315,7 +4604,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ReceivableDocuments", null, t =>
                         {
-                            t.HasCheckConstraint("CK_ReceivableDocument_Positive", "\"Amount\" > 0");
+                            t.HasCheckConstraint("CK_ReceivableDocument_Positive", "\"Amount\" > 0 OR (\"Amount\" < 0 AND \"Source\" = 'OpeningBalance' AND \"ImportJobId\" IS NOT NULL)");
                         });
                 });
 
@@ -4749,7 +5038,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AcademyId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("CollectionId")
+                    b.Property<Guid?>("CollectionId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -4776,11 +5065,21 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("FrozenFromDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("ImportJobId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("InitialSessions")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("Collected");
 
                     b.Property<string>("PlanNameSnapshot")
                         .HasMaxLength(160)
@@ -4793,7 +5092,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<decimal>("PriceSnapshot")
+                    b.Property<decimal?>("PriceSnapshot")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
@@ -4842,6 +5141,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "CollectionId")
                         .IsUnique();
 
+                    b.HasIndex("AcademyId", "ImportJobId");
+
                     b.HasIndex("AcademyId", "IsActive");
 
                     b.HasIndex("AcademyId", "SportEnrollmentId", "SportId");
@@ -4852,6 +5153,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SubscriptionPeriods", null, t =>
                         {
+                            t.HasCheckConstraint("CK_SubscriptionPeriod_Origin", "(\"Origin\" = 'Collected' AND \"CollectionId\" IS NOT NULL AND \"ImportJobId\" IS NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" >= 0) OR (\"Origin\" = 'ImportedHistorical' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NOT NULL AND (\"PriceSnapshot\" IS NULL OR \"PriceSnapshot\" >= 0))");
+
                             t.HasCheckConstraint("CK_SubscriptionPeriods_RemainingSessions", "\"RemainingSessions\" IS NULL OR \"RemainingSessions\" >= 0");
                         });
                 });
@@ -6428,6 +6731,28 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.People.AcademyImportJob", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "MembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.People.GuardianPlayerLink", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -6470,6 +6795,80 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.People.ImportedEnrollment", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.GuardianProfile", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "GuardianId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.AcademyImportJob", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "JobId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "PlayerId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.SportEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportEnrollmentId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPeriod", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SubscriptionPeriodId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.People.ImportedHousehold", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.GuardianProfile", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "GuardianId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.AcademyImportJob", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "JobId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.People.NewEnrollmentRequest", b =>
@@ -6907,6 +7306,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Academy.Infrastructure.People.AcademyImportJob", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ImportJobId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPlan", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "PlanId")
@@ -7062,8 +7467,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "CollectionId")
                         .HasPrincipalKey("AcademyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.AcademyImportJob", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ImportJobId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.People.SportEnrollment", "SportEnrollment")
                         .WithMany()

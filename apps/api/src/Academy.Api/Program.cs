@@ -132,6 +132,8 @@ builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
+builder.Services.AddScoped<Academy.Api.Importing.ImportCommitService>();
+if (builder.Configuration.GetValue("Imports:WorkerEnabled", true)) builder.Services.AddHostedService<Academy.Api.Importing.ImportWorker>();
 builder.Services.AddScoped<IEvaluationReportCalculator, EvaluationReportCalculator>();
 builder.Services.AddHealthChecks().AddDbContextCheck<FoundationDbContext>("postgresql", tags: ["ready"]);
 

@@ -32,7 +32,7 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
         {
             var payments = await db.PaymentRequests.Where(x => ids.Contains(x.RenewalRequestId)).Select(x => x.Id).ToArrayAsync();
             var collections = await db.Collections.Where(x => ids.Contains(x.RenewalRequestId)).Select(x => x.Id).ToArrayAsync();
-            var periods = await db.SubscriptionPeriods.Where(x => collections.Contains(x.CollectionId)).Select(x => x.Id).ToArrayAsync();
+            var periods = await db.SubscriptionPeriods.Where(x => x.CollectionId.HasValue && collections.Contains(x.CollectionId.Value)).Select(x => x.Id).ToArrayAsync();
             await db.SubscriptionAdjustments.Where(x => periods.Contains(x.SubscriptionPeriodId)).ExecuteDeleteAsync();
             await db.SubscriptionPeriods.Where(x => periods.Contains(x.Id)).ExecuteDeleteAsync();
             await db.Receipts.Where(x => collections.Contains(x.CollectionId)).ExecuteDeleteAsync();

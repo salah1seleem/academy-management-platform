@@ -74,7 +74,7 @@ export function PlanList() {
 export { PlanForm } from "./plan-editor";
 
 type Adjustment = { id: string; type: string; effectiveDate: string; daysDelta?: number; oldEndDate?: string; newEndDate?: string; reason: string; performedBy: string; performedAtUtc: string };
-type PeriodDetails = { id: string; sportEnrollmentId: string; player: string; playerCode: string; sport: string; branch: string; group: string; plan: string; planType: "Duration" | "Sessions" | "Combined"; startDate: string; endDate?: string; frozenFromDate?: string; initialSessions?: number; remainingSessions?: number; status: string; version: number; priceSnapshot: number; currencySnapshot: string; receiptId?: string; adjustments: Adjustment[] };
+type PeriodDetails = { id: string; sportEnrollmentId: string; player: string; playerCode: string; sport: string; branch: string; group: string; plan: string; planType: "Duration" | "Sessions" | "Combined"; startDate: string; endDate?: string; frozenFromDate?: string; initialSessions?: number; remainingSessions?: number; status: string; version: number; priceSnapshot: number | null; currencySnapshot: string; receiptId?: string; adjustments: Adjustment[] };
 type ActionKind = "freeze" | "resume" | "add" | "deduct" | "cancel";
 const adjustmentLabels: Record<string, string> = { FreezeStarted: "بدء التجميد", FreezeEnded: "استئناف الاشتراك", DaysAdded: "إضافة أيام", DaysDeducted: "خصم أيام", Cancelled: "إلغاء الاشتراك" };
 

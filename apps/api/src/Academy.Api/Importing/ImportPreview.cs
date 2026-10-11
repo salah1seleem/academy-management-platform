@@ -19,11 +19,14 @@ public sealed record ImportPreviewRow(int Row, string LegacyPlayerId, string Leg
     string? BasePrice, string? Discount, string? AgreedNet, string Currency, string ExistingNew, string? Notes);
 public sealed record ImportPreviewResult(string SchemaVersion, string FileHash, string ReferenceStamp, string? SourceSystem, DateOnly? CutoffDate,
     int RowCount, int PlayerCount, int HouseholdCount, int FinanciallyIncomplete, bool CanApprove,
-    IReadOnlyList<ImportIssue> Errors, IReadOnlyList<ImportPreviewRow> Rows);
+    IReadOnlyList<ImportIssue> Errors, IReadOnlyList<ImportPreviewRow> Rows)
+{
+    public ImportGuardianMatch[] GuardianMatches { get; init; } = [];
+}
 
 public static class ImportPreview
 {
-    public static ImportPreviewResult Validate(ImportWorkbook book, ImportReferences references, string fileHash)
+    public static ImportPreviewResult Validate(ImportWorkbook book, ImportReferences references, string fileHash, ISet<string>? existingEnrollmentIds = null)
     {
         var errors = new List<ImportIssue>(); var totalErrors = 0;
         void Error(string sheet, int row, string col, string message) { totalErrors++; if (errors.Count < 300) errors.Add(new(sheet, row, col, message)); }
@@ -55,6 +58,7 @@ public static class ImportPreview
             foreach (var c in ImportSchema.Enrollments) if (V(c.Key).Length > (c.Key == "Notes" ? 500 : 160)) Bad(c.Key, "القيمة أطول من الحد المسموح.");
             foreach (var key in new[] { "LegacyPlayerId", "LegacyEnrollmentId", "HouseholdRef" }) if (V(key).Length > 0 && !Regex.IsMatch(V(key), "^[A-Za-z0-9_.:-]{1,80}$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50))) Bad(key, "استخدم كودًا ثابتًا بحروف لاتينية وأرقام دون مسافات.");
             if (!row["GuardianPhone"].IsText || !Regex.IsMatch(V("GuardianPhone"), "^\\+?[0-9]{10,15}$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50))) Bad("GuardianPhone", "الهاتف يجب أن يكون نصًا من 10 إلى 15 رقمًا؛ لا تحول الهاتف إلى رقم Excel.");
+            else if (Academy.Api.Auth.EgyptPhoneNormalizer.Normalize(V("GuardianPhone")) is null) Bad("GuardianPhone", "أدخل هاتفًا مصريًا صالحًا للتفعيل الحالي، مثل 010xxxxxxxx أو +2010xxxxxxxx.");
             var birth = Date(V("DateOfBirth")); var start = Date(V("StartDate")); var end = Date(V("EndDate"));
             if (birth is null || birth > cutoff) Bad("DateOfBirth", "تاريخ الميلاد غير صحيح.");
             if (start is null) Bad("StartDate", "بداية الخدمة مطلوبة بصيغة yyyy-MM-dd.");
@@ -81,16 +85,16 @@ public static class ImportPreview
             if (V("ExistingNew") is not ("existing" or "new")) Bad("ExistingNew", "اكتب existing أو new.");
             if (!enrollmentIds.Add(V("LegacyEnrollmentId"))) Bad("LegacyEnrollmentId", "كود التسجيل مكرر في الملف.");
             if (!playerSport.Add(V("LegacyPlayerId") + ":" + V("SportCode"))) Bad("LegacyPlayerId", "تسجيل الرياضة نفسه مكرر للطفل. لا نكرر اللاعب أو الاشتراك.");
-            var identity = JsonSerializer.Serialize(new { name = V("PlayerName"), birth, phone = V("GuardianPhone"), guardian = V("GuardianName"), family = V("HouseholdRef") });
+            var identity = JsonSerializer.Serialize(new { name = V("PlayerName"), birth, phone = Academy.Api.Auth.EgyptPhoneNormalizer.Normalize(V("GuardianPhone")), guardian = V("GuardianName"), family = V("HouseholdRef") });
             if (playerIdentity.TryGetValue(V("LegacyPlayerId"), out var previous) && previous != identity) Bad("LegacyPlayerId", "بيانات الطفل المتكرر عبر الرياضات متعارضة."); else playerIdentity[V("LegacyPlayerId")] = identity;
-            var family = V("HouseholdRef"); if (family.Length > 0) { var identityKey = V("GuardianPhone") + ":" + V("GuardianName"); if (householdIdentity.TryGetValue(family, out var known) && known != identityKey) Bad("HouseholdRef", "كود الأسرة يرتبط ببيانات أولياء أمور متعارضة وتحتاج مراجعة."); else householdIdentity[family] = identityKey; }
+            var family = V("HouseholdRef"); if (family.Length > 0) { var identityKey = Academy.Api.Auth.EgyptPhoneNormalizer.Normalize(V("GuardianPhone")) + ":" + V("GuardianName"); if (householdIdentity.TryGetValue(family, out var known) && known != identityKey) Bad("HouseholdRef", "كود الأسرة يرتبط ببيانات أولياء أمور متعارضة وتحتاج مراجعة."); else householdIdentity[family] = identityKey; }
             if (totalErrors == before) result.Add(new(number, V("LegacyPlayerId"), V("LegacyEnrollmentId"), V("PlayerName"), V("GuardianName"), V("GuardianPhone"), family.Length == 0 ? null : family,
                 birth!.Value, branch!.Id, sport!.Id, group!.Id, product!.Id, product.Revision, start!.Value, end, entitled, remaining, mode.Length == 0 ? null : mode,
                 basis?.ToString("0.00", CultureInfo.InvariantCulture), discount?.ToString("0.00", CultureInfo.InvariantCulture), net?.ToString("0.00", CultureInfo.InvariantCulture), V("Currency"), V("ExistingNew"), V("Notes")));
         }
         if (rowCount is 0 or > ImportSchema.MaxRows) Error("Enrollments", 1, "", "الملف يتطلب من 1 إلى 1000 تسجيل.");
-        foreach (var g in result.GroupBy(r => r.GroupId)) { var reference = references.Values.Single(v => v.Id == g.Key && v.Kind == "group"); if (reference.Capacity is { } capacity && reference.Occupied + g.Count() > capacity) Error("Enrollments", g.First().Row, "GroupCode", "المجموعة تتجاوز سعتها الحالية. عالج السعة أو التوزيع قبل الاعتماد."); }
-        foreach (var phones in result.GroupBy(r => r.GuardianPhone)) if (phones.Select(p => p.LegacyPlayerId).Distinct().Count() > 1 && (phones.Any(p => p.HouseholdRef is null) || phones.Select(p => p.HouseholdRef).Distinct().Count() != 1)) Error("Enrollments", phones.First().Row, "HouseholdRef", "الهاتف المشترك يحتاج كود أسرة موحدًا واعتماد الربط؛ لا دمج آلي بالهاتف.");
+        foreach (var g in result.GroupBy(r => r.GroupId)) { var reference = references.Values.Single(v => v.Id == g.Key && v.Kind == "group"); if (reference.Capacity is { } capacity && reference.Occupied + g.Count(r => existingEnrollmentIds?.Contains(r.LegacyEnrollmentId) != true) > capacity) Error("Enrollments", g.First().Row, "GroupCode", "المجموعة تتجاوز سعتها الحالية. عالج السعة أو التوزيع قبل الاعتماد."); }
+        foreach (var phones in result.GroupBy(r => Academy.Api.Auth.EgyptPhoneNormalizer.Normalize(r.GuardianPhone))) if (phones.Select(p => p.LegacyPlayerId).Distinct().Count() > 1 && (phones.Any(p => p.HouseholdRef is null) || phones.Select(p => p.HouseholdRef).Distinct().Count() != 1)) Error("Enrollments", phones.First().Row, "HouseholdRef", "الهاتف المشترك يحتاج كود أسرة موحدًا واعتماد الربط؛ لا دمج آلي بالهاتف.");
         var balances = Rows("OpenBalances", ImportSchema.OpenBalances);
         var balanceKeys = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < balances.Length; i++)

@@ -56,6 +56,9 @@ public sealed partial class FoundationDbContext
         BranchFilter<StaffAttendance>(b, x => TrainingSessions.Any(s => s.Id == x.TrainingSessionId));
         BranchFilter<SubscriptionSessionMovement>(b, x => SubscriptionPeriods.Any(p => p.Id == x.SubscriptionPeriodId));
         BranchFilter<SubscriptionPeriod>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<AcademyImportJob>(b, x => x.ActorUserId == RequestUserId);
+        BranchFilter<ImportedEnrollment>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ImportedHousehold>(b, x => GuardianProfiles.Any(g => g.Id == x.GuardianId));
         BranchFilter<SubscriptionPlan>(b, x => x.AllBranches || PlanBranchPublications.Any(p => p.SubscriptionPlanId == x.Id && p.IsActive)
             || RenewalRequests.Any(r => r.SubscriptionPlanId == x.Id) || SubscriptionPeriods.Any(p => p.SubscriptionPlanId == x.Id));
         BranchFilter<PlanBranchPublication>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -116,11 +119,14 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
-        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion && e.State is EntityState.Modified or EntityState.Deleted))
+        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
         foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))
             if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot), nameof(IPlanTermsSnapshot.DurationMonthsSnapshot), nameof(IPlanTermsSnapshot.ServiceKindSnapshot), nameof(IPlanTermsSnapshot.TrainingFormatSnapshot) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("شروط الاشتراك محفوظة عند الطلب ولا يمكن استبدالها بشروط باقة جديدة.");
+        foreach (var entry in ChangeTracker.Entries<SubscriptionPeriod>().Where(e => e.State == EntityState.Modified && e.OriginalValues.GetValue<SubscriptionOrigin>(nameof(SubscriptionPeriod.Origin)) == SubscriptionOrigin.ImportedHistorical))
+            if (new[] { nameof(SubscriptionPeriod.Origin), nameof(SubscriptionPeriod.ImportJobId), nameof(SubscriptionPeriod.CollectionId), nameof(SubscriptionPeriod.PriceSnapshot) }.Any(p => entry.Property(p).IsModified))
+                throw new InvalidOperationException("اتفاق الاستيراد ثابت، ولا يتحول إلى تحصيل أو يعاد تسعيره تلقائيًا.");
         if (!RequestScopeEnabled) return;
         ChangeTracker.DetectChanges();
         var entries = ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted && e.Metadata.FindProperty("AcademyId") is not null).ToArray();

@@ -19,6 +19,9 @@
 .import-start-icon { padding: 18px; border-radius: 18px; color: #235b89; background: #e9f4ff; }
 .import-start-card .form-actions { flex: 1; justify-content: flex-end; }
 .import-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.import-approval { display: grid; gap: 1rem; margin-block: 1.5rem; padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; background: #f7faff; }
+.import-approval .checkbox-line { display: flex; align-items: flex-start; gap: .6rem; font-weight: 500; }
+.import-approval .checkbox-line input { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin-top: .2rem; accent-color: var(--academy-primary, #ca1535); }
 .import-steps { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-block: 20px; }
 .import-steps li { display: grid; grid-template-columns: 32px 1fr; gap: 5px 12px; padding: 18px; border-radius: 16px; background: #edf3fc; }
 .import-steps li span { grid-row: span 2; display: grid; place-items: center; border-radius: 50%; width: 30px; height: 30px; color: #27578b; background: white; font-weight: 700; }

@@ -98,7 +98,7 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         if (renewals.Length == 0) return;
         var payments = await db.PaymentRequests.Where(x => renewals.Contains(x.RenewalRequestId)).Select(x => x.Id).ToArrayAsync();
         var collections = await db.Collections.Where(x => renewals.Contains(x.RenewalRequestId)).Select(x => x.Id).ToArrayAsync();
-        await db.SubscriptionPeriods.Where(x => collections.Contains(x.CollectionId)).ExecuteDeleteAsync();
+        await db.SubscriptionPeriods.Where(x => x.CollectionId.HasValue && collections.Contains(x.CollectionId.Value)).ExecuteDeleteAsync();
         await db.Receipts.Where(x => collections.Contains(x.CollectionId)).ExecuteDeleteAsync();
         await db.Collections.Where(x => collections.Contains(x.Id)).ExecuteDeleteAsync();
         await db.PaymentProviderEvents.Where(x => payments.Contains(x.PaymentRequestId)).ExecuteDeleteAsync();

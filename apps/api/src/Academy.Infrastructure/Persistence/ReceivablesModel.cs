@@ -25,7 +25,7 @@ public sealed partial class FoundationDbContext
             e.HasOne<Player>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<SubscriptionPlan>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PlanId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
-            e.ToTable(t => t.HasCheckConstraint("CK_ReceivableDocument_Positive", "\"Amount\" > 0"));
+            e.ToTable(t => t.HasCheckConstraint("CK_ReceivableDocument_Positive", "\"Amount\" > 0 OR (\"Amount\" < 0 AND \"Source\" = 'OpeningBalance' AND \"ImportJobId\" IS NOT NULL)"));
         });
         b.Entity<ReceivableMovement>(e => {
             e.Property(x => x.Amount).HasPrecision(18, 2); e.Property(x => x.Currency).HasMaxLength(3); e.Property(x => x.Reason).HasMaxLength(400);

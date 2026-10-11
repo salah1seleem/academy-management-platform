@@ -35,6 +35,7 @@ public sealed class ImportSchemaTests
         var result = ImportPreview.Validate(parsed, Refs(), "hash"); Assert.True(result.CanApprove, string.Join(',', result.Errors.Select(e => e.Message))); Assert.Equal(1000, result.RowCount); Assert.Equal(1000, result.PlayerCount);
         Assert.All(result.Rows, r => { Assert.Equal("540.00", r.AgreedNet); Assert.Null(r.Discount); Assert.Equal(3, r.PriceRevision); Assert.StartsWith("010", r.GuardianPhone); });
         Assert.Equal(ImportSchema.Enrollments.Select(c => c.Key), parsed.Sheet("Enrollments").Rows[0].Select(c => c.Value));
+        Assert.Equal(bytes, ImportXlsx.Write(source)); // byte-stable template, not ZIP wall-clock timestamps
     }
     [Theory]
     [InlineData("GuardianPhone", "1000000001", false)]
@@ -84,6 +85,7 @@ public sealed class ImportSchemaTests
         Assert.False(ImportPreview.Validate(Filled(), Refs() with { Stamp = "changed" }, "hash").CanApprove);
         var duplicate = Change(Filled(count: 2), "LegacyEnrollmentId", "E-0", row: 2); Assert.Contains(ImportPreview.Validate(duplicate, Refs(), "hash").Errors, e => e.Column == "LegacyEnrollmentId");
         var siblings = Change(Filled(count: 2), "GuardianPhone", "01000000000", row: 2); Assert.Contains(ImportPreview.Validate(siblings, Refs(), "hash").Errors, e => e.Column == "HouseholdRef");
+        var aliases = Change(Filled(count: 2), "GuardianPhone", "+201000000000", row: 2); Assert.Contains(ImportPreview.Validate(aliases, Refs(), "hash").Errors, e => e.Column == "HouseholdRef");
     }
     [Fact]
     public void Error_cap_never_makes_an_invalid_row_eligible_or_throws()

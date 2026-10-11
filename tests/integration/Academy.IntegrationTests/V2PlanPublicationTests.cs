@@ -21,7 +21,13 @@ namespace Academy.IntegrationTests;
 public sealed partial class V2PlanPublicationTests : IAsyncLifetime
 {
     private Factory factory = null!;
-    public Task InitializeAsync() { factory = new(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Isolated database required")); _ = factory.CreateClient(); return Task.CompletedTask; }
+    public async Task InitializeAsync()
+    {
+        factory = new(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Isolated database required")); _ = factory.CreateClient();
+        // Retain abandoned synthetic test audit rows, release only their queue leases on a repeated test run.
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        await db.AcademyImportJobs.Where(j => j.SourceSystem.StartsWith("test-") && (j.State == ImportJobState.Queued || j.State == ImportJobState.Running)).ExecuteUpdateAsync(s => s.SetProperty(j => j.State, ImportJobState.Expired).SetProperty(j => j.StagedFile, (byte[]?)null).SetProperty(j => j.ErrorCode, "expired"));
+    }
     public async Task DisposeAsync() => await factory.DisposeAsync();
     private async Task<(Guid A, Guid B, Guid Group, Guid Enrollment, Guid Owner, int BirthYear)> Fixture(bool linkedGuardian = true)
     {
@@ -209,5 +215,5 @@ public sealed partial class V2PlanPublicationTests : IAsyncLifetime
     private async Task<HttpClient> Staff(string email = DemoSeed.OwnerEmail) { var c = factory.CreateClient(); (await Write(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); return c; }
     private async Task<HttpClient> Guardian() { var c = factory.CreateClient(); var r = await Write(c, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }); r.EnsureSuccessStatusCode(); var id = (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid(); (await Write(c, "/api/v1/auth/guardian/otp/verify", new { phoneNumber = DemoSeed.GuardianPhone, challengeId = id, code = "246810" })).EnsureSuccessStatusCode(); return c; }
     private static async Task<HttpResponseMessage> Write(HttpClient c, string path, object body, bool put = false) { var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var r = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(body) }; r.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); r.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString()); return await c.SendAsync(r); }
-    private sealed class Factory(string connection) : WebApplicationFactory<Program> { protected override void ConfigureWebHost(IWebHostBuilder b) { b.UseEnvironment("Demo"); b.UseSetting("ConnectionStrings:Default", connection); b.UseSetting("Demo:SeedProfile", "LegacyRegression"); b.UseSetting("Demo:SeedEnabled", "true"); b.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); b.UseSetting("Demo:FixedOtpEnabled", "true"); b.UseSetting("Demo:FixedOtp", "246810"); b.UseSetting("Demo:ReferenceDate", "2026-09-28"); b.UseSetting("Payments:InternalTest:Enabled", "true"); b.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456"); } }
+    private sealed class Factory(string connection) : WebApplicationFactory<Program> { protected override void ConfigureWebHost(IWebHostBuilder b) { b.UseEnvironment("Demo"); b.UseSetting("Imports:WorkerEnabled", "false"); b.UseSetting("ConnectionStrings:Default", connection); b.UseSetting("Demo:SeedProfile", "LegacyRegression"); b.UseSetting("Demo:SeedEnabled", "true"); b.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); b.UseSetting("Demo:FixedOtpEnabled", "true"); b.UseSetting("Demo:FixedOtp", "246810"); b.UseSetting("Demo:ReferenceDate", "2026-09-28"); b.UseSetting("Payments:InternalTest:Enabled", "true"); b.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456"); } }
 }

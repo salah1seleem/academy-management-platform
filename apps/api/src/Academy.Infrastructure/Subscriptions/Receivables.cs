@@ -7,6 +7,7 @@ public enum ReceivableSource { ManualCharge = 1, OpeningBalance = 2 }
 public enum ReceivableMovementKind { CreditNote = 1, PaymentAllocation = 2 }
 public sealed class ReceivableDocument : TenantEntity
 {
+    public Guid? ImportJobId { get; set; }
     public Guid SportEnrollmentId { get; set; }
     public Guid PlayerId { get; set; }
     public required string PlayerNameSnapshot { get; set; }

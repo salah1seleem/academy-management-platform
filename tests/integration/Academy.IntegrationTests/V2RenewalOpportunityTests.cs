@@ -69,7 +69,7 @@ public sealed partial class V2PlanPublicationTests
         period.StartDate = new(2026, 8, 29); period.EndDate = new(2026, 9, 28); await db.SaveChangesAsync(); await Count(0); // inclusive last service day
         period.EndDate = new(2026, 9, 27); period.Collection.PaymentRequest.Status = PaymentRequestStatus.Failed; await db.SaveChangesAsync(); await Count(0);
         period.Collection.PaymentRequest.Status = PaymentRequestStatus.Confirmed; period.SportEnrollment.Player.IsActive = false; await db.SaveChangesAsync(); await Count(0);
-        period.SportEnrollment.Player.IsActive = true; db.CollectionRefunds.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, CollectionId = period.CollectionId, PlayerId = period.SportEnrollment.PlayerId, Amount = 1, Currency = "EGP", PerformedByUserId = f.Owner, IdempotencyKey = Guid.NewGuid().ToString() }); await db.SaveChangesAsync(); await Count(0);
+        period.SportEnrollment.Player.IsActive = true; db.CollectionRefunds.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, CollectionId = period.CollectionId!.Value, PlayerId = period.SportEnrollment.PlayerId, Amount = 1, Currency = "EGP", PerformedByUserId = f.Owner, IdempotencyKey = Guid.NewGuid().ToString() }); await db.SaveChangesAsync(); await Count(0);
     }
     [Fact]
     public async Task Branch_admin_forecast_and_options_are_scoped_and_export_requires_its_own_grant()
