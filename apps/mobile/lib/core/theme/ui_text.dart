@@ -64,6 +64,7 @@ class UiText extends StatelessWidget {
 }
 
 const _english = <String, String>{
+  'بطاقة اللاعب': 'Player card',
   'تدريب خاص': 'Private training',
   'تدريب شبه خاص': 'Semi-private training',
   'تدريب جماعي': 'Group training',

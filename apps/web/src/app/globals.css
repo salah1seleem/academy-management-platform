@@ -461,6 +461,21 @@ footer {
 .player-identity em { display: block; margin-block-start: .3rem; color: var(--warning); font-size: .78rem; font-style: normal; }
 .avatar { display: grid; flex: 0 0 2.7rem; width: 2.7rem; height: 2.7rem; color: white; background: var(--primary); border-radius: 50%; place-items: center; font-weight: 900; }
 .status-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }
+.player-card-panel h2, .player-card-lookup summary { display: flex; align-items: center; gap: .5rem; }
+.player-card-paper { display: grid; justify-items: center; gap: .6rem; margin: 1rem auto; padding: 1.5rem; border: 1px solid var(--border); border-radius: 1.25rem; max-width: 22rem; background: white; color: #172238; text-align: center; }
+.player-card-paper img { width: min(100%, 256px); height: auto; background: white; }
+.player-card-paper h3 small { display: block; margin-top: .4rem; font-size: .85rem; font-weight: 500; }
+.guardian-app .player-card-page > .back-link { color: white; }
+.player-card-lookup { padding: 1rem; margin-block: 1rem; border: 1px solid var(--border); border-radius: 1rem; }
+.player-card-lookup summary { cursor: pointer; font-weight: 800; }
+.player-card-lookup form { display: flex; flex-wrap: wrap; gap: .7rem; margin-block: .8rem; align-items: end; }
+.player-card-lookup label { flex: 1 1 16rem; }
+.player-card-lookup input { width: 100%; }
+@media print {
+  body:has(.player-card-paper) * { visibility: hidden; }
+  body .player-card-paper, body .player-card-paper * { visibility: visible; }
+  body .player-card-paper { position: absolute; top: 0; left: 0; width: 80mm; margin: 0; break-inside: avoid; }
+}
 .status-picker button { min-height: 2.75rem; padding: .5rem; color: var(--muted); background: white; border: 1px solid var(--border); border-radius: .65rem; cursor: pointer; }
 .status-picker button.selected { color: white; background: var(--primary); border-color: var(--primary); font-weight: 900; }
 .attendance-save { margin-block-start: .8rem; }

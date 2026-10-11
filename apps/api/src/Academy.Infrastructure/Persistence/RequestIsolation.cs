@@ -62,6 +62,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<ProductSale>(b, x => x.BranchId.HasValue && RequestBranchIds.Contains(x.BranchId.Value));
         BranchFilter<NewEnrollmentRequest>(b, x => RequestBranchIds.Contains(x.PreferredBranchId));
         BranchFilter<Player>(b, x => SportEnrollments.Any(e => e.PlayerId == x.Id));
+        BranchFilter<PlayerCard>(b, x => Players.Any(p => p.Id == x.PlayerId));
         BranchFilter<GuardianPlayerLink>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
         BranchFilter<GuardianProfile>(b, x => GuardianPlayerLinks.Any(l => l.GuardianId == x.Id));
         BranchFilter<RecurringSchedule>(b, x => TrainingGroups.Any(g => g.Id == x.TrainingGroupId));
@@ -133,6 +134,9 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        foreach (var entry in ChangeTracker.Entries<PlayerCard>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
+            if (entry.State == EntityState.Deleted || !entry.OriginalValues.GetValue<bool>(nameof(PlayerCard.IsActive)) || entry.Entity.IsActive || new[] { nameof(PlayerCard.PlayerId), nameof(PlayerCard.AcademyId), nameof(PlayerCard.TokenHash), nameof(PlayerCard.ProtectedToken), nameof(PlayerCard.ExpiresAtUtc), nameof(PlayerCard.IssuedByUserId), nameof(PlayerCard.RequestKey), nameof(PlayerCard.PreviousVersion), nameof(PlayerCard.CreatedAtUtc) }.Any(p => entry.Property(p).IsModified))
+                throw new InvalidOperationException("البطاقة ثابتة؛ يمكن إلغاؤها فقط ثم إصدار بطاقة جديدة.");
         if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
         foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))

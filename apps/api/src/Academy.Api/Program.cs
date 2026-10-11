@@ -70,6 +70,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("mobile-auth", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("player-card", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("renewal-search", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
@@ -131,6 +134,7 @@ builder.Services.AddScoped<RenewalCreationService>();
 builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
+builder.Services.AddScoped<PlayerCardService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
 builder.Services.AddScoped<GroupPlacementService>();
@@ -325,6 +329,7 @@ app.MapCoachProvisioning();
 app.MapSlice2DashboardEndpoints();
 app.MapSlice3Endpoints();
 app.MapSlice4Endpoints();
+app.MapPlayerCards();
 app.MapSlice5Endpoints();
 app.MapSlice6Endpoints();
 app.MapSlice7Endpoints();

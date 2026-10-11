@@ -8,6 +8,7 @@ import 'guardian_content.dart';
 import 'guardian_payments.dart';
 import 'group_transfer_notice.dart';
 import 'compensation_card.dart';
+import 'player_card.dart';
 
 class ChildProfile extends StatelessWidget {
   final AuthController auth;
@@ -72,6 +73,18 @@ class ChildProfile extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           GLink(
+            'بطاقة اللاعب',
+            Icons.qr_code_2,
+            () => openPage(
+              context,
+              GuardianPlayerCard(
+                auth: auth,
+                playerId: playerId,
+                name: textOf(player['arabicName']),
+              ),
+            ),
+          ),
+          GLink(
             'تقرير اللاعب',
             Icons.sports_soccer,
             () => openPage(
@@ -125,7 +138,8 @@ class ChildProfile extends StatelessWidget {
           ),
           if (rows(data['compensations']).isNotEmpty) ...[
             const Heading('التعويضات المعتمدة'),
-            for (final credit in rows(data['compensations'])) CompensationCard(data: credit),
+            for (final credit in rows(data['compensations']))
+              CompensationCard(data: credit),
           ],
           const Heading('الاشتراكات'),
           for (final e in enrollments)

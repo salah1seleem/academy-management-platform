@@ -9,6 +9,7 @@ import { IdentityMark } from "../components/sports-ui";
 import { csrfRequest, uploadAsset } from "./dashboard-api";
 import { SubscriptionPeriodDetail } from "./subscriptions";
 import { PlayerGroupChange } from "./player-group-change";
+import { PlayerCardPanel } from "./player-card";
 import { PlayerRefunds } from "./player-refunds";
 import { PlayerDiscounts } from "./discount-rules";
 import { formatDateAr, statusLabel } from "../lib/formatters";
@@ -40,7 +41,7 @@ export function PlayerDetails({ id }: { id: string }) {
       <div><dt>القدم المفضلة</dt><dd>{({ 1: "اليمنى", 2: "اليسرى", 3: "القدمان", Right: "اليمنى", Left: "اليسرى", Both: "القدمان" } as Record<string, string>)[player.preferredFoot ?? 0] ?? "غير مسجل"}</dd></div>
       <div><dt>الطول / الوزن</dt><dd>{player.heightCm ? `${player.heightCm} سم` : "الطول غير مسجل"} · {player.weightKg ? `${player.weightKg} كجم` : "الوزن غير مسجل"}</dd></div>
     </dl></section>
-    <section className="detail-card"><h2>المتابعة والتواصل</h2><nav className="profile-record-links" aria-label="سجلات المتابعة"><Link href={`/dashboard/attendance/history?playerId=${player.id}`}>سجل الحضور</Link><Link href={`/dashboard/evaluations?playerId=${player.id}`}>تقييمات اللاعب</Link><Link href={`/dashboard/players/${id}?tab=more#player-guardians`}>إدارة روابط أولياء الأمور</Link></nav></section>
+    <PlayerCardPanel playerId={id} name={player.arabicName} /><section className="detail-card"><h2>المتابعة والتواصل</h2><nav className="profile-record-links" aria-label="سجلات المتابعة"><Link href={`/dashboard/attendance/history?playerId=${player.id}`}>سجل الحضور</Link><Link href={`/dashboard/evaluations?playerId=${player.id}`}>تقييمات اللاعب</Link><Link href={`/dashboard/players/${id}?tab=more#player-guardians`}>إدارة روابط أولياء الأمور</Link></nav></section>
     </> }, { id: "subscriptions", label: "الاشتراكات والمالية", content: <>
     <section className="detail-card"><div className="linked-list"><h3>التسجيلات والاشتراكات</h3>{player.enrollments.length ? player.enrollments.map(enrollment => <article key={enrollment.id}>
       <div><strong>{enrollment.sportName}</strong><small>{enrollment.branchName} · {enrollment.categoryName} · {enrollment.groupName}</small>{enrollment.subscription ? <><small>{enrollment.subscription.plan} · {formatDateAr(enrollment.subscription.startDate)} إلى {enrollment.subscription.endDate ? formatDateAr(enrollment.subscription.endDate) : "بالحصص"}</small><StatusBadge status={enrollment.subscription.status} /></> : <small>لا توجد فترة اشتراك سابقة</small>}</div>
