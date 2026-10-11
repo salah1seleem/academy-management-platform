@@ -43,6 +43,29 @@ public sealed class ResourceClosure : TenantEntity
     public string? Reason { get; set; }
     public Guid ActorUserId { get; set; }
 }
+public sealed class GroupResourceSchedule : TenantEntity
+{
+    public Guid TrainingGroupId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid ResourceId { get; set; }
+    public Guid CoachMembershipId { get; set; }
+    public int ReservedSeats { get; set; }
+    public bool Exclusive { get; set; }
+    public DateOnly ValidFrom { get; set; }
+    public DateOnly ValidTo { get; set; }
+}
+// Immutable receipt of a schedule change, not a financial receipt.
+public sealed class TrainingScheduleRevision : TenantEntity
+{
+    public Guid TrainingGroupId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public required string RequestKey { get; set; }
+    public required string RequestHash { get; set; }
+    public required string Snapshot { get; set; }
+    public int CreatedSessions { get; set; }
+    public int PreservedSessions { get; set; }
+}
 // A reservation is neither payment proof, access permission nor attendance.
 public sealed class ResourceBooking : TenantEntity
 {

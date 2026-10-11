@@ -76,7 +76,7 @@ public static class FacilityEndpoints
 
 public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor http, TimeProvider time)
 {
-    private async Task<(TenantMembership T, Guid Actor)> Authority(string action)
+    internal async Task<(TenantMembership T, Guid Actor)> Authority(string action)
     {
         var t = await tenant.ResolveAsync() ?? throw new FacilityRejected("يلزم تسجيل الدخول من جديد.", 401);
         var actor = Guid.Parse(http.HttpContext!.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -101,7 +101,7 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         if (member.Role == AcademyRole.AcademyAdmin && !member.AllBranches && !await db.MembershipBranchAccesses.AnyAsync(x => x.MembershipId == member.Id && x.BranchId == id && x.IsActive)) throw new FacilityRejected("الفرع خارج صلاحياتك الحالية.", 403);
     }
     private async Task<DateOnly> Today() { var academy = await db.Academies.SingleAsync(x => x.Id == db.RequestAcademyId); return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(academy.TimeZone)).DateTime); }
-    private async Task<FacilityResource> Lock(Guid id)
+    internal async Task<FacilityResource> Lock(Guid id)
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"facility-resource:{db.RequestAcademyId}:{id}"}, 0))");
         var r = await db.FacilityResources.FromSqlInterpolated($"SELECT *, xmin FROM \"FacilityResources\" WHERE \"Id\" = {id} FOR UPDATE").SingleOrDefaultAsync() ?? throw new FacilityRejected("المورد غير متاح.", 404);
@@ -144,11 +144,24 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
     public async Task<object> Book(BookingWrite b, string key)
     {
         await using var tx = await db.Database.BeginTransactionAsync(); var (t, actor) = await Authority("Add");
+        var row = await ReserveLocked(b, key, t.AcademyId, actor);
+        await tx.CommitAsync(); return row;
+    }
+    internal async Task<ResourceBooking> ReserveLocked(BookingWrite b, string key, Guid academyId, Guid actor)
+    {
         if (key.Length is < 8 or > 100) throw new FacilityRejected("تعذر تحديد عملية الحجز. حاول من نفس الصفحة.", 422);
         var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(b)));
         var prior = await db.ResourceBookings.SingleOrDefaultAsync(x => x.ActorUserId == actor && x.RequestKey == key);
         if (prior is not null) { if (prior.RequestHash != hash) throw new FacilityRejected("معرف الحجز مرتبط بتفاصيل أخرى."); return prior; }
-        var r = await Lock(b.ResourceId); var space = await db.FacilitySpaces.SingleAsync(x => x.Id == r.FacilitySpaceId);
+        var r = await Lock(b.ResourceId);
+        if (b.CoachId.HasValue) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"facility-coach:{academyId}:{b.CoachId}"}, 0))");
+        await CheckSlot(b, r, [], []);
+        var row = new ResourceBooking { Id = Guid.NewGuid(), AcademyId = academyId, BranchId = r.BranchId, ResourceId = r.Id, TrainingGroupId = b.GroupId, TrainingSessionId = b.SessionId, CoachMembershipId = b.CoachId, Date = b.Date, StartTime = b.Start, EndTime = b.End, ReservedSeats = b.Seats, ApprovedCapacitySnapshot = r.Capacity, Exclusive = b.Exclusive, ServiceKind = b.ServiceKind, State = ResourceBookingState.Reserved, ActorUserId = actor, RequestKey = key, RequestHash = hash, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
+        db.ResourceBookings.Add(row); await db.SaveChangesAsync(); return row;
+    }
+    internal async Task CheckSlot(BookingWrite b, FacilityResource r, Guid[] excludedBookings, Guid[] excludedSessions)
+    {
+        var space = await db.FacilitySpaces.SingleAsync(x => x.Id == r.FacilitySpaceId);
         var today = await Today();
         if (!r.IsActive || !space.IsActive || !await db.Facilities.AnyAsync(x => x.Id == space.FacilityId && x.IsActive) || !await db.Branches.AnyAsync(x => x.Id == r.BranchId && x.IsActive) || !await db.Sports.AnyAsync(x => x.Id == space.SportId && x.IsActive) || !r.ApprovedByUserId.HasValue) throw new FacilityRejected("المورد غير مفعل أو سياسة سعته لم تعتمد بعد.");
         if (b.Date < today || b.Date > today.AddDays(366) || b.Start < r.OpensAt || b.End > r.ClosesAt || b.Start >= b.End || !r.OperatingDays.Contains((int)b.Date.DayOfWeek) || !r.ServiceKinds.Contains(b.ServiceKind)) throw new FacilityRejected("الحجز خارج فترة أو نوع تشغيل المورد المسموح.", 422);
@@ -161,17 +174,17 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         }
         else if (b.GroupId.HasValue || b.SessionId.HasValue) throw new FacilityRejected("حجز الخدمة غير التدريبية لا يرتبط بتسجيل تدريب.", 422);
         if (b.SessionId.HasValue && !await db.TrainingSessions.AnyAsync(s => s.Id == b.SessionId && s.TrainingGroupId == b.GroupId && s.Status != TrainingSessionStatus.Cancelled && s.SessionDate == b.Date && s.StartTime == b.Start && s.EndTime == b.End)) throw new FacilityRejected("بيانات الحصة لا تطابق الحجز.", 422);
+        if (b.SessionId.HasValue && await db.ResourceBookings.AnyAsync(x => !excludedBookings.Contains(x.Id) && x.TrainingSessionId == b.SessionId && x.State == ResourceBookingState.Reserved)) throw new FacilityRejected("الحصة مرتبطة بحجز قائم. عدّل ربطها من جدول المجموعة بدل إنشاء حجز ثانٍ.");
         if (b.CoachId.HasValue)
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"facility-coach:{t.AcademyId}:{b.CoachId}"}, 0))");
+            var assignments = db.StaffGroupAssignments.IgnoreQueryFilters(["trusted-branches"]);
             if (!await db.AcademyMemberships.AnyAsync(m => m.Id == b.CoachId && m.IsActive && m.User.IsActive && m.Role == AcademyRole.Coach)) throw new FacilityRejected("المدرب غير متاح.", 422);
-            if (await db.ResourceBookings.AnyAsync(x => x.CoachMembershipId == b.CoachId && x.State == ResourceBookingState.Reserved && x.Date == b.Date && x.StartTime < b.End && b.Start < x.EndTime)
-                || await db.TrainingSessions.AnyAsync(s => s.Id != b.SessionId && s.SessionDate == b.Date && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < b.End && b.Start < s.EndTime && db.StaffGroupAssignments.Any(a => a.TrainingGroupId == s.TrainingGroupId && a.AcademyMembershipId == b.CoachId && a.IsActive))) throw new FacilityRejected("للمدرب حصة أو حجز آخر في هذا الموعد.");
+            // Conflict detection spans authorized academy branches without disclosing their rosters.
+            if (await db.ResourceBookings.IgnoreQueryFilters(["trusted-branches"]).AnyAsync(x => x.AcademyId == r.AcademyId && !excludedBookings.Contains(x.Id) && x.CoachMembershipId == b.CoachId && x.State == ResourceBookingState.Reserved && x.Date == b.Date && x.StartTime < b.End && b.Start < x.EndTime)
+                || await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).AnyAsync(s => s.AcademyId == r.AcademyId && !excludedSessions.Contains(s.Id) && s.Id != b.SessionId && s.SessionDate == b.Date && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < b.End && b.Start < s.EndTime && assignments.Any(a => a.AcademyId == r.AcademyId && a.TrainingGroupId == s.TrainingGroupId && a.AcademyMembershipId == b.CoachId && a.IsActive))) throw new FacilityRejected("للمدرب حصة أو حجز آخر في هذا الموعد.");
         }
-        var slots = await db.ResourceBookings.Where(x => x.ResourceId == r.Id && x.Date == b.Date && x.State == ResourceBookingState.Reserved && x.StartTime < b.End && b.Start < x.EndTime).Select(x => new BookingCapacity.Slot(x.StartTime, x.EndTime, x.ReservedSeats, x.Exclusive)).ToListAsync();
+        var slots = await db.ResourceBookings.Where(x => !excludedBookings.Contains(x.Id) && x.ResourceId == r.Id && x.Date == b.Date && x.State == ResourceBookingState.Reserved && x.StartTime < b.End && b.Start < x.EndTime).Select(x => new BookingCapacity.Slot(x.StartTime, x.EndTime, x.ReservedSeats, x.Exclusive)).ToListAsync();
         if (!BookingCapacity.Fits(r.Capacity, r.SharedBookingsAllowed, new(b.Start, b.End, b.Seats, b.Exclusive), slots)) throw new FacilityRejected("الموعد متعارض أو السعة المتبقية لا تكفي. اختر موردًا أو موعدًا آخر.");
-        var row = new ResourceBooking { Id = Guid.NewGuid(), AcademyId = t.AcademyId, BranchId = r.BranchId, ResourceId = r.Id, TrainingGroupId = b.GroupId, TrainingSessionId = b.SessionId, CoachMembershipId = b.CoachId, Date = b.Date, StartTime = b.Start, EndTime = b.End, ReservedSeats = b.Seats, ApprovedCapacitySnapshot = r.Capacity, Exclusive = b.Exclusive, ServiceKind = b.ServiceKind, State = ResourceBookingState.Reserved, ActorUserId = actor, RequestKey = key, RequestHash = hash, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
-        db.ResourceBookings.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return row;
     }
     public async Task<object> Cancel(Guid id)
     {
@@ -179,6 +192,7 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         var row = await db.ResourceBookings.SingleOrDefaultAsync(x => x.Id == id) ?? throw new FacilityRejected("الحجز غير متاح.", 404); await Lock(row.ResourceId);
         // Re-read after the resource lock; retries do not rewrite the first cancellation.
         await db.Entry(row).ReloadAsync(); if (row.Date < await Today()) throw new FacilityRejected("الحجوزات التاريخية لا تعدل من هذه الشاشة.");
+        if (row.State == ResourceBookingState.Reserved && row.TrainingSessionId.HasValue && await db.TrainingSessions.AnyAsync(s => s.Id == row.TrainingSessionId && s.Status != TrainingSessionStatus.Cancelled)) throw new FacilityRejected("الحجز مرتبط بحصة قائمة. ألغِ الحصة أو عدّل جدول المجموعة حتى يبقى الموعد والمورد متزامنين.");
         if (row.State != ResourceBookingState.Cancelled) { row.State = ResourceBookingState.Cancelled; row.CancelledByUserId = actor; row.CancelledAtUtc = time.GetUtcNow(); row.UpdatedAtUtc = time.GetUtcNow(); await db.SaveChangesAsync(); }
         await tx.CommitAsync(); return row;
     }

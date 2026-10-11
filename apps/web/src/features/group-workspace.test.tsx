@@ -41,22 +41,24 @@ describe("training timetable UX", () => {
   });
   it("saves exactly Saturday/Monday/Wednesday, removes explanatory text and returns to groups", async () => {
     const writes: unknown[] = [];
-    global.fetch = vi.fn((input, init) => String(input).includes("csrf") ? response({ token: "token" }) : init ? (writes.push(JSON.parse(String(init.body))), response({ created: 6 })) : response({ players: [], schedules: [{ dayOfWeek: "Saturday", startTime: "17:00:00", endTime: "18:30:00", validFrom: "2026-10-03", validTo: "2026-10-17" }], sessions: [] })) as typeof fetch;
+    global.fetch = vi.fn((input, init) => String(input).endsWith("my-permissions") ? response([]) : String(input).includes("csrf") ? response({ token: "token" }) : init ? (writes.push(JSON.parse(String(init.body))), String(input).endsWith("preview") ? response({ fingerprint: "review", proposedSessions: 6, cancelledSessions: 0, preservedSessions: 0, cancelledBookings: 0, expectedPlayers: 0, conflicts: [] }) : response({ created: 6 })) : response({ players: [], schedules: [{ dayOfWeek: "Saturday", startTime: "17:00:00", endTime: "18:30:00", validFrom: "2026-10-03", validTo: "2026-10-17" }], sessions: [] })) as typeof fetch;
     render(<GroupWorkspace id="group" />);
     await screen.findByRole("checkbox", { name: "السبت" });
     fireEvent.click(screen.getByText("إنشاء الحصص / تعديل الجدول"));
     fireEvent.click(screen.getByRole("checkbox", { name: "الاثنين" })); fireEvent.click(screen.getByRole("checkbox", { name: "الأربعاء" }));
     expect(screen.queryByText(/حتى سنة/)).not.toBeInTheDocument();
+    fireEvent.submit(screen.getByRole("button", { name: "معاينة الجدول" }).closest("form")!);
+    await screen.findByRole("region", { name: "معاينة أثر الجدول" }); expect(push).not.toHaveBeenCalled();
     fireEvent.submit(screen.getByRole("button", { name: "حفظ وإنشاء الحصص" }).closest("form")!);
     await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/academy/groups"));
-    expect(writes).toEqual([{ from: "2026-10-03", to: "2026-10-17", days: [6, 1, 3], startTime: "17:00:00", endTime: "18:30:00" }]);
+    expect(writes).toEqual([{ from: "2026-10-03", to: "2026-10-17", days: [6, 1, 3], startTime: "17:00:00", endTime: "18:30:00" }, { from: "2026-10-03", to: "2026-10-17", days: [6, 1, 3], startTime: "17:00:00", endTime: "18:30:00", previewFingerprint: "review" }]);
   });
   it("never claims success or redirects when persistence fails", async () => {
     const saved = vi.fn(); window.addEventListener("academy-save-success", saved);
     global.fetch = vi.fn((input, init) => String(input).includes("csrf") ? response({ token: "token" }) : init ? response({ message: "تعذر الحفظ" }, 422) : response({ players: [], schedules: [{ dayOfWeek: 6, startTime: "17:00:00", endTime: "18:00:00" }], sessions: [] })) as typeof fetch;
     render(<GroupWorkspace id="group" />); await screen.findByRole("checkbox", { name: "السبت" });
     fireEvent.click(screen.getByText("إنشاء الحصص / تعديل الجدول"));
-    fireEvent.submit(screen.getByRole("button", { name: "حفظ وإنشاء الحصص" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "معاينة الجدول" }).closest("form")!);
     expect(await screen.findByRole("alert")).toHaveTextContent("تعذر الحفظ");
     expect(push).not.toHaveBeenCalled(); expect(saved).not.toHaveBeenCalled(); window.removeEventListener("academy-save-success", saved);
   });

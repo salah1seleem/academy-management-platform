@@ -482,6 +482,11 @@ class NextSessionCard extends StatelessWidget {
                   '${sport['group']} · ${sport['branch']}',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
+                if (session['resource'] != null)
+                  UiText(
+                    textOf(session['resource']),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
               ],
             ),
           ),

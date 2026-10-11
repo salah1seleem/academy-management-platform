@@ -65,7 +65,10 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         await db.SportEnrollments.Where(x => enrollments.Contains(x.Id)).ExecuteDeleteAsync();
         await db.GuardianPlayerLinks.Where(x => players.Contains(x.PlayerId)).ExecuteDeleteAsync();
         await db.Players.Where(x => players.Contains(x.Id)).ExecuteDeleteAsync();
-        var groups = await db.TrainingGroups.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && (x.ArabicName.StartsWith("جدول اختبار مستقل ") || x.ArabicName.StartsWith("مجموعة نقل اختبار "))).Select(x => x.Id).ToArrayAsync();
+        // Immutable timetable revisions retain their original group/session history across reruns.
+        var historicalGroups = db.TrainingScheduleRevisions.Select(x => x.TrainingGroupId);
+        await db.TrainingGroups.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName.StartsWith("جدول اختبار مستقل ") && historicalGroups.Contains(x.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        var groups = await db.TrainingGroups.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && (x.ArabicName.StartsWith("جدول اختبار مستقل ") || x.ArabicName.StartsWith("مجموعة نقل اختبار ")) && !historicalGroups.Contains(x.Id)).Select(x => x.Id).ToArrayAsync();
         await db.TrainingSessions.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
         await db.RecurringSchedules.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
         await db.TrainingGroups.Where(x => groups.Contains(x.Id)).ExecuteDeleteAsync();

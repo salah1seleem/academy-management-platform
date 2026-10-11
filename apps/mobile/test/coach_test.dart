@@ -105,6 +105,7 @@ void main() {
             'startTime': '15:00',
             'endTime': '16:00',
             'recorded': 3,
+            'resource': 'مسبح الاختبار · A',
             'playerCount': 5,
           },
         ];
@@ -131,6 +132,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('مدرب الاختبار'), findsOneWidget);
     expect(find.text('براعم 2018'), findsWidgets);
+    expect(find.textContaining('مسبح الاختبار · A'), findsOneWidget);
     for (final forbidden in ['تحصيل', 'مدفوعات', 'إيرادات', 'اشتراكات']) {
       expect(find.textContaining(forbidden), findsNothing);
     }

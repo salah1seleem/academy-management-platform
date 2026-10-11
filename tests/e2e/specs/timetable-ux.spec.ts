@@ -24,6 +24,7 @@ for (const journey of [
       await page.getByLabel(`${label} — الساعة`, { exact: true }).selectOption(hour); await page.getByLabel(`${label} — الدقيقة`, { exact: true }).selectOption(minute); await page.getByLabel(`${label} — الفترة`, { exact: true }).selectOption("pm");
     }
     await expect(page.getByText(/حتى سنة/)).toHaveCount(0);
+    await page.getByRole("button", { name: "معاينة الجدول", exact: true }).click(); await expect(page.getByRole("region", { name: "معاينة أثر الجدول" })).toBeVisible();
     const save = page.getByRole("button", { name: "حفظ وإنشاء الحصص", exact: true }); await save.hover();
     const colors = await save.evaluate(button => ({ text: getComputedStyle(button).color, background: getComputedStyle(button).backgroundColor }));
     expect(colors.text).toBe("rgb(255, 255, 255)"); expect(colors.background).not.toBe(colors.text);

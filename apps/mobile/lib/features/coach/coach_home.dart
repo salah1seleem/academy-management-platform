@@ -85,7 +85,7 @@ class CoachHome extends StatelessWidget {
                 child: ListTile(
                   title: UiText(textOf(session['group'])),
                   subtitle: UiText(
-                    '${day(session['sessionDate'])} · ${session['startTime']} — ${session['branch']}',
+                    '${day(session['sessionDate'])} · ${session['startTime']} — ${session['branch']}${session['resource'] == null ? '' : '\n${session['resource']}'}',
                   ),
                   trailing: UiText(
                     '${session['recorded']}/${session['playerCount']}',

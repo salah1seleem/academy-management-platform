@@ -13,9 +13,25 @@ public sealed partial class FoundationDbContext
     public DbSet<FacilityResource> FacilityResources => Set<FacilityResource>();
     public DbSet<ResourceBooking> ResourceBookings => Set<ResourceBooking>();
     public DbSet<ResourceClosure> ResourceClosures => Set<ResourceClosure>();
+    public DbSet<GroupResourceSchedule> GroupResourceSchedules => Set<GroupResourceSchedule>();
+    public DbSet<TrainingScheduleRevision> TrainingScheduleRevisions => Set<TrainingScheduleRevision>();
     private static void ConfigureFacilities(ModelBuilder b)
     {
         Tenant<Facility>(b); Tenant<FacilitySpace>(b); Tenant<FacilityResource>(b); Tenant<ResourceBooking>(b); Tenant<ResourceClosure>(b);
+        Tenant<GroupResourceSchedule>(b); Tenant<TrainingScheduleRevision>(b);
+        b.Entity<GroupResourceSchedule>(e => {
+            e.HasIndex(x => new { x.AcademyId, x.TrainingGroupId }).IsUnique();
+            e.HasOne<TrainingGroup>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<FacilityResource>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ResourceId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CoachMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t => t.HasCheckConstraint("CK_GroupResourceSchedule_Range", "\"ReservedSeats\" BETWEEN 1 AND 10000 AND \"ValidFrom\" <= \"ValidTo\""));
+        });
+        b.Entity<TrainingScheduleRevision>(e => {
+            e.Property(x => x.RequestKey).HasMaxLength(100); e.Property(x => x.RequestHash).HasMaxLength(64); e.Property(x => x.Snapshot).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.AcademyId, x.ActorUserId, x.RequestKey }).IsUnique();
+            e.HasOne<TrainingGroup>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
         b.Entity<Facility>(e => {
             e.Property(x => x.Name).HasMaxLength(120); e.HasIndex(x => new { x.AcademyId, x.BranchId, x.Name }).IsUnique();
             e.HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

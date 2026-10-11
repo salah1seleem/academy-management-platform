@@ -19,6 +19,12 @@ Widget shell(Widget child) => MaterialApp(
 );
 
 void main() {
+  testWidgets('Next session shows only its own resource context without a lane roster', (tester) async {
+    await tester.pumpWidget(shell(NextSessionCard(childName: 'لاعب تجريبي', sport: {'group': 'براعم', 'branch': 'فرع الاختبار', 'nextSession': {'sessionDate': '2026-10-24', 'startTime': '17:00', 'endTime': '18:00', 'resource': 'المسبح · A'}}, onTap: () {})));
+    expect(find.text('المسبح · A'), findsOneWidget);
+    expect(find.textContaining('لاعب تجريبي'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'Child card keeps the published score, compact FIFA summary and subscription dates',
     (tester) async {

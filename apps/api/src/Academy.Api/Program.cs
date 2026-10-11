@@ -132,6 +132,8 @@ builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
+builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
+builder.Services.AddScoped<Academy.Api.Facilities.ResourceSessionCoordinator>();
 builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
 builder.Services.AddAuthorization(options => {
     foreach (var p in new[] { AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage }) options.AddPolicy(p, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(p)));
@@ -367,6 +369,7 @@ if (app.Environment.IsEnvironment("Demo"))
             await DiscountPricingDemoSeed.SeedAsync(db);
             await RenewalOpportunityDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:ResourceTimetableSeedEnabled")) await Academy.Api.Facilities.ResourceTimetableDemoSeed.Seed(db);
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

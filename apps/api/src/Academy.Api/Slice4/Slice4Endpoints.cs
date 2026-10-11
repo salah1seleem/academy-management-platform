@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
+using Academy.Api.Facilities;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.People;
@@ -21,9 +22,9 @@ public static class Slice4Endpoints
         api.MapGet("/manage/sessions", ManageSessions).RequireAuthorization(AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.AttendanceRead);
         api.MapGet("/manage/sessions/options", SessionOptions).RequireAuthorization(AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.AttendanceRead);
         attendance.MapGet("/sessions/{id:guid}", GetSession);
-        attendance.MapPost("/sessions", CreateSession).AddEndpointFilter<CsrfFilter>();
-        attendance.MapPost("/sessions/generate", GenerateSessions).AddEndpointFilter<CsrfFilter>();
-        attendance.MapPut("/sessions/{id:guid}/status", SetSessionStatus).AddEndpointFilter<CsrfFilter>();
+        attendance.MapPost("/sessions", CreateSession).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
+        attendance.MapPost("/sessions/generate", GenerateSessions).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
+        attendance.MapPut("/sessions/{id:guid}/status", SetSessionStatus).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
         attendance.MapGet("/sessions/{id:guid}/players", PlayerRoster);
         attendance.MapPut("/sessions/{id:guid}/players", SavePlayerAttendance).RequireAuthorization(AcademyPermissions.AttendanceManage).AddEndpointFilter<CsrfFilter>();
         attendance.MapGet("/sessions/{id:guid}/staff", StaffRoster);
@@ -88,6 +89,7 @@ public static class Slice4Endpoints
         {
             x.Id, x.SessionDate, x.StartTime, x.EndTime, status = x.Status.ToString(), source = x.Source.ToString(), x.TrainingGroupId,
             group = x.TrainingGroup.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName,
+            resource = (from booking in db.ResourceBookings join resource in db.FacilityResources on booking.ResourceId equals resource.Id join space in db.FacilitySpaces on resource.FacilitySpaceId equals space.Id where booking.TrainingSessionId == x.Id && booking.State == Academy.Infrastructure.Facilities.ResourceBookingState.Reserved select space.Name + " · " + resource.Name).FirstOrDefault(),
             coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == academyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
             playerCount = db.SportEnrollments.Count(e => e.AcademyId == academyId && e.TrainingGroupId == x.TrainingGroupId && e.IsActive),
             recorded = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status != AttendanceStatus.NotRecorded),
@@ -104,14 +106,17 @@ public static class Slice4Endpoints
         return Results.Ok(new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), source = session.Source.ToString(), session.Notes, group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName });
     }
 
-    private static async Task<IResult> CreateSession(ManualSessionRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> CreateSession(ManualSessionRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock, ResourceSessionCoordinator resources)
     {
         var t = (await tenant.ResolveAsync())!; if (!IsAdmin(t.Role)) return Results.Forbid(); if (request.StartTime >= request.EndTime) return Validation("time", "وقت النهاية يجب أن يكون بعد وقت البداية.");
         if (request.Notes?.Trim().Length > 500) return Validation("notes", "الملاحظات يجب ألا تتجاوز 500 حرف.");
+        try {
+        await using var tx = await db.Database.BeginTransactionAsync(); await resources.LockCalendar(t.AcademyId, [request.TrainingGroupId]);
         var group = await db.TrainingGroups.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.TrainingGroupId && x.IsActive); if (group is null) return Results.NotFound();
         if (await db.TrainingSessions.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == group.Id && x.SessionDate == request.SessionDate && x.StartTime == request.StartTime)) return Results.Conflict(new { message = "توجد حصة للمجموعة في الموعد نفسه." });
         var session = new TrainingSession { Id = Guid.NewGuid(), AcademyId = t.AcademyId, TrainingGroupId = group.Id, BranchId = group.BranchId, SportId = group.SportId, AgeCategoryId = group.AgeCategoryId, SessionDate = request.SessionDate, StartTime = request.StartTime, EndTime = request.EndTime, Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, Notes = Clean(request.Notes), CreatedByUserId = UserId(principal), CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() };
-        db.TrainingSessions.Add(session); await db.SaveChangesAsync(); return Results.Created($"/api/v1/attendance/sessions/{session.Id}", new { session.Id });
+        db.TrainingSessions.Add(session); await db.SaveChangesAsync(); await resources.Reserve(session, UserId(principal)); await tx.CommitAsync(); return Results.Created($"/api/v1/attendance/sessions/{session.Id}", new { session.Id });
+        } catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
     }
 
     private static async Task<IResult> GenerateSessions(GenerateSessionsRequest request, CurrentTenant tenant, ClaimsPrincipal principal, TrainingSessionGenerator generator)
@@ -119,14 +124,23 @@ public static class Slice4Endpoints
         var t = (await tenant.ResolveAsync())!; if (!IsAdmin(t.Role)) return Results.Forbid();
         try { var created = await generator.GenerateAsync(t.AcademyId, UserId(principal), request.From, request.To); return Results.Ok(new { created, message = created == 0 ? "لا توجد حصص جديدة ضمن النطاق." : $"تم إنشاء {created} حصة." }); }
         catch (ArgumentOutOfRangeException) { return Validation("range", "اختر نطاقًا صحيحًا لا يزيد على 31 يومًا."); }
+        catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
     }
 
-    private static async Task<IResult> SetSessionStatus(Guid id, SessionStatusRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> SetSessionStatus(Guid id, SessionStatusRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock, ResourceSessionCoordinator resources)
     {
-        var t = (await tenant.ResolveAsync())!; if (!IsAdmin(t.Role)) return Results.Forbid(); var session = await db.TrainingSessions.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (session is null) return Results.NotFound();
-        if (!Enum.TryParse<TrainingSessionStatus>(request.Status, true, out var next)) return Validation("status", "حالة الحصة غير صالحة.");
+        var t = (await tenant.ResolveAsync())!; if (!IsAdmin(t.Role)) return Results.Forbid();
+        try {
+        await using var tx = await db.Database.BeginTransactionAsync(); var group = await db.TrainingSessions.Where(x => x.Id == id).Select(x => (Guid?)x.TrainingGroupId).SingleOrDefaultAsync(); if (group is null) return Results.NotFound();
+        await resources.LockCalendar(t.AcademyId, [group.Value], "Edit"); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"attendance:{t.AcademyId:N}:{id:N}:{Guid.Empty:N}"}, 0))");
+        var session = await db.TrainingSessions.SingleAsync(x => x.Id == id);
+        if (!Enum.TryParse<TrainingSessionStatus>(request.Status, true, out var next) || !Enum.IsDefined(next)) return Validation("status", "حالة الحصة غير صالحة.");
         if (next == TrainingSessionStatus.Cancelled && (await db.PlayerAttendances.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingSessionId == id && x.Status != AttendanceStatus.NotRecorded) || await db.StaffAttendances.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingSessionId == id && x.Status != AttendanceStatus.NotRecorded))) return Results.Conflict(new { message = "لا يمكن إلغاء حصة بعد تسجيل حضور فعلي. صحح الحضور أولًا." });
-        session.Status = next; session.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); return Results.NoContent();
+        if (next == TrainingSessionStatus.Cancelled) await resources.CancelBookings(session, UserId(principal));
+        var previous = session.Status; session.Status = next; session.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync();
+        if (previous == TrainingSessionStatus.Cancelled && next != TrainingSessionStatus.Cancelled) await resources.Reserve(session, UserId(principal));
+        await tx.CommitAsync(); return Results.NoContent();
+        } catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
     }
 
     private static async Task<IResult> PlayerRoster(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization)
