@@ -132,12 +132,22 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
     }
     public async Task<object> Preview(Guid groupId, PlacementWrite body)
     {
-        var ids = Ids(body); await using var tx = await db.Database.BeginTransactionAsync(); var (_, g) = await Group(groupId, false); return await Inspect(g, ids);
+        await using var tx = await db.Database.BeginTransactionAsync(); return await PreviewInTransaction(groupId, body);
+    }
+    internal async Task<PlacementPreview> PreviewInTransaction(Guid groupId, PlacementWrite body)
+    {
+        if (db.Database.CurrentTransaction is null) throw new InvalidOperationException("Placement requires a transaction.");
+        var ids = Ids(body); var (_, g) = await Group(groupId, false); return await Inspect(g, ids);
     }
     public async Task<object> Save(Guid groupId, PlacementWrite body, string key)
     {
+        await using var tx = await db.Database.BeginTransactionAsync(); var result = await SaveInTransaction(groupId, body, key); await tx.CommitAsync(); return result;
+    }
+    internal async Task<object> SaveInTransaction(Guid groupId, PlacementWrite body, string key)
+    {
+        if (db.Database.CurrentTransaction is null) throw new InvalidOperationException("Placement requires a transaction.");
         var ids = Ids(body); if (string.IsNullOrWhiteSpace(key) || key.Length > 100) throw new FacilityRejected("معرف العملية مطلوب.", 422);
-        await using var tx = await db.Database.BeginTransactionAsync(); var (t, g) = await Group(groupId, true);
+        var (t, g) = await Group(groupId, true);
         var hash = AcademyConfigurationService.Hash(JsonSerializer.Serialize(new { groupId, ids })); var actor = db.RequestUserId;
         var prior = await db.GroupPlacementRevisions.SingleOrDefaultAsync(x => x.ActorUserId == actor && x.RequestKey == key);
         if (prior is not null) { if (prior.RequestHash != hash) throw new FacilityRejected("معرف العملية مستخدم لاختيار مختلف."); return new { prior.Id, prior.Placed, prior.EffectiveDate, replayed = true }; }
@@ -155,6 +165,6 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         if (reasons.Length != 0) throw new FacilityRejected(string.Join(" ", reasons));
         foreach (var row in rows) { row.TrainingGroupId = groupId; row.GroupAssignedFrom = preview.EffectiveDate; row.UpdatedAtUtc = time.GetUtcNow(); }
         var revision = new GroupPlacementRevision { Id = Guid.NewGuid(), AcademyId = t.AcademyId, BranchId = g.BranchId, TrainingGroupId = g.Id, ActorUserId = actor, EffectiveDate = preview.EffectiveDate, RequestKey = key, RequestHash = hash, Snapshot = JsonSerializer.Serialize(new { before = preview, assignedEnrollmentIds = ids, financialEffect = false, attendanceCreated = false }), Placed = rows.Count, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
-        db.GroupPlacementRevisions.Add(revision); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { revision.Id, revision.Placed, revision.EffectiveDate, replayed = false };
+        db.GroupPlacementRevisions.Add(revision); await db.SaveChangesAsync(); return new { revision.Id, revision.Placed, revision.EffectiveDate, replayed = false };
     }
 }

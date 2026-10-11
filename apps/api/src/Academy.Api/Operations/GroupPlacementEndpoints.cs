@@ -12,6 +12,9 @@ public static class GroupPlacementEndpoints
     {
         var api = app.MapGroup("/api/v1").WithMetadata(new AcademyFeatureMetadata("training"));
         var manage = api.MapGroup("/manage").RequireAuthorization(AcademyPermissions.StructureManage);
+        manage.MapGet("/group-creation/candidates", async (Guid branchId, Guid sportId, string? search, int? offset, GroupCreationService service) => await Run(() => service.Candidates(branchId, sportId, search, offset ?? 0))).RequireAuthorization(AcademyPermissions.PeopleManage);
+        manage.MapPost("/group-creation/preview", async (GroupCreationWrite b, GroupCreationService service) => await Run(() => service.Run(b, false))).RequireAuthorization(AcademyPermissions.PeopleManage).AddEndpointFilter<CsrfFilter>();
+        manage.MapPost("/group-creation", async (GroupCreationWrite b, GroupCreationService service, HttpRequest request) => await Run(() => service.Run(b, true, request.Headers["Idempotency-Key"].ToString()))).RequireAuthorization(AcademyPermissions.PeopleManage).AddEndpointFilter<CsrfFilter>();
         manage.MapGet("/training-levels", async (FoundationDbContext db) => Results.Ok(await db.TrainingLevels.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Rank).ThenBy(x => x.ArabicName).Select(x => new { x.Id, x.SportId, x.ArabicName, x.Rank }).ToArrayAsync()));
         manage.MapPost("/training-levels", async (TrainingLevelWrite b, FoundationDbContext db, GroupPlacementService service, TimeProvider time) => await Run(async () =>
         {

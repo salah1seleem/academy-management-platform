@@ -134,6 +134,7 @@ builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
 builder.Services.AddScoped<GroupPlacementService>();
+builder.Services.AddScoped<GroupCreationService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceSessionCoordinator>();
 builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
 builder.Services.AddAuthorization(options => {
@@ -374,7 +375,7 @@ if (app.Environment.IsEnvironment("Demo"))
             if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ResourceTimetableSeedEnabled")) await Academy.Api.Facilities.ResourceTimetableDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:UnassignedEnrollmentSeedEnabled")) await UnassignedEnrollmentDemoSeed.Seed(db);
-            if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
+            if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

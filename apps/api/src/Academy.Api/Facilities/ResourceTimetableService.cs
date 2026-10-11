@@ -100,11 +100,21 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
     }
     public async Task<object> Preview(Guid groupId, TimetableWrite b)
     {
-        await using var tx = await db.Database.BeginTransactionAsync(); var (_, _, group) = await Begin(groupId, b.From); var plan = await ResolvePlan(groupId, b); var result = await Inspect(group, b, plan); await tx.CommitAsync(); return result.Preview;
+        await using var tx = await db.Database.BeginTransactionAsync(); var result = await PreviewInTransaction(groupId, b); await tx.CommitAsync(); return result;
+    }
+    internal async Task<TimetablePreview> PreviewInTransaction(Guid groupId, TimetableWrite b)
+    {
+        if (db.Database.CurrentTransaction is null) throw new InvalidOperationException("Timetable requires a transaction.");
+        var (_, _, group) = await Begin(groupId, b.From); var plan = await ResolvePlan(groupId, b); return (await Inspect(group, b, plan)).Preview;
     }
     public async Task<object> Save(Guid groupId, TimetableWrite b, string key)
     {
-        await using var tx = await db.Database.BeginTransactionAsync(); var (t, actor, group) = await Begin(groupId, b.From); var plan = await ResolvePlan(groupId, b); var hash = Intent(groupId, b);
+        await using var tx = await db.Database.BeginTransactionAsync(); var result = await SaveInTransaction(groupId, b, key); await tx.CommitAsync(); return result;
+    }
+    internal async Task<object> SaveInTransaction(Guid groupId, TimetableWrite b, string key)
+    {
+        if (db.Database.CurrentTransaction is null) throw new InvalidOperationException("Timetable requires a transaction.");
+        var (t, actor, group) = await Begin(groupId, b.From); var plan = await ResolvePlan(groupId, b); var hash = Intent(groupId, b);
         if (key.Length > 100 || plan.ResourceAware && key.Length < 8) throw new FacilityRejected("تعذر تحديد عملية الجدول؛ أعد المعاينة.", 422);
         var before = plan.Stored is null ? null : JsonSerializer.Serialize(new { plan.Stored.ResourceId, plan.Stored.CoachMembershipId, plan.Stored.ReservedSeats, plan.Stored.Exclusive, plan.Stored.ValidFrom, plan.Stored.ValidTo, plan.Stored.IsActive });
         if (key.Length > 0)
@@ -150,6 +160,6 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         if (plan.Value is { } reservation)
             foreach (var s in created) await facilities.ReserveLocked(new(reservation.ResourceId, s.SessionDate, s.StartTime, s.EndTime, reservation.Seats, reservation.Exclusive, "Training", groupId, reservation.CoachMembershipId, s.Id), $"tt-{revisionId:N}-{s.Id:N}", t.AcademyId, actor);
         db.TrainingScheduleRevisions.Add(new() { Id = revisionId, AcademyId = t.AcademyId, BranchId = group.BranchId, TrainingGroupId = groupId, ActorUserId = actor, RequestKey = key.Length > 0 ? key : Guid.NewGuid().ToString("N"), RequestHash = hash, Snapshot = JsonSerializer.Serialize(new { request = b, before, preview, sessions = created.Select(x => x.Id), cancelledBookings = inspection.Cancelled.Select(x => x.Id) }), CreatedSessions = created.Count, PreservedSessions = preview.PreservedSessions, CreatedAtUtc = now, UpdatedAtUtc = now });
-        await db.SaveChangesAsync(); await tx.CommitAsync(); return new { created = created.Count, preserved = preview.PreservedSessions, replayed = false };
+        await db.SaveChangesAsync(); return new { created = created.Count, preserved = preview.PreservedSessions, replayed = false };
     }
 }
