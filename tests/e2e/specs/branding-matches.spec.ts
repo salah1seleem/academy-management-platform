@@ -17,7 +17,7 @@ test("Compact stored-data dashboard has matched filter heights, drill-downs and 
   await page.getByRole("link",{name:/إجمالي الاشتراكات/}).click(); await expect(page.getByLabel("حالة الاشتراك")).toHaveValue("subscribed");
 });
 test("Published match reaches only its guardian and a separate tournament proof produces one receipt", async ({page}) => {
-  await login(page); expect((await page.request.get("/api/v1/platform/academies")).status()).toBe(403);
+  await login(page); expect((await page.request.get("/api/v1/platform/academies")).status()).toBe(401);
   const options=await page.request.get("/api/v1/manage/matches/options").then(r=>r.json());
   const player=options.players.find((p:{playerId:string,sportId:string})=>p.playerId==="36000000-0000-0000-0000-000000000001"&&p.sportId==="32000000-0000-0000-0000-000000000001");
   const structure=await page.request.get("/api/v1/manage/structure/options").then(r=>r.json()); const category=structure.categories.find((c:{minimumBirthYear:number,maximumBirthYear:number})=>c.minimumBirthYear<=player.birthYear&&c.maximumBirthYear>=player.birthYear);

@@ -58,6 +58,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        ConfigurePlatformIdentity(builder);
         ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>
@@ -71,7 +72,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         });
 
         builder.Ignore<IdentityUserLogin<Guid>>();
-        builder.Ignore<IdentityUserToken<Guid>>();
+        builder.Entity<IdentityUserToken<Guid>>().ToTable("IdentityUserTokens");
 
         builder.Entity<Tenancy.Academy>(entity =>
         {

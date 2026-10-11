@@ -30,13 +30,28 @@ public sealed class BrandingMatchesTests : IAsyncLifetime
         var token=MobileAuthenticationHandler.NewToken(); var now=DateTimeOffset.UtcNow;
         db.MobileSessions.Add(new Academy.Infrastructure.Identity.MobileSession { Id=Guid.NewGuid(),UserId=m.UserId,MembershipId=m.Id,AccessTokenHash=MobileAuthenticationHandler.Hash(token),RefreshTokenHash=MobileAuthenticationHandler.Hash(MobileAuthenticationHandler.NewToken()),SecurityStamp=m.User.SecurityStamp??"",DeviceName="Branding match test",CreatedAtUtc=now,LastUsedAtUtc=now,AccessExpiresAtUtc=now.AddMinutes(10),ExpiresAtUtc=now.AddHours(1) });await db.SaveChangesAsync();c.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",token);return c;
     }
-    [Fact] public async Task Branding_requires_explicit_platform_grant_not_owner_or_admin_role() {
-        using var owner=await Staff(); using var admin=await Staff(DemoSeed.AdminEmail); using var guardian=await Mobile(AcademyRole.Guardian);
-        var body=new { displayName="هوية اختبار مستقلة",primaryColor="#D71935",secondaryColor="#171923" };
-        foreach(var c in new[]{owner,admin,guardian}) { Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync("/api/v1/platform/academies")).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await Send(c,$"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/branding",body,true)).StatusCode); }
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var actor=await db.Users.Where(x=>x.Email==DemoSeed.OwnerEmail).Select(x=>x.Id).SingleAsync();db.PlatformBrandOperators.Add(new PlatformBrandOperator{UserId=actor});await db.SaveChangesAsync();
-        try { Assert.Equal(HttpStatusCode.OK,(await owner.GetAsync("/api/v1/platform/academies")).StatusCode);Assert.Equal(HttpStatusCode.NoContent,(await Send(owner,$"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/branding",body,true)).StatusCode);var ours=await owner.GetFromJsonAsync<JsonElement>("/api/v1/academy/experience");Assert.NotEqual(body.displayName,ours.GetProperty("displayName").GetString());using var other=await Staff(DemoSeed.FutureOwnerEmail);Assert.Equal(body.displayName,(await other.GetFromJsonAsync<JsonElement>("/api/v1/academy/experience")).GetProperty("displayName").GetString());Assert.True(await db.BrandingAudits.AnyAsync(x=>x.AcademyId==DemoSeed.FutureAcademyId&&x.ActorUserId==actor)); Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Send(owner,$"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/branding",new{body.displayName,primaryColor="url(javascript:alert(1))",body.secondaryColor},true)).StatusCode); }
-        finally { await db.PlatformBrandOperators.Where(x=>x.UserId==actor).ExecuteDeleteAsync(); }
+    [Fact] public async Task Branding_requires_separate_platform_session_not_owner_or_admin_role() {
+        using var owner = await Staff(); using var admin = await Staff(DemoSeed.AdminEmail); using var guardian = await Mobile(AcademyRole.Guardian);
+        var body = new { displayName = "هوية اختبار مستقلة", primaryColor = "#D71935", secondaryColor = "#171923" };
+        foreach (var c in new[] { owner, admin, guardian }) {
+            Assert.Equal(HttpStatusCode.Unauthorized, (await c.GetAsync("/api/v1/platform/academies")).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await Send(c, $"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/branding", body, true)).StatusCode);
+        }
+        using var platform = factory.CreateClient();
+        async Task<HttpResponseMessage> PlatformWrite(string path, object data, bool put = false) {
+            var csrf = await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/auth/csrf");
+            var request = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(data) };
+            request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); return await platform.SendAsync(request);
+        }
+        (await PlatformWrite("/api/v1/platform/auth/login", new { email = Academy.Api.Platform.PlatformIdentity.DemoEmail, password = "Demo-Only-123!", code = "246810" })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NoContent, (await PlatformWrite($"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/branding", body, true)).StatusCode);
+        var ours = await owner.GetFromJsonAsync<JsonElement>("/api/v1/academy/experience");
+        Assert.NotEqual(body.displayName, ours.GetProperty("displayName").GetString());
+        using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        Assert.Equal(body.displayName, (await other.GetFromJsonAsync<JsonElement>("/api/v1/academy/experience")).GetProperty("displayName").GetString());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.True(await db.BrandingAudits.AnyAsync(x => x.AcademyId == DemoSeed.FutureAcademyId && x.ActorUserId == Academy.Api.Platform.PlatformIdentity.DemoUserId));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await PlatformWrite($"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/branding", new { body.displayName, primaryColor = "url(javascript:alert(1))", body.secondaryColor }, true)).StatusCode);
     }
     [Fact] public async Task Disabled_coach_attendance_is_enforced_server_side_but_evaluation_and_sessions_remain() {
         using var owner=await Staff(); using var admin=await Staff(DemoSeed.AdminEmail);using var coach=await Mobile(AcademyRole.Coach);
@@ -74,6 +89,11 @@ public sealed class BrandingMatchesTests : IAsyncLifetime
     {
         using var owner = await Staff();
         using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        using var platform = factory.CreateClient();
+        var loginToken = await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/auth/csrf");
+        var login = new HttpRequestMessage(HttpMethod.Post, "/api/v1/platform/auth/login") { Content = JsonContent.Create(new { email = Academy.Api.Platform.PlatformIdentity.DemoEmail, password = "Demo-Only-123!", code = "246810" }) };
+        login.Headers.Add("X-CSRF-TOKEN", loginToken.GetProperty("token").GetString());
+        (await platform.SendAsync(login)).EnsureSuccessStatusCode();
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var actor = await db.Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync();
@@ -81,14 +101,14 @@ public sealed class BrandingMatchesTests : IAsyncLifetime
         await db.SaveChangesAsync();
         async Task<HttpResponseMessage> Upload(byte[] bytes, string type)
         {
-            var csrf = await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");
+            var csrf = await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/auth/csrf");
             using var form = new MultipartFormDataContent();
             var file = new ByteArrayContent(bytes);
             file.Headers.ContentType = new MediaTypeHeaderValue(type);
             form.Add(file, "file", "synthetic-logo.png");
             using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/platform/academies/{DemoSeed.FutureAcademyId}/logo") { Content = form };
             request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString());
-            return await owner.SendAsync(request);
+            return await platform.SendAsync(request);
         }
         try
         {

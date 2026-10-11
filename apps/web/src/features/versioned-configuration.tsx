@@ -7,6 +7,7 @@ type Version = { id: string; revision: number; version: number; state: string; c
 type Data = { entitlements: { feature: string; enabled: boolean; planCode: string }[]; versions: Version[]; history: { configurationId: string; from: string; to: string; createdAtUtc: string }[] };
 const states: Record<string, string> = { Draft: "مسودة", Validated: "متحقق منها", Staged: "جاهزة للتفعيل", Active: "سارية", Suspended: "موقوفة", Superseded: "إصدار سابق" };
 const labels: Record<string, string> = { training: "التدريب", nutrition: "التغذية", medical: "السجلات الطبية", media: "الوسائط", catalog: "المنتجات الرياضية", news: "الأخبار", matches: "المباريات", payroll: "الرواتب", facilities: "المرافق والحارات", expenses: "المصروفات", external_partners: "الشركاء الخارجيون", learning_hub: "مركز التعلم", calendar: "التقويم", crm: "متابعة العملاء", simulator: "المحاكي", community_ads: "إعلانات المجتمع", voice_notes: "الملاحظات الصوتية", ai_assistant: "المساعد الذكي" };
+export const featureLabels = labels;
 const next: Record<string, string> = { Draft: "Validated", Validated: "Staged", Staged: "Active", Active: "Suspended", Suspended: "Staged" };
 const actions: Record<string, string> = { Draft: "التحقق", Validated: "تجهيز التفعيل", Staged: "تفعيل الآن", Active: "إيقاف الإصدار", Suspended: "إعادة التجهيز" };
 export function VersionedConfiguration() {

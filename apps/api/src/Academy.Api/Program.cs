@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using Academy.Api.Auth;
 using Academy.Api.Configuration;
+using Academy.Api.Platform;
 using Academy.Api.Mobile;
 using Academy.Api.Demo;
 using Academy.Api.Operations;
@@ -47,7 +48,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
         options.Password.RequireNonAlphanumeric = true;
         options.Lockout.MaxFailedAccessAttempts = 5;
         options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-    }).AddSignInManager().AddEntityFrameworkStores<FoundationDbContext>();
+    }).AddSignInManager().AddEntityFrameworkStores<FoundationDbContext>().AddDefaultTokenProviders();
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = "Academy.Client";
@@ -55,6 +56,7 @@ builder.Services.AddAuthentication(options =>
         options.DefaultSignInScheme = IdentityConstants.ApplicationScheme;
     }).AddIdentityCookies();
 builder.Services.AddAuthentication()
+    .AddCookie(PlatformIdentity.Scheme)
     .AddPolicyScheme("Academy.Client", "Cookie or native session", options =>
         options.ForwardDefaultSelector = context => context.Request.Headers.ContainsKey("Authorization")
             ? MobileAuthenticationHandler.SchemeName : IdentityConstants.ApplicationScheme)
@@ -93,8 +95,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentTenant>();
 builder.Services.AddScoped<AcademyConfigurationService>();
 builder.Services.AddScoped<IAuthorizationHandler, TenantPermissionHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, PlatformAccessHandler>();
 builder.Services.AddAuthorization(options =>
 {
+    options.AddPolicy(PlatformIdentity.Policy, policy => policy.AddAuthenticationSchemes(PlatformIdentity.Scheme).RequireAuthenticatedUser().AddRequirements(new PlatformAccessRequirement()));
     options.AddPolicy("mobile-session", policy => policy.AddAuthenticationSchemes(MobileAuthenticationHandler.SchemeName).RequireAuthenticatedUser());
     options.AddPolicy(AcademyPermissions.AcademySettingsManage, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(AcademyPermissions.AcademySettingsManage)));
     options.AddPolicy(AcademyPermissions.TenantAccess, policy => policy.RequireAuthenticatedUser()
@@ -140,6 +144,8 @@ app.UseRateLimiter();
 app.UseAuthorization();
 app.UseMiddleware<AcademyFeatureGateMiddleware>();
 app.MapMobileAuth();
+app.MapPlatformIdentity();
+app.MapPlatformAcademies();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false, ResponseWriter = HealthResponseWriter.WriteAsync });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready"), ResponseWriter = HealthResponseWriter.WriteAsync });
@@ -338,6 +344,7 @@ if (app.Environment.IsEnvironment("Demo"))
         var db = configSeed.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var ids = await db.Academies.Where(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId || x.Id == FootballDemoSeed.AcademyId).Select(x => x.Id).ToListAsync();
         await AcademyConfigurationService.SeedDemo(db, ids);
+        await PlatformIdentity.SeedDemo(app.Services);
     }
 }
 app.Run();

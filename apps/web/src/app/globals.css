@@ -15,6 +15,34 @@
   box-sizing: border-box;
 }
 
+.platform-shell { width: min(100% - 2rem, 80rem); margin-inline: auto; padding-block: 2rem; display: grid; gap: 1.25rem; }
+.platform-top, .platform-audit li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.platform-top h1 { font-size: clamp(2rem, 5vw, 3rem); }
+.platform-shell h2, .platform-shell button { display: flex; gap: .65rem; align-items: center; }
+.platform-shell .detail-card { max-width: none; min-width: 0; }
+.platform-shell button:not(.platform-academy) { width: auto; min-height: 44px; justify-content: center; padding: .65rem 1rem; color: white; background: var(--primary); border: 1px solid var(--primary); border-radius: .8rem; cursor: pointer; font-weight: 700; }
+.platform-shell button:not(.platform-academy):hover { background: #115e59; color: white; }
+.platform-shell button:disabled { opacity: .55; cursor: wait; }
+.platform-shell select, .platform-shell input:not([type="checkbox"]) { width: 100%; min-height: 44px; }
+.platform-shell input[type="color"] { padding: .2rem; }
+.platform-shell input[type="file"] { font-size: .8rem; }
+.platform-shell .form-shell { max-width: none; box-shadow: none; align-items: start; }
+.platform-shell .form-shell > button, .platform-shell .form-shell > p { grid-column: 1 / -1; }
+.platform-shell .form-shell > button { justify-self: start; }
+.platform-shell .form-shell > p { margin: 0; }
+.platform-academies { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
+.platform-academy { flex-direction: column; align-items: start !important; padding: 1.15rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 1rem; text-align: start; }
+.platform-academy[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.platform-academy:hover { background: var(--primary-soft); color: var(--text); }
+.platform-license-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; margin-block: 1rem; }
+.platform-license-grid label { display: flex; align-items: center; gap: .6rem; min-height: 44px; }
+.platform-license-grid input { width: 1.15rem; height: 1.15rem; min-height: 0; padding: 0; accent-color: var(--primary); }
+.platform-audit { padding: 0; list-style: none; }
+.platform-audit li { padding-block: .9rem; border-bottom: 1px solid var(--border); }
+.platform-audit time, .platform-audit span { font-size: .8rem; color: var(--muted); }
+.platform-form { margin-block: 1rem; }
+@media (min-width: 60rem) { .platform-panels { display: grid; grid-template-columns: 1fr 1.3fr; gap: 1rem; } }
+
 html {
   background: var(--background);
 }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Academy.Api.Platform;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 
@@ -9,16 +10,16 @@ public sealed class IdentityCookieOptions(DatabaseTicketStore ticketStore, IHost
 {
     public void PostConfigure(string? name, CookieAuthenticationOptions options)
     {
-        if (name != IdentityConstants.ApplicationScheme) return;
+        if (name != IdentityConstants.ApplicationScheme && name != PlatformIdentity.Scheme) return;
         options.SessionStore = ticketStore;
-        options.Cookie.Name = "academy.session";
+        options.Cookie.Name = name == PlatformIdentity.Scheme ? "academity.platform.session" : "academy.session";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.SecurePolicy = environment.IsDevelopment() || environment.IsEnvironment("Demo")
             ? CookieSecurePolicy.SameAsRequest
             : CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
-        options.SlidingExpiration = true;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(name == PlatformIdentity.Scheme ? 15 : 30);
+        options.SlidingExpiration = name != PlatformIdentity.Scheme;
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
