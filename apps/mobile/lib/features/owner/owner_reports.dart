@@ -5,6 +5,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/receivable_balances.dart';
+import 'renewal_opportunities.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
@@ -35,6 +36,7 @@ class _OwnerReportsState extends State<OwnerReports> {
                 'financial': 'المال',
                 'attendance': 'الحضور',
                 'receivables': 'الأرصدة',
+                'renewals': 'فرص التجديد',
                 'subscriptions': 'الاشتراكات',
               }.entries)
                 ChoiceChip(
@@ -46,7 +48,12 @@ class _OwnerReportsState extends State<OwnerReports> {
           ),
         ),
         Expanded(
-          child: report == 'receivables'
+          child: report == 'renewals'
+              ? NativeRenewalOpportunities(
+                  auth: widget.auth,
+                  branchId: widget.initialFilters['branchId'] ?? '',
+                )
+              : report == 'receivables'
               ? ReceivableBalances(auth: widget.auth, staff: true)
               : report == 'subscriptions'
               ? _subscription(widget.auth)

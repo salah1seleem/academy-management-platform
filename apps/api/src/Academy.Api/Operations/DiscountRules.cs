@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
 
-public sealed class DiscountRules(FoundationDbContext db, ISubscriptionClock clock)
+public sealed partial class DiscountRules(FoundationDbContext db, ISubscriptionClock clock)
 {
     public async Task<RenewalFinancialSnapshot> CalculateAsync(Guid academy, Guid playerId, decimal amount, Guid actor, Guid? guardianId = null, Guid? selectedRule = null, SubscriptionPlan? plan = null, Guid? branchId = null)
     {
@@ -24,6 +24,10 @@ public sealed class DiscountRules(FoundationDbContext db, ISubscriptionClock clo
             if (sibling is null) rules.Add(new DiscountRule { AcademyId = academy, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي" });
             else if (sibling.IsActive) rules.Add(sibling);
         }
+        return Quote(rules, amount, actor, plan, branchId);
+    }
+    private RenewalFinancialSnapshot Quote(IEnumerable<DiscountRule> rules, decimal amount, Guid actor, SubscriptionPlan? plan, Guid? branchId)
+    {
         var best = DiscountPricing.Best(rules.Where(r => DiscountPricing.Eligible(r, clock.Today, branchId, plan)), amount);
         var discount = best is null ? 0 : DiscountPricing.Amount(best, amount);
         var reason = best is null ? null : string.IsNullOrWhiteSpace(best.Reason) ? $"تطبيق العرض المستحق: {best.ArabicName}" : best.Reason;

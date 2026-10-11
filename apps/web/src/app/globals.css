@@ -13,6 +13,10 @@
 .receivable-metric.green { background: #ecfdf5; color: #166648; border-color: #c7f2e0; }
 .receivable-metric:hover { transform: translateY(-2px); box-shadow: 0 10px 24px #142c5020; }
 .receivable-metric:focus-visible { outline: 3px solid var(--academy-primary, #c91535); outline-offset: 3px; }
+.dashboard-shell .renewal-opportunity-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.renewal-opportunity-filters > label { display: grid; gap: 7px; min-width: 0; font-size: .8rem; }
+.receivable-metrics.opportunity-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 800px) { .dashboard-shell .renewal-opportunity-filters { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .receivable-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .receivable-metric { padding: 14px; border-radius: 16px; } }
 
 :root {

@@ -61,7 +61,7 @@ const modules: NavModule[] = [
   { id: "players", title: "الأعضاء والاشتراكات", group: "الإدارة", icon: Users, links: linksOf("players", "plans", "discounts") },
   { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), ...linksOf("attendance", "matches")] },
   { id: "development", title: "الفريق والتطوير", group: "التشغيل", icon: Star, links: [...linksOf("academy").filter(l => l.href.endsWith("/coaches")), ...linksOf("evaluations", "nutrition")] },
-  { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
+  { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
   { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
   { id: "analytics", title: "التحليل والقرارات", group: "التحليل", icon: BarChart3, links: linksOf("reports").filter(l => l.href.endsWith("/attendance")) },
   { id: "settings", title: "الإعدادات والمساعدة", group: "الإدارة", icon: ShieldCheck, links: linksOf("settings", "staff") },
@@ -75,7 +75,7 @@ function linkPermission(href: string) {
   if (href.includes("/payroll") || href.includes("/staff/employees")) return "payroll.read";
   if (href.includes("/matches")) return "structure.manage";
   if (href.includes("/reports/financial")) return "reports.financial.read";
-  if (href.includes("/finance/receivables")) return "reports.financial.read";
+  if (href.includes("/finance/")) return "reports.financial.read";
   if (href.includes("/reports/attendance")) return "reports.attendance.read";
   if (href.includes("/academy")) return "structure.manage";
   if (href.includes("/players/medical")) return "content.medical.read";

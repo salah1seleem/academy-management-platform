@@ -108,7 +108,11 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
             {
                 // Some legacy endpoints reused a broad policy (e.g. news used media).
                 // Explicit V2 grants use the actual endpoint module, not that legacy alias.
-                var module = context.Resource is HttpContext request ? StaffAccessRules.ForPath(request.Request.Path.Value ?? "") : null;
+                // Export is an additional permission, not an alias for the route's
+                // read policy. Both requirements must pass for a financial export.
+                var module = requirement.Permission == AcademyPermissions.ReportsExport
+                    ? StaffAccessRules.ForPermission(requirement.Permission)
+                    : context.Resource is HttpContext request ? StaffAccessRules.ForPath(request.Request.Path.Value ?? "") : null;
                 module ??= StaffAccessRules.ForPermission(requirement.Permission);
                 allowed = module is not null && await db.StaffActionGrants.AnyAsync(x => x.MembershipId == membership.MembershipId && x.IsActive && x.Module == module && x.Read);
             }
