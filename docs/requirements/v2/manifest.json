@@ -1,0 +1,123 @@
+{
+  "version": "2.0",
+  "date": "2026-10-11",
+  "repository_reviewed": false,
+  "application_tests_executed": false,
+  "files": [
+    {
+      "path": "Academity_Plan_V2_AR.html",
+      "bytes": 134366,
+      "sha256": "e1ec5f7cea6643bf8c0909d51e2c87c0637ac287a6a4487a3a9d502bc16c149e"
+    },
+    {
+      "path": "README_AR.md",
+      "bytes": 3939,
+      "sha256": "db3219abd2c4a98e87e61656712ea99ae08b53889c5e7f75fe6a055bd99dd536"
+    },
+    {
+      "path": "START_HERE_CODEX_AR.md",
+      "bytes": 6613,
+      "sha256": "58069adc6b91857e793a1fe9d3feef9ceaa9452ae52c46441297426ea9e6709e"
+    },
+    {
+      "path": "configuration/regression_profiles.example.json",
+      "bytes": 1205,
+      "sha256": "4e0b281970994afb49a711ba3be9f592fa4a21f37ce7167a270cea1a71068d34"
+    },
+    {
+      "path": "configuration/tenant_config.example.json",
+      "bytes": 1635,
+      "sha256": "4861fd8f29e1eed50fef08236a9dcaa498a9720d43bebe993f3659d5ceb43545"
+    },
+    {
+      "path": "design/README_UX_AR.md",
+      "bytes": 2072,
+      "sha256": "52066a70d40e79711fbc2281af8778bf0144f78d9aea6699b83f36120eb89166"
+    },
+    {
+      "path": "design/Role_Homes_Overview.png",
+      "bytes": 222979,
+      "sha256": "862899ab98bf14155805628d7fc1764e29f721676732d59bca7c8baf4ccd34a6"
+    },
+    {
+      "path": "design/Role_Homes_V2.html",
+      "bytes": 59169,
+      "sha256": "e23ba8e75567fb6490e87c4a1a0f81b8cb850eb47177ef2995a670dea1a7e20c"
+    },
+    {
+      "path": "design/admin-mobile.png",
+      "bytes": 63374,
+      "sha256": "217339b953ce9c656eadbb7346e9621f7d551e12b182a42869ef83072d896448"
+    },
+    {
+      "path": "design/coach-mobile.png",
+      "bytes": 65154,
+      "sha256": "d8de28593ae53efc9b5f694bea30ab2c400ad8c33d5ac33abdac172823193110"
+    },
+    {
+      "path": "design/guardian-mobile.png",
+      "bytes": 62597,
+      "sha256": "c1d55231129d3b4763c34bd1ccb6f1df1006225995b25cd21a4a89df6c24d016"
+    },
+    {
+      "path": "design/owner-desktop.png",
+      "bytes": 125255,
+      "sha256": "6814e4af2015bea948404b8822c4e5085453e2d088e35df54afd1af297ac3326"
+    },
+    {
+      "path": "design/owner-mobile.png",
+      "bytes": 71005,
+      "sha256": "ccf4166c5a26ab49bd91b6ff8dd0ad3da167f2962c63b059a79277d15eedb552"
+    },
+    {
+      "path": "import/Academity_Import_Reference_V2.xlsx",
+      "bytes": 36830,
+      "sha256": "072282562ae9062703c3a35c7f2eb8f212a0e56cee1a33bd6b2223f3ced0e554"
+    },
+    {
+      "path": "source/new_requirements_ar.txt",
+      "bytes": 59290,
+      "sha256": "d5a58990c1279b0502d6d399d46496d5ccbe88bfc6bae53d29a1dac3f3a89a26"
+    },
+    {
+      "path": "specifications/Academity_Master_Plan_V2_AR.md",
+      "bytes": 117924,
+      "sha256": "e43554ccc6738324903a1a0291fd02c87ca1005caa0fafea978b1b471624a25d"
+    },
+    {
+      "path": "specifications/Acceptance_Matrix_V2.md",
+      "bytes": 18889,
+      "sha256": "674edb80f0899aea2205635e9fd4eaa3c559d9ab9a8544bce6647f1b542b54c9"
+    },
+    {
+      "path": "specifications/Requirements_Coverage_V2.md",
+      "bytes": 3580,
+      "sha256": "53839c5774d5b9b12c453ae830c857034bc4182d20de78b55558b32d49dec49e"
+    },
+    {
+      "path": "specifications/acceptance_cases.json",
+      "bytes": 24361,
+      "sha256": "8a170228ee90f91295140c1334327a67ef8f34cd17726cb4aa7bb8258d8df630"
+    },
+    {
+      "path": "verification/prototype_smoke.py",
+      "bytes": 3437,
+      "sha256": "cd5562aaefa5e8b3dce4d52ece67813572af3da243cc1059421b0a7a455163a1"
+    },
+    {
+      "path": "verification/prototype_smoke_results.json",
+      "bytes": 1412,
+      "sha256": "4c554723c752ef705cf7c56baadb2b75f215b21f49c86b9507d50187e3b143cd"
+    },
+    {
+      "path": "verification/reference_finance_tests.py",
+      "bytes": 7336,
+      "sha256": "e87bd08378a149f662a0d82c420f082b583462dccad6c9813a7951b830ff4423"
+    },
+    {
+      "path": "verification/reference_test_results.json",
+      "bytes": 2360,
+      "sha256": "8a27ed7c3fa4fc2ce3f008b851122b10f187322b29b0e2d8bd0cb13f5d8b924b"
+    }
+  ]
+}

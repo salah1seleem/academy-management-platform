@@ -1,0 +1,55 @@
+{
+  "_notice": "Example only. Validate and adapt to the repository; not production configuration.",
+  "schemaVersion": "academy-v2-example-1",
+  "tenantRef": "DEMO-SWIM",
+  "currency": "EGP",
+  "timezone": "Africa/Cairo",
+  "status": "draft",
+  "features": {
+    "multiSport": true,
+    "externalPartners": true,
+    "expenseAllocation": true,
+    "payroll": true,
+    "calendar": true,
+    "learningHub": true,
+    "communityAds": false,
+    "voiceNotes": false,
+    "aiAssistant": false
+  },
+  "operations": {
+    "groupAssignmentMode": "suggest_then_approve",
+    "capacityPolicy": "required_operator_approval",
+    "attendanceDefault": "not_recorded",
+    "consecutiveAbsenceAlert": 3,
+    "coachSubstitutionScope": "single_occurrence",
+    "deductionMode": "propose_for_approval"
+  },
+  "finance": {
+    "allocationBasis": "equal_eligible_operating_groups",
+    "rounding": "half_up_to_minor_unit",
+    "allocationRemainder": "largest_remainder_stable_id",
+    "currencyScale": 2,
+    "cashEnabled": false,
+    "taxConfiguration": "requires_review",
+    "externalPresentation": "requires_contract_review"
+  },
+  "imports": {
+    "mode": "existing_agreements",
+    "schemaVersion": "2.0-demo",
+    "commitPolicy": "all_or_nothing",
+    "previewRequired": true,
+    "sendNotificationsAfterCommit": false,
+    "openingBalancesAreCash": false
+  },
+  "marketing": {
+    "tenantOptIn": false,
+    "adultGuardianConsentRequired": true,
+    "shareContactsWithAdvertisers": false,
+    "crossTenantCampaigns": false
+  },
+  "release": {
+    "target": "staging",
+    "productionWritesDuringTests": false,
+    "profile": "swimming-pilot"
+  }
+}

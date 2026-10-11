@@ -1,0 +1,597 @@
+[
+  {
+    "id": "FIN-01",
+    "scenario": "20 اشتراكًا سابقًا مدفوعًا ومنتهيًا",
+    "expected": "فرص تجديد 12,700؛ متأخر صفر؛ لا مطالبة من تاريخ الانتهاء",
+    "sections": "13",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "FIN-02",
+    "scenario": "مطالبات مسددة وجزئية ودائنة ومستقبلية",
+    "expected": "قائم 1,740؛ متأخر 1,240؛ غير مستحق 500",
+    "sections": "13",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "FIN-03",
+    "scenario": "تغيير السعر بعد صدور المطالبة",
+    "expected": "التاريخ ثابت والتجديد الجديد يعيد فحص الأهلية",
+    "sections": "13",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "FIN-04",
+    "scenario": "أهلية خصم إخوة/ترتيب خصمين وتقريب كسور",
+    "expected": "لا خصم مزدوج ولا صافي سالب؛ السبب محفوظ",
+    "sections": "13",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-01",
+    "scenario": "100,000 على 100 مجموعة متساوية",
+    "expected": "1,000 لكل مجموعة ومجموع 100,000",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-02",
+    "scenario": "100 جنيه على 3 مجموعات",
+    "expected": "33.34/33.33/33.33 بقاعدة ثابتة؛ لا فقد قرش",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-03",
+    "scenario": "فتح تفاصيل مجموعة واحدة",
+    "expected": "نصيبها محفوظ ولا يحملها فلتر التقرير كل المصروف",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-04",
+    "scenario": "مجموعة فارغة محجوزة وأخرى مجرد مسودة",
+    "expected": "التكلفة للمؤهلة/غير الموزع؛ لا إخفاء خسارة أو مقام صفر",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-05",
+    "scenario": "مصروف مرفق يحتوي راتبًا مسجلًا من payroll",
+    "expected": "رفض التكرار أو استبعاد موثق؛ مصدر التكلفة مرة واحدة",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-06",
+    "scenario": "إيراد 7,200؛ مدرب 2,000؛ مباشر 200؛ توزيع 1,000",
+    "expected": "مساهمة 5,000؛ نتيجة تشغيل 4,000",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "COST-07",
+    "scenario": "تعديل مصروف أو قاعدة بعد إغلاق شهر",
+    "expected": "نسخة/حركة تصحيح؛ لا تغير صامت للتاريخ",
+    "sections": "12",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAYROLL-01",
+    "scenario": "ثابت 5,000+20×50+3×120−150 بمعاملة معتمدة",
+    "expected": "6,210 قبل تخصيص دفعات سابقة",
+    "sections": "14",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAYROLL-02",
+    "scenario": "90 دقيقة بسعر 120/ساعة",
+    "expected": "180 وليس 120 أو 240",
+    "sections": "14",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAYROLL-03",
+    "scenario": "توزيع ثابت 5,000 على 10/15/5 ساعات",
+    "expected": "1,666.67/2,500/833.33؛ الإجمالي 5,000",
+    "sections": "14",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAYROLL-04",
+    "scenario": "بديل لحصة واحدة ثم الحصة التالية",
+    "expected": "الأولى للبديل؛ الثانية للمدرب الدائم؛ WorkLog دقيق",
+    "sections": "14",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAYROLL-05",
+    "scenario": "غياب مع سماح/إجازة/سياسة غير معتمدة",
+    "expected": "لا خصم آلي؛ اقتراح مسبب للمراجعة",
+    "sections": "14",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAYROLL-06",
+    "scenario": "نفس العمل يصل من الحضور ومن استدعاء معاد",
+    "expected": "لا أجر مزدوج كحصة وساعات بلا بنود عقد صريحة",
+    "sections": "14",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EXT-01",
+    "scenario": "الأكاديمية تبيع 600 والمدرب يستحق 200",
+    "expected": "دخل 600 وتكلفة 200 وفق السياسة؛ لا تسجيل 400 ثم خصم 200 ثانية",
+    "sections": "15",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EXT-02",
+    "scenario": "الشريك يجمع 600 ويدفع 400 للمرفق",
+    "expected": "دفاتر المضيف 400 لا 600؛ ماليات الأسرة الخارجية محمية",
+    "sections": "15",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EXT-03",
+    "scenario": "أكاديمية وسيط تجمع 600 وللطرف الآخر 200",
+    "expected": "مسؤولية وسيط مراجعة؛ التزام 200 منفصل لا مصروف مزدوج",
+    "sections": "15",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EXT-04",
+    "scenario": "مدرب موظف وشريك عليه مطالبة 4,900",
+    "expected": "كشفان مستقلان، لا مقاصة تلقائية من راتبه",
+    "sections": "15",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EXT-05",
+    "scenario": "700 لشريحة ساعة أسبوعية ثابتة شهريًا",
+    "expected": "لا 700 لكل occurrence؛ billingUnit محفوظ",
+    "sections": "15",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PROD-01",
+    "scenario": "Gold خمسة أشهر بسعر أربع×600",
+    "expected": "سعر 2,400؛ خمسة أشهر خدمة؛ لا تحصيل جديد كل شهر",
+    "sections": "11",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PROD-02",
+    "scenario": "ساعة سباحة حرة 100 وحصة مجانية معتمدة",
+    "expected": "الأولى بيع 100؛ الثانية استحقاق بصفر؛ تقارير منفصلة",
+    "sections": "11",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PROD-03",
+    "scenario": "DayUse vs training vs event vs private",
+    "expected": "موارد/أهلية/تقييمات بحسب النوع؛ لا ترقية من زيارة",
+    "sections": "11",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ENR-01",
+    "scenario": "نشر باقة سباحة لفرع ثم تسجيل جديد",
+    "expected": "تظهر في dropdown الصحيح فقط؛quote يتطابق",
+    "sections": "19",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ENR-02",
+    "scenario": "آخر مقعد وطلبان متزامنان",
+    "expected": "حجز واحد/انتظار صريح؛ لا تجاوز السعة",
+    "sections": "17",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ENR-03",
+    "scenario": "تسجيل طفل موجود برياضتين",
+    "expected": "player واحد وعلاقتا تسجيل دون فقد السعر/المواعيد",
+    "sections": "04",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "GRP-01",
+    "scenario": "إنشاء مجموعة مع تحديد لاعبين ثم حفظ",
+    "expected": "التخصيص والجدول مؤهلان، لا فتح كل ملف على حدة",
+    "sections": "17",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "GRP-02",
+    "scenario": "لاعب مسكن لكرة القدم غير مسكن للسباحة",
+    "expected": "يظهر ضمن unassigned للسباحة وليس محجوبًا عالميًا",
+    "sections": "17",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "GRP-03",
+    "scenario": "نقل مستقبلي أو واقعة واحدة",
+    "expected": "الماضي محفوظ والتعارض/السعة يعاد فحصهما",
+    "sections": "17",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "GRP-04",
+    "scenario": "اقتراح AI يتجاوز سعة أو مستوى",
+    "expected": "يرفضه محرك القيود حتى لو وافق عليه النموذج",
+    "sections": "17,23",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ATT-01",
+    "scenario": "تسجيل حضور ثم retry ثم تصحيح",
+    "expected": "سجل واحد؛ رصيد وتقرير محدثان في الأدوار الأربعة",
+    "sections": "16,29",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ATT-02",
+    "scenario": "expected6 observed7 recorded5",
+    "expected": "فرق يحتاج تحقق؛ لا اتهام ولا حضور طفل مجهول تلقائيًا",
+    "sections": "16",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ATT-03",
+    "scenario": "حصة ملغاة/اعتذار/لم يسجل",
+    "expected": "لا غياب مفترض؛ سياسة رصيد معلنة",
+    "sections": "16",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ATT-04",
+    "scenario": "QR مطبوع/يدوي/QR لأكاديمية أخرى",
+    "expected": "يدوي يعمل؛ QR ضمن الإذن والغرض فقط؛ رفض الغير",
+    "sections": "16",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ATT-05",
+    "scenario": "انقطاع اتصال أثناء حضور",
+    "expected": "pending-sync ظاهر؛ conflict يعالج بلا فقد/نجاح كاذب",
+    "sections": "32",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "OPS-01",
+    "scenario": "بحث حصص الآن الساعة 17:15 والعودة للأمس",
+    "expected": "ترتيب حالي ثم قادم؛ صلاحية الماضي منفصلة",
+    "sections": "07",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAY-01",
+    "scenario": "Webhook مكرر ومتأخر وعكس الترتيب",
+    "expected": "دفعة وفترة واحدة؛ لا regression حالة قديمة",
+    "sections": "19",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAY-02",
+    "scenario": "توقيع/عملة/مبلغ/حساب مزود لا يطابق",
+    "expected": "حجر/رفض؛ لا تفعيل ولا قبض كاذب",
+    "sections": "19",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAY-03",
+    "scenario": "نقدي معطل ثم مفعّل لصندوق مخول",
+    "expected": "رفض API في الأولى؛ إيصال ومطابقة و void متتبع في الثانية",
+    "sections": "19",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PAY-04",
+    "scenario": "استرداد جزئي وزيادة دفع",
+    "expected": "رصيد وتسوية صحيحة؛ لا إعادة دين تلقائيًا",
+    "sections": "13,19",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "SUB-01",
+    "scenario": "إضافة 7 أيام دون طلب حصص جديدة",
+    "expected": "تاريخ فقط؛ لا 7 حصص آلية",
+    "sections": "04",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "SUB-02",
+    "scenario": "نقل رصيد وتعويض وتجميد",
+    "expected": "مصدر وسبب وقيد استهلاك واحد؛ لا تكرار استحقاق",
+    "sections": "17,19",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "SUB-03",
+    "scenario": "تجديد للغير برمز محدود",
+    "expected": "لا GuardianLink جديد ولا تسرب بيانات المستفيد",
+    "sections": "09,27",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-01",
+    "scenario": "توليد template ثم Preview لنفس schema",
+    "expected": "المراجع/نسخة Schema متطابقة؛ لا إنشاء فعلي",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-02",
+    "scenario": "1000 صف وفيها طفل متعدد الرياضات وأسرة متعددة الأطفال",
+    "expected": "عدد ملفات/تسجيلات صحيح وعلاقات سليمة؛ لا merge بالهاتف وحده",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-03",
+    "scenario": "تكرار الرفع أو انقطاع Job وإعادته",
+    "expected": "idempotency؛ لا تكرار أشخاص/اشتراكات/أرصدة",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-04",
+    "scenario": "agreed_net لخصم تاريخي مع قاعدة إخوة جديدة",
+    "expected": "يحفظ القديم؛ لا خصم ثانٍ؛ الجديد في التجديد فقط",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-05",
+    "scenario": "رصيد افتتاحي 500 عند cutoff",
+    "expected": "رصيد 500 لا تحصيل 500 اليوم؛ بلا إيصال provider ملفق",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-06",
+    "scenario": "مراجع Tenant آخر/تواريخ خاطئة/صيغ/macros",
+    "expected": "يمنع الملف/الصف حسب السياسة ويشرح السبب",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "IMP-07",
+    "scenario": "تغير باقة/سعة بين preview و commit",
+    "expected": "stale validation يتوقف/يتجدد، لا قبول متجاوز",
+    "sections": "18",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EVAL-01",
+    "scenario": "تقييم مسودة→نشر→تصحيح",
+    "expected": "الأسرة ترى المنشور فقط؛ version وتاريخ محفوظان",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EVAL-02",
+    "scenario": "إتقان مهارتين من ثماني مهارات",
+    "expected": "يعرض 25% والمهارتين المحددتين؛ لا يحول الفئة العمرية U12 إلى U14.",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "EVAL-03",
+    "scenario": "طلب ترقية بعد استكمال المهارات",
+    "expected": "قرار فني صريح؛ لا ترقية تلقائية بالوقت أو باقتراح الذكاء الاصطناعي.",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "PLAN-01",
+    "scenario": "حصة مدتها 76 دقيقة وأجزاء خطتها مجموعها 60",
+    "expected": "يعرض فرق المدة؛ لا يدعي تطابق الخطة مع مدة الحصة.",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "VOICE-01",
+    "scenario": "تفريغ صوت بأسماء متشابهة أو تعطل مزود التفريغ",
+    "expected": "نص قابل للمراجعة وربط كل ملاحظة بلاعبها؛ لا حفظ آلي؛ الكتابة بديل متاح.",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "MEDIA-01",
+    "scenario": "وسائط لاعب أو مجموعة بموافقات متفاوتة",
+    "expected": "فحص الجمهور والموافقات قبل النشر؛ عضوية المجموعة ليست تصريحًا شاملًا.",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "MEDIA-02",
+    "scenario": "انضمام عضو أو انسحابه أو سحب الموافقة مع رابط قديم",
+    "expected": "إعادة فحص الوصول وإبطال ما يلزم؛ لا إتاحة الأرشيف كاملًا للأعضاء الجدد تلقائيًا.",
+    "sections": "21",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "CAL-01",
+    "scenario": "فعالية مخصصة لمجموعة أو لاعب",
+    "expected": "تظهر للجمهور المخول فقط في التقويم وواجهة API والإشعار.",
+    "sections": "20",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "CAL-02",
+    "scenario": "فعالية تحجز موردًا مشغولًا أو إلغاء تسجيل مدفوع",
+    "expected": "يفحص التعارض ومسار الإلغاء والتسوية؛ لا حذف صامت للحجز أو المبلغ.",
+    "sections": "20",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "REQ-01",
+    "scenario": "شكوى عن حصة دربها بديل في وقت سابق",
+    "expected": "يقترح المدرب الفعلي وقت الحصة ويحفظ خصوصية المشتكي.",
+    "sections": "22",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "REQ-02",
+    "scenario": "تسع شكاوى متشابهة من عدد أقل من الأسر",
+    "expected": "يميز البلاغات عن عدد المشتكين؛ التحليل لا يثبت اتهامًا ولا يقرر عقوبة.",
+    "sections": "22",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "AI-01",
+    "scenario": "تعليمات خبيثة داخل شكوى أو ملف مستورد",
+    "expected": "تعامل كنص بيانات؛ لا تغير صلاحيات ولا تسرب معلومات ولا تنفذ تعليمات.",
+    "sections": "23",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "AI-02",
+    "scenario": "تجهيز متابعة ثم سداد بعض الأفراد قبل اعتماد الإرسال",
+    "expected": "يعاد فحص القائمة؛ يستبعد المسدد والمنسحب من التسويق؛ يمنع تكرار الإرسال.",
+    "sections": "23",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "SIM-01",
+    "scenario": "السيناريوهات 4 المرجعية",
+    "expected": "5,300/3,560/5,240/6,920 وتعادل 15",
+    "sections": "24",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "SIM-02",
+    "scenario": "تغيير أسعار ومجموعات وتوزيع تكلفة داخل المحاكي",
+    "expected": "لا تتغير بيانات التشغيل؛ نقل لاعب داخلي لا يخلق إيرادًا جديدًا.",
+    "sections": "24",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ADS-01",
+    "scenario": "الباقة Premium تدعم الإعلانات وإعداد الأكاديمية معطل",
+    "expected": "لا عرض أو إرسال أو شراء عبر API حتى تتحقق الصلاحية والإعداد.",
+    "sections": "25",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ADS-02",
+    "scenario": "ألف لاعب يمثلون 650 أسرة، وافقت 400 منها على القناة",
+    "expected": "جمهور ومقاييس بتعريفات صحيحة؛ لا ضمان لوصول الإعلان إلى ألف أسرة.",
+    "sections": "25",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ADS-03",
+    "scenario": "إعلان دون اعتماد أو انسحاب مستلم من التسويق",
+    "expected": "لا نشر أو إشعار تسويقي لذلك المستلم؛ تظل إشعارات الخدمة مستقلة.",
+    "sections": "25",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ADS-04",
+    "scenario": "معلن يطلب أرقام الأسر أو شرائح مبنية على صحة الأطفال",
+    "expected": "يرفض الطلب؛ تقارير مجمعة فقط دون كشف الهوية أو بيانات حساسة.",
+    "sections": "25",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "HELP-01",
+    "scenario": "درس مسودة ومنح إذن مشاهدة محتوى المساعدة",
+    "expected": "المسودة لا تظهر؛ إذن الفيديو لا يمنح صلاحيات تشغيلية في المنتج.",
+    "sections": "10",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "ONB-01",
+    "scenario": "تكرار الدخول بنفس الدور والنسخة ثم تغيير الرياضة",
+    "expected": "ثلاث شاشات قابلة للتخطي وثيمة مناسبة؛ لا إجبار متكرر على المشاهدة.",
+    "sections": "10",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "TEN-01",
+    "scenario": "تبديل معرف الأكاديمية أو اللاعب في القراءة والكتابة والعمليات الجماعية",
+    "expected": "يرفض الوصول غير المصرح به في كل المسارات، مع تدقيق لا يكشف بيانات شخصية.",
+    "sections": "26,32",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "TEN-02",
+    "scenario": "تبديل وضع المالك إلى المدرب على هاتف مشترك",
+    "expected": "لا بقاء لبيانات الرواتب في الذاكرة المؤقتة أو زر الرجوع؛ قائمة الدور صحيحة.",
+    "sections": "05,26",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "TEN-03",
+    "scenario": "خفض باقة أو تعطيل الوسائط والذكاء الاصطناعي",
+    "expected": "تمنع عمليات غير المسموح في API والمهام الخلفية؛ يحفظ التاريخ حسب الحقوق والسياسة.",
+    "sections": "26",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "QR-01",
+    "scenario": "فتح رابط فرع ثم التسجيل ثم تثبيت التطبيق والدخول",
+    "expected": "الطلب مرتبط بسياقه وحسابه الموثق؛ لا اعتماد على تذكر متجر التطبيقات للرابط.",
+    "sections": "27",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "CRM-01",
+    "scenario": "رقم واحد لمالك أكاديميتين ومقر يستضيف شريكين",
+    "expected": "يربط جهة الاتصال دون دمج الكيانات التجارية خطأً.",
+    "sections": "28",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "CRM-02",
+    "scenario": "مالك أكاديمية يحاول فتح CRM المنصة أو إرسال لمتلق بلا موافقة",
+    "expected": "يرفض النطاق أو الإرسال غير المصرح به؛ لا نتيجة نجاح وهمية.",
+    "sections": "28",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "UX-01",
+    "scenario": "أحجام 360 و390 و430 و768 و1440 بكسل وتكبير النص 200%",
+    "expected": "لا تمرير أفقي غير مقصود للصفحة؛ اتجاه عربي صحيح وتركيز وأهداف لمس قابلة للاستخدام.",
+    "sections": "02",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "UX-02",
+    "scenario": "أكاديمية بفرع ورياضة واحدة ثم إضافة فروع ورياضات",
+    "expected": "تختفي المحددات غير اللازمة وتظهر عند التعدد مع نطاق واضح.",
+    "sections": "06",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "MET-01",
+    "scenario": "رصيد لحظي وتحميلات فترة واشتراكات قريبة الانتهاء ضمن النشطة",
+    "expected": "تعريف وفترة لكل مؤشر؛ لا جمع عدادات متداخلة أو أرصدة يومية كتحصيل.",
+    "sections": "06,29",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "MET-02",
+    "scenario": "قيمة مقارنة صفر أو أساس ربح سالب أو تكلفة ناقصة",
+    "expected": "لا قيمة لا نهائية أو صفر مصطنع أو اتجاه تحسن أخضر دون أساس.",
+    "sections": "06,29",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "REL-01",
+    "scenario": "تشغيل صفر اختبارات أو غياب إعداد المزود أو نجاح بعد إعادة محاولة",
+    "expected": "يظهر blocked أو flaky عند انطباقه؛ لا نجاح عام مضلل.",
+    "sections": "33,34",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  },
+  {
+    "id": "REL-02",
+    "scenario": "ترقية إصدار Staging إلى الإنتاج ثم الحاجة للرجوع",
+    "expected": "نفس بصمة البناء؛ توافق مخطط البيانات وخطة استعادة وفحص غير مدمّر.",
+    "sections": "34",
+    "status": "NOT_EXECUTED_ON_PRODUCT"
+  }
+]

@@ -1,0 +1,58 @@
+{
+  "notice": "Design example; NOT a configured runner. Translate tags to real tests after repository review.",
+  "core": [
+    "authentication",
+    "tenant-isolation",
+    "cross-role-cache",
+    "pricing",
+    "payment-integrity"
+  ],
+  "profiles": {
+    "swimming-pilot": [
+      "core",
+      "swim-products",
+      "lanes",
+      "attendance",
+      "temporary-coach",
+      "expense-allocation",
+      "hybrid-payroll",
+      "external-contracts",
+      "import",
+      "guardian-journey",
+      "calendar-audience"
+    ],
+    "football": [
+      "core",
+      "football-criteria",
+      "pitch-capacity",
+      "group-placement",
+      "attendance",
+      "renewals"
+    ],
+    "premium-community": [
+      "core",
+      "ads-entitlements",
+      "moderation",
+      "consent",
+      "audience-metrics"
+    ],
+    "disabled-modules": [
+      "core",
+      "disabled-ui",
+      "disabled-api",
+      "disabled-jobs"
+    ],
+    "production-smoke": [
+      "read-only-health",
+      "version",
+      "config-scope",
+      "non-destructive-routes"
+    ]
+  },
+  "blockedMustFailRelease": [
+    "zero-tests",
+    "missing-required-credentials",
+    "cross-tenant-failure",
+    "financial-mismatch"
+  ]
+}
