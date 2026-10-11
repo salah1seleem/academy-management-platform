@@ -21,6 +21,10 @@ public sealed class LiveHealthTests
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            builder.UseEnvironment("Development");
+            builder.UseSetting("Demo:SeedEnabled", "false");
+            builder.UseSetting("Demo:FixedOtpEnabled", "false");
+            builder.UseSetting("Payments:InternalTest:Enabled", "false");
             builder.UseSetting("ConnectionStrings:Default", connectionString);
         }
     }

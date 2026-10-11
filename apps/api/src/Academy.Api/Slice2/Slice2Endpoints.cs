@@ -6,6 +6,7 @@ using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Tenancy;
 using Academy.Api.Slice3;
+using Academy.Api.Operations;
 using Academy.Infrastructure.Subscriptions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +25,7 @@ public static class Slice2Endpoints
             var t = (await tenant.ResolveAsync())!;
             var branches = await db.Branches.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName }).ToListAsync();
             var sports = await db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName }).ToListAsync();
-            var categories = await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName }).ToListAsync();
+            var categories = await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.MinimumBirthYear, x.MaximumBirthYear }).ToListAsync();
             var groups = await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive).OrderBy(x => x.ArabicName)
                 .Select(x => new { x.Id, x.ArabicName, x.BranchId, x.SportId, x.AgeCategoryId }).ToListAsync();
             var coaches = await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Role == AcademyRole.Coach && x.IsActive).OrderBy(x => x.User.DisplayName).Select(x => new { id = x.Id, arabicName = x.User.DisplayName }).ToListAsync();
@@ -84,28 +85,40 @@ public static class Slice2Endpoints
         api.MapGet("/coach/groups", async (CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db) =>
         {
             var t = (await tenant.ResolveAsync())!; var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var groups = await db.StaffGroupAssignments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.AcademyMembership.UserId == userId && x.IsActive).Select(x => new { x.TrainingGroup.Id, x.TrainingGroup.ArabicName }).ToListAsync(); return Results.Ok(groups);
+            var groups = await db.StaffGroupAssignments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.AcademyMembership.UserId == userId && x.IsActive && x.TrainingGroup.IsActive && x.AcademyMembership.IsActive).Select(x => new { x.TrainingGroup.Id, x.TrainingGroup.ArabicName }).ToListAsync(); return Results.Ok(groups);
         }).RequireAuthorization(AcademyPermissions.CoachGroupsRead);
     }
 
-    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, string? subscriptionState, DateOnly? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
-        var t = (await tenant.ResolveAsync())!;
+        var t = (await tenant.ResolveAsync())!; var date = asOf ?? clock.Today;
+        if (subscriptionState is not (null or "" or "active" or "expiring" or "expired" or "subscribed" or "stable" or "other")) return Results.UnprocessableEntity();
         var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.ArabicName.Contains(search) || x.PlayerCode.Contains(search) || db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.Id && l.Guardian.ContactPhone == EgyptPhoneNormalizer.Normalize(search)));
         if (branchId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.BranchId == branchId));
         if (sportId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.SportId == sportId));
         if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroup.AgeCategoryId == ageCategoryId));
         if (groupId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.TrainingGroupId == groupId));
+        var eligible = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen);
+        var subscribed = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollment.IsActive && p.SportEnrollment.Player.IsActive && (!branchId.HasValue || p.SportEnrollment.BranchId == branchId) && (!sportId.HasValue || p.SportEnrollment.SportId == sportId) && (!groupId.HasValue || p.SportEnrollment.TrainingGroupId == groupId) && p.Status != SubscriptionPeriodStatus.Cancelled);
+        var activePeriods = eligible.Where(p => p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0));
+        var expiredPeriods = eligible.Where(p => p.EndDate < date || p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0);
+        if (subscriptionState == "subscribed") query = query.Where(x => subscribed.Any(p => p.SportEnrollment.PlayerId == x.Id));
+        if (subscriptionState == "stable") query = query.Where(x => activePeriods.Any(p => p.SportEnrollment.PlayerId == x.Id) && !activePeriods.Any(p => p.SportEnrollment.PlayerId == x.Id && p.EndDate <= date.AddDays(7)));
+        if (subscriptionState == "other") query = query.Where(x => subscribed.Any(p => p.SportEnrollment.PlayerId == x.Id) && !activePeriods.Any(p => p.SportEnrollment.PlayerId == x.Id) && !expiredPeriods.Any(p => p.SportEnrollment.PlayerId == x.Id));
+        if (subscriptionState == "active") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
+        if (subscriptionState == "expiring") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && p.EndDate >= date && p.EndDate <= date.AddDays(7) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
+        if (subscriptionState == "expired") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && (p.EndDate < date || p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0)) && !eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
         return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new
         {
             x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, x.IsActive, x.PhotoReference,
+            hasActiveSubscription = eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
             enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active),
             enrollmentSummaries = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).ThenBy(e => e.Id).Select(e => new
             {
                 e.Id, sportName = e.Sport.ArabicName, branchName = e.Branch.ArabicName, groupName = e.TrainingGroup.ArabicName, status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == e.Id).OrderByDescending(p => p.UpdatedAtUtc)
-                    .Select(p => new { plan = p.SubscriptionPlan.ArabicName, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < clock.Today || (p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > clock.Today ? "Scheduled" : "Active" }).FirstOrDefault()
+                    .Select(p => new { plan = p.SubscriptionPlan.ArabicName, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < date || (p.SubscriptionPlan.PlanType != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > date ? "Scheduled" : "Active" }).FirstOrDefault()
             }).ToList()
         }).ToListAsync());
     }
@@ -117,12 +130,23 @@ public static class Slice2Endpoints
         return Results.Ok(children);
     }
 
-    private static async Task<IResult> RegisterPlayer(RegistrationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, TimeProvider clock)
+    private static async Task<IResult> RegisterPlayer(RegistrationRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock, CollectionService collections, DiscountRules discounts)
     {
         var t = (await tenant.ResolveAsync())!; var actorId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var group = await db.TrainingGroups.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.GroupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
+        var group = await db.TrainingGroups.AsNoTracking().Include(x => x.AgeCategory).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.GroupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
         if (group is null || group.BranchId != request.BranchId || group.SportId != request.SportId) return Results.UnprocessableEntity(new { message = "المجموعة لا تطابق الفرع والرياضة المختارين." });
         await using var transaction = await db.Database.BeginTransactionAsync();
+        var key = http.Request.Headers["Idempotency-Key"].ToString();
+        var payloadHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(request))));
+        if (request.PlanId.HasValue)
+        {
+            if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || request.PaymentMethod is not ("Cash" or "Online")) return Results.UnprocessableEntity(new { message = "أكد طريقة التحصيل وأعد إرسال الطلب." });
+            key = "register-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"registration:{t.AcademyId}:{actorId}:{key}"}, 0))");
+            var prior = await db.RenewalRequests.Where(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actorId && x.IdempotencyKey == key).Select(x => new { playerId = x.SportEnrollment.PlayerId, x.RegistrationPayloadHash }).SingleOrDefaultAsync();
+            if (prior is not null) return prior.RegistrationPayloadHash == payloadHash ? Results.Ok(new { prior.playerId, subscriptionCreated = true, replay = true }) : Results.Conflict(new { message = "بيانات الطلب تغيرت. استخدم عملية تسجيل جديدة." });
+            if (!await db.SubscriptionPlans.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId && x.SportId == group.SportId && x.IsActive)) return Results.UnprocessableEntity(new { message = "اختر باقة فعالة مطابقة للرياضة." });
+        }
         Player player;
         if (request.ExistingPlayerId is Guid playerId)
         {
@@ -132,9 +156,12 @@ public static class Slice2Endpoints
         else
         {
             if (string.IsNullOrWhiteSpace(request.PlayerArabicName) || request.DateOfBirth is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["player"] = ["اسم اللاعب وتاريخ الميلاد مطلوبان."] });
-            player = new Player { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerCode = $"PLR-{Guid.NewGuid():N}"[..12].ToUpperInvariant(), ArabicName = request.PlayerArabicName.Trim(), DateOfBirth = request.DateOfBirth.Value, Gender = request.Gender, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() };
+            player = new Player { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerCode = $"PLR-{Guid.NewGuid():N}"[..12].ToUpperInvariant(), ArabicName = request.PlayerArabicName.Trim(), DateOfBirth = request.DateOfBirth.Value, Gender = request.Gender, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
             db.Players.Add(player);
         }
+        if (group.AgeCategory.MinimumBirthYear > player.DateOfBirth.Year || group.AgeCategory.MaximumBirthYear < player.DateOfBirth.Year || player.DateOfBirth > DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)) return Results.UnprocessableEntity(new { message = "عمر اللاعب غير مناسب للمجموعة." });
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-capacity:{t.AcademyId}:{group.Id}"}, 0))");
+        if (group.Capacity.HasValue && await db.SportEnrollments.CountAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == group.Id && x.IsActive) >= group.Capacity.Value) return Results.Conflict(new { message = "المجموعة مكتملة العدد." });
         if (await db.SportEnrollments.AnyAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == player.Id && x.SportId == request.SportId && x.Status == EnrollmentStatus.Active)) return Results.Conflict(new { message = "للاعب تسجيل نشط في هذه الرياضة بالفعل." });
         GuardianProfile guardian;
         if (request.ExistingGuardianId is Guid guardianId)
@@ -144,20 +171,32 @@ public static class Slice2Endpoints
             var phone = EgyptPhoneNormalizer.Normalize(request.GuardianPhone);
             if (phone is null || string.IsNullOrWhiteSpace(request.GuardianName)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["guardian"] = ["اسم ولي الأمر ورقم هاتف صحيح مطلوبان."] });
             var user = await users.Users.SingleOrDefaultAsync(x => x.PhoneNumber == phone);
-            if (user is null) { user = new ApplicationUser { Id = Guid.NewGuid(), UserName = phone, PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = request.GuardianName.Trim(), IsActive = true, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() }; var result = await users.CreateAsync(user); if (!result.Succeeded) return Results.ValidationProblem(new Dictionary<string, string[]> { ["guardian"] = result.Errors.Select(x => x.Description).ToArray() }); }
+            if (user is null) { user = new ApplicationUser { Id = Guid.NewGuid(), UserName = phone, PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = request.GuardianName.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; var result = await users.CreateAsync(user); if (!result.Succeeded) return Results.ValidationProblem(new Dictionary<string, string[]> { ["guardian"] = result.Errors.Select(x => x.Description).ToArray() }); }
             var membership = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.UserId == user.Id && x.Role == AcademyRole.Guardian);
-            if (membership is null) db.AcademyMemberships.Add(new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = AcademyRole.Guardian, IsActive = true, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
+            if (membership is null) db.AcademyMemberships.Add(new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = AcademyRole.Guardian, IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
             else if (membership.Role != AcademyRole.Guardian || !membership.IsActive) return Results.Conflict(new { message = "الحساب لا يملك عضوية ولي أمر فعالة." });
-            guardian = await db.GuardianProfiles.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.UserId == user.Id) ?? new GuardianProfile { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, DisplayName = request.GuardianName.Trim(), ContactPhone = phone, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() };
+            guardian = await db.GuardianProfiles.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.UserId == user.Id) ?? new GuardianProfile { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, DisplayName = request.GuardianName.Trim(), ContactPhone = phone, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
             if (db.Entry(guardian).State == EntityState.Detached) db.GuardianProfiles.Add(guardian);
         }
         if (guardian is null) return Results.NotFound();
         var guardianLinkExists = await db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.GuardianId == guardian.Id && x.PlayerId == player.Id && x.IsActive);
         if (!guardianLinkExists)
-            db.GuardianPlayerLinks.Add(new GuardianPlayerLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, GuardianId = guardian.Id, PlayerId = player.Id, RelationshipType = request.RelationshipType ?? "ولي أمر", CreatedByUserId = actorId, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
-        db.SportEnrollments.Add(new SportEnrollment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, SportId = group.SportId, BranchId = group.BranchId, TrainingGroupId = group.Id, Status = EnrollmentStatus.Active, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
-        await db.SaveChangesAsync(); await transaction.CommitAsync();
-        return Results.Created($"/api/v1/people/players/{player.Id}", new { playerId = player.Id, player.PlayerCode, subscriptionCreated = false });
+            db.GuardianPlayerLinks.Add(new GuardianPlayerLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, GuardianId = guardian.Id, PlayerId = player.Id, RelationshipType = request.RelationshipType ?? "ولي أمر", CreatedByUserId = actorId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        var enrollment = new SportEnrollment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, SportId = group.SportId, BranchId = group.BranchId, TrainingGroupId = group.Id, Status = EnrollmentStatus.Active, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+        db.SportEnrollments.Add(enrollment);
+        if (request.DiscountRuleId is Guid ruleId) {
+            if (!await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == ruleId && x.IsActive && !x.IsSiblingOffer)) return Results.NotFound();
+            if (!await db.PlayerDiscountLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == player.Id && x.DiscountRuleId == ruleId)) db.PlayerDiscountLinks.Add(new Academy.Infrastructure.Operations.PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, DiscountRuleId = ruleId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        }
+        await db.SaveChangesAsync();
+        if (request.PlanId.HasValue && request.ExpectedAmount.HasValue) {
+            var price = await db.SubscriptionPlans.Where(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId).Select(x => x.Price).SingleAsync();
+            var quote = await discounts.CalculateAsync(t.AcademyId, player.Id, price, actorId);
+            if (quote.FinalAmount != request.ExpectedAmount.Value) return Results.Conflict(new { message = "تغير المبلغ المستحق. راجع السعر قبل التحصيل." });
+        }
+        if (request.PlanId.HasValue) await collections.CreateCashAsync(t.AcademyId, actorId, enrollment.Id, request.PlanId.Value, key, request.PaymentMethod!, registrationPayloadHash: payloadHash);
+        await transaction.CommitAsync();
+        return Results.Created($"/api/v1/people/players/{player.Id}", new { playerId = player.Id, player.PlayerCode, subscriptionCreated = request.PlanId.HasValue });
     }
 }
 
@@ -166,4 +205,4 @@ public sealed record AgeCategoryRequest(string ArabicName, int? MinimumBirthYear
 public sealed record GroupRequest(string ArabicName, Guid BranchId, Guid SportId, Guid AgeCategoryId, int? Capacity);
 public sealed record ScheduleRequest(DayOfWeek DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
 public sealed record CoachAssignmentRequest(Guid MembershipId);
-public sealed record RegistrationRequest(Guid? ExistingPlayerId, string? PlayerArabicName, DateOnly? DateOfBirth, Gender? Gender, Guid? ExistingGuardianId, string? GuardianName, string? GuardianPhone, string? RelationshipType, Guid BranchId, Guid SportId, Guid GroupId);
+public sealed record RegistrationRequest(Guid? ExistingPlayerId, string? PlayerArabicName, DateOnly? DateOfBirth, Gender? Gender, Guid? ExistingGuardianId, string? GuardianName, string? GuardianPhone, string? RelationshipType, Guid BranchId, Guid SportId, Guid GroupId, Guid? PlanId = null, string? PaymentMethod = null, Guid? DiscountRuleId = null, decimal? ExpectedAmount = null);

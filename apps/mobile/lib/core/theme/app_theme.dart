@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
 abstract final class AcademyTheme {
-  static const teal = Color(0xFF106F66), gold = Color(0xFFE1B451);
-  static const night = Color(0xFF0C101B),
-      card = Color(0xFF242330),
-      red = Color(0xFFE3072D);
-  static ThemeData light() => ThemeData(
+  static const teal = Color(0xFFD71935), gold = Color(0xFFD71935);
+  static const night = Color(0xFF101118),
+      card = Color(0xFF20222C),
+      red = Color(0xFFD71935);
+  static ThemeData light({Color primary = red}) => ThemeData(
     useMaterial3: true,
     fontFamily: 'Cairo',
-    colorScheme: ColorScheme.fromSeed(seedColor: teal),
-    scaffoldBackgroundColor: const Color(0xFFF2F7F5),
+    colorScheme: ColorScheme.fromSeed(seedColor: primary),
+    scaffoldBackgroundColor: const Color(0xFFF6F6F9),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
@@ -18,7 +18,7 @@ abstract final class AcademyTheme {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(50),
-        backgroundColor: teal,
+        backgroundColor: primary,
       ),
     ),
     cardTheme: CardThemeData(

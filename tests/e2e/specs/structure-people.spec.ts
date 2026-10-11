@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { guardianLogin } from "../support/auth";
 
 test("Demo Admin registers a real player and enrollment from mobile", async ({ page }) => {
   const suffix = Date.now().toString().slice(-6);
@@ -17,8 +18,13 @@ test("Demo Admin registers a real player and enrollment from mobile", async ({ p
   await page.getByLabel("الرياضة").selectOption({ label: "كرة القدم" });
   await page.getByLabel("الفئة العمرية").selectOption({ label: "تحت 10 سنوات" });
   await page.getByLabel("المجموعة").selectOption({ label: "ناشئين 2016 — مجموعة أ" });
-  await page.getByRole("button", { name: "حفظ اللاعب" }).click();
-  await expect(page.getByRole("heading", { name: "قائمة اللاعبين" })).toBeVisible();
+  await page.getByLabel("الباقة", { exact: true }).selectOption({ index: 1 });
+  await page.getByRole("button", { name: "حساب المبلغ المستحق" }).click();
+  await expect(page.getByText(/المبلغ المطلوب تحصيله/)).toBeVisible();
+  await page.getByRole("button", { name: "تسجيل وتأكيد التحصيل" }).click();
+  await expect(page.getByRole("heading", { name: "ملف اللاعب" })).toBeVisible();
+  await expect(page.getByText(playerName, { exact: true }).first()).toBeVisible();
+  await page.goto("/dashboard/players");
   await page.getByLabel("بحث اللاعبين").fill(playerName);
   await expect(page.getByText(playerName, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "فتح القائمة" }).click();
@@ -26,12 +32,7 @@ test("Demo Admin registers a real player and enrollment from mobile", async ({ p
 });
 
 test("Demo Guardian sees linked siblings and no unrelated child", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByRole("button", { name: "ولي أمر" }).click();
-  await page.getByLabel("رقم الهاتف").fill("01000000001");
-  await page.getByRole("button", { name: "طلب رمز تجريبي" }).click();
-  await page.getByLabel("رمز التحقق").fill("246810");
-  await page.getByRole("button", { name: "تحقق ودخول" }).click();
+  await guardianLogin(page);
   await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "عمر أحمد محمود" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "مريم أحمد محمود" })).toBeVisible();

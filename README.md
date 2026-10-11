@@ -1,31 +1,33 @@
 # Academy Management Platform
 
-منصة مستقلة عربية أولاً لإدارة الأكاديميات. الويب المتكامل عند **Slice 8D + Sports Dashboard Phase UI**، وبرنامج Native Mobile يتضمن **A: auth backend، B: الديمو الكروي/reset وإنشاء المدرب، C: أساس Flutter ومصادقة آمنة**. شاشات الأعمال native ومراحل D–H لم تكتمل بعد؛ لا ادعاء Demo native كامل.
+منصة مستقلة عربية أولاً لإدارة الأكاديميات، تشمل لوحة إدارة وFlutter أصليًا للولي والمدرب والمالك. هذه نسخة عمل محلية تضيف مراجعة المالك **CH-016..022** إلى البرنامج المتكامل عند HEAD `086a52f4eb409b55c9d36c6846a499c71e61312c`. التنفيذ الحالي وبوابات التحقق وحدود الإنتاج في [STATUS](docs/delivery/STATUS.md)؛ لا يُستنتج Production Ready من إمكانية تشغيل Demo.
 
 [معمارية الموبايل](docs/mobile/MOBILE_ARCHITECTURE_v1.0.md) · [دليل checkpoint](docs/mobile/MOBILE_DEMO_GUIDE.md) · [النطاق الإضافي](docs/requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). المسار الجديد يدعم OTP لـGuardian/Coach/Owner، جلسات أجهزة مع تدوير وإلغاء، واختيار عضوية/دور صريحًا. cookie/CSRF الويب وواجهاته باقية.
 
 ## ما الموجود الآن؟
 
-- [Flutter Foundation](apps/mobile/README.md): هاتف/OTP، اختيار الدور، استعادة الجلسة وتدويرها وlogout، Keychain/Keystore، واجهة Cairo عربية RTL وبيئات قابلة للضبط. شاشات الأدوار الحالية توضح أنها أساس مصادقة وليست وظائف D/F/G المكتملة.
+- [Flutter](apps/mobile/README.md): هاتف/OTP، اختيار الدور، تدوير/logout وKeychain/Keystore، وتجارب أعمال للولي والمدرب والمالك بثيم موحد Dark/Light وعربي/English وتنقل سفلي وonboarding.
 
-- [واجهة أكاديمية رياضية](docs/ui/DASHBOARD_UI_SYSTEM.md): لوحة مالك بمؤشرات ورسوم من البيانات الفعلية، هوية اللاعب/المدرب، بطاقات الباقات والمجموعات، وحضور واضح بالنص والأيقونة. إضافات API للقراءة فقط، بلا تغيير auth/payments أو migration. تفاصيل التحقق في STATUS.
+- [واجهة أكاديمية رياضية](docs/ui/DASHBOARD_UI_SYSTEM.md): مؤشرات حقيقية قابلة للنقر، طلبات الدفع أولًا، فلاتر مشتركة وقائمة مختصرة. مراجعة المالك الحالية تشمل workflows مالية وتشغيلية وmigrations إضافية، وليست تغيير قراءة/ألوان فقط.
 - ASP.NET Core Web API مع `/health/live` و`/health/ready`.
+- هوية The Professional Academy للعرض، واسم/شعار/ألوان مستقلة لكل Academy بإدارة مشغّل منصة مخوّل. إعدادات الأكاديمية تجمع حسابات التحويل وسياسة حضور المدرب؛ رسوم البطولة والمباريات اليدوية مستقلة عن اشتراك التدريب. [تفاصيل التحديث](docs/delivery/BRANDING_MATCHES_EXECUTION.md).
 - EF Core وNpgsql مع ASP.NET Core Identity وعضويات Academy معزولة وجلسات browser محفوظة على الخادم.
-- Next.js login وauthenticated shell عربيان RTL، mobile-first، مع تبديل Academy مخوّل من الخادم وPWA manifest/icon.
+- Next.js login للإدارة (`Owner/Admin` فقط) وshell عربي RTL، مع تبديل Academy مخوّل من الخادم وPWA manifest/icon. لا دخول داشبورد للمدرب أو ولي الأمر.
 - PostgreSQL 17 محلي عبر Docker Compose.
 - Demo كروي مستقل حتمي وreset صريح محروس، وprofile متعدد الرياضات منفصل لاختبارات الانحدار والعزل؛ OTP ثابت في `Demo` فقط.
 - فروع ورياضات وفئات ومجموعات وجداول أسبوعية وإسناد مدرب، مع Player مستقل عن `SportEnrollment` وروابط وصاية صريحة.
-- Dashboard عربي RTL وموبايل أولًا: sidebar ثابت، قوائم، بحث وفلاتر، وتسجيل لاعب/ولي أمر/تسجيل رياضي في transaction واحدة.
-- باقات `Duration/Sessions/Combined` وفترات تاريخية، وتجديد ولي الأمر لنفس أبنائه أو لمستفيد آخر عبر كود آمن وOnline-first، مع `PaymentRequest` وevents وتحصيل وإيصال ذريين idempotent.
+- Dashboard عربي RTL: قوائم وسياق لاعب ثابت، تسجيل مدفوع بباقة ومجموعة وصورة اختيارية، وروابط وصاية صريحة. هوية اللاعب وحدها لا تثبت اشتراكًا نشطًا.
+- باقات `Duration/Sessions/Combined` وفترات تاريخية وتجديد وتحصيل وإيصال ذريون idempotent. تجديد الغير في Flutter يبدأ ببحث مصادق ومحدود ثم مرجع مشفر قصير العمر، بلا وصول للطفل. كود Web التاريخي يبقى متوافقًا.
 - `TrainingSession` فعلية مولّدة دون تكرار من الجدول الأسبوعي أو منشأة يدويًا، وحضور لاعبين وجهاز فني منفصلان. `Present` يخصم حصة واحدة فقط من `Sessions/Combined` المؤهل، والتصحيح يعيدها بحركات audit append-only.
 - تعديلات فترة الاشتراك لـOwner/Admin: تجميد/استئناف `Duration` و`Combined`، إضافة/خصم الأيام، وإلغاء فترة واحدة، مع سجل `SubscriptionAdjustment` append-only وidempotency وتعارض متفائل. لا تعديل لتحصيل أو إيصال ولا refund ضمن هذه الإجراءات، وولي الأمر يرى الحالة المبسطة لطفله المرتبط.
 - خصم يدوي واحد لكل `RenewalRequest` بنوع `Percentage` أو `FixedAmount` يطبقه Owner/Admin قبل تأكيد الدفع مع سبب وسجل `RenewalDiscountAdjustment` append-only. تغيير الخصم يلغي طلب الدفع المعلق ويصدر طلبًا جديدًا بالمبلغ النهائي؛ ولي الأمر يرى السعر الأصلي والخصم والإجمالي فقط ولا يستطيع تعديلها.
 - تجديد Owner/Admin للاعب وتسجيل رياضي قائمين من البحث أو الاشتراكات الحالية أو ملف اللاعب، باستخدام محرك التجديد والدفع نفسه دون ازدواج لاعب/تسجيل أو أثر مالي قبل تأكيد الدفع. الإنشاء idempotent ومحمي من طلبين مفتوحين متنافسين، ومتوافق مع الخصم والدفع التجريبي والإيصال.
 - معايير تقييم خاصة بالرياضة، مسودات ودرجات 0–100 ونشر immutable. تقرير كرة القدم يحسب ستة محاور من snapshots الخادم ويعرض radar وقيمًا نصية وتاريخًا لولي الأمر؛ السباحة لها criteria مستقلة بلا radar كرة قدم.
 - رئيسية ولي أمر عربية mobile-first تجمع الطفل مرة واحدة وتعرض رياضاته دون تكرار، مع الإجراءات الثلاثة: اشتراك جديد، تجديد، وتجديد للغير. ملف الطفل يعرض التقرير المنشور والجدول والحضور والاشتراكات من البيانات المحفوظة.
-- `NewEnrollmentRequest` لطلب رياضة جديدة لطفل مرتبط أو طفل جديد؛ الطلب وحده لا ينشئ لاعبًا أو تسجيلًا أو دفعًا. Owner/Admin يراجع ويختار المجموعة ثم ينشئ الرابط والتسجيل ذريًا دون اشتراك مدفوع.
-- كتالوج رياضي للعرض فقط مرتبط برياضات الأبناء دون تكرار؛ السعر والخصم الاختياريان metadata معلوماتية ولا توجد سلة أو طلب أو checkout أو دفع أو تقييمات.
-- مكتبة تغذية عامة من قاعدة البيانات: 15 مادة و18 موضعًا عبر الإفطار والغداء والعشاء، مع الحصة والقيم وحالة المصدر. كل القيم التجريبية موسومة «بيانات تجريبية غير مراجعة»، ولا توجد أي حقول أو endpoints تجارة غذائية.
+- `NewEnrollmentRequest` بباقة وإثبات تحويل ومراجعة إدارية وإسناد مجموعة؛ لا تفعيل قبل القبول. إعداد InstaPay/محفظة لكل أكاديمية، ونسخ ورفع إيصال وإشعار داخلي. المسار التاريخي غير المدفوع لا يختلق تحصيلًا.
+- منتجات رياضية بسعر ومخزون وشراء من الإدارة أو Flutter للولي، ومراجعة تحويل وتقرير مبيعات. التأكيد يخصم المخزون مرة واحدة؛ لا شحن أو سلة عامة أو بوابة دفع حية.
+- مكتبة تغذية معلوماتية مصورة واقتراحات يومية حتمية حسب العمر واليوم/التدريب، مع مصدر وحصة وحالة مراجعة؛ لا تجارة أو وصفة علاجية. [مصادر وحدود القيم](docs/nutrition/YOUTH_FOOTBALL_NUTRITION_DEMO_DATA.md).
+- خصومات إخوة/مدرسة مستمرة، استرداد جزئي بسجل مستقل، أخبار مسودة/نشر بمدة ظهور، حضور مدرب يومي وخصم تأخير معتمد وصلاحيات فردية يضبطها المالك.
 - سجلات إصابة/استشارة factual ينشئها Owner/Admin وينشرها صراحة؛ Guardian يرى المنشور فقط لطفله المرتبط ولا يرى `StaffNotes`، وCoach بلا وصول طبي. معرض الطفل يتبع قاعدة النشر والربط نفسها.
 
 المتطلبات الحاكمة في [`docs/requirements/CURRENT_REQUIREMENTS.md`](docs/requirements/CURRENT_REQUIREMENTS.md)، وحالة التنفيذ الدقيقة في [`docs/delivery/STATUS.md`](docs/delivery/STATUS.md).
@@ -83,7 +85,7 @@ dotnet ef database update \
   --startup-project apps/api/src/Academy.Api
 ```
 
-آخر migration هي `20261003214541_NativeMobileSessions`: تضيف `MobileSessions` و`MobileOtpChallenges` وتتيح عضويات أدوار متعددة مع uniqueness على academy/user/role. Migration السابقة `20260929015730_Slice8CSubscriptionDiscounts` تبقى كما هي بمكوناتها المالية. لا تعدّل migrations مطبقة أو تحذف بيانات لتسهيل downgrade.
+آخر migration حاليًا `20261007225559_AcademyBrandingAndMatches`، إضافة إلى سبع migrations لمراجعة المالك. migrations الهوية والاشتراك والتغذية السابقة محفوظة كما هي. لا تعدّل migrations مطبقة أو تحذف بيانات لتسهيل downgrade.
 
 ## 5. تشغيل Demo آمن محليًا
 
@@ -132,9 +134,9 @@ export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 npm run dev:web -- --hostname 127.0.0.1
 ```
 
-افتح `http://127.0.0.1:3000/login`. مالك العرض `owner.football@example.test` والإداري `admin.football@example.test` بكلمة Demo `Demo-Only-123!`. ولي الأمر الأول `01099900100`/OTP `246810` لديه طفل واحد؛ الثاني `01099900101` لديه طفلان. افتح لوحة المالك ثم اللاعبين والمجموعات، و«الأكاديمية ← المدربون ← إضافة مدرب». التغذية في checkpoint B ثلاثة أمثلة مؤقتة بلا قيم مختلقة، وليست مكتبة Phase E المكتملة. لا شكشوكة/كشري ولا شراء للتغذية. `OD-008` و`OD-009` و`OD-010` لا تتغير بهذا العمل.
+افتح `http://127.0.0.1:3000/login`. مالك العرض `owner.football@example.test` والإداري `admin.football@example.test` بكلمة Demo `Demo-Only-123!`. ولي الأمر الأول `01099900100`/OTP `246810` لديه طفل واحد؛ الثاني `01099900101` لديه طفلان في Flutter. ابدأ بطلبات الدفع واللاعبين والمجموعات؛ إعداد حسابات التحويل من طلبات الدفع للمالك فقط. لا شكشوكة/كشري ولا شراء للتغذية. ما حسمته المراجعة من قرارات تجارة المنتجات/الدفع موثق في [DECISIONS](docs/architecture/DECISIONS_v1.0.md)، وبقية القرارات المفتوحة لا تصبح معتمدة ضمنيًا.
 
-الفقرات التالية توثق رحلات الشرائح التاريخية على `Demo__SeedProfile=LegacyRegression` في قاعدة اختبار مستقلة. أسماء عمر/مريم والرياضات المتعددة فيها ليست بيانات العرض الكروي الجديد:
+الفقرات التالية توثق رحلات الشرائح **التاريخية** على `Demo__SeedProfile=LegacyRegression` في قاعدة اختبار مستقلة. أسماء عمر/مريم والرياضات المتعددة فيها ليست بيانات العرض الكروي الجديد؛ بعض روابط الاشتراكات باقية مباشرة لكن أُزيلت من القائمة. التقارير الآن للمالك افتراضيًا، إلا عند منحة صريحة للموظف.
 
 لتجربة Slice 8A، ادخل كمالك وافتح «لوحة المالك»، ثم «التقرير المالي» لتصفية التحصيلات المؤكدة حسب الفترة/الرياضة/الفرع/الباقة وتنزيل CSV عربي حقيقي. كإداري افتح «التقارير ← تقارير الحضور»، اختر سبتمبر 2026 وسنة الميلاد 2019 ومجموعة كرة القدم، ثم صدّر CSV؛ يعرض التقرير سجلات الحضور المحفوظة فقط ولا يستنتج الغياب من سجل مفقود. كولي أمر افتح «الإيصالات»، اختر إيصالًا واضغط «طباعة الإيصال» لاستخدام طباعة المتصفح العربية؛ لا يتم إنشاء PDF أو فاتورة ضريبية.
 
@@ -144,14 +146,14 @@ npm run dev:web -- --hostname 127.0.0.1
 
 لتجربة Slice 8D، ادخل كـOwner/Admin واختر الإجراء «تجديد اشتراك» أو افتح «الاشتراكات الحالية» واضغط «تجديد». ابحث باسم اللاعب أو الكود أو هاتف ولي الأمر، اختر التسجيل الرياضي والباقة، وراجع البداية المتوقعة والمبلغ ثم أنشئ طلب الدفع. يمكنك تطبيق خصم من تفاصيل طلب التجديد، ثم فتح طلب الدفع التجريبي ومحاكاة النجاح ومراجعة الإيصال والفترة الجديدة. كولي أمر، راجع التجديد وcheckout والنجاح/الفشل والإيصال بصياغة عربية؛ `/` يوجه تلقائيًا حسب الجلسة، وPWA يبدأ من `/login`. التطبيق installable/responsive ببيانات manifest، لكنه لا يدعم العمل دون اتصال ولا يحتوي Service Worker.
 
-صور الكتالوج والتغذية والمعرض الحالية رسوم SVG محلية اصطناعية مملوكة للمشروع لأغراض Demo. لا يوجد upload أو تخزين وسائط production-grade؛ object storage الخاص، الفحص، الاحتفاظ، والروابط المؤقتة جزء من Production gate لاحق.
+صور Demo محلية اصطناعية؛ التغذية تستخدم صور الوجبات الموثقة، لا صور أطفال حقيقية. يتوفر رفع خاص للصور/الفيديو/إثبات الدفع إلى تخزين محلي مستبعد من Git، مع تحقق صلاحيات عند كل قراءة. هذا ليس تخزينًا production-grade؛ التخزين الدائم والنسخ الاحتياطي وفحص البرمجيات الخبيثة وفك الترميز الكامل بوابات إنتاج لاحقة.
 
 ## 8. تشغيل الاختبارات
 
-مع PostgreSQL يعمل وبعد تحميل `.env`:
+مع PostgreSQL يعمل وبعد تحميل `.env`: عرّف `ACADEMY_TEST_CONNECTION_STRING` باتصال قاعدة اختبار مستقلة، وليس قاعدة العرض التي تراجعها. الاختبارات تغير بياناتها.
 
 ```bash
-export ACADEMY_TEST_CONNECTION_STRING="$ConnectionStrings__Default"
+test -n "$ACADEMY_TEST_CONNECTION_STRING"
 dotnet build AcademyManagementPlatform.slnx --configuration Release
 dotnet test AcademyManagementPlatform.slnx --no-build --configuration Release
 npm run typecheck
@@ -180,9 +182,10 @@ docker compose --env-file .env -f infra/local/compose.yaml down
 ```text
 apps/api/          API وPersistence foundation
 apps/web/          Next.js Arabic RTL PWA shell
+apps/mobile/       Flutter native للولي والمدرب والمالك
 tests/             unit, integration, architecture, e2e
 infra/local/       PostgreSQL Docker Compose
 docs/              requirements, architecture, delivery
 ```
 
-لا يوجد حتى الآن: coupons/campaigns/loyalty أو refunds/payment reversals، تجارة منتجات أو تغذية، production media upload/storage، Communications/bot/ranking/AI Reports أو advanced BI، revision/supersede UI أو مقارنة فترات التقييم، rescheduling متقدم، PDF receipts، provider دفع أو SMS إنتاجي، native auth، نشر أو إثبات production-readiness.
+لا يوجد حتى الآن: بوابة دفع/SMS/push إنتاجية أو استرداد آلي عبر بنك، شحن/ضرائب/سلة متجر عامة، تجارة تغذية، media storage إنتاجي، نظام رواتب كامل، Communications/bot/ranking/AI Reports أو advanced BI، revision/supersede UI، PDF receipts، signing والمتاجر أو إثبات production-readiness. تفاصيل النطاق المنفذ والاختبارات في STATUS.

@@ -1,8 +1,10 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
+import '../shared/transfer_payment.dart';
 
 class RenewalPicker extends StatelessWidget {
   final AuthController auth;
@@ -73,7 +75,7 @@ class PlanPicker extends StatelessWidget {
   Widget content(BuildContext context, List<Json> items) => gList([
     Heading(childName),
     if (reference != null)
-      const Text('الدفع لا يمنحك الوصول إلى ملف اللاعب أو ربطه بحسابك.'),
+      const UiText('الدفع لا يمنحك الوصول إلى ملف اللاعب أو ربطه بحسابك.'),
     if (items.isEmpty) const EmptyMessage('لا توجد باقات متاحة.'),
     for (final p in items)
       GCard(
@@ -81,9 +83,9 @@ class PlanPicker extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Heading(textOf(p['arabicName'])),
-            Text(money(p['price'], p['currency'])),
-            if (p['durationDays'] != null) Text('${p['durationDays']} يومًا'),
-            if (p['sessionCount'] != null) Text('${p['sessionCount']} حصة'),
+            UiText(money(p['price'], p['currency'])),
+            if (p['durationDays'] != null) UiText('${p['durationDays']} يومًا'),
+            if (p['sessionCount'] != null) UiText('${p['sessionCount']} حصة'),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: () => openPage(
@@ -97,7 +99,7 @@ class PlanPicker extends StatelessWidget {
                   reference: reference,
                 ),
               ),
-              child: const Text('اختيار الباقة'),
+              child: const UiText('اختيار الباقة'),
             ),
           ],
         ),
@@ -118,22 +120,53 @@ class ExternalRenewal extends StatefulWidget {
 }
 
 class _ExternalRenewalState extends State<ExternalRenewal> {
-  final reference = TextEditingController();
-  bool busy = false;
+  final name = TextEditingController();
+  List<Json> matches = [];
+  bool busy = false, searched = false;
   String? error;
   @override
   void dispose() {
-    reference.dispose();
+    name.dispose();
     super.dispose();
   }
 
-  Future<void> resolve() async {
+  Future<void> search() async {
     if (busy) return;
-    final code = reference.text.trim();
-    if (code.isEmpty) {
-      setState(() => error = 'أدخل كود التجديد.');
+    if (name.text.trim().length < 3) {
+      setState(() => error = 'اكتب ثلاثة أحرف على الأقل من اسم اللاعب.');
       return;
     }
+    setState(() {
+      busy = true;
+      error = null;
+      matches = [];
+      searched = false;
+    });
+    try {
+      final result = await widget.auth.request(
+        'POST',
+        '/api/v1/guardian/subscriptions/external/search',
+        body: {'name': name.text.trim()},
+      );
+      if (mounted) {
+        setState(() {
+          matches = rows(result);
+          searched = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => error = e is ApiFailure ? e.message : 'تعذر البحث عن اللاعب.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> select(Json match) async {
+    if (busy) return;
     setState(() {
       busy = true;
       error = null;
@@ -143,7 +176,7 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
         await widget.auth.request(
           'POST',
           '/api/v1/guardian/subscriptions/external/resolve',
-          body: {'reference': code},
+          body: {'reference': match['reference']},
         ),
       );
       if (!mounted) return;
@@ -153,16 +186,16 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
           auth: widget.auth,
           environment: widget.environment,
           childName: d['playerDisplayName'],
-          reference: code,
+          reference: match['reference'],
           plans: rows(d['plans']),
         ),
       );
-    } on ApiFailure catch (e) {
+    } catch (e) {
       if (mounted) {
         setState(
-          () => error = e.status == 404
-              ? 'كود التجديد غير صالح أو منتهي.'
-              : e.message,
+          () => error = e is ApiFailure
+              ? e.message
+              : 'انتهى الاختيار. أعد البحث.',
         );
       }
     } finally {
@@ -175,22 +208,32 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
     title: 'تجديد اشتراك لغيره',
     child: gList([
       const Heading('هدية تدعم رحلة لاعب'),
-      const Text(
-        'اطلب كود التجديد الخاص من ولي الأمر أو الأكاديمية. لا يوجد بحث عام بأسماء الأطفال، والدفع لا يتيح الوصول إلى الملف.',
+      const UiText(
+        'ابحث داخل أكاديميتك واختر اللاعب والرياضة. الدفع لا يمنحك الوصول إلى ملفه أو ربطه بحسابك.',
       ),
-      const SizedBox(height: 24),
-      TextField(
-        controller: reference,
-        enabled: !busy,
-        textDirection: TextDirection.ltr,
-        decoration: const InputDecoration(labelText: 'كود التجديد'),
-      ),
-      if (error != null) Text(error!),
       const SizedBox(height: 16),
-      FilledButton(
-        onPressed: busy ? null : resolve,
-        child: Text(busy ? 'جارٍ التحقق…' : 'التحقق من الكود'),
+      TextField(
+        controller: name,
+        enabled: !busy,
+        maxLength: 100,
+        decoration: InputDecoration(labelText: ui(context, 'اسم اللاعب')),
+        onSubmitted: (_) => search(),
       ),
+      FilledButton.icon(
+        onPressed: busy ? null : search,
+        icon: const Icon(Icons.search),
+        label: UiText(busy ? 'جارٍ البحث…' : 'بحث عن لاعب'),
+      ),
+      if (error != null) UiText(error!),
+      if (searched && matches.isEmpty)
+        const EmptyMessage('لا توجد تسجيلات مطابقة للاسم.'),
+      for (final match in matches)
+        GLink(
+          textOf(match['name']),
+          Icons.person_outline,
+          () => select(match),
+          subtitle: '${match['sport']} · ${match['branch']}',
+        ),
     ]),
   );
 }
@@ -272,28 +315,28 @@ class _RenewalReviewState extends State<RenewalReview> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(textOf(widget.plan['arabicName'])),
-            Text(
+            UiText(textOf(widget.plan['arabicName'])),
+            UiText(
               money(widget.plan['price'], widget.plan['currency']),
               style: const TextStyle(fontSize: 28),
             ),
             if (widget.plan['durationDays'] != null)
-              Text('${widget.plan['durationDays']} يومًا'),
+              UiText('${widget.plan['durationDays']} يومًا'),
             if (widget.plan['sessionCount'] != null)
-              Text('${widget.plan['sessionCount']} حصة'),
+              UiText('${widget.plan['sessionCount']} حصة'),
           ],
         ),
       ),
-      const Text(
+      const UiText(
         'لن يتم تحصيل المبلغ أو تفعيل الاشتراك قبل تأكيد الدفع. تاريخ التفعيل والحصص يحددهما الخادم.',
       ),
       if (widget.reference != null)
-        const Text('هذا الطلب لا ينشئ علاقة ولي أمر باللاعب.'),
-      if (error != null) Text(error!),
+        const UiText('هذا الطلب لا ينشئ علاقة ولي أمر باللاعب.'),
+      if (error != null) UiText(error!),
       const SizedBox(height: 24),
       FilledButton(
         onPressed: busy ? null : submit,
-        child: Text(busy ? 'جارٍ إنشاء الطلب…' : 'متابعة إلى الدفع'),
+        child: UiText(busy ? 'جارٍ إنشاء الطلب…' : 'متابعة إلى الدفع'),
       ),
     ]),
   );
@@ -368,25 +411,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
         final pending = d['status'] == 'Pending';
         return gList([
           Heading(textOf(d['player'])),
-          Text('${d['sport']} · ${d['plan']}'),
+          UiText('${d['sport']} · ${d['plan']}'),
           StatusPill(d['status']),
           const SizedBox(height: 18),
           GCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                UiText(
                   'السعر الأصلي: ${money(d['originalAmount'], d['currency'])}',
                 ),
-                Text('الخصم: ${money(d['discountAmount'], d['currency'])}'),
+                UiText('الخصم: ${money(d['discountAmount'], d['currency'])}'),
                 Heading(money(d['finalAmount'], d['currency'])),
               ],
             ),
           ),
-          if (error != null) Text(error!),
+          if (error != null) UiText(error!),
           TextButton(
             onPressed: busy ? null : () => setState(() => revision++),
-            child: const Text('تحديث حالة الدفع'),
+            child: const UiText('تحديث حالة الدفع'),
           ),
           if (d['isCurrent'] == false && d['currentPaymentId'] != null)
             GLink(
@@ -407,32 +450,37 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 context,
                 ReceiptPage(auth: widget.auth, id: d['receiptId']),
               ),
-              child: const Text('عرض الإيصال'),
+              child: const UiText('عرض الإيصال'),
             ),
           if (pending && d['isCurrent'] == true) ...[
-            if (widget.environment == 'Demo') ...[
-              const Text('دفع تجريبي فقط · لن تُخصم أموال حقيقية'),
+            TransferPayment(
+              auth: widget.auth,
+              proofPath: '/api/v1/guardian/payments/${widget.id}/proof',
+              onSubmitted: () => setState(() => revision++),
+            ),
+            if (widget.environment == 'Demo' && d['provider'] != 'Manual') ...[
+              const UiText('دفع تجريبي فقط · لن تُخصم أموال حقيقية'),
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: busy ? null : () => action('Success'),
-                child: const Text('محاكاة دفع ناجح'),
+                child: const UiText('محاكاة دفع ناجح'),
               ),
               TextButton(
                 onPressed: busy ? null : () => action('Failed'),
-                child: const Text('محاكاة فشل الدفع'),
+                child: const UiText('محاكاة فشل الدفع'),
               ),
               TextButton(
                 onPressed: busy ? null : () => action('Cancelled'),
-                child: const Text('إلغاء الدفع التجريبي'),
+                child: const UiText('إلغاء الدفع التجريبي'),
               ),
             ] else
-              const Text('الدفع الحقيقي غير مفعّل. تواصل مع الأكاديمية.'),
+              const SizedBox.shrink(),
           ],
           if (['Failed', 'Cancelled', 'Expired'].contains(d['status']) &&
               d['isCurrent'] == true)
             FilledButton(
               onPressed: busy ? null : () => action('retry'),
-              child: const Text('إعادة محاولة الدفع'),
+              child: const UiText('إعادة محاولة الدفع'),
             ),
         ]);
       },
@@ -487,24 +535,24 @@ class ReceiptPage extends StatelessWidget {
           ),
           Heading(textOf(d['academyName'])),
           Heading(textOf(d['receiptNumber'])),
-          Text(
+          UiText(
             '${d['playerNameSnapshot']}\n${d['sportNameSnapshot']} · ${d['planNameSnapshot']}',
           ),
           GCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                UiText(
                   'السعر الأصلي: ${money(d['originalAmount'], d['currency'])}',
                 ),
-                Text('الخصم: ${money(d['discountAmount'], d['currency'])}'),
+                UiText('الخصم: ${money(d['discountAmount'], d['currency'])}'),
                 Heading('المدفوع: ${money(d['amount'], d['currency'])}'),
               ],
             ),
           ),
-          Text('تاريخ الدفع: ${day(d['paidAtUtc'])}'),
-          Text('مرجع الدفع: ${d['providerReference']}'),
-          const Text('الإيصال صادر من سجل التحصيل على الخادم.'),
+          UiText('تاريخ الدفع: ${day(d['paidAtUtc'])}'),
+          UiText('مرجع الدفع: ${d['providerReference']}'),
+          const UiText('الإيصال صادر من سجل التحصيل على الخادم.'),
         ]);
       },
     ),

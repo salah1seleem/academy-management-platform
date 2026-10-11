@@ -4,8 +4,11 @@ import 'app/app.dart';
 import 'core/api/api_client.dart';
 import 'core/auth/auth_controller.dart';
 import 'core/storage/refresh_store.dart';
+import 'core/theme/appearance.dart';
 
-void main() {
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final config = AppConfig(
@@ -16,7 +19,15 @@ void main() {
       HttpApiTransport(config),
       SecureRefreshStore(config.storageKey),
     );
-    runApp(AcademyApp(auth: auth, environment: config.environment));
+    final appearance = Appearance(storage: const FlutterSecureStorage());
+    await appearance.load();
+    runApp(
+      AcademyApp(
+        auth: auth,
+        environment: config.environment,
+        appearance: appearance,
+      ),
+    );
     auth.restore();
   } catch (_) {
     runApp(

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice3;
 
-public enum RenewalCreationState { Created, Replay, NotFound, OpenRenewalExists }
+public enum RenewalCreationState { Created, Replay, NotFound, OpenRenewalExists, PayloadConflict }
 
 public sealed record RenewalCreationResult(
     RenewalCreationState State,
@@ -25,7 +25,8 @@ public sealed record RenewalFinancialSnapshot(
 public sealed class RenewalCreationService(
     FoundationDbContext db,
     IPaymentGateway gateway,
-    ISubscriptionClock clock)
+    ISubscriptionClock clock,
+    Academy.Api.Operations.DiscountRules rules, IHostEnvironment environment)
 {
     public async Task<RenewalCreationResult> CreateAsync(
         Guid academyId,
@@ -51,10 +52,12 @@ public sealed class RenewalCreationService(
 
         var replay = await db.RenewalRequests.AsNoTracking()
             .Where(x => x.AcademyId == academyId && x.RequestedByUserId == actorUserId && x.IdempotencyKey == idempotencyKey)
-            .Select(x => new { RenewalId = x.Id, PaymentId = x.PaymentRequestId })
+            .Select(x => new { RenewalId = x.Id, PaymentId = x.PaymentRequestId, x.SportEnrollmentId, x.SubscriptionPlanId })
             .SingleOrDefaultAsync(ct);
         if (replay is not null)
-            return new(RenewalCreationState.Replay, replay.RenewalId, replay.PaymentId);
+            return replay.SportEnrollmentId != enrollmentId || replay.SubscriptionPlanId != planId
+                ? new(RenewalCreationState.PayloadConflict)
+                : new(RenewalCreationState.Replay, replay.RenewalId, replay.PaymentId);
 
         var enrollment = await db.SportEnrollments
             .SingleOrDefaultAsync(x => x.AcademyId == academyId && x.Id == enrollmentId && x.IsActive, ct);
@@ -81,7 +84,8 @@ public sealed class RenewalCreationService(
                 return new(RenewalCreationState.OpenRenewalExists);
         }
 
-        var originalAmount = financialSnapshot?.OriginalAmount ?? plan.Price;
+        financialSnapshot ??= await rules.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorUserId);
+        var originalAmount = financialSnapshot.OriginalAmount;
         var finalAmount = financialSnapshot?.FinalAmount ?? originalAmount;
         var renewal = new RenewalRequest
         {
@@ -108,14 +112,15 @@ public sealed class RenewalCreationService(
             UpdatedAtUtc = clock.UtcNow
         };
         var paymentId = Guid.NewGuid();
-        var session = gateway.CreateCheckout(academyId, paymentId);
+        var manual = !environment.IsEnvironment("Demo") && !environment.IsEnvironment("Testing") || await db.AcademyTransferSettings.AnyAsync(x => x.AcademyId == academyId && x.IsActive, ct);
+        var session = manual ? new CheckoutSession("Manual", $"manual-{paymentId:N}", $"manual-{paymentId:N}", ["التحويل للأكاديمية"]) : gateway.CreateCheckout(academyId, paymentId);
         var payment = new PaymentRequest
         {
             Id = paymentId,
             AcademyId = academyId,
             RenewalRequestId = renewal.Id,
             Provider = session.Provider,
-            ProviderEnvironment = "Demo",
+            ProviderEnvironment = manual ? "Manual" : "Demo",
             Amount = finalAmount,
             Currency = plan.Currency,
             Status = PaymentRequestStatus.Pending,

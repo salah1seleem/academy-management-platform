@@ -25,6 +25,21 @@ public sealed class FootballDemoTests : IAsyncLifetime
     private async Task Reset() { await using var scope = factory.Services.CreateAsyncScope(); await FootballDemoSeed.RunAsync(scope.ServiceProvider, true); }
 
     [Fact]
+    public async Task Payroll_demo_is_synthetic_linked_repeatable_and_keeps_manual_salary_edits()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var employees = await db.Employees.Where(x => x.AcademyId == AcademyId).ToListAsync(); Assert.Equal(7, employees.Count); Assert.Equal(2, employees.Count(x => x.MembershipId is null));
+        Assert.Equal(3, await db.PayrollReasons.CountAsync(x => x.AcademyId == AcademyId && x.IsActive));
+        Assert.Equal(new[] { "Approved", "Pending", "Rejected" }, await db.PayrollAdditionRequests.Where(x => x.AcademyId == AcademyId).OrderBy(x => x.Status).Select(x => x.Status).ToArrayAsync());
+        Assert.Equal(300, await db.PayrollAdjustments.Where(x => x.AcademyId == AcademyId && x.Kind == "Addition").SumAsync(x => x.Amount));
+        Assert.Equal(100, await db.PayrollAdjustments.Where(x => x.AcademyId == AcademyId && x.Kind == "Deduction").SumAsync(x => x.Amount));
+        Assert.Single(await db.PayrollSettlements.Where(x => x.AcademyId == AcademyId).ToListAsync());
+        var employee = employees[0]; employee.MonthlySalary = 7100; await db.SaveChangesAsync();
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider, false); await FootballDemoSeed.RunAsync(scope.ServiceProvider, false); db.ChangeTracker.Clear();
+        Assert.Equal(7100, (await db.Employees.SingleAsync(x => x.Id == employee.Id)).MonthlySalary); Assert.Equal(7, await db.Employees.CountAsync(x => x.AcademyId == AcademyId)); Assert.Equal(3, await db.PayrollAdditionRequests.CountAsync(x => x.AcademyId == AcademyId));
+    }
+
+    [Fact]
     public async Task Football_dataset_has_exact_counts_and_unique_linked_identities()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
@@ -65,8 +80,12 @@ public sealed class FootballDemoTests : IAsyncLifetime
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var player = await db.Players.SingleAsync(p => p.Id == FootballDemoSeed.Id("player/0")); player.ArabicName = "تعديل يدوي محفوظ"; await db.SaveChangesAsync();
+        var product = await db.SportCatalogItems.SingleAsync(p => p.Id == FootballDemoSeed.Id("catalog")); product.StockQuantity = 2; product.DisplayPrice = 450m;
+        var offer = await db.DiscountRules.SingleAsync(x => x.AcademyId == AcademyId && x.IsSiblingOffer); offer.Percentage = 15m; await db.SaveChangesAsync();
         await FootballDemoSeed.RunAsync(scope.ServiceProvider, false); db.ChangeTracker.Clear();
         Assert.Equal("تعديل يدوي محفوظ", (await db.Players.SingleAsync(p => p.Id == player.Id)).ArabicName);
+        Assert.Equal(2, (await db.SportCatalogItems.SingleAsync(p => p.Id == product.Id)).StockQuantity); Assert.Equal(450m, (await db.SportCatalogItems.SingleAsync(p => p.Id == product.Id)).DisplayPrice);
+        Assert.Equal(15m, (await db.DiscountRules.SingleAsync(x => x.AcademyId == AcademyId && x.IsSiblingOffer)).Percentage);
     }
 
     [Fact]
@@ -159,7 +178,7 @@ public sealed class FootballDemoTests : IAsyncLifetime
     [Fact]
     public async Task Coach_and_anonymous_cannot_provision()
     {
-        using var coach = await Login("coach1"); using var anonymous = factory.CreateClient();
+        using var coach = await MobileLogin(FootballDemoSeed.Phone(20)); using var anonymous = factory.CreateClient();
         var body = new { displayName = "ممنوع", phoneNumber = NewPhone(), isActive = true };
         Assert.Equal(HttpStatusCode.Forbidden, (await Post(coach, body)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Post(anonymous, body)).StatusCode);

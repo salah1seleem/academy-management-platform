@@ -1,4 +1,8 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/theme/academy_brand.dart';
+import '../shared/matches.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
@@ -6,6 +10,9 @@ import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import 'coach_attendance.dart';
 import 'coach_evaluation.dart';
+import '../shared/private_media.dart';
+import '../shared/academy_news.dart';
+import '../shared/staff_amounts.dart';
 
 class CoachHome extends StatelessWidget {
   final AuthController auth;
@@ -17,7 +24,7 @@ class CoachHome extends StatelessWidget {
     title: 'الرئيسية · المدرب',
     actions: [
       IconButton(
-        tooltip: 'الحساب',
+        tooltip: ui(context, 'الحساب'),
         onPressed: () => openPage(context, accountPage),
         icon: const Icon(Icons.person_outline),
       ),
@@ -50,50 +57,60 @@ class CoachHome extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  UiText(
                     'أهلًا، ${auth.session!.displayName}',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  const Text('حصصك ومجموعاتك فقط — لا تظهر بيانات مالية.'),
+                  const UiText('حصصك ومجموعاتك فقط — لا تظهر بيانات مالية.'),
                 ],
               ),
             ),
+            NewsStrip(auth: auth),
+            NextMatchStrip(auth: auth),
+            OutlinedButton.icon(
+              onPressed: () => openPage(context, StaffAmounts(auth: auth)),
+              icon: const Icon(Icons.add_card_outlined),
+              label: const UiText('طلب مبلغ إضافي'),
+            ),
             const SizedBox(height: 18),
-            Text(
+            UiText(
               'حصص اليوم والقادمة',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            if (sessions.isEmpty) const Text('لا توجد حصص ضمن النطاق الحالي.'),
+            if (sessions.isEmpty)
+              const UiText('لا توجد حصص ضمن النطاق الحالي.'),
             for (final session in sessions.take(6))
               Card(
                 child: ListTile(
-                  title: Text(textOf(session['group'])),
-                  subtitle: Text(
+                  title: UiText(textOf(session['group'])),
+                  subtitle: UiText(
                     '${day(session['sessionDate'])} · ${session['startTime']} — ${session['branch']}',
                   ),
-                  trailing: Text(
+                  trailing: UiText(
                     '${session['recorded']}/${session['playerCount']}',
                   ),
-                  onTap: () => openPage(
-                    context,
-                    CoachAttendance(
-                      auth: auth,
-                      sessionId: textOf(session['id']),
-                    ),
-                  ),
+                  onTap: BrandScope.maybeOf(context)?.coachAttendance == false
+                      ? null
+                      : () => openPage(
+                          context,
+                          CoachAttendance(
+                            auth: auth,
+                            sessionId: textOf(session['id']),
+                          ),
+                        ),
                 ),
               ),
             const SizedBox(height: 18),
-            Text(
+            UiText(
               'المجموعات المسندة',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             for (final group in groups)
               Card(
                 child: ListTile(
-                  title: Text(textOf(group['arabicName'])),
-                  subtitle: Text(
+                  title: UiText(textOf(group['arabicName'])),
+                  subtitle: UiText(
                     '${enrollments.where((e) => e['groupId'] == group['id']).length} لاعبين',
                   ),
                   trailing: const Icon(Icons.chevron_left),
@@ -138,21 +155,21 @@ class CoachGroup extends StatelessWidget {
       children: [
         if (sessions.isNotEmpty)
           AppCard(
-            child: Text(
+            child: UiText(
               '${sessions.first['branch']} · ${sessions.first['sport']}\n${sessions.first['startTime']} — ${sessions.first['endTime']}',
             ),
           ),
-        Text(
+        UiText(
           'اللاعبون (${enrollments.length})',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         for (final player in enrollments)
           ListTile(
             leading: const CircleAvatar(child: Icon(Icons.sports_soccer)),
-            title: Text(textOf(player['player'])),
-            subtitle: Text(textOf(player['playerCode'])),
+            title: UiText(textOf(player['player'])),
+            subtitle: UiText(textOf(player['playerCode'])),
             trailing: IconButton(
-              tooltip: 'تقييم اللاعب',
+              tooltip: ui(context, 'تقييم اللاعب'),
               icon: const Icon(Icons.assessment_outlined),
               onPressed: () => openPage(
                 context,
@@ -161,19 +178,28 @@ class CoachGroup extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: sessions.isEmpty
-              ? null
-              : () => openPage(
-                  context,
-                  CoachAttendance(
-                    auth: auth,
-                    sessionId: textOf(sessions.first['id']),
-                  ),
-                ),
-          icon: const Icon(Icons.fact_check_outlined),
-          label: const Text('تسجيل الحضور'),
+        OutlinedButton.icon(
+          onPressed: () => openPage(
+            context,
+            UploadSessionMedia(auth: auth, groupId: textOf(group['id'])),
+          ),
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          label: const UiText('رفع صور وفيديوهات للحصة'),
         ),
+        if (BrandScope.maybeOf(context)?.coachAttendance != false)
+          FilledButton.icon(
+            onPressed: sessions.isEmpty
+                ? null
+                : () => openPage(
+                    context,
+                    CoachAttendance(
+                      auth: auth,
+                      sessionId: textOf(sessions.first['id']),
+                    ),
+                  ),
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const UiText('تسجيل الحضور'),
+          ),
       ],
     ),
   );

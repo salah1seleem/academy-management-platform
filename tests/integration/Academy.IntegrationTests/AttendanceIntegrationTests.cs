@@ -110,6 +110,9 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     [Fact] public async Task Guardian_sees_only_linked_child_attendance()
     { using var client = await GuardianClient(); Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/guardian/children/{Slice2DemoSeed.OmarPlayerId}/attendance")).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/guardian/children/{Slice2DemoSeed.OtherPlayerId}/attendance")).StatusCode); }
 
+    [Fact] public async Task Admin_history_player_context_returns_only_that_player()
+    { using var client = factory.CreateClient(); await StaffLogin(client, DemoSeed.AdminEmail); var rows = await client.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/v1/attendance/history?playerId={Slice2DemoSeed.OmarPlayerId}"); Assert.All(rows.EnumerateArray(), row => Assert.Equal("عمر أحمد محمود", row.GetProperty("player").GetString())); }
+
     [Fact] public async Task Guardian_cannot_mutate_attendance()
     { using var client = await GuardianClient(); var csrf = await Csrf(client); var response = await Put(client, Slice4DemoSeed.TodayFootballSessionId, Guid.NewGuid(), 2, csrf); Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode); }
 
@@ -143,7 +146,7 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     private static async Task<DateOnly> GenerationDate(FoundationDbContext db) { var date = new DateOnly(2040, 1, 3); while (await db.TrainingSessions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.TrainingGroupId == Slice2DemoSeed.FootballGroupId && x.SessionDate == date)) date = date.AddDays(7); return date; }
 
     private async Task<HttpClient> GuardianClient() { var client = factory.CreateClient(); var request = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, await Csrf(client)); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); (await Post(client, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, await Csrf(client))).EnsureSuccessStatusCode(); return client; }
-    private static async Task StaffLogin(HttpClient client, string email) => (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode();
+    private async Task StaffLogin(HttpClient client, string email) { if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(client, factory.Services); else (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode(); }
     private static async Task<string> Csrf(HttpClient client) => (await client.GetFromJsonAsync<CsrfDto>("/api/v1/auth/csrf"))!.Token;
     private static Task<HttpResponseMessage> Put(HttpClient client, Guid session, Guid enrollment, int status, string csrf) { var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/attendance/sessions/{session}/players") { Content = JsonContent.Create(new { items = new[] { new { sportEnrollmentId = enrollment, status } } }) }; request.Headers.Add("X-CSRF-TOKEN", csrf); return client.SendAsync(request); }
     private static Task<HttpResponseMessage> Post(HttpClient client, string path, object body, string csrf) { var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf); return client.SendAsync(request); }

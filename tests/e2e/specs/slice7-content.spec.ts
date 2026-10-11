@@ -1,8 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-
-async function guardianLogin(page: Page) {
-  await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click(); await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click(); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click();
-}
+import { guardianLogin } from "../support/auth";
 async function openOmar(page: Page) { const card = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await card.getByRole("link", { name: "عرض الملف" }).click(); }
 
 test.describe("Slice 7 Guardian content journeys", () => {

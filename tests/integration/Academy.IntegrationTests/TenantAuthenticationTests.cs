@@ -47,6 +47,16 @@ public sealed class TenantAuthenticationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Administrator_login_succeeds_for_dashboard()
+    {
+        using var client = factory.CreateClient();
+        await Login(client, DemoSeed.AdminEmail);
+        var me = await client.GetFromJsonAsync<MeResponse>("/api/v1/me");
+        Assert.Equal(DemoSeed.NogoomAcademyId, me!.AcademyId);
+        Assert.Equal("AcademyAdmin", me.Role);
+    }
+
+    [Fact]
     public async Task Invalid_credentials_use_same_generic_failure()
     {
         using var first = factory.CreateClient();
@@ -100,16 +110,12 @@ public sealed class TenantAuthenticationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Coach_cannot_provision_staff()
+    public async Task Coach_password_login_is_rejected_for_dashboard()
     {
-        using var client = factory.CreateClient(); await Login(client, DemoSeed.CoachEmail);
-        var csrf = await Csrf(client);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/staff")
-        {
-            Content = JsonContent.Create(new { email = "new@example.test", displayName = "حساب تجريبي", temporaryPassword = "Temporary-123!", role = 3 })
-        };
-        request.Headers.Add("X-CSRF-TOKEN", csrf);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(request)).StatusCode);
+        using var client = factory.CreateClient();
+        var response = await LoginResponse(client, DemoSeed.CoachEmail, "Demo-Only-123!");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
     }
 
     [Fact]

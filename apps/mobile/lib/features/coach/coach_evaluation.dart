@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
@@ -118,17 +119,17 @@ class _CoachEvaluationState extends State<CoachEvaluation> {
             padding: const EdgeInsets.all(20),
             children: [
               AppCard(
-                child: Text(
+                child: UiText(
                   '${widget.enrollment['player']}\n${widget.enrollment['group']}',
                 ),
               ),
-              const Text(
+              const UiText(
                 'درجات كرة القدم من 0 إلى 100. يحسب الخادم التقرير والنتيجة.',
               ),
               if (error != null) ErrorNotice(error!),
               FilledButton(
                 onPressed: busy ? null : create,
-                child: const Text('بدء تقييم جديد'),
+                child: const UiText('بدء تقييم جديد'),
               ),
             ],
           )
@@ -136,12 +137,12 @@ class _CoachEvaluationState extends State<CoachEvaluation> {
             padding: const EdgeInsets.all(18),
             children: [
               AppCard(
-                child: Text(
+                child: UiText(
                   '${evaluation!['player']} · ${evaluation!['group']}',
                 ),
               ),
               for (final item in rows(evaluation!['scores'])) ...[
-                Text(
+                UiText(
                   '${item['name']} · ${scores[textOf(item['criterionId'])]!.round()}',
                 ),
                 Slider(
@@ -159,19 +160,21 @@ class _CoachEvaluationState extends State<CoachEvaluation> {
               TextField(
                 controller: notes,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'ملاحظات المدرب'),
+                decoration: InputDecoration(
+                  labelText: ui(context, 'ملاحظات المدرب'),
+                ),
               ),
               if (message != null)
-                Text(message!, style: const TextStyle(color: Colors.green)),
+                UiText(message!, style: const TextStyle(color: Colors.green)),
               if (error != null) ErrorNotice(error!),
               const SizedBox(height: 12),
               OutlinedButton(
                 onPressed: busy ? null : () => save(publish: false),
-                child: const Text('حفظ كمسودة'),
+                child: const UiText('حفظ كمسودة'),
               ),
               FilledButton(
                 onPressed: busy ? null : () => save(publish: true),
-                child: const Text('نشر التقييم'),
+                child: const UiText('نشر التقييم'),
               ),
             ],
           ),

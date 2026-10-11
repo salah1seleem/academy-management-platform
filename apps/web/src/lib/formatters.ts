@@ -1,11 +1,11 @@
-const arabicDate = new Intl.DateTimeFormat("ar-EG", {
+const arabicDate = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
   year: "numeric",
   month: "short",
   day: "numeric",
   timeZone: "UTC",
 });
 
-const arabicDateTime = new Intl.DateTimeFormat("ar-EG", {
+const arabicDateTime = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
   year: "numeric",
   month: "short",
   day: "numeric",
@@ -53,12 +53,12 @@ export function formatMoneyAr(amount: unknown, currency: unknown = "EGP") {
   const value = typeof amount === "number" ? amount : Number(amount ?? 0);
   const code = typeof currency === "string" && currency ? currency : "EGP";
   if (code === "EGP") {
-    return `${new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 2 }).format(value)} جنيه`;
+    return `${new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 2 }).format(value)} جنيه`;
   }
   try {
-    return new Intl.NumberFormat("ar-EG", { style: "currency", currency: code, currencyDisplay: "name", maximumFractionDigits: 2 }).format(value);
+    return new Intl.NumberFormat("ar-EG-u-nu-latn", { style: "currency", currency: code, currencyDisplay: "name", maximumFractionDigits: 2 }).format(value);
   } catch {
-    return `${new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 2 }).format(value)} ${code}`;
+    return `${new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 2 }).format(value)} ${code}`;
   }
 }
 
@@ -66,6 +66,18 @@ export function formatDateAr(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
   return Number.isNaN(date.valueOf()) ? value : arabicDate.format(date);
+}
+
+export function formatSessionDateAr(value: string) {
+  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(date.valueOf()) ? value : `${new Intl.DateTimeFormat("ar-EG-u-nu-latn", { weekday: "long", timeZone: "UTC" }).format(date)} · ${formatDateAr(value)}`;
+}
+
+export function formatTimeAr(value: string) {
+  const match = /^(\d{2}):(\d{2})/.exec(value);
+  if (!match) return "—";
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? "مساءً" : "صباحًا"}`;
 }
 
 export function formatDateTimeAr(value?: string | null) {

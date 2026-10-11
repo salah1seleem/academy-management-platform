@@ -154,15 +154,20 @@ void main() {
         );
         await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
         await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('child-ب')),
+          120,
+        );
+        expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
         for (final title in [
           'اشتراك جديد',
           'تجديد الاشتراك',
           'تجديد اشتراك لغيره',
         ]) {
+          await tester.scrollUntilVisible(find.text(title), 100);
           expect(find.text(title), findsOneWidget);
         }
-        expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
-        expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -170,6 +175,10 @@ void main() {
   testWidgets(
     'Logout destroys private deep routes and back cannot reopen them',
     (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final auth = await logged(
         (m, p, b, t) async => p.endsWith('/home')
             ? home()
@@ -178,6 +187,11 @@ void main() {
             : [],
       );
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(
+        tester.element(find.text('تجديد الاشتراك')),
+        alignment: .3,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('تجديد الاشتراك'));
       await tester.pumpAndSettle();
@@ -297,18 +311,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('محاكاة دفع ناجح'), findsNothing);
     expect(
-      find.text('الدفع الحقيقي غير مفعّل. تواصل مع الأكاديمية.'),
+      find.text(
+        'لم تضبط الأكاديمية حسابات التحويل بعد. تواصل مع الإدارة قبل الدفع.',
+      ),
       findsOneWidget,
     );
   });
   testWidgets(
-    'External reference uses only opaque resolve, never links or name search',
+    'Authenticated name search uses a scoped reference and never grants child access',
     (tester) async {
       final calls = <String>[];
       Object? sent;
       final auth = await logged((m, p, b, t) async {
         calls.add(p);
         sent = b;
+        if (p.endsWith('/search')) {
+          return [
+            {
+              'name': 'مستفيد',
+              'sport': 'كرة القدم',
+              'branch': 'فرع تجريبي',
+              'reference': 'scoped-reference',
+            },
+          ];
+        }
         return {
           'playerDisplayName': 'مستفيد',
           'plans': [plan()],
@@ -317,11 +343,16 @@ void main() {
       await tester.pumpWidget(
         shell(ExternalRenewal(auth: auth, environment: 'Demo')),
       );
-      await tester.enterText(find.byType(TextField), 'opaque-code');
-      await tester.tap(find.text('التحقق من الكود'));
+      await tester.enterText(find.byType(TextField), 'مستفيد');
+      await tester.tap(find.text('بحث عن لاعب'));
       await tester.pumpAndSettle();
-      expect(calls, ['/api/v1/guardian/subscriptions/external/resolve']);
-      expect(sent, {'reference': 'opaque-code'});
+      await tester.tap(find.text('مستفيد').last);
+      await tester.pumpAndSettle();
+      expect(calls, [
+        '/api/v1/guardian/subscriptions/external/search',
+        '/api/v1/guardian/subscriptions/external/resolve',
+      ]);
+      expect(sent, {'reference': 'scoped-reference'});
       expect(find.textContaining('لا يمنحك'), findsOneWidget);
     },
   );

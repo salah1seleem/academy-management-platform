@@ -34,7 +34,7 @@ public static class SubscriptionPeriodState
 
 public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubscriptionClock clock)
 {
-    public Task<SubscriptionAdjustmentResult> FreezeAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly effectiveDate, string reason, uint expectedVersion, string key, CancellationToken ct = default)
+    public Task<SubscriptionAdjustmentResult> FreezeAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly effectiveDate, string? reason, uint expectedVersion, string key, CancellationToken ct = default)
         => ExecuteAsync(academyId, actorId, periodId, SubscriptionAdjustmentType.FreezeStarted, expectedVersion, key, reason, async period =>
         {
             if (period.SubscriptionPlan.PlanType == SubscriptionPlanType.Sessions || period.EndDate is null)
@@ -50,7 +50,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
             return await Task.FromResult(new AdjustmentDraft(effectiveDate, null, period.EndDate, null, null));
         }, ct);
 
-    public Task<SubscriptionAdjustmentResult> ResumeAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly resumeDate, string reason, uint expectedVersion, string key, CancellationToken ct = default)
+    public Task<SubscriptionAdjustmentResult> ResumeAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly resumeDate, string? reason, uint expectedVersion, string key, CancellationToken ct = default)
         => ExecuteAsync(academyId, actorId, periodId, SubscriptionAdjustmentType.FreezeEnded, expectedVersion, key, reason, async period =>
         {
             if (period.Status != SubscriptionPeriodStatus.Frozen || period.FrozenFromDate is not DateOnly frozenFrom)
@@ -69,7 +69,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
             return new AdjustmentDraft(resumeDate, frozenDays, oldEnd, newEnd, freezeStart.Id);
         }, ct);
 
-    public Task<SubscriptionAdjustmentResult> AdjustDaysAsync(Guid academyId, Guid actorId, Guid periodId, int days, bool add, string reason, uint expectedVersion, string key, CancellationToken ct = default)
+    public Task<SubscriptionAdjustmentResult> AdjustDaysAsync(Guid academyId, Guid actorId, Guid periodId, int days, bool add, string? reason, uint expectedVersion, string key, CancellationToken ct = default)
         => ExecuteAsync(academyId, actorId, periodId, add ? SubscriptionAdjustmentType.DaysAdded : SubscriptionAdjustmentType.DaysDeducted, expectedVersion, key, reason, period =>
         {
             if (days is < 1 or > 365) throw new AdjustmentValidationException("عدد الأيام يجب أن يكون من 1 إلى 365.");
@@ -86,7 +86,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
             return Task.FromResult(new AdjustmentDraft(clock.Today, delta, oldEnd, newEnd, null));
         }, ct);
 
-    public Task<SubscriptionAdjustmentResult> CancelAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly effectiveDate, string reason, uint expectedVersion, string key, CancellationToken ct = default)
+    public Task<SubscriptionAdjustmentResult> CancelAsync(Guid academyId, Guid actorId, Guid periodId, DateOnly effectiveDate, string? reason, uint expectedVersion, string key, CancellationToken ct = default)
         => ExecuteAsync(academyId, actorId, periodId, SubscriptionAdjustmentType.Cancelled, expectedVersion, key, reason, period =>
         {
             if (effectiveDate == default) throw new AdjustmentValidationException("تاريخ سريان الإلغاء مطلوب.");
@@ -103,7 +103,7 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
         SubscriptionAdjustmentType type,
         uint expectedVersion,
         string key,
-        string reason,
+        string? reason,
         Func<SubscriptionPeriod, Task<AdjustmentDraft>> mutate,
         CancellationToken ct)
     {
@@ -150,10 +150,9 @@ public sealed class SubscriptionAdjustmentService(FoundationDbContext db, ISubsc
     private SubscriptionPeriodStatus Current(SubscriptionPeriod period)
         => SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.SubscriptionPlan.PlanType, period.RemainingSessions, clock.Today);
 
-    private static string NormalizeReason(string reason)
+    private static string NormalizeReason(string? reason)
     {
         var value = reason?.Trim() ?? string.Empty;
-        if (value.Length == 0) throw new AdjustmentValidationException("سبب التعديل مطلوب.");
         if (value.Length > 500) throw new AdjustmentValidationException("سبب التعديل لا يتجاوز 500 حرف.");
         return value;
     }

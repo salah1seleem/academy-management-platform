@@ -19,7 +19,7 @@ public sealed class TrainingSessionGenerator(FoundationDbContext db, TimeProvide
         {
             for (var date = from; date <= to; date = date.AddDays(1))
             {
-                if (date.DayOfWeek != schedule.DayOfWeek || !keys.Add((schedule.TrainingGroupId, date, schedule.StartTime))) continue;
+                if (date < schedule.ValidFrom || date > schedule.ValidTo || date.DayOfWeek != schedule.DayOfWeek || !keys.Add((schedule.TrainingGroupId, date, schedule.StartTime))) continue;
                 db.TrainingSessions.Add(new TrainingSession
                 {
                     Id = Guid.NewGuid(), AcademyId = academyId, TrainingGroupId = schedule.TrainingGroupId,

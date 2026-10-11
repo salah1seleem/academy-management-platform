@@ -30,8 +30,8 @@ export function CoachCreate() {
         displayName: data.get("displayName"), phoneNumber: data.get("phoneNumber"), email: data.get("email") || null,
         isActive: data.get("isActive") === "on", groupIds: data.getAll("groupIds"),
       });
-      const result = await response.json() as { membershipId: string };
-      router.push(`/dashboard/academy/coaches/${result.membershipId}`);
+      await response.json();
+      router.push("/dashboard/academy/coaches");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر إنشاء المدرب."); }
     finally { submitting.current = false; setBusy(false); }
   }

@@ -17,6 +17,8 @@ public static class Slice4Endpoints
         var api = app.MapGroup("/api/v1");
         var attendance = api.MapGroup("/attendance").RequireAuthorization(AcademyPermissions.AttendanceRead);
         attendance.MapGet("/sessions", ListSessions);
+        api.MapGet("/manage/sessions", ManageSessions).RequireAuthorization(AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.AttendanceRead);
+        api.MapGet("/manage/sessions/options", SessionOptions).RequireAuthorization(AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.AttendanceRead);
         attendance.MapGet("/sessions/{id:guid}", GetSession);
         attendance.MapPost("/sessions", CreateSession).AddEndpointFilter<CsrfFilter>();
         attendance.MapPost("/sessions/generate", GenerateSessions).AddEndpointFilter<CsrfFilter>();
@@ -29,21 +31,68 @@ public static class Slice4Endpoints
         api.MapGet("/guardian/children/{playerId:guid}/attendance", GuardianAttendance).RequireAuthorization(AcademyPermissions.GuardianAttendanceRead);
     }
 
-    private static async Task<IResult> ListSessions(DateOnly? from, DateOnly? to, Guid? branchId, Guid? sportId, Guid? groupId, string? status, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> ListSessions(DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId, Guid? sportId, Guid? groupId, string? status, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
-        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var start = from ?? clock.Today.AddDays(-7); var end = to ?? start.AddDays(14);
-        if (end < start || end.DayNumber - start.DayNumber > 90) return Validation("range", "نطاق التاريخ يجب ألا يتجاوز 90 يومًا.");
-        var query = db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SessionDate >= start && x.SessionDate <= end);
+        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
+        var unfiltered = allDates == true && from is null && to is null;
+        var start = from ?? today; var end = to ?? today;
+        if (!unfiltered && (end < start || end.DayNumber - start.DayNumber > 366)) return Validation("range", "نطاق التاريخ يجب ألا يتجاوز سنة.");
+        var query = db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
+        if (!unfiltered) query = query.Where(x => x.SessionDate >= start && x.SessionDate <= end);
         if (t.Role == AcademyRole.Coach) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId); if (sportId.HasValue) query = query.Where(x => x.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<TrainingSessionStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);
+        return await SessionRows(query, t.AcademyId, db);
+    }
+
+    private static async Task<IResult> ManageSessions(DateOnly? from, DateOnly? to, Guid? groupId, Guid? coachId, Guid? playerId, Guid? guardianId, Guid? branchId, Guid? sportId, CurrentTenant tenant, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        if (!IsAdmin(t.Role)) return Results.Forbid();
+        if (from.HasValue && to.HasValue && to < from) return Validation("range", "تاريخ النهاية يجب ألا يسبق البداية.");
+        var query = db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Status != TrainingSessionStatus.Cancelled);
+        if (from.HasValue) query = query.Where(x => x.SessionDate >= from);
+        if (to.HasValue) query = query.Where(x => x.SessionDate <= to);
+        if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
+        if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        if (sportId.HasValue) query = query.Where(x => x.SportId == sportId);
+        if (coachId.HasValue) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembershipId == coachId && a.IsActive && a.AcademyMembership.IsActive));
+        if (playerId.HasValue) query = query.Where(x =>
+            db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.TrainingGroupId == x.TrainingGroupId && e.PlayerId == playerId && e.IsActive) ||
+            db.PlayerAttendances.Any(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == x.Id && a.SportEnrollment.PlayerId == playerId));
+        if (guardianId.HasValue) query = query.Where(x => db.GuardianPlayerLinks.Any(l =>
+            l.AcademyId == t.AcademyId && l.GuardianId == guardianId && l.IsActive && l.Guardian.IsActive &&
+            (db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.TrainingGroupId == x.TrainingGroupId && e.PlayerId == l.PlayerId && e.IsActive) ||
+             db.PlayerAttendances.Any(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == x.Id && a.SportEnrollment.PlayerId == l.PlayerId))));
+        return await SessionRows(query, t.AcademyId, db);
+    }
+
+    private static async Task<IResult> SessionOptions(CurrentTenant tenant, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        if (!IsAdmin(t.Role)) return Results.Forbid();
+        return Results.Ok(new {
+            groups = await db.TrainingGroups.Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
+            coaches = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.Role == AcademyRole.Coach && x.IsActive).OrderBy(x => x.User.DisplayName).Select(x => new { x.Id, name = x.User.DisplayName }).ToListAsync(),
+            players = await db.Players.Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
+            guardians = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.DisplayName).Select(x => new { x.Id, name = x.DisplayName }).ToListAsync(),
+            branches = await db.Branches.Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
+            sports = await db.Sports.Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync()
+        });
+    }
+
+    private static async Task<IResult> SessionRows(IQueryable<TrainingSession> query, Guid academyId, FoundationDbContext db)
+    {
         var rows = await query.OrderBy(x => x.SessionDate).ThenBy(x => x.StartTime).Select(x => new
         {
             x.Id, x.SessionDate, x.StartTime, x.EndTime, status = x.Status.ToString(), source = x.Source.ToString(), x.TrainingGroupId,
             group = x.TrainingGroup.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName,
-            coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
-            playerCount = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.TrainingGroupId == x.TrainingGroupId && e.IsActive),
-            recorded = db.PlayerAttendances.Count(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == x.Id && a.Status != AttendanceStatus.NotRecorded)
+            coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == academyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
+            playerCount = db.SportEnrollments.Count(e => e.AcademyId == academyId && e.TrainingGroupId == x.TrainingGroupId && e.IsActive),
+            recorded = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status != AttendanceStatus.NotRecorded),
+            present = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status == AttendanceStatus.Present),
+            absent = db.PlayerAttendances.Count(a => a.AcademyId == academyId && a.TrainingSessionId == x.Id && a.Status == AttendanceStatus.Absent),
+            staff = db.StaffGroupAssignments.Where(a => a.AcademyId == academyId && a.TrainingGroupId == x.TrainingGroupId && a.IsActive && a.AcademyMembership.IsActive).Select(a => new { id = a.AcademyMembershipId, name = a.AcademyMembership.User.DisplayName, attendanceStatus = db.StaffAttendances.Where(s => s.AcademyId == academyId && s.TrainingSessionId == x.Id && s.AcademyMembershipId == a.AcademyMembershipId).Select(s => s.Status.ToString()).FirstOrDefault() ?? "NotRecorded" }).ToList()
         }).ToListAsync();
         return Results.Ok(rows);
     }
@@ -89,7 +138,7 @@ public static class Slice4Endpoints
         var rows = enrollments.Select(e =>
         {
             attendance.TryGetValue(e.Id, out var record); var candidates = periods.Where(x => x.SportEnrollmentId == e.Id).ToList(); var period = candidates.FirstOrDefault(x => x.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || x.RemainingSessions is > 0) ?? candidates.FirstOrDefault(); var type = period?.SubscriptionPlan.PlanType;
-            return new { sportEnrollmentId = e.Id, e.Player.PlayerCode, e.Player.ArabicName, e.Player.PhotoReference, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString(), subscriptionPlan = period?.SubscriptionPlan.ArabicName, subscriptionType = type?.ToString(), remainingSessions = type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined ? period?.RemainingSessions : null, sessionConsumed = record?.ConsumedSubscriptionPeriodId is not null, warning = period is null ? "لا يوجد اشتراك مؤهل" : type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined && period.RemainingSessions == 0 ? "الرصيد غير كافٍ" : null };
+            return new { sportEnrollmentId = e.Id, playerId = e.PlayerId, e.Player.PlayerCode, e.Player.ArabicName, e.Player.PhotoReference, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString(), subscriptionPlan = period?.SubscriptionPlan.ArabicName, subscriptionType = type?.ToString(), remainingSessions = type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined ? period?.RemainingSessions : null, sessionConsumed = record?.ConsumedSubscriptionPeriodId is not null, warning = period is null ? "لا يوجد اشتراك مؤهل" : type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined && period.RemainingSessions == 0 ? "الرصيد غير كافٍ" : null };
         });
         return Results.Ok(new { session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
     }
@@ -122,10 +171,11 @@ public static class Slice4Endpoints
         catch (AttendanceValidationException e) { return Validation("items", e.Message); } catch (AttendanceConflictException e) { return Results.Conflict(new { message = e.Message }); } catch (AttendanceNotFoundException) { return Results.NotFound(); }
     }
 
-    private static async Task<IResult> History(string? search, Guid? branchId, Guid? sportId, Guid? groupId, DateOnly? from, DateOnly? to, string? status, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
+    private static async Task<IResult> History(string? search, Guid? playerId, Guid? branchId, Guid? sportId, Guid? groupId, DateOnly? from, DateOnly? to, string? status, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var query = db.PlayerAttendances.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
         if (t.Role == AcademyRole.Coach) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
+        if (playerId.HasValue) query = query.Where(x => x.SportEnrollment.PlayerId == playerId);
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.SportEnrollment.Player.ArabicName.Contains(search.Trim()) || x.SportEnrollment.Player.PlayerCode.Contains(search.Trim()));
         if (branchId.HasValue) query = query.Where(x => x.TrainingSession.BranchId == branchId); if (sportId.HasValue) query = query.Where(x => x.TrainingSession.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId); if (from.HasValue) query = query.Where(x => x.TrainingSession.SessionDate >= from); if (to.HasValue) query = query.Where(x => x.TrainingSession.SessionDate <= to); if (Enum.TryParse<AttendanceStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);
         return Results.Ok(await query.OrderByDescending(x => x.TrainingSession.SessionDate).ThenBy(x => x.SportEnrollment.Player.ArabicName).Take(500).Select(x => new { x.Id, x.TrainingSessionId, x.SportEnrollment.Player.PlayerCode, player = x.SportEnrollment.Player.ArabicName, group = x.TrainingSession.TrainingGroup.ArabicName, sport = x.TrainingSession.Sport.ArabicName, branch = x.TrainingSession.Branch.ArabicName, x.TrainingSession.SessionDate, x.TrainingSession.StartTime, status = x.Status.ToString(), sessionConsumed = x.ConsumedSubscriptionPeriodId != null }).ToListAsync());

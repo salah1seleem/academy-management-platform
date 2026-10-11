@@ -1,11 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-
-async function guardianLogin(page: Page) {
-  await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click();
-  await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click();
-  await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click();
-  await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();
-}
+import { guardianLogin } from "../support/auth";
 
 async function startFootballRenewal(page: Page) {
   const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
@@ -51,11 +45,13 @@ test("Guardian renews for another player without gaining profile access", async 
   await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
 });
 
-test("Admin sees confirmed and failed payments and confirmed collection", async ({ page }) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
-  await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("button", { name: /الاشتراكات/ }).click();
-  await page.getByRole("link", { name: "طلبات الدفع" }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
-  await expect(page.getByText("مؤكد", { exact: true }).first()).toBeVisible(); await expect(page.getByText("فشل", { exact: true }).first()).toBeVisible();
-  await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("link", { name: "التحصيلات" }).click();
+test("Owner sees approved and rejected payment requests and confirmed collection", async ({ page }) => {
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "فتح القائمة" }).click();
+  await page.getByRole("button", { name: "خيارات اللاعبين" }).click();
+  await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "طلبات الدفع", exact: true }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
+  await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Approved"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مقبول" }).first()).toBeVisible(); await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Rejected"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مرفوض" }).first()).toBeVisible();
+  await page.goto("/dashboard/subscriptions/collections");
   await expect(page.getByText(/إجمالي التحصيل المؤكد/)).toBeVisible(); await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
 });

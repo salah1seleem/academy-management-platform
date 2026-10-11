@@ -93,9 +93,10 @@ public static class Slice5Endpoints
         return Results.Ok(new { enrollments = rows, sports });
     }
 
-    private static async Task<IResult> ListEvaluations(string? search, Guid? sportId, Guid? groupId, string? status, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)
+    private static async Task<IResult> ListEvaluations(string? search, Guid? playerId, Guid? sportId, Guid? groupId, string? status, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)
     {
         var t = (await tenant.ResolveAsync())!; var query = AccessibleEvaluations(t, principal, db).AsNoTracking();
+        if (playerId.HasValue) query = query.Where(x => x.SportEnrollment.PlayerId == playerId);
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.SportEnrollment.Player.ArabicName.Contains(search.Trim()) || x.SportEnrollment.Player.PlayerCode.Contains(search.Trim()));
         if (sportId.HasValue) query = query.Where(x => x.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<EvaluationStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed); if (from.HasValue) query = query.Where(x => x.EvaluationDate >= from); if (to.HasValue) query = query.Where(x => x.EvaluationDate <= to);

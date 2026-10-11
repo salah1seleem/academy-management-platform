@@ -140,8 +140,24 @@ public sealed class DashboardRemediationTests : IAsyncLifetime
         await using var verify = factory.Services.CreateAsyncScope(); var database = verify.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.False((await database.Branches.SingleAsync(x => x.Id == branchId)).IsActive); Assert.True(await database.TrainingGroups.AnyAsync(x => x.Id == groupId && x.BranchId == branchId)); Assert.DoesNotContain(groupName, await client.GetStringAsync("/api/v1/manage/structure/options"));
     }
 
+    [Fact]
+    public async Task Admin_can_deactivate_and_reactivate_branch_sport_group_and_coach()
+    {
+        using var client = factory.CreateClient(); await Login(client, DemoSeed.AdminEmail);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var coachId = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == Academy.Infrastructure.Tenancy.AcademyRole.Coach).Select(x => x.Id).SingleAsync();
+        var targets = new[] { ("branches", Slice2DemoSeed.CityBranchId), ("sports", Slice2DemoSeed.FootballId), ("groups", Slice2DemoSeed.FootballGroupId), ("coaches", coachId) };
+        foreach (var (kind, id) in targets)
+        {
+            Assert.Equal(HttpStatusCode.NoContent, (await Put(client, $"/api/v1/manage/structure/{kind}/{id}/status", new { isActive = false }, await Csrf(client))).StatusCode);
+            var rows = await client.GetFromJsonAsync<JsonElement>($"/api/v1/manage/structure/{kind}");
+            Assert.False(rows.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == id).GetProperty("isActive").GetBoolean());
+            Assert.Equal(HttpStatusCode.NoContent, (await Put(client, $"/api/v1/manage/structure/{kind}/{id}/status", new { isActive = true }, await Csrf(client))).StatusCode);
+        }
+    }
+
     private async Task<Guid> CreateBranch(string prefix) { await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var id = Guid.NewGuid(); db.Branches.Add(new Branch { Id = id, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = $"{prefix} {id:N}", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow }); await db.SaveChangesAsync(); return id; }
-    private static async Task Login(HttpClient client, string email) { var response = await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client)); response.EnsureSuccessStatusCode(); }
+    private async Task Login(HttpClient client, string email) { if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(client, factory.Services); else { var response = await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client)); response.EnsureSuccessStatusCode(); } }
     private static async Task GuardianLogin(HttpClient client) { var request = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, await Csrf(client)); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); var response = await Post(client, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, await Csrf(client)); response.EnsureSuccessStatusCode(); }
     private static async Task<string> Csrf(HttpClient client) => (await client.GetFromJsonAsync<CsrfToken>("/api/v1/auth/csrf"))!.Token;
     private static Task<HttpResponseMessage> Post(HttpClient client, string path, object body, string token) => Send(client, HttpMethod.Post, path, body, token);

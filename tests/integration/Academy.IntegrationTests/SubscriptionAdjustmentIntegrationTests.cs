@@ -252,10 +252,12 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
         Assert.Single(outcomes, x => x); Assert.Equal(s.EndDate.AddDays(5), (await Period(s)).EndDate); Assert.Equal(1, await AdjustmentCount(s, SubscriptionAdjustmentType.DaysAdded));
     }
 
-    [Fact] public async Task Adjustment_reason_is_required_and_trimmed()
+    [Fact] public async Task Adjustment_reason_is_optional_and_trimmed_when_present()
     {
-        var s = await NewScenario(); await Assert.ThrowsAsync<AdjustmentValidationException>(() => Days(s, 1, true, reason: "   "));
-        await Days(s, 1, true, reason: "  سبب واضح  "); await using var scope = Scope(); Assert.Equal("سبب واضح", await Db(scope).SubscriptionAdjustments.Where(x => x.SubscriptionPeriodId == s.PeriodId).Select(x => x.Reason).SingleAsync());
+        var blank = await NewScenario(); await Days(blank, 1, true, reason: "   ");
+        var present = await NewScenario(); await Days(present, 1, true, reason: "  سبب واضح  "); await using var scope = Scope();
+        Assert.Equal("", await Db(scope).SubscriptionAdjustments.Where(x => x.SubscriptionPeriodId == blank.PeriodId).Select(x => x.Reason).SingleAsync());
+        Assert.Equal("سبب واضح", await Db(scope).SubscriptionAdjustments.Where(x => x.SubscriptionPeriodId == present.PeriodId).Select(x => x.Reason).SingleAsync());
     }
 
     [Fact] public async Task Audit_performer_and_timestamp_are_stored()
@@ -374,7 +376,7 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
         using var c = await Guardian(); var response = await Post(c, "/api/v1/guardian/subscriptions/renewals", new { sportEnrollmentId = s.EnrollmentId, subscriptionPlanId = s.PlanId }, Guid.NewGuid().ToString()); response.EnsureSuccessStatusCode(); return (await response.Content.ReadFromJsonAsync<Created>())!.PaymentId;
     }
     private async Task Simulate(Guid payment) { using var c = await Guardian(); (await Post(c, $"/api/v1/guardian/subscriptions/payments/{payment}/simulate", new { outcome = "Success" })).EnsureSuccessStatusCode(); }
-    private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); (await Post(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); return c; }
+    private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(c, factory.Services); else (await Post(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); return c; }
     private async Task<HttpClient> Guardian() { var c = factory.CreateClient(); var request = await Post(c, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); (await Post(c, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" })).EnsureSuccessStatusCode(); return c; }
     private static async Task<HttpResponseMessage> Post(HttpClient c, string path, object body, string? key = null) { var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", await Csrf(c)); if (key is not null) request.Headers.Add("Idempotency-Key", key); return await c.SendAsync(request); }
     private static async Task<HttpResponseMessage> Adjust(HttpClient c, Scenario s, string action, object body) => await Post(c, $"/api/v1/subscriptions/periods/{s.PeriodId}/{action}", body, Guid.NewGuid().ToString());

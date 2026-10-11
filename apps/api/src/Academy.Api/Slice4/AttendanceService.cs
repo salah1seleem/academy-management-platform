@@ -20,6 +20,7 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
         await LockAsync(academyId, sessionId, Guid.Empty, ct);
         var session = await db.TrainingSessions.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.Id == sessionId, ct) ?? throw new AttendanceNotFoundException();
         if (session.Status == TrainingSessionStatus.Cancelled) throw new AttendanceConflictException("لا يمكن تسجيل الحضور لحصة ملغاة.");
+        if (session.SessionDate > await AttendanceCalendar.TodayAsync(academyId, db, clock, ct)) throw new AttendanceValidationException("لا يمكن تسجيل الحضور بتاريخ مستقبلي.");
         var ids = changes.Select(x => x.SportEnrollmentId).ToArray();
         var valid = await db.SportEnrollments.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && x.TrainingGroupId == session.TrainingGroupId && x.IsActive, ct);
         if (valid != ids.Length) throw new AttendanceNotFoundException();
@@ -56,6 +57,7 @@ public sealed class AttendanceService(FoundationDbContext db, TimeProvider clock
         await LockAsync(academyId, sessionId, Guid.Empty, ct);
         var session = await db.TrainingSessions.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.Id == sessionId, ct) ?? throw new AttendanceNotFoundException();
         if (session.Status == TrainingSessionStatus.Cancelled) throw new AttendanceConflictException("لا يمكن تسجيل الحضور لحصة ملغاة.");
+        if (session.SessionDate > await AttendanceCalendar.TodayAsync(academyId, db, clock, ct)) throw new AttendanceValidationException("لا يمكن تسجيل الحضور بتاريخ مستقبلي.");
         var ids = changes.Select(x => x.AcademyMembershipId).ToArray();
         var assigned = await db.StaffGroupAssignments.CountAsync(x => x.AcademyId == academyId && x.TrainingGroupId == session.TrainingGroupId && ids.Contains(x.AcademyMembershipId) && x.IsActive, ct);
         if (assigned != ids.Length) throw new AttendanceNotFoundException();

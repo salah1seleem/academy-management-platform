@@ -1,4 +1,7 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+
+import '../theme/appearance.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -30,7 +33,7 @@ class PrimaryButton extends StatelessWidget {
               semanticsLabel: 'جارٍ التنفيذ',
             ),
           )
-        : Text(label),
+        : UiText(label),
   );
 }
 
@@ -42,7 +45,7 @@ class ErrorNotice extends StatelessWidget {
     liveRegion: true,
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(
+      child: UiText(
         message,
         style: TextStyle(color: Theme.of(context).colorScheme.error),
       ),
@@ -62,7 +65,17 @@ class AppScaffold extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(title), actions: actions),
+    appBar: AppBar(
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const AcademyCrest(size: 30),
+          const SizedBox(width: 10),
+          Flexible(child: UiText(title)),
+        ],
+      ),
+      actions: actions,
+    ),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(

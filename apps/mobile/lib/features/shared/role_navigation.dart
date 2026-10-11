@@ -1,0 +1,309 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
+import 'package:flutter/material.dart';
+
+import '../../core/auth/auth_controller.dart';
+import '../../core/theme/appearance.dart';
+import '../guardian/guardian_ui.dart';
+import '../guardian/guardian_content.dart';
+import '../guardian/guardian_profile.dart';
+import '../guardian/guardian_report.dart';
+import '../coach/coach_home.dart';
+import '../owner/owner_reports.dart';
+import 'academy_news.dart';
+import 'matches.dart';
+
+class NativeRoleTabs extends StatefulWidget {
+  final AuthController auth;
+  final Widget home, account;
+  final String role;
+  const NativeRoleTabs({
+    super.key,
+    required this.auth,
+    required this.home,
+    required this.account,
+    required this.role,
+  });
+  @override
+  State<NativeRoleTabs> createState() => _NativeRoleTabsState();
+}
+
+class _NativeRoleTabsState extends State<NativeRoleTabs> {
+  int selected = 0;
+  @override
+  Widget build(BuildContext context) {
+    final guardian = widget.role == 'Guardian',
+        owner = widget.role == 'AcademyOwner';
+    final destinations = guardian
+        ? [
+            ('الرئيسية', 'Home', Icons.home_outlined),
+            ('التغذية', 'Nutrition', Icons.restaurant_outlined),
+            ('التقييمات', 'Progress', Icons.insights),
+            ('المواعيد', 'Schedule', Icons.calendar_month_outlined),
+            ('حسابي', 'Account', Icons.person_outline),
+          ]
+        : owner
+        ? [
+            ('الرئيسية', 'Home', Icons.home_outlined),
+            ('الطلبات', 'Requests', Icons.receipt_long_outlined),
+            ('التقارير', 'Reports', Icons.analytics_outlined),
+            ('الأخبار', 'News', Icons.newspaper_outlined),
+            ('حسابي', 'Account', Icons.person_outline),
+          ]
+        : [
+            ('الرئيسية', 'Home', Icons.home_outlined),
+            ('مجموعاتي', 'Groups', Icons.groups_outlined),
+            ('الأخبار', 'News', Icons.newspaper_outlined),
+            ('حسابي', 'Account', Icons.person_outline),
+          ];
+    final Widget page = selected == 0
+        ? widget.home
+        : selected == destinations.length - 1
+        ? widget.account
+        : guardian
+        ? GuardianHub(
+            auth: widget.auth,
+            section: selected == 1
+                ? 'nutrition'
+                : selected == 2
+                ? 'evaluations'
+                : 'schedule',
+          )
+        : owner
+        ? selected == 1
+              ? NativePaymentRequests(auth: widget.auth)
+              : selected == 2
+              ? OwnerReports(auth: widget.auth)
+              : AcademyNewsPage(auth: widget.auth)
+        : selected == 1
+        ? CoachGroupsPage(auth: widget.auth)
+        : AcademyNewsPage(auth: widget.auth);
+    return Scaffold(
+      body: KeyedSubtree(
+        key: ValueKey('$selected-${widget.role}'),
+        child: page,
+      ),
+      bottomNavigationBar: NavigationBar(
+        height: 72,
+        selectedIndex: selected,
+        onDestinationSelected: (i) => setState(() => selected = i),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: [
+          for (final d in destinations)
+            NavigationDestination(
+              icon: Icon(d.$3),
+              label: localized(context, d.$1, d.$2),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class GuardianHub extends StatelessWidget {
+  final AuthController auth;
+  final String section;
+  const GuardianHub({super.key, required this.auth, required this.section});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(
+      context,
+      section == 'nutrition'
+          ? 'التغذية والوجبات'
+          : section == 'evaluations'
+          ? 'تقدم أبنائي'
+          : 'المواعيد والحضور',
+      section == 'nutrition'
+          ? 'Nutrition & meals'
+          : section == 'evaluations'
+          ? 'Children’s progress'
+          : 'Schedule & attendance',
+    ),
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/guardian/home',
+      builder: (context, value) {
+        final d = obj(value);
+        return gList([
+          if (section == 'schedule')
+            GLink(
+              localized(context, 'مباريات أبنائي', 'Children’s matches'),
+              Icons.sports_soccer,
+              () => openPage(context, MatchSchedule(auth: auth)),
+            ),
+          for (final c in rows(d['children']))
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      PlayerAvatar(
+                        textOf(c['arabicName']),
+                        auth: auth,
+                        reference: c['photoReference'],
+                        size: 48,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: UiText(
+                          textOf(c['arabicName']),
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonal(
+                    onPressed: () => openPage(
+                      context,
+                      section == 'nutrition'
+                          ? NutritionLibrary(
+                              auth: auth,
+                              playerId: c['id'],
+                              today: d['today'],
+                            )
+                          : section == 'evaluations'
+                          ? ReportHistory(auth: auth, playerId: c['id'])
+                          : ProfileRecords(
+                              auth: auth,
+                              playerId: c['id'],
+                              section: 'schedule',
+                            ),
+                    ),
+                    child: UiText(
+                      localized(context, 'عرض التفاصيل', 'View details'),
+                    ),
+                  ),
+                  if (section == 'schedule')
+                    TextButton(
+                      onPressed: () => openPage(
+                        context,
+                        ProfileRecords(
+                          auth: auth,
+                          playerId: c['id'],
+                          section: 'attendance',
+                        ),
+                      ),
+                      child: UiText(
+                        localized(context, 'حضور اللاعب', 'Player attendance'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (rows(d['children']).isEmpty) const EmptyMessage(),
+        ]);
+      },
+    ),
+  );
+}
+
+class CoachGroupsPage extends StatelessWidget {
+  final AuthController auth;
+  const CoachGroupsPage({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(context, 'مجموعاتي', 'My groups'),
+    child: FutureBuilder<List<Object?>>(
+      future: Future.wait([
+        auth.request('GET', '/api/v1/coach/groups'),
+        auth.request('GET', '/api/v1/attendance/sessions'),
+        auth.request('GET', '/api/v1/evaluations/options'),
+      ]),
+      builder: (context, data) {
+        if (data.hasError) return const EmptyMessage('تعذر تحميل المجموعات.');
+        if (!data.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final groups = rows(data.data![0]),
+            sessions = rows(data.data![1]),
+            players = rows(obj(data.data![2])['enrollments']);
+        return gList([
+          for (final g in groups)
+            GLink(
+              textOf(g['arabicName']),
+              Icons.groups_outlined,
+              () => openPage(
+                context,
+                CoachGroup(
+                  auth: auth,
+                  group: g,
+                  sessions: sessions
+                      .where((s) => s['trainingGroupId'] == g['id'])
+                      .toList(),
+                  enrollments: players
+                      .where((p) => p['groupId'] == g['id'])
+                      .toList(),
+                ),
+              ),
+            ),
+          if (groups.isEmpty) const EmptyMessage(),
+        ]);
+      },
+    ),
+  );
+}
+
+class NativePaymentRequests extends StatelessWidget {
+  final AuthController auth;
+  final Map<String, String> filters;
+  const NativePaymentRequests({
+    super.key,
+    required this.auth,
+    this.filters = const {},
+  });
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(context, 'طلبات الدفع', 'Payment requests'),
+    child: RemoteBody(
+      auth: auth,
+      path:
+          '/api/v1/manage/payment-requests?${Uri(queryParameters: {...filters, 'status': 'Pending'}).query}',
+      builder: (context, value) {
+        final d = obj(value);
+        return gList([
+          Heading(
+            localized(
+              context,
+              '${d['pending']} طلب بانتظار المراجعة',
+              '${d['pending']} requests awaiting review',
+            ),
+          ),
+          UiText(
+            localized(
+              context,
+              'اعتماد الطلبات وإسناد المجموعة متاحان من لوحة الويب.',
+              'Approve requests and assign groups from the web dashboard.',
+            ),
+          ),
+          for (final r in rows(d['items']))
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(
+                    textOf(r['player']),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  UiText('${r['sport']} · ${r['branch']}'),
+                  UiText(textOf(r['plan'])),
+                  UiText(money(r['amount'], r['currency'])),
+                  UiText(
+                    localized(
+                      context,
+                      r['hasProof'] == true
+                          ? 'وصل إثبات الدفع'
+                          : 'لم يصل إثبات دفع',
+                      r['hasProof'] == true
+                          ? 'Payment proof received'
+                          : 'No payment proof yet',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ]);
+      },
+    ),
+  );
+}

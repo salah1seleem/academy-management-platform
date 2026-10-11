@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
@@ -36,9 +37,14 @@ class ChildProfile extends StatelessWidget {
             ),
             child: Column(
               children: [
-                PlayerAvatar(textOf(player['arabicName']), size: 84),
+                PlayerAvatar(
+                  textOf(player['arabicName']),
+                  auth: auth,
+                  reference: player['photoReference'],
+                  size: 84,
+                ),
                 const SizedBox(height: 12),
-                Text(
+                UiText(
                   textOf(player['arabicName']),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -46,11 +52,11 @@ class ChildProfile extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text('${ageOn(player['dateOfBirth'], today) ?? '—'} سنوات'),
+                UiText('${ageOn(player['dateOfBirth'], today) ?? '—'} سنوات'),
                 for (final e in enrollments) ...[
-                  Text('${e['sport']} · ${e['branch']}'),
+                  UiText('${e['sport']} · ${e['branch']}'),
                   if (e['period'] != null)
-                    Text(
+                    UiText(
                       '${day(e['period']['startDate'])} — ${day(e['period']['endDate'])}',
                       style: const TextStyle(
                         fontSize: 12,
@@ -120,15 +126,15 @@ class ChildProfile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${e['sport']} · ${e['group']}'),
+                  UiText('${e['sport']} · ${e['group']}'),
                   if (e['period'] != null) ...[
                     StatusPill(e['period']['status']),
-                    Text(textOf(e['period']['plan'])),
-                    Text(
+                    UiText(textOf(e['period']['plan'])),
+                    UiText(
                       '${day(e['period']['startDate'])} — ${day(e['period']['endDate'])}',
                     ),
                     if (e['period']['remainingSessions'] != null)
-                      Text(
+                      UiText(
                         'الحصص المتبقية: ${e['period']['remainingSessions']}',
                       ),
                     TextButton(
@@ -136,7 +142,7 @@ class ChildProfile extends StatelessWidget {
                         context,
                         PeriodPage(auth: auth, id: e['period']['id']),
                       ),
-                      child: const Text('تفاصيل حالة الاشتراك'),
+                      child: const UiText('تفاصيل حالة الاشتراك'),
                     ),
                   ],
                   FilledButton(
@@ -149,7 +155,7 @@ class ChildProfile extends StatelessWidget {
                         childName: player['arabicName'],
                       ),
                     ),
-                    child: const Text('تجديد الاشتراك'),
+                    child: const UiText('تجديد الاشتراك'),
                   ),
                 ],
               ),
@@ -187,20 +193,20 @@ class ProfileRecords extends StatelessWidget {
               ? [
                   for (final e in rows(d['enrollments'])) ...[
                     Heading(textOf(e['sport'])),
-                    Text('${e['branch']} · ${e['group']}'),
+                    UiText('${e['branch']} · ${e['group']}'),
                     const Heading('الجلسات القادمة'),
                     if (rows(e['upcoming']).isEmpty)
                       const EmptyMessage('لا توجد جلسات قادمة منشورة.'),
                     for (final s in rows(e['upcoming']))
                       GCard(
-                        child: Text(
+                        child: UiText(
                           '${day(s['sessionDate'])}\n${s['startTime']} — ${s['endTime']}',
                         ),
                       ),
                     const Heading('المواعيد الدورية'),
                     for (final s in rows(e['recurring']))
                       GCard(
-                        child: Text(
+                        child: UiText(
                           '${label(s['dayOfWeek'])}\n${s['startTime']} — ${s['endTime']}',
                         ),
                       ),
@@ -217,8 +223,8 @@ class ProfileRecords extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${a['sport']} · ${a['group']}'),
-                          Text(day(a['sessionDate'])),
+                          UiText('${a['sport']} · ${a['group']}'),
+                          UiText(day(a['sessionDate'])),
                           StatusPill(a['status']),
                         ],
                       ),
@@ -245,17 +251,17 @@ class PeriodPage extends StatelessWidget {
         return gList([
           Heading(textOf(d['plan'])),
           StatusPill(d['status']),
-          Text('${day(d['startDate'])} — ${day(d['endDate'])}'),
+          UiText('${day(d['startDate'])} — ${day(d['endDate'])}'),
           if (d['frozenFromDate'] != null)
-            Text('مجمد من ${day(d['frozenFromDate'])}'),
+            UiText('مجمد من ${day(d['frozenFromDate'])}'),
           if (d['remainingSessions'] != null)
-            Text('الحصص المتبقية: ${d['remainingSessions']}'),
+            UiText('الحصص المتبقية: ${d['remainingSessions']}'),
           const Heading('سجل التعديلات'),
           if (rows(d['adjustments']).isEmpty)
             const EmptyMessage('لا توجد تعديلات.'),
           for (final a in rows(d['adjustments']))
             GCard(
-              child: Text(
+              child: UiText(
                 '${label(a['type'])} · ${day(a['effectiveDate'])}\nنهاية الاشتراك: ${day(a['newEndDate'])}',
               ),
             ),

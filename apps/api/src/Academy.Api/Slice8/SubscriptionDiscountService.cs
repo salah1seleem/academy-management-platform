@@ -92,7 +92,7 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
         oldPayment.Status = PaymentRequestStatus.Cancelled;
         oldPayment.UpdatedAtUtc = clock.UtcNow;
         var paymentId = Guid.NewGuid();
-        var checkout = gateway.CreateCheckout(academyId, paymentId);
+        var checkout = oldPayment.Provider == "Manual" ? new CheckoutSession("Manual", $"manual-{paymentId:N}", $"manual-{paymentId:N}", ["التحويل للأكاديمية"]) : gateway.CreateCheckout(academyId, paymentId);
         db.PaymentRequests.Add(new PaymentRequest
         {
             Id = paymentId, AcademyId = academyId, RenewalRequestId = renewal.Id,

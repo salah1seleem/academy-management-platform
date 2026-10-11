@@ -1,3 +1,5 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -17,7 +19,7 @@ class ReportHistory extends StatelessWidget {
       auth: auth,
       path: '/api/v1/guardian/children/$playerId/evaluations',
       builder: (context, value) => gList([
-        const Text('التقييمات المنشورة · اختر تاريخ التقرير'),
+        const UiText('التقييمات المنشورة · اختر تاريخ التقرير'),
         if (rows(value).isEmpty)
           const EmptyMessage('لا توجد تقييمات منشورة بعد.'),
         for (final r in rows(value))
@@ -50,56 +52,65 @@ class PlayerReport extends StatelessWidget {
             spacing: 10,
             runSpacing: 8,
             children: [
-              Chip(label: Text(textOf(d['reportingPeriod']))),
-              Chip(label: Text(day(d['evaluationDate']))),
+              Chip(label: UiText(textOf(d['reportingPeriod']))),
+              Chip(label: UiText(day(d['evaluationDate']))),
             ],
           ),
           GCard(
             child: Row(
               children: [
-                PlayerAvatar(textOf(d['player']), size: 74),
-                const SizedBox(width: 16),
+                PlayerAvatar(
+                  textOf(d['player']),
+                  auth: auth,
+                  reference: d['photoReference'],
+                  size: 54,
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      UiText(
                         textOf(d['player']),
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       if (d['isFootballReport'] == true)
-                        Text(
+                        UiText(
                           textOf(d['footballPosition']),
                           style: const TextStyle(color: Colors.greenAccent),
                         ),
-                      Text(
+                      UiText(
                         textOf(d['overallScore']),
                         style: const TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Text(
+                      const UiText(
                         'التقييم العام',
                         style: TextStyle(color: Colors.white60),
                       ),
                     ],
                   ),
                 ),
+                if (d['isFootballReport'] == true)
+                  SizedBox(
+                    width: 122,
+                    child: RadarChart(rows(d['axes']), compact: true),
+                  ),
               ],
             ),
           ),
           if (d['isFootballReport'] == true) ...[
-            RadarChart(rows(d['axes'])),
             Wrap(
               spacing: 12,
               runSpacing: 8,
               children: [
                 for (final a in rows(d['axes']))
-                  Text('${label(a['axis'])}: ${textOf(a['value'])}'),
+                  UiText('${label(a['axis'])}: ${textOf(a['value'])}'),
               ],
             ),
           ],
@@ -110,7 +121,7 @@ class PlayerReport extends StatelessWidget {
             ('الوزن · كجم', textOf(d['weightKg'])),
             ('القدم المفضلة', label(d['preferredFoot'])),
           ]),
-          Text(
+          UiText(
             'اكتمال التقييم ${textOf(d['completenessPercentage'])}% · القيم غير المسجلة ليست صفرًا',
             style: const TextStyle(fontSize: 12, color: Colors.white60),
           ),
@@ -122,8 +133,8 @@ class PlayerReport extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text(textOf(c['name']))),
-                      Text(
+                      Expanded(child: UiText(textOf(c['name']))),
+                      UiText(
                         textOf(c['score']),
                         style: TextStyle(
                           fontSize: 23,
@@ -133,13 +144,13 @@ class PlayerReport extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (c['notes'] != null) Text(c['notes']),
+                  if (c['notes'] != null) UiText(c['notes']),
                 ],
               ),
             ),
           const Heading('ملاحظات المدرب'),
-          Text(d['generalNotes'] ?? 'لا توجد ملاحظات منشورة.'),
-          Text(
+          UiText(d['generalNotes'] ?? 'لا توجد ملاحظات منشورة.'),
+          UiText(
             'المدرب: ${d['evaluator']}',
             style: const TextStyle(color: Colors.white60),
           ),
@@ -161,20 +172,29 @@ Color scoreColor(Object? score) => score == null
 
 class RadarChart extends StatelessWidget {
   final List<Json> axes;
-  const RadarChart(this.axes, {super.key});
+  final bool compact;
+  const RadarChart(this.axes, {super.key, this.compact = false});
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'رسم المحاور الستة؛ القيم موضحة نصيًا أسفله',
     child: SizedBox(
-      height: 240,
-      child: CustomPaint(painter: _RadarPainter(axes)),
+      height: compact ? 140 : 210,
+      child: CustomPaint(
+        painter: _RadarPainter(
+          axes,
+          compact,
+          Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
     ),
   );
 }
 
 class _RadarPainter extends CustomPainter {
   final List<Json> axes;
-  _RadarPainter(this.axes);
+  final bool compact;
+  final Color textColor;
+  _RadarPainter(this.axes, this.compact, this.textColor);
   static const names = [
     'Passing',
     'Shooting',
@@ -186,7 +206,10 @@ class _RadarPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2),
-        radius = math.min(size.width / 2 - 55, size.height / 2 - 28);
+        radius = math.min(
+          size.width / 2 - (compact ? 25 : 55),
+          size.height / 2 - 28,
+        );
     Offset point(int i, double scale) =>
         center +
         Offset(
@@ -199,11 +222,7 @@ class _RadarPainter extends CustomPainter {
       ..color = Colors.white24
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    for (final scale in [.25, .5, .75, 1.0]) {
-      final path = Path()
-        ..addPolygon(List.generate(6, (i) => point(i, scale)), true);
-      canvas.drawPath(path, grid);
-    }
+    canvas.drawCircle(center, radius, grid);
     final values = names
         .map(
           (n) =>
@@ -219,9 +238,18 @@ class _RadarPainter extends CustomPainter {
         ),
         Paint()..color = Colors.cyan.withValues(alpha: .24),
       );
+      canvas.drawPath(
+        Path()..addPolygon(
+          List.generate(6, (i) => point(i, values[i]!.toDouble() / 100)),
+          true,
+        ),
+        Paint()
+          ..color = Colors.cyan
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
     }
     for (var i = 0; i < 6; i++) {
-      canvas.drawLine(center, point(i, 1), grid);
       if (values[i] != null) {
         canvas.drawCircle(
           point(i, values[i]!.toDouble() / 100),
@@ -231,12 +259,10 @@ class _RadarPainter extends CustomPainter {
       }
       final t = TextPainter(
         text: TextSpan(
-          text: label(names[i]),
-          style: const TextStyle(
-            color: Colors.white70,
-            fontFamily: 'Cairo',
-            fontSize: 11,
-          ),
+          text: compact
+              ? const ['PAS', 'SHT', 'PHY', 'DEF', 'SPD', 'DRI'][i]
+              : label(names[i]),
+          style: TextStyle(color: textColor, fontFamily: 'Cairo', fontSize: 11),
         ),
         textDirection: TextDirection.rtl,
       )..layout();
@@ -251,5 +277,6 @@ class _RadarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RadarPainter old) => old.axes != axes;
+  bool shouldRepaint(covariant _RadarPainter old) =>
+      old.axes != axes || old.textColor != textColor || old.compact != compact;
 }

@@ -1,4 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
+import { guardianLogin } from "../support/auth";
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   await page.goto("/login");
@@ -10,7 +11,7 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
 async function openTodayFootballRoster(page: Page) {
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: /الحضور/ }).click();
-  await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "جلسات التدريب" }).click();
+  await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "حضور اللاعبين" }).click();
   const session = page.locator("article").filter({ hasText: "2026-09-28" }).filter({ hasText: "ناشئين 2016 — مجموعة أ" });
   await session.getByRole("link", { name: "تسجيل الحضور" }).click();
   await expect(page.getByRole("heading", { name: "حضور اللاعبين" })).toBeVisible();
@@ -35,16 +36,13 @@ test("Admin correction restores the consumed session", async ({ page }) => {
   await expect(player).toContainText("الرصيد: 5"); await expect(player.getByRole("button", { name: "غائب" })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("Coach records own attendance and cannot open an unrelated group", async ({ page }) => {
+test("Coach cannot sign in to the web dashboard", async ({ page }) => {
   await staffLogin(page, "coach.nogoom@example.test");
-  await expect(page.getByRole("heading", { name: "جلسات التدريب" })).toBeVisible();
-  await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("navigation", { name: "مساحة المدرب" }).getByRole("link", { name: "حضور المدربين" }).click();
-  const session = page.locator("article").filter({ hasText: "2026-09-28" }).filter({ hasText: "ناشئين 2016 — مجموعة أ" }); await session.getByRole("link", { name: "حضور المدربين" }).click();
-  await page.getByRole("button", { name: "حاضر" }).click(); await page.getByRole("button", { name: "حفظ حضور المدربين" }).click(); await expect(page.getByText("تم حفظ حضور الجهاز الفني.")).toBeVisible();
-  await page.goto("/dashboard/attendance/sessions/62000000-0000-0000-0000-000000000005/players"); await expect(page.getByText("تعذر تحميل كشف اللاعبين.")).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toContainText("بيانات الدخول غير صحيحة");
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("Guardian sees attendance for linked child only", async ({ page }) => {
-  await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click(); await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click(); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click();
+  await guardianLogin(page);
   const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await child.getByRole("link", { name: "عرض الملف" }).click(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
 });

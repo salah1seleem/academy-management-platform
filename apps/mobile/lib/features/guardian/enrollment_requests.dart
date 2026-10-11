@@ -1,8 +1,10 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
+import '../shared/transfer_payment.dart';
 import 'guardian_payments.dart';
 
 class EnrollmentForm extends StatefulWidget {
@@ -21,7 +23,7 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
   final form = GlobalKey<FormState>();
   final name = TextEditingController(), notes = TextEditingController();
   int kind = 2;
-  String? child, sport, branch, dob, error;
+  String? child, sport, branch, dob, error, plan;
   bool busy = false;
   Json? submitted;
   final key = commandKey();
@@ -47,6 +49,7 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
         'newChildDateOfBirth': kind == 2 ? dob : null,
         'newChildGender': null,
         'sportId': sport,
+        'subscriptionPlanId': plan,
         'preferredBranchId': branch,
         'notes': notes.text.trim().isEmpty ? null : notes.text.trim(),
       };
@@ -56,19 +59,19 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
       error = null;
     });
     try {
-      await widget.auth.request(
-        'POST',
-        '/api/v1/guardian/enrollment-requests',
-        body: submitted,
-        idempotencyKey: key,
+      final result = obj(
+        await widget.auth.request(
+          'POST',
+          '/api/v1/guardian/enrollment-requests',
+          body: submitted,
+          idempotencyKey: key,
+        ),
       );
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
-            builder: (_) => EnrollmentRequests(
-              auth: widget.auth,
-              environment: widget.environment,
-            ),
+            builder: (_) =>
+                EnrollmentPaymentPage(auth: widget.auth, id: result['id']),
           ),
         );
       }
@@ -107,8 +110,8 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
         return Form(
           key: form,
           child: gList([
-            const Text(
-              'أرسل الطلب لتراجعه الأكاديمية وتحدد المجموعة. لا ينشئ الطلب دفعًا أو اشتراكًا فعالًا.',
+            const UiText(
+              'اختر الباقة ثم أرسل إثبات الدفع. يُفعّل الاشتراك بعد موافقة الأكاديمية وإسناد المجموعة.',
             ),
             const SizedBox(height: 16),
             AbsorbPointer(
@@ -118,8 +121,8 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                 children: [
                   SegmentedButton<int>(
                     segments: const [
-                      ButtonSegment(value: 2, label: Text('طفل جديد')),
-                      ButtonSegment(value: 1, label: Text('طفل مرتبط')),
+                      ButtonSegment(value: 2, label: UiText('طفل جديد')),
+                      ButtonSegment(value: 1, label: UiText('طفل مرتبط')),
                     ],
                     selected: {kind},
                     onSelectionChanged: (s) => setState(() => kind = s.single),
@@ -136,7 +139,9 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                     TextFormField(
                       controller: name,
                       maxLength: 180,
-                      decoration: const InputDecoration(labelText: 'اسم الطفل'),
+                      decoration: InputDecoration(
+                        labelText: ui(context, 'اسم الطفل'),
+                      ),
                       validator: (v) => v == null || v.trim().length < 2
                           ? 'أدخل اسم الطفل.'
                           : null,
@@ -144,7 +149,7 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                     OutlinedButton.icon(
                       onPressed: pickDate,
                       icon: const Icon(Icons.calendar_month),
-                      label: Text(dob ?? 'تاريخ الميلاد'),
+                      label: UiText(dob ?? 'تاريخ الميلاد'),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -152,7 +157,10 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                     'الرياضة',
                     rows(d['sports']),
                     sport,
-                    (v) => setState(() => sport = v),
+                    (v) => setState(() {
+                      sport = v;
+                      plan = null;
+                    }),
                   ),
                   const SizedBox(height: 16),
                   select(
@@ -166,21 +174,38 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                     controller: notes,
                     maxLength: 600,
                     maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'ملاحظات — اختياري',
+                    decoration: InputDecoration(
+                      labelText: ui(context, 'ملاحظات — اختياري'),
                     ),
                   ),
                 ],
               ),
             ),
-            if (error != null) Text(error!),
+            DropdownButtonFormField<String>(
+              key: ValueKey('plan-$sport'),
+              initialValue: plan,
+              decoration: InputDecoration(labelText: ui(context, 'الباقة')),
+              items: [
+                for (final p in rows(d['plans'] ?? []))
+                  if (p['sportId'] == sport)
+                    DropdownMenuItem(
+                      value: textOf(p['id']),
+                      child: UiText(
+                        '${p['arabicName']} · ${money(p['price'], p['currency'])}',
+                      ),
+                    ),
+              ],
+              onChanged: busy ? null : (v) => setState(() => plan = v),
+              validator: (v) => v == null ? 'اختر باقة الاشتراك.' : null,
+            ),
+            if (error != null) UiText(error!),
             if (submitted != null && !busy)
-              const Text(
+              const UiText(
                 'لمنع الطلب المكرر، أعد إرسال نفس البيانات من هنا عند عودة الاتصال.',
               ),
             FilledButton(
               onPressed: busy ? null : submit,
-              child: Text(busy ? 'جارٍ الإرسال…' : 'إرسال طلب الاشتراك'),
+              child: UiText(busy ? 'جارٍ الإرسال…' : 'إرسال طلب الاشتراك'),
             ),
           ]),
         );
@@ -195,11 +220,13 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
   ) => DropdownButtonFormField<String>(
     initialValue: value,
     isExpanded: true,
-    decoration: InputDecoration(labelText: title),
+    decoration: InputDecoration(labelText: ui(context, title)),
     items: items
         .map(
-          (x) =>
-              DropdownMenuItem<String>(value: x['id'], child: Text(x['name'])),
+          (x) => DropdownMenuItem<String>(
+            value: x['id'],
+            child: UiText(x['name']),
+          ),
         )
         .toList(),
     onChanged: change,
@@ -229,11 +256,11 @@ class EnrollmentRequests extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Heading(textOf(d['child'])),
-                Text('${d['sport']} · ${d['branch']}'),
+                UiText('${d['sport']} · ${d['branch']}'),
                 StatusPill(d['status']),
-                Text(day(d['createdAtUtc'])),
+                UiText(day(d['createdAtUtc'])),
                 if (d['guardianVisibleReason'] != null)
-                  Text(d['guardianVisibleReason']),
+                  UiText(d['guardianVisibleReason']),
                 if (d['status'] == 'Approved' &&
                     d['createdSportEnrollmentId'] != null)
                   FilledButton(
@@ -246,7 +273,7 @@ class EnrollmentRequests extends StatelessWidget {
                         childName: d['child'],
                       ),
                     ),
-                    child: const Text('اختيار باقة والاشتراك'),
+                    child: const UiText('اختيار باقة والاشتراك'),
                   ),
               ],
             ),

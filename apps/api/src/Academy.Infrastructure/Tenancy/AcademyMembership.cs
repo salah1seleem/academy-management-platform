@@ -8,6 +8,7 @@ public sealed class AcademyMembership
     public Guid AcademyId { get; set; }
     public Guid UserId { get; set; }
     public AcademyRole Role { get; set; }
+    public string? JobTitle { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }

@@ -25,7 +25,7 @@ describe("individual coach provisioning", () => {
     await waitFor(() => expect(request).toHaveBeenCalledWith("/api/v1/manage/coaches", "POST", {
       displayName: "مدرب تجريبي", phoneNumber: "01012345678", email: null, isActive: true, groupIds: ["group-a"],
     }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/academy/coaches/member-a"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/academy/coaches"));
   });
   it("keeps the form and exposes the server validation failure", async () => {
     request.mockRejectedValue(new Error("تعذر ربط الهوية بهذه البيانات."));

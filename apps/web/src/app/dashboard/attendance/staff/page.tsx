@@ -1,2 +1,2 @@
-import { TrainingSessionsList } from "../../../../features/attendance";
-export default function Page() { return <TrainingSessionsList staffOnly />; }
+import { DailyCoaches } from "../../../../features/daily-staff-attendance";
+export default function Page() { return <DailyCoaches />; }

@@ -1,13 +1,8 @@
 import { expect, Page, test } from "@playwright/test";
+import { guardianLogin } from "../support/auth";
 
 let originalCheckout = "";
 let renewalDetail = "";
-
-async function guardianLogin(page: Page) {
-  await page.context().clearCookies(); await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click();
-  await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click();
-  await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click(); await page.waitForURL("**/guardian**");
-}
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email);
@@ -52,8 +47,8 @@ test.describe.serial("Slice 8C subscription discount journeys", () => {
     await page.getByRole("button", { name: "إعادة محاولة الدفع" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٧٥٠/);
   });
 
-  test("Journey D — Guardian and Coach cannot mutate discounts", async ({ page }) => {
+  test("Journey D — Guardian cannot mutate discounts and Coach cannot enter the dashboard", async ({ page }) => {
     await guardianLogin(page); const guardianStatus = await page.evaluate(async path => { const csrf = await fetch("/api/v1/auth/csrf").then(r => r.json()) as { token: string }; return fetch(`${path}/discount`, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ type: "Percentage", value: 10, reason: "مرفوض", expectedVersion: 1 }) }).then(r => r.status); }, `/api/v1/subscriptions/renewals/${renewalDetail.split("/").pop()}`); expect(guardianStatus).toBe(403);
-    await staffLogin(page, "coach.nogoom@example.test"); const coachStatus = await page.evaluate(async path => { const csrf = await fetch("/api/v1/auth/csrf").then(r => r.json()) as { token: string }; return fetch(`${path}/discount`, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ type: "Percentage", value: 10, reason: "مرفوض", expectedVersion: 1 }) }).then(r => r.status); }, `/api/v1/subscriptions/renewals/${renewalDetail.split("/").pop()}`); expect(coachStatus).toBe(403);
+    await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("coach.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await expect(page.locator("main").getByRole("alert")).toContainText("بيانات الدخول غير صحيحة");
   });
 });

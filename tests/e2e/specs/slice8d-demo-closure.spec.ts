@@ -1,4 +1,5 @@
 import { expect, Page, test, TestInfo } from "@playwright/test";
+import { guardianLogin } from "../support/auth";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -9,17 +10,6 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.waitForURL("**/dashboard**");
-}
-
-async function guardianLogin(page: Page) {
-  await page.context().clearCookies();
-  await page.goto("/login");
-  await page.getByRole("button", { name: "ولي أمر" }).click();
-  await page.getByLabel("رقم الهاتف").fill("01000000001");
-  await page.getByRole("button", { name: "طلب رمز تجريبي" }).click();
-  await page.getByLabel("رمز التحقق").fill("246810");
-  await page.getByRole("button", { name: "تحقق ودخول" }).click();
-  await page.waitForURL("**/guardian**");
 }
 
 async function assertMobileArabicSurface(page: Page) {

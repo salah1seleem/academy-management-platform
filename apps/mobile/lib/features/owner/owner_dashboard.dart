@@ -1,12 +1,18 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+
+import '../shared/matches.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/app_widgets.dart';
+import '../../core/theme/academy_brand.dart';
+import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
+import '../shared/academy_news.dart';
+import '../shared/role_navigation.dart';
 import 'owner_reports.dart';
 
-class OwnerDashboard extends StatelessWidget {
+class OwnerDashboard extends StatefulWidget {
   final AuthController auth;
   final Widget accountPage;
   const OwnerDashboard({
@@ -15,144 +21,414 @@ class OwnerDashboard extends StatelessWidget {
     required this.accountPage,
   });
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'لوحة المالك',
+  State<OwnerDashboard> createState() => _OwnerDashboardState();
+}
+
+class _OwnerDashboardState extends State<OwnerDashboard> {
+  String from = '', to = '', branch = '';
+  int revision = 0;
+  Future<void> chooseRange() async {
+    final chosen = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDateRange: from.isEmpty || to.isEmpty
+          ? null
+          : DateTimeRange(start: DateTime.parse(from), end: DateTime.parse(to)),
+    );
+    if (chosen != null && mounted) {
+      setState(() {
+        from = day(chosen.start.toIso8601String());
+        to = day(chosen.end.toIso8601String());
+        revision++;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(context, 'لوحة المالك', 'Owner dashboard'),
     actions: [
       IconButton(
-        tooltip: 'الحساب',
-        onPressed: () => openPage(context, accountPage),
+        tooltip: localized(context, 'الحساب', 'Account'),
+        onPressed: () => openPage(context, widget.accountPage),
         icon: const Icon(Icons.person_outline),
       ),
     ],
     child: RemoteBody(
-      auth: auth,
-      path: '/api/v1/reports/owner-summary',
+      key: ValueKey(revision),
+      auth: widget.auth,
+      path:
+          '/api/v1/reports/owner-summary?${Uri(queryParameters: {if (from.isNotEmpty) 'from': from, if (to.isNotEmpty) 'to': to, if (branch.isNotEmpty) 'branchId': branch}).query}',
       builder: (context, value) {
         final d = obj(value),
-            collections = obj(d['collections']),
-            payments = obj(d['payments']),
-            subscriptions = obj(d['subscriptions']),
-            attendance = obj(d['attendance']);
+            c = obj(d['collections']),
+            s = obj(d['subscriptions']),
+            p = d['paymentRequests'] is Map
+                ? obj(d['paymentRequests'])
+                : <String, dynamic>{
+                    'total': d['payments']?['pending'],
+                    'newEnrollments': null,
+                    'renewals': null,
+                    'products': null,
+                  };
         final currency = d['currency'];
-        return ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: AcademyTheme.teal,
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    auth.session!.selected!.academyName,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  Text(
-                    'ملخص تنفيذي حتى ${day(d['asOfDate'])}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Text(
-                    'كل الأرقام من السجلات المخزنة؛ لا توجد اتجاهات تقديرية.',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _metrics([
-              ('تحصيل اليوم', money(collections['today'], currency)),
-              ('تحصيل الشهر', money(collections['month'], currency)),
-              ('الاشتراكات الفعالة', textOf(subscriptions['active'])),
-              ('تنتهي قريبًا', textOf(subscriptions['expiring'])),
-              ('إجمالي التحصيلات', money(collections['total'], currency)),
-              ('مدفوعات معلقة', textOf(payments['pending'])),
-              ('مدفوعات فاشلة', textOf(payments['failed'])),
-              ('اللاعبون النشطون', textOf(d['activePlayers'])),
-              ('حضور اليوم', textOf(attendance['present'])),
-            ]),
-            const SizedBox(height: 18),
-            Text(
-              'التحصيل حسب الفرع',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            for (final branch in rows(d['byBranch']))
-              ListTile(
-                title: Text(textOf(branch['name'])),
-                trailing: Text(money(branch['amount'], currency)),
-              ),
-            Text(
-              'أحدث التحصيلات',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            for (final item in rows(d['latest']))
-              ListTile(
-                title: Text(textOf(item['player'])),
-                subtitle: Text(textOf(item['receiptNumber'])),
-                trailing: Text(money(item['amount'], item['currency'])),
-              ),
-            Text(
-              'ملخص الاشتراكات',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            AppCard(
-              child: Text(
-                'فعالة: ${subscriptions['active']} · تنتهي قريبًا: ${subscriptions['expiring']} · منتهية: ${subscriptions['expired']}',
-              ),
-            ),
-            FilledButton.icon(
-              onPressed: () => openPage(context, OwnerReports(auth: auth)),
-              icon: const Icon(Icons.analytics_outlined),
-              label: const Text('التقارير'),
-            ),
-            Wrap(
-              spacing: 8,
-              children: const [
-                Chip(label: Text('الاشتراكات')),
-                Chip(label: Text('اللاعبون')),
-                Chip(label: Text('الحضور')),
-              ],
-            ),
-            const Text('الإدارة والتعديل الكاملان متاحان من لوحة الويب.'),
-          ],
+        void requests([String type = '']) => openPage(
+          context,
+          NativePaymentRequests(
+            auth: widget.auth,
+            filters: {
+              if (type.isNotEmpty) 'type': type,
+              if (d['from'] != null) 'from': textOf(d['from']),
+              if (d['to'] != null) 'to': textOf(d['to']),
+              if (branch.isNotEmpty) 'branchId': branch,
+            },
+          ),
         );
-      },
-    ),
-  );
-}
-
-Widget _metrics(List<(String, String)> values) => LayoutBuilder(
-  builder: (context, c) => Wrap(
-    spacing: 10,
-    runSpacing: 10,
-    children: [
-      for (final item in values)
-        SizedBox(
-          width: (c.maxWidth - 10) / 2,
-          child: AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        void financial(String method, {bool daily = false}) => openPage(
+          context,
+          OwnerReports(
+            auth: widget.auth,
+            initialFilters: {
+              'from': daily
+                  ? textOf(d['to'] ?? d['asOfDate'])
+                  : textOf(
+                      d['from'] ??
+                          '${d['asOfDate'].toString().substring(0, 8)}01',
+                    ),
+              'to': textOf(d['to'] ?? d['asOfDate']),
+              if (branch.isNotEmpty) 'branchId': branch,
+              if (method.isNotEmpty) 'provider': method,
+            },
+          ),
+        );
+        return gList([
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF283047), Color(0xFF15182A)],
+              ),
+              border: Border.all(
+                color: AcademyTheme.gold.withValues(alpha: .25),
+              ),
+            ),
+            child: Row(
               children: [
-                Text(item.$1),
-                const SizedBox(height: 4),
-                Text(
-                  item.$2,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                    color: AcademyTheme.teal,
+                const AcademyCrest(size: 52),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      UiText(
+                        BrandScope.maybeOf(context)?.name ??
+                            widget.auth.session!.selected!.academyName,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      UiText(
+                        localized(
+                          context,
+                          'الصورة الكاملة لأكاديميتك',
+                          'Your academy at a glance',
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      UiText(
+                        day(d['asOfDate']),
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ),
-    ],
-  ),
-);
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: chooseRange,
+                  icon: const Icon(Icons.date_range, size: 18),
+                  label: UiText(
+                    '${d['from'] ?? from} — ${d['to'] ?? to}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() {
+                  from = '';
+                  to = '';
+                  branch = '';
+                  revision++;
+                }),
+                child: UiText(localized(context, 'مسح', 'Clear')),
+              ),
+            ],
+          ),
+          RemoteBody(
+            auth: widget.auth,
+            path: '/api/v1/manage/structure/options',
+            builder: (context, options) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: DropdownButtonFormField<String>(
+                initialValue: branch,
+                decoration: InputDecoration(
+                  labelText: localized(context, 'الفرع', 'Branch'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: '',
+                    child: UiText(
+                      localized(context, 'كل الفروع', 'All branches'),
+                    ),
+                  ),
+                  for (final b in rows(obj(options)['branches']))
+                    DropdownMenuItem(
+                      value: b['id'],
+                      child: UiText(textOf(b['arabicName'])),
+                    ),
+                ],
+                onChanged: (v) => setState(() {
+                  branch = v ?? '';
+                  revision++;
+                }),
+              ),
+            ),
+          ),
+          GCard(
+            onTap: requests,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: UiText(
+                        localized(context, 'طلبات الدفع', 'Payment requests'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AcademyTheme.red,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: UiText(
+                        textOf(p['total']),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    for (final x in [
+                      (
+                        'اشتراكات جديدة',
+                        'New',
+                        p['newEnrollments'],
+                        'Enrollment',
+                      ),
+                      ('تجديد', 'Renewals', p['renewals'], 'Renewal'),
+                      ('منتجات', 'Products', p['products'], 'Product'),
+                      if (p['tournaments'] != null && p['tournaments'] != 0)
+                        (
+                          'بطولات',
+                          'Tournaments',
+                          p['tournaments'],
+                          'Tournament',
+                        ),
+                    ])
+                      Expanded(
+                        child: InkWell(
+                          key: ValueKey('owner-request-${x.$4}'),
+                          onTap: () => requests(x.$4),
+                          child: Column(
+                            children: [
+                              UiText(
+                                textOf(x.$3),
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              UiText(
+                                localized(context, x.$1, x.$2),
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          for (final x in [
+            (
+              'تحصيل اليوم',
+              'Today’s collections',
+              c['today'],
+              c['todayCash'],
+              c['todayOnline'],
+              true,
+            ),
+            (
+              'تحصيل الشهر',
+              'Period collections',
+              c['month'],
+              c['monthCash'],
+              c['monthOnline'],
+              false,
+            ),
+          ])
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  UiText(
+                    localized(context, x.$1, x.$2),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  InkWell(
+                    onTap: () => financial('', daily: x.$6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: UiText(
+                        money(x.$3, currency),
+                        style: TextStyle(
+                          fontSize: 30,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => financial('Cash', daily: x.$6),
+                          child: UiText(
+                            '${localized(context, 'نقدي', 'Cash')}\n${x.$4 == null ? '—' : money(x.$4, currency)}',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => financial('Online', daily: x.$6),
+                          child: UiText(
+                            '${localized(context, 'إلكتروني', 'Online')}\n${x.$5 == null ? '—' : money(x.$5, currency)}',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  UiText(
+                    localized(
+                      context,
+                      'صافي التحصيل بعد الاسترداد',
+                      'Net collections after refunds',
+                    ),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
+          GCard(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      UiText(
+                        localized(
+                          context,
+                          'الاشتراكات الفعالة',
+                          'Active subscriptions',
+                        ),
+                      ),
+                      UiText(
+                        textOf(s['active']),
+                        style: const TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      UiText(
+                        localized(context, 'تنتهي قريبًا', 'Expiring soon'),
+                      ),
+                      UiText(
+                        textOf(s['expiring']),
+                        style: TextStyle(
+                          fontSize: 30,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final x in [
+                ('اللاعبون النشطون', 'Active players', d['activePlayers']),
+                ('المدربون', 'Coaches', d['coaches']),
+                ('اشتراكات جديدة', 'New subscriptions', d['newSubscriptions']),
+              ])
+                Chip(
+                  label: UiText(
+                    '${localized(context, x.$1, x.$2)} · ${textOf(x.$3)}',
+                  ),
+                ),
+            ],
+          ),
+          NewsStrip(auth: widget.auth),
+          NextMatchStrip(auth: widget.auth),
+          FilledButton.icon(
+            onPressed: () => openPage(context, OwnerReports(auth: widget.auth)),
+            icon: const Icon(Icons.analytics_outlined),
+            label: UiText(localized(context, 'التقارير', 'Reports')),
+          ),
+        ]);
+      },
+    ),
+  );
+}

@@ -19,9 +19,23 @@ void main() {
       // Dedicated test key; never clear the reviewer's normal installed app session.
       final store = SecureRefreshStore('${config.storageKey}.integration');
       await store.clear();
+      Future<void> waitUntil(bool Function() ready) async {
+        for (var i = 0; i < 200 && !ready(); i++) {
+          await tester.pump(const Duration(milliseconds: 150));
+        }
+        expect(ready(), isTrue);
+        await tester.pumpAndSettle();
+      }
+
       for (final (phone, role) in [
         ('01099900100', 'Guardian'),
-        ('01099900020', 'Coach'),
+        (
+          const String.fromEnvironment(
+            'COACH_AUTH_PHONE',
+            defaultValue: '01099900020',
+          ),
+          'Coach',
+        ),
         ('01099900010', 'AcademyOwner'),
       ]) {
         final auth = AuthController(transport, store);
@@ -31,9 +45,11 @@ void main() {
         await tester.enterText(find.byType(TextFormField).first, phone);
         await tester.tap(find.text('إرسال رمز التحقق'));
         await tester.pumpAndSettle();
+        await waitUntil(() => find.text('رمز التحقق').evaluate().isNotEmpty);
         await tester.enterText(find.byType(TextFormField).last, '246810');
         await tester.tap(find.text('تأكيد الدخول'));
         await tester.pumpAndSettle();
+        await waitUntil(() => auth.session?.selected?.role == role);
         expect(auth.session?.selected?.role, role);
         expect(await store.read(), isNotNull);
         final restored = AuthController(transport, store);

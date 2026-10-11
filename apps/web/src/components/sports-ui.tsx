@@ -18,12 +18,12 @@ export function SportsHero({ name, academy, date, children }: { name: string; ac
 
 export function IdentityMark({ name, detail, photo, large = false }: { name: string; detail?: string; photo?: string; large?: boolean }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join(" ");
-  // Demo assets only; never send a child's identity to an arbitrary image host.
-  const safePhoto = photo && /^\/demo-assets\/[a-zA-Z0-9/_-]+\.(svg|png|jpe?g|webp)$/.test(photo) ? photo : null;
-  return <span className={`sports-identity ${large ? "sports-identity-large" : ""}`}>{safePhoto ? <Image className="identity-monogram" src={safePhoto} width={large ? 80 : 42} height={large ? 80 : 42} alt={`صورة ${name}`} /> : <span className="identity-monogram" aria-hidden="true">{initials}</span>}<span><strong>{name}</strong>{detail && <small>{detail}</small>}</span></span>;
+  // Only packaged assets or same-origin, authorized private assets.
+  const safePhoto = photo && (/^\/demo-assets\/[a-zA-Z0-9/_-]+\.(svg|png|jpe?g|webp)$/.test(photo) || /^\/api\/v1\/assets\/[a-f0-9-]{36}$/i.test(photo)) ? photo : null;
+  return <span className={`sports-identity ${large ? "sports-identity-large" : ""}`}>{safePhoto ? <Image unoptimized className="identity-monogram" src={safePhoto} width={large ? 80 : 42} height={large ? 80 : 42} alt={`صورة ${name}`} /> : <span className="identity-monogram" aria-hidden="true">{initials}</span>}<span><strong>{name}</strong>{detail && <small>{detail}</small>}</span></span>;
 }
 
-export function SportsQuickActions({ coach = false }: { coach?: boolean }) {
+export function SportsQuickActions({ coach = false, showReports = true }: { coach?: boolean; showReports?: boolean }) {
   const actions = coach ? [
     { label: "تسجيل حضور", detail: "جلسات مجموعاتك", href: "/dashboard/attendance/sessions", icon: Activity },
     { label: "إنشاء تقييم", detail: "تابع تطور اللاعبين", href: "/dashboard/evaluations/new", icon: ClipboardList },
@@ -35,7 +35,7 @@ export function SportsQuickActions({ coach = false }: { coach?: boolean }) {
     { label: "إنشاء تقييم", detail: "قياس الأداء والتطور", href: "/dashboard/evaluations/new", icon: ClipboardList },
     { label: "التقرير المالي", detail: "التحصيلات والإيصالات", href: "/dashboard/reports/financial", icon: ReceiptText },
   ];
-  return <nav className="sports-quick-actions" aria-label="الإجراءات التشغيلية السريعة">{actions.map(({ label, detail, href, icon: Icon }) => <Link key={href} href={href}><span className="quick-action-icon"><Icon aria-hidden="true" /></span><span><b>{label}</b><small>{detail}</small></span><ArrowUpLeft className="quick-action-arrow" aria-hidden="true" /></Link>)}</nav>;
+  return <nav className="sports-quick-actions" aria-label="الإجراءات التشغيلية السريعة">{actions.filter(x => showReports || x.href !== "/dashboard/reports/financial").map(({ label, detail, href, icon: Icon }) => <Link key={href} href={href}><span className="quick-action-icon"><Icon aria-hidden="true" /></span><span><b>{label}</b><small>{detail}</small></span><ArrowUpLeft className="quick-action-arrow" aria-hidden="true" /></Link>)}</nav>;
 }
 
 export function ProgressTrack({ value, total, label }: { value: number; total: number; label: string }) {

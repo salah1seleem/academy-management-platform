@@ -1,4 +1,6 @@
 using Academy.Infrastructure.Tenancy;
+using Academy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Academy.Api.Auth;
@@ -6,6 +8,7 @@ namespace Academy.Api.Auth;
 public static class AcademyPermissions
 {
     public const string TenantAccess = "tenant.access";
+    public const string AcademySettingsManage = "academy.settings.manage";
     public const string StaffProvision = "staff.provision";
     public const string StructureManage = "structure.manage";
     public const string PeopleManage = "people.manage";
@@ -41,11 +44,13 @@ public static class AcademyPermissions
     public const string ReportsAttendanceRead = "reports.attendance.read";
     public const string ReportsExport = "reports.export";
     public const string OwnerDashboardRead = "dashboard.owner.read";
+    public const string PayrollRead = "payroll.read";
+    public const string PayrollManage = "payroll.manage";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
 
-public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
+public sealed class TenantPermissionHandler(CurrentTenant currentTenant, FoundationDbContext db)
     : AuthorizationHandler<TenantPermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, TenantPermissionRequirement requirement)
@@ -56,6 +61,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
         var allowed = requirement.Permission switch
         {
             AcademyPermissions.TenantAccess => true,
+            AcademyPermissions.AcademySettingsManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.StaffProvision => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.StructureManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.PeopleManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
@@ -90,9 +96,16 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant)
             AcademyPermissions.ReportsFinancialRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             AcademyPermissions.ReportsAttendanceRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
             AcademyPermissions.ReportsExport => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach,
-            AcademyPermissions.OwnerDashboardRead => membership.Role == AcademyRole.AcademyOwner,
+            AcademyPermissions.OwnerDashboardRead => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
+            AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage => membership.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,
             _ => false
         };
+        if (allowed && membership.Role == AcademyRole.AcademyAdmin) {
+            var grant = await db.StaffGrants.AsNoTracking().Where(x => x.AcademyId == membership.AcademyId && x.MembershipId == membership.MembershipId && x.Permission == requirement.Permission && x.IsActive).Select(x => (bool?)x.Allowed).SingleOrDefaultAsync();
+            allowed = grant ?? requirement.Permission is not (AcademyPermissions.ReportsFinancialRead or AcademyPermissions.ReportsAttendanceRead or AcademyPermissions.ReportsExport or AcademyPermissions.OwnerDashboardRead or AcademyPermissions.AcademySettingsManage or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage);
+        }
+        if (allowed && membership.Role == AcademyRole.Coach && requirement.Permission == AcademyPermissions.AttendanceManage)
+            allowed = await db.AcademyExperiences.Where(x => x.AcademyId == membership.AcademyId).Select(x => (bool?)x.CoachAttendanceEnabled).SingleOrDefaultAsync() ?? true;
         if (allowed) context.Succeed(requirement);
     }
 }

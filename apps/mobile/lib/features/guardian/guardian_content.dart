@@ -1,7 +1,10 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
+import 'daily_nutrition.dart';
+import '../shared/private_media.dart';
 
 class NutritionLibrary extends StatefulWidget {
   final AuthController auth;
@@ -23,78 +26,23 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
     title: 'التغذية والصحة',
     child: Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.all(12),
-          child: Text(
-            'مكتبة معلومات عامة، وليست وصفة أو خطة علاجية.',
-            textAlign: TextAlign.center,
-          ),
-        ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: GCard(
-            child: RemoteBody(
-              auth: widget.auth,
-              path:
-                  '/api/v1/guardian/children/${widget.playerId}/nutrition/recommendations?date=${widget.today}',
-              builder: (context, value) {
-                final d = obj(value);
-                final suggestions = [
-                  ('الإفطار', d['breakfast']),
-                  ('الغداء', d['lunch']),
-                  ('العشاء', d['dinner']),
-                  if (d['preTraining'] != null)
-                    ('قبل التدريب', d['preTraining']),
-                  if (d['postTraining'] != null)
-                    ('بعد التدريب', d['postTraining']),
-                ];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Heading('اقتراحات اليوم'),
-                    Text(
-                      d['isTrainingDay'] == true
-                          ? 'يوم تدريب · الحصة ${label(d['servingProfile'])}'
-                          : 'يوم راحة · الحصة ${label(d['servingProfile'])}',
-                    ),
-                    const SizedBox(height: 8),
-                    for (final suggestion in suggestions)
-                      if (suggestion.$2 is Map)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(suggestion.$1),
-                          subtitle: Text(
-                            textOf(obj(suggestion.$2)['arabicName']),
-                          ),
-                          trailing: const Icon(Icons.chevron_left),
-                          onTap: () => openPage(
-                            context,
-                            MealDetails(
-                              auth: widget.auth,
-                              id: textOf(obj(suggestion.$2)['id']),
-                            ),
-                          ),
-                        ),
-                    Text(
-                      textOf(d['disclaimer']),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white60,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: DailyNutritionCard(
+            auth: widget.auth,
+            playerId: widget.playerId,
+            playerName: 'اقتراحات اليوم',
+            today: widget.today,
+            compact: false,
           ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'Breakfast', label: Text('الإفطار')),
-              ButtonSegment(value: 'Lunch', label: Text('الغداء')),
-              ButtonSegment(value: 'Dinner', label: Text('العشاء')),
+              ButtonSegment(value: 'Breakfast', label: UiText('الإفطار')),
+              ButtonSegment(value: 'Lunch', label: UiText('الغداء')),
+              ButtonSegment(value: 'Dinner', label: UiText('العشاء')),
             ],
             selected: {category},
             onSelectionChanged: (s) => setState(() => category = s.single),
@@ -127,14 +75,14 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
                               children: [
                                 DemoImage(item['imageReference'], height: 125),
                                 const SizedBox(height: 10),
-                                Text(
+                                UiText(
                                   textOf(item['arabicName']),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 if (item['dataStatus'] == 'DemoUnreviewed')
-                                  const Text(
+                                  const UiText(
                                     'بيانات تجريبية غير مراجعة',
                                     style: TextStyle(
                                       fontSize: 11,
@@ -172,11 +120,11 @@ class MealDetails extends StatelessWidget {
         return gList([
           DemoImage(d['imageReference'], height: 235),
           Heading(textOf(d['arabicName'])),
-          Text(textOf(d['arabicDescription'])),
+          UiText(textOf(d['arabicDescription'])),
           const SizedBox(height: 14),
-          Text('الحصة: ${d['servingDescription']}'),
+          UiText('الحصة: ${d['servingDescription']}'),
           if (d['servingWeightGrams'] != null)
-            Text('وزن الحصة التقريبي: ${d['servingWeightGrams']} جم'),
+            UiText('وزن الحصة التقريبي: ${d['servingWeightGrams']} جم'),
           const Heading('القيم الغذائية'),
           Facts([
             ('سعرات حرارية', textOf(d['calories'])),
@@ -184,19 +132,19 @@ class MealDetails extends StatelessWidget {
             ('كربوهيدرات · جرام', textOf(d['carbohydratesGrams'])),
             ('دهون · جرام', textOf(d['fatGrams'])),
           ]),
-          const Text('القيم الغذائية تقديرية حسب الحصة الموضحة'),
+          const UiText('القيم الغذائية تقديرية حسب الحصة الموضحة'),
           if (d['minimumAge'] != null)
-            Text(
+            UiText(
               'الفئة العمرية: ${d['minimumAge']}–${d['maximumAge']} سنة · ${label(d['servingProfile'])}',
             ),
-          Text(
+          UiText(
             d['dataStatus'] == 'DemoUnreviewed'
                 ? 'بيانات تجريبية غير مراجعة'
                 : 'بيانات مراجعة وفق المصدر المسجل',
           ),
-          if (d['sourceDescription'] != null) Text(d['sourceDescription']),
+          if (d['sourceDescription'] != null) UiText(d['sourceDescription']),
           if (d['sourceReference'] != null)
-            const Text(
+            const UiText(
               'المصادر: USDA FoodData Central · HealthyChildren/AAP · Sports Dietitians Australia',
               style: TextStyle(fontSize: 11, color: Colors.white60),
             ),
@@ -217,7 +165,7 @@ class MedicalPage extends StatelessWidget {
       auth: auth,
       path: '/api/v1/guardian/children/$playerId/medical',
       builder: (context, value) => gList([
-        const Text('السجلات المنشورة لهذا الطفل فقط'),
+        const UiText('السجلات المنشورة لهذا الطفل فقط'),
         if (rows(value).isEmpty)
           const EmptyMessage('لا توجد إصابات أو استشارات منشورة.'),
         for (final d in rows(value))
@@ -227,10 +175,10 @@ class MedicalPage extends StatelessWidget {
               children: [
                 StatusPill(d['status']),
                 Heading(textOf(d['arabicTitle'])),
-                Text('${label(d['type'])} · ${day(d['recordDate'])}'),
-                Text(textOf(d['arabicDescription'])),
+                UiText('${label(d['type'])} · ${day(d['recordDate'])}'),
+                UiText(textOf(d['arabicDescription'])),
                 if (d['guardianVisibleNotes'] != null)
-                  Text(d['guardianVisibleNotes']),
+                  UiText(d['guardianVisibleNotes']),
               ],
             ),
           ),
@@ -250,7 +198,16 @@ class GalleryPage extends StatelessWidget {
       auth: auth,
       path: '/api/v1/guardian/children/$playerId/media',
       builder: (context, value) => gList([
-        if (rows(value).isEmpty) const EmptyMessage('لا توجد وسائط منشورة.'),
+        RemoteBody(
+          auth: auth,
+          path: '/api/v1/assets/gallery?playerId=$playerId',
+          builder: (context, v) => Column(
+            children: [
+              for (final m in rows(v)) MediaTile(auth: auth, media: m),
+            ],
+          ),
+        ),
+        if (rows(value).isEmpty) const SizedBox.shrink(),
         for (final d in rows(value))
           GCard(
             child: Column(
@@ -259,9 +216,9 @@ class GalleryPage extends StatelessWidget {
                   d['thumbnailReference'] ?? d['mediaReference'],
                   height: 210,
                 ),
-                if (d['arabicCaption'] != null) Text(d['arabicCaption']),
+                if (d['arabicCaption'] != null) UiText(d['arabicCaption']),
                 if (d['type'] == 'Video')
-                  const Text(
+                  const UiText(
                     'صورة مصغرة للفيديو · تشغيل وسائط الإنتاج غير متاح في الديمو',
                   ),
               ],

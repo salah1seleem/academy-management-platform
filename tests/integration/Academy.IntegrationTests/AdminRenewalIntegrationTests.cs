@@ -21,9 +21,10 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
     private Factory factory = null!;
     private readonly List<(Guid RenewalId, RenewalRequestStatus RenewalStatus, Guid PaymentId, PaymentRequestStatus PaymentStatus)> suspended = [];
+    private readonly List<Guid> suspendedTransferSettings = [];
 
-    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); await Cleanup(); await SuspendExistingOpenRenewals(); }
-    public async Task DisposeAsync() { await Cleanup(); await RestoreExistingOpenRenewals(); await factory.DisposeAsync(); }
+    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); await Cleanup(); await SuspendExistingOpenRenewals(); await SuspendManualTransferRoute(); }
+    public async Task DisposeAsync() { await Cleanup(); await RestoreExistingOpenRenewals(); await RestoreManualTransferRoute(); await factory.DisposeAsync(); }
 
     [Fact] public async Task Owner_can_list_renewable_enrollments() { using var c = await Staff(DemoSeed.OwnerEmail); Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/v1/subscriptions/admin-renewals/enrollments")).StatusCode); }
     [Fact] public async Task Admin_can_list_renewable_enrollments() { using var c = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/v1/subscriptions/admin-renewals/enrollments")).StatusCode); }
@@ -48,6 +49,7 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
     [Fact] public async Task Admin_can_create_admin_renewal() { using var c = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.Created, (await Create(c)).StatusCode); }
     [Fact] public async Task Idempotency_key_is_required() { using var c = await Staff(DemoSeed.OwnerEmail); var r = await Post(c, "/api/v1/subscriptions/admin-renewals", Body(), null); Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode); }
     [Fact] public async Task Same_idempotency_key_replays_same_result() { using var c = await Staff(DemoSeed.OwnerEmail); var key = Key(); var first = await Create(c, key); var second = await Create(c, key); Assert.Equal((await Json(first)).GetProperty("paymentId").GetGuid(), (await Json(second)).GetProperty("paymentId").GetGuid()); }
+    [Fact] public async Task Reusing_a_key_for_a_different_plan_is_rejected_without_a_second_request() { using var c = await Staff(DemoSeed.OwnerEmail); var key = Key(); (await Create(c, key)).EnsureSuccessStatusCode(); var r = await Post(c, "/api/v1/subscriptions/admin-renewals", new { sportEnrollmentId = await Enrollment(), subscriptionPlanId = Slice3DemoSeed.SwimmingMonthlyId }, key); Assert.Equal(HttpStatusCode.Conflict, r.StatusCode); }
     [Fact] public async Task Second_open_renewal_is_rejected() { using var c = await Staff(DemoSeed.OwnerEmail); (await Create(c)).EnsureSuccessStatusCode(); Assert.Equal(HttpStatusCode.Conflict, (await Create(c)).StatusCode); }
     [Fact] public async Task Concurrent_open_renewals_create_only_one_request() { using var first = await Staff(DemoSeed.OwnerEmail); using var second = await Staff(DemoSeed.AdminEmail); var responses = await Task.WhenAll(Create(first), Create(second)); Assert.Single(responses, x => x.IsSuccessStatusCode); Assert.Single(responses, x => x.StatusCode == HttpStatusCode.Conflict); }
     [Fact] public async Task Creation_persists_renewal_request() { var created = await Created(); Assert.Equal(1, await Count<RenewalRequest>(x => x.Id == created.RenewalId)); }
@@ -80,7 +82,7 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
     private async Task<CreatedDto> Created() { using var c = await Staff(DemoSeed.OwnerEmail); var response = await Create(c); response.EnsureSuccessStatusCode(); return (await response.Content.ReadFromJsonAsync<CreatedDto>())!; }
     private Task<HttpResponseMessage> Create(HttpClient c, string? key = null) => Post(c, "/api/v1/subscriptions/admin-renewals", Body(), key ?? Key());
     private async Task Simulate(Guid paymentId, string outcome) { using var c = await Staff(DemoSeed.OwnerEmail); (await Post(c, $"/api/v1/subscriptions/payments/{paymentId}/simulate", new { outcome }, null)).EnsureSuccessStatusCode(); }
-    private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); (await Post(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, null)).EnsureSuccessStatusCode(); return c; }
+    private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(c, factory.Services); else (await Post(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, null)).EnsureSuccessStatusCode(); return c; }
     private async Task<HttpClient> Guardian() { var c = factory.CreateClient(); var request = await Post(c, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, null); var challenge = (await request.Content.ReadFromJsonAsync<Challenge>())!; (await Post(c, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, null)).EnsureSuccessStatusCode(); return c; }
     private static string Key() => $"{Prefix}{Guid.NewGuid():N}";
     private static async Task<JsonElement> Json(HttpResponseMessage response) { response.EnsureSuccessStatusCode(); return (await response.Content.ReadFromJsonAsync<JsonElement>()); }
@@ -133,6 +135,23 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
             renewal.Status = state.RenewalStatus; payment.Status = state.PaymentStatus;
         }
         await db.SaveChangesAsync();
+    }
+
+    // These cases exercise InternalTest, not manual receipt review. Other test suites
+    // can configure the shared synthetic academy's transfer route; preserve that state.
+    private async Task SuspendManualTransferRoute()
+    {
+        await using var scope = Scope(); var db = Db(scope);
+        var settings = await db.AcademyTransferSettings.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.IsActive).ToListAsync();
+        foreach (var setting in settings) { suspendedTransferSettings.Add(setting.Id); setting.IsActive = false; }
+        await db.SaveChangesAsync();
+    }
+
+    private async Task RestoreManualTransferRoute()
+    {
+        if (suspendedTransferSettings.Count == 0) return;
+        await using var scope = Scope(); var db = Db(scope);
+        await db.AcademyTransferSettings.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && suspendedTransferSettings.Contains(x.Id)).ExecuteUpdateAsync(x => x.SetProperty(s => s.IsActive, true));
     }
 
     private sealed record Csrf(string Token);

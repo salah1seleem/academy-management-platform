@@ -75,6 +75,7 @@ public sealed class SubscriptionAdjustment : TenantEntity
 
 public sealed class RenewalRequest : TenantEntity
 {
+    public string? RegistrationPayloadHash { get; set; }
     public Guid SportEnrollmentId { get; set; }
     public Guid SportId { get; set; }
     public Guid SubscriptionPlanId { get; set; }

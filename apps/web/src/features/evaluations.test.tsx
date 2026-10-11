@@ -39,6 +39,13 @@ describe("evaluation experience", () => {
     render(<EvaluationsList />); expect(await screen.findByText(/عمر أحمد محمود/)).toBeVisible(); expect(screen.getByText("2/18")).toBeVisible(); expect(screen.getByRole("columnheader", { name: "الاكتمال" })).toBeVisible(); expect(screen.getByRole("link", { name: "عرض وتعديل" })).toHaveAttribute("href", "/dashboard/evaluations/e1/edit");
   });
 
+  it("requests only the selected player's evaluations when opened from the player profile", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    render(<EvaluationsList playerId="player-1" />);
+    await screen.findByText("لا توجد تقييمات");
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("playerId=player-1"))).toBe(true);
+  });
+
   it("uses integer 0–100 inputs and explicit Draft/Publish actions", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "e1", player: "عمر أحمد محمود", sport: "كرة القدم", group: "مجموعة أ", evaluationDate: "2026-09-28", reportingPeriod: "سبتمبر", status: "Draft", version: 1, scores: [{ criterionId: "c1", name: "دقة التمرير", score: null, axis: "Passing" }] }) });
     render(<EvaluationEditor id="e1" />); const input = await screen.findByRole("spinbutton", { name: "درجة دقة التمرير" }); expect(input).toHaveAttribute("min", "0"); expect(input).toHaveAttribute("max", "100"); expect(screen.getByRole("button", { name: "حفظ المسودة" })).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "نشر التقييم" })); expect(screen.getByRole("dialog")).toHaveTextContent("سيظهر التقييم المنشور لولي الأمر");

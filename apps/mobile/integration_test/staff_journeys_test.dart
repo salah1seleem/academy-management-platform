@@ -9,6 +9,14 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  Future<void> waitFor(WidgetTester tester, Finder finder) async {
+    for (var i = 0; i < 200 && finder.evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(finder, findsWidgets);
+    await tester.pumpAndSettle();
+  }
+
   Future<(AuthController, HttpApiTransport)> launch(
     WidgetTester tester,
     String key,
@@ -31,10 +39,11 @@ void main() {
     await tester.enterText(find.byType(TextFormField).first, phone);
     await tester.tap(find.text('إرسال رمز التحقق'));
     await tester.pumpAndSettle();
+    await waitFor(tester, find.text('رمز التحقق'));
     await tester.enterText(find.byType(TextFormField).last, '246810');
     await tester.tap(find.text('تأكيد الدخول'));
     await tester.pumpAndSettle();
-    expect(find.text(homeText), findsWidgets);
+    await waitFor(tester, find.text(homeText));
   }
 
   Future<void> capture(String name) async {
@@ -47,35 +56,49 @@ void main() {
     tester,
   ) async {
     final session = await launch(tester, 'coach-integration');
-    await login(tester, '01099900020', 'المجموعات المسندة');
+    await login(tester, '01099900020', 'حصص اليوم والقادمة');
     await capture('coach-home');
+    // Six session cards precede the group section; ListView builds it lazily.
+    await tester.scrollUntilVisible(
+      find.text('المجموعات المسندة'),
+      320,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.chevron_left).first);
     await tester.pumpAndSettle();
-    expect(find.text('تسجيل الحضور'), findsOneWidget);
+    await waitFor(tester, find.text('تسجيل الحضور'));
     await tester.tap(find.text('تسجيل الحضور'));
     await tester.pumpAndSettle();
+    await waitFor(tester, find.text('حفظ الحضور'));
     await capture('coach-attendance');
     await tester.tap(find.text('لم يُسجل').last);
-    await tester.tap(find.text('حفظ الحضور'));
+    final saveAttendance = find.widgetWithText(FilledButton, 'حفظ الحضور');
+    await tester.ensureVisible(saveAttendance);
     await tester.pumpAndSettle();
-    expect(find.textContaining('يمكن تصحيحه'), findsOneWidget);
+    await tester.tap(saveAttendance);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 1600));
+    await tester.pumpAndSettle();
+    await waitFor(tester, find.textContaining('يمكن تصحيحه'));
     await tester.tap(find.byType(BackButton).last);
     await tester.pumpAndSettle();
     await capture('coach-group');
     await tester.tap(find.byTooltip('تقييم اللاعب').first);
     await tester.pumpAndSettle();
+    await waitFor(tester, find.text('بدء تقييم جديد'));
     await tester.tap(find.text('بدء تقييم جديد'));
     await tester.pumpAndSettle();
-    expect(find.byType(Slider), findsWidgets);
+    await waitFor(tester, find.byType(Slider));
     await capture('coach-evaluation');
     await tester.scrollUntilVisible(
-      find.text('نشر التقييم'),
+      find.widgetWithText(FilledButton, 'نشر التقييم'),
       500,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('نشر التقييم'));
+    await tester.tap(find.widgetWithText(FilledButton, 'نشر التقييم'));
     await tester.pumpAndSettle();
-    expect(find.text('تم نشر التقييم.'), findsOneWidget);
+    await waitFor(tester, find.text('تم نشر التقييم.'));
     await session.$1.logout();
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -88,24 +111,24 @@ void main() {
     await login(tester, '01099900010', 'تحصيل اليوم');
     await capture('owner-dashboard');
     await tester.scrollUntilVisible(
-      find.text('التقارير'),
+      find.text('التقارير').first,
       400,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('التقارير'));
+    await tester.tap(find.text('التقارير').first);
     await tester.pumpAndSettle();
-    expect(find.text('ملخص التحصيلات'), findsOneWidget);
+    await waitFor(tester, find.text('ملخص التحصيلات'));
     await capture('owner-reports');
     await tester.tap(find.text('الحضور'));
     await tester.pumpAndSettle();
-    expect(find.text('ملخص الحضور المخزن'), findsOneWidget);
+    await waitFor(tester, find.text('ملخص الحضور المخزن'));
     await tester.tap(find.text('الاشتراكات'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('ملخص قراءة فقط'), findsOneWidget);
+    await waitFor(tester, find.textContaining('ملخص قراءة فقط'));
     await session.$1.logout();
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
     session.$1.dispose();
     session.$2.close();
-  });
+  }, skip: const String.fromEnvironment('STAFF_JOURNEY') == 'coach');
 }

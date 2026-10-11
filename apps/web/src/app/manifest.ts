@@ -2,26 +2,26 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "منصة إدارة الأكاديمية",
+    name: "The Professional Academy",
     short_name: "الأكاديمية",
     description: "منصة عربية لإدارة الأكاديميات الرياضية.",
     start_url: "/login",
     display: "standalone",
-    background_color: "#f4f7f6",
-    theme_color: "#0f766e",
+    background_color: "#171923",
+    theme_color: "#D71935",
     lang: "ar",
     dir: "rtl",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/branding/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/branding/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
         purpose: "maskable",
       },
     ],

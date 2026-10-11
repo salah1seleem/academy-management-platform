@@ -1,0 +1,87 @@
+/* One field rhythm across every filter, including native select controls. */
+.dashboard-shell :is(.report-filters,.filter-bar,.filter-toolbar,.filter-toolbar-fields) :is(input:not([type=checkbox]):not([type=radio]),select) {
+  min-height: 46px; height: 46px; width: 100%; min-width: 0; font-size: 14px;
+  line-height: 1.5; padding: 10px 12px; border: 1px solid var(--staff-border-strong);
+  border-radius: 12px; background: white; color: var(--staff-text); box-sizing: border-box;
+}
+.dashboard-shell :is(.report-filters,.filter-toolbar-fields) > label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; font-weight: 600; min-width: 150px; flex: 1; }
+.dashboard-shell select { text-overflow: ellipsis; }
+.dashboard-shell .sidebar { isolation: isolate; overflow: hidden; border-inline-end: 0; box-shadow: -6px 0 26px #1719230a; }
+.dashboard-shell .sidebar-watermark { position: absolute; inset: 100px -35px 0; z-index: -1; background-size: 280px auto; background-position: center; background-repeat: repeat-y; opacity: .065; filter: grayscale(1); mix-blend-mode: luminosity; pointer-events: none; }
+.dashboard-shell .academy-logo { width: 52px; height: 64px; object-fit: contain; background: white; border-radius: 12px; padding: 3px; }
+.dashboard-shell .sidebar-brand { border-bottom: 1px solid #ffffff14; padding-bottom: 20px; }
+.dashboard-shell .module-toggle { border-radius: 12px; }
+.dashboard-shell .nav-module.current > .module-direct > .module-toggle,
+.dashboard-shell .nav-module.current > .module-toggle { background: var(--staff-primary-700); color: white; }
+.dashboard-shell .sidebar-account-top { border-inline-start-color: var(--staff-primary-700); }
+.dashboard-shell .owner-filter-bar { align-items: flex-end; gap: 14px; background: #fff; padding: 18px; border-radius: 18px; border: 1px solid var(--staff-border); }
+.dashboard-shell .filter-period-note { display: flex; align-items: center; gap: 6px; color: var(--staff-text-muted); font-size: 11px; margin-block-end: 12px; }
+.dashboard-shell .owner-command-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin-block: 20px; }
+.dashboard-shell .command-card { display: flex; flex-direction: column; gap: 5px; padding: 20px 16px 14px; background: white; border: 1px solid var(--staff-border); border-radius: 20px; box-shadow: 0 6px 24px #17192304; min-width: 0; }
+.dashboard-shell .command-label { display: flex; align-items: center; gap: 7px; color: var(--staff-text-secondary); font-size: 13px; font-weight: 700; }
+.dashboard-shell .command-value { font-size: 32px; line-height: 1.7; color: var(--staff-primary-900); text-decoration: none; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dashboard-shell .money-value { font-size: clamp(20px,2vw,28px); white-space: nowrap; }
+.dashboard-shell .command-card > small { color: var(--staff-text-muted); font-size: 10px; }
+.dashboard-shell .command-splits { display: flex; margin-top: auto; padding-top: 12px; gap: 4px; }
+.dashboard-shell .command-splits > a { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center; padding: 8px 3px; background: var(--staff-primary-50); border-radius: 10px; text-decoration: none; }
+.dashboard-shell .command-splits b { color: var(--staff-primary-800); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dashboard-shell .command-splits span { font-size: 10px; color: var(--staff-text-secondary); }
+.dashboard-shell .requests-card { border-color: color-mix(in srgb,var(--staff-primary-700),white 65%); background: linear-gradient(140deg,white,var(--staff-primary-50)); }
+.dashboard-shell .requests-card .command-value { color: var(--staff-primary-700); }
+.dashboard-shell .owner-secondary-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-bottom: 20px; }
+.dashboard-shell .owner-chart-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+.dashboard-shell .donut-visual { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.dashboard-shell .donut-plot { width: 172px; height: 172px; position: relative; }
+.dashboard-shell .donut-plot svg { width: 100%; height: 100%; stroke-width: 12px; }
+.dashboard-shell .donut-center { position: absolute; inset: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 3px; pointer-events: none; }
+.dashboard-shell .donut-center b { font-size: 19px; color: var(--staff-primary-900); }
+.dashboard-shell .donut-center span { font-size: 10px; color: var(--staff-text-muted); }
+.dashboard-shell .donut-legend { list-style: none; margin: 0; padding: 0; width: 100%; }
+.dashboard-shell .donut-legend a { display: flex; align-items: center; gap: 7px; padding: 7px 0; text-decoration: none; font-size: 11px; color: var(--staff-text-secondary); }
+.dashboard-shell .donut-legend i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; }
+.dashboard-shell .donut-legend b { margin-inline-start: auto; color: var(--staff-text); }
+.dashboard-shell .owner-secondary-metrics .metric-link { text-decoration: none; color: inherit; }
+.dashboard-shell .sidebar .sidebar-brand p, .dashboard-shell .sidebar .lucide { color: #B4BCC9; }
+.dashboard-shell .sidebar .active .lucide { color: white; }
+.dashboard-shell .match-workspace { display: grid; gap: 18px; }
+.dashboard-shell .match-workspace .team-roster { max-height: 220px; overflow: auto; display: grid; gap: 8px; padding: 12px; background: var(--staff-surface-muted); border-radius: 12px; }
+.dashboard-shell .match-workspace .team-roster label { display: flex; flex-direction: row; gap: 10px; align-items: center; font-size: 13px; }
+.dashboard-shell .match-workspace .team-roster input { width: auto; }
+@media(max-width:1200px) { .dashboard-shell .owner-command-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .dashboard-shell .owner-chart-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .dashboard-shell .owner-command-grid { gap: 10px; } .dashboard-shell .command-card { padding: 14px 10px 10px; } .dashboard-shell .money-value { white-space: normal; font-size: 21px; } .dashboard-shell .command-splits span { font-size: 9px; } .dashboard-shell .owner-secondary-metrics,.dashboard-shell .owner-chart-grid { grid-template-columns: 1fr; } }
+.dashboard-shell .form-shell input:is([type="checkbox"],[type="radio"]) { width: 18px; min-height: 18px; height: 18px; padding: 0; flex: 0 0 18px; accent-color: var(--staff-primary-700); }
+.dashboard-shell .weekdays-field, .dashboard-shell .time-field { min-width: 0; margin: 0; padding: 0; border: 0; }
+.dashboard-shell .weekdays-field { grid-column: 1 / -1; }
+.dashboard-shell .weekdays-field legend, .dashboard-shell .time-field legend { margin-bottom: 8px; color: var(--staff-text-muted); font-size: 13px; font-weight: 650; }
+.weekdays-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 8px; }
+.dashboard-shell .weekday-choice { position: relative; display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 48px; padding: 8px; border: 1px solid var(--staff-border-strong); border-radius: 12px; color: var(--staff-text); background: white; cursor: pointer; }
+.dashboard-shell .weekday-choice.selected { border: 2px solid var(--staff-primary-700); padding: 7px; background: var(--staff-primary-50); color: var(--staff-primary-800); }
+.dashboard-shell .weekday-choice input[type="checkbox"] { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; cursor: pointer; }
+.weekday-check { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 1px solid currentColor; border-radius: 5px; flex: 0 0 18px; }
+.weekday-choice.selected .weekday-check { color: white; background: var(--staff-primary-700); border-color: var(--staff-primary-700); }
+.weekday-choice:focus-within { outline: 3px solid var(--staff-primary-100); outline-offset: 3px; }
+.time-field-controls { display: grid; grid-template-columns: minmax(65px,1fr) auto minmax(65px,1fr) minmax(90px,1.3fr); align-items: center; gap: 7px; }
+.dashboard-shell .time-field-controls select { direction: rtl; text-align: center; padding-inline: 7px; }
+.dashboard-shell .time-field-clear { margin-top: 5px; min-height: 28px !important; padding: 3px 8px !important; font-size: 11px !important; }
+.group-sessions-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.dashboard-shell .timetable-duration { grid-column: 1 / -1; max-width: 360px; }
+.dashboard-shell .timetable-form .form-actions { grid-column: 1 / -1; align-items: center; }
+.dashboard-shell .timetable-form .primary-button { min-height: 46px; align-self: start; }
+.dashboard-shell .primary-button:hover, .dashboard-shell .button-primary:hover { background: var(--staff-primary-800); color: white; border-color: var(--staff-primary-800); }
+.save-notice { position: fixed; z-index: 90; inset-block-start: 18px; inset-inline-start: auto; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 14px 20px; border: 1px solid #b8d9c7; border-radius: 14px; color: #185b35; background: #effaf3; box-shadow: 0 10px 32px #162b3320; }
+.save-notice button { border: 0; background: transparent; color: inherit; padding: 4px; cursor: pointer; }
+.sessions-toolbar { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 16px 0; }
+@media (max-width: 760px) { .weekdays-grid { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+@media (max-width: 440px) { .weekdays-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .dashboard-shell .weekday-choice { padding-inline: 4px; font-size: 12px; } }
+/* Staff accounting keeps review decisions in a visible, bounded dialog. */
+.payroll-dialog::backdrop { background: #14172099; backdrop-filter: blur(4px); }
+.payroll-dialog { width: min(100%, 38rem); max-height: 90dvh; overflow: auto; box-shadow: 0 24px 80px #0005; }
+.contract-choice { display: flex; gap: 1rem; align-items: center; border: 1px solid var(--staff-border); border-radius: 1rem; }
+.contract-choice label { display: inline-flex; align-items: center; gap: .5rem; }
+.contract-choice input { width: 1.1rem; min-height: auto; }
+.dashboard-shell .payroll-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-block: 18px; }
+.dashboard-shell .payroll-stats > a { text-decoration: none; color: inherit; }
+.dashboard-shell .payroll-stats .metric-card { height: 100%; }
+.dashboard-shell :is(.report-filters,.filter-bar,.filter-toolbar,.filter-toolbar-fields) .search-input input:not([type=checkbox]):not([type=radio]) { padding-inline-start: 40px; }
+@media (max-width: 1100px) { .dashboard-shell .payroll-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 440px) { .dashboard-shell .payroll-stats { grid-template-columns: 1fr; } }

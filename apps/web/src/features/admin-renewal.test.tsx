@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminRenewalFlow } from "./subscriptions";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams() }));
+let query = new URLSearchParams();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => query }));
 
 const row = { id: "enrollment-1", playerId: "player-1", playerCode: "NG-0003", player: "عمر أحمد حسن", sport: "كرة القدم", branch: "مدينة نصر", group: "مجموعة أ", guardianPhone: "+201000000002", period: null };
 const details = { enrollment: { ...row, sportId: "sport-1" }, current: null, previewStart: "2026-09-28", plans: [{ id: "plan-1", arabicName: "اشتراك شهري", planType: "Duration", price: 900, currency: "EGP", durationDays: 30 }] };
@@ -12,6 +13,7 @@ function response(data: unknown, ok = true) { return { ok, json: async () => dat
 
 beforeEach(() => {
   push.mockReset();
+  query = new URLSearchParams();
   global.fetch = vi.fn(async input => {
     const url = String(input);
     if (url.includes("admin-renewals/enrollments/enrollment-1")) return response(details) as Response;
@@ -29,4 +31,5 @@ describe("admin renewal flow", () => {
   it("shows that creation has no immediate financial effect", async () => { render(<AdminRenewalFlow />); fireEvent.click(await screen.findByRole("button", { name: "اختيار" })); expect(await screen.findByText(/لا يتم التحصيل أو تمديد الاشتراك قبل تأكيد الدفع التجريبي/)).toBeVisible(); });
   it("creates a request and navigates to its payment", async () => { render(<AdminRenewalFlow />); fireEvent.click(await screen.findByRole("button", { name: "اختيار" })); fireEvent.click(await screen.findByRole("radio")); fireEvent.click(screen.getByRole("button", { name: "إنشاء طلب التجديد والدفع" })); await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/subscriptions/payments/payment-1")); });
   it("renders server conflicts in Arabic", async () => { vi.mocked(fetch).mockImplementation(async input => { const url = String(input); if (url.includes("auth/csrf")) return response({ token: "csrf" }) as Response; if (url.endsWith("/admin-renewals")) return response({ message: "يوجد طلب تجديد ودفع جارٍ بالفعل لهذا التسجيل." }, false) as Response; if (url.includes("/enrollments/enrollment-1")) return response(details) as Response; return response([row]) as Response; }); render(<AdminRenewalFlow />); fireEvent.click(await screen.findByRole("button", { name: "اختيار" })); fireEvent.click(await screen.findByRole("radio")); fireEvent.click(screen.getByRole("button", { name: "إنشاء طلب التجديد والدفع" })); expect(await screen.findByRole("alert")).toHaveTextContent("يوجد طلب تجديد ودفع جارٍ بالفعل"); });
+  it("keeps the selected enrollment and does not show all players again", async () => { query = new URLSearchParams("enrollmentId=enrollment-1"); render(<AdminRenewalFlow />); expect(await screen.findByText("مراجعة التجديد")).toBeVisible(); expect(screen.queryByText("اختر تسجيل اللاعب")).not.toBeInTheDocument(); expect(screen.queryByPlaceholderText("اسم اللاعب أو الكود أو هاتف ولي الأمر")).not.toBeInTheDocument(); expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("admin-renewals/enrollments"))).toHaveLength(1); });
 });

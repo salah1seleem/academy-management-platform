@@ -60,19 +60,67 @@ Map<String, dynamic> summary() => {
 };
 
 void main() {
+  testWidgets('Payment category drill-down carries the displayed date range', (
+    tester,
+  ) async {
+    String? requestPath;
+    final auth = await owner((m, p, b, t) async {
+      if (p.contains('/structure/options')) return {'branches': []};
+      if (p.endsWith('/news')) return [];
+      if (p.contains('/manage/payment-requests')) {
+        requestPath = p;
+        return {'pending': 0, 'items': []};
+      }
+      return {
+        ...summary(),
+        'from': '2026-09-01',
+        'to': '2026-09-28',
+        'paymentRequests': {
+          'total': 3,
+          'newEnrollments': 1,
+          'renewals': 1,
+          'products': 1,
+        },
+      };
+    });
+    await tester.pumpWidget(
+      shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('owner-request-Product')),
+    );
+    await tester.tap(find.byKey(const ValueKey('owner-request-Product')));
+    await tester.pumpAndSettle();
+    final query = Uri.parse(requestPath!).queryParameters;
+    expect(query['type'], 'Product');
+    expect(query['from'], '2026-09-01');
+    expect(query['to'], '2026-09-28');
+    expect(query['status'], 'Pending');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    auth.dispose();
+  });
+
   testWidgets('Owner dashboard preserves real zeroes and has no fake trends', (
     tester,
   ) async {
-    final auth = await owner((m, p, b, t) async => summary());
+    final auth = await owner(
+      (m, p, b, t) async => p.contains('/structure/options')
+          ? {'branches': []}
+          : p.endsWith('/news')
+          ? []
+          : summary(),
+    );
     await tester.pumpWidget(
       shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())),
     );
     await tester.pumpAndSettle();
     expect(find.text('تحصيل اليوم'), findsOneWidget);
     expect(find.text('0 ج.م'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('الاشتراكات الفعالة'), 250);
     expect(find.text('الاشتراكات الفعالة'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('أحدث التحصيلات'), 300);
-    expect(find.text('أحدث التحصيلات'), findsOneWidget);
+    expect(find.text('أحدث التحصيلات'), findsNothing);
     for (final forbidden in ['نمو', '%', 'متوقع']) {
       expect(find.textContaining(forbidden), findsNothing);
     }

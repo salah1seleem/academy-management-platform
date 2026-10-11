@@ -98,5 +98,5 @@ public static class SubscriptionAdjustmentEndpoints
 }
 
 public enum DayAdjustmentDirection { Add = 1, Deduct = 2 }
-public sealed record AdjustmentDateRequest(DateOnly EffectiveDate, string Reason, uint ExpectedVersion);
-public sealed record DayAdjustmentRequest(DayAdjustmentDirection Direction, int Days, string Reason, uint ExpectedVersion);
+public sealed record AdjustmentDateRequest(DateOnly EffectiveDate, string? Reason, uint ExpectedVersion);
+public sealed record DayAdjustmentRequest(DayAdjustmentDirection Direction, int Days, string? Reason, uint ExpectedVersion);

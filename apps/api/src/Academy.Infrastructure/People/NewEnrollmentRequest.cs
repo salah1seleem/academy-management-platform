@@ -15,6 +15,12 @@ public sealed class NewEnrollmentRequest : TenantEntity
     public DateOnly? NewChildDateOfBirth { get; set; }
     public Gender? NewChildGender { get; set; }
     public Guid SportId { get; set; }
+    public Guid? SubscriptionPlanId { get; set; }
+    public decimal? OriginalAmount { get; set; }
+    public decimal? FinalAmount { get; set; }
+    public string? Currency { get; set; }
+    public Guid? ProofAssetId { get; set; }
+    public Guid? PaymentRequestId { get; set; }
     public Guid PreferredBranchId { get; set; }
     public string? Notes { get; set; }
     public NewEnrollmentRequestStatus Status { get; set; } = NewEnrollmentRequestStatus.Pending;

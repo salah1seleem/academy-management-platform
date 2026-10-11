@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
@@ -94,12 +95,12 @@ class _CoachAttendanceState extends State<CoachAttendance> {
             padding: const EdgeInsets.all(18),
             children: [
               AppCard(
-                child: Text(
+                child: UiText(
                   '${obj(data!['session'])['group']} · ${day(obj(data!['session'])['sessionDate'])} · ${obj(data!['session'])['startTime']}',
                 ),
               ),
               if (message != null)
-                Text(message!, style: const TextStyle(color: Colors.green)),
+                UiText(message!, style: const TextStyle(color: Colors.green)),
               if (error != null) ErrorNotice(error!),
               for (final player in rows(data!['players']))
                 Card(
@@ -108,21 +109,24 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        UiText(
                           textOf(player['arabicName']),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        Text(textOf(player['playerCode'])),
+                        UiText(textOf(player['playerCode'])),
                         SegmentedButton<String>(
                           segments: const [
                             ButtonSegment(
                               value: 'Present',
-                              label: Text('حاضر'),
+                              label: UiText('حاضر'),
                             ),
-                            ButtonSegment(value: 'Absent', label: Text('غائب')),
+                            ButtonSegment(
+                              value: 'Absent',
+                              label: UiText('غائب'),
+                            ),
                             ButtonSegment(
                               value: 'NotRecorded',
-                              label: Text('لم يُسجل'),
+                              label: UiText('لم يُسجل'),
                             ),
                           ],
                           selected: {
@@ -135,7 +139,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                           ),
                         ),
                         if (player['warning'] != null)
-                          Text(
+                          UiText(
                             textOf(player['warning']),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.error,
@@ -147,7 +151,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                 ),
               FilledButton(
                 onPressed: busy ? null : save,
-                child: Text(busy ? 'جارٍ الحفظ…' : 'حفظ الحضور'),
+                child: UiText(busy ? 'جارٍ الحفظ…' : 'حفظ الحضور'),
               ),
             ],
           ),

@@ -1,2 +1,2 @@
-import { ContentList } from "../../../../features/admin-content";
-export default function Page() { return <ContentList kind="media" />; }
+import { MediaUpload } from "../../../../features/media-upload";
+export default function Page() { return <MediaUpload gallery />; }

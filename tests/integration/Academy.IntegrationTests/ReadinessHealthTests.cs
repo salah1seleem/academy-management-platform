@@ -39,6 +39,7 @@ public sealed class ReadinessHealthTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("ConnectionStrings:Default", connectionString);
+            builder.UseSetting("Demo:SeedEnabled", "false");
         }
     }
 }

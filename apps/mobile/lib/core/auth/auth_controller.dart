@@ -176,6 +176,49 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  Future<T> _assetAction<T>(
+    Future<T> Function(AssetTransport, String) action, {
+    bool read = false,
+  }) async {
+    if (busy || session == null) {
+      throw const ApiFailure(401, 'سجل الدخول أولًا.');
+    }
+    if (transport is! AssetTransport) {
+      throw const ApiFailure(501, 'خدمة الوسائط غير متاحة.');
+    }
+    final epoch = _epoch;
+    if (session!.accessExpires.isBefore(
+      DateTime.now().toUtc().add(const Duration(seconds: 30)),
+    )) {
+      await refresh();
+    }
+    if (epoch != _epoch || session == null) {
+      throw const ApiFailure(401, 'تغيرت الجلسة.');
+    }
+    final token = session!.accessToken;
+    T result;
+    try {
+      result = await action(transport as AssetTransport, token);
+    } on ApiFailure catch (e) {
+      if (e.status != 401 || !read || epoch != _epoch) rethrow;
+      if (session?.accessToken == token) await refresh();
+      if (epoch != _epoch || session == null) rethrow;
+      result = await action(transport as AssetTransport, session!.accessToken);
+    }
+    if (epoch != _epoch || session == null) {
+      throw const ApiFailure(401, 'تغيرت الجلسة.');
+    }
+    return result;
+  }
+
+  Future<Uint8List> asset(String path) =>
+      _assetAction((t, token) => t.asset(path, token), read: true);
+  Future<Object?> upload(
+    Uint8List bytes,
+    String contentType,
+    Map<String, String> fields,
+  ) => _assetAction((t, token) => t.upload(bytes, contentType, fields, token));
+
   Future<void> logout() async {
     final token = session?.accessToken;
     ++_epoch;

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Academy.Api.Auth;
 using Academy.Api.Mobile;
 using Academy.Api.Demo;
+using Academy.Api.Operations;
 using Academy.Api.Slice2;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
@@ -65,6 +66,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("mobile-auth", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("renewal-search", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
@@ -81,6 +85,7 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     };
 });
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<ScopedRenewalReferences>();
 builder.Services.AddSingleton<DatabaseTicketStore>();
 builder.Services.AddSingleton<IPostConfigureOptions<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>, IdentityCookieOptions>();
 builder.Services.AddHttpContextAccessor();
@@ -89,11 +94,12 @@ builder.Services.AddScoped<IAuthorizationHandler, TenantPermissionHandler>();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("mobile-session", policy => policy.AddAuthenticationSchemes(MobileAuthenticationHandler.SchemeName).RequireAuthenticatedUser());
+    options.AddPolicy(AcademyPermissions.AcademySettingsManage, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(AcademyPermissions.AcademySettingsManage)));
     options.AddPolicy(AcademyPermissions.TenantAccess, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));
     options.AddPolicy(AcademyPermissions.StaffProvision, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.StaffProvision)));
-    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.SubscriptionRenewManage, AcademyPermissions.SubscriptionAdjustmentManage, AcademyPermissions.SubscriptionDiscountManage, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead, AcademyPermissions.AttendanceRead, AcademyPermissions.AttendanceManage, AcademyPermissions.GuardianAttendanceRead, AcademyPermissions.EvaluationRead, AcademyPermissions.EvaluationManage, AcademyPermissions.EvaluationCriteriaManage, AcademyPermissions.GuardianEvaluationRead, AcademyPermissions.EnrollmentRequestRead, AcademyPermissions.EnrollmentRequestManage, AcademyPermissions.GuardianEnrollmentRequestCreate, AcademyPermissions.SportCatalogRead, AcademyPermissions.SportCatalogManage, AcademyPermissions.NutritionRead, AcademyPermissions.NutritionManage, AcademyPermissions.MedicalRecordRead, AcademyPermissions.MedicalRecordManage, AcademyPermissions.PlayerMediaRead, AcademyPermissions.PlayerMediaManage, AcademyPermissions.ReportsFinancialRead, AcademyPermissions.ReportsAttendanceRead, AcademyPermissions.ReportsExport, AcademyPermissions.OwnerDashboardRead })
+    foreach (var permission in new[] { AcademyPermissions.StructureManage, AcademyPermissions.PeopleManage, AcademyPermissions.GuardianChildrenRead, AcademyPermissions.CoachGroupsRead, AcademyPermissions.SubscriptionPlanManage, AcademyPermissions.SubscriptionRead, AcademyPermissions.SubscriptionRenewManage, AcademyPermissions.SubscriptionAdjustmentManage, AcademyPermissions.SubscriptionDiscountManage, AcademyPermissions.GuardianOwnRenewal, AcademyPermissions.PaymentRead, AcademyPermissions.CollectionRead, AcademyPermissions.AttendanceRead, AcademyPermissions.AttendanceManage, AcademyPermissions.GuardianAttendanceRead, AcademyPermissions.EvaluationRead, AcademyPermissions.EvaluationManage, AcademyPermissions.EvaluationCriteriaManage, AcademyPermissions.GuardianEvaluationRead, AcademyPermissions.EnrollmentRequestRead, AcademyPermissions.EnrollmentRequestManage, AcademyPermissions.GuardianEnrollmentRequestCreate, AcademyPermissions.SportCatalogRead, AcademyPermissions.SportCatalogManage, AcademyPermissions.NutritionRead, AcademyPermissions.NutritionManage, AcademyPermissions.MedicalRecordRead, AcademyPermissions.MedicalRecordManage, AcademyPermissions.PlayerMediaRead, AcademyPermissions.PlayerMediaManage, AcademyPermissions.ReportsFinancialRead, AcademyPermissions.ReportsAttendanceRead, AcademyPermissions.ReportsExport, AcademyPermissions.OwnerDashboardRead, AcademyPermissions.PayrollRead, AcademyPermissions.PayrollManage })
         options.AddPolicy(permission, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(permission)));
 });
 builder.Services.AddAntiforgery(options =>
@@ -109,6 +115,8 @@ builder.Services.AddScoped<CsrfFilter>();
 builder.Services.AddScoped<ISubscriptionClock, SubscriptionClock>();
 builder.Services.AddScoped<IPaymentGateway, InternalTestPaymentGateway>();
 builder.Services.AddScoped<PaymentProcessor>();
+builder.Services.AddScoped<CollectionService>();
+builder.Services.AddScoped<DiscountRules>();
 builder.Services.AddScoped<RenewalCreationService>();
 builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
@@ -145,9 +153,11 @@ api.MapPost("/auth/login", async (LoginRequest request, UserManager<ApplicationU
     if (user is null || !user.IsActive || passwordResult is null || !passwordResult.Succeeded)
         return Results.Problem(statusCode: 401, title: "تعذر تسجيل الدخول", detail: "بيانات الدخول غير صحيحة.");
     var membership = await db.AcademyMemberships.AsNoTracking()
-        .Where(x => x.UserId == user.Id && x.IsActive && x.Academy.IsActive)
+        .Where(x => x.UserId == user.Id && x.IsActive && x.Academy.IsActive &&
+            (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin))
         .OrderBy(x => x.CreatedAtUtc).FirstOrDefaultAsync();
-    if (membership is null) return Results.Problem(statusCode: 403, title: "الحساب غير متاح");
+    if (membership is null)
+        return Results.Problem(statusCode: 403, title: "الدخول غير متاح", detail: "لوحة الإدارة متاحة للمالك والإداري فقط.");
     await context.SignOutAsync(IdentityConstants.ApplicationScheme);
     await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
     return Results.Ok(new { authenticated = true });
@@ -292,6 +302,18 @@ app.MapSlice7Endpoints();
 app.MapSlice8ReportingEndpoints();
 app.MapSubscriptionAdjustmentEndpoints();
 app.MapSubscriptionDiscountEndpoints();
+app.MapAssetEndpoints();
+app.MapDiscountRuleEndpoints();
+app.MapGroupOperations();
+app.MapManualPayments();
+app.MapExperience();
+app.MapMatches();
+app.MapTournamentPayments();
+app.MapProductSales();
+app.MapNews();
+app.MapStaffManagement();
+app.MapDailyStaffAttendance();
+app.MapPayroll();
 
 if (args.Contains("--reset-football-demo"))
 {

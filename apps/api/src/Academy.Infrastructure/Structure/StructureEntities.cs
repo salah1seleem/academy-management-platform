@@ -47,6 +47,8 @@ public sealed class TrainingGroup : TenantEntity
 
 public sealed class RecurringSchedule : TenantEntity
 {
+    public DateOnly? ValidFrom { get; set; }
+    public DateOnly? ValidTo { get; set; }
     public Guid TrainingGroupId { get; set; }
     public DayOfWeek DayOfWeek { get; set; }
     public TimeOnly StartTime { get; set; }

@@ -29,7 +29,7 @@ public static class Slice2DashboardEndpoints
         people.MapPut("/guardians/{guardianId:guid}", UpdateGuardian).AddEndpointFilter<CsrfFilter>();
     }
 
-    private static async Task<IResult> ListStructure(string kind, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> ListStructure(string kind, Guid? branchId, CurrentTenant tenant, FoundationDbContext db)
     {
         var current = (await tenant.ResolveAsync())!;
         object? result = kind switch
@@ -42,13 +42,13 @@ public static class Slice2DashboardEndpoints
                 x.Id, x.ArabicName, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName,
                 playerCount = db.SportEnrollments.Count(e => e.AcademyId == current.AcademyId && e.TrainingGroupId == x.Id && e.IsActive),
                 coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.Id && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
-                schedules = db.RecurringSchedules.Where(s => s.AcademyId == current.AcademyId && s.TrainingGroupId == x.Id && s.IsActive).OrderBy(s => s.DayOfWeek).ThenBy(s => s.StartTime).Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime }).ToList()
+                schedules = db.RecurringSchedules.Where(s => s.AcademyId == current.AcademyId && s.TrainingGroupId == x.Id && s.IsActive).OrderBy(s => ((int)s.DayOfWeek + 1) % 7).ThenBy(s => s.StartTime).Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime }).ToList()
             }).ToListAsync(),
-            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Role == Infrastructure.Tenancy.AcademyRole.Coach).OrderBy(x => x.User.DisplayName).Select(x => new
+            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Role == Infrastructure.Tenancy.AcademyRole.Coach && (!branchId.HasValue || db.StaffGroupAssignments.Any(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive && a.TrainingGroup.BranchId == branchId))).OrderBy(x => x.User.DisplayName).Select(x => new
             {
                 id = x.Id, arabicName = x.User.DisplayName, x.IsActive,
-                assignedGroups = db.StaffGroupAssignments.Count(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive),
-                groups = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive).OrderBy(a => a.TrainingGroup.ArabicName).Select(a => new { id = a.TrainingGroupId, name = a.TrainingGroup.ArabicName, branch = a.TrainingGroup.Branch.ArabicName }).ToList()
+                assignedGroups = db.StaffGroupAssignments.Count(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive),
+                groups = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive).OrderBy(a => a.TrainingGroup.ArabicName).Select(a => new { id = a.TrainingGroupId, name = a.TrainingGroup.ArabicName, branch = a.TrainingGroup.Branch.ArabicName }).ToList()
             }).ToListAsync(),
             _ => null
         };
@@ -64,7 +64,7 @@ public static class Slice2DashboardEndpoints
             "sports" => await db.Sports.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).SingleOrDefaultAsync(),
             "categories" => await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id).Select(x => new { x.Id, x.ArabicName, x.MinimumBirthYear, x.MaximumBirthYear, x.IsActive }).SingleOrDefaultAsync(),
             "groups" => await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.BranchId, x.SportId, x.AgeCategoryId, x.Capacity, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName }).SingleOrDefaultAsync(),
-            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id && x.Role == Infrastructure.Tenancy.AcademyRole.Coach).Select(x => new { id = x.Id, arabicName = x.User.DisplayName, x.IsActive, assignments = x.Id == Guid.Empty ? Array.Empty<object>() : db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id).OrderBy(a => a.TrainingGroup.ArabicName).Select(a => new { a.Id, a.TrainingGroupId, groupName = a.TrainingGroup.ArabicName, a.IsActive }).ToArray() }).SingleOrDefaultAsync(),
+            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id && x.Role == Infrastructure.Tenancy.AcademyRole.Coach).Select(x => new { id = x.Id, arabicName = x.User.DisplayName, x.IsActive, assignments = x.Id == Guid.Empty ? Array.Empty<object>() : db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.TrainingGroup.IsActive).OrderBy(a => a.TrainingGroup.ArabicName).Select(a => new { a.Id, a.TrainingGroupId, groupName = a.TrainingGroup.ArabicName, a.IsActive }).ToArray() }).SingleOrDefaultAsync(),
             _ => null
         };
         return result is null ? Results.NotFound() : Results.Ok(result);
@@ -114,6 +114,14 @@ public static class Slice2DashboardEndpoints
     private static async Task<IResult> SetStructureStatus(string kind, Guid id, StatusRequest request, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var current = (await tenant.ResolveAsync())!;
+        if (kind == "coaches")
+        {
+            var coach = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == current.AcademyId && x.Id == id && x.Role == Infrastructure.Tenancy.AcademyRole.Coach);
+            if (coach is null) return Results.NotFound();
+            coach.IsActive = request.IsActive; coach.UpdatedAtUtc = clock.GetUtcNow();
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        }
         TenantEntity? entity = kind switch
         {
             "branches" => await db.Branches.SingleOrDefaultAsync(x => x.AcademyId == current.AcademyId && x.Id == id),
@@ -144,11 +152,12 @@ public static class Slice2DashboardEndpoints
         {
             x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive, x.PhotoReference,
             asOfDate = clock.Today,
+            hasActiveSubscription = db.SubscriptionPeriods.Any(p => p.AcademyId == current.AcademyId && p.SportEnrollment.PlayerId == x.Id && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= clock.Today && (p.EndDate == null || p.EndDate >= clock.Today) && (p.SubscriptionPlan.PlanType == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
             guardians = db.GuardianPlayerLinks.Where(l => l.AcademyId == current.AcademyId && l.PlayerId == x.Id && l.IsActive && l.Guardian.IsActive)
                 .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
             {
-                e.Id,
+                e.Id, e.TrainingGroupId,
                 sportName = e.Sport.ArabicName,
                 branchName = e.Branch.ArabicName,
                 groupName = e.TrainingGroup.ArabicName,

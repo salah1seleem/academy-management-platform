@@ -1,2 +1,2 @@
 import { EvaluationsList } from "../../../features/evaluations";
-export default function Page() { return <EvaluationsList />; }
+export default async function Page({ searchParams }: { searchParams: Promise<{ playerId?: string }> }) { const query = await searchParams; return <EvaluationsList playerId={query.playerId} />; }

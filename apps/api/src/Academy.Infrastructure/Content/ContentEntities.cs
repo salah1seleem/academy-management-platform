@@ -13,6 +13,7 @@ public enum PlayerMediaType { Image = 1, Video = 2 }
 
 public sealed class SportCatalogItem : TenantEntity
 {
+    public int StockQuantity { get; set; }
     public Guid SportId { get; set; }
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }

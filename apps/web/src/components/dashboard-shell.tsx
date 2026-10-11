@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle, BarChart3, Building2, Check, ChevronDown, ChevronLeft,
-  CircleDollarSign, ClipboardCheck, CreditCard, FileText, Filter,
+  CircleDollarSign, ClipboardCheck, FileText, Filter,
   Trophy, LayoutDashboard, Layers3, LoaderCircle, LogOut, Menu,
-  MoreHorizontal, Plus, Search, ShieldCheck, Star, UserRound, Users, X,
+  MoreHorizontal, Plus, Search, ShieldCheck, Star, Users, X,
 } from "lucide-react";
 import {
   CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useRef, useState,
@@ -21,51 +22,71 @@ type NavModule = {
 };
 
 const modules: NavModule[] = [
-  { id: "home", title: "الرئيسية", group: "الأساس", icon: LayoutDashboard, links: [{ label: "نظرة عامة", href: "/dashboard" }] },
+  { id: "home", title: "الرئيسية", group: "الأساس", icon: LayoutDashboard, links: [{ label: "الرئيسية", href: "/dashboard" }] },
   { id: "academy", title: "الأكاديمية", group: "الإدارة", icon: Building2, links: [
     { label: "الفروع", href: "/dashboard/academy/branches" }, { label: "الرياضات", href: "/dashboard/academy/sports" },
     { label: "الفئات العمرية", href: "/dashboard/academy/categories" }, { label: "المجموعات", href: "/dashboard/academy/groups" },
+    { label: "الحصص", href: "/dashboard/academy/groups/sessions" },
     { label: "المدربون", href: "/dashboard/academy/coaches" },
   ] },
   { id: "players", title: "اللاعبون", group: "الإدارة", icon: Users, links: [
-    { label: "قائمة اللاعبين", href: "/dashboard/players" }, { label: "تسجيل لاعب جديد", href: "/dashboard/players/new" },
-    { label: "طلبات الاشتراك الجديدة", href: "/dashboard/enrollment-requests" }, { label: "الإصابات والاستشارات", href: "/dashboard/players/medical" },
-    { label: "معرض اللاعبين", href: "/dashboard/players/media" },
+    { label: "اللاعبون", href: "/dashboard/players" }, { label: "أولياء الأمور", href: "/dashboard/guardians" },
+    { label: "طلبات الدفع", href: "/dashboard/subscriptions/payments" },
+    { label: "الإصابات والاستشارات", href: "/dashboard/players/medical" }, { label: "معرض اللاعبين", href: "/dashboard/players/media" },
   ] },
-  { id: "guardians", title: "أولياء الأمور", group: "الإدارة", icon: UserRound, links: [{ label: "قائمة أولياء الأمور", href: "/dashboard/guardians" }] },
-  { id: "content", title: "المحتوى", group: "الإدارة", icon: Layers3, links: [{ label: "المنتجات الرياضية", href: "/dashboard/content/catalog" }, { label: "التغذية والصحة", href: "/dashboard/content/nutrition" }] },
-  { id: "subscriptions", title: "الاشتراكات", group: "التشغيل", icon: CreditCard, links: [
-    { label: "الباقات", href: "/dashboard/subscriptions/plans" }, { label: "الاشتراكات الحالية", href: "/dashboard/subscriptions/current" },
-    { label: "تجديد اشتراك", href: "/dashboard/subscriptions/renew/new" },
-    { label: "طلبات التجديد", href: "/dashboard/subscriptions/renewals" }, { label: "طلبات الدفع", href: "/dashboard/subscriptions/payments" },
-    { label: "التحصيلات", href: "/dashboard/subscriptions/collections" }, { label: "تنتهي قريبًا", href: "/dashboard/subscriptions/expiring" },
-    { label: "الاشتراكات المنتهية", href: "/dashboard/subscriptions/expired" },
-  ] },
+  { id: "plans", title: "الباقات", group: "التشغيل", icon: Layers3, links: [{ label: "الباقات", href: "/dashboard/subscriptions/plans" }] },
+  { id: "discounts", title: "إدارة الخصومات", group: "التشغيل", icon: CircleDollarSign, links: [{ label: "إدارة الخصومات", href: "/dashboard/discounts" }] },
+  { id: "catalog", title: "المنتجات الرياضية", group: "الإدارة", icon: Layers3, links: [{ label: "المنتجات الرياضية", href: "/dashboard/content/catalog" }] },
+  { id: "news", title: "الأخبار", group: "الإدارة", icon: FileText, links: [{ label: "الأخبار", href: "/dashboard/news" }] },
+  { id: "staff", title: "الموظفون والصلاحيات", group: "الإدارة", icon: ShieldCheck, links: [{ label: "الموظفون", href: "/dashboard/staff/employees" }, { label: "الحسابات والصلاحيات", href: "/dashboard/staff" }] },
+  { id: "payroll", title: "الرواتب", group: "التحليل", icon: CircleDollarSign, links: [{ label: "الرواتب والمستحقات", href: "/dashboard/payroll" }, { label: "الخصومات", href: "/dashboard/payroll/deductions" }, { label: "المبالغ الإضافية", href: "/dashboard/payroll/requests" }] },
+  { id: "nutrition", title: "التغذية والصحة", group: "الإدارة", icon: Layers3, links: [{ label: "التغذية والصحة", href: "/dashboard/content/nutrition" }] },
   { id: "attendance", title: "الحضور", group: "التشغيل", icon: ClipboardCheck, links: [
-    { label: "جلسات التدريب", href: "/dashboard/attendance/sessions" }, { label: "حضور المدربين", href: "/dashboard/attendance/staff" },
-    { label: "سجل الحضور", href: "/dashboard/attendance/history" },
+    { label: "حضور اللاعبين", href: "/dashboard/attendance/sessions" }, { label: "حضور المدربين", href: "/dashboard/attendance/staff" },
   ] },
   { id: "evaluations", title: "التقييمات", group: "التشغيل", icon: Star, links: [
-    { label: "معايير التقييم", href: "/dashboard/evaluations/criteria" }, { label: "تقييمات اللاعبين", href: "/dashboard/evaluations" },
-    { label: "التقارير المنشورة", href: "/dashboard/evaluations/reports" },
+    { label: "تقييمات اللاعبين", href: "/dashboard/evaluations" }, { label: "معايير التقييم", href: "/dashboard/evaluations/criteria" },
   ] },
   { id: "reports", title: "التقارير", group: "التحليل", icon: BarChart3, links: [
     { label: "التقارير المالية", href: "/dashboard/reports/financial" }, { label: "تقارير الحضور", href: "/dashboard/reports/attendance" },
-    { label: "الإيصالات", href: "/dashboard/reports/receipts" },
   ] },
+  { id: "matches", title: "المباريات", group: "التشغيل", icon: Trophy, links: [{ label: "المباريات والبطولات", href: "/dashboard/matches" }] },
+  { id: "settings", title: "إعدادات الأكاديمية", group: "الإدارة", icon: Building2, links: [{ label: "إعدادات الأكاديمية", href: "/dashboard/settings" }] },
 ];
+const order = ["home", "academy", "players", "plans", "attendance", "evaluations", "reports", "payroll", "matches", "catalog", "nutrition", "news", "discounts", "settings", "staff"];
+modules.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 
 const roleLabels: Record<string, string> = { AcademyOwner: "مالك", AcademyAdmin: "إداري", Coach: "مدرب" };
 
+function linkPermission(href: string) {
+  if (href === "/dashboard") return null; // The basic task home remains available without financial metrics.
+  if (href.includes("/settings")) return "academy.settings.manage";
+  if (href.includes("/payroll") || href.includes("/staff/employees")) return "payroll.read";
+  if (href.includes("/matches")) return "structure.manage";
+  if (href.includes("/reports/financial")) return "reports.financial.read";
+  if (href.includes("/reports/attendance")) return "reports.attendance.read";
+  if (href.includes("/academy")) return "structure.manage";
+  if (href.includes("/players/medical")) return "content.medical.read";
+  if (href.includes("/players/media")) return "content.media.read";
+  if (href.includes("/players") || href.includes("/guardians")) return "people.manage";
+  if (href.includes("/subscriptions/payments")) return "payment.read";
+  if (href.includes("/subscriptions/plans")) return "subscription.plan.manage";
+  if (href.includes("/discounts")) return "subscription.discount.manage";
+  if (href.includes("/content/catalog")) return "content.catalog.manage";
+  if (href.includes("/content/nutrition")) return "content.nutrition.manage";
+  if (href.includes("/news")) return "content.media.manage";
+  if (href.includes("/attendance")) return "attendance.read";
+  if (href.includes("/evaluations/criteria")) return "evaluation.criteria.manage";
+  if (href.includes("/evaluations")) return "evaluation.read";
+  return "staff.provision";
+}
+
 function currentModule(path: string) {
-  if (path.startsWith("/dashboard/academy/")) return "academy";
-  if (path.startsWith("/dashboard/players") || path.startsWith("/dashboard/enrollment-requests")) return "players";
-  if (path.startsWith("/dashboard/content")) return "content";
-  if (path.startsWith("/dashboard/guardians")) return "guardians";
-  if (path.startsWith("/dashboard/subscriptions")) return "subscriptions";
-  if (path.startsWith("/dashboard/attendance")) return "attendance";
-  if (path.startsWith("/dashboard/evaluations")) return "evaluations";
-  if (path.startsWith("/dashboard/reports")) return "reports";
+  const match = modules.flatMap(module => module.links.map(link => ({ id: module.id, href: link.href })))
+    .filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`)))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  if (match) return match.id;
+  if (path.startsWith("/dashboard/subscriptions")) return "players";
   return "home";
 }
 
@@ -82,21 +103,35 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const activeModule = useMemo(() => currentModule(path), [path]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const saved = (event: Event) => {
+      setSaveNotice((event as CustomEvent<string>).detail);
+      clearTimeout(timer);
+      timer = setTimeout(() => setSaveNotice(""), 7000);
+    };
+    window.addEventListener("academy-save-success", saved);
+    return () => { clearTimeout(timer); window.removeEventListener("academy-save-success", saved); };
+  }, []);
   const [navOverride, setNavOverride] = useState<{ path: string; id: string | null } | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [identity, setIdentity] = useState({ name: "", role: "", academyName: "" });
+  const [brand, setBrand] = useState<{ displayName?: string; primaryColor?: string; secondaryColor?: string; logoUrl?: string; platformBrandOperator?: boolean }>({});
   const toggleRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const openModule = navOverride?.path === path ? navOverride.id : activeModule;
-  const navigation = useMemo(() => visibleModules(identity.role), [identity.role]);
+  const navigation = useMemo(() => visibleModules(identity.role).filter(m => m.id !== "staff" || identity.role === "AcademyOwner").map(m => ({ ...m, links: m.links.filter(l => l.href === "/dashboard/academy/groups/sessions" ? identity.role === "AcademyOwner" || ["structure.manage", "people.manage", "attendance.read"].every(p => permissions.includes(p)) : identity.role === "AcademyOwner" || m.id === "settings" && brand.platformBrandOperator || linkPermission(l.href) === null || permissions.includes(linkPermission(l.href)!)) })).filter(m => m.links.length > 0), [identity.role, permissions, brand.platformBrandOperator]);
   const activeHref = useMemo(() => navigation.flatMap(module => module.links).filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`))).sort((a, b) => b.href.length - a.href.length)[0]?.href, [navigation, path]);
 
   useEffect(() => {
     fetch("/api/v1/me").then(async response => {
       if (!response.ok) return router.replace("/login");
       const me = await response.json() as { displayName: string; role: string; academyName?: string };
-      if (!["AcademyOwner", "AcademyAdmin", "Coach"].includes(me.role)) return router.replace(me.role === "Guardian" ? "/guardian" : "/");
+      if (!["AcademyOwner", "AcademyAdmin"].includes(me.role)) return router.replace("/");
       setIdentity({ name: me.displayName, role: me.role, academyName: me.academyName ?? "الأكاديمية" });
-      if (me.role === "Coach" && path === "/dashboard") router.replace("/dashboard/attendance/sessions");
+      fetch("/api/v1/academy/experience").then(r => r.ok ? r.json() : {}).then(setBrand).catch(() => setBrand({}));
+      fetch("/api/v1/my-permissions").then(r => r.ok ? r.json() : []).then(p => setPermissions(Array.isArray(p) ? p : [])).catch(() => setPermissions([]));
     }).catch(() => router.replace("/login"));
   }, [path, router]);
 
@@ -117,20 +152,22 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     router.replace("/login");
   }
 
-  return <div className="dashboard-shell">
+  const primary = brand.primaryColor ?? "#D71935", secondary = brand.secondaryColor ?? "#171923";
+  return <div className="dashboard-shell" style={{ "--staff-primary-950": secondary, "--staff-primary-900": secondary, "--staff-primary-800": `color-mix(in srgb, ${primary}, black 25%)`, "--staff-primary-700": primary, "--staff-primary-600": primary, "--staff-primary-100": `color-mix(in srgb, ${primary}, white 92%)`, "--staff-primary-50": `color-mix(in srgb, ${primary}, white 97%)` } as CSSProperties}>
     <button ref={toggleRef} className="nav-toggle" aria-label={drawerOpen ? "إغلاق القائمة" : "فتح القائمة"} aria-expanded={drawerOpen} aria-controls="staff-sidebar" onClick={() => setDrawerOpen(!drawerOpen)}>{drawerOpen ? <X /> : <Menu />}</button>
     {drawerOpen && <button className="nav-backdrop" aria-label="إغلاق القائمة" onClick={closeDrawer} />}
     <aside ref={sidebarRef} id="staff-sidebar" tabIndex={-1} className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي">
-      <div className="sidebar-brand"><span className="brand-mark" aria-hidden="true"><Trophy /></span><span><b>{identity.academyName || "منصة الأكاديمية"}</b><small>نظام إدارة الأكاديمية</small></span></div>
+      {brand.logoUrl && <div className="sidebar-watermark" aria-hidden="true" style={{ backgroundImage: `url(${brand.logoUrl})` }} />}
+      <div className="sidebar-brand">{brand.logoUrl ? <Image unoptimized width={52} height={64} className="academy-logo" src={brand.logoUrl} alt={brand.displayName ?? identity.academyName} /> : <span className="brand-mark" aria-hidden="true"><Trophy /></span>}<span><b>{brand.displayName || identity.academyName || "منصة الأكاديمية"}</b><small>نظام إدارة الأكاديمية</small></span></div>
       <div className="sidebar-account sidebar-account-top"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span><b>{identity.name || "جارٍ تحميل الحساب…"}</b><small className="role-badge"><ShieldCheck />{roleLabels[identity.role] ?? "حساب موظف"}</small></span></div>
       <nav className="sidebar-navigation" aria-label={identity.role === "Coach" ? "مساحة المدرب" : "مساحة الإدارة"}>
-        {navigation.map((module, index) => {
-          const showGroup = index === 0 || module.group !== navigation[index - 1].group;
+        {navigation.map(module => {
           const isExpanded = openModule === module.id;
           const Icon = module.icon;
-          return <div key={module.id}>{showGroup && <p className="nav-group-label">{identity.role === "Coach" && module.group === "التشغيل" ? "مهامك" : module.group}</p>}<section className={`nav-module ${activeModule === module.id ? "current" : ""}`}>
-            <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span><Icon aria-hidden="true" />{module.title}</span><ChevronDown className="nav-chevron" aria-hidden="true" /></button>
-            <div className={`nav-reveal ${isExpanded ? "expanded" : ""}`} inert={!isExpanded} aria-hidden={!isExpanded}><div className="nav-reveal-inner"><div id={`nav-${module.id}`} className="submodule-list">{module.links.map(link => {
+          return <div key={module.id}><section className={`nav-module ${activeModule === module.id ? "current" : ""}`}>
+            {module.links.length === 1 || module.id === "players" ? <div className="module-direct"><Link className="module-toggle" href={module.links[0].href} aria-current={activeHref === module.links[0].href ? "page" : undefined} onClick={() => setDrawerOpen(false)}><span><Icon aria-hidden="true" />{module.title}</span></Link>{module.id === "players" && <button aria-label="خيارات اللاعبين" aria-expanded={isExpanded} onClick={() => toggleModule(module.id)}><ChevronDown /></button>}</div> : <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span><Icon aria-hidden="true" />{module.title}</span><ChevronDown className="nav-chevron" aria-hidden="true" /></button>}
+
+            <div className={`nav-reveal ${isExpanded ? "expanded" : ""}`} inert={!isExpanded} aria-hidden={!isExpanded}><div className="nav-reveal-inner"><div id={`nav-${module.id}`} className="submodule-list">{module.links.filter((_, index) => module.links.length > 1 && (module.id !== "players" || index > 0)).map(link => {
               const isActive = activeHref === link.href;
               return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "active" : ""} href={link.href} key={link.href} onClick={() => setDrawerOpen(false)}><span>{link.label}</span><ChevronLeft aria-hidden="true" /></Link>;
             })}</div></div></div>
@@ -139,7 +176,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </nav>
       <div className="sidebar-account sidebar-account-bottom"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span className="sidebar-account-copy"><b>{identity.name || "حساب الموظف"}</b><small>{roleLabels[identity.role] ?? ""}</small></span><button className="sidebar-logout" aria-label="تسجيل الخروج" title="تسجيل الخروج" onClick={() => void logout()}><LogOut /></button></div>
     </aside>
-    <main className="dashboard-content" id="main-content">{children}</main>
+    <main className="dashboard-content" id="main-content">{saveNotice && <div className="save-notice" role="status"><Check size={18} /><span>{saveNotice}</span><button type="button" aria-label="إغلاق رسالة النجاح" onClick={() => setSaveNotice("")}><X size={16} /></button></div>}{children}</main>
   </div>;
 }
 
@@ -168,7 +205,7 @@ export function RowActionMenu({ actions, label = "المزيد من الإجرا
 }
 export function RowActions({ actions }: { actions: RowAction[] }) {
   if (actions.length === 0) return null;
-  return <div className="row-actions"><ActionControl action={actions[0]} />{actions.length === 2 ? <ActionControl action={actions[1]} /> : <RowActionMenu actions={actions.slice(1)} />}</div>;
+  return <div className="row-actions"><ActionControl key={`${actions[0].label}-${actions[0].href ?? "button"}`} action={actions[0]} />{actions.length === 2 ? <ActionControl key={`${actions[1].label}-${actions[1].href ?? "button"}`} action={actions[1]} /> : <RowActionMenu actions={actions.slice(1)} />}</div>;
 }
 
 export function SearchInput({ value, onChange, label = "بحث", placeholder = "بحث…" }: { value: string; onChange: (value: string) => void; label?: string; placeholder?: string }) {

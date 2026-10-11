@@ -1,2 +1,2 @@
-import { ContentForm } from "../../../../../features/admin-content";
-export default function Page() { return <ContentForm kind="media" />; }
+import { MediaUpload } from "../../../../../features/media-upload";
+export default function Page() { return <MediaUpload />; }

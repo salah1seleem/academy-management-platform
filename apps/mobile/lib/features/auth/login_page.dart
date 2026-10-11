@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
@@ -63,13 +64,13 @@ class _LoginPageState extends State<LoginPage> {
         const SizedBox(height: 24),
         const Icon(Icons.sports_soccer, size: 56),
         const SizedBox(height: 20),
-        Text(
+        UiText(
           'كل يوم تدريب.. خطوة للأمام',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 12),
-        const Text(
+        const UiText(
           'ادخل برقم هاتف حسابك لمتابعة رحلتك في الأكاديمية.',
           textAlign: TextAlign.center,
         ),
@@ -86,7 +87,9 @@ class _LoginPageState extends State<LoginPage> {
                   keyboardType: TextInputType.phone,
                   textDirection: TextDirection.ltr,
                   autofillHints: const [AutofillHints.telephoneNumber],
-                  decoration: const InputDecoration(labelText: 'رقم الهاتف'),
+                  decoration: InputDecoration(
+                    labelText: ui(context, 'رقم الهاتف'),
+                  ),
                   validator: (value) =>
                       value == null || value.trim().length < 10
                       ? 'أدخل رقم الهاتف المصري.'
@@ -101,7 +104,9 @@ class _LoginPageState extends State<LoginPage> {
                     textDirection: TextDirection.ltr,
                     maxLength: 6,
                     autofillHints: const [AutofillHints.oneTimeCode],
-                    decoration: const InputDecoration(labelText: 'رمز التحقق'),
+                    decoration: InputDecoration(
+                      labelText: ui(context, 'رمز التحقق'),
+                    ),
                     validator: (value) => value?.trim().length == 6
                         ? null
                         : 'أدخل رمز التحقق من ٦ أرقام.',
@@ -126,7 +131,7 @@ class _LoginPageState extends State<LoginPage> {
                             otp.clear();
                             error = null;
                           }),
-                    child: const Text('تغيير الرقم أو طلب رمز جديد'),
+                    child: const UiText('تغيير الرقم أو طلب رمز جديد'),
                   ),
               ],
             ),
@@ -135,7 +140,7 @@ class _LoginPageState extends State<LoginPage> {
         if (widget.environment == 'Demo')
           const Padding(
             padding: EdgeInsets.only(top: 16),
-            child: Text(
+            child: UiText(
               'بيئة عرض تجريبي فقط — لا تُرسل رسالة SMS حقيقية.',
               textAlign: TextAlign.center,
             ),

@@ -45,7 +45,14 @@ public static class FootballDemoSeed
         if (academy is not null && (academy.Slug != Slug || academy.EnglishName != Marker))
             throw new InvalidOperationException("Reserved demo identity has no matching dataset marker. No changes made.");
         if (reset && academy is null) throw new InvalidOperationException("Cannot reset an unmarked/unseeded academy.");
-        if (academy is not null && !reset) return; // Never undo manual demo edits during startup.
+        if (academy is not null && !reset)
+        {
+            await SeedExperience(services, db, ct);
+            await SeedReviewExtensions(db, services.GetRequiredService<ISubscriptionClock>().UtcNow, ct);
+            await PayrollDemoSeed.AddOnce(db, ct);
+            await transaction.CommitAsync(ct);
+            return; // Never reset players, collections or manual demo edits during startup.
+        }
         if (reset) await ClearMarkedTenant(db, ct);
         var today = services.GetRequiredService<ISubscriptionClock>().Today;
         var now = new DateTimeOffset(today.ToDateTime(new TimeOnly(6, 0)), TimeSpan.Zero);
@@ -94,7 +101,58 @@ public static class FootballDemoSeed
         await History(db, today, now, ct);
         Content(db, today, now);
         await db.SaveChangesAsync(ct);
+        await SeedReviewExtensions(db, now, ct);
+        await SeedExperience(services, db, ct);
+        await PayrollDemoSeed.AddOnce(db, ct);
         await transaction.CommitAsync(ct);
+    }
+
+    private static async Task SeedReviewExtensions(FoundationDbContext db, DateTimeOffset now, CancellationToken ct)
+    {
+        // One-time additive upgrade, scoped to the marked synthetic Football tenant.
+        // The deterministic rule is the upgrade marker: no stock replenishment on restart.
+        var markerId = Id("owner-review/sibling-offer");
+        if (await db.DiscountRules.AnyAsync(x => x.AcademyId == AcademyId && x.Id == markerId, ct)) return;
+        if (await db.DiscountRules.AnyAsync(x => x.AcademyId == AcademyId && x.IsSiblingOffer, ct)) return;
+        db.DiscountRules.Add(new Academy.Infrastructure.Operations.DiscountRule { Id = markerId, AcademyId = AcademyId, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي", CreatedAtUtc = now, UpdatedAtUtc = now });
+        var product = await db.SportCatalogItems.SingleOrDefaultAsync(x => x.AcademyId == AcademyId && x.Id == Id("catalog"), ct);
+        if (product is not null && product.DisplayPrice is null && product.StockQuantity == 0 && !await db.ProductSales.AnyAsync(x => x.AcademyId == AcademyId && x.ProductId == product.Id, ct))
+        {
+            product.ArabicDescription = "طقم تدريب تجريبي. الأسعار والمخزون اصطناعيان، ولا يتم إرسال طلب شراء خارجي.";
+            product.DisplayPrice = 380; product.Currency = "EGP"; product.StockQuantity = 12; product.UpdatedAtUtc = now;
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task SeedMatchExample(FoundationDbContext db, DateTimeOffset now, DateOnly today, CancellationToken ct)
+    {
+        Guid tournament = Id("matches/tournament"), team = Id("matches/team"), match = Id("matches/next");
+        if (await db.AcademyTournaments.AnyAsync(x => x.AcademyId == AcademyId && x.Id == tournament, ct)) return;
+        db.AcademyTournaments.Add(new Academy.Infrastructure.Operations.AcademyTournament { Id = tournament, AcademyId = AcademyId, Name = "بطولة البراعم — عرض تجريبي", SportId = Id("sport"), Fee = 250, Currency = "EGP", CreatedAtUtc = now, UpdatedAtUtc = now });
+        db.MatchTeams.Add(new Academy.Infrastructure.Operations.MatchTeam { Id = team, AcademyId = AcademyId, Name = "منتخب 2018 — عرض تجريبي", SportId = Id("sport"), BranchId = Id("branch/0"), AgeCategoryId = Id("age/0"), CoachMembershipId = Id("member/coach1"), CreatedAtUtc = now, UpdatedAtUtc = now });
+        db.AcademyMatches.Add(new Academy.Infrastructure.Operations.AcademyMatch { Id = match, AcademyId = AcademyId, TeamId = team, TournamentId = tournament, Opponent = "فريق الأصدقاء — بيانات خيالية", MatchDate = today.AddDays(5), StartTime = new TimeOnly(17, 0), Venue = "ملعب العرض التجريبي", Notes = "التجمع قبل المباراة بنصف ساعة — بيانات عرض فقط", PublishedAtUtc = now, PublishedFingerprint = "demo-fixture-v1", CreatedAtUtc = now, UpdatedAtUtc = now });
+        for (var i = 0; i < 4; i++) {
+            db.MatchTeamPlayers.Add(new Academy.Infrastructure.Operations.MatchTeamPlayer { Id = Id($"matches/roster/{i}"), AcademyId = AcademyId, TeamId = team, EnrollmentId = Id($"enrollment/{i}"), CreatedAtUtc = now, UpdatedAtUtc = now });
+            db.MatchParticipants.Add(new Academy.Infrastructure.Operations.MatchParticipant { Id = Id($"matches/audience/{i}"), AcademyId = AcademyId, MatchId = match, PlayerId = Id($"player/{i}"), IsBench = i == 3, CreatedAtUtc = now, UpdatedAtUtc = now });
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task SeedExperience(IServiceProvider services, FoundationDbContext db, CancellationToken ct)
+    {
+        var now = services.GetRequiredService<ISubscriptionClock>().UtcNow;
+        if (!await db.AcademyExperiences.AnyAsync(x => x.AcademyId == AcademyId, ct))
+        {
+            var logo = Path.Combine(services.GetRequiredService<IHostEnvironment>().ContentRootPath, "Assets", "professional-academy.png");
+            db.AcademyExperiences.Add(new Academy.Infrastructure.Operations.AcademyExperience { Id = Id("experience"), AcademyId = AcademyId, DisplayName = "The Professional Academy", PrimaryColor = "#D71935", SecondaryColor = "#171923", Logo = await File.ReadAllBytesAsync(logo, ct), LogoContentType = "image/png", CreatedAtUtc = now, UpdatedAtUtc = now });
+        }
+        // Separate synthetic operator, not a privilege silently added to the academy owner.
+        var users = services.GetRequiredService<UserManager<ApplicationUser>>();
+        await User(users, db, "platform", "مشغّل المنصة — حساب تجريبي", 12, AcademyRole.AcademyAdmin, services.GetRequiredService<IOptions<DemoOptions>>().Value.StaffPassword, now, ct);
+        var id = Id("user/platform");
+        if (!await db.PlatformBrandOperators.AnyAsync(x => x.UserId == id, ct)) db.PlatformBrandOperators.Add(new Academy.Infrastructure.Operations.PlatformBrandOperator { UserId = id });
+        await db.SaveChangesAsync(ct);
+        await SeedMatchExample(db, now, services.GetRequiredService<ISubscriptionClock>().Today, ct);
     }
 
     private static async Task User(UserManager<ApplicationUser> users, FoundationDbContext db, string key, string name, int phoneSuffix, AcademyRole role, string? password, DateTimeOffset now, CancellationToken ct)
@@ -112,8 +170,16 @@ public static class FootballDemoSeed
         }
         else if (user.PhoneNumber != phone || user.Email != email || !user.IsActive)
             throw new InvalidOperationException("Reserved demo identity was edited/disabled. Reset will not overwrite shared identity.");
-        db.AcademyMemberships.Add(new AcademyMembership { Id = Id($"member/{key}"), AcademyId = AcademyId, UserId = id, Role = role, IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
-        await db.SaveChangesAsync(ct);
+        var membershipId = Id($"member/{key}");
+        var membership = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.Id == membershipId, ct);
+        if (membership is null)
+        {
+            db.AcademyMemberships.Add(new AcademyMembership { Id = membershipId, AcademyId = AcademyId, UserId = id, Role = role, IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            await db.SaveChangesAsync(ct);
+        }
+        else if (membership.AcademyId != AcademyId || membership.UserId != id || membership.Role != role)
+            throw new InvalidOperationException("Reserved demo membership collision. Existing membership was not modified.");
+        // Existing role, activity and permissions are never reset during additive startup.
     }
 
     private static T Add<T>(FoundationDbContext db, T row, string key, DateTimeOffset now) where T : TenantEntity

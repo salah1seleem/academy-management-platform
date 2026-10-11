@@ -1,4 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
+import { guardianLogin } from "../support/auth";
 
 const footballPeriod = "53000000-0000-0000-0000-000000000501";
 const swimmingPeriod = "53000000-0000-0000-0000-000000000503";
@@ -6,10 +7,6 @@ const mariamPeriod = "53000000-0000-0000-0000-000000000504";
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**");
-}
-
-async function guardianLogin(page: Page) {
-  await page.context().clearCookies(); await page.goto("/login"); await page.getByRole("button", { name: "ولي أمر" }).click(); await page.getByLabel("رقم الهاتف").fill("01000000001"); await page.getByRole("button", { name: "طلب رمز تجريبي" }).click(); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تحقق ودخول" }).click(); await page.waitForURL("**/guardian**");
 }
 
 async function openPeriod(page: Page, id: string) { await page.goto(`/dashboard/subscriptions/periods/${id}`); await expect(page.getByRole("heading", { name: "تفاصيل الاشتراك" })).toBeVisible(); }
@@ -37,6 +34,6 @@ test.describe.serial("Slice 8B subscription adjustment journeys", () => {
     await staffLogin(page); await openPeriod(page, swimmingPeriod); await expect(page.getByText("12 حصة")).toBeVisible(); await page.getByRole("button", { name: "تجميد" }).click(); await fillDateReason(page, "2026-09-27", "إيقاف مؤقت للسباحة"); await page.getByRole("button", { name: "تأكيد التجميد" }).click(); await expect(page.getByText("مجمد", { exact: true })).toBeVisible();
     await page.goto("/dashboard/attendance/sessions/62000000-0000-0000-0000-000000000005/players"); const player = page.locator("article").filter({ hasText: "عمر أحمد محمود" }); await player.getByRole("button", { name: "حاضر" }).click(); await page.getByRole("button", { name: "حفظ الحضور" }).click(); await expect(page.getByText(/تم تسجيل الحضور دون خصم: الاشتراك مجمد أو غير مؤهل/)).toBeVisible();
     await openPeriod(page, swimmingPeriod); await expect(page.getByText("12 حصة")).toBeVisible(); await page.getByRole("button", { name: "استئناف" }).click(); await page.getByLabel("التاريخ الفعلي").fill("2026-09-28"); await page.getByLabel("سبب التعديل").fill("استئناف السباحة"); await page.getByRole("button", { name: "متابعة" }).click(); await expect(page.getByText("فعال", { exact: true })).toBeVisible(); await expect(page.locator(".adjustment-history").getByText("استئناف الاشتراك", { exact: true })).toBeVisible();
-    await page.goto("/dashboard/attendance/sessions"); await page.getByRole("button", { name: "إنشاء حصة" }).click(); const form = page.locator("form.inline-attendance-form"); await form.locator("select[name=group]").selectOption({ label: "سباحة ناشئين — مجموعة أ" }); await form.locator("input[name=date]").fill("2026-09-29"); await form.locator("input[name=start]").fill("20:00"); await form.locator("input[name=end]").fill("21:00"); await form.getByRole("button", { name: "حفظ الحصة" }).click(); await expect(page.getByText("تم إنشاء الحصة.")).toBeVisible(); const session = page.locator("article").filter({ hasText: "2026-09-29" }).filter({ hasText: "سباحة ناشئين — مجموعة أ" }); await session.getByRole("link", { name: "تسجيل الحضور" }).click(); const later = page.locator("article").filter({ hasText: "عمر أحمد محمود" }); await later.getByRole("button", { name: "حاضر" }).click(); await page.getByRole("button", { name: "حفظ الحضور" }).click(); await expect(later).toContainText("الرصيد: 11");
+    await page.goto("/dashboard/academy/groups/34000000-0000-0000-0000-000000000002"); await page.getByText("إنشاء الحصص / تعديل الجدول", { exact: true }).click(); const form = page.locator("form.form-shell"); for (const day of await form.locator("input[name=days]").all()) await day.uncheck(); await form.getByLabel("الثلاثاء").check(); await form.locator("input[name=from]").fill("2026-09-29"); await form.locator("input[name=to]").fill("2026-09-29"); await form.locator("input[name=start]").fill("20:00"); await form.locator("input[name=end]").fill("21:00"); await form.getByRole("button", { name: "حفظ وإنشاء الحصص" }).click(); await expect(page.getByText(/تم حفظ الجدول/)).toBeVisible(); await page.goto("/dashboard/attendance/sessions"); const session = page.locator("article").filter({ hasText: "2026-09-29" }).filter({ hasText: "سباحة ناشئين — مجموعة أ" }); await session.getByRole("link", { name: "تسجيل الحضور" }).click(); const later = page.locator("article").filter({ hasText: "عمر أحمد محمود" }); await later.getByRole("button", { name: "حاضر" }).click(); await page.getByRole("button", { name: "حفظ الحضور" }).click(); await expect(later).toContainText("الرصيد: 11");
   });
 });

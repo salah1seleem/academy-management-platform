@@ -8,6 +8,7 @@ TestResults/
 # Node
 node_modules/
 .next/
+.next-e2e/
 out/
 coverage/
 *.tsbuildinfo

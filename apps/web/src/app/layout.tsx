@@ -16,15 +16,15 @@ export const metadata: Metadata = {
   description: "الأساس التقني لمنصة عربية لإدارة الأكاديميات الرياضية.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/branding/icon-192.png",
+    apple: "/branding/icon-180.png",
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0f766e",
+  themeColor: "#D71935",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

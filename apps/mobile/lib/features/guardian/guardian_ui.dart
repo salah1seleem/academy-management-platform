@@ -1,3 +1,5 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +8,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/appearance.dart';
+import '../shared/private_media.dart';
 
 typedef Json = Map<String, dynamic>;
 Json obj(Object? value) => value as Json;
@@ -79,20 +83,20 @@ String commandKey() => List.generate(
 Future<T?> openPage<T>(BuildContext context, Widget page) =>
     Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => page));
 
-ThemeData guardianTheme() => ThemeData(
+ThemeData guardianTheme({
+  Color primary = AcademyTheme.red,
+  Color secondary = AcademyTheme.night,
+}) => ThemeData(
   brightness: Brightness.dark,
   useMaterial3: true,
   fontFamily: 'Cairo',
-  colorScheme: const ColorScheme.dark(
-    primary: AcademyTheme.gold,
-    secondary: AcademyTheme.red,
+  colorScheme: ColorScheme.dark(
+    primary: Color.lerp(primary, Colors.white, .30)!,
+    secondary: Color.lerp(primary, Colors.white, .30)!,
     surface: AcademyTheme.card,
   ),
-  scaffoldBackgroundColor: AcademyTheme.night,
-  appBarTheme: const AppBarTheme(
-    backgroundColor: AcademyTheme.night,
-    centerTitle: true,
-  ),
+  scaffoldBackgroundColor: secondary,
+  appBarTheme: AppBarTheme(backgroundColor: secondary, centerTitle: true),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
     fillColor: AcademyTheme.card,
@@ -100,7 +104,7 @@ ThemeData guardianTheme() => ThemeData(
   ),
   filledButtonTheme: FilledButtonThemeData(
     style: FilledButton.styleFrom(
-      backgroundColor: AcademyTheme.red,
+      backgroundColor: primary,
       foregroundColor: Colors.white,
       minimumSize: const Size.fromHeight(50),
     ),
@@ -127,9 +131,18 @@ class GuardianPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const AcademyCrest(size: 30),
+          const SizedBox(width: 10),
+          Flexible(
+            child: UiText(
+              title,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
       actions: actions,
     ),
@@ -179,10 +192,10 @@ class GLink extends StatelessWidget {
     margin: const EdgeInsets.only(bottom: 12),
     child: ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      leading: Icon(icon, color: AcademyTheme.gold),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: const Icon(Icons.chevron_left),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+      title: UiText(title),
+      subtitle: subtitle == null ? null : UiText(subtitle!),
+      trailing: Icon(Icons.chevron_left),
       onTap: onTap,
     ),
   );
@@ -194,9 +207,9 @@ class Heading extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Text(
+    child: UiText(
       text,
-      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
     ),
   );
 }
@@ -208,7 +221,7 @@ class EmptyMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(20),
-    child: Text(text, textAlign: TextAlign.center),
+    child: UiText(text, textAlign: TextAlign.center),
   );
 }
 
@@ -219,12 +232,15 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: AcademyTheme.gold.withValues(alpha: .12),
+      color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
       borderRadius: BorderRadius.circular(18),
     ),
-    child: Text(
+    child: UiText(
       label(status),
-      style: const TextStyle(color: AcademyTheme.gold, fontSize: 12),
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.primary,
+        fontSize: 12,
+      ),
     ),
   );
 }
@@ -232,7 +248,15 @@ class StatusPill extends StatelessWidget {
 class PlayerAvatar extends StatelessWidget {
   final String name;
   final double size;
-  const PlayerAvatar(this.name, {super.key, this.size = 64});
+  final AuthController? auth;
+  final Object? reference;
+  const PlayerAvatar(
+    this.name, {
+    super.key,
+    this.size = 64,
+    this.auth,
+    this.reference,
+  });
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'صورة رمزية للاعب',
@@ -241,19 +265,25 @@ class PlayerAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: AcademyTheme.gold, width: 3),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary,
+          width: 3,
+        ),
         color: const Color(0xFF37374A),
       ),
-      child: Center(
-        child: Text(
-          name.isEmpty ? '⚽' : name.characters.first,
-          style: TextStyle(
-            fontSize: size * .4,
-            color: AcademyTheme.gold,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: auth != null && isPrivateAsset(reference)
+          ? PrivateImage(auth: auth!, path: reference.toString(), height: size)
+          : Center(
+              child: UiText(
+                name.isEmpty ? '⚽' : name.characters.first,
+                style: TextStyle(
+                  fontSize: size * .4,
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
     ),
   );
 }
@@ -350,7 +380,7 @@ class _RemoteBodyState extends State<RemoteBody> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                UiText(
                   snapshot.error is ApiFailure
                       ? (snapshot.error as ApiFailure).message
                       : 'تعذر عرض البيانات.',
@@ -359,11 +389,19 @@ class _RemoteBodyState extends State<RemoteBody> {
                   onPressed: () => setState(() {
                     future = load();
                   }),
-                  child: const Text('إعادة المحاولة'),
+                  child: const UiText('إعادة المحاولة'),
                 ),
               ],
             ),
           ),
+        );
+      }
+      Widget content;
+      try {
+        content = widget.builder(context, snapshot.data);
+      } catch (_) {
+        return const EmptyMessage(
+          'تعذر قراءة بيانات الشاشة. حدّثها وحاول مجددًا.',
         );
       }
       return RefreshIndicator(
@@ -377,7 +415,7 @@ class _RemoteBodyState extends State<RemoteBody> {
             /* Rendered above. */
           }
         },
-        child: widget.builder(context, snapshot.data),
+        child: content,
       );
     },
   );
@@ -404,22 +442,19 @@ class Facts extends StatelessWidget {
               child: GCard(
                 child: Column(
                   children: [
-                    Text(
+                    UiText(
                       v.$2,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 25,
                         fontWeight: FontWeight.bold,
-                        color: AcademyTheme.gold,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    Text(
+                    UiText(
                       v.$1,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 class ApiFailure implements Exception {
   final int status;
@@ -55,7 +56,17 @@ abstract interface class ApiTransport {
   });
 }
 
-class HttpApiTransport implements ApiTransport {
+abstract interface class AssetTransport {
+  Future<Uint8List> asset(String path, String token);
+  Future<Object?> upload(
+    Uint8List bytes,
+    String contentType,
+    Map<String, String> fields,
+    String token,
+  );
+}
+
+class HttpApiTransport implements ApiTransport, AssetTransport {
   final AppConfig config;
   final HttpClient _client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 12);
@@ -123,4 +134,106 @@ class HttpApiTransport implements ApiTransport {
   }
 
   void close() => _client.close(force: true);
+
+  @override
+  Future<Uint8List> asset(String path, String token) async {
+    if (path != '/api/v1/academy/branding/logo' &&
+        !RegExp(r'^/api/v1/assets/[a-fA-F0-9-]{36}$').hasMatch(path)) {
+      throw const ApiFailure(400, 'مرجع الوسائط غير صالح.');
+    }
+    try {
+      final request = await _client
+          .getUrl(config.api.resolve(path))
+          .timeout(const Duration(seconds: 20));
+      request.followRedirects = false;
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      final response = await request.close().timeout(
+        const Duration(seconds: 20),
+      );
+      if (response.statusCode != 200) {
+        throw ApiFailure(response.statusCode, 'تعذر عرض الوسائط.');
+      }
+      final bytes = BytesBuilder();
+      await for (final chunk in response.timeout(const Duration(seconds: 20))) {
+        bytes.add(chunk);
+        if (bytes.length > 50 * 1024 * 1024) {
+          throw const ApiFailure(413, 'حجم الوسائط أكبر من المسموح.');
+        }
+      }
+      return bytes.takeBytes();
+    } on SocketException {
+      throw const ApiFailure(0, 'تعذر الاتصال بالخادم.');
+    } on TimeoutException {
+      throw const ApiFailure(0, 'انتهت مهلة تحميل الوسائط.');
+    }
+  }
+
+  @override
+  Future<Object?> upload(
+    Uint8List bytes,
+    String contentType,
+    Map<String, String> fields,
+    String token,
+  ) async {
+    if (bytes.length > 50 * 1024 * 1024 ||
+        !{
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'video/mp4',
+          'video/quicktime',
+        }.contains(contentType) ||
+        fields.keys.any(
+          (k) => !{'purpose', 'playerId', 'groupId', 'caption'}.contains(k),
+        )) {
+      throw const ApiFailure(400, 'ملف غير مدعوم أو أكبر من المسموح.');
+    }
+    final boundary = 'academy-${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      final request = await _client
+          .postUrl(config.api.resolve('/api/v1/assets/upload'))
+          .timeout(const Duration(seconds: 20));
+      request.followRedirects = false;
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      request.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'multipart/form-data; boundary=$boundary',
+      );
+      for (final field in fields.entries) {
+        request.add(
+          utf8.encode(
+            '--$boundary\r\nContent-Disposition: form-data; name="${field.key}"\r\n\r\n${field.value}\r\n',
+          ),
+        );
+      }
+      request.add(
+        utf8.encode(
+          '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="upload"\r\nContent-Type: $contentType\r\n\r\n',
+        ),
+      );
+      request.add(bytes);
+      request.add(utf8.encode('\r\n--$boundary--\r\n'));
+      final response = await request.close().timeout(
+        const Duration(seconds: 60),
+      );
+      final raw = await utf8.decoder
+          .bind(response)
+          .join()
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 201) {
+        throw ApiFailure(
+          response.statusCode,
+          'تعذر رفع الملف. راجع النوع والحجم والصلاحية.',
+        );
+      }
+      return jsonDecode(raw);
+    } on SocketException {
+      throw const ApiFailure(0, 'تعذر الاتصال. لم يُعَد رفع الملف تلقائيًا.');
+    } on TimeoutException {
+      throw const ApiFailure(
+        0,
+        'انتهت مهلة رفع الملف. حدّث الطلب قبل المحاولة.',
+      );
+    }
+  }
 }

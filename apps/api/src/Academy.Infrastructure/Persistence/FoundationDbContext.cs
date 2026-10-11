@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Infrastructure.Persistence;
 
-public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> options)
+public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbContext> options)
     : IdentityUserContext<ApplicationUser, Guid>(options)
 {
     public DbSet<Tenancy.Academy> Academies => Set<Tenancy.Academy>();
@@ -58,6 +58,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>
         {
@@ -222,7 +223,6 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(x => new { x.AcademyId, x.PlayerId, x.SportId, x.TrainingGroupId }).IsUnique();
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
-            entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId });
             entity.HasOne(x => x.Player).WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -438,7 +438,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.Property(x => x.Notes).HasMaxLength(500);
             entity.HasIndex(x => new { x.AcademyId, x.TrainingSessionId, x.SportEnrollmentId }).IsUnique();
             entity.HasOne(x => x.TrainingSession).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingSessionId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ConsumedSubscriptionPeriod).WithMany().HasForeignKey(x => new { x.AcademyId, x.ConsumedSubscriptionPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -491,7 +491,6 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id, x.SportId });
             entity.HasIndex(x => new { x.AcademyId, x.SportEnrollmentId, x.EvaluationDate });
             entity.HasOne(x => x.SportEnrollment).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.SportId }).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<SportEnrollment>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportEnrollmentId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.TrainingGroup).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.EvaluatedByUser).WithMany().HasForeignKey(x => x.EvaluatedByUserId).OnDelete(DeleteBehavior.Restrict);

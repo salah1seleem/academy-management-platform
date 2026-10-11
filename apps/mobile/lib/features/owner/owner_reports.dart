@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
@@ -6,7 +7,12 @@ import '../guardian/guardian_ui.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
-  const OwnerReports({super.key, required this.auth});
+  final Map<String, String> initialFilters;
+  const OwnerReports({
+    super.key,
+    required this.auth,
+    this.initialFilters = const {},
+  });
   @override
   State<OwnerReports> createState() => _OwnerReportsState();
 }
@@ -22,9 +28,12 @@ class _OwnerReportsState extends State<OwnerReports> {
           padding: const EdgeInsets.all(16),
           child: SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'financial', label: Text('المال')),
-              ButtonSegment(value: 'attendance', label: Text('الحضور')),
-              ButtonSegment(value: 'subscriptions', label: Text('الاشتراكات')),
+              ButtonSegment(value: 'financial', label: UiText('المال')),
+              ButtonSegment(value: 'attendance', label: UiText('الحضور')),
+              ButtonSegment(
+                value: 'subscriptions',
+                label: UiText('الاشتراكات'),
+              ),
             ],
             selected: {report},
             onSelectionChanged: (v) => setState(() => report = v.single),
@@ -47,7 +56,7 @@ class _OwnerReportsState extends State<OwnerReports> {
       return ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          const Text('ملخص قراءة فقط من فترات الاشتراك المخزنة.'),
+          const UiText('ملخص قراءة فقط من فترات الاشتراك المخزنة.'),
           AppCard(
             child: Column(
               children: [
@@ -65,32 +74,32 @@ class _OwnerReportsState extends State<OwnerReports> {
     key: ValueKey(kind),
     auth: auth,
     path: kind == 'financial'
-        ? '/api/v1/reports/financial?pageSize=20'
+        ? '/api/v1/reports/financial?${Uri(queryParameters: {'pageSize': '20', ...widget.initialFilters}).query}'
         : '/api/v1/reports/attendance?subject=players&pageSize=20',
     builder: (context, value) {
       final d = obj(value), items = rows(d['items']);
       return ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          Text(
+          UiText(
             kind == 'financial' ? 'ملخص التحصيلات' : 'ملخص الحضور المخزن',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          Text('إجمالي السجلات: ${d['totalCount']}'),
+          UiText('إجمالي السجلات: ${d['totalCount']}'),
           if (kind == 'financial')
-            Text('الإجمالي: ${money(d['totalAmount'], d['currency'])}'),
+            UiText('الإجمالي: ${money(d['totalAmount'], d['currency'])}'),
           for (final item in items)
             Card(
               child: ListTile(
-                title: Text(
+                title: UiText(
                   textOf(kind == 'financial' ? item['player'] : item['player']),
                 ),
-                subtitle: Text(
+                subtitle: UiText(
                   kind == 'financial'
                       ? '${item['receiptNumber']} · ${item['branch']}'
                       : '${day(item['date'])} · ${item['group']}',
                 ),
-                trailing: Text(
+                trailing: UiText(
                   kind == 'financial'
                       ? money(item['amount'], item['currency'])
                       : label(item['status']),
@@ -102,5 +111,5 @@ class _OwnerReportsState extends State<OwnerReports> {
     },
   );
   Widget _row(String name, Object? value) =>
-      ListTile(title: Text(name), trailing: Text(textOf(value)));
+      ListTile(title: UiText(name), trailing: UiText(textOf(value)));
 }
