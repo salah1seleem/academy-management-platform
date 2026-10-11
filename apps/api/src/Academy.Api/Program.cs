@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using Academy.Api.Auth;
 using Academy.Api.Configuration;
+using Academy.Api.Finance;
 using Academy.Api.Platform;
 using Academy.Api.Mobile;
 using Academy.Api.Demo;
@@ -330,6 +331,7 @@ app.MapStaffManagement();
 app.MapDailyStaffAttendance();
 app.MapPayroll();
 app.MapVersionedConfiguration();
+app.MapReceivables();
 
 if (args.Contains("--reset-football-demo"))
 {
@@ -346,6 +348,8 @@ if (app.Environment.IsEnvironment("Demo"))
         var db = configSeed.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var ids = await db.Academies.Where(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId || x.Id == FootballDemoSeed.AcademyId).Select(x => x.Id).ToListAsync();
         await AcademyConfigurationService.SeedDemo(db, ids);
+        if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
+            await ReceivableDemoSeed.SeedAsync(db);
         await PlatformIdentity.SeedDemo(app.Services);
     }
 }

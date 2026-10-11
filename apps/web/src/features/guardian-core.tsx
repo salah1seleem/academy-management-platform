@@ -7,6 +7,7 @@ import { AdminDataTable, EmptyState, ErrorState, FilterToolbar, LoadingState, Pa
 import { GuardianShell } from "../components/guardian-shell";
 import { csrfRequest } from "./dashboard-api";
 import { GuardianSportCatalog } from "./guardian-content";
+import { GuardianReceivables } from "./receivables";
 import { formatDateAr, formatMoneyAr, statusLabel, workflowStatusLabels } from "../lib/formatters";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 
@@ -29,6 +30,7 @@ export function GuardianHome() {
     <section id="children" className="guardian-section"><div className="guardian-section-title"><h2>الأبناء</h2><span>{data.children.length} ملفات مرتبطة</span></div>{data.children.length === 0 ? <EmptyState message="لا يوجد أبناء مرتبطون بهذا الحساب." /> : <div className="guardian-child-grid">{data.children.map(child => <article className="guardian-child-card" key={child.id}><div className="guardian-child-head"><span className="guardian-avatar">{child.arabicName[0]}</span><div><h3>{child.arabicName}</h3><small>{age(child.dateOfBirth, data.today)} سنوات</small></div></div><div className="sport-badges">{child.sports.map(item => <span key={item.id}>{item.sport}</span>)}</div><div className="subscription-mini">{child.sports.map(item => <p key={item.id}><b>{item.sport}</b><span className={`status-pill ${item.period?.status.toLowerCase() ?? "empty"}`}>{subscriptionText(item.period)}</span><Link href={`/guardian/renew/${item.id}`}>{!item.period ? "اختيار باقة والاشتراك" : item.period.status === "Expiring" || item.period.status === "Expired" ? "تجديد الآن" : "تجديد الاشتراك"}</Link></p>)}</div><Link className="guardian-card-cta" href={`/guardian/children/${child.id}`}>عرض الملف</Link></article>)}</div>}</section>
     <section className="guardian-section"><div className="guardian-section-title"><h2>رياضات الأبناء</h2><span>بدون تكرار</span></div><div className="sport-context-grid">{data.sportContexts.map(item => <article key={item.sportId}><span className="sport-context-icon">●</span><div><h3>{item.sport}</h3><p>{item.children.join("، ")}</p></div><b>{item.childCount}</b></article>)}</div></section>
     <GuardianSportCatalog />
+    <GuardianReceivables />
   </GuardianShell>;
 }
 

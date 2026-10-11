@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
+import '../shared/receivable_balances.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
@@ -26,21 +27,28 @@ class _OwnerReportsState extends State<OwnerReports> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'financial', label: UiText('المال')),
-              ButtonSegment(value: 'attendance', label: UiText('الحضور')),
-              ButtonSegment(
-                value: 'subscriptions',
-                label: UiText('الاشتراكات'),
-              ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final item in const {
+                'financial': 'المال',
+                'attendance': 'الحضور',
+                'receivables': 'الأرصدة',
+                'subscriptions': 'الاشتراكات',
+              }.entries)
+                ChoiceChip(
+                  label: UiText(item.value),
+                  selected: report == item.key,
+                  onSelected: (_) => setState(() => report = item.key),
+                ),
             ],
-            selected: {report},
-            onSelectionChanged: (v) => setState(() => report = v.single),
           ),
         ),
         Expanded(
-          child: report == 'subscriptions'
+          child: report == 'receivables'
+              ? ReceivableBalances(auth: widget.auth, staff: true)
+              : report == 'subscriptions'
               ? _subscription(widget.auth)
               : _report(widget.auth, report),
         ),

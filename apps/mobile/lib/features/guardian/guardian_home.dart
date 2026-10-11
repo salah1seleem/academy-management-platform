@@ -13,6 +13,7 @@ import '../shared/academy_news.dart';
 import 'sport_store.dart';
 import 'tournament_fees.dart';
 import '../shared/matches.dart';
+import '../shared/receivable_balances.dart';
 
 class GuardianHome extends StatelessWidget {
   final AuthController auth;
@@ -198,6 +199,11 @@ class GuardianHome extends StatelessWidget {
             localized(context, 'إيصالاتي', 'My receipts'),
             Icons.receipt_long_outlined,
             () => openPage(context, ReceiptsPage(auth: auth)),
+          ),
+          GLink(
+            localized(context, 'أرصدة الأسرة', 'Family balances'),
+            Icons.account_balance_wallet_outlined,
+            () => openPage(context, ReceivableBalancesPage(auth: auth)),
           ),
         ]);
       },

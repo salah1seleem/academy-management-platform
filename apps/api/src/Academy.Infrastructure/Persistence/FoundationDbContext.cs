@@ -60,6 +60,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         base.OnModelCreating(builder);
         ConfigurePlatformIdentity(builder);
         ConfigureStaffAccess(builder);
+        ConfigureReceivables(builder);
         ConfigureOperations(builder);
 
         builder.Entity<ApplicationUser>(entity =>

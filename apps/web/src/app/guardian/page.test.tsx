@@ -5,7 +5,7 @@ import GuardianPage from "./page";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 
 beforeEach(() => {
-  global.fetch = vi.fn(async () => new Response(JSON.stringify({ academyName: "أكاديمية النجوم الرياضية", guardianName: "سارة محمود", today: "2026-09-28", children: [], sportContexts: [] }), { status: 200 }));
+  global.fetch = vi.fn(async url => new Response(JSON.stringify(String(url).endsWith("/receivables") ? { outstanding: "0.00", overpaymentCredit: "0.00", items: [] } : { academyName: "أكاديمية النجوم الرياضية", guardianName: "سارة محمود", today: "2026-09-28", children: [], sportContexts: [] }), { status: 200 }));
 });
 
 describe("guardian subscription actions", () => {
