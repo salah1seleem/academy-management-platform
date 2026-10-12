@@ -48,7 +48,8 @@ describe("owner-review operations", () => {
     global.fetch = vi.fn((input, init) => {
       const url = String(input);
       if (url.includes("/auth/csrf")) return response({ token: "csrf" });
-      if (url.includes("/manage/product-sales")) { writes.push(init!); return writes.length === 1 ? response({ message: "انقطع الاتصال" }, 503) : response({ id: "sale", amount: 180, currency: "EGP" }); }
+      if (url.includes("/manage/product-sales/quote")) return response({ unitPrice: "90.00", amount: "180.00", currency: "EGP", stockQuantity: 3, cashEnabled: true, sessions: [{ id: "shift", name: "ورديتي" }] });
+      if (url.includes("/manage/product-sales") && init?.method === "POST") { writes.push(init); return writes.length === 1 ? response({ message: "انقطع الاتصال" }, 503) : response({ id: "sale", amount: "180.00", currency: "EGP" }); }
       if (url.includes("catalog")) return response({ arabicName: "حذاء", displayPrice: 100, discountPercentage: 10, stockQuantity: 3, isActive: true, currency: "EGP" });
       if (url.includes("options")) return response({ branches: [{ id: "b1", arabicName: "فرع تجريبي" }] });
       return response([]);
@@ -57,13 +58,16 @@ describe("owner-review operations", () => {
     await screen.findByText("حذاء");
     fireEvent.change(screen.getByLabelText("الفرع"), { target: { value: "b1" } });
     fireEvent.change(screen.getByLabelText("الكمية"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("طريقة الدفع"), { target: { value: "Cash" } });
+    await screen.findByLabelText("وردية التحصيل"); fireEvent.change(screen.getByLabelText("وردية التحصيل"), { target: { value: "shift" } });
     fireEvent.click(screen.getByRole("button", { name: "تأكيد التحصيل والبيع" }));
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "تأكيد التحصيل والبيع" }));
     expect(await screen.findByText("تم التحصيل وخصم المخزون")).toBeVisible();
     expect(writes).toHaveLength(2);
     expect(writes[0].headers).toEqual(writes[1].headers);
-    expect(JSON.parse(String(writes[0].body))).toEqual({ productId: "product", quantity: 2, branchId: "b1", playerId: null, paymentMethod: "Cash" });
+    expect(JSON.parse(String(writes[0].body))).toEqual({ productId: "product", quantity: 2, branchId: "b1", playerId: null, paymentMethod: "Cash", expectedAmount: "180.00", cashSessionId: "shift" });
+    expect(screen.getByLabelText("الفرع")).toBeDisabled();
   });
   it("creates a seven-day draft separately from publish, with automatic date metadata", async () => {
     const writes: unknown[] = [];

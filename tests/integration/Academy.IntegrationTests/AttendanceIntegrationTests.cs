@@ -26,18 +26,18 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
 
     [Fact] public async Task Session_generation_creates_expected_occurrence()
     {
-        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var from = await GenerationDate(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
-        var before = await db.TrainingSessions.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == from);
-        var created = await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from);
-        Assert.True(created > 0);
-        Assert.Equal(before + created, await db.TrainingSessions.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == from));
-        Assert.True(await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().TrainingSessions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == from && x.Source == TrainingSessionSource.RecurringSchedule));
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var f = await GenerationFixture(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
+        Assert.Equal(1, await generator.GenerateAsync(f.Academy, owner, f.Date, f.Date));
+        var session = Assert.Single(await db.TrainingSessions.Where(x => x.AcademyId == f.Academy).ToListAsync());
+        Assert.Equal(f.Group, session.TrainingGroupId); Assert.Equal(f.Date, session.SessionDate);
+        Assert.Equal(TrainingSessionSource.RecurringSchedule, session.Source); Assert.Equal(new TimeOnly(17, 0), session.StartTime);
     }
 
     [Fact] public async Task Session_generation_rerun_is_idempotent()
     {
-        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var from = await GenerationDate(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
-        Assert.True(await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from) > 0); Assert.Equal(0, await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from));
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var f = await GenerationFixture(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
+        Assert.Equal(1, await generator.GenerateAsync(f.Academy, owner, f.Date, f.Date)); Assert.Equal(0, await generator.GenerateAsync(f.Academy, owner, f.Date, f.Date));
+        Assert.Single(await db.TrainingSessions.Where(x => x.AcademyId == f.Academy).ToListAsync());
     }
 
     [Fact] public async Task Academy_A_cannot_access_Academy_B_session()
@@ -146,7 +146,19 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     private IQueryable<SubscriptionPeriod> EligiblePeriod(AsyncServiceScope scope, ScenarioData s) => scope.ServiceProvider.GetRequiredService<FoundationDbContext>().SubscriptionPeriods.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SportEnrollmentId == s.EnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen && x.StartDate <= new DateOnly(2026, 9, 22) && (x.EndDate == null || x.EndDate >= new DateOnly(2026, 9, 22))).OrderBy(x => x.StartDate);
     private static PlayerAttendance Attendance(ScenarioData s, Guid actor, DateTimeOffset now) => new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, TrainingSessionId = s.SessionId, TrainingGroupId = s.GroupId, SportEnrollmentId = s.EnrollmentId, Status = AttendanceStatus.NotRecorded, RecordedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now };
     private static async Task<Guid> OwnerId(AsyncServiceScope scope) => await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync();
-    private static async Task<DateOnly> GenerationDate(FoundationDbContext db) { var date = new DateOnly(2040, 1, 3); while (await db.TrainingSessions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == date)) date = date.AddDays(7); return date; }
+    private static async Task<(Guid Academy, Guid Group, DateOnly Date)> GenerationFixture(FoundationDbContext db)
+    {
+        // Academy-wide generation must not inherit unrelated test rosters or coach conflicts.
+        // Keep the production capacity guard intact; own the whole academy under test.
+        var academy = Guid.NewGuid(); var branch = Guid.NewGuid(); var sport = Guid.NewGuid(); var age = Guid.NewGuid(); var group = Guid.NewGuid(); var date = new DateOnly(2040, 1, 3);
+        db.Academies.Add(new() { Id = academy, ArabicName = "أكاديمية توليد اصطناعية", Slug = "generation-" + academy.ToString("N"), TimeZone = "Africa/Cairo", DefaultCurrency = "EGP" });
+        db.Branches.Add(new() { Id = branch, AcademyId = academy, ArabicName = "فرع اصطناعي" });
+        db.Sports.Add(new() { Id = sport, AcademyId = academy, ArabicName = "رياضة اصطناعية" });
+        db.AgeCategories.Add(new() { Id = age, AcademyId = academy, ArabicName = "فئة اصطناعية" });
+        db.TrainingGroups.Add(new() { Id = group, AcademyId = academy, BranchId = branch, SportId = sport, AgeCategoryId = age, ArabicName = "مجموعة توليد اصطناعية", Capacity = 1 });
+        db.RecurringSchedules.Add(new() { Id = Guid.NewGuid(), AcademyId = academy, TrainingGroupId = group, DayOfWeek = date.DayOfWeek, ValidFrom = date, ValidTo = date, StartTime = new(17, 0), EndTime = new(18, 0) });
+        await db.SaveChangesAsync(); return (academy, group, date);
+    }
 
     private async Task<HttpClient> GuardianClient() { var client = factory.CreateClient(); var request = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, await Csrf(client)); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); (await Post(client, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, await Csrf(client))).EnsureSuccessStatusCode(); return client; }
     private async Task StaffLogin(HttpClient client, string email) { if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(client, factory.Services); else (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode(); }

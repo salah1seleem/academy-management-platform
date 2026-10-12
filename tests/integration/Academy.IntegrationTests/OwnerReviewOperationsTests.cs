@@ -130,10 +130,10 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     }
     [Fact] public async Task Product_sale_uses_server_price_decrements_stock_once_and_rejects_changed_replay()
     {
-        using var c = await Owner(); var p = await Product(); var key = Guid.NewGuid().ToString(); var body = new { productId = p, quantity = 2, branchId = Slice2DemoSeed.CityBranchId, paymentMethod = "Cash", amount = 1 };
-        var r = await Send(c, "/api/v1/manage/product-sales", body, key); Assert.Equal(HttpStatusCode.OK, r.StatusCode); var saleResult = await r.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal(180m, saleResult.GetProperty("amount").GetDecimal());
+        using var c = await Owner(); var p = await Product(); var key = Guid.NewGuid().ToString(); var body = new { productId = p, quantity = 2, branchId = Slice2DemoSeed.CityBranchId, paymentMethod = "Online", expectedAmount = "180.00", amount = 1 };
+        var r = await Send(c, "/api/v1/manage/product-sales", body, key); Assert.Equal(HttpStatusCode.OK, r.StatusCode); var saleResult = await r.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal("180.00", saleResult.GetProperty("amount").GetString());
         Assert.Equal(HttpStatusCode.OK, (await Send(c, "/api/v1/manage/product-sales", body, key)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/manage/product-sales", new { productId = p, quantity = 2, branchId = Slice2DemoSeed.CityBranchId, paymentMethod = "Online" }, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/manage/product-sales", new { productId = p, quantity = 2, branchId = Slice2DemoSeed.CityBranchId, paymentMethod = "Cash", expectedAmount = "180.00" }, key)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/manage/product-sales", body, Guid.NewGuid().ToString())).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.Equal(1, await db.ProductSales.CountAsync(x => x.ProductId == p)); Assert.Equal(1, (await db.SportCatalogItems.SingleAsync(x => x.Id == p)).StockQuantity);
         var saleId = saleResult.GetProperty("id").GetGuid(); var report = await c.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?from=2026-01-01&to=2026-12-31&collectionType=Product&branchId={Slice2DemoSeed.CityBranchId}"); Assert.Contains(report.GetProperty("items").EnumerateArray(), x => x.GetProperty("collectionId").GetGuid() == saleId);

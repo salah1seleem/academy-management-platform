@@ -75,3 +75,15 @@ public sealed class CashReceiptPosting : TenantEntity
     public required string RequestHash { get; set; }
     public Receipt Receipt { get; set; } = null!;
 }
+
+public sealed class CashProductPosting : TenantEntity
+{
+    public Guid SessionId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid ProductSaleId { get; set; }
+    [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public Guid ActorUserId { get; set; }
+    public required string RequestHash { get; set; }
+    public Academy.Infrastructure.Operations.ProductSale ProductSale { get; set; } = null!;
+}

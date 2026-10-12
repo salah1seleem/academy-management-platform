@@ -3736,8 +3736,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("AcademyId", "Id");
-
                     b.HasIndex("AcademyId", "BranchId");
 
                     b.HasIndex("AcademyId", "PlayerId");
@@ -5743,6 +5741,73 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("CashMovements", null, t =>
                         {
                             t.HasCheckConstraint("CK_CashMovement_Sign", "(\"Kind\" = 'TransferIn' AND \"Amount\" > 0) OR (\"Kind\" = 'TransferOut' AND \"Amount\" < 0)");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.CashProductPosting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ProductSaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "ProductSaleId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SessionId", "BranchId");
+
+                    b.ToTable("CashProductPostings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CashProductPosting_Amount", "\"Amount\" > 0");
                         });
                 });
 
@@ -9968,6 +10033,37 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id", "BranchId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.CashProductPosting", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.ProductSale", "ProductSale")
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ProductSaleId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.CashSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SessionId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id", "BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProductSale");
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.CashReceiptPosting", b =>

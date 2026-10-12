@@ -45,6 +45,11 @@ it("failed authorization does not show stale money or controls", async () => {
   global.fetch = vi.fn(async () => response({}, 404)); render(<CashSessionDetail id="foreign" />); await screen.findByText("تعذر تحميل الصندوق أو أنه خارج صلاحياتك.");
   expect(screen.queryByText("الرصيد الدفتري")).not.toBeInTheDocument(); expect(screen.queryByLabelText("المبلغ الموجود فعليًا")).not.toBeInTheDocument();
 });
+it("links typed product cash postings without pretending they are subscription receipts", async () => {
+  global.fetch = vi.fn(async () => response({ name: "صندوق متجر", currency: "EGP", balance: "280.00", variance: null, canClose: false, session: { openingAmount: "100.00", openedAtUtc: "2026-09-28T06:00:00Z" }, movements: [], productSales: [{ id: "posting", productSaleId: "sale", amount: "180.00", currency: "EGP", quantity: 2, productName: "طقم اصطناعي", createdAtUtc: "2026-09-28T06:00:00Z" }] }));
+  render(<CashSessionDetail id="session" />); await screen.findByText("مبيعات المنتجات النقدية"); expect(screen.getByText("طقم اصطناعي")).toBeVisible();
+  expect(screen.getByRole("link", { name: "تفاصيل البيع" })).toHaveAttribute("href", "/dashboard/product-sales/sale"); expect(screen.queryByText("إيصالات القبض في الوردية")).not.toBeInTheDocument();
+});
 it("closing is explicit, optional reason and navigates back only after confirmed write", async () => {
   vi.spyOn(window, "confirm").mockReturnValue(true); const writes: unknown[] = [];
   global.fetch = vi.fn(async (url, init) => {

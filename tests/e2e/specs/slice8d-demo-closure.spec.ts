@@ -28,6 +28,17 @@ async function createAdminRenewal(page: Page, testInfo?: TestInfo) {
   // Independent synthetic enrollment: a failed prior run must not leave this
   // journey blocked behind another test's pending renewal for NG-0003.
   const branchId = "31000000-0000-0000-0000-000000000001", sportId = "32000000-0000-0000-0000-000000000001", planId = "51000000-0000-0000-0000-000000000001";
+  // This financial journey owns its administrator and explicit grants. Do not
+  // promote the shared legacy demo admin or depend on another spec doing so.
+  await staffLogin(page, "owner.nogoom@example.test");
+  const ownerCsrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
+  const email = `renewal.review.${crypto.randomUUID()}@example.test`;
+  const created = await page.request.post("/api/v1/manage/staff", { headers: { "X-CSRF-TOKEN": ownerCsrf.token, "Idempotency-Key": crypto.randomUUID() }, data: { name: "إداري تجديد اصطناعي", email, phone: `010${Date.now().toString().slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "مراجعة تجديد" } });
+  expect(created.ok(), await created.text()).toBe(true); const member = await created.json();
+  const options = await page.request.get(`/api/v1/manage/staff/${member.id}/access`).then(r => r.json());
+  const allowed = ["academy", "players", "subscriptions", "payments", "finance", "discounts"];
+  const access = await page.request.put(`/api/v1/manage/staff/${member.id}/access`, { headers: { "X-CSRF-TOKEN": ownerCsrf.token }, data: { allBranches: false, branches: [branchId], actions: options.modules.map((module: string) => ({ module, read: allowed.includes(module), add: allowed.includes(module), edit: allowed.includes(module), delete: false })) } });
+  expect(access.ok(), await access.text()).toBe(true); await staffLogin(page, email);
   const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
   async function write(path: string, data: unknown) {
     const r = await page.request.post(path, { headers: { "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": crypto.randomUUID() }, data });
