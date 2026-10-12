@@ -6,6 +6,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import 'coach_evaluation.dart';
+import '../shared/past_attendance.dart';
 
 class CoachAttendance extends StatefulWidget {
   final AuthController auth;
@@ -201,6 +202,28 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                 FilledButton(
                   onPressed: busy ? null : save,
                   child: UiText(busy ? 'جارٍ الحفظ…' : 'حفظ الحضور'),
+                ),
+              if (data!['canRequestCorrection'] == true)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.history_rounded),
+                  label: const UiText('طلب تصحيح يوم سابق'),
+                  onPressed: () async {
+                    final sent = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => PastAttendanceRequestPage(
+                          auth: widget.auth,
+                          sessionId: widget.sessionId,
+                          players: rows(data!['players']),
+                        ),
+                      ),
+                    );
+                    if (mounted) await load();
+                    if (sent == true && mounted) {
+                      setState(
+                        () => message = 'أُرسل طلب التصحيح لاعتماد المالك؛ لم يتغير الحضور بعد.',
+                      );
+                    }
+                  },
                 ),
             ],
           ),

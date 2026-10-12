@@ -33,7 +33,7 @@ it("does not claim a refreshed snapshot when the post-save reload fails", async 
   fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" })); await screen.findByText(/تعذر تحديث الكشف/); expect(screen.queryByText("تم حفظ الحضور بنجاح.")).not.toBeInTheDocument();
 });
 for (const manage of [false, true]) it(`staff attendance uses server permissions (${manage}) and row versions`, async () => {
-  global.fetch = vi.fn(async (url, init) => ({ ok: true, json: async () => String(url).endsWith("/my-permissions") ? manage ? ["attendance.manage"] : ["attendance.read"] : String(url).endsWith("/csrf") ? { token: "test" } : init?.method === "PUT" ? {} : [{ academyMembershipId: "c", name: "مدرب اصطناعي", role: "Coach", attendanceStatus: "Late", version: 73 }] })) as unknown as typeof fetch;
+  global.fetch = vi.fn(async (url, init) => ({ ok: true, json: async () => String(url).endsWith("/correction-context") ? {canManageAttendance:manage,canRequestCorrection:false} : String(url).endsWith("/my-permissions") ? manage ? ["attendance.manage"] : ["attendance.read"] : String(url).endsWith("/csrf") ? { token: "test" } : init?.method === "PUT" ? {} : [{ academyMembershipId: "c", name: "مدرب اصطناعي", role: "Coach", attendanceStatus: "Late", version: 73 }] })) as unknown as typeof fetch;
   render(<StaffAttendance sessionId="s" />); await screen.findByText("مدرب اصطناعي");
   if (!manage) { expect(screen.queryByRole("button", { name: "حفظ حضور المدربين" })).not.toBeInTheDocument(); expect(screen.getByText("متأخر")).toBeVisible(); return; }
   fireEvent.click(screen.getByRole("button", { name: "معتذر" })); fireEvent.click(screen.getByRole("button", { name: "حفظ حضور المدربين" }));

@@ -153,7 +153,7 @@ public static class Slice4Endpoints
         } catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
     }
 
-    private static async Task<IResult> PlayerRoster(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization, TimeProvider clock)
+    private static async Task<IResult> PlayerRoster(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization, TimeProvider clock, AttendanceCorrectionService corrections)
     {
         var t = (await tenant.ResolveAsync())!; var session = await AccessibleSession(id, tenant, principal, db); if (session is null) return Results.NotFound();
         var enrollments = await db.SportEnrollments.AsNoTracking().Include(x => x.Player).Where(x => x.AcademyId == t.AcademyId && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, session.Id) && x.IsActive).OrderBy(x => x.Player.ArabicName).ToListAsync();
@@ -166,9 +166,9 @@ public static class Slice4Endpoints
             attendance.TryGetValue(e.Id, out var record); var candidates = periods.Where(x => x.SportEnrollmentId == e.Id && (x.ServiceKindSnapshot ?? x.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && PlanCatalog.FormatMatches(e.RegistrationFormat, x.TrainingFormatSnapshot ?? x.SubscriptionPlan.TrainingFormat)).ToList(); var period = candidates.FirstOrDefault(x => (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || x.RemainingSessions is > 0) ?? candidates.FirstOrDefault(); var type = period?.SubscriptionPlan.PlanType;
             return new { sportEnrollmentId = e.Id, playerId = e.PlayerId, e.Player.PlayerCode, e.Player.ArabicName, e.Player.PhotoReference, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString(), version = record?.Version ?? 0, subscriptionPlan = period?.SubscriptionPlan.ArabicName, subscriptionType = type?.ToString(), remainingSessions = type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined ? period?.RemainingSessions : null, sessionConsumed = record?.ConsumedSubscriptionPeriodId is not null, compensatory = compensation.Contains(e.Id), warning = compensation.Contains(e.Id) ? "حصة تعويضية معتمدة؛ لا خصم من الرصيد الأصلي" : period is null ? "لا يوجد اشتراك مؤهل" : type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined && period.RemainingSessions == 0 ? "الرصيد غير كافٍ" : null };
         });
-        var canManageAttendance = (await authorization.AuthorizeAsync(principal, AcademyPermissions.AttendanceManage)).Succeeded;
+        var context = await corrections.Context(id);
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
-        return Results.Ok(new { canManageAttendance, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
+        return Results.Ok(new { canManageAttendance=context.CanManageAttendance, canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
     }
 
     private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service)

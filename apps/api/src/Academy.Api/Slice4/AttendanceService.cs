@@ -12,15 +12,16 @@ public sealed record AttendanceSaveResult(Guid SubjectId, string Status, bool Se
 
 public sealed partial class AttendanceService(FoundationDbContext db, TimeProvider clock)
 {
-    public async Task<IReadOnlyList<AttendanceSaveResult>> SavePlayersAsync(Guid academyId, Guid sessionId, Guid actorId, IReadOnlyList<PlayerAttendanceChange> changes, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AttendanceSaveResult>> SavePlayersAsync(Guid academyId, Guid sessionId, Guid actorId, IReadOnlyList<PlayerAttendanceChange> changes, CancellationToken ct = default, Guid? approvedCorrectionId = null)
     {
         if (changes.Count == 0 || changes.Select(x => x.SportEnrollmentId).Distinct().Count() != changes.Count) throw new AttendanceValidationException("قائمة الحضور فارغة أو تحتوي لاعبًا مكررًا.");
         if (changes.Any(x => !Enum.IsDefined(x.Status))) throw new AttendanceValidationException("حالة حضور اللاعب غير صحيحة.");
-        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        await using var tx = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct) : null;
         await LockAsync(academyId, sessionId, Guid.Empty, ct);
         var session = await db.TrainingSessions.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.Id == sessionId, ct) ?? throw new AttendanceNotFoundException();
         if (session.Status == TrainingSessionStatus.Cancelled) throw new AttendanceConflictException("لا يمكن تسجيل الحضور لحصة ملغاة.");
         if (session.SessionDate > await AttendanceCalendar.TodayAsync(academyId, db, clock, ct)) throw new AttendanceValidationException("لا يمكن تسجيل الحضور بتاريخ مستقبلي.");
+        await ValidatePast(session, actorId, AttendanceCorrectionKind.Players, approvedCorrectionId, ct);
         var ids = changes.Select(x => x.SportEnrollmentId).ToArray();
         var enrollments = await db.SportEnrollments.FromSqlInterpolated($"SELECT *, xmin FROM \"SportEnrollments\" WHERE \"AcademyId\"={academyId} AND \"Id\"=ANY({ids}) ORDER BY \"Id\" FOR UPDATE").AsNoTracking().ToArrayAsync(ct);
         foreach (var player in enrollments.Select(e => e.PlayerId).Distinct().Order()) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Players\" WHERE \"AcademyId\"={academyId} AND \"Id\"={player} FOR UPDATE", ct);
@@ -53,18 +54,19 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
             if (previous != change.Status || db.Entry(attendance).State == EntityState.Added) { attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow(); }
             results.Add(new AttendanceSaveResult(change.SportEnrollmentId, change.Status.ToString(), consumed, remaining, warning));
         }
-        await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return results;
+        await db.SaveChangesAsync(ct); if(tx is not null) await tx.CommitAsync(ct); return results;
     }
 
-    public async Task<IReadOnlyList<AttendanceSaveResult>> SaveStaffAsync(Guid academyId, Guid sessionId, Guid actorId, IReadOnlyList<StaffAttendanceChange> changes, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AttendanceSaveResult>> SaveStaffAsync(Guid academyId, Guid sessionId, Guid actorId, IReadOnlyList<StaffAttendanceChange> changes, CancellationToken ct = default, Guid? approvedCorrectionId = null)
     {
         if (changes.Count == 0 || changes.Select(x => x.AcademyMembershipId).Distinct().Count() != changes.Count) throw new AttendanceValidationException("قائمة حضور الجهاز الفني غير صالحة.");
         if (changes.Any(x => !Enum.IsDefined(x.Status))) throw new AttendanceValidationException("حالة حضور الموظف غير صحيحة.");
-        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        await using var tx = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct) : null;
         await LockAsync(academyId, sessionId, Guid.Empty, ct);
         var session = await db.TrainingSessions.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.Id == sessionId, ct) ?? throw new AttendanceNotFoundException();
         if (session.Status == TrainingSessionStatus.Cancelled) throw new AttendanceConflictException("لا يمكن تسجيل الحضور لحصة ملغاة.");
         if (session.SessionDate > await AttendanceCalendar.TodayAsync(academyId, db, clock, ct)) throw new AttendanceValidationException("لا يمكن تسجيل الحضور بتاريخ مستقبلي.");
+        await ValidatePast(session, actorId, AttendanceCorrectionKind.Staff, approvedCorrectionId, ct);
         var ids = changes.Select(x => x.AcademyMembershipId).ToArray();
         var assigned = await db.AcademyMemberships.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && FoundationDbContext.IsSessionStaffAssigned(academyId,x.Id,session.Id), ct);
         if (assigned != ids.Length) throw new AttendanceNotFoundException();
@@ -81,7 +83,14 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
             if (attendance.Status != change.Status || db.Entry(attendance).State == EntityState.Added) { attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow(); }
             output.Add(new AttendanceSaveResult(change.AcademyMembershipId, change.Status.ToString(), false, null, null));
         }
-        await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return output;
+        await db.SaveChangesAsync(ct); if(tx is not null) await tx.CommitAsync(ct); return output;
+    }
+
+    private async Task ValidatePast(TrainingSession session, Guid actor, AttendanceCorrectionKind kind, Guid? correction, CancellationToken ct)
+    {
+        if(session.SessionDate >= await AttendanceCalendar.TodayAsync(session.AcademyId,db,clock,ct)) return;
+        if(!correction.HasValue || !await db.AttendanceCorrections.AnyAsync(c=>c.AcademyId==session.AcademyId&&c.Id==correction&&c.TrainingSessionId==session.Id&&c.Kind==kind&&c.State==AttendanceCorrectionState.Applying&&c.DecidedByUserId==actor&&c.AppliedAtUtc==null&&c.ExpiresAtUtc>clock.GetUtcNow(),ct))
+            throw new AttendanceConflictException("انتهى يوم الحصة؛ أرسل طلب تصحيح بسبب واضح لاعتماد المالك قبل تغيير الحضور.");
     }
 
     private async Task<(bool consumed, int? remaining, string? warning)> ConsumeAsync(PlayerAttendance attendance, DateOnly sessionDate, Guid actorId, CancellationToken ct)

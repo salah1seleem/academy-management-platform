@@ -52,6 +52,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<AccessEntitlement>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<EntryVisit>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<SessionCoachOverride>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<AttendanceCorrection>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ResourceClosure>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<GroupResourceSchedule>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<TrainingScheduleRevision>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -138,6 +139,9 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        foreach (var entry in ChangeTracker.Entries<AttendanceCorrection>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if (entry.State==EntityState.Deleted || entry.OriginalValues.GetValue<AttendanceCorrectionState>(nameof(AttendanceCorrection.State)) is AttendanceCorrectionState.Approved or AttendanceCorrectionState.Rejected || entry.Properties.Any(p=>p.IsModified && p.Metadata.Name is not (nameof(AttendanceCorrection.State) or nameof(AttendanceCorrection.DecidedByUserId) or nameof(AttendanceCorrection.DecidedByMembershipId) or nameof(AttendanceCorrection.DecidedAtUtc) or nameof(AttendanceCorrection.DecisionReason) or nameof(AttendanceCorrection.AppliedAtUtc) or nameof(AttendanceCorrection.UpdatedAtUtc))))
+                throw new InvalidOperationException("Attendance correction source and terminal decisions are immutable.");
         foreach (var entry in ChangeTracker.Entries<PlayerEvaluation>().Where(e=>e.State==EntityState.Modified))
             if(new[]{nameof(PlayerEvaluation.TrainingSessionId),nameof(PlayerEvaluation.SportEnrollmentId),nameof(PlayerEvaluation.TrainingGroupId),nameof(PlayerEvaluation.SportId),nameof(PlayerEvaluation.EvaluationDate),nameof(PlayerEvaluation.EvaluatedByUserId)}.Any(p=>entry.Property(p).IsModified)) throw new InvalidOperationException("سياق التقييم ثابت؛ لا ينقل التقييم إلى لاعب أو حصة أو مدرب آخر.");
         foreach (var entry in ChangeTracker.Entries<PlayerCard>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))

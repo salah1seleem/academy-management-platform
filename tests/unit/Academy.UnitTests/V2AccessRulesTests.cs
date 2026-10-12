@@ -20,6 +20,7 @@ public class V2AccessRulesTests
     [InlineData("PUT", "/api/v1/manage/structure/sessions/123/coach-override", "Edit")]
     [InlineData("PUT", "/api/v1/manage/groups/123/status", "Edit")]
     [InlineData("POST", "/api/v1/payments/123/approve", "Edit")]
+    [InlineData("POST", "/api/v1/attendance/sessions/123/corrections", "Edit")]
     [InlineData("DELETE", "/api/v1/people/players/123", "Delete")]
     public void Writes_do_not_inherit_read_permission(string method, string path, string operation) => Assert.Equal(operation, StaffAccessRules.Operation(method, path));
     [Fact] public void Unknown_modules_fail_closed() => Assert.Null(StaffAccessRules.ForPath("/api/v1/new-feature"));

@@ -42,7 +42,7 @@ const existingModules: NavModule[] = [
   { id: "payroll", title: "الرواتب", group: "التحليل", icon: CircleDollarSign, links: [{ label: "الرواتب والمستحقات", href: "/dashboard/payroll" }, { label: "الخصومات", href: "/dashboard/payroll/deductions" }, { label: "المبالغ الإضافية", href: "/dashboard/payroll/requests" }] },
   { id: "nutrition", title: "التغذية والصحة", group: "الإدارة", icon: Layers3, links: [{ label: "التغذية والصحة", href: "/dashboard/content/nutrition" }] },
   { id: "attendance", title: "الحضور", group: "التشغيل", icon: ClipboardCheck, links: [
-    { label: "حضور اللاعبين", href: "/dashboard/attendance/sessions" }, { label: "حضور المدربين", href: "/dashboard/attendance/staff" },
+    { label: "حضور اللاعبين", href: "/dashboard/attendance/sessions" }, { label: "حضور المدربين", href: "/dashboard/attendance/staff" }, { label: "تصحيح الأيام السابقة", href: "/dashboard/attendance/corrections" },
   ] },
   { id: "evaluations", title: "التقييمات", group: "التشغيل", icon: Star, links: [
     { label: "تقييمات اللاعبين", href: "/dashboard/evaluations" }, { label: "معايير التقييم", href: "/dashboard/evaluations/criteria" },

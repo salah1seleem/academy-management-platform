@@ -100,6 +100,7 @@ builder.Services.AddSingleton<DatabaseTicketStore>();
 builder.Services.AddSingleton<IPostConfigureOptions<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>, IdentityCookieOptions>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentTenant>();
+builder.Services.AddScoped<AttendanceCorrectionService>();
 builder.Services.AddScoped<AcademyConfigurationService>();
 builder.Services.AddScoped<IAuthorizationHandler, TenantPermissionHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, PlatformAccessHandler>();
@@ -335,6 +336,7 @@ app.MapCoachProvisioning();
 app.MapSlice2DashboardEndpoints();
 app.MapSlice3Endpoints();
 app.MapSlice4Endpoints();
+app.MapAttendanceCorrections();
 app.MapPlayerCards();
 app.MapSlice5Endpoints();
 app.MapSlice6Endpoints();
@@ -399,6 +401,10 @@ if (app.Environment.IsEnvironment("Demo"))
                 await Academy.Api.Facilities.VisitDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), configSeed.ServiceProvider.GetRequiredService<CollectionService>(), app.Services.GetRequiredService<TimeProvider>());
             }
             if (app.Configuration.GetValue<bool>("Demo:CoachOverrideSeedEnabled")) await CoachOverrideDemoSeed.Seed(db,configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(),app.Services.GetRequiredService<TimeProvider>());
+            if (app.Configuration.GetValue<bool>("Demo:PastAttendanceSeedEnabled")) {
+                await AttendanceStatesDemoSeed.Seed(db,configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+                await PastAttendanceDemoSeed.Seed(db,app.Services.GetRequiredService<TimeProvider>());
+            }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
         }
         await PlatformIdentity.SeedDemo(app.Services);

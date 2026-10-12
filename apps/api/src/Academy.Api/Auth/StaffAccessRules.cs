@@ -50,6 +50,7 @@ public static class StaffAccessRules
     }
     public static string Operation(string method, string path)
     {
+        if (method == "POST" && path.StartsWith("/api/v1/attendance/sessions/") && path.EndsWith("/corrections")) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/manage/structure/sessions/") && path.EndsWith("/coach-override/preview")) return "Read";
         if (method == "POST" && path.StartsWith("/api/v1/facilities/visits/") && path.EndsWith("/exit")) return "Edit";
         // Timetable service rechecks Add for the first schedule or Edit for an existing one under locks.
