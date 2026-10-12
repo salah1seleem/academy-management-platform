@@ -10,6 +10,7 @@ const regressionSeeds = [
   "CashRegisters", "CollectionFunds", "Facilities", "ResourceTimetable",
   "UnassignedEnrollment", "Observation", "Visit", "CoachOverride",
   "GroupPlacement", "PastAttendance", "AttendanceDraft",
+  "ProviderQuarantine",
 ].map(name => `Demo__${name}SeedEnabled=true`).join(" ");
 
 const localConnectionFallback = process.env.ConnectionStrings__Default

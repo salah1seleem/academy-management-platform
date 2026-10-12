@@ -163,6 +163,7 @@ public sealed class PaymentRequest : TenantEntity
 
 public sealed class PaymentProviderEvent : TenantEntity
 {
+    public string? EnvelopeHash { get; set; }
     public Guid PaymentRequestId { get; set; }
     public required string Provider { get; set; }
     public required string ProviderEventId { get; set; }

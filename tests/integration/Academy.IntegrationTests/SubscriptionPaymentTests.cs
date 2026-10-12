@@ -14,7 +14,7 @@ using Microsoft.Extensions.Hosting;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class SubscriptionPaymentTests : IAsyncLifetime
+public sealed partial class SubscriptionPaymentTests : IAsyncLifetime
 {
     private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
     private Factory factory = null!;

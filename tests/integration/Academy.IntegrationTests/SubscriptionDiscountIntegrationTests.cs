@@ -27,7 +27,10 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
     public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); route = await InternalGatewayRouteScope.Begin(factory.Services); }
     public async Task DisposeAsync()
     {
-        await using var scope = Scope(); var db = Db(scope); var ids = renewals.Distinct().ToArray();
+        await using var scope = Scope(); var db = Db(scope);
+        // Signed discrepancies are immutable evidence; retain their synthetic source graph too.
+        var retained = await db.ProviderEventQuarantines.Select(x => x.PaymentRequest.RenewalRequestId).ToArrayAsync();
+        var ids = renewals.Distinct().Except(retained).ToArray();
         if (ids.Length > 0)
         {
             var payments = await db.PaymentRequests.Where(x => ids.Contains(x.RenewalRequestId)).Select(x => x.Id).ToArrayAsync();

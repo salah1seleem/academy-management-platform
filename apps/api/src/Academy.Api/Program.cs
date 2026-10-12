@@ -366,6 +366,7 @@ app.MapPayroll();
 app.MapVersionedConfiguration();
 app.MapReceivables();
 app.MapCashRegisters();
+app.MapProviderQuarantine();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
@@ -391,6 +392,7 @@ if (app.Environment.IsEnvironment("Demo"))
         {
             await ReceivableDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:ProviderQuarantineSeedEnabled")) await ProviderQuarantineDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:CashRegistersSeedEnabled"))
             {
                 await CashRegisterDemoSeed.Seed(db);

@@ -62,6 +62,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureStaffAccess(builder);
         ConfigureReceivables(builder);
         ConfigureCashRegisters(builder);
+        ConfigureProviderQuarantine(builder);
         ConfigurePlanPublication(builder);
         ConfigureDiscountPricing(builder);
         ConfigureImports(builder);
@@ -392,6 +393,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.Property(x => x.EventType).HasMaxLength(50); entity.Property(x => x.RawStatus).HasMaxLength(50);
             entity.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(20); entity.Property(x => x.Amount).HasPrecision(18, 2);
             entity.Property(x => x.Currency).HasMaxLength(3).IsFixedLength(); entity.Property(x => x.ProcessingResult).HasMaxLength(100);
+            entity.Property(x => x.EnvelopeHash).HasMaxLength(64);
             entity.HasIndex(x => new { x.Provider, x.ProviderEventId }).IsUnique();
             entity.HasOne(x => x.PaymentRequest).WithMany().HasForeignKey(x => new { x.AcademyId, x.PaymentRequestId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         });

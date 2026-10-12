@@ -49,6 +49,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<CashProductPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashRefundPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashReceiptVoid>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ProviderEventQuarantine>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashTransfer>(b, x => RequestBranchIds.Contains(x.BranchId) && RequestBranchIds.Contains(x.ToBranchId));
         BranchFilter<TrainingGroup>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<SportEnrollment>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -161,7 +162,7 @@ public sealed partial class FoundationDbContext
                 throw new InvalidOperationException("سجل الدخول ثابت؛ يسمح بتسجيل الخروج مرة واحدة فقط.");
         if (ChangeTracker.Entries().Any(e => e.Entity is SessionCoachOverride or AccessEntitlement or ResourceObservation or ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
-        if (ChangeTracker.Entries().Any(e => e.Entity is CashRegister or CashTransfer or CashMovement or CashReceiptPosting or CashProductPosting or CashRefundPosting or CashReceiptVoid && e.State is EntityState.Modified or EntityState.Deleted))
+        if (ChangeTracker.Entries().Any(e => e.Entity is CashRegister or CashTransfer or CashMovement or CashReceiptPosting or CashProductPosting or CashRefundPosting or CashReceiptVoid or ProviderEventQuarantine && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("سجل الصندوق مثبت ولا يعدل أو يحذف.");
         foreach(var entry in ChangeTracker.Entries<CashierAssignment>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(entry.State==EntityState.Deleted || entry.Properties.Any(p=>p.IsModified && p.Metadata.Name is not (nameof(CashierAssignment.IsActive) or nameof(CashierAssignment.UpdatedAtUtc))))
