@@ -460,7 +460,8 @@ footer {
 .player-identity small, .attendance-roster small { display: block; margin-block-start: .25rem; color: var(--muted); }
 .player-identity em { display: block; margin-block-start: .3rem; color: var(--warning); font-size: .78rem; font-style: normal; }
 .avatar { display: grid; flex: 0 0 2.7rem; width: 2.7rem; height: 2.7rem; color: white; background: var(--primary); border-radius: 50%; place-items: center; font-weight: 900; }
-.status-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }
+.status-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.status-picker:disabled button { cursor: not-allowed; opacity: .65; }
 .player-card-panel h2, .player-card-lookup summary { display: flex; align-items: center; gap: .5rem; }
 .player-card-paper { display: grid; justify-items: center; gap: .6rem; margin: 1rem auto; padding: 1.5rem; border: 1px solid var(--border); border-radius: 1.25rem; max-width: 22rem; background: white; color: #172238; text-align: center; }
 .player-card-paper img { width: min(100%, 256px); height: auto; background: white; }

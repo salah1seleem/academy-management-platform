@@ -14,9 +14,9 @@ public sealed record AttendanceCorrectionItem(Guid SubjectId, AttendanceStatus S
 public sealed record AttendanceCorrectionWrite(AttendanceCorrectionKind Kind, AttendanceCorrectionItem[] Items, string? Reason);
 public sealed record AttendanceCorrectionDecision(uint ExpectedVersion, string? Reason);
 public sealed record AttendanceCorrectionSnapshot(Guid SubjectId, AttendanceStatus Before, AttendanceStatus After, uint Version);
-public sealed record AttendanceCorrectionContext(bool IsPast, bool CanManageAttendance, bool CanRequestCorrection, bool CanApproveCorrection);
+public sealed record AttendanceCorrectionContext(bool IsPast, bool CanManageAttendance, bool CanRequestCorrection, bool CanApproveCorrection, string? DraftLease = null, string? DraftScope = null, DateTimeOffset? DraftExpiresAtUtc = null);
 
-public sealed class AttendanceCorrectionService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor http, IAuthorizationService authorization, AttendanceService attendance, TimeProvider clock)
+public sealed class AttendanceCorrectionService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor http, IAuthorizationService authorization, AttendanceService attendance, TimeProvider clock, AttendanceDraftGuard drafts)
 {
     private static string Hash(object body)=>Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(body)));
     private async Task<TenantMembership> Authority(bool write, bool approve=false)
@@ -52,7 +52,8 @@ public sealed class AttendanceCorrectionService(FoundationDbContext db, CurrentT
         var t=await tenant.ResolveAsync()??throw new FacilityRejected("يلزم تسجيل الدخول.",401);var s=await Session(id);var past=s.SessionDate<await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock);var manage=(await authorization.AuthorizeAsync(http.HttpContext!.User,http.HttpContext,AcademyPermissions.AttendanceManage)).Succeeded;
         if(t.Role==AcademyRole.Coach&&!await db.TrainingSessions.AnyAsync(x=>x.Id==id&&FoundationDbContext.IsSessionStaffAssigned(t.AcademyId,t.MembershipId,id)))throw new FacilityRejected("الحصة غير متاحة.",404);
         if(t.Role==AcademyRole.AcademyAdmin&&await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants))manage=manage&&await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="attendance"&&g.IsActive&&g.Read&&g.Edit);
-        return new(past,!past&&s.SessionDate==await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock)&&s.Status!=TrainingSessionStatus.Cancelled&&manage,past&&s.Status!=TrainingSessionStatus.Cancelled&&manage&&t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,t.Role==AcademyRole.AcademyOwner);
+        var draft=drafts.Issue(t,http.HttpContext!.User,id);
+        return new(past,!past&&s.SessionDate==await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock)&&s.Status!=TrainingSessionStatus.Cancelled&&manage,past&&s.Status!=TrainingSessionStatus.Cancelled&&manage&&t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin,t.Role==AcademyRole.AcademyOwner,draft.Token,draft.Scope,draft.Expires);
     }
     public async Task<object> Request(Guid id,AttendanceCorrectionWrite body,string key)
     {

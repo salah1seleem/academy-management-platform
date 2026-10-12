@@ -5,12 +5,12 @@ import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, PageH
 import { AttendanceChoice, IdentityMark } from "../components/sports-ui";
 import { PlayerCardLookup } from "./player-card";
 import { PastAttendanceRequest } from "./attendance-corrections";
-import { csrfRequest } from "./dashboard-api";
+import { DashboardRequestError } from "./dashboard-api";
 import { formatSessionDateAr, formatTimeAr } from "../lib/formatters";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
+import { AttendanceSnapshot, AttendanceSyncNotice, useAttendanceSync } from "./attendance-sync";
 
 type Session = { id: string; trainingGroupId: string; sessionDate: string; startTime: string; endTime: string; status: string; group: string; sport: string; branch: string; playerCount: number; recorded: number; present?: number; absent?: number; coaches?: string[]; staff?: { id: string; name: string; attendanceStatus: string }[] };
-const attendanceValues: Record<string, number> = { NotRecorded: 1, Present: 2, Absent: 3, Late: 4, Excused: 5 };
 const attendanceLabels: Record<string, string> = { Present: "حاضر", Late: "متأخر", Excused: "معتذر", Absent: "غائب", NotRecorded: "لم يُسجل" };
 export function TrainingSessionsList({ staffOnly = false, initialGroupId = "", playerId = "" }: { staffOnly?: boolean; initialGroupId?: string; playerId?: string }) {
   const defaults = useDateFilterDefaults();
@@ -31,44 +31,69 @@ export function TrainingSessionsList({ staffOnly = false, initialGroupId = "", p
     </section></>;
 }
 
-type Roster = { canManageAttendance: boolean; canRequestCorrection?: boolean; isPast?: boolean; lastSynchronizedAtUtc?: string; session: { id: string; sessionDate: string; startTime: string; endTime: string; status: string; group: string; sport: string; branch: string }; players: PlayerRow[] };
+type Roster = { canManageAttendance: boolean; canRequestCorrection?: boolean; isPast?: boolean; draftLease?: string; draftScope?: string; draftExpiresAtUtc?: string; lastSynchronizedAtUtc?: string; session: { id: string; sessionDate: string; startTime: string; endTime: string; status: string; group: string; sport: string; branch: string }; players: PlayerRow[] };
 type PlayerRow = { sportEnrollmentId: string; playerId: string; playerCode: string; arabicName: string; photoReference?: string; attendanceStatus: string; version?: number; subscriptionPlan?: string; subscriptionType?: string; remainingSessions?: number; sessionConsumed: boolean; warning?: string };
 export function PlayerAttendance({ sessionId, playerId = "" }: { sessionId: string; playerId?: string }) {
-  const [data, setData] = useState<Roster | null>(null); const [states, setStates] = useState<Record<string, string>>({}); const [search, setSearch] = useState(""); const [error, setError] = useState(""); const [message, setMessage] = useState(""); const [saving, setSaving] = useState(false);
+  return <PlayerAttendancePage key={sessionId} sessionId={sessionId} playerId={playerId} />;
+}
+function PlayerAttendancePage({ sessionId, playerId }: { sessionId: string; playerId: string }) {
+  const [data, setData] = useState<Roster | null>(null); const [states, setStates] = useState<Record<string, string>>({}); const [search, setSearch] = useState(""); const [loadError, setLoadError] = useState("");
+  const path = `/api/v1/attendance/sessions/${sessionId}/players`;
+  const snapshot = (roster: Roster): AttendanceSnapshot => ({ ...roster, canManage: roster.canManageAttendance, rows: roster.players.map(row => ({ id: row.sportEnrollmentId, name: row.arabicName, status: row.attendanceStatus, version: row.version ?? 0 })) });
+  const sync = useAttendanceSync(path, "sportEnrollmentId", async () => { const response = await fetch(path); if (!response.ok) throw new DashboardRequestError("تعذر تحديث الكشف؛ أعد فتحه قبل تصحيح آخر.", response.status); return snapshot(await response.json() as Roster); });
+  const { error: syncError, message, busy: saving } = sync;
+  const error = syncError || loadError;
   const load = async () => { const response = await fetch(`/api/v1/attendance/sessions/${sessionId}/players`); if (!response.ok) throw new Error("تعذر تحديث الكشف؛ أعد فتحه قبل تصحيح آخر."); const roster = await response.json() as Roster; setData(roster); setStates(Object.fromEntries(roster.players.map(row => [row.sportEnrollmentId, row.attendanceStatus]))); };
-  useEffect(() => { fetch(`/api/v1/attendance/sessions/${sessionId}/players`).then(async response => { if (!response.ok) throw new Error(); const roster = await response.json() as Roster; setData(roster); setStates(Object.fromEntries(roster.players.map(row => [row.sportEnrollmentId, row.attendanceStatus]))); }).catch(() => setError("تعذر تحميل كشف اللاعبين.")); }, [sessionId]);
+  useEffect(() => { let active = true; fetch(`/api/v1/attendance/sessions/${sessionId}/players`).then(async response => { if (!response.ok) throw new Error(); const roster = await response.json() as Roster; if (!active) return; setData(roster); setStates(Object.fromEntries(roster.players.map(row => [row.sportEnrollmentId, row.attendanceStatus]))); }).catch(() => { if (active) setLoadError("تعذر تحميل كشف اللاعبين."); }); return () => { active = false; }; }, [sessionId]);
   const visible = data?.players.filter(row => (!playerId || row.playerId === playerId) && `${row.playerCode} ${row.arabicName}`.includes(search)) ?? [];
-  async function save() { if (!data?.canManageAttendance || saving) return; setSaving(true); setError(""); setMessage(""); try { const items = data.players.map(row => ({ sportEnrollmentId: row.sportEnrollmentId, status: attendanceValues[states[row.sportEnrollmentId]], expectedVersion: row.version })); const response = await csrfRequest(`/api/v1/attendance/sessions/${sessionId}/players`, "PUT", { items }); const result = await response.json() as { items: { warning?: string }[] }; await load(); setMessage(result.items.some(item => item.warning) ? `تم الحفظ. ${result.items.find(item => item.warning)?.warning}` : "تم حفظ الحضور بنجاح."); } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر الحفظ."); } finally { setSaving(false); } }
+  async function save() { if (!data?.canManageAttendance) return; await sync.save(snapshot(data), states, load); }
+  if (sync.blocked) return <><PageHeader title="حضور اللاعبين" context="الحضور" />{error && <ErrorState message={error} />}<AttendanceSyncNotice sync={sync} discard={() => void sync.discard(load)} /></>;
   if (!data && !error) return <LoadingState />;
-  return <><PageHeader title="حضور اللاعبين" context="الحضور / جلسات التدريب" />{error && <ErrorState message={error} />}{data && <><section className="session-summary"><strong>{data.session.sessionDate} · {data.session.startTime.slice(0, 5)}–{data.session.endTime.slice(0, 5)}</strong><span>{data.session.group} · {data.session.sport} · {data.session.branch}</span></section><section className="list-card">{data.lastSynchronizedAtUtc && <p className="muted">آخر مزامنة مؤكدة: {new Date(data.lastSynchronizedAtUtc).toLocaleTimeString("ar-EG-u-nu-latn")}</p>}{data.canManageAttendance && <PlayerCardLookup sessionId={sessionId} onResolved={setSearch} />}<div className="attendance-actions"><ListSearch value={search} onChange={setSearch} label="بحث بالاسم أو كود اللاعب" placeholder="اسم اللاعب أو الكود" />{data.canManageAttendance && <button className="secondary-button" type="button" onClick={() => setStates(Object.fromEntries(data.players.map(row => [row.sportEnrollmentId, "Present"]))) }>تحديد الحاضرين</button>}</div>{!data.canManageAttendance && <p role="status">الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.</p>}<div className="attendance-roster">{visible.map(row => <article key={row.sportEnrollmentId}><div className="player-identity"><div><IdentityMark name={row.arabicName} /><small>{row.playerCode} · {row.subscriptionPlan ?? "لا يوجد اشتراك مؤهل"}{row.remainingSessions != null ? ` · الرصيد: ${row.remainingSessions}` : ""}</small>{row.warning && <em>{row.warning}</em>}</div></div>{data.canManageAttendance ? <div className="status-picker" role="group" aria-label={`حضور ${row.arabicName}`}>{["Present", "Late", "Absent", "Excused", "NotRecorded"].map(value => <AttendanceChoice value={value} selected={states[row.sportEnrollmentId] === value} onClick={() => setStates({ ...states, [row.sportEnrollmentId]: value })} key={value} />)}</div> : <StatusBadge status={row.attendanceStatus} />}</article>)}</div>{message && <p className="success-message" role="status">{message}</p>}{data.canManageAttendance && <button className="primary-button attendance-save" disabled={saving || data.session.status === "Cancelled"} onClick={() => void save()}>{saving ? "جارٍ الحفظ…" : "حفظ الحضور"}</button>}{data.canRequestCorrection && <PastAttendanceRequest sessionId={sessionId} kind="Players" rows={data.players.map(row=>({id:row.sportEnrollmentId,name:row.arabicName,status:row.attendanceStatus,version:row.version}))}/>}</section></>}</>;
+  return <><PageHeader title="حضور اللاعبين" context="الحضور / جلسات التدريب" />{error && <ErrorState message={error} />}{data && <><section className="session-summary"><strong>{data.session.sessionDate} · {data.session.startTime.slice(0, 5)}–{data.session.endTime.slice(0, 5)}</strong><span>{data.session.group} · {data.session.sport} · {data.session.branch}</span></section><section className="list-card">{data.lastSynchronizedAtUtc && <p className="muted">آخر مزامنة مؤكدة: {new Date(data.lastSynchronizedAtUtc).toLocaleTimeString("ar-EG-u-nu-latn")}</p>}<AttendanceSyncNotice sync={sync} discard={() => void sync.discard(load)} />{data.canManageAttendance && <PlayerCardLookup sessionId={sessionId} onResolved={setSearch} />}<div className="attendance-actions"><ListSearch value={search} onChange={setSearch} label="بحث بالاسم أو كود اللاعب" placeholder="اسم اللاعب أو الكود" />{data.canManageAttendance && <button className="secondary-button" type="button" disabled={sync.locked} onClick={() => setStates(Object.fromEntries(data.players.map(row => [row.sportEnrollmentId, "Present"]))) }>تحديد الحاضرين</button>}</div>{!data.canManageAttendance && <p role="status">الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.</p>}<div className="attendance-roster">{visible.map(row => <article key={row.sportEnrollmentId}><div className="player-identity"><div><IdentityMark name={row.arabicName} /><small>{row.playerCode} · {row.subscriptionPlan ?? "لا يوجد اشتراك مؤهل"}{row.remainingSessions != null ? ` · الرصيد: ${row.remainingSessions}` : ""}</small>{row.warning && <em>{row.warning}</em>}</div></div>{data.canManageAttendance ? <fieldset disabled={sync.locked} className="status-picker" aria-label={`حضور ${row.arabicName}`}>{["Present", "Late", "Absent", "Excused", "NotRecorded"].map(value => <AttendanceChoice value={value} selected={states[row.sportEnrollmentId] === value} onClick={() => setStates({ ...states, [row.sportEnrollmentId]: value })} key={value} />)}</fieldset> : <StatusBadge status={row.attendanceStatus} />}</article>)}</div>{message && <p className="success-message" role="status">{message}</p>}{data.canManageAttendance && <button className="primary-button attendance-save" disabled={saving || sync.conflicts.length > 0 || data.session.status === "Cancelled"} onClick={() => void save()}>{saving ? "جارٍ الحفظ…" : sync.draft ? "مراجعة وإعادة المزامنة" : "حفظ الحضور"}</button>}{data.canRequestCorrection && <PastAttendanceRequest sessionId={sessionId} kind="Players" rows={data.players.map(row=>({id:row.sportEnrollmentId,name:row.arabicName,status:row.attendanceStatus,version:row.version}))}/>}</section></>}</>;
 }
 
 type StaffRow = { academyMembershipId: string; name: string; role: string; attendanceStatus: string; version?: number };
 export function StaffAttendance({ sessionId }: { sessionId: string }) {
+  return <StaffAttendancePage key={sessionId} sessionId={sessionId} />;
+}
+function StaffAttendancePage({ sessionId }: { sessionId: string }) {
   const [canRequestCorrection,setCanRequestCorrection]=useState(false);
-  const [rows, setRows] = useState<StaffRow[]>([]), [states, setStates] = useState<Record<string, string>>({}), [canManage, setCanManage] = useState(false), [busy, setBusy] = useState(false), [synced, setSynced] = useState(""), [message, setMessage] = useState(""), [error, setError] = useState("");
+  const [rows, setRows] = useState<StaffRow[]>([]), [states, setStates] = useState<Record<string, string>>({}), [canManage, setCanManage] = useState(false), [synced, setSynced] = useState(""), [loadError, setLoadError] = useState("");
+  const [draftContext, setDraftContext] = useState<Partial<AttendanceSnapshot>>({});
+  const path = `/api/v1/attendance/sessions/${sessionId}/staff`;
+  async function read() {
+    const [r, p, c] = await Promise.all([fetch(path), fetch("/api/v1/my-permissions"), fetch(`/api/v1/attendance/sessions/${sessionId}/correction-context`)]);
+    for (const response of [r, p, c]) if (!response.ok) throw new DashboardRequestError("تعذر تحميل حضور الجهاز الفني والصلاحيات.", response.status);
+    const result = await r.json() as StaffRow[], permissions = await p.json() as string[];
+    const context = await c.json() as { canManageAttendance: boolean; canRequestCorrection: boolean; draftLease?: string; draftScope?: string; draftExpiresAtUtc?: string };
+    return { result, context, canManage: permissions.includes("attendance.manage") && context.canManageAttendance === true };
+  }
+  const toSnapshot = (value: Awaited<ReturnType<typeof read>>): AttendanceSnapshot => ({ ...value.context, canManage: value.canManage, rows: value.result.map(row => ({ id: row.academyMembershipId, name: row.name, status: row.attendanceStatus, version: row.version ?? 0 })) });
+  const sync = useAttendanceSync(path, "academyMembershipId", async () => toSnapshot(await read()));
+  const { busy, message } = sync, error = sync.error || loadError;
+  async function load() {
+    const value = await read(); setRows(value.result); setStates(Object.fromEntries(value.result.map(row => [row.academyMembershipId, row.attendanceStatus]))); setCanManage(value.canManage); setCanRequestCorrection(value.context.canRequestCorrection); setDraftContext(value.context); setSynced(new Date().toISOString());
+  }
   useEffect(() => { const abort = new AbortController(); void (async () => {
     const [r, p, c] = await Promise.all([fetch(`/api/v1/attendance/sessions/${sessionId}/staff`, { signal: abort.signal }), fetch("/api/v1/my-permissions", { signal: abort.signal }), fetch(`/api/v1/attendance/sessions/${sessionId}/correction-context`, {signal:abort.signal})]);
     if (!r.ok || !p.ok || !c.ok) throw new Error("تعذر تحميل الحضور والصلاحيات.");
     const result = await r.json() as StaffRow[], permissions = await p.json() as string[];
-    const context=await c.json() as {canManageAttendance:boolean;canRequestCorrection:boolean};setCanRequestCorrection(context.canRequestCorrection===true);
+    const context=await c.json() as {canManageAttendance:boolean;canRequestCorrection:boolean;draftLease?:string;draftScope?:string;draftExpiresAtUtc?:string};setCanRequestCorrection(context.canRequestCorrection===true);setDraftContext(context);
     setRows(result); setStates(Object.fromEntries(result.map(row => [row.academyMembershipId, row.attendanceStatus]))); setCanManage(permissions.includes("attendance.manage")&&context.canManageAttendance===true); setSynced(new Date().toISOString());
-  })().catch(e => { if (e.name !== "AbortError") setError("تعذر تحميل حضور الجهاز الفني."); }); return () => abort.abort(); }, [sessionId]);
+  })().catch(e => { if (e.name !== "AbortError") setLoadError("تعذر تحميل حضور الجهاز الفني."); }); return () => abort.abort(); }, [sessionId]);
   async function save() {
-    if (!canManage || busy) return; setBusy(true); setError(""); setMessage("");
-    try {
-      await csrfRequest(`/api/v1/attendance/sessions/${sessionId}/staff`, "PUT", { items: rows.map(row => ({ academyMembershipId: row.academyMembershipId, status: attendanceValues[states[row.academyMembershipId]], expectedVersion: row.version })) });
-      const r = await fetch(`/api/v1/attendance/sessions/${sessionId}/staff`); if (!r.ok) throw new Error("تم الحفظ؛ تعذر تحديث الكشف، أعد فتحه قبل تصحيح آخر."); const updated = await r.json() as StaffRow[];
-      setRows(updated); setStates(Object.fromEntries(updated.map(row => [row.academyMembershipId, row.attendanceStatus]))); setSynced(new Date().toISOString()); setMessage("تم حفظ حضور الجهاز الفني.");
-    } catch (e) { setError(e instanceof Error ? e.message : "تعذر الحفظ."); } finally { setBusy(false); }
+    if (!canManage) return;
+    await sync.save({ ...draftContext, canManage, rows: rows.map(row => ({ id: row.academyMembershipId, name: row.name, status: row.attendanceStatus, version: row.version ?? 0 })) }, states, load);
   }
+  if (sync.blocked) return <><PageHeader title="حضور المدربين" context="الحضور" />{error && <ErrorState message={error} />}<AttendanceSyncNotice sync={sync} discard={() => void sync.discard(load)} /></>;
   return <><PageHeader title="حضور المدربين" context="الحضور / حضور المدربين" />{error && <ErrorState message={error} />}<section className="list-card">
+    <AttendanceSyncNotice sync={sync} discard={() => void sync.discard(load)} />
     {synced && <p className="muted">آخر مزامنة مؤكدة: {new Date(synced).toLocaleTimeString("ar-EG-u-nu-latn")}</p>}
     {!canManage && <p role="status">الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.</p>}
     {!rows.length ? <EmptyState message="لا يوجد جهاز فني مكلف بهذه المجموعة." /> : <div className="attendance-roster">{rows.map(row => <article key={row.academyMembershipId}><div><strong>{row.name}</strong><small>{row.role === "Coach" ? "مدرب" : "جهاز فني"}</small></div>
-      {canManage ? <div className="status-picker" role="group" aria-label={`حضور ${row.name}`}>{Object.keys(attendanceLabels).map(value => <AttendanceChoice value={value} selected={states[row.academyMembershipId] === value} onClick={() => { if (!busy) setStates({ ...states, [row.academyMembershipId]: value }); }} key={value} />)}</div> : <StatusBadge status={row.attendanceStatus} />}
+      {canManage ? <fieldset disabled={sync.locked} className="status-picker" aria-label={`حضور ${row.name}`}>{Object.keys(attendanceLabels).map(value => <AttendanceChoice value={value} selected={states[row.academyMembershipId] === value} onClick={() => { if (!sync.locked) setStates({ ...states, [row.academyMembershipId]: value }); }} key={value} />)}</fieldset> : <StatusBadge status={row.attendanceStatus} />}
     </article>)}</div>}
-    {message && <p className="success-message" role="status">{message}</p>}{canManage && rows.length > 0 && <button className="primary-button attendance-save" disabled={busy} onClick={() => void save()}>{busy ? "جارٍ الحفظ…" : "حفظ حضور المدربين"}</button>}
+    {message && <p className="success-message" role="status">{message}</p>}{canManage && rows.length > 0 && <button className="primary-button attendance-save" disabled={busy || sync.conflicts.length > 0} onClick={() => void save()}>{busy ? "جارٍ الحفظ…" : sync.draft ? "مراجعة وإعادة المزامنة" : "حفظ حضور المدربين"}</button>}
     {canRequestCorrection&&<PastAttendanceRequest sessionId={sessionId} kind="Staff" rows={rows.map(row=>({id:row.academyMembershipId,name:row.name,status:row.attendanceStatus,version:row.version}))}/>}
   </section></>;
 }

@@ -1,4 +1,5 @@
 import 'package:academy_mobile/core/auth/auth_controller.dart';
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/coach/coach_attendance.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
@@ -46,6 +47,69 @@ Widget shell(Widget page) => MaterialApp(
 );
 
 void main() {
+  for (final lostResponse in [false, true]) {
+    testWidgets(
+      'Attendance network retry checks server before write; lost response $lostResponse',
+      (tester) async {
+        var writes = 0;
+        var remote = 'NotRecorded';
+        final auth = await coach((m, p, b, t) async {
+          if (m == 'PUT') {
+            writes++;
+            if (writes == 1) {
+              if (lostResponse) remote = 'Present';
+              throw const ApiFailure(0, 'تعذر الاتصال');
+            }
+            remote = 'Present';
+            return {};
+          }
+          return {
+            'canManageAttendance': true,
+            'draftLease': 'lease',
+            'draftScope': 'scope',
+            'session': {
+              'group': 'مجموعة مزامنة',
+              'sessionDate': '2026-10-12',
+              'startTime': '17:00',
+            },
+            'players': [
+              {
+                'sportEnrollmentId': 'e',
+                'arabicName': 'لاعب مسودة',
+                'playerCode': 'SYNC',
+                'attendanceStatus': remote,
+                'version': remote == 'Present' ? 4 : 0,
+              },
+            ],
+          };
+        });
+        await tester.pumpWidget(
+          shell(CoachAttendance(auth: auth, sessionId: 's')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('حاضر'));
+        await tester.tap(find.text('حفظ الحضور'));
+        await tester.pumpAndSettle();
+        expect(find.text('بانتظار المزامنة'), findsOneWidget);
+        expect(writes, 1);
+        final retry = find.text('مراجعة وإعادة المزامنة');
+        await tester.ensureVisible(retry);
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(writes, lostResponse ? 1 : 2);
+        expect(find.text('بانتظار المزامنة'), findsNothing);
+        expect(
+          find.textContaining(
+            lostResponse ? 'دون إعادة الإرسال' : 'يمكن تصحيحه',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
   testWidgets(
     'Replacement roster opens evaluation with the actual session and date, never attendance write',
     (tester) async {

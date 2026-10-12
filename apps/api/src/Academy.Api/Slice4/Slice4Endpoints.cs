@@ -168,13 +168,14 @@ public static class Slice4Endpoints
         });
         var context = await corrections.Context(id);
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
-        return Results.Ok(new { canManageAttendance=context.CanManageAttendance, canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
+        return Results.Ok(new { canManageAttendance=context.CanManageAttendance, canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
     }
 
-    private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service)
+    private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service, AttendanceDraftGuard drafts)
     {
         var session = await AccessibleSession(id, tenant, principal, db); if (session is null) return Results.NotFound(); var t = (await tenant.ResolveAsync())!;
         if (request.Items is null) return Validation("items", "قائمة الحضور مطلوبة.");
+        if (!drafts.Valid(t, principal, id, request.DraftLease)) return Results.Conflict(new { message = "انتهت صلاحية المسودة أو تغير حساب الدخول؛ افتح كشفًا جديدًا." });
         try { return Results.Ok(new { items = await service.SavePlayersAsync(t.AcademyId, id, UserId(principal), request.Items) }); }
         catch (AttendanceValidationException e) { return Validation("items", e.Message); } catch (AttendanceConflictException e) { return Results.Conflict(new { message = e.Message }); } catch (AttendanceNotFoundException) { return Results.NotFound(); }
     }
@@ -189,10 +190,11 @@ public static class Slice4Endpoints
         return Results.Ok(members.Select(x => { records.TryGetValue(x.academyMembershipId, out var record); return new { x.academyMembershipId, x.name, x.role, version = record?.Version ?? 0, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString() }; }));
     }
 
-    private static async Task<IResult> SaveStaffAttendance(Guid id, StaffAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service)
+    private static async Task<IResult> SaveStaffAttendance(Guid id, StaffAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service, AttendanceDraftGuard drafts)
     {
         var session = await AccessibleSession(id, tenant, principal, db); if (session is null) return Results.NotFound(); var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
         if (request.Items is null) return Validation("items", "قائمة حضور الجهاز الفني مطلوبة.");
+        if (!drafts.Valid(t, principal, id, request.DraftLease)) return Results.Conflict(new { message = "انتهت صلاحية المسودة أو تغير حساب الدخول؛ افتح كشفًا جديدًا." });
         if (t.Role == AcademyRole.Coach)
         {
             var own = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.UserId == user && x.IsActive && x.Role == AcademyRole.Coach).Select(x => x.Id).SingleAsync(); if (request.Items.Any(x => x.AcademyMembershipId != own)) return Results.NotFound();
@@ -234,5 +236,5 @@ public static class Slice4Endpoints
 public sealed record ManualSessionRequest(Guid TrainingGroupId, DateOnly SessionDate, TimeOnly StartTime, TimeOnly EndTime, string? Notes);
 public sealed record GenerateSessionsRequest(DateOnly From, DateOnly To);
 public sealed record SessionStatusRequest(string Status);
-public sealed record PlayerAttendanceBatch(IReadOnlyList<PlayerAttendanceChange>? Items);
-public sealed record StaffAttendanceBatch(IReadOnlyList<StaffAttendanceChange>? Items);
+public sealed record PlayerAttendanceBatch(IReadOnlyList<PlayerAttendanceChange>? Items, string? DraftLease = null);
+public sealed record StaffAttendanceBatch(IReadOnlyList<StaffAttendanceChange>? Items, string? DraftLease = null);

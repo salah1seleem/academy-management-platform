@@ -91,10 +91,14 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
         var membershipClaim = context.CurrentPrincipal?.FindFirst("membership_id");
         if (membershipClaim is not null && context.NewPrincipal?.Identity is ClaimsIdentity memberIdentity)
             memberIdentity.AddClaim(membershipClaim);
+        var draftClaim = context.CurrentPrincipal?.FindFirst("attendance_session");
+        if (draftClaim is not null && context.NewPrincipal?.Identity is ClaimsIdentity draftIdentity)
+            draftIdentity.AddClaim(draftClaim);
         return Task.CompletedTask;
     };
 });
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<AttendanceDraftGuard>();
 builder.Services.AddSingleton<ScopedRenewalReferences>();
 builder.Services.AddSingleton<DatabaseTicketStore>();
 builder.Services.AddSingleton<IPostConfigureOptions<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>, IdentityCookieOptions>();
@@ -405,6 +409,11 @@ if (app.Environment.IsEnvironment("Demo"))
                 await AttendanceStatesDemoSeed.Seed(db,configSeed.ServiceProvider.GetRequiredService<CollectionService>());
                 await PastAttendanceDemoSeed.Seed(db,app.Services.GetRequiredService<TimeProvider>());
             }
+            if (app.Configuration.GetValue<bool>("Demo:AttendanceDraftSeedEnabled")) {
+                await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+                await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+                await AttendanceDraftDemoSeed.Seed(db, app.Services.GetRequiredService<TimeProvider>());
+            }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
         }
         await PlatformIdentity.SeedDemo(app.Services);
@@ -429,6 +438,7 @@ public partial class Program
         identity.AddClaim(new Claim("AspNet.Identity.SecurityStamp", user.SecurityStamp ?? string.Empty));
         identity.AddClaim(new Claim("academy_id", academyId.ToString()));
         identity.AddClaim(new Claim("membership_id", membershipId.ToString()));
+        identity.AddClaim(new Claim("attendance_session", current is null ? Guid.NewGuid().ToString("N") : context.User.FindFirstValue("attendance_session") ?? Guid.NewGuid().ToString("N")));
         var principal = new ClaimsPrincipal(identity);
         var now = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
         await context.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties

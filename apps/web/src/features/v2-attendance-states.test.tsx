@@ -10,7 +10,7 @@ function mockPlayer(conflict = false, reloadFails = false) {
   global.fetch = vi.fn(async (url, init) => {
     if (String(url).endsWith("/csrf")) return { ok: true, json: async () => ({ token: "test" }) };
     if (init?.method === "PUT") { saved = true; return { ok: !conflict, json: async () => conflict ? ({ message: "تغير السجل؛ راجع الكشف قبل الحفظ." }) : ({ items: [] }) }; }
-    return { ok: !(saved && reloadFails), json: async () => ({ canManageAttendance: true, lastSynchronizedAtUtc: "2026-10-11T09:00:00Z", session, players: [{ ...row, attendanceStatus: saved ? "Late" : row.attendanceStatus, version: saved ? 42 : 41 }] }) };
+    return { ok: !(saved && reloadFails), json: async () => ({ canManageAttendance: true, draftLease: "lease", draftScope: "scope", lastSynchronizedAtUtc: "2026-10-11T09:00:00Z", session, players: [{ ...row, attendanceStatus: saved ? "Late" : row.attendanceStatus, version: saved ? 42 : 41 }] }) };
   }) as unknown as typeof fetch;
 }
 it("sends the loaded version, supports five states and reloads the confirmed snapshot", async () => {
@@ -30,6 +30,7 @@ it("keeps a conflicting draft without reporting successful synchronization", asy
 });
 it("does not claim a refreshed snapshot when the post-save reload fails", async () => {
   mockPlayer(false, true); render(<PlayerAttendance sessionId="s" />); await screen.findByText(row.arabicName);
+  fireEvent.click(screen.getByRole("button", { name: "متأخر" }));
   fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" })); await screen.findByText(/تعذر تحديث الكشف/); expect(screen.queryByText("تم حفظ الحضور بنجاح.")).not.toBeInTheDocument();
 });
 for (const manage of [false, true]) it(`staff attendance uses server permissions (${manage}) and row versions`, async () => {
