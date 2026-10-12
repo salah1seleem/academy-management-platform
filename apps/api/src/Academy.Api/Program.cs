@@ -391,7 +391,11 @@ if (app.Environment.IsEnvironment("Demo"))
         {
             await ReceivableDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
-            if (app.Configuration.GetValue<bool>("Demo:CashRegistersSeedEnabled")) await CashRegisterDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:CashRegistersSeedEnabled"))
+            {
+                await CashRegisterDemoSeed.Seed(db);
+                await CashPendingPaymentDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<Academy.Api.Operations.DiscountRules>());
+            }
             await PlanPublicationDemoSeed.SeedAsync(db);
             await DiscountPricingDemoSeed.SeedAsync(db);
             await RenewalOpportunityDemoSeed.SeedAsync(db);

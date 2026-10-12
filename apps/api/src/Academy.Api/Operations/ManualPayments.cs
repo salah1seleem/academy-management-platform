@@ -22,6 +22,10 @@ public static class ManualPayments
         api.MapGet("/manage/payments/{id:guid}/proof", GetProof).RequireAuthorization(AcademyPermissions.PaymentRead);
         api.MapPost("/manage/payments/{id:guid}/review", Review).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/manage/payments/{id:guid}/collect", CollectStaff).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage).AddEndpointFilter<CsrfFilter>();
+        api.MapGet("/manage/payments/{id:guid}/cash-options", async (Guid id, CashRegisterService cash) => {
+            try { return Results.Ok(await cash.PendingPaymentOptions(id)); }
+            catch (CashRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
+        }).RequireAuthorization(AcademyPermissions.SubscriptionRenewManage);
         api.MapGet("/manage/payment-requests", Queue).RequireAuthorization(AcademyPermissions.PaymentRead);
         api.MapPost("/guardian/enrollment-requests/{id:guid}/proof", EnrollmentProof).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/guardian/enrollment-requests/{id:guid}/payment", EnrollmentPayment).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
@@ -31,9 +35,14 @@ public static class ManualPayments
         api.MapPost("/people/players/{id:guid}/refunds", Refund).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
     }
     private static Guid Actor(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private static async Task<IResult> CollectStaff(Guid id, CollectWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService service, TimeProvider time)
+    private static async Task<IResult> CollectStaff(Guid id, CollectWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService service, TimeProvider time, CashRegisterService cash)
     {
         if (body.PaymentMethod is not ("Cash" or "Online")) return Results.UnprocessableEntity();
+        if (body.PaymentMethod == "Cash")
+        {
+            try { return Results.Ok(await cash.CollectPendingPayment(id, body.CashSessionId, body.ExpectedAmount, service)); }
+            catch (CashRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
+        }
         var t = (await tenant.ResolveAsync())!; var actor = Actor(principal);
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"collection:{t.AcademyId}:{id}"}, 0))");
@@ -41,7 +50,7 @@ public static class ManualPayments
         if (p is null) return Results.NotFound();
         if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.UserId == p.RenewalRequest.RequestedByUserId && (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin))) return Results.Forbid();
         if (await db.PaymentProofs.AnyAsync(x => x.AcademyId == t.AcademyId && x.PaymentRequestId == id)) return Results.Conflict(new { message = "استخدم مراجعة إثبات الدفع لهذا الطلب." });
-        if (p.Status == PaymentRequestStatus.Confirmed) { var existing = await db.Receipts.Where(x => x.AcademyId == t.AcademyId && x.Collection.PaymentRequestId == id).Select(x => x.Id).SingleAsync(); return Results.Ok(new { receiptId = existing, replay = true }); }
+        if (p.Status == PaymentRequestStatus.Confirmed) { var existing = await db.Receipts.Where(x => x.AcademyId == t.AcademyId && x.Collection.PaymentRequestId == id).Select(x => new { x.Id, x.PaymentMethod }).SingleAsync(); return existing.PaymentMethod != body.PaymentMethod ? Results.Conflict(new { message = "طلب الدفع محصل بطريقة أخرى." }) : Results.Ok(new { receiptId = existing.Id, replay = true }); }
         var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         if (p.Status != PaymentRequestStatus.Pending || p.RenewalRequest.PaymentRequestId != id || !await db.TrainingGroups.AnyAsync(g => g.Id == FoundationDbContext.AssignedGroupAt(t.AcademyId, p.RenewalRequest.SportEnrollmentId, day) && g.IsActive)) return Results.Conflict();
         if (!PlanCatalog.FormatMatches(p.RenewalRequest.SportEnrollment.RegistrationFormat, PlanTerms.From(p.RenewalRequest, p.RenewalRequest.SubscriptionPlan).Format)) return Results.Conflict(new { message = "الباقة المحفوظة لا تطابق نوع التسجيل." });
@@ -184,7 +193,7 @@ public static class ManualPayments
     }
 }
 public sealed record TransferWrite(string? InstaPayAddress, string? WalletNumber, string? RecipientName, bool IsActive);
-public sealed record CollectWrite(string PaymentMethod);
+public sealed record CollectWrite(string PaymentMethod, Guid? CashSessionId = null, string? ExpectedAmount = null);
 public sealed record ProofWrite(Guid AssetId);
 public sealed record ReviewWrite(bool Accept, Guid? GroupId, string? Reason);
 public sealed record RefundWrite(Guid CollectionId, [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal Amount, string? Reason);

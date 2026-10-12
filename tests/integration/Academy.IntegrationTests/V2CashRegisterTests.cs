@@ -57,7 +57,8 @@ public sealed partial class V2ReceivablesTests
         Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,$"{CashRoot}/{f.Register}/open",new{openingAmount="101.00"},key)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,$"{CashRoot}/{f.Register}/open",new{openingAmount="100.00"})).StatusCode);
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Single(await db.CashSessions.Where(s=>s.RegisterId==f.Register).ToListAsync());Assert.False(await db.CashMovements.AnyAsync(m=>m.SessionId==id));
-        var read=await owner.GetFromJsonAsync<JsonElement>(CashRoot);Assert.Contains(read.GetProperty("items").EnumerateArray(),r=>r.GetProperty("id").GetGuid()==f.Register&&r.GetProperty("session").GetProperty("balance").GetString()=="100.00");
+        // The register list is bounded; accumulated fixtures need not be on its first page.
+        var read=await owner.GetFromJsonAsync<JsonElement>($"{CashRoot}/sessions/{id}");Assert.Equal(f.Register,read.GetProperty("session").GetProperty("registerId").GetGuid());Assert.Equal("100.00",read.GetProperty("balance").GetString());
     }
     [Fact]
     public async Task Cash_transfers_conserve_funds_replay_and_reject_excess_or_invalid_money()
@@ -89,7 +90,7 @@ public sealed partial class V2ReceivablesTests
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.False(await db.CashMovements.AnyAsync(m=>m.SessionId==id));var row=await db.CashSessions.SingleAsync(s=>s.Id==id);row.CountedAmount=99;await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());db.Entry(row).State=EntityState.Unchanged;
         var failure=await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"CashSessions\" SET \"CountedAmount\"=99 WHERE \"Id\"={id}"));Assert.Equal("23514",failure.SqlState);
         failure=await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"CashSessions\" WHERE \"Id\"={id}"));Assert.Equal("23514",failure.SqlState);
-        var read=await owner.GetFromJsonAsync<JsonElement>(CashRoot);Assert.Contains(read.GetProperty("history").EnumerateArray(),s=>s.GetProperty("id").GetGuid()==id);
+        var read=await owner.GetFromJsonAsync<JsonElement>($"{CashRoot}/sessions/{id}");Assert.Equal(id,read.GetProperty("session").GetProperty("id").GetGuid());Assert.Equal(90m,decimal.Parse(read.GetProperty("session").GetProperty("countedAmount").GetString()!,System.Globalization.CultureInfo.InvariantCulture));Assert.Equal("-10.00",read.GetProperty("variance").GetString());
     }
     [Fact]
     public async Task Cash_disabled_blocks_open_and_transfer_but_owner_can_reconcile_existing_shift()

@@ -97,13 +97,17 @@ public sealed partial class V2ReceivablesTests
         var created=await Post(owner,"/api/v1/manage/staff",new{name="أمين تحصيل اصطناعي",email,phone="010"+Random.Shared.Next(10000000,99999999),temporaryPassword="Demo-Only-123!",role="AcademyAdmin",jobTitle="اختبار"});created.EnsureSuccessStatusCode();var member=(await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         async Task Access(bool subscriptions)
         {
-            var options=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff/{member}/access");var actions=options.GetProperty("modules").EnumerateArray().Select(x=>new{module=x.GetString(),read=x.GetString() is "finance" or "players" || subscriptions&&x.GetString()=="subscriptions",add=x.GetString()=="finance"||subscriptions&&x.GetString()=="subscriptions",edit=false,delete=false}).ToArray();
+            var options=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff/{member}/access");var actions=options.GetProperty("modules").EnumerateArray().Select(x=>new{module=x.GetString(),read=x.GetString() is "finance" or "players" || subscriptions&&x.GetString() is "subscriptions" or "payments",add=x.GetString()=="finance"||subscriptions&&x.GetString() is "subscriptions" or "payments",edit=false,delete=false}).ToArray();
             var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");var r=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff/{member}/access"){Content=JsonContent.Create(new{allBranches=false,branches=new[]{f.Branch},actions})};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());(await owner.SendAsync(r)).EnsureSuccessStatusCode();
         }
         await Access(false);(await CashAssign(owner,f.Register,member)).EnsureSuccessStatusCode();using var admin=await Staff(email);
         Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,$"{CashRoot}/sessions/{f.Session}/collection-quote",new{enrollmentId=f.Enrollment,planId=Slice3DemoSeed.FootballMonthlyId})).StatusCode);
         await Access(true);Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,$"{CashRoot}/sessions/{f.Session}/collection-quote",new{enrollmentId=f.Enrollment,planId=Slice3DemoSeed.FootballMonthlyId})).StatusCode);
         (await Post(owner,$"{CashRoot}/sessions/{f.Session}/close",new{countedAmount="100",reason=(string?)null})).EnsureSuccessStatusCode();var session=await CashOpen(admin,f.Register,"0");var quote=await CashQuote(admin,session,f.Enrollment);(await CashCollect(admin,session,f.Enrollment,quote.GetProperty("quoteHash").GetString()!)).EnsureSuccessStatusCode();
+        var pending = await PendingCashRequest(admin, f.Enrollment);
+        var pendingAmount = await PendingCashAmount(admin, pending);
+        (await PendingCash(admin, pending, session, pendingAmount)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Forbidden, (await PendingCash(owner, pending, session, pendingAmount)).StatusCode);
     }
     [Fact]
     public async Task Cash_collection_guardian_receipt_access_requires_a_current_trusted_link()
