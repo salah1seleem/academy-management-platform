@@ -135,6 +135,7 @@ builder.Services.AddScoped<IPaymentGateway, InternalTestPaymentGateway>();
 builder.Services.AddScoped<PaymentProcessor>();
 builder.Services.AddScoped<CollectionService>();
 builder.Services.AddScoped<CashRegisterService>();
+builder.Services.AddScoped<SettlementComparisonService>();
 builder.Services.AddScoped<DiscountRules>();
 builder.Services.AddScoped<RenewalCreationService>();
 builder.Services.AddScoped<SubscriptionAdjustmentService>();
@@ -367,6 +368,7 @@ app.MapVersionedConfiguration();
 app.MapReceivables();
 app.MapCashRegisters();
 app.MapProviderQuarantine();
+app.MapSettlementComparisons();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
@@ -392,6 +394,7 @@ if (app.Environment.IsEnvironment("Demo"))
         {
             await ReceivableDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:SettlementComparisonsSeedEnabled")) await SettlementComparisonDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ProviderQuarantineSeedEnabled")) await ProviderQuarantineDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:CashRegistersSeedEnabled"))
             {

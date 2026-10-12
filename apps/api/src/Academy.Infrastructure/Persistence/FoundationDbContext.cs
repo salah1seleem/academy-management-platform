@@ -63,6 +63,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureReceivables(builder);
         ConfigureCashRegisters(builder);
         ConfigureProviderQuarantine(builder);
+        ConfigureSettlementComparisons(builder);
         ConfigurePlanPublication(builder);
         ConfigureDiscountPricing(builder);
         ConfigureImports(builder);

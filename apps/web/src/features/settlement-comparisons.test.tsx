@@ -1,0 +1,21 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { SettlementComparisons, SettlementComparisonDetail, SettlementComparisonForm } from "./settlement-comparisons";
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+const row = { id: "statement", accountTag: "DEMO", statementReference: "كشف اصطناعي", lineReference: "1", settlementDate: "2026-09-28", result: "Matched", gross: "900.00", fee: "5.00", net: "895.00", currency: "EGP", expected: "900.00", expectedCurrency: "EGP", receiptId: "receipt", paymentReference: "DEMO-REF", actor: "مالك تجريبي" };
+describe("Owner manual statement comparison", () => {
+  it("clears default dates and paginates without inventing a payment", async () => {
+    const paths: string[] = []; global.fetch = vi.fn(async path => { paths.push(String(path)); return response({ total: 26, page: String(path).includes("page=2") ? 2 : 1, pageSize: 25, items: [row] }); });
+    render(<SettlementComparisons />); await screen.findByText("كشف اصطناعي"); fireEvent.click(screen.getByRole("button", { name: "مسح الفلاتر" })); await waitFor(() => expect(paths.at(-1)).toBe("/api/v1/finance/settlement-comparisons?page=1")); expect(screen.getByLabelText("من تاريخ")).toHaveValue(""); await screen.findByText("كشف اصطناعي"); fireEvent.click(screen.getByRole("button", { name: /^التالي$/ })); await waitFor(() => expect(paths.at(-1)).toContain("page=2"));
+  });
+  it("shows original receipt gross separately from fees and net", async () => { global.fetch = vi.fn(async () => response(row)); render(<SettlementComparisonDetail id="statement" />); await screen.findByText("مطابق يدويًا"); expect(screen.getByText("895 جنيه")).toBeInTheDocument(); expect(screen.getByText("5 جنيه")).toBeInTheDocument(); expect(screen.getByRole("link", { name: "الإيصال الأصلي" })).toHaveAttribute("href", "/dashboard/subscriptions/receipts/receipt"); expect(screen.queryByRole("button", { name: /تفعيل|دفع/ })).not.toBeInTheDocument(); });
+  it("fails closed if owner access is revoked", async () => { global.fetch = vi.fn(async () => response({}, 403)); render(<SettlementComparisonForm />); await screen.findByText("مطابقة الكشف متاحة للمالك فقط."); expect(screen.queryByLabelText("مرجع الكشف")).not.toBeInTheDocument(); });
+  it("locks reviewed inputs and retries the identical source line after a lost response", async () => {
+    const writes: string[] = []; let attempt = 0;
+    global.fetch = vi.fn(async (path, init) => { const p = String(path); if (p.endsWith("/options")) return response({ branches: [{ id: "branch", name: "فرع تجريبي" }], providers: ["InternalTest"] }); if (p.endsWith("/csrf")) return response({ token: "csrf" }); if (p.endsWith("/preview")) return response({ ...row, quoteHash: "quote" }); writes.push(String(init?.body)); if (++attempt === 1) throw new Error("تعذر الوصول؛ أعد المحاولة."); return response(row); });
+    render(<SettlementComparisonForm />); await screen.findByLabelText("الفرع");
+    for (const [label, value] of [["الفرع", "branch"], ["اسم الحساب المختصر", "DEMO"], ["مرجع الكشف", "statement"], ["مرجع السطر", "1"], ["المزود المسجل", "InternalTest"], ["مرجع الدفع في الكشف", "DEMO-REF"], ["إجمالي الكشف", "900"], ["الرسوم الواردة", "5"], ["صافي الكشف", "895"]]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "معاينة المقارنة" })); await screen.findByRole("button", { name: "حفظ نتيجة المقارنة" }); expect(screen.getByLabelText("مرجع الكشف")).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "حفظ نتيجة المقارنة" })); await screen.findByText("تعذر الوصول؛ أعد المحاولة."); expect(screen.queryByRole("button", { name: "تعديل البيانات" })).not.toBeInTheDocument(); fireEvent.click(screen.getByRole("button", { name: "إعادة تأكيد الحفظ بنفس البيانات" })); await screen.findByText("تم حفظ نتيجة المقارنة دون تغيير التحصيل أو الاشتراك."); expect(writes).toHaveLength(2); expect(writes[0]).toBe(writes[1]);
+  });
+});

@@ -8,6 +8,7 @@ import '../shared/receivable_balances.dart';
 import 'renewal_opportunities.dart';
 import 'cash_registers.dart';
 import 'provider_quarantine.dart';
+import 'settlement_comparisons.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
@@ -40,6 +41,7 @@ class _OwnerReportsState extends State<OwnerReports> {
                 'receivables': 'الأرصدة',
                 'cash': 'الصناديق',
                 'provider-quarantine': 'اختلافات الدفع',
+                'settlement-comparisons': 'مطابقة الكشوف',
                 'renewals': 'فرص التجديد',
                 'subscriptions': 'الاشتراكات',
               }.entries)
@@ -52,7 +54,9 @@ class _OwnerReportsState extends State<OwnerReports> {
           ),
         ),
         Expanded(
-          child: report == 'provider-quarantine'
+          child: report == 'settlement-comparisons'
+              ? NativeSettlementComparisons(auth: widget.auth)
+              : report == 'provider-quarantine'
               ? NativeProviderQuarantine(auth: widget.auth)
               : report == 'cash'
               ? NativeCashRegisters(auth: widget.auth)

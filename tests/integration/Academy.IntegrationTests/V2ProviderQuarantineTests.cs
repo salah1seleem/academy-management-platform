@@ -30,7 +30,10 @@ public sealed partial class SubscriptionPaymentTests
     }
     private async Task<HttpClient> InboxStaff(string email)
     {
-        var client = factory.CreateClient(); (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode(); return client;
+        var client = factory.CreateClient();
+        if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(client, factory.Services);
+        else (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode();
+        return client;
     }
     [Fact]
     public async Task Quarantine_demo_seed_is_repeatable_without_collection_or_activation()

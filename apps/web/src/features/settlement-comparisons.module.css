@@ -1,0 +1,16 @@
+.notice {
+  display: grid;
+  gap: .4rem;
+  margin-block: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--staff-border, var(--border));
+  border-inline-start: 3px solid var(--staff-primary-700, var(--primary));
+  border-radius: 14px;
+  background: var(--staff-primary-50, #f0faf8);
+  color: var(--staff-text, #22334a);
+}
+.notice strong { font-size: 1rem; }
+.notice p { margin: 0; font-size: .9rem; line-height: 1.8; }
+.fields { min-width: 0; margin-block: 1rem; }
+.fields legend { padding-inline: .5rem; font-size: .95rem; font-weight: 700; }
+.fields > label { min-width: 0; }

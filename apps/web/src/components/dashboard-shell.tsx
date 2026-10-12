@@ -61,7 +61,7 @@ const modules: NavModule[] = [
   { id: "players", title: "الأعضاء والاشتراكات", group: "الإدارة", icon: Users, links: linksOf("players", "plans", "discounts") },
   { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), { label: "المرافق والحارات", href: "/dashboard/facilities" }, ...linksOf("attendance", "matches")] },
   { id: "development", title: "الفريق والتطوير", group: "التشغيل", icon: Star, links: [...linksOf("academy").filter(l => l.href.endsWith("/coaches")), ...linksOf("evaluations", "nutrition")] },
-  { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "الصناديق والعهد", href: "/dashboard/finance/cash-registers" }, { label: "متابعة اختلافات الدفع", href: "/dashboard/finance/provider-quarantine" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
+  { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "الصناديق والعهد", href: "/dashboard/finance/cash-registers" }, { label: "متابعة اختلافات الدفع", href: "/dashboard/finance/provider-quarantine" }, { label: "مطابقة كشوف التحصيل", href: "/dashboard/finance/settlement-comparisons" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
   { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
   { id: "analytics", title: "التحليل والقرارات", group: "التحليل", icon: BarChart3, links: linksOf("reports").filter(l => l.href.endsWith("/attendance")) },
   { id: "settings", title: "الإعدادات والمساعدة", group: "الإدارة", icon: ShieldCheck, links: [...linksOf("settings", "staff"), { label: "استيراد البيانات", href: "/dashboard/import" }] },
@@ -138,6 +138,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const navigation = useMemo(() => visibleModules(identity.role).map(m => ({ ...m, links: m.links.filter(l => {
     if (l.href.startsWith("/dashboard/staff") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/provider-quarantine") && identity.role !== "AcademyOwner") return false;
+    if (l.href.startsWith("/dashboard/finance/settlement-comparisons") && identity.role !== "AcademyOwner") return false;
     if (l.href === "/dashboard/academy/groups/sessions") return identity.role === "AcademyOwner" || ["structure.manage", "people.manage", "attendance.read"].every(p => permissions.includes(p));
     return identity.role === "AcademyOwner" || l.href === "/dashboard/settings" && brand.platformBrandOperator || linkPermission(l.href) === null || permissions.includes(linkPermission(l.href)!);
   }) })).filter(m => m.links.length > 0), [identity.role, permissions, brand.platformBrandOperator]);
