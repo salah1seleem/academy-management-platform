@@ -87,13 +87,15 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     {
         var ownGroup = groupId ?? await FreshRegistrationGroup();
         var key = Guid.NewGuid().ToString(); var options = await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/options"); var group = options.GetProperty("groups").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == ownGroup);
-        var body = new { playerArabicName = "لاعب اختبار التسجيل " + key[..8], dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = group.GetProperty("branchId").GetGuid(), sportId = Slice2DemoSeed.FootballId, groupId = group.GetProperty("id").GetGuid(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Cash" };
+        // This legacy fixture exercises people/subscription workflows, not a cash
+        // shift. Cash-specific registration tests retain immutable posted sources.
+        var body = new { playerArabicName = "لاعب اختبار التسجيل " + key[..8], dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = group.GetProperty("branchId").GetGuid(), sportId = Slice2DemoSeed.FootballId, groupId = group.GetProperty("id").GetGuid(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Online" };
         var response = await Send(c, "/api/v1/people/registrations", body, key); Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var player = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("playerId").GetGuid();
         var replay = await Send(c, "/api/v1/people/registrations", body, key); Assert.Equal(HttpStatusCode.OK, replay.StatusCode); Assert.Equal(player, (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("playerId").GetGuid());
         Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/people/registrations", body with { playerArabicName = body.playerArabicName + " مختلف" }, key)).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var enrollment = await db.SportEnrollments.SingleAsync(x => x.PlayerId == player);
-        var collection = await db.Collections.SingleAsync(x => x.SportEnrollmentId == enrollment.Id); Assert.Equal("Cash", collection.PaymentMethod); Assert.Equal(1, await db.Receipts.CountAsync(x => x.CollectionId == collection.Id)); Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(x => x.CollectionId == collection.Id)); return (player, enrollment.Id, collection.Id);
+        var collection = await db.Collections.SingleAsync(x => x.SportEnrollmentId == enrollment.Id); Assert.Equal("Online", collection.PaymentMethod); Assert.Equal(1, await db.Receipts.CountAsync(x => x.CollectionId == collection.Id)); Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(x => x.CollectionId == collection.Id)); return (player, enrollment.Id, collection.Id);
     }
     private async Task<Guid> FreshRegistrationGroup()
     {
@@ -215,7 +217,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     [Fact] public async Task Changed_registration_quote_rolls_back_player_enrollment_and_collection()
     {
         using var c = await Owner(); var name = "لاعب اختبار التسجيل " + Guid.NewGuid();
-        var body = new { playerArabicName = name, dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = Slice2DemoSeed.CityBranchId, sportId = Slice2DemoSeed.FootballId, groupId = await FreshRegistrationGroup(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Cash", expectedAmount = 1m };
+        var body = new { playerArabicName = name, dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = Slice2DemoSeed.CityBranchId, sportId = Slice2DemoSeed.FootballId, groupId = await FreshRegistrationGroup(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Online", expectedAmount = 1m };
         Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/people/registrations", body, Guid.NewGuid().ToString())).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.False(await db.Players.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName == name));
     }

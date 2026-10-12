@@ -707,3 +707,6 @@ footer {
 .cash-quote dl { display: grid; gap: .7rem; margin-block: 1rem; }
 .cash-quote dl > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
 .cash-quote dd { margin: 0; }
+.form-shell .registration-payment-method { align-content: start; }
+.form-shell .registration-cash-options { grid-column: 1 / -1; min-width: 0; }
+.registration-cash-options h3 { margin-block: .25rem .8rem; font-size: 1rem; }

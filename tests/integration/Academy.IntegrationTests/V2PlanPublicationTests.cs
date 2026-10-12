@@ -103,7 +103,7 @@ public sealed partial class V2PlanPublicationTests : IAsyncLifetime
         var quote = await Write(owner, "/api/v1/people/registration-quote", new { planId = plan, branchId = f.A, guardianPhone = phone }); quote.EnsureSuccessStatusCode();
         var value = await quote.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal("600.00", value.GetProperty("finalAmount").GetString());
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, "/api/v1/people/registration-quote", new { planId = plan, branchId = f.B, guardianPhone = phone })).StatusCode);
-        var registration = await Write(owner, "/api/v1/people/registrations", new { playerArabicName = "لاعب سباحة جديد اصطناعي", dateOfBirth = $"{f.BirthYear}-01-02", guardianName = "ولي أمر اختبار", guardianPhone = phone, branchId = f.A, sportId = Slice2DemoSeed.SwimmingId, groupId = f.Group, planId = plan, paymentMethod = "Cash", expectedAmount = 600 });
+        var registration = await Write(owner, "/api/v1/people/registrations", new { playerArabicName = "لاعب سباحة جديد اصطناعي", dateOfBirth = $"{f.BirthYear}-01-02", guardianName = "ولي أمر اختبار", guardianPhone = phone, branchId = f.A, sportId = Slice2DemoSeed.SwimmingId, groupId = f.Group, planId = plan, paymentMethod = "Online", expectedAmount = 600 });
         registration.EnsureSuccessStatusCode();
         var id = (await registration.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("playerId").GetGuid();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

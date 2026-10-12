@@ -7,6 +7,7 @@ using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Tenancy;
 using Academy.Api.Slice3;
 using Academy.Api.Operations;
+using Academy.Api.Finance;
 using Academy.Infrastructure.Subscriptions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -74,6 +75,10 @@ public static class Slice2Endpoints
         people.MapGet("/players", SearchPlayers);
         people.MapGet("/guardians", async (string? search, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var normalizedPhone = EgyptPhoneNormalizer.Normalize(search); return Results.Ok(await db.GuardianProfiles.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && (string.IsNullOrWhiteSpace(search) || x.DisplayName.Contains(search.Trim()) || (normalizedPhone != null && x.ContactPhone == normalizedPhone))).OrderBy(x => x.DisplayName).Select(x => new { x.Id, x.DisplayName, x.ContactPhone }).ToListAsync()); });
         people.MapPost("/registrations", RegisterPlayer).AddEndpointFilter<CsrfFilter>();
+        people.MapGet("/registration-cash-options", async (Guid branchId, Guid planId, CashRegisterService cash) => {
+            try { return Results.Ok(await cash.RegistrationOptions(branchId, planId)); }
+            catch (CashRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); }
+        });
 
         api.MapGet("/guardian/children", GuardianChildren).RequireAuthorization(AcademyPermissions.GuardianChildrenRead);
         api.MapGet("/guardian/children/{playerId:guid}", async (Guid playerId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db) =>
@@ -131,9 +136,16 @@ public static class Slice2Endpoints
         return Results.Ok(children);
     }
 
-    private static async Task<IResult> RegisterPlayer(RegistrationRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock, CollectionService collections, DiscountRules discounts, Academy.Api.Operations.GroupPlacementService placement, TimeProvider time)
+    private static async Task<IResult> RegisterPlayer(RegistrationRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock, CollectionService collections, DiscountRules discounts, Academy.Api.Operations.GroupPlacementService placement, TimeProvider time, CashRegisterService cash)
     {
         var t = (await tenant.ResolveAsync())!; var actorId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (request.PaymentMethod == "Cash" && !request.PlanId.HasValue)
+            return Results.Problem(statusCode: 422, title: "القبض النقدي يحتاج باقة ومراجعة مبلغ.");
+        if (request.PlanId.HasValue)
+        {
+            try { await cash.AuthorizeRegistration(); }
+            catch (CashRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); }
+        }
         var group = await db.TrainingGroups.AsNoTracking().Include(x => x.AgeCategory).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == request.GroupId && x.IsActive && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
         if (group is null || group.BranchId != request.BranchId || group.SportId != request.SportId) return Results.UnprocessableEntity(new { message = "المجموعة لا تطابق الفرع والرياضة المختارين." });
         await using var transaction = await db.Database.BeginTransactionAsync();
@@ -144,10 +156,21 @@ public static class Slice2Endpoints
             if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || request.PaymentMethod is not ("Cash" or "Online")) return Results.UnprocessableEntity(new { message = "أكد طريقة التحصيل وأعد إرسال الطلب." });
             key = "register-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"registration:{t.AcademyId}:{actorId}:{key}"}, 0))");
-            var prior = await db.RenewalRequests.Where(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actorId && x.IdempotencyKey == key).Select(x => new { playerId = x.SportEnrollment.PlayerId, x.RegistrationPayloadHash }).SingleOrDefaultAsync();
-            if (prior is not null) return prior.RegistrationPayloadHash == payloadHash ? Results.Ok(new { prior.playerId, subscriptionCreated = true, replay = true }) : Results.Conflict(new { message = "بيانات الطلب تغيرت. استخدم عملية تسجيل جديدة." });
+            var prior = await db.RenewalRequests.Where(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actorId && x.IdempotencyKey == key).Select(x => new { playerId = x.SportEnrollment.PlayerId, x.RegistrationPayloadHash, x.PaymentRequestId }).SingleOrDefaultAsync();
+            if (prior is not null)
+            {
+                if (prior.RegistrationPayloadHash != payloadHash) return Results.Conflict(new { message = "بيانات الطلب تغيرت. استخدم عملية تسجيل جديدة." });
+                if (request.PaymentMethod == "Cash" && !await db.CashReceiptPostings.AnyAsync(p => db.Collections.Any(c => c.Id == p.CollectionId && c.PaymentRequestId == prior.PaymentRequestId)))
+                    return Results.Conflict(new { message = "التسجيل النقدي التاريخي يحتاج مطابقة مستقلة؛ لم تُنشأ حركة صندوق جديدة." });
+                return Results.Ok(new { prior.playerId, subscriptionCreated = true, replay = true });
+            }
             await PlanCatalog.LockAsync(db, t.AcademyId, request.PlanId.Value);
             if (!await db.SubscriptionPlans.TrainingOnly().ForRegistrationFormat(group.RegistrationFormat).ForBranch(group.BranchId).AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == request.PlanId && x.SportId == group.SportId && x.IsActive)) return Results.UnprocessableEntity(new { message = "اختر باقة فعالة مطابقة للرياضة والفرع." });
+            if (request.PaymentMethod == "Cash")
+            {
+                try { await cash.PrepareRegistration(request.CashSessionId, group.BranchId, request.PlanId.Value, request.ExpectedAmount); }
+                catch (CashRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); }
+            }
         }
         if (group.RegistrationFormat != TrainingRegistrationFormat.Group)
         {
@@ -165,7 +188,6 @@ public static class Slice2Endpoints
         {
             if (string.IsNullOrWhiteSpace(request.PlayerArabicName) || request.DateOfBirth is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["player"] = ["اسم اللاعب وتاريخ الميلاد مطلوبان."] });
             player = new Player { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerCode = $"PLR-{Guid.NewGuid():N}"[..12].ToUpperInvariant(), ArabicName = request.PlayerArabicName.Trim(), DateOfBirth = request.DateOfBirth.Value, Gender = request.Gender, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
-            db.Players.Add(player);
         }
         if (group.AgeCategory.MinimumBirthYear > player.DateOfBirth.Year || group.AgeCategory.MaximumBirthYear < player.DateOfBirth.Year || player.DateOfBirth > DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)) return Results.UnprocessableEntity(new { message = "عمر اللاعب غير مناسب للمجموعة." });
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-capacity:{t.AcademyId}:{group.Id}"}, 0))");
@@ -187,6 +209,10 @@ public static class Slice2Endpoints
             if (db.Entry(guardian).State == EntityState.Detached) db.GuardianProfiles.Add(guardian);
         }
         if (guardian is null) return Results.NotFound();
+        // Identity may save its own user while provisioning a new guardian. Keep
+        // the new player detached until its branch-scoped enrollment/link graph
+        // is ready, so a branch administrator never flushes an orphan player.
+        if (!request.ExistingPlayerId.HasValue) db.Players.Add(player);
         var guardianLinkExists = await db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.GuardianId == guardian.Id && x.PlayerId == player.Id && x.IsActive);
         if (!guardianLinkExists)
             db.GuardianPlayerLinks.Add(new GuardianPlayerLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, GuardianId = guardian.Id, PlayerId = player.Id, RelationshipType = request.RelationshipType ?? "ولي أمر", CreatedByUserId = actorId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
@@ -202,7 +228,15 @@ public static class Slice2Endpoints
             var quote = await discounts.CalculateAsync(t.AcademyId, player.Id, plan.Price, actorId, plan: plan, branchId: enrollment.BranchId);
             if (quote.FinalAmount != request.ExpectedAmount.Value) return Results.Conflict(new { message = "تغير المبلغ المستحق. راجع السعر قبل التحصيل." });
         }
-        if (request.PlanId.HasValue) await collections.CreateCashAsync(t.AcademyId, actorId, enrollment.Id, request.PlanId.Value, key, request.PaymentMethod!, registrationPayloadHash: payloadHash);
+        if (request.PlanId.HasValue)
+        {
+            var paymentId = await collections.CreateCashAsync(t.AcademyId, actorId, enrollment.Id, request.PlanId.Value, key, request.PaymentMethod!, registrationPayloadHash: payloadHash);
+            if (request.PaymentMethod == "Cash")
+            {
+                try { await cash.PostRegistration(request.CashSessionId!.Value, paymentId, key, payloadHash); }
+                catch (CashRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); }
+            }
+        }
         if (group.RegistrationFormat != TrainingRegistrationFormat.Group)
         {
             try { await placement.FinishSpecialAdmission(group, enrollment); }
@@ -219,4 +253,4 @@ public sealed record GroupRequest(string ArabicName, Guid BranchId, Guid SportId
 public sealed record ScheduleRequest(DayOfWeek DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
 public sealed record CoachAssignmentRequest(Guid MembershipId);
 public sealed record RegistrationRequest(Guid? ExistingPlayerId, string? PlayerArabicName, DateOnly? DateOfBirth, Gender? Gender, Guid? ExistingGuardianId, string? GuardianName, string? GuardianPhone, string? RelationshipType, Guid BranchId, Guid SportId, Guid GroupId, Guid? PlanId = null, string? PaymentMethod = null, Guid? DiscountRuleId = null,
-    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal? ExpectedAmount = null, Guid? TrainingLevelId = null, bool LevelReviewed = false);
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal? ExpectedAmount = null, Guid? TrainingLevelId = null, bool LevelReviewed = false, Guid? CashSessionId = null);

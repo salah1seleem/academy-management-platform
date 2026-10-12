@@ -112,7 +112,20 @@ public sealed partial class V2ReceivablesTests
     [Fact]
     public async Task Cash_collection_guardian_receipt_access_requires_a_current_trusted_link()
     {
-        using var owner=await Staff(DemoSeed.OwnerEmail);using var guardian=await Guardian();var f=await CashCollectionFixture(owner);var quote=await CashQuote(owner,f.Session,f.Enrollment);var response=await CashCollect(owner,f.Session,f.Enrollment,quote.GetProperty("quoteHash").GetString()!);response.EnsureSuccessStatusCode();var receipt=(await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("receiptId").GetGuid();
+        using var owner=await Staff(DemoSeed.OwnerEmail);var f=await CashCollectionFixture(owner);
+        // An owned household keeps the latest-100 list assertion deterministic
+        // even when other tests retain immutable receipts for the shared guardian.
+        var phone="010"+Random.Shared.Next(10000000,99999999);
+        await using(var household=factory.Services.CreateAsyncScope()) {
+            var householdDb=household.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var normalized=EgyptPhoneNormalizer.Normalize(phone)!;
+            var user=new Academy.Infrastructure.Identity.ApplicationUser {Id=Guid.NewGuid(),UserName=normalized,PhoneNumber=normalized,DisplayName="ولي إيصال اصطناعي",IsActive=true};
+            var created=await household.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Academy.Infrastructure.Identity.ApplicationUser>>().CreateAsync(user);Assert.True(created.Succeeded);
+            var profile=new Academy.Infrastructure.People.GuardianProfile {Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,UserId=user.Id,DisplayName=user.DisplayName,ContactPhone=normalized};
+            householdDb.AcademyMemberships.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,UserId=user.Id,Role=Academy.Infrastructure.Tenancy.AcademyRole.Guardian});householdDb.GuardianProfiles.Add(profile);
+            (await householdDb.GuardianPlayerLinks.SingleAsync(l=>l.PlayerId==f.Player)).GuardianId=profile.Id;await householdDb.SaveChangesAsync();
+        }
+        using var guardian=await Guardian(phone);var quote=await CashQuote(owner,f.Session,f.Enrollment);var response=await CashCollect(owner,f.Session,f.Enrollment,quote.GetProperty("quoteHash").GetString()!);response.EnsureSuccessStatusCode();var receipt=(await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("receiptId").GetGuid();
         var list=await guardian.GetFromJsonAsync<JsonElement>("/api/v1/guardian/subscriptions/receipts");Assert.Contains(list.GetProperty("items").EnumerateArray(),r=>r.GetProperty("id").GetGuid()==receipt);
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var link=await db.GuardianPlayerLinks.SingleAsync(l=>l.PlayerId==f.Player);link.IsActive=false;await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/guardian/subscriptions/receipts/{receipt}")).StatusCode);

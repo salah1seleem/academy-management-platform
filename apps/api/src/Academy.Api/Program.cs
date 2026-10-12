@@ -395,6 +395,7 @@ if (app.Environment.IsEnvironment("Demo"))
             {
                 await CashRegisterDemoSeed.Seed(db);
                 await CashPendingPaymentDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<Academy.Api.Operations.DiscountRules>());
+                await CashRegistrationDemoSeed.Seed(db);
             }
             await PlanPublicationDemoSeed.SeedAsync(db);
             await DiscountPricingDemoSeed.SeedAsync(db);

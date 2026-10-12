@@ -1,13 +1,25 @@
 import { expect, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 
-test("Demo Admin registers a real player and enrollment from mobile", async ({ page }) => {
+test("Explicitly authorized branch Admin registers a paid synthetic player from mobile", async ({ page }) => {
   const suffix = Date.now().toString().slice(-6);
   const playerName = `يوسف اختبار ${suffix}`;
   await page.goto("/login");
-  await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test");
+  await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.waitForURL("**/dashboard");
+  async function write(path: string, data: unknown, method = "POST") {
+    const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
+    const response = await page.request.fetch(path, { method, data, headers: { "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": crypto.randomUUID() } });
+    expect(response.ok(), await response.text()).toBe(true); return response.status() === 204 ? null : response.json();
+  }
+  const email = `registration.${crypto.randomUUID()}@example.test`;
+  const member = await write("/api/v1/manage/staff", { name: "إداري تسجيل اصطناعي", email, phone: `011${Date.now().toString().slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "تسجيل" });
+  const access = await page.request.get(`/api/v1/manage/staff/${member.id}/access`).then(r => r.json());
+  await write(`/api/v1/manage/staff/${member.id}/access`, { allBranches: false, branches: ["31000000-0000-0000-0000-000000000001"], actions: access.modules.map((module: string) => ({ module, read: ["players", "subscriptions", "finance"].includes(module), add: ["players", "subscriptions", "finance"].includes(module), edit: false, delete: false })) }, "PUT");
+  await page.context().clearCookies(); await page.goto("/login");
+  await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" }).getByRole("link", { name: /^تسجيل لاعب/ }).click();
   await expect(page.getByRole("heading", { name: "تسجيل لاعب جديد" })).toBeVisible();
   await page.getByLabel("اسم اللاعب بالعربية").fill(playerName);
@@ -21,6 +33,7 @@ test("Demo Admin registers a real player and enrollment from mobile", async ({ p
   await page.getByLabel("الباقة", { exact: true }).selectOption({ index: 1 });
   await page.getByRole("button", { name: "حساب المبلغ المستحق" }).click();
   await expect(page.getByText(/المبلغ المطلوب تحصيله/)).toBeVisible();
+  await page.getByLabel("طريقة التحصيل").selectOption("Online");
   await page.getByRole("button", { name: "تسجيل وتأكيد التحصيل" }).click();
   await page.waitForURL("**/dashboard/players");
   await expect(page.getByRole("heading", { name: "قائمة اللاعبين" })).toBeVisible();
