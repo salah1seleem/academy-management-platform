@@ -672,3 +672,32 @@ footer {
 .visit-row small, .visit-occupancy small, .visit-occupancy span { display: block; }
 .visit-occupancy span { color: #9c420b; font-size: .8rem; }
 @media (max-width: 600px) { .visit-row { display: grid; grid-template-columns: minmax(0, 1fr); } .visit-row button { justify-self: start; } }
+.cash-intro { display: flex; align-items: center; gap: 1rem; background: linear-gradient(115deg,#eaf7f5,#f3f4fc); border: 1px solid #cddfdc; border-radius: 20px; padding: 1.2rem; margin-block: 1rem; }
+.cash-intro > svg { color: #127c74; flex-shrink: 0; }
+.cash-intro > div { flex: 1; }
+.cash-intro p { color: var(--muted); font-size: .85rem; line-height: 1.8; margin: .4rem 0 0; }
+.cash-intro > a { font-size: .85rem; font-weight: 700; }
+.cash-register-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,330px),1fr)); align-items: start; gap: 1rem; margin-block: 1.2rem; }
+.cash-register-card { padding: 1.25rem; border-radius: 22px; border: 1px solid var(--border); background: linear-gradient(150deg,#fff,#f4f8fb); min-width: 0; }
+.cash-register-card header { display: flex; align-items: center; gap: .7rem; }
+.cash-register-card header > div { flex: 1; min-width: 0; }
+.cash-register-card h2 { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+.cash-register-card p { font-size: .85rem; color: var(--muted); line-height: 1.8; }
+.cash-symbol { width: 44px; height: 44px; border-radius: 14px; background: #e0efec; color: #14756d; display: grid; place-items: center; flex-shrink: 0; }
+.cash-balance-label { display: block; margin-top: 1.2rem; font-size: .8rem; color: var(--muted); }
+.cash-balance { font-size: 1.8rem; display: block; margin-block: .4rem; color: #164e55; }
+.cash-register-card .primary-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; text-decoration: none; }
+.cash-cashiers { display: flex; align-items: center; gap: .4rem; border-top: 1px solid var(--border); padding-top: .9rem; }
+.cash-register-card details { padding-block: .6rem; }
+.cash-register-card details form { display: grid; gap: .7rem; padding-top: .8rem; }
+.cash-register-card label { display: grid; gap: .4rem; font-size: .85rem; font-weight: 600; }
+.cash-register-card input:not([type=checkbox]), .cash-register-card select { width: 100%; min-width: 0; min-height: 46px; padding: .65rem .8rem; border: 1px solid var(--border); border-radius: 12px; background: white; color: var(--text); font: inherit; }
+.cash-register-card input:focus-visible, .cash-register-card select:focus-visible { outline: 2px solid #167b71; outline-offset: 2px; }
+.cash-register-card label.checkbox-line { display: flex; gap: .5rem; align-items: center; }
+.cash-register-card label.checkbox-line input { width: 18px; min-height: 18px; accent-color: #167b71; }
+.cash-register-card small { font-size: .78rem; line-height: 1.7; color: var(--muted); }
+.cash-session-stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: .9rem; margin-block: 1rem; }
+.cash-session-stats > div { background: #f1f7f8; border-radius: 16px; padding: 1rem; }
+.cash-session-stats small { display: block; color: var(--muted); margin-bottom: .6rem; }
+.cash-session-stats strong { font-size: 1.3rem; color: #155963; }
+@media(max-width:600px) { .cash-intro { flex-wrap: wrap; } .cash-intro > a { width: 100%; } .cash-register-card header { flex-wrap: wrap; } .cash-register-card header > .status-pill { margin-inline-start: 52px; } }

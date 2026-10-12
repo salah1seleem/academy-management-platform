@@ -28,7 +28,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        `${localConnectionFallback}ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=LegacyRegression Demo__SeedEnabled=true Demo__CollectionFundsSeedEnabled=true Demo__PastAttendanceSeedEnabled=true Demo__AttendanceDraftSeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile`,
+        `${localConnectionFallback}ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=LegacyRegression Demo__SeedEnabled=true Demo__CashRegistersSeedEnabled=true Demo__CollectionFundsSeedEnabled=true Demo__PastAttendanceSeedEnabled=true Demo__AttendanceDraftSeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile`,
       url: `${apiUrl}/health/live`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

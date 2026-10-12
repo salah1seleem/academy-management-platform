@@ -35,6 +35,7 @@ public static class ConfigurationEndpoints
         var t = (await tenant.ResolveAsync())!;
         if (body.Features is null || body.Features.Count > AcademyFeatures.All.Length || body.TimeZone?.Length > 80 || body.Currency?.Length != 3) return Results.Problem(statusCode: 422, title: "إعدادات غير صالحة");
         await using var tx = await db.Database.BeginTransactionAsync(); await Lock(db, t.AcademyId);
+        if (t.Role != AcademyRole.AcademyOwner && body.CashEnabled != ((await service.Active(t.AcademyId))?.CashEnabled ?? false)) return Results.Forbid();
         var row = await service.CreateDraft(t.AcademyId, Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!), body);
         await tx.CommitAsync(); return Results.Ok(new { row.Id, row.Revision });
     }
@@ -47,6 +48,7 @@ public static class ConfigurationEndpoints
         if (row.Version != body.Version) return Results.Problem(statusCode: 409, title: "تغير إصدار الإعدادات؛ حدّث الصفحة");
         var valid = (row.State, body.Target) is (ConfigurationState.Draft, ConfigurationState.Validated) or (ConfigurationState.Validated, ConfigurationState.Staged) or (ConfigurationState.Staged, ConfigurationState.Active) or (ConfigurationState.Active, ConfigurationState.Suspended) or (ConfigurationState.Suspended, ConfigurationState.Staged);
         if (!valid) return Results.Problem(statusCode: 409, title: "انتقال حالة الإعدادات غير مسموح");
+        if (body.Target == ConfigurationState.Suspended && t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled) return Results.Forbid();
         if (body.Target is ConfigurationState.Validated or ConfigurationState.Active or ConfigurationState.Staged)
         {
             var errors = await service.Validate(row); if (errors.Length > 0) return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = errors }, statusCode: 422);
@@ -56,6 +58,7 @@ public static class ConfigurationEndpoints
         {
             if (row.EffectiveAtUtc > clock.GetUtcNow()) return Results.Problem(statusCode: 409, title: "لم يحن موعد سريان الإعدادات");
             var previous = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.State == ConfigurationState.Active);
+            if (t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled != (previous is not null && AcademyRuntimeSettings.Read(previous.Payload).CashEnabled)) return Results.Forbid();
             if (previous is not null) await service.Transition(previous, ConfigurationState.Superseded, user);
         }
         await service.Transition(row, body.Target, user); await tx.CommitAsync(); return Results.NoContent();

@@ -41,6 +41,11 @@ public sealed partial class FoundationDbContext
             b.Entity(type).HasQueryFilter("trusted-academy", Expression.Lambda(predicate, row));
         }
         BranchFilter<Branch>(b, x => RequestBranchIds.Contains(x.Id));
+        BranchFilter<CashRegister>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CashierAssignment>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CashSession>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CashMovement>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CashTransfer>(b, x => RequestBranchIds.Contains(x.BranchId) && RequestBranchIds.Contains(x.ToBranchId));
         BranchFilter<TrainingGroup>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<SportEnrollment>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<TrainingSession>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -152,6 +157,14 @@ public sealed partial class FoundationDbContext
                 throw new InvalidOperationException("سجل الدخول ثابت؛ يسمح بتسجيل الخروج مرة واحدة فقط.");
         if (ChangeTracker.Entries().Any(e => e.Entity is SessionCoachOverride or AccessEntitlement or ResourceObservation or ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
+        if (ChangeTracker.Entries().Any(e => e.Entity is CashRegister or CashTransfer or CashMovement && e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("سجل الصندوق مثبت ولا يعدل أو يحذف.");
+        foreach(var entry in ChangeTracker.Entries<CashierAssignment>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(entry.State==EntityState.Deleted || entry.Properties.Any(p=>p.IsModified && p.Metadata.Name is not (nameof(CashierAssignment.IsActive) or nameof(CashierAssignment.UpdatedAtUtc))))
+                throw new InvalidOperationException("تفويض أمين الصندوق لا ينقل؛ يلغى التفويض وينشأ تفويض مستقل.");
+        foreach (var entry in ChangeTracker.Entries<CashSession>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if (entry.State == EntityState.Deleted || entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(CashSession.ClosedAtUtc)).HasValue || !entry.Entity.ClosedAtUtc.HasValue || entry.Properties.Any(p=>p.IsModified && p.Metadata.Name is not (nameof(CashSession.ClosedAtUtc) or nameof(CashSession.ClosedByUserId) or nameof(CashSession.CountedAmount) or nameof(CashSession.ExpectedAmount) or nameof(CashSession.ClosingReason) or nameof(CashSession.CloseKey) or nameof(CashSession.CloseHash) or nameof(CashSession.UpdatedAtUtc))))
+                throw new InvalidOperationException("وردية الصندوق ثابتة؛ يسمح بإقفالها مرة واحدة فقط.");
         foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))
             if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot), nameof(IPlanTermsSnapshot.DurationMonthsSnapshot), nameof(IPlanTermsSnapshot.ServiceKindSnapshot), nameof(IPlanTermsSnapshot.TrainingFormatSnapshot) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("شروط الاشتراك محفوظة عند الطلب ولا يمكن استبدالها بشروط باقة جديدة.");

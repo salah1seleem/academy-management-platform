@@ -134,6 +134,7 @@ builder.Services.AddScoped<ISubscriptionClock, SubscriptionClock>();
 builder.Services.AddScoped<IPaymentGateway, InternalTestPaymentGateway>();
 builder.Services.AddScoped<PaymentProcessor>();
 builder.Services.AddScoped<CollectionService>();
+builder.Services.AddScoped<CashRegisterService>();
 builder.Services.AddScoped<DiscountRules>();
 builder.Services.AddScoped<RenewalCreationService>();
 builder.Services.AddScoped<SubscriptionAdjustmentService>();
@@ -364,6 +365,7 @@ app.MapDailyStaffAttendance();
 app.MapPayroll();
 app.MapVersionedConfiguration();
 app.MapReceivables();
+app.MapCashRegisters();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
@@ -389,6 +391,7 @@ if (app.Environment.IsEnvironment("Demo"))
         {
             await ReceivableDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:CashRegistersSeedEnabled")) await CashRegisterDemoSeed.Seed(db);
             await PlanPublicationDemoSeed.SeedAsync(db);
             await DiscountPricingDemoSeed.SeedAsync(db);
             await RenewalOpportunityDemoSeed.SeedAsync(db);

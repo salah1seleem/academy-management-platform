@@ -6,6 +6,7 @@ import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/receivable_balances.dart';
 import 'renewal_opportunities.dart';
+import 'cash_registers.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
@@ -36,6 +37,7 @@ class _OwnerReportsState extends State<OwnerReports> {
                 'financial': 'المال',
                 'attendance': 'الحضور',
                 'receivables': 'الأرصدة',
+                'cash': 'الصناديق',
                 'renewals': 'فرص التجديد',
                 'subscriptions': 'الاشتراكات',
               }.entries)
@@ -48,7 +50,9 @@ class _OwnerReportsState extends State<OwnerReports> {
           ),
         ),
         Expanded(
-          child: report == 'renewals'
+          child: report == 'cash'
+              ? NativeCashRegisters(auth: widget.auth)
+              : report == 'renewals'
               ? NativeRenewalOpportunities(
                   auth: widget.auth,
                   branchId: widget.initialFilters['branchId'] ?? '',
