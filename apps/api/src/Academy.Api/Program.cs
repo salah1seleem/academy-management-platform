@@ -140,6 +140,7 @@ builder.Services.AddScoped<Academy.Api.Facilities.VisitService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
 builder.Services.AddScoped<GroupPlacementService>();
+builder.Services.AddScoped<CoachOverrideService>();
 builder.Services.AddScoped<GroupCreationService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceSessionCoordinator>();
 builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
@@ -358,6 +359,7 @@ app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
 Academy.Api.Facilities.VisitEndpoints.MapVisits(app);
+app.MapCoachOverrides();
 
 if (args.Contains("--reset-football-demo"))
 {
@@ -388,11 +390,12 @@ if (app.Environment.IsEnvironment("Demo"))
                 await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
                 await Academy.Api.Facilities.ObservationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>(), app.Services.GetRequiredService<TimeProvider>());
             }
-            if (app.Configuration.GetValue<bool>("Demo:VisitSeedEnabled")) {
+            if (app.Configuration.GetValue<bool>("Demo:VisitSeedEnabled") || app.Configuration.GetValue<bool>("Demo:CoachOverrideSeedEnabled")) {
                 await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
                 await Academy.Api.Operations.GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
                 await Academy.Api.Facilities.VisitDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), configSeed.ServiceProvider.GetRequiredService<CollectionService>(), app.Services.GetRequiredService<TimeProvider>());
             }
+            if (app.Configuration.GetValue<bool>("Demo:CoachOverrideSeedEnabled")) await CoachOverrideDemoSeed.Seed(db,configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(),app.Services.GetRequiredService<TimeProvider>());
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
         }
         await PlatformIdentity.SeedDemo(app.Services);

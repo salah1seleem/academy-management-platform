@@ -35,6 +35,7 @@ public sealed class EvaluationCriterion : TenantEntity
 
 public sealed class PlayerEvaluation : TenantEntity
 {
+    public Guid? TrainingSessionId { get; set; }
     public Guid SportEnrollmentId { get; set; }
     public Guid SportId { get; set; }
     public Guid TrainingGroupId { get; set; }

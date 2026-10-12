@@ -42,6 +42,8 @@ void main() {
               'facility': 'مرفق اختبار',
               'space': 'مسبح اختبار',
               'groupName': 'مجموعة سباحة',
+              'coach': 'مدرب بديل الحصة',
+              'plannedCoach': 'المدرب الأصلي',
               'startTime': '17:00:00',
               'endTime': '18:00:00',
               'reservedSeats': 6,
@@ -56,6 +58,8 @@ void main() {
       expect(find.text('مجموعة سباحة'), findsOneWidget);
       expect(find.text('المقاعد: 6 / 8'), findsOneWidget);
       expect(find.text('لم تربط حصة مؤرخة'), findsOneWidget);
+      expect(find.text('المدرب المخطط: المدرب الأصلي'), findsOneWidget);
+      expect(find.textContaining('مدرب بديل الحصة'), findsOneWidget);
       expect(tester.takeException(), isNull);
       auth.dispose();
     },

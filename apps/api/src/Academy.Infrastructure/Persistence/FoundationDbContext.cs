@@ -464,7 +464,6 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.HasIndex(x => new { x.AcademyId, x.TrainingSessionId, x.AcademyMembershipId }).IsUnique();
             entity.HasOne(x => x.TrainingSession).WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingSessionId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AcademyMembership).WithMany().HasForeignKey(x => new { x.AcademyId, x.AcademyMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<StaffGroupAssignment>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AcademyMembershipId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.AcademyMembershipId, x.TrainingGroupId }).OnDelete(DeleteBehavior.Restrict);
         });
 
         ConfigureTenantEntity<SubscriptionSessionMovement>(builder, "SubscriptionSessionMovements");

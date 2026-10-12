@@ -214,7 +214,7 @@ public static partial class ReportingEndpoints
     private static IQueryable<PlayerAttendance> PlayerAttendanceQuery(TenantMembership current, Guid userId, DateOnly from, DateOnly to, Guid? sportId, Guid? branchId, Guid? groupId, string? status, string? search, int? birthYear, FoundationDbContext db)
     {
         var query = db.PlayerAttendances.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.TrainingSession.SessionDate >= from && x.TrainingSession.SessionDate <= to && x.TrainingSession.Status != TrainingSessionStatus.Cancelled);
-        if (current.Role == AcademyRole.Coach) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == userId && a.IsActive));
+        if (current.Role == AcademyRole.Coach) query = query.Where(x => FoundationDbContext.IsSessionStaffAssigned(current.AcademyId,current.MembershipId,x.TrainingSessionId));
         if (sportId.HasValue) query = query.Where(x => x.TrainingSession.SportId == sportId); if (branchId.HasValue) query = query.Where(x => x.TrainingSession.BranchId == branchId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<AttendanceStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);
         if (!string.IsNullOrWhiteSpace(search)) { var value = search.Trim(); query = query.Where(x => x.SportEnrollment.Player.ArabicName.Contains(value) || x.SportEnrollment.Player.PlayerCode.Contains(value)); }
@@ -228,7 +228,7 @@ public static partial class ReportingEndpoints
     {
         var query = db.StaffAttendances.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.TrainingSession.SessionDate >= from && x.TrainingSession.SessionDate <= to && x.TrainingSession.Status != TrainingSessionStatus.Cancelled);
         if (coachId.HasValue) query = query.Where(x => x.AcademyMembershipId == coachId);
-        if (current.Role == AcademyRole.Coach) query = query.Where(x => x.AcademyMembership.UserId == userId && db.StaffGroupAssignments.Any(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembershipId == x.AcademyMembershipId && a.IsActive));
+        if (current.Role == AcademyRole.Coach) query = query.Where(x => x.AcademyMembershipId == current.MembershipId);
         if (sportId.HasValue) query = query.Where(x => x.TrainingSession.SportId == sportId); if (branchId.HasValue) query = query.Where(x => x.TrainingSession.BranchId == branchId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<AttendanceStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);
         if (!string.IsNullOrWhiteSpace(search)) { var value = search.Trim(); query = query.Where(x => x.AcademyMembership.User.DisplayName.Contains(value)); }

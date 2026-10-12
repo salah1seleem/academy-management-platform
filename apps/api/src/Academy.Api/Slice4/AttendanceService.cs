@@ -66,7 +66,7 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
         if (session.Status == TrainingSessionStatus.Cancelled) throw new AttendanceConflictException("لا يمكن تسجيل الحضور لحصة ملغاة.");
         if (session.SessionDate > await AttendanceCalendar.TodayAsync(academyId, db, clock, ct)) throw new AttendanceValidationException("لا يمكن تسجيل الحضور بتاريخ مستقبلي.");
         var ids = changes.Select(x => x.AcademyMembershipId).ToArray();
-        var assigned = await db.StaffGroupAssignments.CountAsync(x => x.AcademyId == academyId && x.TrainingGroupId == session.TrainingGroupId && ids.Contains(x.AcademyMembershipId) && x.IsActive, ct);
+        var assigned = await db.AcademyMemberships.CountAsync(x => x.AcademyId == academyId && ids.Contains(x.Id) && FoundationDbContext.IsSessionStaffAssigned(academyId,x.Id,session.Id), ct);
         if (assigned != ids.Length) throw new AttendanceNotFoundException();
         var output = new List<AttendanceSaveResult>();
         foreach (var change in changes.OrderBy(x => x.AcademyMembershipId))

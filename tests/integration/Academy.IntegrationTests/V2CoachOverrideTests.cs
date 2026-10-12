@@ -1,0 +1,114 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Academy.Api.Auth;
+using Academy.Api.Operations;
+using Academy.Api.Slice4;
+using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.Tenancy;
+using Academy.Infrastructure.Evaluations;
+using Academy.Infrastructure.People;
+using Academy.Infrastructure.Identity;
+using Academy.Api.Facilities;
+using Academy.Api.Slice5;
+using Academy.Api.Configuration;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Identity;
+using Npgsql;
+
+namespace Academy.IntegrationTests;
+public sealed partial class V2PlanPublicationTests
+{
+    private async Task<(PlacementFixture F,Guid Actual)> OverrideReady(HttpClient owner)
+    {
+        var f=await OccurrenceReady(owner); await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); (await db.TrainingSessions.SingleAsync(s=>s.Id==f.F.Next)).SessionDate=PlacementToday; await db.SaveChangesAsync(); return(f.F,await db.StaffGroupAssignments.Where(a=>a.TrainingGroupId==f.Target&&a.IsActive).Select(a=>a.AcademyMembershipId).SingleAsync());
+    }
+    private static CoachOverrideWrite OverrideBody(Guid original,Guid actual,int sequence=0)=>new(original,actual,sequence,"تعذر حضور المدرب الأصلي — سيناريو اصطناعي",true,"مراجعة أهلية اصطناعية لهذه المجموعة والرياضة");
+    private static string OverridePath(Guid session)=>$"/api/v1/manage/structure/sessions/{session}/coach-override";
+    private async Task<CoachOverrideWrite> OverrideReview(HttpClient owner,Guid session,CoachOverrideWrite body)
+    {
+        var r=await Write(owner,OverridePath(session)+"/preview",body); Assert.True(r.IsSuccessStatusCode,await r.Content.ReadAsStringAsync()); var p=(await r.Content.ReadFromJsonAsync<CoachOverridePreview>())!; Assert.Empty(p.Conflicts); return body with{Fingerprint=p.Fingerprint};
+    }
+    private static async Task<HttpResponseMessage> OverrideSave(HttpClient c,Guid session,CoachOverrideWrite body,string? key=null)
+    {
+        var csrf=await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var r=new HttpRequestMessage(HttpMethod.Put,OverridePath(session)){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",key??Guid.NewGuid().ToString());return await c.SendAsync(r);
+    }
+    private async Task<HttpClient> OverrideCoach(Guid id)
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var email=await db.AcademyMemberships.Where(m=>m.Id==id).Select(m=>m.User.Email).SingleAsync();var c=factory.CreateClient();await MobileCoachTestSession.SignInAsync(c,factory.Services,email!);return c;
+    }
+    [Fact]
+    public async Task Coach_override_changes_only_occurrence_scope_staff_roster_and_notice_without_permanent_assignment_or_money()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var before=(await db.StaffGroupAssignments.CountAsync(),await db.StaffAttendances.CountAsync(),await db.PlayerAttendances.CountAsync(),await db.Collections.CountAsync());var body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));var key=Guid.NewGuid().ToString();var saved=await OverrideSave(owner,f.F.Next,body,key);Assert.True(saved.IsSuccessStatusCode,await saved.Content.ReadAsStringAsync());(await OverrideSave(owner,f.F.Next,body,key)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await OverrideSave(owner,f.F.Next,body with{Reason="changed"},key)).StatusCode);
+        Assert.Equal(before,(await db.StaffGroupAssignments.CountAsync(),await db.StaffAttendances.CountAsync(),await db.PlayerAttendances.CountAsync(),await db.Collections.CountAsync()));Assert.Single(await db.SessionCoachOverrides.Where(o=>o.TrainingSessionId==f.F.Next).ToArrayAsync());Assert.True(await db.AcademyNotices.AnyAsync(n=>n.Message.Contains("المدرب الفعلي")&&n.Message.Contains("مجموعة سباحة تحقق")));
+        using var original=await OverrideCoach(f.F.Coach);using var actual=await OverrideCoach(f.Actual);Assert.Equal(HttpStatusCode.NotFound,(await original.GetAsync($"/api/v1/attendance/sessions/{f.F.Next}/players")).StatusCode);Assert.Equal(HttpStatusCode.OK,(await actual.GetAsync($"/api/v1/attendance/sessions/{f.F.Next}/players")).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await actual.GetAsync($"/api/v1/attendance/sessions/{f.F.Past}/players")).StatusCode);
+        var groups=await actual.GetFromJsonAsync<JsonElement>("/api/v1/coach/groups");Assert.DoesNotContain(groups.EnumerateArray(),g=>g.GetProperty("id").GetGuid()==f.F.Group);var staff=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions/{f.F.Next}/staff");Assert.Contains(staff.EnumerateArray(),m=>m.GetProperty("academyMembershipId").GetGuid()==f.Actual);Assert.DoesNotContain(staff.EnumerateArray(),m=>m.GetProperty("academyMembershipId").GetGuid()==f.F.Coach);
+        var sessionList=await actual.GetFromJsonAsync<JsonElement>("/api/v1/attendance/sessions");Assert.Contains(sessionList.EnumerateArray(),s=>s.GetProperty("id").GetGuid()==f.F.Next);
+    }
+    [Fact]
+    public async Task Coach_override_restore_is_a_new_immutable_decision_and_concurrent_stale_review_has_one_winner()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);var body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));var results=await Task.WhenAll(OverrideSave(owner,f.F.Next,body),OverrideSave(owner,f.F.Next,body));Assert.Single(results,r=>r.IsSuccessStatusCode);Assert.Single(results,r=>r.StatusCode==HttpStatusCode.Conflict);var reset=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.F.Coach,1));(await OverrideSave(owner,f.F.Next,reset)).EnsureSuccessStatusCode();
+        using var original=await OverrideCoach(f.F.Coach);using var actual=await OverrideCoach(f.Actual);Assert.Equal(HttpStatusCode.OK,(await original.GetAsync($"/api/v1/attendance/sessions/{f.F.Next}/players")).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await actual.GetAsync($"/api/v1/attendance/sessions/{f.F.Next}/players")).StatusCode);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var rows=await db.SessionCoachOverrides.Where(o=>o.TrainingSessionId==f.F.Next).OrderBy(o=>o.Sequence).ToArrayAsync();Assert.Equal(2,rows.Length);Assert.Equal(rows[0].Id,rows[1].PreviousDecisionId);Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"SessionCoachOverrides\" WHERE \"Id\"={rows[0].Id}"))).SqlState);rows[0].Reason="changed";await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());
+    }
+    [Fact]
+    public async Task Coach_override_rejects_missing_qualification_completed_work_past_and_foreign_scope()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);var body=OverrideBody(f.F.Coach,f.Actual);var incomplete=await Write(owner,OverridePath(f.F.Next)+"/preview",body with{QualificationConfirmed=false});incomplete.EnsureSuccessStatusCode();Assert.NotEmpty((await incomplete.Content.ReadFromJsonAsync<CoachOverridePreview>())!.Conflicts);var reviewed=await OverrideReview(owner,f.F.Next,body);using var foreign=await Staff("owner.future@example.test");Assert.Equal(HttpStatusCode.NotFound,(await OverrideSave(foreign,f.F.Next,reviewed)).StatusCode);Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync(OverridePath(f.F.Next),reviewed)).StatusCode);
+        (await Write(owner,$"/api/v1/attendance/sessions/{f.F.Next}/staff",new{items=new[]{new StaffAttendanceChange(f.F.Coach,AttendanceStatus.Present,0)}},true)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await OverrideSave(owner,f.F.Next,reviewed)).StatusCode);
+        var past=await Write(owner,OverridePath(f.F.Past)+"/preview",body);past.EnsureSuccessStatusCode();Assert.NotEmpty((await past.Content.ReadFromJsonAsync<CoachOverridePreview>())!.Conflicts);
+    }
+    [Fact]
+    public async Task Coach_override_evaluation_retains_exact_session_context_without_broad_group_access()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var sport=await db.TrainingGroups.Where(g=>g.Id==f.F.Group).Select(g=>g.SportId).SingleAsync();if(!await db.EvaluationCriteria.AnyAsync(c=>c.SportId==sport&&c.IsActive)){db.EvaluationCriteria.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,SportId=sport,ArabicName="مهارة سباحة اصطناعية"});await db.SaveChangesAsync();}
+        (await OverrideSave(owner,f.F.Next,await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual)))).EnsureSuccessStatusCode();using var actual=await OverrideCoach(f.Actual);using var original=await OverrideCoach(f.F.Coach);var body=new CreateEvaluationRequest(f.F.First,PlacementToday,"تقييم الحصة",null,f.F.Next);Assert.Equal(HttpStatusCode.NotFound,(await Write(original,"/api/v1/evaluations",body)).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await Write(actual,"/api/v1/evaluations",body with{TrainingSessionId=null})).StatusCode);
+        var created=await Write(actual,"/api/v1/evaluations",body);Assert.True(created.IsSuccessStatusCode,await created.Content.ReadAsStringAsync());var id=(await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();var detail=await actual.GetFromJsonAsync<JsonElement>($"/api/v1/evaluations/{id}");Assert.Equal(f.F.Next,detail.GetProperty("trainingSessionId").GetGuid());var criterion=detail.GetProperty("scores")[0].GetProperty("criterionId").GetGuid();var update=await Write(actual,$"/api/v1/evaluations/{id}",new UpdateEvaluationRequest("تقييم الحصة",null,detail.GetProperty("version").GetUInt32(),[new EvaluationScoreRequest(criterion,88,null)]),true);update.EnsureSuccessStatusCode();var version=(await update.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("version").GetUInt32();(await Write(actual,$"/api/v1/evaluations/{id}/publish",new PublishEvaluationRequest(version))).EnsureSuccessStatusCode();using var guardian=await Guardian();var profile=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{await PlayerFor(f.F.First)}/profile");Assert.Contains(profile.GetProperty("evaluations").EnumerateArray(),e=>e.GetProperty("id").GetGuid()==id);
+        var entity=await db.PlayerEvaluations.SingleAsync(e=>e.Id==id);entity.TrainingSessionId=f.F.Past;await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());
+    }
+    [Fact]
+    public async Task Coach_override_original_absence_does_not_prove_undelivered_service_when_replacement_is_unknown_or_present()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);(await Write(owner,$"/api/v1/attendance/sessions/{f.F.Next}/staff",new{items=new[]{new StaffAttendanceChange(f.F.Coach,AttendanceStatus.Absent,0)}},true)).EnsureSuccessStatusCode();(await OverrideSave(owner,f.F.Next,await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual)))).EnsureSuccessStatusCode();
+        var body=new CompensationGrantWrite(f.F.Next,CompensationCause.CoachAbsent,CompensationUnit.Session,PlacementToday,PlacementToday.AddDays(30));var path=$"/api/v1/people/enrollments/{f.F.First}/compensation/preview";var unknown=await Write(owner,path,body);unknown.EnsureSuccessStatusCode();Assert.NotEmpty((await unknown.Content.ReadFromJsonAsync<CompensationGrantPreview>())!.Conflicts);
+        (await Write(owner,$"/api/v1/attendance/sessions/{f.F.Next}/staff",new{items=new[]{new StaffAttendanceChange(f.Actual,AttendanceStatus.Present,0)}},true)).EnsureSuccessStatusCode();var present=await Write(owner,path,body);present.EnsureSuccessStatusCode();Assert.NotEmpty((await present.Content.ReadFromJsonAsync<CompensationGrantPreview>())!.Conflicts);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Equal(AttendanceStatus.Absent,await db.StaffAttendances.Where(a=>a.TrainingSessionId==f.F.Next&&a.AcademyMembershipId==f.F.Coach).Select(a=>a.Status).SingleAsync());
+    }
+    [Fact]
+    public async Task Coach_override_conflict_detector_uses_actual_teacher_and_frees_original_without_changing_permanent_assignment()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);(await OverrideSave(owner,f.F.Next,await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual)))).EnsureSuccessStatusCode();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var coordinator=scope.ServiceProvider.GetRequiredService<ResourceSessionCoordinator>();var group=await db.StaffGroupAssignments.Where(a=>a.AcademyMembershipId==f.Actual&&a.IsActive).Select(a=>a.TrainingGroupId).SingleAsync();await using var tx=await db.Database.BeginTransactionAsync();await Assert.ThrowsAsync<FacilityRejected>(()=>coordinator.CheckCoachSlot(DemoSeed.NogoomAcademyId,group,PlacementToday,new(10,0),new(11,0)));await coordinator.CheckCoachSlot(DemoSeed.NogoomAcademyId,f.F.Group,PlacementToday,new(10,0),new(11,0));await tx.RollbackAsync();
+    }
+    [Fact]
+    public async Task Coach_override_read_edit_branch_and_current_training_entitlements_are_checked_independently()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);var email="override.admin."+Guid.NewGuid().ToString("N")+"@example.test";var created=await Write(owner,"/api/v1/manage/staff",new StaffWrite("إداري بديل اصطناعي",email,"010"+Random.Shared.Next(10000000,99999999),"Demo-Only-123!",AcademyRole.AcademyAdmin,null));created.EnsureSuccessStatusCode();var member=(await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();using var admin=await Staff(email);StaffAccessWrite Access(Guid branch,bool edit)=>new(false,[branch],StaffAccessRules.Modules.Select(m=>new StaffActionValue(m,true,false,m=="academy"&&edit,false)).ToArray());var body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));
+        (await Write(owner,$"/api/v1/manage/staff/{member}/access",Access(f.F.Branch,false),true)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.OK,(await admin.GetAsync(OverridePath(f.F.Next))).StatusCode);Assert.Equal(HttpStatusCode.OK,(await Write(admin,OverridePath(f.F.Next)+"/preview",body)).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await OverrideSave(admin,f.F.Next,body)).StatusCode);
+        (await Write(owner,$"/api/v1/manage/staff/{member}/access",Access(f.F.OtherBranch,true),true)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.NotFound,(await OverrideSave(admin,f.F.Next,body)).StatusCode);using var coach=await OverrideCoach(f.Actual);using var guardian=await Guardian();Assert.Equal(HttpStatusCode.Forbidden,(await coach.GetAsync(OverridePath(f.F.Next))).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await guardian.GetAsync(OverridePath(f.F.Next))).StatusCode);
+        (await Write(owner,$"/api/v1/manage/staff/{member}/access",Access(f.F.Branch,true),true)).EnsureSuccessStatusCode();(await OverrideSave(admin,f.F.Next,body)).EnsureSuccessStatusCode();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var config=await db.AcademyConfigurationVersions.SingleAsync(c=>c.AcademyId==DemoSeed.NogoomAcademyId&&c.State==ConfigurationState.Active);var original=config.Payload;try{var settings=AcademyRuntimeSettings.Read(original);settings.Features["training"]=false;config.Payload=settings.Serialize();config.ContentHash=AcademyConfigurationService.Hash(config.Payload);await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.Forbidden,(await OverrideSave(owner,f.F.Next,body)).StatusCode);}finally{config.Payload=original;config.ContentHash=AcademyConfigurationService.Hash(original);await db.SaveChangesAsync();}
+    }
+    [Fact]
+    public async Task Coach_override_cancelled_session_and_changed_preview_cannot_be_committed()
+    {
+        SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);var body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));Assert.Equal(HttpStatusCode.Conflict,(await OverrideSave(owner,f.F.Next,body with{QualificationEvidence="مرجع تغير بعد المعاينة"})).StatusCode);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();(await db.TrainingSessions.SingleAsync(s=>s.Id==f.F.Next)).Status=TrainingSessionStatus.Cancelled;await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.Conflict,(await OverrideSave(owner,f.F.Next,body)).StatusCode);Assert.False(await db.SessionCoachOverrides.AnyAsync(o=>o.TrainingSessionId==f.F.Next));
+    }
+    [Fact]
+    public async Task Coach_override_rechecks_resource_policy_and_preserves_occurrence_dates_after_approval()
+    {
+        await using var licensed=await FacilityLicenseScope.Begin(factory.Services);SetVisitClock();using var owner=await Staff();var f=await OverrideReady(owner);var resource=await FacilityFixture(owner,branch:f.F.Branch);(await BookFacility(owner,FacilityBody(resource,2,10,11) with{Date=PlacementToday,ServiceKind="Training",GroupId=f.F.Group,CoachId=f.F.Coach,SessionId=f.F.Next},Guid.NewGuid().ToString())).EnsureSuccessStatusCode();var body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var row=await db.FacilityResources.SingleAsync(r=>r.Id==resource);row.OpensAt=new(9,0);await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.Conflict,(await OverrideSave(owner,f.F.Next,body)).StatusCode);body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));row.ServiceKinds=["DayPass"];await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.Conflict,(await OverrideSave(owner,f.F.Next,body)).StatusCode);row.ServiceKinds=["Training"];await db.SaveChangesAsync();body=await OverrideReview(owner,f.F.Next,OverrideBody(f.F.Coach,f.Actual));(await OverrideSave(owner,f.F.Next,body)).EnsureSuccessStatusCode();Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"TrainingSessions\" SET \"StartTime\"='10:30:00' WHERE \"Id\"={f.F.Next}"))).SqlState);
+    }
+    [Fact]
+    public async Task Coach_override_demo_seed_is_repeatable_without_reassigning_work_or_reactivating_a_reviewed_account()
+    {
+        await using var licensed=await FacilityLicenseScope.Begin(factory.Services);SetVisitClock();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var users=scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();var collections=scope.ServiceProvider.GetRequiredService<CollectionService>();await FacilityDemoSeed.Seed(db);await GroupPlacementDemoSeed.Seed(db,collections);await VisitDemoSeed.Seed(db,users,collections,factory.VisitClock);await CoachOverrideDemoSeed.Seed(db,users,factory.VisitClock);var before=(await db.Collections.CountAsync(),await db.Players.CountAsync(),await db.StaffAttendances.CountAsync(),await db.SessionCoachOverrides.CountAsync(),await db.AcademyNotices.CountAsync(),await db.Users.CountAsync());await CoachOverrideDemoSeed.Seed(db,users,factory.VisitClock);Assert.Equal(before,(await db.Collections.CountAsync(),await db.Players.CountAsync(),await db.StaffAttendances.CountAsync(),await db.SessionCoachOverrides.CountAsync(),await db.AcademyNotices.CountAsync(),await db.Users.CountAsync()));Assert.False(await db.StaffGroupAssignments.AnyAsync(a=>a.AcademyMembershipId==CoachOverrideDemoSeed.MembershipId));var member=await db.AcademyMemberships.SingleAsync(m=>m.Id==CoachOverrideDemoSeed.MembershipId);try{member.IsActive=false;await db.SaveChangesAsync();await CoachOverrideDemoSeed.Seed(db,users,factory.VisitClock);Assert.False(await db.AcademyMemberships.Where(m=>m.Id==member.Id).Select(m=>m.IsActive).SingleAsync());}finally{member.IsActive=true;await db.SaveChangesAsync();}
+    }
+    [Fact]
+    public async Task Coach_override_guardian_schedule_candidates_preserve_selected_moves_dated_transfers_and_compensation()
+    {
+        using var owner=await Staff();var moved=await OccurrenceReady(owner);(await SessionSave(owner,moved.F.First,await SessionReview(owner,moved.F.First,new SessionTransferPair(moved.F.Next,moved.TargetSession)))).EnsureSuccessStatusCode();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var day=await db.TrainingSessions.Where(s=>s.Id==moved.TargetSession).Select(s=>s.SessionDate).SingleAsync();var result=await Academy.Api.Slice6.GuardianNextSessionReadModel.Read(db,DemoSeed.NogoomAcademyId,[moved.F.First],day);Assert.Equal(moved.TargetSession,result[moved.F.First]!.Id);
+        var dated=await OccurrenceReady(owner);(await TransferSave(owner,dated.F.First,await TransferReview(owner,dated.F.First,dated.Target))).EnsureSuccessStatusCode();result=await Academy.Api.Slice6.GuardianNextSessionReadModel.Read(db,DemoSeed.NogoomAcademyId,[dated.F.First],day);Assert.Equal(dated.TargetSession,result[dated.F.First]!.Id);
+        var makeup=await CompensationReady(owner);var grant=await CompensationGrant(owner,makeup.F.First,makeup.F.Past);(await CompensationCommand(owner,$"/api/v1/people/compensations/{grant}/booking",await CompensationBookReview(owner,grant,makeup.TargetSession))).EnsureSuccessStatusCode();day=await db.TrainingSessions.Where(s=>s.Id==makeup.TargetSession).Select(s=>s.SessionDate).SingleAsync();result=await Academy.Api.Slice6.GuardianNextSessionReadModel.Read(db,DemoSeed.NogoomAcademyId,[makeup.F.First],day);Assert.Equal(makeup.F.Next,result[makeup.F.First]!.Id);(await db.TrainingSessions.SingleAsync(s=>s.Id==makeup.F.Next)).Status=TrainingSessionStatus.Cancelled;await db.SaveChangesAsync();result=await Academy.Api.Slice6.GuardianNextSessionReadModel.Read(db,DemoSeed.NogoomAcademyId,[makeup.F.First],day);Assert.Equal(makeup.TargetSession,result[makeup.F.First]!.Id);Assert.Empty(await Academy.Api.Slice6.GuardianNextSessionReadModel.Read(db,DemoSeed.FutureAcademyId,[makeup.F.First],day));
+    }
+}

@@ -156,6 +156,12 @@ class _FacilityBoardPageState extends State<FacilityBoardPage> {
                   UiText(
                     '${textOf(b['startTime']).split(':').take(2).join(':')} — ${textOf(b['endTime']).split(':').take(2).join(':')} · ${b['coach'] ?? localized(context, 'بدون مدرب', 'No coach')}',
                   ),
+                  if (textOf(b['plannedCoach']).isNotEmpty &&
+                      b['plannedCoach'] != b['coach'])
+                    UiText(
+                      '${localized(context, 'المدرب المخطط', 'Planned coach')}: ${b['plannedCoach']}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   UiText(
                     '${localized(context, 'المقاعد', 'Seats')}: ${b['reservedSeats']} / ${b['capacity']}',
                   ),

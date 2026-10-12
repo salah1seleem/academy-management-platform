@@ -116,7 +116,7 @@ public static class Slice5Endpoints
             var user = UserId(principal);
             sessionGroup = await db.TrainingSessions.Where(s => s.AcademyId == t.AcademyId && s.Id == sessionId && s.SessionDate == request.EvaluationDate && s.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled &&
                 db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.Id == request.SportEnrollmentId && e.IsActive && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)) &&
-                (t.Role != AcademyRole.Coach || db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == s.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive)))
+                (t.Role != AcademyRole.Coach || FoundationDbContext.IsSessionStaffAssigned(t.AcademyId,t.MembershipId,s.Id)))
                 .Select(s => (Guid?)s.TrainingGroupId).SingleOrDefaultAsync();
             if (sessionGroup is null) return Results.NotFound();
         }
@@ -131,16 +131,17 @@ public static class Slice5Endpoints
         if (criteria.Count == 0) return Results.Conflict(new { message = "لا توجد معايير فعالة لهذه الرياضة." });
         if (request.EvaluationDate == default) return Validation("evaluationDate", "تاريخ التقييم مطلوب.");
         var now = clock.GetUtcNow(); var id = Guid.NewGuid();
-        var entity = new PlayerEvaluation { Id = id, AcademyId = t.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, TrainingGroupId = groupId, EvaluatedByUserId = UserId(principal), EvaluationDate = request.EvaluationDate, ReportingPeriod = string.IsNullOrWhiteSpace(request.ReportingPeriod) ? "تقييم دوري" : request.ReportingPeriod.Trim(), Status = EvaluationStatus.Draft, GeneralNotes = Clean(request.GeneralNotes), CreatedAtUtc = now, UpdatedAtUtc = now };
+        var entity = new PlayerEvaluation { TrainingSessionId = request.TrainingSessionId, Id = id, AcademyId = t.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, TrainingGroupId = groupId, EvaluatedByUserId = UserId(principal), EvaluationDate = request.EvaluationDate, ReportingPeriod = string.IsNullOrWhiteSpace(request.ReportingPeriod) ? "تقييم دوري" : request.ReportingPeriod.Trim(), Status = EvaluationStatus.Draft, GeneralNotes = Clean(request.GeneralNotes), CreatedAtUtc = now, UpdatedAtUtc = now };
         entity.Scores = criteria.Select(c => new EvaluationScore { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerEvaluationId = id, EvaluationCriterionId = c.Id, SportId = c.SportId, Score = null, CriterionNameSnapshot = c.ArabicName, WeightSnapshot = c.Weight, FootballAxisSnapshot = c.FootballAxis, CreatedAtUtc = now, UpdatedAtUtc = now }).ToList();
-        db.PlayerEvaluations.Add(entity); await db.SaveChangesAsync();
+        db.PlayerEvaluations.Add(entity);
+        try { await db.SaveChangesAsync(); } catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23514" }) { return Results.Conflict(new { message = "تغير سياق الحصة أو عضوية اللاعب أثناء الإنشاء؛ أعد تحميل الكشف." }); }
         return Results.Created($"/api/v1/evaluations/{id}", new { id });
     }
 
     private static async Task<IResult> GetEvaluation(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; var entity = await AccessibleEvaluations(t, principal, db).AsNoTracking().Include(x => x.Scores).ThenInclude(x => x.EvaluationCriterion).SingleOrDefaultAsync(x => x.Id == id); if (entity is null) return Results.NotFound();
-        return Results.Ok(new { entity.Id, entity.SportEnrollmentId, player = entity.SportEnrollment.Player.ArabicName, sport = entity.Sport.ArabicName, group = entity.TrainingGroup.ArabicName, entity.EvaluationDate, entity.ReportingPeriod, status = entity.Status.ToString(), entity.GeneralNotes, entity.Version,
+        return Results.Ok(new { entity.Id, entity.SportEnrollmentId, entity.TrainingSessionId, player = entity.SportEnrollment.Player.ArabicName, sport = entity.Sport.ArabicName, group = entity.TrainingGroup.ArabicName, entity.EvaluationDate, entity.ReportingPeriod, status = entity.Status.ToString(), entity.GeneralNotes, entity.Version,
             scores = entity.Scores.OrderBy(x => x.EvaluationCriterion.DisplayOrder).Select(x => new { criterionId = x.EvaluationCriterionId, name = x.CriterionNameSnapshot, x.Score, x.Notes, axis = x.FootballAxisSnapshot == null ? null : x.FootballAxisSnapshot.ToString() }) });
     }
 
@@ -202,7 +203,7 @@ public static class Slice5Endpoints
     private static IQueryable<PlayerEvaluation> AccessibleEvaluations(TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var user = UserId(principal); var query = db.PlayerEvaluations.Where(x => x.AcademyId == t.AcademyId);
-        if (t.Role == AcademyRole.Coach) query = query.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
+        if (t.Role == AcademyRole.Coach) query = query.Where(x => x.TrainingSessionId.HasValue ? FoundationDbContext.IsSessionStaffAssigned(t.AcademyId,t.MembershipId,x.TrainingSessionId.Value) : db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == x.TrainingGroupId && a.AcademyMembership.UserId == user && a.IsActive));
         return query.Include(x => x.SportEnrollment).ThenInclude(x => x.Player).Include(x => x.Sport).Include(x => x.TrainingGroup).Include(x => x.EvaluatedByUser);
     }
 

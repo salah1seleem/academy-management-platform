@@ -16,6 +16,8 @@ public class V2AccessRulesTests
     [InlineData("GET", "/api/v1/people/players", "Read")]
     [InlineData("POST", "/api/v1/people/registration-quote", "Read")]
     [InlineData("POST", "/api/v1/manage/groups", "Add")]
+    [InlineData("POST", "/api/v1/manage/structure/sessions/123/coach-override/preview", "Read")]
+    [InlineData("PUT", "/api/v1/manage/structure/sessions/123/coach-override", "Edit")]
     [InlineData("PUT", "/api/v1/manage/groups/123/status", "Edit")]
     [InlineData("POST", "/api/v1/payments/123/approve", "Edit")]
     [InlineData("DELETE", "/api/v1/people/players/123", "Delete")]

@@ -8,6 +8,7 @@ using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
 using Microsoft.EntityFrameworkCore;
+using Academy.Infrastructure.Tenancy;
 
 namespace Academy.Api.Operations;
 public sealed record CompensationGrantWrite(Guid SourceSessionId, CompensationCause Cause, CompensationUnit Unit, DateOnly ValidFrom, DateOnly ValidTo, string? Fingerprint = null);
@@ -38,9 +39,10 @@ public sealed partial class GroupPlacementService
         if (!await db.SportEnrollments.Where(e => e.Id == enrollment).Select(e => FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)).SingleAsync()) conflicts.Add("الحصة ليست ضمن مواعيد هذا التسجيل.");
         var attendance = await db.PlayerAttendances.AsNoTracking().SingleOrDefaultAsync(a => a.SportEnrollmentId == enrollment && a.TrainingSessionId == s.Id);
         if (attendance is not null && AttendanceRules.Attended(attendance.Status) || attendance?.ConsumedSubscriptionPeriodId is not null) conflicts.Add("الحصة لها حضور أو استهلاك قائم؛ صحح السجل المعني أولًا.");
-        var staff = await db.StaffAttendances.AsNoTracking().Where(a => a.TrainingSessionId == s.Id).OrderBy(a => a.Id).Select(a => new { a.Id, a.Status, a.Version }).ToArrayAsync();
+        var staff = await db.StaffAttendances.AsNoTracking().Where(a => a.TrainingSessionId == s.Id).OrderBy(a => a.Id).Select(a => new { a.Id, a.AcademyMembershipId, a.Status, a.Version }).ToArrayAsync();
+        var actualCoaches = b.Cause == CompensationCause.CoachAbsent ? await db.AcademyMemberships.Where(m=>m.Role==AcademyRole.Coach&&FoundationDbContext.IsSessionStaffAssigned(s.AcademyId,m.Id,s.Id)).Select(m=>m.Id).ToArrayAsync() : [];
         if (b.Cause == CompensationCause.CancelledSession && s.Status != TrainingSessionStatus.Cancelled) conflicts.Add("سبب الإلغاء يحتاج حصة ملغاة فعليًا، وليس غياب طفل.");
-        if (b.Cause == CompensationCause.CoachAbsent && (!staff.Any(a => a.Status == AttendanceStatus.Absent) || staff.Any(a => AttendanceRules.Attended(a.Status)))) conflicts.Add("راجع غياب الجهاز الفني؛ لا تمنح تعويضًا من غياب مدرب مع وجود مدرب حاضر.");
+        if (b.Cause == CompensationCause.CoachAbsent && ((!staff.Any(a => a.Status == AttendanceStatus.Absent) || staff.Any(a => AttendanceRules.Attended(a.Status))) || s.Status != TrainingSessionStatus.Cancelled && (actualCoaches.Length==0 || actualCoaches.Any(m=>!staff.Any(a=>a.AcademyMembershipId==m&&a.Status==AttendanceStatus.Absent))))) conflicts.Add("راجع غياب المدربين الفعليين؛ لا تمنح تعويضًا من غياب الأصلي مع بديل حاضر أو غير مسجل.");
         if (b.Cause == CompensationCause.ApprovedAbsence && attendance?.Status is not (AttendanceStatus.Absent or AttendanceStatus.Excused)) conflicts.Add("التعويض عن غياب معتمد يحتاج واقعة غياب أو اعتذار مسجلة للطفل.");
         var periods = await db.SubscriptionPeriods.AsNoTracking().Include(p => p.SubscriptionPlan).Where(p => p.SportEnrollmentId == enrollment && p.IsActive && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= s.SessionDate && (p.EndDate == null || p.EndDate >= s.SessionDate)).OrderBy(p => p.StartDate).ThenBy(p => p.Id).ToArrayAsync();
         var period = periods.FirstOrDefault(p => (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && PlanCatalog.FormatMatches(e.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat));

@@ -73,6 +73,7 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         var conflicts = new List<ScheduleConflict>(); FacilityResource? resource = null;
         if (await db.EnrollmentSessionMoves.AnyAsync(m => removed.Contains(m.SourceSessionId) || removed.Contains(m.TargetSessionId))) conflicts.Add(new(b.From, "الجدول يتضمن نقل حصص معتمدًا؛ لا نلغي مواعيد اللاعبين المنقولين بصمت."));
         if (await db.CompensationBookings.AnyAsync(c => removed.Contains(c.TrainingSessionId) && c.State == CompensationBookingState.Reserved)) conflicts.Add(new(b.From, "الجدول يتضمن حجز تعويض؛ حرره صراحة قبل استبدال الموعد."));
+        if (await db.SessionCoachOverrides.AnyAsync(o => removed.Contains(o.TrainingSessionId) && o.ActualCoachMembershipId != o.OriginalCoachMembershipId && !db.SessionCoachOverrides.Any(n => n.TrainingSessionId == o.TrainingSessionId && n.OriginalCoachMembershipId == o.OriginalCoachMembershipId && n.Sequence > o.Sequence))) conflicts.Add(new(b.From, "الجدول يتضمن بديل مدرب معتمدًا لحصة محددة؛ راجع القرار قبل استبدال الموعد."));
         var datedRoster = new List<object>();
         foreach (var day in dates)
             try { var count = await coordinator.CheckRosterSlot(group.AcademyId, group.Id, day, b.StartTime, b.EndTime, checkBookedSeats: false); datedRoster.Add(new { day, count }); if (plan.Value is { } reservation && count > reservation.Seats) conflicts.Add(new(day, "المقاعد المطلوبة لا تكفي أعضاء المجموعة في هذا التاريخ.")); }
