@@ -34,7 +34,7 @@ public static class ReceivableEndpoints
             var t = (await tenant.ResolveAsync())!; var doc = await db.ReceivableDocuments.SingleOrDefaultAsync(x => x.Id == id);
             if (doc is null) return Results.NotFound();
             var rows = await db.Collections.Where(c => c.SportEnrollmentId == doc.SportEnrollmentId && c.Currency == doc.Currency)
-                .Select(c => new { c.Id, c.ConfirmedAtUtc, c.Amount, available = c.Amount - (db.ReceivableMovements.Where(m => m.CollectionId == c.Id).Sum(m => (decimal?)m.Amount) ?? 0) - (db.CollectionRefunds.Where(r => r.CollectionId == c.Id).Sum(r => (decimal?)r.Amount) ?? 0) })
+                .Select(c => new { c.Id, c.ConfirmedAtUtc, c.Amount, available = c.Amount - (db.ReceivableMovements.IgnoreQueryFilters().Where(m => m.AcademyId == t.AcademyId && m.CollectionId == c.Id && m.Kind == ReceivableMovementKind.PaymentAllocation).Sum(m => (decimal?)m.Amount) ?? 0) - (db.CollectionRefunds.IgnoreQueryFilters().Where(r => r.AcademyId == t.AcademyId && r.CollectionId == c.Id).Sum(r => (decimal?)r.Amount) ?? 0) })
                 .Where(c => c.available > 0).OrderByDescending(c => c.ConfirmedAtUtc).ToListAsync();
             return Results.Ok(rows.Select(c => new { c.Id, c.ConfirmedAtUtc, amount = Money(c.Amount), available = Money(c.available) }));
         });
@@ -142,12 +142,11 @@ public static class ReceivableEndpoints
         var doc = await db.ReceivableDocuments.SingleOrDefaultAsync(x => x.Id == id); if (doc is null) return Results.NotFound();
         if (body.CollectionId.HasValue)
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"receivable-collection:{t.AcademyId}:{body.CollectionId}"}, 0))");
+            await CollectionFunds.Lock(db,t.AcademyId,body.CollectionId.Value);
             var c = await db.Collections.SingleOrDefaultAsync(x => x.Id == body.CollectionId && x.SportEnrollmentId == doc.SportEnrollmentId && x.Currency == doc.Currency);
             if (c is null) return Results.NotFound();
-            var allocated = await db.ReceivableMovements.Where(x => x.CollectionId == c.Id).SumAsync(x => (decimal?)x.Amount) ?? 0;
-            var refunded = await db.CollectionRefunds.Where(x => x.CollectionId == c.Id).SumAsync(x => (decimal?)x.Amount) ?? 0;
-            if (allocated + body.Amount > c.Amount - refunded) return Results.Conflict(new { message = "المبلغ يتجاوز الرصيد غير المخصص من التحصيل المؤكد." });
+            var used=await CollectionFunds.Used(db,t.AcademyId,c.Id);
+            if (body.Amount > CollectionFunds.Available(c.Amount,used.Refunded,used.Allocated)) return Results.Conflict(new { message = "المبلغ يتجاوز الرصيد غير المخصص من التحصيل المؤكد." });
         }
         else if (body.Amount + (await db.ReceivableMovements.Where(x => x.DocumentId == id && x.Kind == ReceivableMovementKind.CreditNote).SumAsync(x => (decimal?)x.Amount) ?? 0) > doc.Amount) return Results.Conflict(new { message = "إجمالي الإشعارات الدائنة لا يتجاوز أصل المطالبة." });
         var row = new ReceivableMovement { Id = Guid.NewGuid(), AcademyId = t.AcademyId, DocumentId = id, Kind = body.Kind, Amount = body.Amount, Currency = doc.Currency, CollectionId = body.CollectionId, Reason = body.Reason.Trim(), SourceKey = key, ContentHash = hash, ActorUserId = actor, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };

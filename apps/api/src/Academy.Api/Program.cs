@@ -388,6 +388,7 @@ if (app.Environment.IsEnvironment("Demo"))
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
             await ReceivableDemoSeed.SeedAsync(db);
+            if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
             await PlanPublicationDemoSeed.SeedAsync(db);
             await DiscountPricingDemoSeed.SeedAsync(db);
             await RenewalOpportunityDemoSeed.SeedAsync(db);

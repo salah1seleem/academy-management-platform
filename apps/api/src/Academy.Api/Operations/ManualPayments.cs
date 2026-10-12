@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
 using Academy.Api.Slice3;
+using Academy.Api.Finance;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
@@ -157,27 +158,34 @@ public static class ManualPayments
     private static async Task<IResult> Refunds(Guid id, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; if (!await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id)) return Results.NotFound();
-        var collections = await db.Collections.Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == id).OrderByDescending(x => x.ConfirmedAtUtc).Select(x => new { x.Id, x.Amount, x.Currency, refunded = db.CollectionRefunds.Where(r => r.AcademyId == t.AcademyId && r.CollectionId == x.Id).Sum(r => (decimal?)r.Amount) ?? 0, x.ConfirmedAtUtc }).ToListAsync();
+        // Scope the visible collections first. Aggregate only their own tenant-bound
+        // financial usage, including historical branches, without disclosing those rows.
+        var records = await db.Collections.Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == id).OrderByDescending(x => x.ConfirmedAtUtc).Select(x => new {
+            x.Id, x.Amount, x.Currency, x.ConfirmedAtUtc,
+            refunded = db.CollectionRefunds.IgnoreQueryFilters().Where(r => r.AcademyId == t.AcademyId && r.CollectionId == x.Id).Sum(r => (decimal?)r.Amount) ?? 0,
+            allocated = db.ReceivableMovements.IgnoreQueryFilters().Where(m => m.AcademyId == t.AcademyId && m.CollectionId == x.Id && m.Kind == ReceivableMovementKind.PaymentAllocation).Sum(m => (decimal?)m.Amount) ?? 0,
+        }).ToListAsync();
+        var collections = records.Select(c => new { c.Id, c.Amount, c.Currency, c.refunded, c.allocated, available = CollectionFunds.Available(c.Amount,c.refunded,c.allocated).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture), c.ConfirmedAtUtc });
         return Results.Ok(new { collections, refunds = await db.CollectionRefunds.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == id).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, x.Amount, x.Currency, x.Reason, x.CreatedAtUtc }).ToListAsync() });
     }
     private static async Task<IResult> Refund(Guid id, RefundWrite body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!; var user = Actor(context.User); var key = context.Request.Headers["Idempotency-Key"].ToString();
-        if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || body.Amount <= 0 || decimal.Round(body.Amount, 2) != body.Amount || body.Reason?.Length > 500) return Results.UnprocessableEntity(new { message = "أدخل مبلغ استرداد صحيحًا." });
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || body.Amount <= 0 || body.Amount > 999999999m || decimal.Round(body.Amount, 2) != body.Amount || body.Reason?.Length > 500) return Results.UnprocessableEntity(new { message = "أدخل مبلغ استرداد صحيحًا." });
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"refund-key:{t.AcademyId}:{user}:{key}"}, 0))");
         var replay = await db.CollectionRefunds.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.PerformedByUserId == user && x.IdempotencyKey == key);
-        if (replay is not null) return replay.CollectionId == body.CollectionId && replay.PlayerId == id && replay.Amount == body.Amount ? Results.Ok(new { replay.Id, replay = true }) : Results.Conflict();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"refund-collection:{t.AcademyId}:{body.CollectionId}"}, 0))");
+        if (replay is not null) return replay.CollectionId == body.CollectionId && replay.PlayerId == id && replay.Amount == body.Amount && (string.IsNullOrWhiteSpace(replay.Reason) ? null : replay.Reason.Trim()) == (string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim()) ? Results.Ok(new { replay.Id, replay = true }) : Results.Conflict(new { message="معرف الاسترداد مستخدم بتفاصيل أخرى." });
+        await CollectionFunds.Lock(db,t.AcademyId,body.CollectionId);
         var collection = await db.Collections.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.CollectionId && x.SportEnrollment.PlayerId == id); if (collection is null) return Results.NotFound();
-        var refunded = await db.CollectionRefunds.Where(x => x.AcademyId == t.AcademyId && x.CollectionId == body.CollectionId).SumAsync(x => (decimal?)x.Amount) ?? 0;
-        if (refunded + body.Amount > collection.Amount) return Results.Conflict(new { message = "الاسترداد أكبر من الرصيد المتبقي للتحصيل." });
-        var row = new CollectionRefund { Id = Guid.NewGuid(), AcademyId = t.AcademyId, CollectionId = collection.Id, PlayerId = id, Amount = body.Amount, Currency = collection.Currency, Reason = body.Reason?.Trim(), PerformedByUserId = user, IdempotencyKey = key, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.CollectionRefunds.Add(row); await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { row.Id });
+        var used = await CollectionFunds.Used(db,t.AcademyId,collection.Id);
+        if (body.Amount > CollectionFunds.Available(collection.Amount,used.Refunded,used.Allocated)) return Results.Conflict(new { message = "الاسترداد يتجاوز المبلغ غير المسترد وغير المخصص لمطالبة. راجع الحركات المالية أولًا؛ لن يُعاد فتح دين تلقائيًا." });
+        var row = new CollectionRefund { Id = Guid.NewGuid(), AcademyId = t.AcademyId, CollectionId = collection.Id, PlayerId = id, Amount = body.Amount, Currency = collection.Currency, Reason = string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim(), PerformedByUserId = user, IdempotencyKey = key, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.CollectionRefunds.Add(row); await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { row.Id });
     }
 }
 public sealed record TransferWrite(string? InstaPayAddress, string? WalletNumber, string? RecipientName, bool IsActive);
 public sealed record CollectWrite(string PaymentMethod);
 public sealed record ProofWrite(Guid AssetId);
 public sealed record ReviewWrite(bool Accept, Guid? GroupId, string? Reason);
-public sealed record RefundWrite(Guid CollectionId, decimal Amount, string? Reason);
+public sealed record RefundWrite(Guid CollectionId, [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal Amount, string? Reason);
 public sealed record PaymentQueueItem(Guid Id, string Type, string Player, string Sport, string Branch, string Plan, decimal Amount, string Currency, string Status, bool HasProof, DateTimeOffset CreatedAtUtc);

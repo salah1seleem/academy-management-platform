@@ -17,7 +17,7 @@ using Npgsql;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class V2ReceivablesTests : IAsyncLifetime
+public sealed partial class V2ReceivablesTests : IAsyncLifetime
 {
     private Factory factory = null!;
     public async Task InitializeAsync()
@@ -77,14 +77,18 @@ public sealed class V2ReceivablesTests : IAsyncLifetime
             var detail = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/finance/receivables/{doc}"); Assert.Equal(original, decimal.Parse(detail.GetProperty("document").GetProperty("planPriceSnapshot").GetString()!, System.Globalization.CultureInfo.InvariantCulture));
             var enrollment = await db.SportEnrollments.SingleAsync(x => x.Id == f.Enrollment);
             var another = await db.TrainingGroups.FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.BranchId != f.Branch && x.SportId == enrollment.SportId && x.IsActive);
-            enrollment.BranchId = another.BranchId; enrollment.TrainingGroupId = another.Id; await db.SaveChangesAsync();
+            // Branch is now part of the enrollment's relational identity. Do not bypass
+            // dated transfer workflows by mutating a key in this older ledger fixture.
+            enrollment.BranchId = another.BranchId;
+            await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());
+            enrollment.BranchId = f.Branch;
             Assert.Equal(f.Branch, (await db.ReceivableDocuments.SingleAsync(x => x.Id == doc)).BranchId);
             await using (var branchScope = factory.Services.CreateAsyncScope())
             {
                 var scoped = branchScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
                 scoped.BindRequestScope(DemoSeed.NogoomAcademyId, f.Owner, Guid.NewGuid(), [f.Branch]);
                 Assert.True(await scoped.ReceivableDocuments.AnyAsync(x => x.Id == doc));
-                Assert.False(await scoped.SportEnrollments.AnyAsync(x => x.Id == f.Enrollment));
+                Assert.True(await scoped.SportEnrollments.AnyAsync(x => x.Id == f.Enrollment));
             }
             var row = await db.ReceivableDocuments.SingleAsync(x => x.Id == doc); row.Amount = 1;
             await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync()); db.Entry(row).State = EntityState.Unchanged;
@@ -166,7 +170,7 @@ public sealed class V2ReceivablesTests : IAsyncLifetime
     [Fact]
     public async Task Refund_does_not_silently_recreate_debt_and_excess_payment_is_separate_credit()
     {
-        var f = await Fixture(); using var owner = await Staff(DemoSeed.OwnerEmail); var doc = await Charge(owner, f.Enrollment, 100); var collection = await Collection(f.Enrollment, f.Owner, 120);
+        var f = await Fixture(); using var owner = await Staff(DemoSeed.OwnerEmail); var doc = await Charge(owner, f.Enrollment, 100); var collection = await Collection(f.Enrollment, f.Owner, 140);
         (await Move(owner, doc, "PaymentAllocation", 120, collection)).EnsureSuccessStatusCode();
         await using var s = factory.Services.CreateAsyncScope(); var db = s.ServiceProvider.GetRequiredService<FoundationDbContext>();
         db.CollectionRefunds.Add(new CollectionRefund { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, CollectionId = collection, PlayerId = f.Player, Amount = 20, Currency = "EGP", PerformedByUserId = f.Owner, IdempotencyKey = Guid.NewGuid().ToString() }); await db.SaveChangesAsync();
