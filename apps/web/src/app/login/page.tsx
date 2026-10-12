@@ -23,9 +23,21 @@ export default function LoginPage() {
         method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": token },
         body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
       });
+      if (response.status === 409) throw new Error("توجد جلسة دخول نشطة. سجّل الخروج أولًا قبل الدخول بحساب آخر.");
       if (!response.ok) throw new Error("بيانات الدخول غير صحيحة.");
       router.replace("/dashboard");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تسجيل الدخول."); setBusy(false); }
+  }
+
+  async function logout() {
+    setBusy(true); setError("");
+    try {
+      const { token } = await csrf();
+      const response = await fetch("/api/v1/auth/logout", { method: "POST", headers: { "X-CSRF-TOKEN": token } });
+      if (!response.ok && response.status !== 401) throw new Error("تعذر تسجيل الخروج. حاول مرة أخرى.");
+      // Full navigation also discards role/tenant-scoped client state and CSRF.
+      window.location.reload();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تسجيل الخروج."); setBusy(false); }
   }
 
   return <main className="center-shell">
@@ -37,6 +49,7 @@ export default function LoginPage() {
         <button className="primary-button" disabled={busy}>{busy ? "جارٍ الدخول…" : "دخول آمن"}</button>
       </form>
       {error && <p className="error-message" role="alert">{error}</p>}
+      {error.startsWith("توجد جلسة دخول نشطة") && <button className="secondary-button" disabled={busy} onClick={() => void logout()}>تسجيل خروج الحساب الحالي</button>}
     </section>
   </main>;
 }

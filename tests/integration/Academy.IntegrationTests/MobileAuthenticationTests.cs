@@ -244,7 +244,7 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/me")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(Root + "/select-role", new { membershipId = Guid.NewGuid() })).StatusCode);
         Guid otherMember = Guid.Empty;
-        await Mutate(async db => otherMember = await db.AcademyMemberships.Where(x => x.User.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync());
+        await Mutate(async db => otherMember = await db.AcademyMemberships.Where(x => x.User.Email == DemoSeed.OwnerEmail && x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.AcademyOwner).Select(x => x.Id).SingleAsync());
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(Root + "/select-role", new { membershipId = otherMember })).StatusCode);
         var response = await client.PostAsJsonAsync(Root + "/select-role", new { membershipId = guardian }); response.EnsureSuccessStatusCode();
         var selected = (await response.Content.ReadFromJsonAsync<MobileCredentials>())!; Assert.Equal(guardian, selected.MembershipId);

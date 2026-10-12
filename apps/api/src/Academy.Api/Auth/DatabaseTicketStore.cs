@@ -44,6 +44,11 @@ public sealed class DatabaseTicketStore(IServiceScopeFactory scopeFactory, TimeP
         var session = await db.UserSessions.SingleOrDefaultAsync(x => x.Id == key, cancellationToken);
         if (session is null || session.RevokedAtUtc is not null) return;
         var now = timeProvider.GetUtcNow();
+        // A renewal can update one account's context, never replace the account
+        // behind an existing opaque cookie or revive an expired/revoked session.
+        if (session.ExpiresAtUtc <= now || session.AbsoluteExpiresAtUtc <= now ||
+            !Guid.TryParse(ticket.Principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) || session.UserId != userId)
+            throw new InvalidOperationException("Session renewal cannot replace an identity or revive an expired session.");
         session.Ticket = TicketSerializer.Default.Serialize(ticket);
         session.ActiveAcademyId = Guid.TryParse(ticket.Principal.FindFirstValue("academy_id"), out var academyId) ? academyId : null;
         session.LastSeenAtUtc = now;

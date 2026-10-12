@@ -183,6 +183,7 @@ api.MapGet("/auth/csrf", (HttpContext context, IAntiforgery antiforgery) =>
 api.MapPost("/auth/login", async (LoginRequest request, UserManager<ApplicationUser> users,
     SignInManager<ApplicationUser> signIn, FoundationDbContext db, HttpContext context) =>
 {
+    if (context.User.Identity?.IsAuthenticated == true) return Program.ActiveSessionConflict();
     var normalized = users.NormalizeEmail(request.Email.Trim());
     var user = await users.Users.SingleOrDefaultAsync(x => x.NormalizedEmail == normalized);
     var passwordResult = user is null ? null : await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
@@ -194,7 +195,6 @@ api.MapPost("/auth/login", async (LoginRequest request, UserManager<ApplicationU
         .OrderBy(x => x.CreatedAtUtc).FirstOrDefaultAsync();
     if (membership is null)
         return Results.Problem(statusCode: 403, title: "الدخول غير متاح", detail: "لوحة الإدارة متاحة للمالك والإداري فقط.");
-    await context.SignOutAsync(IdentityConstants.ApplicationScheme);
     await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
     return Results.Ok(new { authenticated = true });
 }).AddEndpointFilter<CsrfFilter>();
@@ -220,6 +220,7 @@ api.MapPost("/auth/guardian/otp/verify", async (GuardianOtpVerifyRequest request
     UserManager<ApplicationUser> users, IOptions<DemoOptions> options,
     IHostEnvironment environment, TimeProvider clock, HttpContext context) =>
 {
+    if (context.User.Identity?.IsAuthenticated == true) return Program.ActiveSessionConflict();
     DemoSeed.ValidateEnvironment(environment, options.Value);
     if (!environment.IsEnvironment("Demo") || !options.Value.FixedOtpEnabled)
         return Results.Problem(statusCode: 501, title: "خدمة OTP الإنتاجية غير منفذة بعد");
@@ -237,7 +238,6 @@ api.MapPost("/auth/guardian/otp/verify", async (GuardianOtpVerifyRequest request
     if (user is null || membership is null) return Results.Problem(statusCode: 401, title: "تعذر التحقق", detail: "رمز التحقق غير صحيح أو منتهي.");
     challenge.ConsumedAtUtc = clock.GetUtcNow();
     await db.SaveChangesAsync();
-    await context.SignOutAsync(IdentityConstants.ApplicationScheme);
     await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
     return Results.Ok(new { authenticated = true });
 }).AddEndpointFilter<CsrfFilter>();
@@ -281,8 +281,11 @@ api.MapPost("/session/academy", async (SelectAcademyRequest request, ClaimsPrinc
     if (membership is null) return Results.Forbid();
     var user = await users.FindByIdAsync(userId.ToString());
     if (user is null || !user.IsActive) return Results.Unauthorized();
-    await context.SignOutAsync(IdentityConstants.ApplicationScheme);
-    await Program.SignInAsync(context, user, request.AcademyId, membership.Id);
+    // Same authenticated account only. Revoking and signing in in one request
+    // causes CookieAuthenticationHandler to renew the now-revoked session key.
+    var authenticated = await context.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+    if (!authenticated.Succeeded || authenticated.Properties?.ExpiresUtc <= context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow()) return Results.Unauthorized();
+    await Program.SignInAsync(context, user, request.AcademyId, membership.Id, authenticated.Properties);
     return Results.NoContent();
 }).RequireAuthorization().AddEndpointFilter<CsrfFilter>();
 
@@ -411,7 +414,8 @@ public sealed record CreateStaffRequest(string Email, string DisplayName, string
 
 public partial class Program
 {
-    public static async Task SignInAsync(HttpContext context, ApplicationUser user, Guid academyId, Guid membershipId)
+    public static IResult ActiveSessionConflict() => Results.Problem(statusCode:409, title:"توجد جلسة دخول نشطة",detail:"سجّل الخروج أولًا قبل الدخول بحساب آخر.");
+    public static async Task SignInAsync(HttpContext context, ApplicationUser user, Guid academyId, Guid membershipId, AuthenticationProperties? current = null)
     {
         var identity = new ClaimsIdentity(IdentityConstants.ApplicationScheme, ClaimTypes.Name, ClaimTypes.Role);
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
@@ -423,7 +427,7 @@ public partial class Program
         var now = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
         await context.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties
         {
-            IsPersistent = false, AllowRefresh = true, IssuedUtc = now, ExpiresUtc = now.AddMinutes(30)
+            IsPersistent = false, AllowRefresh = true, IssuedUtc = current?.IssuedUtc ?? now, ExpiresUtc = current?.ExpiresUtc ?? now.AddMinutes(30)
         });
     }
 }
