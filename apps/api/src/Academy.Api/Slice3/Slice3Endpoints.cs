@@ -102,21 +102,25 @@ public static class Slice3Endpoints
     }
     private static async Task<IResult> GuardianReceipt(Guid receiptId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
-        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var r = await db.Receipts.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == receiptId && x.Collection.RenewalRequest.RequestedByUserId == user).Select(x => new { x.Id, academyName = t.AcademyName, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.OriginalAmount, discountType = x.DiscountType == null ? null : x.DiscountType.ToString(), x.DiscountValue, x.DiscountAmount, x.FinalAmount, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return r is null ? Results.NotFound() : Results.Ok(r);
+        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var r = await GuardianReceiptQuery(db,t.AcademyId,user).Where(x => x.Id == receiptId).Select(x => new { x.Id, academyName = t.AcademyName, x.ReceiptNumber, x.PlayerNameSnapshot, x.SportNameSnapshot, x.PlanNameSnapshot, x.OriginalAmount, discountType = x.DiscountType == null ? null : x.DiscountType.ToString(), x.DiscountValue, x.DiscountAmount, x.FinalAmount, x.Amount, x.Currency, x.PaidAtUtc, x.PaymentMethod, x.ProviderReference }).SingleOrDefaultAsync(); return r is null ? Results.NotFound() : Results.Ok(r);
     }
 
     private static async Task<IResult> GuardianReceipts(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!;
         var user = UserId(principal);
-        var items = await db.Receipts.AsNoTracking()
-            .Where(x => x.AcademyId == t.AcademyId && x.Collection.RenewalRequest.RequestedByUserId == user)
+        var items = await GuardianReceiptQuery(db,t.AcademyId,user)
             .OrderByDescending(x => x.PaidAtUtc)
             .Take(100)
             .Select(x => new { x.Id, x.ReceiptNumber, player = x.PlayerNameSnapshot, sport = x.SportNameSnapshot, plan = x.PlanNameSnapshot, x.OriginalAmount, x.DiscountAmount, x.FinalAmount, x.Amount, x.Currency, x.PaidAtUtc })
             .ToListAsync();
         return Results.Ok(new { items });
     }
+    // Paying for somebody else retains the payer's receipt only; it does not
+    // create a guardian link. A currently linked guardian may also see the
+    // child's staff-collected receipt. Never infer either right from a phone.
+    private static IQueryable<Receipt> GuardianReceiptQuery(FoundationDbContext db,Guid academy,Guid user) => db.Receipts.AsNoTracking().Where(x=>x.AcademyId==academy &&
+        (x.Collection.RenewalRequest.RequestedByUserId==user || db.GuardianPlayerLinks.Any(l=>l.AcademyId==academy&&l.PlayerId==x.PlayerId&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.UserId==user)));
 
     private static async Task<IResult> SearchExternalBeneficiary(ExternalSearchRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ScopedRenewalReferences scoped, TimeProvider time)
     {

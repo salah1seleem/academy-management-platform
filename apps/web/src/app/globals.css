@@ -701,3 +701,9 @@ footer {
 .cash-session-stats small { display: block; color: var(--muted); margin-bottom: .6rem; }
 .cash-session-stats strong { font-size: 1.3rem; color: #155963; }
 @media(max-width:600px) { .cash-intro { flex-wrap: wrap; } .cash-intro > a { width: 100%; } .cash-register-card header { flex-wrap: wrap; } .cash-register-card header > .status-pill { margin-inline-start: 52px; } }
+.cash-collection-panel h2 { display: flex; align-items: center; gap: .6rem; }
+.cash-collection-panel .form-shell { margin-block: 1rem; }
+.cash-quote { padding: 1.2rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+.cash-quote dl { display: grid; gap: .7rem; margin-block: 1rem; }
+.cash-quote dl > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+.cash-quote dd { margin: 0; }

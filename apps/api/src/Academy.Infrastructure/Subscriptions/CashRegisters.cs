@@ -59,3 +59,19 @@ public sealed class CashTransfer : TenantEntity
     public required string RequestKey { get; set; }
     public required string RequestHash { get; set; }
 }
+
+// A collection is counted once, with the immutable receipt that produced it.
+// Opening float/transfers deliberately remain separate from sales income.
+public sealed class CashReceiptPosting : TenantEntity
+{
+    public Guid SessionId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid CollectionId { get; set; }
+    public Guid ReceiptId { get; set; }
+    [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public Guid ActorUserId { get; set; }
+    public required string RequestKey { get; set; }
+    public required string RequestHash { get; set; }
+    public Receipt Receipt { get; set; } = null!;
+}

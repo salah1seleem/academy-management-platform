@@ -25,6 +25,9 @@ public static class CashRegisterEndpoints
         api.MapGet("/", async (CashRegisterService service) => await Run(service.Read));
         api.MapGet("/options", async (CashRegisterService service) => await Run(service.Options));
         api.MapGet("/sessions/{id:guid}", async (Guid id, CashRegisterService service) => await Run(()=>service.Detail(id)));
+        api.MapGet("/sessions/{id:guid}/collection-options", async (Guid id, string? search, CashRegisterService service) => await Run(()=>service.CollectionOptions(id,search)));
+        api.MapPost("/sessions/{id:guid}/collection-quote", async (Guid id, CashCollectionQuote body, CashRegisterService service, Academy.Api.Operations.DiscountRules discounts) => await Run(()=>service.CollectionQuote(id,body,discounts))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/sessions/{id:guid}/collections", async (Guid id, CashCollectionWrite body, HttpRequest request, CashRegisterService service, Academy.Api.Operations.DiscountRules discounts, Academy.Api.Operations.CollectionService collections) => await Run(()=>service.Collect(id,body,Key(request),discounts,collections))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/", async (CashRegisterWrite body, HttpRequest request, CashRegisterService service) => await Run(()=>service.Create(body,Key(request)))).AddEndpointFilter<CsrfFilter>();
         api.MapPut("/{id:guid}/cashiers", async (Guid id, CashierWrite body, CashRegisterService service) => await Run(()=>service.Assign(id,body))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/{id:guid}/open", async (Guid id, CashOpenWrite body, HttpRequest request, CashRegisterService service) => await Run(()=>service.Open(id,body,Key(request)))).AddEndpointFilter<CsrfFilter>();
@@ -40,7 +43,7 @@ public static class CashRegisterEndpoints
     }
 }
 
-public sealed class CashRegisterService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor accessor, AcademyConfigurationService config, TimeProvider time)
+public sealed partial class CashRegisterService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor accessor, AcademyConfigurationService config, TimeProvider time)
 {
     private async Task<(TenantMembership Tenant, Guid User)> Context(bool owner = false, bool write = false)
     {
@@ -71,7 +74,7 @@ public sealed class CashRegisterService(FoundationDbContext db, CurrentTenant te
     {
         if(!await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive)) throw new CashRejected("لم يعيّنك المالك أمينًا لهذا الصندوق.",403);
     }
-    private async Task<decimal> Balance(CashSession session) => session.OpeningAmount+(await db.CashMovements.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0);
+    private async Task<decimal> Balance(CashSession session) => session.OpeningAmount+(await db.CashMovements.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)+(await db.CashReceiptPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0);
     public async Task<object> Options()
     {
         var (t,_)=await Context();
@@ -85,6 +88,8 @@ public sealed class CashRegisterService(FoundationDbContext db, CurrentTenant te
         var sessions=await db.CashSessions.AsNoTracking().Where(s=>ids.Contains(s.RegisterId)&&s.ClosedAtUtc==null).ToListAsync();
         var sessionIds=sessions.Select(s=>s.Id).ToArray();
         var balances=await db.CashMovements.Where(m=>sessionIds.Contains(m.SessionId)).GroupBy(m=>m.SessionId).Select(g=>new{id=g.Key,amount=g.Sum(m=>m.Amount)}).ToDictionaryAsync(g=>g.id,g=>g.amount);
+        var collected=await db.CashReceiptPostings.Where(m=>sessionIds.Contains(m.SessionId)).GroupBy(m=>m.SessionId).Select(g=>new{id=g.Key,amount=g.Sum(m=>m.Amount)}).ToListAsync();
+        foreach(var row in collected) balances[row.id]=balances.GetValueOrDefault(row.id)+row.amount;
         var branchIds=registers.Select(r=>r.BranchId).Distinct().ToArray();
         var branches=await db.Branches.Where(b=>branchIds.Contains(b.Id)).ToDictionaryAsync(b=>b.Id,b=>b.ArabicName);
         var cashiers=await db.CashierAssignments.Where(a=>ids.Contains(a.RegisterId)).Join(db.AcademyMemberships,a=>a.MembershipId,m=>m.Id,(a,m)=>new{a.Id,a.RegisterId,a.MembershipId,a.IsActive,name=m.User.DisplayName}).ToListAsync();
@@ -95,7 +100,8 @@ public sealed class CashRegisterService(FoundationDbContext db, CurrentTenant te
     {
         var (t,_)=await Context(); var session=await Session(id); var register=await Register(session.RegisterId);
         var canClose=t.Role==AcademyRole.AcademyOwner||session.OpenedByMembershipId==t.MembershipId&&await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive);
-        return new {session,register.Name,register.Currency,canClose,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync()};
+        var canCollect= !session.ClosedAtUtc.HasValue && session.OpenedByMembershipId==t.MembershipId && register.IsActive && (await config.Active(t.AcademyId))?.CashEnabled==true && await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive) && await CollectionPermissions(t,false);
+        return new {session,register.Name,register.Currency,canClose,canCollect,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts=await db.CashReceiptPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ReceiptId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Receipt.ReceiptNumber,p.Receipt.PlayerNameSnapshot,p.Receipt.PlanNameSnapshot}).ToListAsync()};
     }
     public async Task<object> Create(CashRegisterWrite body,string key)
     {

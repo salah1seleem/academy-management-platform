@@ -8,6 +8,7 @@ import { csrfRequest } from "./dashboard-api";
 import { useStaffAction } from "./use-staff-action";
 import { clearFinancialIntent, pendingFinancialIntent } from "../lib/pending-financial-intent";
 import { formatDateTimeAr, formatMoneyAr } from "../lib/formatters";
+import { CashCollectionForm } from "./cash-collection-form";
 
 const root = "/api/v1/finance/cash-registers";
 const route = "/dashboard/finance/cash-registers";
@@ -51,7 +52,7 @@ export function CashRegisters() {
   return <><PageHeader title="الصناديق والعهد" context="المالية" description="كل فرع بصندوق وأمين مخول. العهدة الافتتاحية والتحويل بين الصناديق ليسا تحصيلًا أو إيرادًا." />
     {(error || write.error) && <ErrorState message={error || write.error} />}
     {!data || !options ? !error && <LoadingState /> : <>
-      <div className="cash-intro"><Wallet aria-hidden="true" /><div><strong>{data.cashEnabled ? "النقدي مفعل في إعدادات الأكاديمية" : "النقدي متوقف"}</strong><p>{data.cashEnabled ? "جهّز الصندوق والأمين والوردية قبل تسجيل أي قبض. ربط التحصيل بالصندوق ضمن الدفعة التالية." : "يمكن تجهيز الصناديق الآن. لا يفتح أمين وردية قبل تفعيل النقدي من المالك."}</p></div>{options.isOwner && <Link href="/dashboard/settings">إعدادات الأكاديمية</Link>}</div>
+      <div className="cash-intro"><Wallet aria-hidden="true" /><div><strong>{data.cashEnabled ? "النقدي مفعل في إعدادات الأكاديمية" : "النقدي متوقف"}</strong><p>{data.cashEnabled ? "اقبض اشتراكًا من تفاصيل ورديتك المفتوحة، ثم راجع الإيصال ورصيد الصندوق." : "يمكن تجهيز الصناديق الآن. لا يفتح أمين وردية قبل تفعيل النقدي من المالك."}</p></div>{options.isOwner && <Link href="/dashboard/settings">إعدادات الأكاديمية</Link>}</div>
       <div className="cash-register-grid">{data.items.map(r => <article className="cash-register-card" key={r.id} aria-label={`صندوق ${r.name}`}>
         <header><span className="cash-symbol"><Landmark aria-hidden="true" /></span><div><h2>{r.name}</h2><p>{r.branch}</p></div><span className="status-pill">{r.session ? "وردية مفتوحة" : "مقفل"}</span></header>
         {r.session ? <><span className="cash-balance-label">الرصيد الدفتري للوردية</span><strong className="cash-balance">{formatMoneyAr(r.session.balance, r.currency)}</strong><p>عهدة افتتاحية: {formatMoneyAr(r.session.opening, r.currency)} · {formatDateTimeAr(r.session.openedAtUtc)}</p><Link className="primary-button" href={`${route}/sessions/${r.session.id}`}>تفاصيل الوردية والمطابقة</Link></> : <p className="muted">لا توجد وردية مفتوحة لهذا الصندوق.</p>}
@@ -66,7 +67,7 @@ export function CashRegisters() {
     </>}
   </>;
 }
-type SessionData = { name: string; currency: string; balance: string; variance: string | null; canClose: boolean; session: { openingAmount: string; openedAtUtc: string; closedAtUtc?: string; expectedAmount?: string; countedAmount?: string; closingReason?: string }; movements: { id: string; kind: string; amount: string; createdAtUtc: string }[] };
+type SessionData = { name: string; currency: string; balance: string; variance: string | null; canClose: boolean; canCollect?: boolean; receipts?: { id: string; receiptId: string; amount: string; currency: string; receiptNumber: string; playerNameSnapshot: string; planNameSnapshot: string; createdAtUtc: string }[]; session: { openingAmount: string; openedAtUtc: string; closedAtUtc?: string; expectedAmount?: string; countedAmount?: string; closingReason?: string }; movements: { id: string; kind: string; amount: string; createdAtUtc: string }[] };
 export function CashSessionDetail({ id }: { id: string }) {
   const [data, setData] = useState<SessionData | null>(null), [error, setError] = useState("");
   const router = useRouter(), write = useCashWrite(), canAdd = useStaffAction("finance", "add");
@@ -78,6 +79,8 @@ export function CashSessionDetail({ id }: { id: string }) {
   }
   return <><PageHeader title="مطابقة وردية الصندوق" context="المالية / الصناديق" action={{ label: "العودة للصناديق", href: route, tone: "secondary" }} />{(error || write.error) && <ErrorState message={error || write.error} />}{!data ? !error && <LoadingState /> : <>
     <section className="detail-card"><h2>{data.name}</h2><p>{data.session.closedAtUtc ? `وردية مقفلة ${formatDateTimeAr(data.session.closedAtUtc)}` : `مفتوحة منذ ${formatDateTimeAr(data.session.openedAtUtc)}`}</p><div className="cash-session-stats"><div><small>العهدة الافتتاحية</small><strong>{formatMoneyAr(data.session.openingAmount, data.currency)}</strong></div><div><small>الرصيد الدفتري</small><strong>{formatMoneyAr(data.balance, data.currency)}</strong></div>{data.session.closedAtUtc && <><div><small>المبلغ الفعلي عند الإقفال</small><strong>{formatMoneyAr(data.session.countedAmount, data.currency)}</strong></div><div><small>فرق المطابقة</small><strong>{formatMoneyAr(data.variance, data.currency)}</strong></div></>}</div>{data.session.closingReason && <p>{data.session.closingReason}</p>}</section>
+    {!data.session.closedAtUtc && data.canCollect && canAdd && <CashCollectionForm key={id} sessionId={id} onCollected={async () => setData(await read<SessionData>(`${root}/sessions/${id}`))} />}
+    {!!data.receipts?.length && <section className="detail-card"><h2>إيصالات القبض في الوردية</h2><div className="linked-list">{data.receipts.map(r => <article key={r.id}><div><strong>{r.playerNameSnapshot}</strong><small>{r.planNameSnapshot} · {r.receiptNumber}</small></div><span>{formatMoneyAr(r.amount, r.currency)}</span><Link href={`/dashboard/subscriptions/receipts/${r.receiptId}`}>عرض الإيصال</Link></article>)}</div></section>}
     {!data.session.closedAtUtc && data.canClose && canAdd && <section className="detail-card"><h2>عدّ النقدية ثم طابق</h2><p>الفارق يُسجل للمراجعة ولا يتحول إلى تحصيل أو مصروف تلقائيًا.</p><form className="form-shell" onSubmit={close}><label>المبلغ الموجود فعليًا<input name="counted" type="number" min="0" max="999999999" step="0.01" required /></label><label>ملاحظة المطابقة (اختياري)<input name="reason" maxLength={400} /></label><div className="form-actions"><button className="primary-button" disabled={write.busy}>تثبيت المطابقة وإقفال الوردية</button></div></form></section>}
     <section className="detail-card"><h2>حركات العهدة</h2><div className="linked-list">{data.movements.map(m => <article key={m.id}><strong>{m.kind === "TransferIn" ? "عهدة مستلمة" : "عهدة محولة"}</strong><span>{formatMoneyAr(m.amount, data.currency)}</span><small>{formatDateTimeAr(m.createdAtUtc)}</small></article>)}</div>{!data.movements.length && <p className="muted">لا توجد حركات للوردية. العهدة الافتتاحية محفوظة بشكل مستقل.</p>}</section>
   </>}</>;

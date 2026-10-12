@@ -13,9 +13,23 @@ public sealed partial class FoundationDbContext
     public DbSet<CashSession> CashSessions => Set<CashSession>();
     public DbSet<CashMovement> CashMovements => Set<CashMovement>();
     public DbSet<CashTransfer> CashTransfers => Set<CashTransfer>();
+    public DbSet<CashReceiptPosting> CashReceiptPostings => Set<CashReceiptPosting>();
     private static void ConfigureCashRegisters(ModelBuilder b)
     {
         Tenant<CashRegister>(b); Tenant<CashierAssignment>(b); Tenant<CashSession>(b); Tenant<CashMovement>(b); Tenant<CashTransfer>(b);
+        Tenant<CashReceiptPosting>(b);
+        b.Entity<CashReceiptPosting>(e => {
+            e.Property(x=>x.Amount).HasPrecision(18,2); e.Property(x=>x.Currency).HasMaxLength(3);
+            e.Property(x=>x.RequestKey).HasMaxLength(150); e.Property(x=>x.RequestHash).HasMaxLength(64);
+            e.HasIndex(x=>new{x.AcademyId,x.RequestKey}).IsUnique();
+            e.HasIndex(x=>new{x.AcademyId,x.CollectionId}).IsUnique();
+            e.HasIndex(x=>new{x.AcademyId,x.ReceiptId}).IsUnique();
+            e.HasOne<CashSession>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.SessionId,x.BranchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.BranchId}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<PaymentCollection>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.CollectionId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x=>x.Receipt).WithMany().HasForeignKey(x=>new{x.AcademyId,x.ReceiptId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x=>x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t=>t.HasCheckConstraint("CK_CashReceiptPosting_Amount", "\"Amount\" > 0"));
+        });
         b.Entity<CashRegister>(e => {
             e.Property(x=>x.Name).HasMaxLength(100); e.Property(x=>x.Currency).HasMaxLength(3);
             e.Property(x=>x.RequestKey).HasMaxLength(150); e.Property(x=>x.RequestHash).HasMaxLength(64);
