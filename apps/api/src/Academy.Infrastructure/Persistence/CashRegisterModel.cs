@@ -16,12 +16,26 @@ public sealed partial class FoundationDbContext
     public DbSet<CashReceiptPosting> CashReceiptPostings => Set<CashReceiptPosting>();
     public DbSet<CashProductPosting> CashProductPostings => Set<CashProductPosting>();
     public DbSet<CashRefundPosting> CashRefundPostings => Set<CashRefundPosting>();
+    public DbSet<CashReceiptVoid> CashReceiptVoids => Set<CashReceiptVoid>();
     private static void ConfigureCashRegisters(ModelBuilder b)
     {
         Tenant<CashRegister>(b); Tenant<CashierAssignment>(b); Tenant<CashSession>(b); Tenant<CashMovement>(b); Tenant<CashTransfer>(b);
         Tenant<CashReceiptPosting>(b);
         Tenant<CashProductPosting>(b);
         Tenant<CashRefundPosting>(b);
+        Tenant<CashReceiptVoid>(b);
+        b.Entity<CashReceiptVoid>(e => {
+            e.Property(x=>x.RequestKey).HasMaxLength(100); e.Property(x=>x.RequestHash).HasMaxLength(64); e.Property(x=>x.Snapshot).HasColumnType("jsonb");
+            e.HasIndex(x=>new{x.AcademyId,x.ReceiptId}).IsUnique();e.HasIndex(x=>new{x.AcademyId,x.RefundId}).IsUnique();
+            e.HasIndex(x=>new{x.AcademyId,x.ActorUserId,x.RequestKey}).IsUnique();
+            e.HasOne<Receipt>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ReceiptId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Academy.Infrastructure.Operations.CollectionRefund>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.RefundId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<CashRefundPosting>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.RefundPostingId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<SubscriptionPeriod>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.SubscriptionPeriodId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<SubscriptionAdjustment>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.AdjustmentId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Branch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.BranchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x=>x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
         b.Entity<CashRefundPosting>(e => {
             e.Property(x=>x.Amount).HasPrecision(18,2); e.Property(x=>x.Currency).HasMaxLength(3); e.Property(x=>x.RequestHash).HasMaxLength(64);
             e.HasIndex(x=>new{x.AcademyId,x.RefundId}).IsUnique();

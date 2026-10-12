@@ -24,6 +24,9 @@ public static class CashRegisterEndpoints
         var api = app.MapGroup("/api/v1/finance/cash-registers").RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         api.MapGet("/", async (CashRegisterService service) => await Run(service.Read));
         api.MapGet("/options", async (CashRegisterService service) => await Run(service.Options));
+        api.MapGet("/receipts/{id:guid}/void-options", async (Guid id, CashRegisterService service) => await Run(()=>service.VoidOptions(id)));
+        api.MapPost("/receipts/{id:guid}/void-quote", async (Guid id, CashReceiptVoidWrite body, CashRegisterService service) => await Run(()=>service.VoidQuote(id,body))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/receipts/{id:guid}/void", async (Guid id, CashReceiptVoidWrite body, HttpRequest request, CashRegisterService service) => await Run(()=>service.VoidReceipt(id,body,Key(request)))).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/sessions/{id:guid}", async (Guid id, CashRegisterService service) => await Run(()=>service.Detail(id)));
         api.MapGet("/sessions/{id:guid}/collection-options", async (Guid id, string? search, CashRegisterService service) => await Run(()=>service.CollectionOptions(id,search)));
         api.MapPost("/sessions/{id:guid}/collection-quote", async (Guid id, CashCollectionQuote body, CashRegisterService service, Academy.Api.Operations.DiscountRules discounts) => await Run(()=>service.CollectionQuote(id,body,discounts))).AddEndpointFilter<CsrfFilter>();
@@ -39,6 +42,7 @@ public static class CashRegisterEndpoints
     {
         try { return Results.Ok(await work()); }
         catch(CashRejected e) { return Results.Problem(statusCode:e.Status,title:e.Message); }
+        catch(DbUpdateConcurrencyException) { return Results.Problem(statusCode:409,title:"تغير السجل أثناء التنفيذ. حدّث المراجعة قبل التأكيد."); }
         catch(DbUpdateException e) when(e.InnerException is Npgsql.PostgresException {SqlState:"23505"}) { return Results.Problem(statusCode:409,title:"الصندوق أو الوردية مسجل بالفعل. حدّث القائمة وراجع العملية السابقة."); }
     }
 }
@@ -105,7 +109,7 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         var (t,_)=await Context(); var session=await Session(id); var register=await Register(session.RegisterId);
         var canClose=t.Role==AcademyRole.AcademyOwner||session.OpenedByMembershipId==t.MembershipId&&await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive);
         var canCollect= !session.ClosedAtUtc.HasValue && session.OpenedByMembershipId==t.MembershipId && register.IsActive && (await config.Active(t.AcademyId))?.CashEnabled==true && await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive) && await CollectionPermissions(t,false);
-        return new {session,register.Name,register.Currency,canClose,canCollect,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts=await db.CashReceiptPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ReceiptId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Receipt.ReceiptNumber,p.Receipt.PlayerNameSnapshot,p.Receipt.PlanNameSnapshot}).ToListAsync(),productSales=await db.CashProductPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ProductSaleId,amount=Money(p.Amount),p.Currency,p.ProductSale.ProductName,p.ProductSale.Quantity,p.CreatedAtUtc}).ToListAsync(),refunds=await db.CashRefundPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new {p.Id,p.RefundId,p.Refund.PlayerId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Refund.Reason}).ToListAsync()};
+        return new {session,register.Name,register.Currency,canClose,canCollect,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts=await db.CashReceiptPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ReceiptId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Receipt.ReceiptNumber,p.Receipt.PlayerNameSnapshot,p.Receipt.PlanNameSnapshot}).ToListAsync(),productSales=await db.CashProductPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ProductSaleId,amount=Money(p.Amount),p.Currency,p.ProductSale.ProductName,p.ProductSale.Quantity,p.CreatedAtUtc}).ToListAsync(),refunds=await db.CashRefundPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new {p.Id,p.RefundId,p.Refund.PlayerId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Refund.Reason,voidReceiptId=db.CashReceiptVoids.Where(v=>v.RefundId==p.RefundId).Select(v=>(Guid?)v.ReceiptId).SingleOrDefault()}).ToListAsync()};
     }
     public async Task<object> Create(CashRegisterWrite body,string key)
     {

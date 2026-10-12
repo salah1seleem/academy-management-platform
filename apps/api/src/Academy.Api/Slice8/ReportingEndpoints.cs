@@ -129,7 +129,7 @@ public static partial class ReportingEndpoints
         if (collectionType is not ("Subscription" or "Product") && !planId.HasValue) rows.AddRange(await TournamentRows(tournaments, db).ToListAsync());
         if(collectionType is not ("Product" or "Tournament")) rows.AddRange(await RefundFinancialRows(refunds,db).ToListAsync());
         var csv = new List<string[]> { new[] { "رقم الإيصال", "اللاعب", "الرياضة", "الفرع", "المجموعة", "الباقة", "المبلغ", "العملة", "طريقة الدفع", "مزود الدفع", "مرجع المزود", "وقت التحصيل", "الاسترداد", "الصافي", "نوع التحصيل" } };
-        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
+        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="Void"?"عكس إيصال نقدي":x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
         return Csv(csv, $"financial-collections-{range.From:yyyy-MM}.csv");
     }
 
@@ -221,7 +221,7 @@ public static partial class ReportingEndpoints
         from r in q join c in db.Collections on r.CollectionId equals c.Id join receipt in db.Receipts on r.CollectionId equals receipt.CollectionId
         select new FinancialRow(r.Id,receipt.Id,"استرداد — "+receipt.ReceiptNumber,receipt.PlayerNameSnapshot,receipt.SportNameSnapshot,c.SportEnrollment.Branch.ArabicName,
             c.SportEnrollment.TrainingGroup==null?"في انتظار المجموعة":c.SportEnrollment.TrainingGroup.ArabicName,receipt.PlanNameSnapshot,0,r.Currency,
-            r.PayoutMethod ?? (db.CashRefundPostings.Any(p=>p.RefundId==r.Id)?"Cash":"Unspecified"),"Manual",r.Id.ToString(),r.CreatedAtUtc,r.Amount,"Refund");
+            r.PayoutMethod ?? (db.CashRefundPostings.Any(p=>p.RefundId==r.Id)?"Cash":"Unspecified"),"Manual",r.Id.ToString(),r.CreatedAtUtc,r.Amount,db.CashReceiptVoids.Any(v=>v.RefundId==r.Id)?"Void":"Refund");
 
     private static IQueryable<Academy.Infrastructure.Operations.ProductSale> ProductFinancialQuery(Guid academy, string currency, DateTimeOffset start, DateTimeOffset end, Guid? sport, Guid? branch, string? method, string? search, FoundationDbContext db)
     {

@@ -119,7 +119,11 @@ class _OwnerReportsState extends State<OwnerReports> {
                 ),
                 subtitle: UiText(
                   kind == 'financial'
-                      ? '${item['collectionType'] == 'Refund' ? 'استرداد اشتراك · بتاريخ الصرف · ' : ''}${item['receiptNumber']} · ${item['branch']}'
+                      ? '${item['collectionType'] == 'Void'
+                            ? 'عكس إيصال نقدي · الفترة ملغاة · '
+                            : item['collectionType'] == 'Refund'
+                            ? 'استرداد اشتراك · بتاريخ الصرف · '
+                            : ''}${item['receiptNumber']} · ${item['branch']}'
                       : '${day(item['date'])} · ${item['group']}',
                 ),
                 trailing: UiText(

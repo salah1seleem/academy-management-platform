@@ -1,4 +1,5 @@
 import 'package:academy_mobile/core/theme/ui_text.dart';
+import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
@@ -535,6 +536,16 @@ class ReceiptPage extends StatelessWidget {
           ),
           Heading(textOf(d['academyName'])),
           Heading(textOf(d['receiptNumber'])),
+          if (d['isVoided'] == true)
+            GCard(
+              child: UiText(
+                localized(
+                  context,
+                  'إيصال معكوس؛ رُدت قيمته وأُلغيت فترة الاشتراك المرتبطة. السجل الأصلي محفوظ.',
+                  'Voided receipt: refunded and linked subscription period cancelled. Original record retained.',
+                ),
+              ),
+            ),
           UiText(
             '${d['playerNameSnapshot']}\n${d['sportNameSnapshot']} · ${d['planNameSnapshot']}',
           ),

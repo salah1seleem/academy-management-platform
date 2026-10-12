@@ -100,3 +100,19 @@ public sealed class CashRefundPosting : TenantEntity
     public required string RequestHash { get; set; }
     public Academy.Infrastructure.Operations.CollectionRefund Refund { get; set; } = null!;
 }
+
+// An explicit whole-receipt reversal, backed by the existing payout ledger.
+// The original receipt, collection and consumed history are never rewritten.
+public sealed class CashReceiptVoid : TenantEntity
+{
+    public Guid ReceiptId { get; set; }
+    public Guid RefundId { get; set; }
+    public Guid RefundPostingId { get; set; }
+    public Guid SubscriptionPeriodId { get; set; }
+    public Guid AdjustmentId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public required string RequestKey { get; set; }
+    public required string RequestHash { get; set; }
+    public required string Snapshot { get; set; }
+}

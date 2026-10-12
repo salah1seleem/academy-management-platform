@@ -28,6 +28,7 @@ public sealed partial class CashRegisterService
     public async Task<object> RefundQuote(Guid player, RefundWrite body)
     {
         await AuthorizeRefund(); var (t, _) = await Context(write:true); Amount(body.Amount,false);
+        if(body.Reason?.Length>500) throw new CashRejected("السبب لا يتجاوز 500 حرف.",422);
         var collection = await RefundCollection(player,body.CollectionId);
         // This slice pays from the enrollment branch. Cross-branch payouts must
         // be a separately authorized workflow, never inferred from a client ID.
