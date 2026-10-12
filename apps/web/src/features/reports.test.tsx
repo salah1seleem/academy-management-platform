@@ -19,6 +19,16 @@ describe("Slice 8A reports", () => {
   it("shows owner loading state", async () => { let release!: (value: Response) => void; const pending = new Promise<Response>(resolve => { release = resolve; }); global.fetch = vi.fn(input => String(input).endsWith("/me") ? pending : String(input).includes("options") ? response(options) : response(summary)) as typeof fetch; render(<OwnerDashboard />); expect(screen.getByRole("status")).toBeVisible(); await act(async () => release(new Response(JSON.stringify({ role: "AcademyOwner" }), { status: 200 }))); expect(await screen.findByRole("link", { name: /طلبات الدفع/ })).toBeVisible(); });
   it("shows owner error state", async () => { global.fetch = vi.fn(() => Promise.reject()) as typeof fetch; render(<OwnerDashboard />); expect(await screen.findByRole("alert")).toBeVisible(); });
   it("renders financial confirmed total", async () => { render(<FinancialReport />); expect((await screen.findAllByText("900 جنيه"))[0]).toBeVisible(); expect(screen.getByText(/صافي/)).toBeVisible(); });
+  it("shows a separate dated refund and links to the unchanged original receipt", async () => {
+    global.fetch = vi.fn(input => String(input).includes("financial") ? response({ ...financial, totalAmount: 0, totalRefunds: 40.25, netAmount: -40.25, items: [{ ...financial.items[0], collectionId: "refund-1", amount: 0, refundAmount: 40.25, collectionType: "Refund", paymentMethod: "Unspecified", provider: "Manual" }] }) : String(input).includes("options") ? response(options) : response([])) as typeof fetch;
+    render(<FinancialReport />);
+    expect(await screen.findByText("استرداد اشتراك · بتاريخ الصرف")).toBeVisible();
+    expect(screen.getByText(/طريقة غير موثقة \/ تسجيل يدوي/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "الإيصال" })).toHaveAttribute("href", "/dashboard/subscriptions/receipts/r1");
+    fireEvent.change(screen.getByLabelText("طريقة الدفع"), { target: { value: "Unspecified" } });
+    fireEvent.click(screen.getByRole("button", { name: "تطبيق الفلاتر" }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("provider=Unspecified")));
+  });
   it("submits financial filters", async () => { render(<FinancialReport />); await screen.findByText("REC-1"); fireEvent.change(screen.getByLabelText("الرياضة"), { target: { value: "s1" } }); fireEvent.click(screen.getByRole("button", { name: "تطبيق الفلاتر" })); await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("sportId=s1"))); });
   it("financial export is an honest CSV link", async () => { render(<FinancialReport />); const link = await screen.findByRole("link", { name: "تصدير CSV" }); expect(link).toHaveAttribute("href", expect.stringContaining("/financial/export")); expect(screen.queryByText(/Excel/)).not.toBeInTheDocument(); });
   it("financial empty state is explicit", async () => { global.fetch = vi.fn((input) => String(input).includes("financial") ? response({ ...financial, totalAmount: 0, totalCount: 0, items: [] }) : String(input).includes("options") ? response(options) : response([])) as unknown as typeof fetch; render(<FinancialReport />); expect(await screen.findByText(/لا توجد تحصيلات مؤكدة/)).toBeVisible(); });

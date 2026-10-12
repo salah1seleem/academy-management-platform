@@ -64,10 +64,10 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
         Assert.Equal(dashboard.GetProperty("collections").GetProperty("total").GetDecimal(), report.GetProperty("netAmount").GetDecimal());
         Assert.Equal(await NetRevenue(), report.GetProperty("netAmount").GetDecimal());
         await using var s = Scope(); var db = Db(s);
-        var collections = db.Collections.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ConfirmedAtUtc >= new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero) && x.ConfirmedAtUtc < new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero));
+        var collections = db.Collections.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.ConfirmedAtUtc >= new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero) && x.ConfirmedAtUtc < new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero));
         Assert.Equal(await collections.SumAsync(x => x.Amount), await db.Receipts.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && collections.Select(c => c.Id).Contains(x.CollectionId)).SumAsync(x => x.Amount));
         var gross = await collections.SumAsync(x => x.Amount)
-            + (await db.ProductSales.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Status == "Confirmed" && x.ConfirmedAtUtc >= new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero) && x.ConfirmedAtUtc < new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero)).SumAsync(x => (decimal?)x.Amount) ?? 0)
+            + (await db.ProductSales.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.Status == "Confirmed" && x.ConfirmedAtUtc >= new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero) && x.ConfirmedAtUtc < new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero)).SumAsync(x => (decimal?)x.Amount) ?? 0)
             + await ConfirmedTournamentRevenue(db);
         Assert.Equal(gross, report.GetProperty("totalAmount").GetDecimal());
     }
@@ -115,10 +115,10 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
         await using var s = Scope(); var db = Db(s);
         var start = new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero);
         var end = new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero);
-        var ids = db.Collections.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ConfirmedAtUtc >= start && x.ConfirmedAtUtc < end).Select(x => x.Id);
+        var ids = db.Collections.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.ConfirmedAtUtc >= start && x.ConfirmedAtUtc < end).Select(x => x.Id);
         return (await db.Collections.Where(x => ids.Contains(x.Id)).SumAsync(x => (decimal?)x.Amount) ?? 0)
-            - (await db.CollectionRefunds.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && ids.Contains(x.CollectionId)).SumAsync(x => (decimal?)x.Amount) ?? 0)
-            + (await db.ProductSales.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Status == "Confirmed" && x.ConfirmedAtUtc >= start && x.ConfirmedAtUtc < end).SumAsync(x => (decimal?)x.Amount) ?? 0)
+            - (await db.CollectionRefunds.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.CreatedAtUtc >= start && x.CreatedAtUtc < end && db.Collections.Any(c => c.AcademyId == x.AcademyId && c.Currency == "EGP" && c.Id == x.CollectionId)).SumAsync(x => (decimal?)x.Amount) ?? 0)
+            + (await db.ProductSales.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.Status == "Confirmed" && x.ConfirmedAtUtc >= start && x.ConfirmedAtUtc < end).SumAsync(x => (decimal?)x.Amount) ?? 0)
             + await ConfirmedTournamentRevenue(db);
     }
     private static async Task<decimal> ConfirmedTournamentRevenue(FoundationDbContext db)

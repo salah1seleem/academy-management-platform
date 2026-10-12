@@ -81,6 +81,8 @@ public sealed class CollectionRefund : TenantEntity
     public string? Reason { get; set; }
     public Guid PerformedByUserId { get; set; }
     public required string IdempotencyKey { get; set; }
+    // Null preserves honestly unknown payout methods on historical records.
+    public string? PayoutMethod { get; set; }
 }
 public sealed class ProductSale : TenantEntity
 {

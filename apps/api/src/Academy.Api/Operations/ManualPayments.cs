@@ -33,6 +33,10 @@ public static class ManualPayments
         api.MapGet("/notices", async (CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var user = Actor(principal); return Results.Ok(await db.AcademyNotices.Where(x => x.AcademyId == t.AcademyId && x.UserId == user).OrderByDescending(x => x.CreatedAtUtc).Take(50).Select(x => new { x.Id, x.Message, x.IsRead, x.CreatedAtUtc }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.TenantAccess);
         api.MapGet("/people/players/{id:guid}/refunds", Refunds).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage);
         api.MapPost("/people/players/{id:guid}/refunds", Refund).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/people/players/{id:guid}/refunds/quote", async (Guid id, RefundWrite body, CashRegisterService cash) => {
+            try { return Results.Ok(await cash.RefundQuote(id,body)); }
+            catch(CashRejected error) { return Results.Problem(statusCode:error.Status,title:error.Message); }
+        }).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
     }
     private static Guid Actor(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static async Task<IResult> CollectStaff(Guid id, CollectWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, CollectionService service, TimeProvider time, CashRegisterService cash)
@@ -164,37 +168,56 @@ public static class ManualPayments
         db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = payment.RenewalRequest.RequestedByUserId, Message = body.Accept ? "تم قبول إثبات الدفع وتفعيل الاشتراك بنجاح. يمكنك مراجعة الإيصال ومواعيد التدريب." : $"لم يتم قبول طلب الدفع. {body.Reason?.Trim() ?? "تواصل مع إدارة الأكاديمية للتوضيح."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { receiptId = receipt, proof.Status });
     }
-    private static async Task<IResult> Refunds(Guid id, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> Refunds(Guid id, CurrentTenant tenant, FoundationDbContext db, CashRegisterService cash)
     {
+        try { await cash.AuthorizeRefund(readOnly:true); }
+        catch(CashRejected error) { return Results.Problem(statusCode:error.Status,title:error.Message); }
         var t = (await tenant.ResolveAsync())!; if (!await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id)) return Results.NotFound();
         // Scope the visible collections first. Aggregate only their own tenant-bound
         // financial usage, including historical branches, without disclosing those rows.
         var records = await db.Collections.Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == id).OrderByDescending(x => x.ConfirmedAtUtc).Select(x => new {
-            x.Id, x.Amount, x.Currency, x.ConfirmedAtUtc,
+            x.Id, x.Amount, x.Currency, x.ConfirmedAtUtc, x.PaymentMethod,
             refunded = db.CollectionRefunds.IgnoreQueryFilters().Where(r => r.AcademyId == t.AcademyId && r.CollectionId == x.Id).Sum(r => (decimal?)r.Amount) ?? 0,
             allocated = db.ReceivableMovements.IgnoreQueryFilters().Where(m => m.AcademyId == t.AcademyId && m.CollectionId == x.Id && m.Kind == ReceivableMovementKind.PaymentAllocation).Sum(m => (decimal?)m.Amount) ?? 0,
         }).ToListAsync();
-        var collections = records.Select(c => new { c.Id, c.Amount, c.Currency, c.refunded, c.allocated, available = CollectionFunds.Available(c.Amount,c.refunded,c.allocated).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture), c.ConfirmedAtUtc });
-        return Results.Ok(new { collections, refunds = await db.CollectionRefunds.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == id).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, x.Amount, x.Currency, x.Reason, x.CreatedAtUtc }).ToListAsync() });
+        var collections = records.Select(c => new { c.Id, c.Amount, c.Currency, c.refunded, c.allocated, c.PaymentMethod, available = CollectionFunds.Available(c.Amount,c.refunded,c.allocated).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture), c.ConfirmedAtUtc });
+        return Results.Ok(new { collections, refunds = await db.CollectionRefunds.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == id).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, x.Amount, x.Currency, x.Reason, x.CreatedAtUtc, cashSessionId=db.CashRefundPostings.Where(p=>p.RefundId==x.Id).Select(p=>(Guid?)p.SessionId).SingleOrDefault() }).ToListAsync() });
     }
-    private static async Task<IResult> Refund(Guid id, RefundWrite body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> Refund(Guid id, RefundWrite body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, CashRegisterService cash, TimeProvider time)
+    {
+        try { return await RecordRefund(id,body,context,tenant,db,cash,time); }
+        catch(CashRejected error) { return Results.Problem(statusCode:error.Status,title:error.Message); }
+    }
+    private static async Task<IResult> RecordRefund(Guid id, RefundWrite body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, CashRegisterService cash, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var user = Actor(context.User); var key = context.Request.Headers["Idempotency-Key"].ToString();
         if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || body.Amount <= 0 || body.Amount > 999999999m || decimal.Round(body.Amount, 2) != body.Amount || body.Reason?.Length > 500) return Results.UnprocessableEntity(new { message = "أدخل مبلغ استرداد صحيحًا." });
+        await cash.AuthorizeRefund();
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"refund-key:{t.AcademyId}:{user}:{key}"}, 0))");
         var replay = await db.CollectionRefunds.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.PerformedByUserId == user && x.IdempotencyKey == key);
-        if (replay is not null) return replay.CollectionId == body.CollectionId && replay.PlayerId == id && replay.Amount == body.Amount && (string.IsNullOrWhiteSpace(replay.Reason) ? null : replay.Reason.Trim()) == (string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim()) ? Results.Ok(new { replay.Id, replay = true }) : Results.Conflict(new { message="معرف الاسترداد مستخدم بتفاصيل أخرى." });
+        if (replay is not null) {
+            var posting=await db.CashRefundPostings.SingleOrDefaultAsync(p=>p.RefundId==replay.Id);
+            return replay.CollectionId == body.CollectionId && replay.PlayerId == id && replay.Amount == body.Amount && (string.IsNullOrWhiteSpace(replay.Reason) ? null : replay.Reason.Trim()) == (string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim()) &&
+                (posting is null ? body.CashSessionId is null && body.QuoteHash is null : posting.SessionId==body.CashSessionId && posting.RequestHash==CashRegisterService.RefundHash(body))
+                ? Results.Ok(new { replay.Id, replay = true }) : Results.Conflict(new { message="معرف الاسترداد مستخدم بتفاصيل أخرى." });
+        }
         await CollectionFunds.Lock(db,t.AcademyId,body.CollectionId);
-        var collection = await db.Collections.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.CollectionId && x.SportEnrollment.PlayerId == id); if (collection is null) return Results.NotFound();
+        var collection = await db.Collections.Include(x=>x.SportEnrollment).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.CollectionId && x.SportEnrollment.PlayerId == id); if (collection is null) return Results.NotFound();
         var used = await CollectionFunds.Used(db,t.AcademyId,collection.Id);
         if (body.Amount > CollectionFunds.Available(collection.Amount,used.Refunded,used.Allocated)) return Results.Conflict(new { message = "الاسترداد يتجاوز المبلغ غير المسترد وغير المخصص لمطالبة. راجع الحركات المالية أولًا؛ لن يُعاد فتح دين تلقائيًا." });
-        var row = new CollectionRefund { Id = Guid.NewGuid(), AcademyId = t.AcademyId, CollectionId = collection.Id, PlayerId = id, Amount = body.Amount, Currency = collection.Currency, Reason = string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim(), PerformedByUserId = user, IdempotencyKey = key, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.CollectionRefunds.Add(row); await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { row.Id });
+        var cashPayout=collection.PaymentMethod=="Cash" || body.CashSessionId.HasValue;
+        if(cashPayout) await cash.PrepareRefund(id,body,collection,CollectionFunds.Available(collection.Amount,used.Refunded,used.Allocated));
+        else if(body.QuoteHash is not null) return Results.UnprocessableEntity(new {message="اختر وردية مراجعة الصرف النقدي."});
+        var at=time.GetUtcNow();
+        var row = new CollectionRefund { Id = Guid.NewGuid(), AcademyId = t.AcademyId, CollectionId = collection.Id, PlayerId = id, Amount = body.Amount, Currency = collection.Currency, PayoutMethod=cashPayout?"Cash":"Online", Reason = string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim(), PerformedByUserId = user, IdempotencyKey = key, CreatedAtUtc = at, UpdatedAtUtc = at }; db.CollectionRefunds.Add(row); await db.SaveChangesAsync();
+        if(cashPayout) await cash.PostRefund(body,row);
+        await transaction.CommitAsync(); return Results.Ok(new { row.Id });
     }
 }
 public sealed record TransferWrite(string? InstaPayAddress, string? WalletNumber, string? RecipientName, bool IsActive);
 public sealed record CollectWrite(string PaymentMethod, Guid? CashSessionId = null, string? ExpectedAmount = null);
 public sealed record ProofWrite(Guid AssetId);
 public sealed record ReviewWrite(bool Accept, Guid? GroupId, string? Reason);
-public sealed record RefundWrite(Guid CollectionId, [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal Amount, string? Reason);
+public sealed record RefundWrite(Guid CollectionId, [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal Amount, string? Reason, Guid? CashSessionId = null, string? QuoteHash = null);
 public sealed record PaymentQueueItem(Guid Id, string Type, string Player, string Sport, string Branch, string Plan, decimal Amount, string Currency, string Status, bool HasProof, DateTimeOffset CreatedAtUtc);

@@ -60,3 +60,9 @@ it("closing is explicit, optional reason and navigates back only after confirmed
   render(<CashSessionDetail id="session" />); const amount = await screen.findByLabelText("المبلغ الموجود فعليًا"); fireEvent.change(amount, { target: { value: "90.00" } }); fireEvent.submit(amount.closest("form")!);
   await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/finance/cash-registers")); expect(writes).toEqual([{ countedAmount: "90.00", reason: null }]);
 });
+
+it("shows cash refunds as separate payouts linked to the player, never negative replacement receipts", async () => {
+  global.fetch = vi.fn(async () => response({ name: "صندوق الاسترداد", currency: "EGP", balance: "59.75", variance: null, canClose: false, session: { openingAmount: "100.00", openedAtUtc: "2026-09-28T06:00:00Z" }, movements: [], refunds: [{ id: "posting", refundId: "refund", playerId: "player", amount: "40.25", currency: "EGP", createdAtUtc: "2026-09-28T07:00:00Z" }] }));
+  render(<CashSessionDetail id="session" />); await screen.findByRole("heading", { name: "الاستردادات النقدية المصروفة" });
+  expect(screen.getByRole("link", { name: "ملف اللاعب والاسترداد" })).toHaveAttribute("href", "/dashboard/players/player?tab=subscriptions"); expect(screen.queryByText("إيصالات القبض في الوردية")).not.toBeInTheDocument();
+});

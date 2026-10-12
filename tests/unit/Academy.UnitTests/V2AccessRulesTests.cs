@@ -24,4 +24,8 @@ public class V2AccessRulesTests
     [InlineData("DELETE", "/api/v1/people/players/123", "Delete")]
     public void Writes_do_not_inherit_read_permission(string method, string path, string operation) => Assert.Equal(operation, StaffAccessRules.Operation(method, path));
     [Fact] public void Unknown_modules_fail_closed() => Assert.Null(StaffAccessRules.ForPath("/api/v1/new-feature"));
+    [Theory]
+    [InlineData("/api/v1/people/players/00000000-0000-0000-0000-000000000001/refunds")]
+    [InlineData("/api/v1/people/players/00000000-0000-0000-0000-000000000001/refunds/quote")]
+    public void Refunds_require_finance_not_player_create(string path) => Assert.Equal("finance",StaffAccessRules.ForPath(path));
 }

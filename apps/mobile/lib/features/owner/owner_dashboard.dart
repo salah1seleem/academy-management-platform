@@ -295,6 +295,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               c['todayCash'],
               c['todayOnline'],
               true,
+              c['todayUnspecified'],
             ),
             (
               'تحصيل الشهر',
@@ -303,6 +304,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               c['monthCash'],
               c['monthOnline'],
               false,
+              c['monthUnspecified'],
             ),
           ])
             GCard(
@@ -350,6 +352,14 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                       ),
                     ],
                   ),
+                  if (x.$7 != null &&
+                      !RegExp(r'^-?0+(\.0+)?$').hasMatch(textOf(x.$7)))
+                    TextButton(
+                      onPressed: () => financial('Unspecified', daily: x.$6),
+                      child: UiText(
+                        '${localized(context, 'طريقة صرف قديمة غير موثقة', 'Historical payout method unrecorded')}: ${money(x.$7, currency)}',
+                      ),
+                    ),
                   UiText(
                     localized(
                       context,

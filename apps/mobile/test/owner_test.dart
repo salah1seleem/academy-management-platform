@@ -60,6 +60,71 @@ Map<String, dynamic> summary() => {
 };
 
 void main() {
+  testWidgets(
+    'Historical payout method is explicit and retains its drill-down',
+    (tester) async {
+      String? reportPath;
+      final auth = await owner((m, p, b, t) async {
+        if (p.contains('/structure/options')) return {'branches': []};
+        if (p.endsWith('/news')) return [];
+        if (p.contains('/reports/financial')) {
+          reportPath = p;
+          return {
+            'totalCount': 1,
+            'totalAmount': 0,
+            'totalRefunds': 40.25,
+            'netAmount': -40.25,
+            'currency': 'EGP',
+            'items': [
+              {
+                'player': 'لاعب اختبار',
+                'receiptNumber': 'استرداد — R1',
+                'branch': 'فرع اختبار',
+                'amount': 0,
+                'netAmount': -40.25,
+                'currency': 'EGP',
+                'collectionType': 'Refund',
+              },
+            ],
+          };
+        }
+        return {
+          ...summary(),
+          'collections': {
+            'today': -40.25,
+            'todayCash': 0,
+            'todayOnline': 0,
+            'todayUnspecified': -40.25,
+            'month': 1200,
+            'monthUnspecified': 0.0,
+          },
+        };
+      });
+      await tester.pumpWidget(
+        shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())),
+      );
+      await tester.pumpAndSettle();
+      final link = find.textContaining('طريقة صرف قديمة غير موثقة');
+      await tester.scrollUntilVisible(link, 250);
+      await tester.ensureVisible(link);
+      await tester.pumpAndSettle();
+      expect(
+        link,
+        findsOneWidget,
+      ); // A documented zero in the period is not shown as unknown.
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(Uri.parse(reportPath!).queryParameters['provider'], 'Unspecified');
+      expect(
+        find.textContaining('استرداد اشتراك · بتاريخ الصرف'),
+        findsOneWidget,
+      );
+      expect(find.text('-40.25 ج.م'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    },
+  );
   testWidgets('Payment category drill-down carries the displayed date range', (
     tester,
   ) async {

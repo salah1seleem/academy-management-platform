@@ -73,6 +73,8 @@ public sealed partial class FoundationDbContext
         b.Entity<PlayerDiscountLink>().HasOne<DiscountRule>().WithMany().HasForeignKey(x => new { x.AcademyId, x.DiscountRuleId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<CollectionRefund>().HasIndex(x => new { x.AcademyId, x.PerformedByUserId, x.IdempotencyKey }).IsUnique();
         b.Entity<CollectionRefund>().Property(x => x.Amount).HasPrecision(18, 2);
+        b.Entity<CollectionRefund>().Property(x => x.PayoutMethod).HasMaxLength(16);
+        b.Entity<CollectionRefund>().ToTable(t=>t.HasCheckConstraint("CK_CollectionRefund_PayoutMethod", "\"PayoutMethod\" IS NULL OR \"PayoutMethod\" IN ('Cash','Online')"));
         b.Entity<CollectionRefund>().HasOne<PaymentCollection>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<ProductSale>().HasIndex(x => new { x.AcademyId, x.RequestedByUserId, x.IdempotencyKey }).IsUnique();
         b.Entity<ProductSale>().HasOne<SportCatalogItem>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ProductId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

@@ -87,3 +87,16 @@ public sealed class CashProductPosting : TenantEntity
     public required string RequestHash { get; set; }
     public Academy.Infrastructure.Operations.ProductSale ProductSale { get; set; } = null!;
 }
+
+// A refund is a separate payout, never a mutation/deletion of the original receipt.
+public sealed class CashRefundPosting : TenantEntity
+{
+    public Guid SessionId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid RefundId { get; set; }
+    [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public Guid ActorUserId { get; set; }
+    public required string RequestHash { get; set; }
+    public Academy.Infrastructure.Operations.CollectionRefund Refund { get; set; } = null!;
+}

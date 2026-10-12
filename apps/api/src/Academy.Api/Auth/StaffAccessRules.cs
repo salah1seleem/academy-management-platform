@@ -28,6 +28,7 @@ public static class StaffAccessRules
         if (path.StartsWith("/api/v1/facilities")) return "facilities";
         if (path.StartsWith("/api/v1/manage/training-levels")) return "academy";
         if (path.StartsWith("/api/v1/finance/")) return "finance";
+        if (path.StartsWith("/api/v1/people/players/") && (path.EndsWith("/refunds") || path.Contains("/refunds/"))) return "finance";
         if (path.StartsWith("/api/v1/reports/owner-summary") || path.StartsWith("/api/v1/reports/financial")) return "finance";
         if (path.StartsWith("/api/v1/reports/")) return "reports";
         if (path.Contains("/payroll") || path.Contains("/employees")) return "payroll";

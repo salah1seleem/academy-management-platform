@@ -15,11 +15,21 @@ public sealed partial class FoundationDbContext
     public DbSet<CashTransfer> CashTransfers => Set<CashTransfer>();
     public DbSet<CashReceiptPosting> CashReceiptPostings => Set<CashReceiptPosting>();
     public DbSet<CashProductPosting> CashProductPostings => Set<CashProductPosting>();
+    public DbSet<CashRefundPosting> CashRefundPostings => Set<CashRefundPosting>();
     private static void ConfigureCashRegisters(ModelBuilder b)
     {
         Tenant<CashRegister>(b); Tenant<CashierAssignment>(b); Tenant<CashSession>(b); Tenant<CashMovement>(b); Tenant<CashTransfer>(b);
         Tenant<CashReceiptPosting>(b);
         Tenant<CashProductPosting>(b);
+        Tenant<CashRefundPosting>(b);
+        b.Entity<CashRefundPosting>(e => {
+            e.Property(x=>x.Amount).HasPrecision(18,2); e.Property(x=>x.Currency).HasMaxLength(3); e.Property(x=>x.RequestHash).HasMaxLength(64);
+            e.HasIndex(x=>new{x.AcademyId,x.RefundId}).IsUnique();
+            e.HasOne<CashSession>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.SessionId,x.BranchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.BranchId}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x=>x.Refund).WithMany().HasForeignKey(x=>new{x.AcademyId,x.RefundId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x=>x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t=>t.HasCheckConstraint("CK_CashRefundPosting_Amount", "\"Amount\" > 0"));
+        });
         b.Entity<CashProductPosting>(e => {
             e.Property(x=>x.Amount).HasPrecision(18,2); e.Property(x=>x.Currency).HasMaxLength(3); e.Property(x=>x.RequestHash).HasMaxLength(64);
             e.HasIndex(x=>new{x.AcademyId,x.ProductSaleId}).IsUnique();

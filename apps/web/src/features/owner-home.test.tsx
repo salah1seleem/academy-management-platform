@@ -21,6 +21,14 @@ it("does not invent a pie when there are no stored records", () => {
   render(<DonutChart center="0" caption="لاعبًا" rows={[{ name: "فعال", value: 0, href: "/players" }]} />);
   expect(screen.queryByRole("img")).not.toBeInTheDocument(); expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
 });
+it("does not pretend historical refunds have a documented electronic method", async () => {
+  const historic = { ...summary, collections: { today: -40, month: 5600, todayCash: 0, todayOnline: 0, todayUnspecified: -40, monthUnspecified: 0 } };
+  global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(historic)) as typeof fetch;
+  render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
+  const link = await screen.findByRole("link", { name: /طريقة صرف قديمة غير موثقة/ });
+  expect(link).toHaveAttribute("href", expect.stringContaining("provider=Unspecified"));
+  expect(link).toHaveTextContent("-40 جنيه");
+});
 it("an owner manages attendance/transfers without receiving platform branding controls", async () => {
   global.fetch = vi.fn(input => String(input).includes("experience") ? response({ displayName: "أكاديمية اختبار", platformBrandOperator: false, coachAttendanceEnabled: true }) : String(input).includes("my-permissions") ? response(["academy.settings.manage"]) : String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : response({ configured: false })) as typeof fetch;
   render(<AcademySettings />); expect(await screen.findByRole("checkbox")).toBeVisible(); expect(screen.queryByText("هوية الأكاديميات — مشغّل المنصة")).not.toBeInTheDocument(); expect(screen.queryByLabelText("رفع شعار")).not.toBeInTheDocument();

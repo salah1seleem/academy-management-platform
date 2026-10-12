@@ -107,6 +107,10 @@ class _OwnerReportsState extends State<OwnerReports> {
           UiText('إجمالي السجلات: ${d['totalCount']}'),
           if (kind == 'financial')
             UiText('الإجمالي: ${money(d['totalAmount'], d['currency'])}'),
+          if (kind == 'financial')
+            UiText(
+              'الاستردادات: ${money(d['totalRefunds'] ?? 0, d['currency'])} · الصافي: ${money(d['netAmount'] ?? d['totalAmount'], d['currency'])}',
+            ),
           for (final item in items)
             Card(
               child: ListTile(
@@ -115,12 +119,15 @@ class _OwnerReportsState extends State<OwnerReports> {
                 ),
                 subtitle: UiText(
                   kind == 'financial'
-                      ? '${item['receiptNumber']} · ${item['branch']}'
+                      ? '${item['collectionType'] == 'Refund' ? 'استرداد اشتراك · بتاريخ الصرف · ' : ''}${item['receiptNumber']} · ${item['branch']}'
                       : '${day(item['date'])} · ${item['group']}',
                 ),
                 trailing: UiText(
                   kind == 'financial'
-                      ? money(item['amount'], item['currency'])
+                      ? money(
+                          item['netAmount'] ?? item['amount'],
+                          item['currency'],
+                        )
                       : label(item['status']),
                 ),
               ),

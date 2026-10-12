@@ -2765,6 +2765,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PayoutMethod")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<Guid>("PerformedByUserId")
                         .HasColumnType("uuid");
 
@@ -2785,14 +2789,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("AcademyId", "Id");
-
                     b.HasIndex("AcademyId", "CollectionId");
 
                     b.HasIndex("AcademyId", "PerformedByUserId", "IdempotencyKey")
                         .IsUnique();
 
-                    b.ToTable("CollectionRefunds", (string)null);
+                    b.ToTable("CollectionRefunds", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CollectionRefund_PayoutMethod", "\"PayoutMethod\" IS NULL OR \"PayoutMethod\" IN ('Cash','Online')");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.DiscountRule", b =>
@@ -5889,6 +5894,73 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("CashReceiptPostings", null, t =>
                         {
                             t.HasCheckConstraint("CK_CashReceiptPosting_Amount", "\"Amount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.CashRefundPosting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("RefundId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "RefundId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SessionId", "BranchId");
+
+                    b.ToTable("CashRefundPostings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CashRefundPosting_Amount", "\"Amount\" > 0");
                         });
                 });
 
@@ -10102,6 +10174,37 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Receipt");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.CashRefundPosting", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.CollectionRefund", "Refund")
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "RefundId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.CashSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SessionId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id", "BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Refund");
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.CashRegister", b =>
