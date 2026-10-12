@@ -1,6 +1,7 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 import { resolve } from "node:path";
+import { cairoDateRange } from "../support/attendance";
 
 async function login(page: Page, role: "admin" | "owner") {
   await page.goto("/login");
@@ -24,8 +25,9 @@ test("Owner payment-priority card opens the matching request type with month-to-
   await page.locator(".requests-card").getByRole("link", { name: /منتجات/ }).click();
   await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
   await expect(page.getByLabel("نوع الطلب")).toHaveValue("Product");
-  await expect(page.getByLabel("من تاريخ")).toHaveValue("2026-09-01");
-  await expect(page.getByLabel("إلى تاريخ")).toHaveValue("2026-09-28");
+  const range = cairoDateRange();
+  await expect(page.getByLabel("من تاريخ")).toHaveValue(range.from);
+  await expect(page.getByLabel("إلى تاريخ")).toHaveValue(range.to);
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
 });
 

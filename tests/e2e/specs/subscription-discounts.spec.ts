@@ -1,8 +1,10 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
+import { formatMoneyAr } from "../../../apps/web/src/lib/formatters";
 
 let originalCheckout = "";
 let renewalDetail = "";
+let originalAmount = 0;
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email);
@@ -14,13 +16,13 @@ async function startRenewal(page: Page) {
   await child.locator(".subscription-mini p").filter({ hasText: "كرة القدم" }).getByRole("link").click();
   await page.getByText("اشتراك شهري", { exact: true }).click(); await page.getByRole("button", { name: /الدفع الإلكتروني — ادفع الآن/ }).click();
   await page.waitForURL("**/guardian/checkout/**"); const url = page.url(); const paymentId = url.split("/").pop()!;
-  const renewalId = await page.evaluate(async id => fetch(`/api/v1/guardian/subscriptions/payments/${id}`).then(r => r.json()).then((x: { renewalId: string }) => x.renewalId), paymentId);
-  return { url, renewalId };
+  const payment = await page.request.get(`/api/v1/guardian/subscriptions/payments/${paymentId}`).then(r => r.json());
+  return { url, renewalId: payment.renewalId, originalAmount: payment.originalAmount as number };
 }
 
 async function applyDiscount(page: Page, renewalId: string, type: "نسبة مئوية" | "مبلغ ثابت", value: string, reason: string) {
   await staffLogin(page); renewalDetail = `/dashboard/subscriptions/renewals/${renewalId}`; await page.goto(renewalDetail);
-  await page.getByRole("button", { name: "تطبيق خصم" }).click(); await page.getByLabel("نوع الخصم").selectOption({ label: type });
+  await page.getByRole("button", { name: /^(تطبيق خصم|تعديل الخصم)$/ }).click(); await page.getByLabel("نوع الخصم").selectOption({ label: type });
   await page.getByLabel("قيمة الخصم").fill(value); await page.getByLabel("سبب الخصم").fill(reason);
   const saved = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/api/v1/subscriptions/renewals/${renewalId}/discount`));
   await page.getByRole("button", { name: "حفظ الخصم" }).click();
@@ -29,22 +31,22 @@ async function applyDiscount(page: Page, renewalId: string, type: "نسبة مئ
 
 test.describe.serial("Slice 8C subscription discount journeys", () => {
   test("Journey A — Admin applies 10 percent and final amount updates", async ({ page }) => {
-    const renewal = await startRenewal(page); originalCheckout = renewal.url; await applyDiscount(page, renewal.renewalId, "نسبة مئوية", "10", "خصم إخوة تجريبي");
-    await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(/10%.*٩٠/); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٨١٠/); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
+    const renewal = await startRenewal(page); originalCheckout = renewal.url; originalAmount = renewal.originalAmount; await applyDiscount(page, renewal.renewalId, "نسبة مئوية", "10", "خصم إخوة تجريبي");
+    await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(`10% (-${formatMoneyAr(Math.round(originalAmount * 10) / 100)})`); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100)); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
   });
 
   test("Journey B — Guardian pays the discounted final amount and sees receipt", async ({ page }) => {
     await guardianLogin(page); await page.goto(originalCheckout); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click();
-    await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(/10%.*٩٠/); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٨١٠/);
+    await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(`10% (-${formatMoneyAr(Math.round(originalAmount * 10) / 100)})`); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100));
     await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click(); await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
-    await page.getByRole("link", { name: "عرض الإيصال" }).click(); await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(/10%.*٩٠/); await expect(page.getByText("المبلغ المدفوع", { exact: true }).locator("..")).toContainText(/٨١٠/);
+    await page.getByRole("link", { name: "عرض الإيصال" }).click(); await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(`10% (-${formatMoneyAr(Math.round(originalAmount * 10) / 100)})`); await expect(page.getByText("المبلغ المدفوع", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100));
   });
 
   test("Journey C — Failed discounted payment has no receipt and retry retains amount", async ({ page }) => {
     const renewal = await startRenewal(page); await applyDiscount(page, renewal.renewalId, "مبلغ ثابت", "150", "خصم حالة تشغيلية");
-    await guardianLogin(page); await page.goto(renewal.url); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٧٥٠/);
+    await guardianLogin(page); await page.goto(renewal.url); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(formatMoneyAr(renewal.originalAmount - 150));
     await page.getByRole("button", { name: "محاكاة فشل الدفع" }).click(); await expect(page.getByText("فشلت عملية الدفع ولم يتم تجديد الاشتراك.")).toBeVisible(); await expect(page.getByRole("link", { name: "عرض الإيصال" })).toHaveCount(0);
-    await page.getByRole("button", { name: "إعادة محاولة الدفع" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(/٧٥٠/);
+    await page.getByRole("button", { name: "إعادة محاولة الدفع" }).click(); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(formatMoneyAr(renewal.originalAmount - 150));
   });
 
   test("Journey D — Guardian cannot mutate discounts and Coach cannot enter the dashboard", async ({ page }) => {

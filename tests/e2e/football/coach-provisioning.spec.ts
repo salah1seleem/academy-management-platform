@@ -19,7 +19,13 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   await page.getByLabel("الاسم بالعربية").fill(`مدرب رحلة عرض ${width}`);
   await page.getByLabel("رقم الهاتف المصري").fill(phone);
   await page.getByLabel("براعم 2018 — مجموعة أ").check();
+  const created = page.waitForResponse(response => response.url().endsWith("/api/v1/manage/coaches") && response.request().method() === "POST");
   await page.getByRole("button", { name: "حفظ المدرب", exact: true }).click();
+  const response = await created; expect(response.status()).toBe(201);
+  const { membershipId } = await response.json();
+  await expect(page).toHaveURL(/\/academy\/coaches$/);
+  await page.getByLabel("بحث المدربون").fill(`مدرب رحلة عرض ${width}`);
+  await page.locator(`a[href="/dashboard/academy/coaches/${membershipId}"]`).click();
   await expect(page).toHaveURL(/\/academy\/coaches\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: `مدرب رحلة عرض ${width}` })).toBeVisible();
   await expect(page.getByText("براعم 2018 — مجموعة أ", { exact: true })).toBeVisible();

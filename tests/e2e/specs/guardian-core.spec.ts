@@ -19,7 +19,7 @@ test.describe.serial("Guardian core mobile journeys", () => {
   test("Journey B — existing child requests a new sport", async ({ page }) => {
     await guardianLogin(page); await page.getByRole("link", { name: /اشتراك جديد/ }).click(); await page.getByRole("button", { name: /إضافة رياضة لطفل موجود/ }).click(); await page.getByLabel("الطفل").selectOption({ label: "مريم أحمد محمود" }); await page.getByLabel("الرياضة").selectOption({ label: "السباحة" }); await page.getByLabel("الفرع المفضل").selectOption({ label: "فرع التجمع الخامس" }); await page.getByRole("button", { name: "إرسال طلب الاشتراك" }).click();
     const requestListHeading = page.getByRole("heading", { name: "طلبات الاشتراك" });
-    const alreadySubmitted = page.getByText(/يوجد طلب قائم|مشترك بالفعل/);
+    const alreadySubmitted = page.getByText(/يوجد طلب قائم|مشترك بالفعل|يوجد تسجيل للطفل/);
     await expect(requestListHeading.or(alreadySubmitted)).toBeVisible({ timeout: 15_000 });
     if (!await requestListHeading.isVisible()) await page.goto("/guardian/enrollment-requests");
     await expect(requestListHeading).toBeVisible();
@@ -39,7 +39,7 @@ test.describe.serial("Guardian core mobile journeys", () => {
         const created = await page.request.post("/api/v1/manage/groups", { headers: { "X-CSRF-TOKEN": csrf.token }, data: { arabicName: groupName, branchId: "31000000-0000-0000-0000-000000000002", sportId: "32000000-0000-0000-0000-000000000002", ageCategoryId: "33000000-0000-0000-0000-000000000001", capacity: 20 } });
         expect(created.ok()).toBeTruthy();
       }
-      await page.context().clearCookies(); await adminLogin(page); await page.goto("/dashboard/enrollment-requests"); const row = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "قيد الانتظار" }); await row.getByRole("link", { name: "عرض" }).click(); await page.getByLabel("المجموعة").selectOption({ label: groupName }); await page.getByRole("button", { name: "قبول وإنشاء التسجيل" }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
+      await page.context().clearCookies(); await adminLogin(page); await page.goto("/dashboard/enrollment-requests"); await page.getByLabel("من تاريخ").fill(""); await page.getByLabel("إلى تاريخ").fill(""); const row = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "قيد الانتظار" }); await row.getByRole("link", { name: "عرض", exact: true }).click(); await page.getByLabel("المجموعة").selectOption({ label: groupName }); await page.getByRole("button", { name: "قبول وإنشاء التسجيل" }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
       await page.context().clearCookies(); await guardianLogin(page); await openGuardianRequests(page); approved = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "مقبول" });
     }
     await expect(approved).toHaveCount(1); await approved.getByRole("link", { name: "إكمال الاشتراك / اختيار الباقة" }).click(); await expect(page.getByRole("heading", { name: "اختر الباقة" })).toBeVisible();

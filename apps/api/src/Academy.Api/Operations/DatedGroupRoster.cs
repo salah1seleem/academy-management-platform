@@ -8,14 +8,23 @@ public static class DatedGroupRoster
 {
     public static async Task<DatedRosterCount[]> Forecast(FoundationDbContext db, Guid group, DateOnly from)
     {
+        // Bound the expensive dated-assignment functions to potential members,
+        // not every enrollment in the academy. Include incoming transfers and
+        // single-session/compensation visitors before checking exact membership.
+        var recurringIds = await db.SportEnrollments.Where(e => e.IsActive &&
+            (e.TrainingGroupId == group || db.EnrollmentGroupTransfers.Any(t => t.SportEnrollmentId == e.Id && t.TargetGroupId == group))).Select(e => e.Id).ToArrayAsync();
+        var visitorIds = await db.SportEnrollments.Where(e => e.IsActive &&
+            (e.TrainingGroupId == group || db.EnrollmentGroupTransfers.Any(t => t.SportEnrollmentId == e.Id && t.TargetGroupId == group) ||
+             db.EnrollmentSessionMoves.Any(m => m.SportEnrollmentId == e.Id && m.TargetGroupId == group) ||
+             db.CompensationBookings.Any(b => b.SportEnrollmentId == e.Id && b.TrainingGroupId == group && b.State == Academy.Infrastructure.People.CompensationBookingState.Reserved))).Select(e => e.Id).ToArrayAsync();
         var dates = db.TrainingSessions.Where(s => s.TrainingGroupId == group && s.SessionDate >= from).Select(s => s.SessionDate)
             .Union(db.EnrollmentGroupTransfers.Where(t => (t.SourceGroupId == group || t.TargetGroupId == group) && t.EffectiveDate >= from).Select(t => t.EffectiveDate))
             .Union(db.TrainingGroups.Where(g => g.Id == group).Select(g => from));
-        var counts = await dates.OrderBy(d => d).Take(1001).Select(date => new DatedRosterCount(date, db.SportEnrollments.Count(e => e.IsActive && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group))).ToArrayAsync();
+        var counts = await dates.OrderBy(d => d).Take(1001).Select(date => new DatedRosterCount(date, db.SportEnrollments.Count(e => e.IsActive && recurringIds.Contains(e.Id) && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group))).ToArrayAsync();
         if (counts.Length > 1000) throw new FacilityRejected("نطاق جدول المجموعة أكبر من حد فحص المقاعد؛ راجعه قبل الإضافة.");
         var occurrences = await db.TrainingSessions.Where(s => s.TrainingGroupId == group && s.SessionDate >= from && s.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled)
             .Where(s => db.EnrollmentSessionMoves.Any(m => m.SourceSessionId == s.Id || m.TargetSessionId == s.Id) || db.CompensationBookings.Any(b => b.TrainingSessionId == s.Id && b.State == Academy.Infrastructure.People.CompensationBookingState.Reserved))
-            .OrderBy(s => s.SessionDate).ThenBy(s => s.Id).Take(1001).Select(s => new DatedRosterCount(s.SessionDate, db.SportEnrollments.Count(e => e.IsActive && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)))).ToArrayAsync();
+            .OrderBy(s => s.SessionDate).ThenBy(s => s.Id).Take(1001).Select(s => new DatedRosterCount(s.SessionDate, db.SportEnrollments.Count(e => e.IsActive && visitorIds.Contains(e.Id) && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id)))).ToArrayAsync();
         if (occurrences.Length > 1000) throw new FacilityRejected("عدد الحصص المنقولة يتجاوز حد فحص السعة.");
         return counts.Concat(occurrences).ToArray();
     }

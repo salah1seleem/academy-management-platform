@@ -369,7 +369,11 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
     {
         await using var scope = Scope(); var db = Db(scope); var group = await db.TrainingGroups.SingleAsync(x => x.Id == s.GroupId); var actor = await OwnerId(group.AcademyId); var starts = await db.TrainingSessions.Where(x => x.AcademyId == group.AcademyId && x.TrainingGroupId == group.Id && x.SessionDate == date).Select(x => x.StartTime).ToListAsync(); var start = new TimeOnly(2, 0); while (starts.Contains(start)) start = start.AddMinutes(1);
         var session = new TrainingSession { Id = Guid.NewGuid(), AcademyId = group.AcademyId, TrainingGroupId = group.Id, BranchId = group.BranchId, SportId = group.SportId, AgeCategoryId = group.AgeCategoryId, SessionDate = date, StartTime = start, EndTime = start.AddMinutes(45), Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, CreatedByUserId = actor, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
-        db.TrainingSessions.Add(session); await db.SaveChangesAsync(); createdSessionIds.Add(session.Id); return (await scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(group.AcademyId, session.Id, actor, [new(s.EnrollmentId, AttendanceStatus.Present)])).Single();
+        db.TrainingSessions.Add(session); await db.SaveChangesAsync(); createdSessionIds.Add(session.Id);
+        var previous = factory.Clock.Now;
+        factory.Clock.Now = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(new TimeOnly(12, 0)), TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")));
+        try { return (await scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(group.AcademyId, session.Id, actor, [new(s.EnrollmentId, AttendanceStatus.Present)])).Single(); }
+        finally { factory.Clock.Now = previous; }
     }
 
     private async Task<Guid> Renew(Scenario s)
@@ -399,8 +403,10 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
     private sealed record CsrfDto(string Token); private sealed record Challenge(Guid ChallengeId); private sealed record Created(Guid PaymentId);
     private sealed class Factory(string connection) : WebApplicationFactory<Program>
     {
+        public ScenarioTimeProvider Clock { get; } = new(DateTimeOffset.Parse("2026-09-28T10:00:00Z"));
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            builder.ConfigureServices(s => { s.AddSingleton<TimeProvider>(Clock); s.PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme, o => o.TimeProvider = Clock); });
             builder.UseEnvironment("Demo"); builder.UseSetting("ConnectionStrings:Default", connection); builder.UseSetting("Demo:SeedProfile", "LegacyRegression"); builder.UseSetting("Demo:SeedEnabled", "true"); builder.UseSetting("Demo:FixedOtpEnabled", "true"); builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); builder.UseSetting("Demo:ReferenceDate", "2026-09-28"); builder.UseSetting("Payments:InternalTest:Enabled", "true"); builder.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456");
         }
     }

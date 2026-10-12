@@ -59,14 +59,44 @@ public static class Slice4Endpoints
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
         if (sportId.HasValue) query = query.Where(x => x.SportId == sportId);
         if (coachId.HasValue) query = query.Where(x => FoundationDbContext.IsSessionStaffAssigned(t.AcademyId, coachId.Value, x.Id));
-        if (playerId.HasValue) query = query.Where(x =>
-            db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, x.Id) && e.PlayerId == playerId && e.IsActive) ||
-            db.PlayerAttendances.Any(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == x.Id && a.SportEnrollment.PlayerId == playerId));
-        if (guardianId.HasValue) query = query.Where(x => db.GuardianPlayerLinks.Any(l =>
-            l.AcademyId == t.AcademyId && l.GuardianId == guardianId && l.IsActive && l.Guardian.IsActive &&
-            (db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, x.Id) && e.PlayerId == l.PlayerId && e.IsActive) ||
-             db.PlayerAttendances.Any(a => a.AcademyId == t.AcademyId && a.TrainingSessionId == x.Id && a.SportEnrollment.PlayerId == l.PlayerId))));
+        if (playerId.HasValue) query = await SessionsForPlayers(query, [playerId.Value], t.AcademyId, db);
+        if (guardianId.HasValue)
+        {
+            var children = await db.GuardianPlayerLinks.AsNoTracking().Where(l =>
+                l.AcademyId == t.AcademyId && l.GuardianId == guardianId && l.IsActive && l.Guardian.IsActive)
+                .Select(l => l.PlayerId).Distinct().ToArrayAsync();
+            query = await SessionsForPlayers(query, children, t.AcademyId, db);
+        }
         return await SessionRows(query, t.AcademyId, db);
+    }
+
+    private static async Task<IQueryable<TrainingSession>> SessionsForPlayers(IQueryable<TrainingSession> query, Guid[] players, Guid academy, FoundationDbContext db)
+    {
+        // Materialize only authorized candidates before invoking the dated SQL
+        // function. A correlated guardian join otherwise evaluates it against
+        // every enrollment per session. Keep historical attendance even when
+        // the enrollment is no longer active, and retain all tenant/branch filters.
+        var enrollments = await db.SportEnrollments.AsNoTracking().Where(e => e.AcademyId == academy && players.Contains(e.PlayerId))
+            .Select(e => new { e.Id, e.IsActive, e.TrainingGroupId }).ToArrayAsync();
+        var all = enrollments.Select(e => e.Id).ToArray();
+        var active = enrollments.Where(e => e.IsActive).Select(e => e.Id).ToArray();
+        var transfers = await db.EnrollmentGroupTransfers.Where(t => active.Contains(t.SportEnrollmentId)).Select(t => new { t.SourceGroupId, t.TargetGroupId }).ToArrayAsync();
+        var moves = await db.EnrollmentSessionMoves.Where(m => active.Contains(m.SportEnrollmentId)).Select(m => new { m.SourceGroupId, m.TargetGroupId }).ToArrayAsync();
+        var compensation = await db.CompensationBookings.Where(b => active.Contains(b.SportEnrollmentId) && b.State == CompensationBookingState.Reserved).Select(b => b.TrainingGroupId).ToArrayAsync();
+        var groups = enrollments.Where(e => e.IsActive && e.TrainingGroupId.HasValue).Select(e => e.TrainingGroupId!.Value)
+            .Concat(transfers.SelectMany(t => new[] { t.SourceGroupId, t.TargetGroupId }))
+            .Concat(moves.SelectMany(m => new[] { m.SourceGroupId, m.TargetGroupId })).Concat(compensation).Distinct().ToArray();
+        var historical = await db.PlayerAttendances.Where(a => a.AcademyId == academy && all.Contains(a.SportEnrollmentId)).Select(a => a.TrainingSessionId).Distinct().ToArrayAsync();
+        var candidates = await query.Where(s => groups.Contains(s.TrainingGroupId) || historical.Contains(s.Id)).Select(s => s.Id).ToArrayAsync();
+        return query.Where(s => candidates.Contains(s.Id) && (db.SportEnrollments.Any(e => e.AcademyId == academy && active.Contains(e.Id) &&
+            // CASE keeps the expensive function behind the cheap per-enrollment
+            // candidate check even if PostgreSQL reorders other WHERE clauses.
+            ((e.TrainingGroupId == s.TrainingGroupId ||
+              db.EnrollmentGroupTransfers.Any(t => t.SportEnrollmentId == e.Id && (t.SourceGroupId == s.TrainingGroupId || t.TargetGroupId == s.TrainingGroupId)) ||
+              db.EnrollmentSessionMoves.Any(m => m.SportEnrollmentId == e.Id && (m.SourceGroupId == s.TrainingGroupId || m.TargetGroupId == s.TrainingGroupId)) ||
+              db.CompensationBookings.Any(b => b.SportEnrollmentId == e.Id && b.TrainingGroupId == s.TrainingGroupId && b.State == CompensationBookingState.Reserved))
+                ? FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, s.Id) : false)) ||
+            db.PlayerAttendances.Any(a => a.AcademyId == academy && a.TrainingSessionId == s.Id && all.Contains(a.SportEnrollmentId))));
     }
 
     private static async Task<IResult> SessionOptions(CurrentTenant tenant, FoundationDbContext db)

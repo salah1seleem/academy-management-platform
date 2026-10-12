@@ -56,6 +56,7 @@ public sealed class V2AttendancePolicyTests : IAsyncLifetime
     {
         using var owner = await Staff(DemoSeed.OwnerEmail);
         using var coach = await Coach();
+        var session = await TodayFootballSession();
         await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = false });
         var before = await History(owner);
         try
@@ -63,7 +64,7 @@ public sealed class V2AttendancePolicyTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.NoContent, (await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = true })).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent, (await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = true })).StatusCode);
             Assert.Equal(before + 1, await History(owner));
-            var roster = await coach.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions/{Slice4DemoSeed.TodayFootballSessionId}/players");
+            var roster = await coach.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions/{session}/players");
             Assert.True(roster.GetProperty("canManageAttendance").GetBoolean());
             Assert.Equal(HttpStatusCode.NotFound, (await Write(coach, $"/api/v1/attendance/sessions/{Slice4DemoSeed.TodaySwimmingSessionId}/players", new { items = Array.Empty<object>() })).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync("/api/v1/manage/academy/policy-audit")).StatusCode);
@@ -71,9 +72,20 @@ public sealed class V2AttendancePolicyTests : IAsyncLifetime
             var foreignHistoryBefore = await History(other);
             Assert.Equal(HttpStatusCode.NoContent, (await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = false })).StatusCode);
             Assert.Equal(before + 2, await History(owner)); Assert.Equal(foreignHistoryBefore, await History(other));
-            Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, $"/api/v1/attendance/sessions/{Slice4DemoSeed.TodayFootballSessionId}/players", new { items = Array.Empty<object>() })).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, $"/api/v1/attendance/sessions/{session}/players", new { items = Array.Empty<object>() })).StatusCode);
         }
         finally { await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = false }); }
+    }
+    private async Task<Guid> TodayFootballSession()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var source = await db.TrainingSessions.AsNoTracking().SingleAsync(s => s.Id == Slice4DemoSeed.TodayFootballSessionId);
+        var today = await AttendanceCalendar.TodayAsync(source.AcademyId, db, TimeProvider.System);
+        var existing = await db.TrainingSessions.Where(s => s.AcademyId == source.AcademyId && s.TrainingGroupId == source.TrainingGroupId && s.SessionDate == today && s.StartTime == source.StartTime).Select(s => (Guid?)s.Id).SingleOrDefaultAsync();
+        if (existing.HasValue) return existing.Value;
+        source.Id = Guid.NewGuid(); source.SessionDate = today;
+        db.TrainingSessions.Add(source); await db.SaveChangesAsync(); return source.Id;
     }
     private static async Task<int> History(HttpClient c) => (await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/academy/policy-audit")).GetArrayLength();
     private async Task<HttpClient> Coach() { var c = factory.CreateClient(); await MobileCoachTestSession.SignInAsync(c, factory.Services); return c; }

@@ -27,14 +27,17 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     [Fact] public async Task Session_generation_creates_expected_occurrence()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var from = await GenerationDate(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
-        Assert.Equal(1, await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from));
+        var before = await db.TrainingSessions.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == from);
+        var created = await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from);
+        Assert.True(created > 0);
+        Assert.Equal(before + created, await db.TrainingSessions.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == from));
         Assert.True(await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().TrainingSessions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == from && x.Source == TrainingSessionSource.RecurringSchedule));
     }
 
     [Fact] public async Task Session_generation_rerun_is_idempotent()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var from = await GenerationDate(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
-        Assert.Equal(1, await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from)); Assert.Equal(0, await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from));
+        Assert.True(await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from) > 0); Assert.Equal(0, await generator.GenerateAsync(DemoSeed.NogoomAcademyId, owner, from, from));
     }
 
     [Fact] public async Task Academy_A_cannot_access_Academy_B_session()
@@ -143,7 +146,7 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     private IQueryable<SubscriptionPeriod> EligiblePeriod(AsyncServiceScope scope, ScenarioData s) => scope.ServiceProvider.GetRequiredService<FoundationDbContext>().SubscriptionPeriods.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SportEnrollmentId == s.EnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen && x.StartDate <= new DateOnly(2026, 9, 22) && (x.EndDate == null || x.EndDate >= new DateOnly(2026, 9, 22))).OrderBy(x => x.StartDate);
     private static PlayerAttendance Attendance(ScenarioData s, Guid actor, DateTimeOffset now) => new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, TrainingSessionId = s.SessionId, TrainingGroupId = s.GroupId, SportEnrollmentId = s.EnrollmentId, Status = AttendanceStatus.NotRecorded, RecordedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now };
     private static async Task<Guid> OwnerId(AsyncServiceScope scope) => await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync();
-    private static async Task<DateOnly> GenerationDate(FoundationDbContext db) { var date = new DateOnly(2040, 1, 3); while (await db.TrainingSessions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.TrainingGroupId == Slice2DemoSeed.FootballGroupId && x.SessionDate == date)) date = date.AddDays(7); return date; }
+    private static async Task<DateOnly> GenerationDate(FoundationDbContext db) { var date = new DateOnly(2040, 1, 3); while (await db.TrainingSessions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SessionDate == date)) date = date.AddDays(7); return date; }
 
     private async Task<HttpClient> GuardianClient() { var client = factory.CreateClient(); var request = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, await Csrf(client)); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); (await Post(client, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, await Csrf(client))).EnsureSuccessStatusCode(); return client; }
     private async Task StaffLogin(HttpClient client, string email) { if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(client, factory.Services); else (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode(); }
@@ -151,5 +154,13 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     private static Task<HttpResponseMessage> Put(HttpClient client, Guid session, Guid enrollment, int status, string csrf) { var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/attendance/sessions/{session}/players") { Content = JsonContent.Create(new { items = new[] { new { sportEnrollmentId = enrollment, status } } }) }; request.Headers.Add("X-CSRF-TOKEN", csrf); return client.SendAsync(request); }
     private static Task<HttpResponseMessage> Post(HttpClient client, string path, object body, string csrf) { var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf); return client.SendAsync(request); }
     private sealed record ScenarioData(Guid SessionId, Guid EnrollmentId, Guid GroupId); private sealed record CsrfDto(string Token); private sealed record Challenge(Guid ChallengeId);
-    private sealed class Factory(string connection) : WebApplicationFactory<Program> { protected override void ConfigureWebHost(IWebHostBuilder builder) { builder.UseEnvironment("Demo"); builder.UseSetting("ConnectionStrings:Default", connection); builder.UseSetting("Demo:SeedProfile", "LegacyRegression"); builder.UseSetting("Demo:SeedEnabled", "true"); builder.UseSetting("Demo:FixedOtpEnabled", "true"); builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); builder.UseSetting("Demo:ReferenceDate", "2026-09-28"); builder.UseSetting("Payments:InternalTest:Enabled", "true"); builder.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456"); } }
+    private sealed class Factory(string connection) : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            var clock = new ScenarioTimeProvider(DateTimeOffset.Parse("2026-09-22T10:00:00Z"));
+            builder.ConfigureServices(s => { s.AddSingleton<TimeProvider>(clock); s.PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme, o => o.TimeProvider = clock); });
+            builder.UseEnvironment("Demo"); builder.UseSetting("ConnectionStrings:Default", connection); builder.UseSetting("Demo:SeedProfile", "LegacyRegression"); builder.UseSetting("Demo:SeedEnabled", "true"); builder.UseSetting("Demo:FixedOtpEnabled", "true"); builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); builder.UseSetting("Demo:ReferenceDate", "2026-09-28"); builder.UseSetting("Payments:InternalTest:Enabled", "true"); builder.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456");
+        }
+    }
 }

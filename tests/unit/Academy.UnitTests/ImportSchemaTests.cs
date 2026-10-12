@@ -39,11 +39,16 @@ public sealed class ImportSchemaTests
     }
     [Theory]
     [InlineData(3000)]
+    [InlineData(6000)]
     public void Large_tenant_reference_sheet_roundtrips_without_weakening_upload_limits(int count)
     {
         var refs = Refs(); var many = refs with { Values = refs.Values.Concat(Enumerable.Range(0, count).Select(i => new ImportReference("group", Guid.NewGuid(), "مجموعة اختبار صناعية " + i, Branch, Sport, Capacity: 30))).ToArray() };
         var book = Filled(many, 1000); var bytes = ImportXlsx.Write(book); var parsed = ImportXlsx.Read(bytes);
         Assert.Equal(count + refs.Values.Count + 1, parsed.Sheet("References").Rows.Count); Assert.Equal(1001, parsed.Sheet("Enrollments").Rows.Count);
+        using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        Assert.All(zip.Entries, entry => Assert.True(entry.Length <= 4 * 1024 * 1024));
+        Assert.True(zip.Entries.Sum(entry => entry.Length) <= 16 * 1024 * 1024);
+        Assert.True(bytes.Length <= ImportXlsx.MaxFileBytes);
     }
     [Theory]
     [InlineData("GuardianPhone", "1000000001", false)]

@@ -1,5 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
+import { formatMoneyAr } from "../../../apps/web/src/lib/formatters";
 
 async function startFootballRenewal(page: Page) {
   const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
@@ -12,10 +13,16 @@ async function startFootballRenewal(page: Page) {
 
 test("Guardian completes a successful online test renewal and sees receipt", async ({ page }) => {
   await guardianLogin(page); await startFootballRenewal(page);
+  const paymentId = page.url().split("/").at(-1);
+  const payment = await page.request.get(`/api/v1/guardian/subscriptions/payments/${paymentId}`).then(r => r.json());
+  expect(payment.amount).toBe(payment.finalAmount);
+  expect(payment.finalAmount).toBe(payment.originalAmount - payment.discountAmount);
+  expect(payment.finalAmount).toBeGreaterThan(0);
   await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click();
   await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
   await page.getByRole("link", { name: "عرض الإيصال" }).click();
-  await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible(); await expect(page.getByText(/900|٩٠٠/)).toBeVisible();
+  await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
+  await expect(page.locator(".printable-receipt dl > div").filter({ has: page.getByText("المبلغ المدفوع", { exact: true }) }).locator("dd")).toHaveText(formatMoneyAr(payment.finalAmount, payment.currency));
 });
 
 test("Guardian failed payment does not report a renewal", async ({ page }) => {
@@ -51,6 +58,7 @@ test("Owner sees approved and rejected payment requests and confirmed collection
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: "خيارات اللاعبين" }).click();
   await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "طلبات الدفع", exact: true }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
+  await page.getByRole("button", { name: "مسح", exact: true }).click(); await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue("");
   await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Approved"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مقبول" }).first()).toBeVisible(); await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Rejected"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مرفوض" }).first()).toBeVisible();
   await page.goto("/dashboard/subscriptions/collections");
   await expect(page.getByText(/إجمالي التحصيل المؤكد/)).toBeVisible(); await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();

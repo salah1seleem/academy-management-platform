@@ -30,7 +30,18 @@ export default function PlayersPage() {
 
 
   useEffect(() => { fetch("/api/v1/manage/structure/options").then(response => response.json()).then(setOptions).catch(() => setError("تعذر تحميل الفلاتر.")); }, []);
-  useEffect(() => { const params = new URLSearchParams({ search }); Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); }); fetch(`/api/v1/people/players?${params}`).then(async response => { if (!response.ok) throw new Error(); setPlayers(await response.json() as Player[]); }).catch(() => setError("تعذر تحميل اللاعبين.")).finally(() => setLoading(false)); }, [search, filters]);
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ search });
+    Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+    fetch(`/api/v1/people/players?${params}`, { signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error(); return response.json() as Promise<Player[]>; })
+      .then(rows => { if (active) { setPlayers(rows); setError(""); } })
+      .catch(() => { if (active) setError("تعذر تحميل اللاعبين."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [search, filters]);
   const pick = (key: keyof typeof filters, value: string) => { setPage(0); setFilters(current => ({ ...current, [key]: value, ...(key !== "groupId" && key !== "subscriptionState" ? { groupId: "" } : {}) })); };
   async function changeStatus() { if (!target) return; try { await csrfRequest(`/api/v1/people/players/${target.id}/status`, "PUT", { isActive: !target.isActive }); setPlayers(current => current.map(player => player.id === target.id ? { ...player, isActive: !player.isActive } : player)); setSuccess(target.isActive ? `تم إيقاف «${target.arabicName}».` : `تم تفعيل «${target.arabicName}».`); setTarget(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تغيير حالة اللاعب."); } }
 

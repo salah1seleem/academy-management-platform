@@ -6,6 +6,7 @@ using Academy.Api.Slice2;
 using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Operations;
+using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Tenancy;
@@ -23,6 +24,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
     private Factory factory = null!;
     private readonly List<Guid> groups = [];
     private readonly List<Guid> players = [];
+    private readonly List<Guid> coaches = [];
     public Task InitializeAsync() { factory = new Factory(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Separate test database required")); _ = factory.CreateClient(); return Task.CompletedTask; }
     public async Task DisposeAsync()
     {
@@ -35,7 +37,13 @@ public sealed class TimetableUxTests : IAsyncLifetime
         await db.SportEnrollments.Where(x => players.Contains(x.PlayerId)).ExecuteDeleteAsync();
         await db.GuardianPlayerLinks.Where(x => players.Contains(x.PlayerId)).ExecuteDeleteAsync();
         await db.Players.Where(x => players.Contains(x.Id)).ExecuteDeleteAsync();
-        await db.TrainingGroups.Where(x => groups.Contains(x.Id)).ExecuteDeleteAsync();
+        // Timetable revisions are permanent audit history. Archive only this
+        // test's groups; do not delete revisions or their referenced groups.
+        var historical = db.TrainingScheduleRevisions.Select(x => x.TrainingGroupId);
+        await db.TrainingGroups.Where(x => groups.Contains(x.Id) && historical.Contains(x.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        await db.TrainingGroups.Where(x => groups.Contains(x.Id) && !historical.Contains(x.Id)).ExecuteDeleteAsync();
+        await db.AcademyMemberships.Where(x => coaches.Contains(x.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        await db.Users.Where(u => db.AcademyMemberships.Any(m => coaches.Contains(m.Id) && m.UserId == u.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
         await factory.DisposeAsync();
     }
     private async Task<HttpClient> Staff(string email = DemoSeed.OwnerEmail)
@@ -52,12 +60,19 @@ public sealed class TimetableUxTests : IAsyncLifetime
         var c = factory.CreateClient(); var r = await Send(c, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }); r.EnsureSuccessStatusCode(); var challenge = await r.Content.ReadFromJsonAsync<JsonElement>();
         (await Send(c, "/api/v1/auth/guardian/otp/verify", new { phoneNumber = DemoSeed.GuardianPhone, challengeId = challenge.GetProperty("challengeId").GetGuid(), code = "246810" })).EnsureSuccessStatusCode(); return c;
     }
-    private async Task<(Guid Group, Guid Player, Guid Enrollment, Guid Guardian, Guid Coach)> Fixture()
+    private async Task<(Guid Group, Guid Player, Guid Enrollment, Guid Guardian, Guid Coach, string CoachEmail)> Fixture()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var original = await db.TrainingGroups.FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SportId == Slice2DemoSeed.FootballId && x.IsActive);
+        // Copy only reference dimensions; another scenario may have archived the
+        // shared group. The new group owns its active lifecycle independently.
+        var original = await db.TrainingGroups.SingleAsync(x => x.Id == Slice2DemoSeed.FootballGroupId && x.AcademyId == DemoSeed.NogoomAcademyId && x.Branch.IsActive && x.Sport.IsActive && x.AgeCategory.IsActive);
         var guardian = await db.GuardianProfiles.FirstAsync(x => x.AcademyId == original.AcademyId && x.User.PhoneNumber == DemoSeed.GuardianPhone);
-        var coach = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == original.AcademyId && x.Role == AcademyRole.Coach && x.User.Email == DemoSeed.CoachEmail && x.IsActive);
+        // A real conflict check must remain enabled. Give this scenario its own
+        // coach rather than colliding with earlier scenarios' dated sessions.
+        var email = $"timetable.coach.{Guid.NewGuid():N}@example.test";
+        var user = new ApplicationUser { Id = Guid.NewGuid(), DisplayName = "مدرب جدول اصطناعي", Email = email, NormalizedEmail = email.ToUpperInvariant(), UserName = email, NormalizedUserName = email.ToUpperInvariant(), SecurityStamp = Guid.NewGuid().ToString("N") };
+        var coach = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = original.AcademyId, UserId = user.Id, Role = AcademyRole.Coach };
+        db.Users.Add(user); db.AcademyMemberships.Add(coach); coaches.Add(coach.Id);
         var owner = await db.Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync();
         var group = new TrainingGroup { Id = Guid.NewGuid(), AcademyId = original.AcademyId, ArabicName = "مجموعة اختبار أيام " + Guid.NewGuid().ToString("N"), BranchId = original.BranchId, SportId = original.SportId, AgeCategoryId = original.AgeCategoryId };
         var player = new Player { Id = Guid.NewGuid(), AcademyId = original.AcademyId, ArabicName = "لاعب اختبار أيام", PlayerCode = "UX-" + Guid.NewGuid().ToString("N")[..16], DateOfBirth = new DateOnly(2017, 5, 1) };
@@ -65,7 +80,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
         db.TrainingGroups.Add(group); db.Players.Add(player); db.SportEnrollments.Add(enrollment);
         db.GuardianPlayerLinks.Add(new GuardianPlayerLink { Id = Guid.NewGuid(), AcademyId = group.AcademyId, GuardianId = guardian.Id, PlayerId = player.Id, CreatedByUserId = owner });
         db.StaffGroupAssignments.Add(new StaffGroupAssignment { Id = Guid.NewGuid(), AcademyId = group.AcademyId, AcademyMembershipId = coach.Id, TrainingGroupId = group.Id });
-        await db.SaveChangesAsync(); groups.Add(group.Id); players.Add(player.Id); return (group.Id, player.Id, enrollment.Id, guardian.Id, coach.Id);
+        await db.SaveChangesAsync(); groups.Add(group.Id); players.Add(player.Id); return (group.Id, player.Id, enrollment.Id, guardian.Id, coach.Id, email);
     }
     private static object Timetable(int[]? days = null) => new { from = "2026-10-03", to = "2026-10-17", days = days ?? [6, 1, 3], startTime = "17:07:00", endTime = "18:30:00" };
 
@@ -80,7 +95,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
         var profile = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{f.Player}/profile");
         var enrollment = profile.GetProperty("enrollments")[0]; Assert.Equal(new[] { "Saturday", "Monday", "Wednesday" }, enrollment.GetProperty("recurring").EnumerateArray().Select(x => x.GetProperty("dayOfWeek").GetString()));
         Assert.All(enrollment.GetProperty("recurring").EnumerateArray(), x => Assert.Equal("17:07:00", x.GetProperty("startTime").GetString()));
-        Assert.Equal("2026-10-03", enrollment.GetProperty("upcoming")[0].GetProperty("sessionDate").GetString());
+        Assert.Equal("2026-10-10", enrollment.GetProperty("upcoming")[0].GetProperty("sessionDate").GetString()); // test clock is October 8; upcoming excludes the past
         using var other = await Staff(DemoSeed.FutureOwnerEmail); Assert.Equal(HttpStatusCode.NotFound, (await Send(other, $"/api/v1/manage/groups/{f.Group}/timetable", Timetable())).StatusCode);
     }
 
@@ -122,6 +137,9 @@ public sealed class TimetableUxTests : IAsyncLifetime
         await db.SportEnrollments.Where(x => x.Id == a.Enrollment).ExecuteUpdateAsync(s => s.SetProperty(x => x.TrainingGroupId, b.Group));
         var old = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/sessions?playerId={a.Player}&groupId={a.Group}"); Assert.Single(old.EnumerateArray()); Assert.Equal(session.Id, old[0].GetProperty("id").GetGuid());
         var current = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/sessions?playerId={a.Player}&groupId={b.Group}"); Assert.NotEmpty(current.EnumerateArray());
+        await db.SportEnrollments.Where(x => x.Id == a.Enrollment).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        var inactive = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/sessions?guardianId={a.Guardian}&playerId={a.Player}&groupId={a.Group}");
+        Assert.Single(inactive.EnumerateArray()); Assert.Equal(session.Id, inactive[0].GetProperty("id").GetGuid());
         Assert.Equal(AttendanceStatus.Present, (await db.PlayerAttendances.SingleAsync(x => x.TrainingSessionId == session.Id)).Status);
     }
 
@@ -154,7 +172,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
     public async Task No_role_can_record_future_player_or_session_staff_attendance()
     {
         using var owner = await Staff(); using var admin = await Staff(DemoSeed.AdminEmail); using var coach = factory.CreateClient();
-        await MobileCoachTestSession.SignInAsync(coach, factory.Services); var f = await Fixture();
+        var f = await Fixture(); await MobileCoachTestSession.SignInAsync(coach, factory.Services, f.CoachEmail);
         (await Send(owner, $"/api/v1/manage/groups/{f.Group}/timetable", Timetable())).EnsureSuccessStatusCode();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var session = await db.TrainingSessions.Where(x => x.TrainingGroupId == f.Group && x.SessionDate > new DateOnly(2026, 10, 8)).OrderBy(x => x.SessionDate).FirstAsync();

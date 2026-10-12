@@ -17,6 +17,10 @@ public static class ImportXlsx
     private static readonly XNamespace T = "http://schemas.openxmlformats.org/package/2006/content-types";
     public static byte[] Write(ImportWorkbook book)
     {
+        // Reuse repeated labels/IDs instead of duplicating inline strings in
+        // every reference cell. Keep every existing reader/security size limit.
+        var strings = book.Sheets.SelectMany(s => s.Rows).SelectMany(r => r).Where(c => c.IsText).Select(c => c.Value).Distinct(StringComparer.Ordinal).ToArray();
+        var stringIds = strings.Select((value, index) => (value, index)).ToDictionary(x => x.value, x => x.index, StringComparer.Ordinal);
         using var bytes = new MemoryStream();
         using (var zip = new ZipArchive(bytes, ZipArchiveMode.Create, true))
         {
@@ -25,11 +29,13 @@ public static class ImportXlsx
                 new XElement(T + "Default", new XAttribute("Extension", "xml"), new XAttribute("ContentType", "application/xml")),
                 new XElement(T + "Override", new XAttribute("PartName", "/xl/workbook.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")),
                 new XElement(T + "Override", new XAttribute("PartName", "/xl/styles.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml")),
+                new XElement(T + "Override", new XAttribute("PartName", "/xl/sharedStrings.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml")),
                 book.Sheets.Select((_, i) => new XElement(T + "Override", new XAttribute("PartName", $"/xl/worksheets/sheet{i + 1}.xml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"))))));
             XElement Rel(string id, string type, string target) => new(P + "Relationship", new XAttribute("Id", id), new XAttribute("Type", R.NamespaceName + "/" + type), new XAttribute("Target", target));
             Xml("_rels/.rels", new(new XElement(P + "Relationships", Rel("rId1", "officeDocument", "xl/workbook.xml"))));
             Xml("xl/workbook.xml", new(new XElement(S + "workbook", new XAttribute(XNamespace.Xmlns + "r", R), new XElement(S + "sheets", book.Sheets.Select((s, i) => new XElement(S + "sheet", new XAttribute("name", s.Name), new XAttribute("sheetId", i + 1), new XAttribute(R + "id", $"rId{i + 1}")))))));
-            Xml("xl/_rels/workbook.xml.rels", new(new XElement(P + "Relationships", book.Sheets.Select((_, i) => Rel($"rId{i + 1}", "worksheet", $"worksheets/sheet{i + 1}.xml")), Rel("styles", "styles", "styles.xml"))));
+            Xml("xl/_rels/workbook.xml.rels", new(new XElement(P + "Relationships", book.Sheets.Select((_, i) => Rel($"rId{i + 1}", "worksheet", $"worksheets/sheet{i + 1}.xml")), Rel("styles", "styles", "styles.xml"), Rel("strings", "sharedStrings", "sharedStrings.xml"))));
+            Xml("xl/sharedStrings.xml", new(new XElement(S + "sst", new XAttribute("uniqueCount", strings.Length), strings.Select(value => new XElement(S + "si", new XElement(S + "t", new XAttribute(XNamespace.Xml + "space", "preserve"), value))))));
             Xml("xl/styles.xml", new(new XElement(S + "styleSheet",
                 new XElement(S + "fonts", new XAttribute("count", 2), new XElement(S + "font", new XElement(S + "sz", new XAttribute("val", 11)), new XElement(S + "name", new XAttribute("val", "Arial"))), new XElement(S + "font", new XElement(S + "b"), new XElement(S + "sz", new XAttribute("val", 11)), new XElement(S + "color", new XAttribute("rgb", "FFFFFFFF")), new XElement(S + "name", new XAttribute("val", "Arial")))),
                 new XElement(S + "fills", new XAttribute("count", 3), new XElement(S + "fill", new XElement(S + "patternFill", new XAttribute("patternType", "none"))), new XElement(S + "fill", new XElement(S + "patternFill", new XAttribute("patternType", "gray125"))), new XElement(S + "fill", new XElement(S + "patternFill", new XAttribute("patternType", "solid"), new XElement(S + "fgColor", new XAttribute("rgb", "FF23395D")), new XElement(S + "bgColor", new XAttribute("indexed", 64))))),
@@ -45,7 +51,7 @@ public static class ImportXlsx
                     new XElement(S + "sheetViews", new XElement(S + "sheetView", new XAttribute("workbookViewId", 0), new XAttribute("rightToLeft", 1), new XAttribute("showGridLines", 0), new XElement(S + "pane", new XAttribute("ySplit", 1), new XAttribute("topLeftCell", "A2"), new XAttribute("activePane", "bottomLeft"), new XAttribute("state", "frozen")))),
                     new XElement(S + "cols", new XElement(S + "col", new XAttribute("min", 1), new XAttribute("max", columns), new XAttribute("width", sheet.Name == "Instructions" ? 60 : 25), new XAttribute("customWidth", 1), new XAttribute("style", 0))),
                     new XElement(S + "sheetData", sheet.Rows.Select((row, ri) => new XElement(S + "row", new XAttribute("r", ri + 1), new XAttribute("ht", ri == 0 ? 42 : Math.Max(28, Math.Ceiling(row.Max(c => c.Value.Length) / (sheet.Name == "Instructions" ? 45d : 22d)) * 18)), new XAttribute("customHeight", 1), row.Select((cell, ci) => cell.IsText
-                        ? new XElement(S + "c", new XAttribute("r", Column(ci) + (ri + 1)), new XAttribute("s", ri == 0 ? 1 : 0), new XAttribute("t", "inlineStr"), new XElement(S + "is", new XElement(S + "t", new XAttribute(XNamespace.Xml + "space", "preserve"), cell.Value)))
+                        ? new XElement(S + "c", new XAttribute("r", Column(ci) + (ri + 1)), new XAttribute("s", ri == 0 ? 1 : 0), new XAttribute("t", "s"), new XElement(S + "v", stringIds[cell.Value]))
                         : new XElement(S + "c", new XAttribute("r", Column(ci) + (ri + 1)), new XAttribute("s", 2), new XElement(S + "v", cell.Value)))))))));
             }
         }

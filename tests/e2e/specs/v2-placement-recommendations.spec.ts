@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 test("Owner sees explained eligible alternatives and keeps the selected child through explicit placement preview", async ({ page }, info) => {
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
-  const player = "5a000000-0000-0000-0000-000000000020", enrollment = "5a000000-0000-0000-0000-000000000021";
+  const player = "5a000000-0000-0000-0000-000000000194", enrollment = "5a000000-0000-0000-0000-000000000195";
   const before = await page.request.get(`/api/v1/people/players/${player}`).then(r => r.json()); expect(before.enrollments.find((e: { id: string }) => e.id === enrollment).trainingGroupId).toBeNull();
   await page.goto(`/dashboard/players/${player}?tab=training`); const groupTrack = page.locator("section.detail-card").filter({ has: page.locator(".team-chip", { hasText: /^جماعي$/ }) }); await groupTrack.getByText("اقتراح مجموعات مناسبة", { exact: true }).click(); await groupTrack.getByRole("button", { name: "عرض البدائل المؤهلة" }).click();
   const choices = page.getByRole("region", { name: "بدائل التسكين" }); await expect(choices.getByRole("link", { name: "فتح المجموعة ومراجعة التسكين" })).toHaveCount(1); await expect(choices.getByText("مطابقة للفرع والرياضة والعمر والمستوى المراجع")).toBeVisible();

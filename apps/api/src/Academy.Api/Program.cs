@@ -419,6 +419,7 @@ if (app.Environment.IsEnvironment("Demo"))
                 await AttendanceDraftDemoSeed.Seed(db, app.Services.GetRequiredService<TimeProvider>());
             }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
+            if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) await PlacementRecommendationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

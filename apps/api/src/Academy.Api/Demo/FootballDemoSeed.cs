@@ -309,7 +309,26 @@ public static class FootballDemoSeed
         while (pending.Count > 0)
         {
             var leaves = pending.Where(e => !pending.Any(other => other != e && other.GetForeignKeys().Any(fk => fk.PrincipalEntityType == e))).ToArray();
-            if (leaves.Length == 0) throw new InvalidOperationException("Tenant FK cycle: reset rolled back; schema needs explicit review.");
+            if (leaves.Length == 0)
+            {
+                // A model-level cycle need not contain records in this reserved
+                // dataset (participant visit <-> companion access, for example).
+                // Remove EMPTY nodes only. Never disable a constraint/trigger or
+                // clear a populated cycle whose deletion policy is unreviewed.
+                var empty = new List<Microsoft.EntityFrameworkCore.Metadata.IEntityType>();
+                foreach (var entity in pending)
+                {
+                    var table = entity.GetTableName()!.Replace("\"", "\"\"");
+                    // Identifier is escaped and comes only from the compiled EF
+                    // model; the reserved tenant value is always a parameter.
+                    var sql = $"SELECT 1 AS \"Value\" FROM \"{table}\" WHERE \"AcademyId\" = {{0}} LIMIT 1";
+                    var rows = await db.Database.SqlQueryRaw<int>(sql, AcademyId).ToArrayAsync(ct);
+                    if (rows.Length == 0) empty.Add(entity);
+                }
+                if (empty.Count == 0) throw new InvalidOperationException("Populated tenant FK cycle: reset rolled back; schema needs explicit review.");
+                pending.ExceptWith(empty);
+                continue;
+            }
             foreach (var entity in leaves)
             {
                 // Table names originate solely in the compiled EF model, never CLI/user input.

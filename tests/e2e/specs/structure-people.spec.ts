@@ -22,9 +22,8 @@ test("Demo Admin registers a real player and enrollment from mobile", async ({ p
   await page.getByRole("button", { name: "حساب المبلغ المستحق" }).click();
   await expect(page.getByText(/المبلغ المطلوب تحصيله/)).toBeVisible();
   await page.getByRole("button", { name: "تسجيل وتأكيد التحصيل" }).click();
-  await expect(page.getByRole("heading", { name: "ملف اللاعب" })).toBeVisible();
-  await expect(page.getByText(playerName, { exact: true }).first()).toBeVisible();
-  await page.goto("/dashboard/players");
+  await page.waitForURL("**/dashboard/players");
+  await expect(page.getByRole("heading", { name: "قائمة اللاعبين" })).toBeVisible();
   await page.getByLabel("بحث اللاعبين").fill(playerName);
   await expect(page.getByText(playerName, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "فتح القائمة" }).click();

@@ -71,6 +71,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         var groups = await db.TrainingGroups.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && (x.ArabicName.StartsWith("جدول اختبار مستقل ") || x.ArabicName.StartsWith("مجموعة نقل اختبار ")) && !historicalGroups.Contains(x.Id)).Select(x => x.Id).ToArrayAsync();
         await db.TrainingSessions.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
         await db.RecurringSchedules.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
+        await db.StaffGroupAssignments.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
         await db.TrainingGroups.Where(x => groups.Contains(x.Id)).ExecuteDeleteAsync();
         // Posted rule versions are permanent, including synthetic test history. Archive only our rules.
         foreach (var rule in await db.DiscountRules.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.IsActive && x.ArabicName.StartsWith("مدرسة اختبار ")).ToListAsync())
@@ -82,9 +83,10 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     }
     private async Task<HttpClient> Owner() { var c = factory.CreateClient(); var r = await Send(c, "/api/v1/auth/login", new { email = DemoSeed.OwnerEmail, password = "Demo-Only-123!" }); Assert.Equal(HttpStatusCode.OK, r.StatusCode); return c; }
     private static async Task<HttpResponseMessage> Send(HttpClient c, string path, object body, string? key = null, bool put = false) { var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) request.Headers.Add("Idempotency-Key", key); return await c.SendAsync(request); }
-    private async Task<(Guid Player, Guid Enrollment, Guid Collection)> Register(HttpClient c)
+    private async Task<(Guid Player, Guid Enrollment, Guid Collection)> Register(HttpClient c, Guid? groupId = null)
     {
-        var key = Guid.NewGuid().ToString(); var options = await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/options"); var group = options.GetProperty("groups").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == Slice2DemoSeed.FootballGroupId);
+        var ownGroup = groupId ?? await FreshRegistrationGroup();
+        var key = Guid.NewGuid().ToString(); var options = await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/options"); var group = options.GetProperty("groups").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == ownGroup);
         var body = new { playerArabicName = "لاعب اختبار التسجيل " + key[..8], dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = group.GetProperty("branchId").GetGuid(), sportId = Slice2DemoSeed.FootballId, groupId = group.GetProperty("id").GetGuid(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Cash" };
         var response = await Send(c, "/api/v1/people/registrations", body, key); Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var player = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("playerId").GetGuid();
@@ -92,6 +94,17 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/people/registrations", body with { playerArabicName = body.playerArabicName + " مختلف" }, key)).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var enrollment = await db.SportEnrollments.SingleAsync(x => x.PlayerId == player);
         var collection = await db.Collections.SingleAsync(x => x.SportEnrollmentId == enrollment.Id); Assert.Equal("Cash", collection.PaymentMethod); Assert.Equal(1, await db.Receipts.CountAsync(x => x.CollectionId == collection.Id)); Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(x => x.CollectionId == collection.Id)); return (player, enrollment.Id, collection.Id);
+    }
+    private async Task<Guid> FreshRegistrationGroup()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var source = await db.TrainingGroups.SingleAsync(g => g.Id == Slice2DemoSeed.FootballGroupId);
+        var id = Guid.NewGuid(); var actor = await db.Users.Where(u => u.Email == DemoSeed.OwnerEmail).Select(u => u.Id).SingleAsync();
+        db.TrainingGroups.Add(new() { Id = id, AcademyId = source.AcademyId, ArabicName = "مجموعة نقل اختبار " + id, BranchId = source.BranchId, SportId = source.SportId, AgeCategoryId = source.AgeCategoryId, Capacity = 5 });
+        foreach (var member in await db.StaffGroupAssignments.Where(a => a.TrainingGroupId == source.Id && a.IsActive).Select(a => a.AcademyMembershipId).ToArrayAsync())
+            db.StaffGroupAssignments.Add(new() { Id = Guid.NewGuid(), AcademyId = source.AcademyId, TrainingGroupId = id, AcademyMembershipId = member });
+        db.TrainingSessions.Add(new() { Id = Guid.NewGuid(), AcademyId = source.AcademyId, TrainingGroupId = id, BranchId = source.BranchId, SportId = source.SportId, AgeCategoryId = source.AgeCategoryId, SessionDate = new(2026, 9, 28), StartTime = new(1, 0), EndTime = new(1, 30), CreatedByUserId = actor });
+        await db.SaveChangesAsync(); return id;
     }
     private async Task<Guid> GuardianId() { await using var scope = factory.Services.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().GuardianProfiles.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.User.PhoneNumber == DemoSeed.GuardianPhone).Select(x => x.Id).SingleAsync(); }
     private async Task<HttpClient> Guardian()
@@ -139,7 +152,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         var record = await Register(c); var photo = await Upload(c, "Photo", record.Player); Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/assets/{photo}")).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await coach.GetAsync($"/api/v1/assets/{photo}")).StatusCode); await Upload(c, "Photo", record.Player, valid: false);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var group = await db.SportEnrollments.Where(x => x.Id == record.Enrollment).Select(x => x.TrainingGroupId).SingleAsync();
         var media = await Upload(c, "Media", group: group); Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/assets/{media}")).StatusCode); Assert.True(await db.PrivateAssetAudiences.AnyAsync(x => x.AssetId == media && x.PlayerId == record.Player));
-        var later = await Register(c); Assert.False(await db.PrivateAssetAudiences.AnyAsync(x => x.AssetId == media && x.PlayerId == later.Player));
+        var later = await Register(c, group); Assert.False(await db.PrivateAssetAudiences.AnyAsync(x => x.AssetId == media && x.PlayerId == later.Player));
         var future = factory.CreateClient(); (await Send(future, "/api/v1/auth/login", new { email = DemoSeed.FutureOwnerEmail, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); Assert.Equal(HttpStatusCode.NotFound, (await future.GetAsync($"/api/v1/assets/{media}")).StatusCode);
     }
     [Fact] public async Task Draft_and_expired_news_hide_both_text_and_private_image()
@@ -202,7 +215,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     [Fact] public async Task Changed_registration_quote_rolls_back_player_enrollment_and_collection()
     {
         using var c = await Owner(); var name = "لاعب اختبار التسجيل " + Guid.NewGuid();
-        var body = new { playerArabicName = name, dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = Slice2DemoSeed.CityBranchId, sportId = Slice2DemoSeed.FootballId, groupId = Slice2DemoSeed.FootballGroupId, planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Cash", expectedAmount = 1m };
+        var body = new { playerArabicName = name, dateOfBirth = "2017-05-01", existingGuardianId = await GuardianId(), branchId = Slice2DemoSeed.CityBranchId, sportId = Slice2DemoSeed.FootballId, groupId = await FreshRegistrationGroup(), planId = Slice3DemoSeed.FootballMonthlyId, paymentMethod = "Cash", expectedAmount = 1m };
         Assert.Equal(HttpStatusCode.Conflict, (await Send(c, "/api/v1/people/registrations", body, Guid.NewGuid().ToString())).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.False(await db.Players.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName == name));
     }
@@ -211,7 +224,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         using var guardian = await Guardian(); using var owner = await Owner(); var name = "لاعب اختبار التسجيل " + Guid.NewGuid();
         var body = new { requestType = "NewChild", newChildArabicName = name, newChildDateOfBirth = "2017-05-01", sportId = Slice2DemoSeed.FootballId, preferredBranchId = Slice2DemoSeed.CityBranchId, subscriptionPlanId = Slice3DemoSeed.FootballMonthlyId };
         var created = await Send(guardian, "/api/v1/guardian/enrollment-requests", body, Guid.NewGuid().ToString()); Assert.Equal(HttpStatusCode.Created, created.StatusCode); var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        var approval = new { trainingGroupId = Slice2DemoSeed.FootballGroupId };
+        var approval = new { trainingGroupId = await FreshRegistrationGroup() };
         Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/enrollment-requests/{id}/approve", approval)).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.False(await db.Players.AnyAsync(x => x.ArabicName == name));
         var asset = await Upload(guardian, "Proof"); Assert.Equal(HttpStatusCode.OK, (await Send(guardian, $"/api/v1/guardian/enrollment-requests/{id}/proof", new { assetId = asset })).StatusCode);

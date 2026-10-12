@@ -12,6 +12,14 @@ beforeEach(() => { push.mockReset(); global.fetch = vi.fn(() => ok(home)); });
 afterEach(() => cleanup());
 
 describe("Guardian core experience", () => {
+  it("filters enrollment requests by workflow states, not subscription states", async () => {
+    global.fetch = vi.fn((input) => String(input).includes("structure/options") ? ok({ sports: [], branches: [] }) : ok([]));
+    render(<AdminEnrollmentRequests />);
+    const filter = await screen.findByRole("combobox", { name: "حالة الطلب" });
+    expect(within(filter).getAllByRole("option").map(x => x.getAttribute("value"))).toEqual(["", "Pending", "UnderReview", "Approved", "Rejected", "Cancelled"]);
+    fireEvent.change(filter, { target: { value: "UnderReview" } });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("status=UnderReview")));
+  });
   it("shows the three primary actions", async () => { render(<GuardianHome />); const nav = await screen.findByRole("navigation", { name: "إجراءات الاشتراك" }); expect(within(nav).getByRole("link", { name: /اشتراك جديد/ })).toBeVisible(); expect(within(nav).getByRole("link", { name: /تجديد الاشتراك$/ })).toBeVisible(); expect(within(nav).getByRole("link", { name: /تجديد اشتراك لغيره/ })).toBeVisible(); });
   it("renders one child card with multiple sport badges", async () => { render(<GuardianHome />); const heading = await screen.findByRole("heading", { name: "عمر أحمد محمود" }); const card = heading.closest("article")!; expect(within(card).getAllByText("كرة القدم").length).toBeGreaterThan(0); expect(within(card).getAllByText("السباحة").length).toBeGreaterThan(0); expect(screen.getAllByRole("heading", { name: "عمر أحمد محمود" })).toHaveLength(1); });
   it("deduplicates sport context across children", async () => { render(<GuardianHome />); await screen.findByText("رياضات الأبناء"); const context = screen.getByText("بدون تكرار").closest("section")!; expect(within(context).getAllByRole("heading", { name: "كرة القدم" })).toHaveLength(1); expect(within(context).getAllByRole("heading", { name: "السباحة" })).toHaveLength(1); });

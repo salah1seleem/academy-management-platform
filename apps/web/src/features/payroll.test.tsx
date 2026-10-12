@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { EmployeeForm, EmployeeList } from "./employees";
 import { EmployeeDeductions, PayrollRequests, PayrollWorkspace } from "./payroll";
@@ -12,6 +12,23 @@ const options = { items: [employee], branches: [{ id: "branch", name: "فرع ت
 const response = (data: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(data), { status }));
 const renderPage = (page: React.ReactNode) => render(<DateFilterDefaults range={range}>{page}</DateFilterDefaults>);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); push.mockReset(); params.forEach((_, key) => params.delete(key)); });
+
+it("does not replace the selected payroll month with a slower previous response", async () => {
+  let finishOld!: (response: Response) => void;
+  const salary = { employeeId: employee.id, name: employee.name, monthlySalary: 3100, contractDays: 5, baseDue: 516.67, deductions: 0, additions: 0, netDue: 516.67, currency: "EGP", isPaid: false };
+  global.fetch = vi.fn(input => {
+    if (String(input).includes("my-permissions")) return response(["payroll.manage"]);
+    if (String(input).includes("month=2026-10-01")) return new Promise<Response>(resolve => { finishOld = resolve; });
+    return response({ currency: "EGP", items: [salary] });
+  }) as typeof fetch;
+  renderPage(<PayrollWorkspace />);
+  await waitFor(() => expect(finishOld).toBeTypeOf("function"));
+  fireEvent.change(screen.getByLabelText("شهر الرواتب"), { target: { value: "2026-09" } });
+  await screen.findByText("5 يوم عقد في الشهر");
+  await act(async () => { finishOld(new Response(JSON.stringify({ currency: "EGP", items: [{ ...salary, contractDays: 0, baseDue: 0, netDue: 0 }] }))); });
+  expect(screen.getByText("5 يوم عقد في الشهر")).toBeVisible();
+  expect(screen.queryByText("0 يوم عقد في الشهر")).not.toBeInTheDocument();
+});
 
 it("shows employees without accounts and opens an editable fixed contract", async () => {
   global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage"]) : response(options)) as typeof fetch;

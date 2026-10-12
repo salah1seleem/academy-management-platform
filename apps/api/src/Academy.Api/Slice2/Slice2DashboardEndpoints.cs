@@ -34,18 +34,26 @@ public static class Slice2DashboardEndpoints
     {
         var current = (await tenant.ResolveAsync())!;
         var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, time);
+        if (kind == "groups")
+        {
+            // Resolve each visible enrollment once, not once per group. Keep the
+            // canonical dated assignment and the context's tenant/branch filters.
+            var assigned = await db.SportEnrollments.AsNoTracking().Where(e => e.AcademyId == current.AcademyId && e.IsActive)
+                .Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).ToListAsync();
+            var counts = assigned.Where(id => id.HasValue).GroupBy(id => id!.Value).ToDictionary(g => g.Key, g => g.Count());
+            var groups = await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new
+            {
+                x.Id, x.ArabicName, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName,
+                coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.Id && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
+                schedules = db.RecurringSchedules.Where(s => s.AcademyId == current.AcademyId && s.TrainingGroupId == x.Id && s.IsActive).OrderBy(s => ((int)s.DayOfWeek + 1) % 7).ThenBy(s => s.StartTime).Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime }).ToList()
+            }).ToListAsync();
+            return Results.Ok(groups.Select(g => new { g.Id, g.ArabicName, g.IsActive, g.branchName, g.sportName, g.categoryName, playerCount = counts.GetValueOrDefault(g.Id), g.coaches, g.schedules }));
+        }
         object? result = kind switch
         {
             "branches" => await db.Branches.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
             "sports" => await db.Sports.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
             "categories" => await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.MinimumBirthYear, x.MaximumBirthYear, x.IsActive }).ToListAsync(),
-            "groups" => await db.TrainingGroups.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new
-            {
-                x.Id, x.ArabicName, x.IsActive, branchName = x.Branch.ArabicName, sportName = x.Sport.ArabicName, categoryName = x.AgeCategory.ArabicName,
-                playerCount = db.SportEnrollments.Count(e => e.AcademyId == current.AcademyId && FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate) == x.Id && e.IsActive),
-                coaches = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.TrainingGroupId == x.Id && a.IsActive && a.AcademyMembership.IsActive).OrderBy(a => a.AcademyMembership.User.DisplayName).Select(a => a.AcademyMembership.User.DisplayName).ToList(),
-                schedules = db.RecurringSchedules.Where(s => s.AcademyId == current.AcademyId && s.TrainingGroupId == x.Id && s.IsActive).OrderBy(s => ((int)s.DayOfWeek + 1) % 7).ThenBy(s => s.StartTime).Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime }).ToList()
-            }).ToListAsync(),
             "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Role == Infrastructure.Tenancy.AcademyRole.Coach && (!branchId.HasValue || db.StaffGroupAssignments.Any(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive && a.TrainingGroup.BranchId == branchId))).OrderBy(x => x.User.DisplayName).Select(x => new
             {
                 id = x.Id, arabicName = x.User.DisplayName, x.IsActive,

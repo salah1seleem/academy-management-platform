@@ -24,7 +24,9 @@ public sealed class DashboardRemediationTests : IAsyncLifetime
     public async Task Sports_player_list_preserves_distinct_enrollments_and_server_subscription_states()
     {
         using var client = factory.CreateClient(); await Login(client, DemoSeed.OwnerEmail);
-        var rows = await client.GetFromJsonAsync<JsonElement>("/api/v1/people/players");
+        await using var scope = factory.Services.CreateAsyncScope();
+        var code = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Players.Where(p => p.Id == Slice2DemoSeed.OmarPlayerId && p.AcademyId == DemoSeed.NogoomAcademyId).Select(p => p.PlayerCode).SingleAsync();
+        var rows = await client.GetFromJsonAsync<JsonElement>($"/api/v1/people/players?search={Uri.EscapeDataString(code)}");
         Assert.DoesNotContain(rows.EnumerateArray(), row => row.GetProperty("id").GetGuid() == Slice2DemoSeed.AcademyBPlayerId);
         var omar = rows.EnumerateArray().Single(row => row.GetProperty("id").GetGuid() == Slice2DemoSeed.OmarPlayerId);
         var details = await client.GetFromJsonAsync<JsonElement>($"/api/v1/people/players/{Slice2DemoSeed.OmarPlayerId}");
@@ -61,12 +63,17 @@ public sealed class DashboardRemediationTests : IAsyncLifetime
         using var client = factory.CreateClient(); await Login(client, DemoSeed.OwnerEmail);
         var rows = await client.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/groups");
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(DemoSeed.NogoomAcademyId, db, scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        var assignments = await db.SportEnrollments.Where(e => e.AcademyId == DemoSeed.NogoomAcademyId && e.IsActive).Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, day)).ToListAsync();
+        var expectedCounts = assignments.Where(id => id.HasValue).GroupBy(id => id!.Value).ToDictionary(g => g.Key, g => g.Count());
+        var groupIds = await db.TrainingGroups.Where(g => g.AcademyId == DemoSeed.NogoomAcademyId).Select(g => g.Id).ToListAsync();
+        var schedules = await db.RecurringSchedules.Where(s => s.AcademyId == DemoSeed.NogoomAcademyId && s.IsActive).GroupBy(s => s.TrainingGroupId).Select(g => new { Id = g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Id, g => g.Count);
         foreach (var row in rows.EnumerateArray())
         {
             var id = row.GetProperty("id").GetGuid();
-            Assert.True(await db.TrainingGroups.AnyAsync(g => g.Id == id && g.AcademyId == DemoSeed.NogoomAcademyId));
-            Assert.Equal(await db.SportEnrollments.CountAsync(e => e.AcademyId == DemoSeed.NogoomAcademyId && e.TrainingGroupId == id && e.IsActive), row.GetProperty("playerCount").GetInt32());
-            Assert.Equal(await db.RecurringSchedules.CountAsync(s => s.AcademyId == DemoSeed.NogoomAcademyId && s.TrainingGroupId == id && s.IsActive), row.GetProperty("schedules").GetArrayLength());
+            Assert.Contains(id, groupIds);
+            Assert.Equal(expectedCounts.GetValueOrDefault(id), row.GetProperty("playerCount").GetInt32());
+            Assert.Equal(schedules.GetValueOrDefault(id), row.GetProperty("schedules").GetArrayLength());
         }
     }
 

@@ -1,5 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
+import { cairoDateRange } from "../support/attendance";
 
 async function staffLogin(page: Page, email: string) { await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**"); }
 
@@ -13,7 +14,7 @@ test.describe("Slice 8A operational reporting journeys", () => {
     await expect(metrics.getByRole("link", { name: /تنتهي قريبًا/ })).toBeVisible();
     await expect(metrics.getByText("منتهية", { exact: true })).toBeVisible();
     await expect(page.locator(".requests-card").getByRole("link", { name: /طلبات الدفع/ })).toBeVisible();
-    await expect(page.getByLabel("من تاريخ")).toHaveValue("2026-09-01");
+    await expect(page.getByLabel("من تاريخ")).toHaveValue(cairoDateRange().from);
     await page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" }).getByRole("link", { name: /^التقرير المالي/ }).click();
     await expect(page.getByRole("heading", { name: "التقارير المالية" })).toBeVisible();
   });

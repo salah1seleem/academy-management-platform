@@ -29,8 +29,21 @@ export function PayrollWorkspace() {
   const [month, setMonth] = useState(incoming.get("month") && /^\d{4}-\d{2}$/.test(incoming.get("month")!) ? incoming.get("month")! : defaults.to.slice(0, 7)), [search, setSearch] = useState("");
   const [data, setData] = useState<Report | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(""), [canManage, setCanManage] = useState(false);
   const branch = incoming.get("branchId") ?? "";
-  const load = useCallback(() => fetch(`/api/v1/manage/payroll/?month=${month}-01${branch ? `&branchId=${encodeURIComponent(branch)}` : ""}`).then(async r => { if (!r.ok) throw new Error(); setData(await r.json()); setError(""); }).catch(() => setError("تعذر تحميل الرواتب أو لا توجد صلاحية.")), [month, branch]);
-  useEffect(() => { void load(); }, [load]);
+  const query = `/api/v1/manage/payroll/?month=${month}-01${branch ? `&branchId=${encodeURIComponent(branch)}` : ""}`;
+  const requestVersion = useRef(0), currentQuery = useRef(query);
+  const load = useCallback(() => {
+    if (currentQuery.current !== query) return Promise.resolve();
+    const version = ++requestVersion.current;
+    return fetch(query).then(async response => {
+      if (!response.ok) throw new Error();
+      return response.json() as Promise<Report>;
+    }).then(result => {
+      if (version === requestVersion.current && currentQuery.current === query) { setData(result); setError(""); }
+    }).catch(() => {
+      if (version === requestVersion.current && currentQuery.current === query) setError("تعذر تحميل الرواتب أو لا توجد صلاحية.");
+    });
+  }, [query]);
+  useEffect(() => { const requests = requestVersion; currentQuery.current = query; void load(); return () => { ++requests.current; }; }, [load, query]);
   useEffect(() => { fetch("/api/v1/my-permissions").then(r => r.ok ? r.json() : []).then(p => setCanManage(p.includes("payroll.manage"))).catch(() => setCanManage(false)); }, []);
   async function pay(x: Salary) { if (busy || !window.confirm(`تأكيد صرف ${formatMoneyAr(x.netDue, x.currency)} إلى ${x.name}؟`)) return; setBusy(x.employeeId); try { const payload = { month: `${month}-01`, expectedNetDue: x.netDue }; await csrfRequest(`/api/v1/manage/payroll/${x.employeeId}/pay`, "POST", payload, idempotency({ employee: x.employeeId, ...payload })); await load(); } catch (e) { await load(); setError(e instanceof Error ? e.message : "تعذر تسجيل السداد."); } finally { setBusy(""); } }
   const rows = data?.items.filter(x => x.name.includes(search) && (!incoming.get("employeeId") || x.employeeId === incoming.get("employeeId"))) ?? [];
