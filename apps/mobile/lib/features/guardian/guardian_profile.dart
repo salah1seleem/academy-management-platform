@@ -1,5 +1,6 @@
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/appearance.dart';
 
 import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
@@ -9,6 +10,7 @@ import 'guardian_payments.dart';
 import 'group_transfer_notice.dart';
 import 'compensation_card.dart';
 import 'player_card.dart';
+import 'guardian_visits.dart';
 
 class ChildProfile extends StatelessWidget {
   final AuthController auth;
@@ -72,6 +74,14 @@ class ChildProfile extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
+          GLink(
+            localized(context, 'الدخول والخروج', 'Entry and exit'),
+            Icons.door_front_door_outlined,
+            () => openPage(
+              context,
+              GuardianVisits(auth: auth, playerId: playerId),
+            ),
+          ),
           GLink(
             'بطاقة اللاعب',
             Icons.qr_code_2,

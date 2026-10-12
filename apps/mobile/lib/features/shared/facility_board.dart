@@ -5,6 +5,8 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'observation_summary.dart';
+import 'occupancy_summary.dart';
+import 'visit_history.dart';
 
 class FacilityBoardLink extends StatelessWidget {
   final AuthController auth;
@@ -76,6 +78,36 @@ class _FacilityBoardPageState extends State<FacilityBoardPage> {
               ],
             ),
           ),
+          for (final q in rows(
+            board['openVisitQuality'] ?? [],
+          ).where((q) => (q['staleOpen'] as num? ?? 0) > 0))
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  OccupancySummary(value: q),
+                  for (final id
+                      in q['staleBookings'] is List
+                          ? q['staleBookings'] as List
+                          : [])
+                    GLink(
+                      localized(
+                        context,
+                        'مراجعة زيارة دون خروج',
+                        'Review visit without checkout',
+                      ),
+                      Icons.history_outlined,
+                      () => openPage(
+                        context,
+                        VisitHistoryPage(
+                          auth: widget.auth,
+                          bookingId: textOf(id),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           for (final b in bookings)
             GCard(
               child: Column(
@@ -103,6 +135,23 @@ class _FacilityBoardPageState extends State<FacilityBoardPage> {
                   const SizedBox(height: 10),
                   if (b['observation'] is Map)
                     ObservationSummary(value: obj(b['observation'])),
+                  if (b['occupancy'] is Map)
+                    OccupancySummary(value: obj(b['occupancy'])),
+                  GLink(
+                    localized(
+                      context,
+                      'سجل الدخول والخروج',
+                      'Entry and exit history',
+                    ),
+                    Icons.door_front_door_outlined,
+                    () => openPage(
+                      context,
+                      VisitHistoryPage(
+                        auth: widget.auth,
+                        bookingId: textOf(b['id']),
+                      ),
+                    ),
+                  ),
                   UiText('${b['facility']} · ${b['space']}'),
                   UiText(
                     '${textOf(b['startTime']).split(':').take(2).join(':')} — ${textOf(b['endTime']).split(':').take(2).join(':')} · ${b['coach'] ?? localized(context, 'بدون مدرب', 'No coach')}',

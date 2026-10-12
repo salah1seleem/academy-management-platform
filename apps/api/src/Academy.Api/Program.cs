@@ -136,6 +136,7 @@ builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<PlayerCardService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ObservationService>();
+builder.Services.AddScoped<Academy.Api.Facilities.VisitService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
 builder.Services.AddScoped<GroupPlacementService>();
@@ -356,6 +357,7 @@ app.MapReceivables();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
+Academy.Api.Facilities.VisitEndpoints.MapVisits(app);
 
 if (args.Contains("--reset-football-demo"))
 {
@@ -386,6 +388,11 @@ if (app.Environment.IsEnvironment("Demo"))
                 await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
                 await Academy.Api.Facilities.ObservationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>(), app.Services.GetRequiredService<TimeProvider>());
             }
+            if (app.Configuration.GetValue<bool>("Demo:VisitSeedEnabled")) {
+                await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
+                await Academy.Api.Operations.GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+                await Academy.Api.Facilities.VisitDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), configSeed.ServiceProvider.GetRequiredService<CollectionService>(), app.Services.GetRequiredService<TimeProvider>());
+            }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
         }
         await PlatformIdentity.SeedDemo(app.Services);
@@ -410,9 +417,10 @@ public partial class Program
         identity.AddClaim(new Claim("academy_id", academyId.ToString()));
         identity.AddClaim(new Claim("membership_id", membershipId.ToString()));
         var principal = new ClaimsPrincipal(identity);
+        var now = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
         await context.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties
         {
-            IsPersistent = false, AllowRefresh = true, IssuedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30)
+            IsPersistent = false, AllowRefresh = true, IssuedUtc = now, ExpiresUtc = now.AddMinutes(30)
         });
     }
 }

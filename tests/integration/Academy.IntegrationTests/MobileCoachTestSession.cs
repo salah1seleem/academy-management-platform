@@ -19,7 +19,7 @@ internal static class MobileCoachTestSession
         var membership = await db.AcademyMemberships.SingleAsync(x => x.UserId == user.Id &&
             x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.Coach && x.IsActive);
         var accessToken = MobileAuthenticationHandler.NewToken();
-        var now = DateTimeOffset.UtcNow;
+        var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
         db.MobileSessions.Add(new MobileSession
         {
             Id = Guid.NewGuid(),

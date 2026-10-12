@@ -998,6 +998,213 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Facilities.AccessEntitlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AccompanyingVisitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorizedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateOnly>("BookingDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CompensationBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GuardianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PersonKind")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ResourceBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SubscriptionPeriodId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ValidFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ValidToUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorizedByUserId");
+
+                    b.HasIndex("AcademyId", "AccompanyingVisitId");
+
+                    b.HasIndex("AcademyId", "CompensationBookingId");
+
+                    b.HasIndex("AcademyId", "GuardianId");
+
+                    b.HasIndex("AcademyId", "PlayerId");
+
+                    b.HasIndex("AcademyId", "ResourceBookingId");
+
+                    b.HasIndex("AcademyId", "ResourceId");
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId");
+
+                    b.HasIndex("AcademyId", "SubscriptionPeriodId");
+
+                    b.ToTable("AccessEntitlements", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Access_Kind", "\"ValidFromUtc\"<\"ValidToUtc\" AND ((\"PersonKind\"=1 AND \"PlayerId\" IS NOT NULL AND \"SportEnrollmentId\" IS NOT NULL AND \"GuardianId\" IS NULL AND \"AccompanyingVisitId\" IS NULL AND ((\"SubscriptionPeriodId\" IS NOT NULL)::int+(\"CompensationBookingId\" IS NOT NULL)::int)=1) OR (\"PersonKind\"=2 AND \"PlayerId\" IS NULL AND \"SportEnrollmentId\" IS NULL AND \"GuardianId\" IS NOT NULL AND \"AccompanyingVisitId\" IS NOT NULL AND \"SubscriptionPeriodId\" IS NULL AND \"CompensationBookingId\" IS NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Facilities.EntryVisit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccessEntitlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("BookingDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("EnteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EnteredByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntryHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("EntryKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExitHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExitKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("ExitedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ExitedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("GuardianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PersonKind")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ResourceBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnteredByUserId");
+
+                    b.HasIndex("ExitedByUserId");
+
+                    b.HasIndex("AcademyId", "AccessEntitlementId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "GuardianId")
+                        .IsUnique()
+                        .HasFilter("\"ExitedAtUtc\" IS NULL AND \"GuardianId\" IS NOT NULL");
+
+                    b.HasIndex("AcademyId", "PlayerId")
+                        .IsUnique()
+                        .HasFilter("\"ExitedAtUtc\" IS NULL AND \"PlayerId\" IS NOT NULL");
+
+                    b.HasIndex("AcademyId", "ResourceBookingId");
+
+                    b.HasIndex("AcademyId", "EnteredByUserId", "EntryKey")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ExitedByUserId", "ExitKey")
+                        .IsUnique()
+                        .HasFilter("\"ExitKey\" IS NOT NULL");
+
+                    b.ToTable("EntryVisits", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Visit_Exit", "((\"ExitedAtUtc\" IS NULL AND \"ExitedByUserId\" IS NULL AND \"ExitKey\" IS NULL AND \"ExitHash\" IS NULL) OR (\"ExitedAtUtc\" IS NOT NULL AND \"ExitedAtUtc\">=\"EnteredAtUtc\" AND \"ExitedByUserId\" IS NOT NULL AND \"ExitKey\" IS NOT NULL AND \"ExitHash\" IS NOT NULL)) AND ((\"PersonKind\"=1 AND \"PlayerId\" IS NOT NULL AND \"GuardianId\" IS NULL) OR (\"PersonKind\"=2 AND \"GuardianId\" IS NOT NULL AND \"PlayerId\" IS NULL))");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Facilities.Facility", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3768,8 +3975,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
-
-                    b.HasAlternateKey("AcademyId", "Id");
 
                     b.HasIndex("ActorUserId");
 
@@ -7378,6 +7583,105 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Navigation("SportEnrollment");
 
                     b.Navigation("TrainingGroup");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Facilities.AccessEntitlement", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorizedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Facilities.EntryVisit", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AccompanyingVisitId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.CompensationBooking", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CompensationBookingId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.GuardianProfile", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "GuardianId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "PlayerId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Facilities.ResourceBooking", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ResourceBookingId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Facilities.FacilityResource", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ResourceId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.SportEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportEnrollmentId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPeriod", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SubscriptionPeriodId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Facilities.EntryVisit", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("EnteredByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ExitedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Facilities.AccessEntitlement", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AccessEntitlementId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Facilities.ResourceBooking", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ResourceBookingId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Facilities.Facility", b =>

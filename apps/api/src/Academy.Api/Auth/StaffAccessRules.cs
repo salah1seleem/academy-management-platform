@@ -50,6 +50,7 @@ public static class StaffAccessRules
     }
     public static string Operation(string method, string path)
     {
+        if (method == "POST" && path.StartsWith("/api/v1/facilities/visits/") && path.EndsWith("/exit")) return "Edit";
         // Timetable service rechecks Add for the first schedule or Edit for an existing one under locks.
         if (method is "GET" or "HEAD" || path.EndsWith("/quote") || path.EndsWith("registration-quote") || path.EndsWith("/search") || path.EndsWith("/resolve") || path.EndsWith("/timetable/preview") || path.EndsWith("/timetable") || path.EndsWith("/placement/preview") || path.EndsWith("/placement") || path.EndsWith("/placement-recommendations")) return "Read";
         if (method == "DELETE" || path.EndsWith("/delete")) return "Delete";
