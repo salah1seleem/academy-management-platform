@@ -4,6 +4,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import 'observation_summary.dart';
 
 class FacilityBoardLink extends StatelessWidget {
   final AuthController auth;
@@ -100,6 +101,8 @@ class _FacilityBoardPageState extends State<FacilityBoardPage> {
                     ],
                   ),
                   const SizedBox(height: 10),
+                  if (b['observation'] is Map)
+                    ObservationSummary(value: obj(b['observation'])),
                   UiText('${b['facility']} · ${b['space']}'),
                   UiText(
                     '${textOf(b['startTime']).split(':').take(2).join(':')} — ${textOf(b['endTime']).split(':').take(2).join(':')} · ${b['coach'] ?? localized(context, 'بدون مدرب', 'No coach')}',

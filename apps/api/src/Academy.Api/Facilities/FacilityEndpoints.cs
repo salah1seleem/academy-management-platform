@@ -38,6 +38,12 @@ public static class FacilityEndpoints
             resources = await db.FacilityResources.AsNoTracking().OrderBy(x => x.Name).ToListAsync()
         }));
         api.MapGet("/board", Board);
+        api.MapGet("/bookings/{id:guid}/observations", async (Guid id, FoundationDbContext db, HttpResponse response) => {
+            response.Headers.CacheControl = "no-store, private";
+            if (!await db.ResourceBookings.AnyAsync(b => b.Id == id)) return Results.NotFound();
+            return Results.Ok((await db.ResourceObservations.AsNoTracking().Where(o => o.ResourceBookingId == id).OrderByDescending(o => o.Sequence).Take(100).ToListAsync()).Select(ObservationService.View));
+        });
+        api.MapPost("/bookings/{id:guid}/observations", async (Guid id, ObservationWrite body, ObservationService service, HttpRequest request) => await Run(() => service.Record(id, body, request.Headers["Idempotency-Key"].ToString()))).RequireAuthorization(AcademyPermissions.FacilitiesManage).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/", async (FacilityWrite body, FacilityService service) => await Run(() => service.Create(body))).RequireAuthorization(AcademyPermissions.FacilitiesManage).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/spaces", async (SpaceWrite body, FacilityService service) => await Run(() => service.Create(body))).RequireAuthorization(AcademyPermissions.FacilitiesManage).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/resources", async (ResourceWrite body, FacilityService service) => await Run(() => service.Create(body))).RequireAuthorization(AcademyPermissions.FacilitiesManage).AddEndpointFilter<CsrfFilter>();
@@ -55,7 +61,7 @@ public static class FacilityEndpoints
     private static async Task<IResult> Board(DateOnly? date, Guid? branchId, FoundationDbContext db, CurrentTenant tenant, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var a = await db.Academies.SingleAsync(x => x.Id == t.AcademyId);
-        var day = date ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(a.TimeZone)).DateTime);
+        var actualToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(a.TimeZone)).DateTime); var day = date ?? actualToday;
         var query = db.ResourceBookings.AsNoTracking().Where(b => b.Date == day && b.State == ResourceBookingState.Reserved);
         if (branchId.HasValue) query = query.Where(b => b.BranchId == branchId);
         var bookings = await (from b in query
@@ -65,12 +71,14 @@ public static class FacilityEndpoints
             join g in db.TrainingGroups on b.TrainingGroupId equals g.Id into groups from g in groups.DefaultIfEmpty()
             join c in db.AcademyMemberships on b.CoachMembershipId equals c.Id into coaches from c in coaches.DefaultIfEmpty()
             orderby b.StartTime, r.Name
-            select new { b.Id, b.ResourceId, resource = r.Name, space = s.Name, facility = f.Name, b.Date, b.StartTime, b.EndTime, b.ReservedSeats, r.Capacity, b.Exclusive, b.ServiceKind, b.TrainingGroupId, groupName = g == null ? null : g.ArabicName, coach = c == null ? null : c.User.DisplayName, b.TrainingSessionId,
-                expectedPlayers = b.TrainingGroupId.HasValue ? db.SportEnrollments.Count(e => e.IsActive && e.Status == EnrollmentStatus.Active && (b.TrainingSessionId.HasValue ? FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, b.TrainingSessionId.GetValueOrDefault()) : FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, b.Date) == b.TrainingGroupId)) : 0,
-                present = b.TrainingSessionId.HasValue ? db.PlayerAttendances.Count(p => p.TrainingSessionId == b.TrainingSessionId && (p.Status == AttendanceStatus.Present || p.Status == AttendanceStatus.Late)) : 0,
-                absent = b.TrainingSessionId.HasValue ? db.PlayerAttendances.Count(p => p.TrainingSessionId == b.TrainingSessionId && p.Status == AttendanceStatus.Absent) : 0
-            }).ToListAsync();
-        return Results.Ok(new { date = day, refreshedAtUtc = time.GetUtcNow(), bookings, closures = await db.ResourceClosures.AsNoTracking().Where(c => c.FromDate <= day && c.ToDate >= day && (!branchId.HasValue || c.BranchId == branchId)).ToListAsync() });
+            select new { b.Id, b.ResourceId, resource = r.Name, space = s.Name, facility = f.Name, b.Date, b.StartTime, b.EndTime, b.ReservedSeats, r.Capacity, b.Exclusive, b.ServiceKind, b.TrainingGroupId, groupName = g == null ? null : g.ArabicName, coach = c == null ? null : c.User.DisplayName, b.TrainingSessionId }).ToListAsync();
+        var bookingIds = bookings.Select(b => b.Id).ToArray();
+        var groupIds = bookings.Where(b => b.TrainingGroupId.HasValue).Select(b => b.TrainingGroupId!.Value).Distinct().ToArray();
+        var sessions = bookings.Where(b => b.TrainingSessionId.HasValue).Select(b => b.TrainingSessionId!.Value).Distinct().ToArray();
+        var counts = await FacilityRosterCounts.Read(db, t.AcademyId, groupIds, sessions, day);
+        var attendance = await db.PlayerAttendances.AsNoTracking().Where(p => p.AcademyId == t.AcademyId && sessions.Contains(p.TrainingSessionId)).GroupBy(p => p.TrainingSessionId).Select(g => new { session = g.Key, present = g.Count(p => p.Status == AttendanceStatus.Present || p.Status == AttendanceStatus.Late), absent = g.Count(p => p.Status == AttendanceStatus.Absent), recorded = g.Count(p => p.Status != AttendanceStatus.NotRecorded) }).ToDictionaryAsync(g => g.session);
+        var observations = await db.ResourceObservations.AsNoTracking().Where(o => bookingIds.Contains(o.ResourceBookingId) && !db.ResourceObservations.Any(n => n.ResourceBookingId == o.ResourceBookingId && n.Sequence > o.Sequence)).ToDictionaryAsync(o => o.ResourceBookingId);
+        return Results.Ok(new { date = day, actualToday, refreshedAtUtc = time.GetUtcNow(), bookings = bookings.Select(b => new { b.Id, b.ResourceId, b.resource, b.space, b.facility, b.Date, b.StartTime, b.EndTime, b.ReservedSeats, b.Capacity, b.Exclusive, b.ServiceKind, b.TrainingGroupId, b.groupName, b.coach, b.TrainingSessionId, expectedPlayers = b.TrainingSessionId is Guid session ? counts.Sessions.GetValueOrDefault(session) : b.TrainingGroupId is Guid group ? counts.Groups.GetValueOrDefault(group) : 0, present = b.TrainingSessionId is Guid presentSession && attendance.TryGetValue(presentSession, out var presentCounts) ? presentCounts.present : 0, absent = b.TrainingSessionId is Guid absentSession && attendance.TryGetValue(absentSession, out var absentCounts) ? absentCounts.absent : 0, recorded = b.TrainingSessionId is Guid recordedSession && attendance.TryGetValue(recordedSession, out var recordedCounts) ? recordedCounts.recorded : 0, observation = observations.TryGetValue(b.Id, out var observed) ? ObservationService.View(observed) : null }), closures = await db.ResourceClosures.AsNoTracking().Where(c => c.FromDate <= day && c.ToDate >= day && (!branchId.HasValue || c.BranchId == branchId)).ToListAsync() });
     }
 }
 

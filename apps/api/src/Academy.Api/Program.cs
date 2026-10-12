@@ -135,6 +135,7 @@ builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<PlayerCardService>();
+builder.Services.AddScoped<Academy.Api.Facilities.ObservationService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceTimetableService>();
 builder.Services.AddScoped<GroupPlacementService>();
@@ -380,6 +381,11 @@ if (app.Environment.IsEnvironment("Demo"))
             if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ResourceTimetableSeedEnabled")) await Academy.Api.Facilities.ResourceTimetableDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:UnassignedEnrollmentSeedEnabled")) await UnassignedEnrollmentDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:ObservationSeedEnabled")) {
+                await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
+                await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+                await Academy.Api.Facilities.ObservationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>(), app.Services.GetRequiredService<TimeProvider>());
+            }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
         }
         await PlatformIdentity.SeedDemo(app.Services);

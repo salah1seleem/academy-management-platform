@@ -1324,8 +1324,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("AcademyId", "Id");
-
                     b.HasIndex("ActorUserId");
 
                     b.HasIndex("AcademyId", "CoachMembershipId");
@@ -1405,6 +1403,108 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("ResourceClosures", null, t =>
                         {
                             t.HasCheckConstraint("CK_ResourceClosure_Range", "\"FromDate\" <= \"ToDate\" AND \"StartTime\" < \"EndTime\"");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Facilities.ResourceObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("BookingDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExpectedBasis")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("ExpectedSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("OutsideBookedHours")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("RecordedPresentSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RecordedTotalSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ResourceBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("TrainingSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "ResourceId");
+
+                    b.HasIndex("AcademyId", "TrainingSessionId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestKey")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ResourceBookingId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("ResourceObservations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Observation_Counts", "\"Count\" BETWEEN 0 AND 10000 AND \"Sequence\">0 AND \"ExpectedSnapshot\">=0 AND (\"RecordedPresentSnapshot\" IS NULL OR \"RecordedPresentSnapshot\">=0) AND (\"RecordedTotalSnapshot\" IS NULL OR \"RecordedTotalSnapshot\">=\"RecordedPresentSnapshot\") AND \"ExpectedBasis\" IN ('Roster','ReservedSeats') AND \"Source\" IN ('Manual','DemoSeed')");
                         });
                 });
 
@@ -7430,6 +7530,41 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Facilities.ResourceObservation", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Facilities.ResourceBooking", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ResourceBookingId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Facilities.FacilityResource", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ResourceId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Attendance.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingSessionId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Facilities.TrainingScheduleRevision", b =>

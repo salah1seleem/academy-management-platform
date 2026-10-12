@@ -48,6 +48,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<FacilitySpace>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<FacilityResource>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ResourceBooking>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ResourceObservation>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ResourceClosure>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<GroupResourceSchedule>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<TrainingScheduleRevision>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -137,7 +138,7 @@ public sealed partial class FoundationDbContext
         foreach (var entry in ChangeTracker.Entries<PlayerCard>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
             if (entry.State == EntityState.Deleted || !entry.OriginalValues.GetValue<bool>(nameof(PlayerCard.IsActive)) || entry.Entity.IsActive || new[] { nameof(PlayerCard.PlayerId), nameof(PlayerCard.AcademyId), nameof(PlayerCard.TokenHash), nameof(PlayerCard.ProtectedToken), nameof(PlayerCard.ExpiresAtUtc), nameof(PlayerCard.IssuedByUserId), nameof(PlayerCard.RequestKey), nameof(PlayerCard.PreviousVersion), nameof(PlayerCard.CreatedAtUtc) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("البطاقة ثابتة؛ يمكن إلغاؤها فقط ثم إصدار بطاقة جديدة.");
-        if (ChangeTracker.Entries().Any(e => e.Entity is ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
+        if (ChangeTracker.Entries().Any(e => e.Entity is ResourceObservation or ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
         foreach (var entry in ChangeTracker.Entries().Where(e => e.Entity is IPlanTermsSnapshot && e.State == EntityState.Modified))
             if (entry.Property(nameof(IPlanTermsSnapshot.PlanTypeSnapshot)).OriginalValue is not null && new[] { nameof(IPlanTermsSnapshot.PlanTypeSnapshot), nameof(IPlanTermsSnapshot.PlanNameSnapshot), nameof(IPlanTermsSnapshot.DurationDaysSnapshot), nameof(IPlanTermsSnapshot.SessionCountSnapshot), nameof(IPlanTermsSnapshot.PlanRevisionSnapshot), nameof(IPlanTermsSnapshot.DurationMonthsSnapshot), nameof(IPlanTermsSnapshot.ServiceKindSnapshot), nameof(IPlanTermsSnapshot.TrainingFormatSnapshot) }.Any(p => entry.Property(p).IsModified))

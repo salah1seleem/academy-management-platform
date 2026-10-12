@@ -32,6 +32,7 @@ public sealed partial class FoundationDbContext
     {
         ConfigureVersionedSettings(b);
         ConfigurePlayerCards(b);
+        ConfigureObservations(b);
         ConfigureMatches(b);
         ConfigurePayroll(b);
         Tenant<AcademyExperience>(b);

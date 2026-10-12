@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 // Presentation only. The API independently rechecks current grants for every write.
-export function useStaffAction(module: string, action: "add" | "edit" | "delete") {
+export function useStaffAction(module: string, action: "read" | "add" | "edit" | "delete") {
   const [allowed, setAllowed] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
