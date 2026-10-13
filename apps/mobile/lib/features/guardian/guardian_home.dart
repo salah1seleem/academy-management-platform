@@ -12,6 +12,7 @@ import 'enrollment_requests.dart';
 import '../shared/academy_news.dart';
 import 'sport_store.dart';
 import 'tournament_fees.dart';
+import 'guardian_day_pass.dart';
 import '../shared/matches.dart';
 import '../shared/receivable_balances.dart';
 
@@ -165,6 +166,13 @@ class GuardianHome extends StatelessWidget {
                 'Tournaments',
                 Icons.emoji_events_outlined,
                 () => openPage(context, TournamentFees(auth: auth)),
+              ),
+              homeAction(
+                context,
+                'زيارة يومية',
+                'Day pass',
+                Icons.confirmation_number_outlined,
+                () => openPage(context, GuardianDayPassPage(auth: auth)),
               ),
             ],
           ),

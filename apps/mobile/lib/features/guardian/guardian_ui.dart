@@ -28,6 +28,7 @@ String label(Object? value) =>
       'Cancelled': 'ملغي',
       'Scheduled': 'قادم',
       'Pending': 'قيد الانتظار',
+      'PendingProof': 'بانتظار إثبات التحويل',
       'UnderReview': 'قيد المراجعة',
       'Approved': 'مقبول',
       'Rejected': 'مرفوض',
