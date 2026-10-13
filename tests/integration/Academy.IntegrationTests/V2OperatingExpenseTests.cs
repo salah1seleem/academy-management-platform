@@ -95,10 +95,21 @@ public sealed partial class V2PlanPublicationTests
         var mixedResponse = await Write(owner, root + "/", body with { Category = "Heating" }); mixedResponse.EnsureSuccessStatusCode();
         var mixedId = (await mixedResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         (await Write(owner, $"{root}/{mixedId}/approve", new { })).EnsureSuccessStatusCode();
+        var trainingOnlyQuoteResponse = await Write(owner, $"{root}/{mixedId}/quote", new { }); trainingOnlyQuoteResponse.EnsureSuccessStatusCode();
+        var trainingOnlyQuote = await trainingOnlyQuoteResponse.Content.ReadFromJsonAsync<JsonElement>();
         db.ResourceBookings.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, BranchId = f.A, ResourceId = resource, Date = FacilityDay, StartTime = new(12,0), EndTime = new(13,0), ServiceKind = "DayPass", ReservedSeats = 1, ApprovedCapacitySnapshot = 10, ActorUserId = f.Owner, RequestKey = Guid.NewGuid().ToString(), RequestHash = "synthetic-mixed-cost-test" });
         await db.SaveChangesAsync();
-        Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, $"{root}/{mixedId}/quote", new { })).StatusCode);
-        Assert.False(await db.OperatingExpenseAllocations.AnyAsync(x => x.ExpenseId == mixedId));
+        Assert.Equal(HttpStatusCode.Conflict, (await ExpenseCommand(owner, $"{root}/{mixedId}/post", new OperatingExpensePost(trainingOnlyQuote.GetProperty("quoteHash").GetString()!), Guid.NewGuid().ToString())).StatusCode);
+        var mixedQuoteResponse = await Write(owner, $"{root}/{mixedId}/quote", new { }); mixedQuoteResponse.EnsureSuccessStatusCode();
+        var mixedQuote = await mixedQuoteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(3, mixedQuote.GetProperty("shares").GetArrayLength());
+        Assert.Equal(100m, mixedQuote.GetProperty("total").GetDecimal());
+        Assert.Contains(mixedQuote.GetProperty("shares").EnumerateArray(), x => x.GetProperty("serviceKind").GetString() == "DayPass" && x.GetProperty("groupId").ValueKind == JsonValueKind.Null && x.GetProperty("amount").GetDecimal() == 33.33m);
+        (await ExpenseCommand(owner, $"{root}/{mixedId}/post", new OperatingExpensePost(mixedQuote.GetProperty("quoteHash").GetString()!), Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
+        Assert.Equal(100m, await db.OperatingExpenseAllocations.Where(x => x.ExpenseId == mixedId).SumAsync(x => x.Amount));
+        Assert.Equal(33.33m, (await db.OperatingExpenseAllocations.SingleAsync(x => x.ExpenseId == mixedId && x.ServiceKind == "DayPass")).Amount);
+        var mixedGroup = await owner.GetFromJsonAsync<JsonElement>($"{root}/allocations?groupId={f.Group}");
+        Assert.InRange(mixedGroup.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("expenseId").GetGuid() == mixedId).GetProperty("amount").GetDecimal(), 33.33m, 33.34m);
     }
 
     private static async Task<HttpResponseMessage> ExpenseCommand(HttpClient client, string path, object body, string key)

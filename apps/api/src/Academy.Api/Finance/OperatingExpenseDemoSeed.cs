@@ -29,7 +29,7 @@ public static class OperatingExpenseDemoSeed
             CreatedByUserId = owner, ApprovedByUserId = owner, ApprovedAtUtc = at, PostedByUserId = owner, PostedAtUtc = at,
             RequestKey = "demo-operating-expense-2026-09", RequestHash = hash, PostRequestKey = "demo-operating-post-2026-09", PostQuoteHash = hash,
             CreatedAtUtc = at, UpdatedAtUtc = at });
-        db.OperatingExpenseAllocations.Add(new() { Id = AllocationId, AcademyId = academy, ExpenseId = ExpenseId, TrainingGroupId = group.Id,
+        db.OperatingExpenseAllocations.Add(new() { Id = AllocationId, AcademyId = academy, ExpenseId = ExpenseId, TrainingGroupId = group.Id, ServiceKind = "Training",
             Weight = 1, Amount = 200m, Currency = "EGP", CreatedAtUtc = at, UpdatedAtUtc = at });
         await db.SaveChangesAsync(); await tx.CommitAsync();
     }

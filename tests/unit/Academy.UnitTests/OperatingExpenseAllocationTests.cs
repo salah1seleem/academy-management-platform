@@ -32,4 +32,28 @@ public sealed class OperatingExpenseAllocationTests
         Assert.Null(share.GroupId);
         Assert.Equal(100m, share.Amount);
     }
+
+    [Fact]
+    public void Mixed_resource_minutes_split_services_before_training_groups_without_losing_a_piaster()
+    {
+        var first = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var second = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var bookings = new[] { new ExpenseBooking(Guid.NewGuid(), "Training", first, 60), new ExpenseBooking(Guid.NewGuid(), "Training", second, 60), new ExpenseBooking(Guid.NewGuid(), "DayPass", null, 60) };
+        var shares = OperatingExpenseAllocation.ByServiceMinutes(100m, bookings);
+        Assert.Equal(100m, shares.Sum(x => x.Amount));
+        Assert.Equal(33.33m, Assert.Single(shares, x => x.ServiceKind == "DayPass").Amount);
+        Assert.Equal(new[] { 33.34m, 33.33m }, shares.Where(x => x.ServiceKind == "Training").Select(x => x.Amount));
+        Assert.Equal(shares, OperatingExpenseAllocation.ByServiceMinutes(100m, bookings.Reverse()));
+    }
+
+    [Fact]
+    public void Missing_booking_or_group_remains_visible_without_charging_another_group()
+    {
+        var empty = Assert.Single(OperatingExpenseAllocation.ByServiceMinutes(100m, []));
+        Assert.Equal("Unallocated", empty.ServiceKind);
+        var group = Guid.NewGuid();
+        var split = OperatingExpenseAllocation.ByServiceMinutes(100m, [new(Guid.NewGuid(), "Training", group, 60), new(Guid.NewGuid(), "Training", null, 60)]);
+        Assert.Equal(50m, Assert.Single(split, x => x.GroupId == group).Amount);
+        Assert.Equal(50m, Assert.Single(split, x => x.GroupId is null).Amount);
+    }
 }

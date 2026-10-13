@@ -36,9 +36,10 @@ public sealed partial class FoundationDbContext
         b.Entity<OperatingExpenseAllocation>(e => {
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.Property(x => x.Currency).HasMaxLength(3);
+            e.Property(x => x.ServiceKind).HasMaxLength(32).HasDefaultValue("Training");
             e.HasOne<OperatingExpense>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ExpenseId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<TrainingGroup>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
-            e.HasIndex(x => new { x.AcademyId, x.ExpenseId, x.TrainingGroupId }).IsUnique();
+            e.HasIndex(x => new { x.AcademyId, x.ExpenseId, x.ServiceKind, x.TrainingGroupId }).IsUnique();
             e.ToTable(t => t.HasCheckConstraint("CK_OperatingExpenseAllocation_Terms", "\"Amount\">=0 AND \"Weight\">=0"));
         });
     }

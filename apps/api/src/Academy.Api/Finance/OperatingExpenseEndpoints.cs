@@ -79,7 +79,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     {
         var (t, _) = await Owner(); var row = await Find(t.AcademyId, id);
         var shares = await db.OperatingExpenseAllocations.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.ExpenseId == id)
-            .OrderBy(x => x.TrainingGroupId).Select(x => new { x.TrainingGroupId, x.Weight, x.Amount, x.Currency }).ToArrayAsync();
+            .OrderBy(x => x.ServiceKind).ThenBy(x => x.TrainingGroupId).Select(x => new { x.ServiceKind, x.TrainingGroupId, x.Weight, x.Amount, x.Currency }).ToArrayAsync();
         return new { expense = row, allocations = shares, allocationTotal = shares.Sum(x => x.Amount) };
     }
     public async Task<object> Allocations(Guid? groupId, DateOnly? from, DateOnly? to)
@@ -89,7 +89,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         var query = from a in db.OperatingExpenseAllocations.AsNoTracking()
                     join e in db.OperatingExpenses.AsNoTracking() on a.ExpenseId equals e.Id
                     where a.AcademyId == t.AcademyId && e.AcademyId == t.AcademyId && e.Status == OperatingExpenseStatus.Posted
-                    select new { a.TrainingGroupId, a.Amount, a.Currency, a.Weight, a.ExpenseId, e.Category, e.BranchId, e.PeriodFrom, e.PeriodTo, expenseAmount = e.Amount };
+                    select new { a.ServiceKind, a.TrainingGroupId, a.Amount, a.Currency, a.Weight, a.ExpenseId, e.Category, e.BranchId, e.PeriodFrom, e.PeriodTo, expenseAmount = e.Amount };
         if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId.Value);
         if (from.HasValue) query = query.Where(x => x.PeriodTo >= from.Value);
         if (to.HasValue) query = query.Where(x => x.PeriodFrom <= to.Value);
@@ -135,27 +135,30 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     private async Task<(IReadOnlyList<ExpenseShare> Shares, string Hash)> Prepare(OperatingExpense row)
     {
         if (row.Status != OperatingExpenseStatus.Approved) throw new OperatingExpenseRejected("اعتمد المصروف قبل الترحيل.");
-        Guid[] eligible;
-        if (row.Scope == OperatingExpenseScope.Group) eligible = [row.TrainingGroupId!.Value];
+        IReadOnlyList<ExpenseShare> shares;
+        object? bookingInputs = null;
+        if (row.Scope == OperatingExpenseScope.Group) shares = OperatingExpenseAllocation.Equal(row.Amount, [row.TrainingGroupId!.Value]);
         else
         {
             var bookings = await db.ResourceBookings.AsNoTracking().Where(b => b.AcademyId == row.AcademyId && b.ResourceId == row.ResourceId && b.BranchId == row.BranchId
                 && b.Date >= row.PeriodFrom && b.Date <= row.PeriodTo && b.State == ResourceBookingState.Reserved)
-                .Select(b => new { b.TrainingGroupId, b.ServiceKind }).ToArrayAsync();
-            if (bookings.Any(b => b.ServiceKind != "Training" || !b.TrainingGroupId.HasValue))
-                throw new OperatingExpenseRejected("المرفق يضم خدمة غير تدريبية؛ انتظر توزيعًا متعدد الخدمات بدل تحميل التدريب وحده.");
-            eligible = bookings.Select(b => b.TrainingGroupId!.Value).Distinct().ToArray();
+                .Select(b => new { b.Id, b.TrainingGroupId, b.ServiceKind, b.Date, b.StartTime, b.EndTime, b.Version }).ToArrayAsync();
+            if (bookings.Any(b => b.EndTime <= b.StartTime)) throw new OperatingExpenseRejected("بيانات مدة حجز المرفق غير صالحة للتوزيع.");
+            bookingInputs = bookings.OrderBy(b => b.Id).ToArray();
+            try { shares = OperatingExpenseAllocation.ByServiceMinutes(row.Amount, bookings.Select(b =>
+                new ExpenseBooking(b.Id, b.ServiceKind, b.TrainingGroupId, (int)(b.EndTime.ToTimeSpan() - b.StartTime.ToTimeSpan()).TotalMinutes))); }
+            catch (ArgumentException) { throw new OperatingExpenseRejected("بيانات حجز المرفق غير صالحة للتوزيع؛ راجع الخدمة والمدة.", 422); }
         }
-        var shares = OperatingExpenseAllocation.Equal(row.Amount, eligible);
         var hash = StatementComparisonRules.Hash(new { row.AcademyId, row.Id, row.Version, row.BranchId, row.Scope, row.ResourceId, row.TrainingGroupId,
-            row.PeriodFrom, row.PeriodTo, row.Amount, row.Currency, shares });
+            row.PeriodFrom, row.PeriodTo, row.Amount, row.Currency, bookingInputs, shares });
         return (shares, hash);
     }
     public async Task<object> Quote(Guid id)
     {
         var (t, _) = await Owner(); var row = await Find(t.AcademyId, id); var (shares, hash) = await Prepare(row);
         return new { quoteHash = hash, shares, total = shares.Sum(s => s.Amount), row.Currency,
-            warning = shares.Count == 1 && shares[0].GroupId is null ? "لا توجد مجموعات تشغيلية مؤهلة؛ سيبقى المصروف غير موزع." : null };
+            method = row.Scope == OperatingExpenseScope.Group ? "مجموعة مباشرة" : "دقائق الحجوزات بين الخدمات، ثم بالتساوي بين مجموعات التدريب",
+            warning = shares.Count == 1 && shares[0].ServiceKind == "Unallocated" ? "لا توجد حجوزات مؤهلة؛ سيبقى المصروف غير موزع." : null };
     }
     public async Task<object> Post(Guid id, OperatingExpensePost body, string key)
     {
@@ -175,7 +178,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         if (hash != body.QuoteHash) throw new OperatingExpenseRejected("تغيرت بيانات الحجز أو المصروف؛ راجع التوزيع مرة أخرى.");
         var at = time.GetUtcNow();
         foreach (var share in shares) db.OperatingExpenseAllocations.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, ExpenseId = row.Id,
-            TrainingGroupId = share.GroupId, Weight = share.Weight, Amount = share.Amount, Currency = row.Currency, CreatedAtUtc = at, UpdatedAtUtc = at });
+            TrainingGroupId = share.GroupId, ServiceKind = share.ServiceKind, Weight = share.Weight, Amount = share.Amount, Currency = row.Currency, CreatedAtUtc = at, UpdatedAtUtc = at });
         row.Status = OperatingExpenseStatus.Posted; row.PostedByUserId = actor; row.PostedAtUtc = row.UpdatedAtUtc = at; row.PostRequestKey = key; row.PostQuoteHash = hash;
         await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, replay = false };
     }

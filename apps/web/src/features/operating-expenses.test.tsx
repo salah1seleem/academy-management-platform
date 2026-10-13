@@ -17,7 +17,7 @@ it("keeps expense creation, review and posted shares separate from collections",
     if (path === "/api/v1/auth/csrf") return response({ token: "test-only" });
     if (path.startsWith("/api/v1/finance/operating-expenses/?")) return response({ count: 1, items: [{ ...row, status }] });
     if (path.endsWith("/approve")) { status = "Approved"; return response({ id: row.id, status }); }
-    if (path.endsWith("/quote")) return response({ quoteHash: "a".repeat(64), shares: [{ groupId: "group-1", weight: 1, amount: 100 }], total: 100, currency: "EGP" });
+    if (path.endsWith("/quote")) return response({ quoteHash: "a".repeat(64), shares: [{ serviceKind: "Training", groupId: "group-1", weight: 1, amount: 100 }], method: "مجموعة مباشرة", total: 100, currency: "EGP" });
     if (path.endsWith("/post")) { expect(init?.headers).toMatchObject({ "Idempotency-Key": expect.any(String) }); status = "Posted"; return response({ id: row.id, replay: false }); }
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -29,7 +29,7 @@ it("keeps expense creation, review and posted shares separate from collections",
   await screen.findByRole("button", { name: "معاينة توزيع التكلفة" });
   fireEvent.click(screen.getByRole("button", { name: "معاينة توزيع التكلفة" }));
   await screen.findByRole("button", { name: "ترحيل التكلفة مرة واحدة" });
-  expect(screen.getByText(/مجموعة اصطناعية —/)).toBeInTheDocument();
+  expect(screen.getByText(/التدريب · مجموعة اصطناعية —/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "ترحيل التكلفة مرة واحدة" }));
   await screen.findByText(/تم ترحيل المصروف وأنصبته المحفوظة مرة واحدة/);
   expect(calls.some(p => p.includes("/api/v1/reports/financial"))).toBe(false);

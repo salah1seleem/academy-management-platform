@@ -38,6 +38,8 @@ public sealed class OperatingExpenseAllocation : TenantEntity
 {
     public Guid ExpenseId { get; set; }
     public Guid? TrainingGroupId { get; set; }
+    // Training rows may target a group; other services remain visible as their own cost buckets.
+    public required string ServiceKind { get; set; } = "Training";
     public int Weight { get; set; }
     public decimal Amount { get; set; }
     public required string Currency { get; set; }

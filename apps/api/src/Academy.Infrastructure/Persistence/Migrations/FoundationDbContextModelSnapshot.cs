@@ -2276,6 +2276,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ServiceKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Training");
+
                     b.Property<Guid?>("TrainingGroupId")
                         .HasColumnType("uuid");
 
@@ -2297,7 +2304,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingGroupId");
 
-                    b.HasIndex("AcademyId", "ExpenseId", "TrainingGroupId")
+                    b.HasIndex("AcademyId", "ExpenseId", "ServiceKind", "TrainingGroupId")
                         .IsUnique();
 
                     b.ToTable("OperatingExpenseAllocations", null, t =>
