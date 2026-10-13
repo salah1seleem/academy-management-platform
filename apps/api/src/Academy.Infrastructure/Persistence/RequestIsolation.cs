@@ -153,6 +153,8 @@ public sealed partial class FoundationDbContext
     }
     private async Task GuardWrites(CancellationToken token)
     {
+        ChangeTracker.DetectChanges();
+        GuardCashPaymentPurpose();
         if (ChangeTracker.Entries<ReceivableCreditApplication>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("تخصيص الرصيد الدائن ثابت ولا يعدل أو يحذف.");
         ChangeTracker.DetectChanges();
         if (ChangeTracker.Entries<FreeTrainingApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("اعتماد الإعفاء ثابت؛ لا يعدل أو يحذف.");

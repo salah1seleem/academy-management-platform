@@ -23,7 +23,15 @@ public static class VisitDemoSeed
         var sessionId = SlotId(day,hour,"session"); var resourceId = GroupPlacementDemoSeed.Id(264); var groupId = GroupPlacementDemoSeed.Id(260);
         await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:"+academy},0))");
         var source = await db.TrainingGroups.SingleOrDefaultAsync(g=>g.Id==GroupPlacementDemoSeed.Id(1));
-        if (source is null || !source.IsActive || !await db.Branches.AnyAsync(b=>b.Id==source.BranchId&&b.IsActive) || !await db.Sports.AnyAsync(s=>s.Id==source.SportId&&s.IsActive) || !await db.Academies.AnyAsync(a=>a.Id==academy && a.Slug=="nogoom-demo" && a.IsActive) || !await db.FacilitySpaces.AnyAsync(s=>s.Id==FacilityDemoSeed.SpaceId && s.IsActive && db.Facilities.Any(f=>f.Id==s.FacilityId&&f.IsActive)) || await db.TrainingSessions.AnyAsync(s=>s.Id==sessionId)) return;
+        if (source is null || !source.IsActive || !await db.Branches.AnyAsync(b=>b.Id==source.BranchId&&b.IsActive) || !await db.Sports.AnyAsync(s=>s.Id==source.SportId&&s.IsActive) || !await db.Academies.AnyAsync(a=>a.Id==academy && a.Slug=="nogoom-demo" && a.IsActive) || !await db.FacilitySpaces.AnyAsync(s=>s.Id==FacilityDemoSeed.SpaceId && s.IsActive && db.Facilities.Any(f=>f.Id==s.FacilityId&&f.IsActive))) return;
+        // Keep the second rehearsal child's companion independent of the first
+        // child's guardian, including when this two-hour slot already exists.
+        if (await db.Players.AnyAsync(p=>p.Id==GroupPlacementDemoSeed.Id(280)) && !await db.GuardianPlayerLinks.AnyAsync(l=>l.Id==GroupPlacementDemoSeed.Id(284)))
+        {
+            db.GuardianPlayerLinks.Add(new(){Id=GroupPlacementDemoSeed.Id(284),AcademyId=academy,PlayerId=GroupPlacementDemoSeed.Id(280),GuardianId=Guid.Parse("35000000-0000-0000-0000-000000000002"),CreatedByUserId=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync(),CreatedAtUtc=now,UpdatedAtUtc=now});
+            await db.SaveChangesAsync();
+        }
+        if (await db.TrainingSessions.AnyAsync(s=>s.Id==sessionId)) { await tx.CommitAsync(); return; }
         var payload=await db.AcademyConfigurationVersions.Where(c=>c.AcademyId==academy&&c.State==ConfigurationState.Active).Select(c=>c.Payload).SingleAsync(); var settings=AcademyRuntimeSettings.Read(payload);
         if(!settings.Features.GetValueOrDefault("training") || !settings.Features.GetValueOrDefault("facilities") || await db.AcademyFeatureEntitlements.CountAsync(e=>e.AcademyId==academy&&e.IsActive&&e.Enabled&&(e.Feature=="training"||e.Feature=="facilities"))!=2) return;
         var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync(); var start=new TimeOnly(hour,0); var end=hour==22?new TimeOnly(23,59):new TimeOnly(hour+2,0);
@@ -41,6 +49,8 @@ public static class VisitDemoSeed
                 db.GuardianPlayerLinks.Add(new(){Id=GroupPlacementDemoSeed.Id(n+2),AcademyId=academy,PlayerId=GroupPlacementDemoSeed.Id(n),GuardianId=guardian,CreatedByUserId=actor,CreatedAtUtc=now,UpdatedAtUtc=now});
             }
             await db.SaveChangesAsync(); foreach(var n in new[]{270,280}) await collections.CreateCashAsync(academy,actor,GroupPlacementDemoSeed.Id(n+1),GroupPlacementDemoSeed.Id(5),"demo-entry-player-"+n,"Cash");
+            db.GuardianPlayerLinks.Add(new(){Id=GroupPlacementDemoSeed.Id(284),AcademyId=academy,PlayerId=GroupPlacementDemoSeed.Id(280),GuardianId=Guid.Parse("35000000-0000-0000-0000-000000000002"),CreatedByUserId=actor,CreatedAtUtc=now,UpdatedAtUtc=now});
+            await db.SaveChangesAsync();
         }
         var r=await db.FacilityResources.SingleAsync(r=>r.Id==resourceId); var group=await db.TrainingGroups.SingleAsync(g=>g.Id==groupId);
         if(!r.IsActive || r.ApprovedAtUtc is null || r.Capacity<2 || r.BranchId!=group.BranchId || group.BranchId!=source.BranchId || group.SportId!=source.SportId || !r.ServiceKinds.Contains("Training") || !r.OperatingDays.Contains((int)day.DayOfWeek) || start<r.OpensAt || end>r.ClosesAt || !group.IsActive || !await db.StaffGroupAssignments.AnyAsync(a=>a.TrainingGroupId==groupId&&a.IsActive&&a.AcademyMembershipId==GroupPlacementDemoSeed.Id(262)&&a.AcademyMembership.IsActive&&a.AcademyMembership.User.IsActive)

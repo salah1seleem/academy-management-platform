@@ -29,7 +29,7 @@ it("retry after an uncertain connection uses the same reviewed request and idemp
     return response({ items });
   });
   render(<CashCollectionForm sessionId="shift" onCollected={collected} />); await choose(); fireEvent.click(screen.getByText("مراجعة مبلغ القبض"));
-  const confirm = await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال"); fireEvent.click(confirm); await screen.findByText("انقطع الاتصال"); fireEvent.click(confirm);
+  const confirm = await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال"); fireEvent.click(confirm); await screen.findByText(/انقطع الاتصال/); fireEvent.click(screen.getByRole("button", { name: "إعادة إرسال نفس التحصيل" }));
   await screen.findByRole("link", { name: "عرض الإيصال" }); expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]); expect(bodies[0]).toEqual({ enrollmentId: "enrollment", planId: "plan", quoteHash: quote.quoteHash }); expect(bodies[0]).toEqual(bodies[1]); expect(collected).toHaveBeenCalledTimes(1);
 });
 it("cancelled confirmation never records a collection", async () => {
@@ -55,7 +55,39 @@ it("a denied search reveals no previous player or receipt", async () => {
   await screen.findByText("تعذر البحث في لاعبي فرع الصندوق."); expect(screen.queryByLabelText("تسجيل اللاعب")).not.toBeInTheDocument(); expect(screen.queryByRole("link", { name: "عرض الإيصال" })).not.toBeInTheDocument();
 });
 it("price conflict retains explicit re-review and never shows a false success", async () => {
-  const collected = vi.fn(); global.fetch = vi.fn(async url => response(String(url).endsWith("csrf") ? { token: "csrf" } : String(url).endsWith("collection-quote") ? quote : String(url).endsWith("/collections") ? { title: "تغير السعر. راجع المبلغ." } : { items }, String(url).endsWith("/collections") ? 409 : 200));
+  const collected = vi.fn(); global.fetch = vi.fn(async url => response(String(url).endsWith("csrf") ? { token: "csrf" } : String(url).endsWith("collection-quote") ? quote : String(url).endsWith("collection-result") ? { status: "NotRecorded", canDiscard: false } : String(url).endsWith("/collections") ? { title: "تغير السعر. راجع المبلغ." } : { items }, String(url).endsWith("/collections") ? 409 : 200));
   render(<CashCollectionForm sessionId="shift" onCollected={collected} />); await choose(); fireEvent.click(screen.getByText("مراجعة مبلغ القبض")); fireEvent.click(await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال"));
   await screen.findByText("تغير السعر. راجع المبلغ."); await waitFor(() => expect(screen.getByText("مراجعة مبلغ القبض")).not.toBeDisabled()); expect(collected).not.toHaveBeenCalled();
+});
+it("an authorized Admin searches for payment only and submits the protected reference rather than a raw foreign enrollment", async () => {
+  global.fetch = vi.fn(async (url) => response(String(url).endsWith("csrf") ? { token: "csrf" } : String(url).endsWith("/cross-branch/quote") ? quote : String(url).endsWith("/cross-branch/collect") ? { receiptId: "receipt" } : { items: [{ ...items[0], paymentReference: "CP1.protected" }] }));
+  render(<CashCollectionForm sessionId="shift" allowCrossBranchSearch onCollected={vi.fn()} />); fireEvent.click(screen.getByRole("checkbox")); await choose(); fireEvent.click(screen.getByText("مراجعة مبلغ القبض")); fireEvent.click(await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال")); await screen.findByRole("link", { name: "عرض الإيصال" });
+  const posted = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith("/cross-branch/collect"))!; expect(JSON.parse(posted[1]!.body as string)).toEqual({ reference: "CP1.protected", planId: "plan", quoteHash: quote.quoteHash });
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/collections"))).toBe(false);
+});
+it("reload recovers a committed attempt before allowing a new collection without storing names or amounts", async () => {
+  const body = { reference: "CP1.protected", planId: "plan", quoteHash: quote.quoteHash }, key = "pending-attempt-key";
+  sessionStorage.setItem("academy-cash-pending:shift", JSON.stringify({ body, key, external: true }));
+  global.fetch = vi.fn(async url => response(String(url).endsWith("csrf") ? { token: "csrf" } : { status: "Confirmed", receiptId: "receipt", canDiscard: false }));
+  render(<CashCollectionForm sessionId="shift" onCollected={vi.fn()} />); await screen.findByLabelText("استعادة نتيجة التحصيل"); expect(screen.queryByLabelText("البحث باللاعب أو كوده")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("فحص نتيجة المحاولة")); await screen.findByRole("link", { name: "عرض الإيصال" }); expect(sessionStorage.getItem("academy-cash-pending:shift")).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/collect") || String(url).endsWith("/collections"))).toBe(false);
+});
+it("reload retry keeps the original body and key and an unresolved open attempt cannot be discarded", async () => {
+  const body = { reference: "CP1.protected", planId: "plan", quoteHash: quote.quoteHash }, key = "pending-attempt-key";
+  sessionStorage.setItem("academy-cash-pending:shift", JSON.stringify({ body, key, external: true }));
+  global.fetch = vi.fn(async url => response(String(url).endsWith("csrf") ? { token: "csrf" } : String(url).endsWith("collection-result") ? { status: "NotRecorded", canDiscard: false } : { receiptId: "receipt" }));
+  render(<CashCollectionForm sessionId="shift" onCollected={vi.fn()} />); await screen.findByLabelText("استعادة نتيجة التحصيل"); fireEvent.click(screen.getByText("فحص نتيجة المحاولة")); await screen.findByText(/لم يُسجل تحصيل بهذا المعرف/);
+  expect(screen.queryByText("إلغاء المحاولة غير المنفذة")).not.toBeInTheDocument(); fireEvent.click(screen.getByText("إعادة إرسال نفس التحصيل")); await screen.findByRole("link", { name: "عرض الإيصال" });
+  const posted = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith("/cross-branch/collect"))!; expect(JSON.parse(posted[1]!.body as string)).toEqual(body); expect((posted[1]!.headers as Record<string,string>)["Idempotency-Key"]).toBe(key);
+});
+it("unavailable session storage stops before any financial request is sent", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+  render(<CashCollectionForm sessionId="shift" onCollected={vi.fn()} />); await choose(); fireEvent.click(screen.getByText("مراجعة مبلغ القبض")); fireEvent.click(await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال"));
+  await screen.findByText(/لم نرسل التحصيل/); expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/collections"))).toBe(false);
+});
+it("failure to refresh the shift never reclassifies a known receipt as an uncertain payment", async () => {
+  global.fetch = vi.fn(async url => response(String(url).endsWith("csrf") ? { token: "csrf" } : String(url).endsWith("collection-quote") ? quote : String(url).endsWith("/collections") ? { receiptId: "receipt" } : { items }));
+  render(<CashCollectionForm sessionId="shift" onCollected={vi.fn().mockRejectedValue(new Error("refresh failed"))} />); await choose(); fireEvent.click(screen.getByText("مراجعة مبلغ القبض")); fireEvent.click(await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال"));
+  await screen.findByText(/تم تسجيل التحصيل والإيصال، لكن تعذر تحديث/); expect(screen.getByRole("link", { name: "عرض الإيصال" })).toBeInTheDocument(); expect(screen.queryByLabelText("استعادة نتيجة التحصيل")).not.toBeInTheDocument();
 });

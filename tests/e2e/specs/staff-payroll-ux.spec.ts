@@ -63,12 +63,12 @@ test("Additional amounts UX: configure a reason, accept one request and reject a
     await command(staffPage, "/api/v1/staff/payroll/requests", { reasonId: reason.id, amount: 150 }, `approved-${Date.now()}`);
     await command(staffPage, "/api/v1/staff/payroll/requests", { reasonId: reason.id, amount: 200 }, `rejected-${Date.now()}`);
     await page.reload();
-    const approved = page.getByRole("row").filter({ hasText: reasonName }).filter({ hasText: "150" });
+    const approved = page.getByRole("row").filter({ hasText: reasonName }).filter({ has: page.getByRole("cell", { name: "150 جنيه", exact: true }) });
     await approved.getByRole("button", { name: "مراجعة", exact: true }).click();
     const dialog = page.getByRole("dialog"); await expect(dialog).toBeVisible();
     await dialog.getByLabel("تاريخ الاستحقاق").fill("2026-10-08"); await dialog.getByRole("button", { name: "حفظ القرار" }).click();
     await expect(approved).toContainText("مقبول");
-    const rejected = page.getByRole("row").filter({ hasText: reasonName }).filter({ hasText: "200" });
+    const rejected = page.getByRole("row").filter({ hasText: reasonName }).filter({ has: page.getByRole("cell", { name: "200 جنيه", exact: true }) });
     await rejected.getByRole("button", { name: "مراجعة", exact: true }).click();
     await dialog.getByLabel("القرار").selectOption("reject"); await expect(dialog.getByLabel("تاريخ الاستحقاق")).toBeDisabled();
     await dialog.getByRole("button", { name: "حفظ القرار" }).click(); await expect(rejected).toContainText("مرفوض");

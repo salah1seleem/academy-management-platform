@@ -38,13 +38,16 @@ public sealed partial class CashRegisterService
         if(session.OpenedByMembershipId!=t.MembershipId)throw new CashRejected("التحصيل من ورديتك المفتوحة فقط.",403);
         return(session,register);
     }
-    public async Task<object> CollectionOptions(Guid id,string? search)
+    public Task<object> CollectionOptions(Guid id,string? search)=>CollectionOptionsCore(id,search,null);
+    internal Task<object> ExternalCollectionOptions(Guid id,string? search,CashPaymentActor actor)=>CollectionOptionsCore(id,search,actor);
+    private async Task<object> CollectionOptionsCore(Guid id,string? search,CashPaymentActor? external)
     {
         var(t,_)=await Context(write:true);var(session,register)=await CollectingSession(id,t);
         search=search?.Trim();if(search?.Length>100)throw new CashRejected("البحث حتى100حرف.",422);
         // Owner already has trusted academy-wide visibility. No branch or tenant
         // filter is disabled here; scoped administrators retain the same-branch path.
-        var crossBranch=t.Role==AcademyRole.AcademyOwner;
+        if(external is not null&&(external.Tenant.AcademyId!=t.AcademyId||external.Tenant.MembershipId!=t.MembershipId||external.Session!=id||external.CollectingBranch!=session.BranchId))throw new CashRejected("نطاق الدفع غير صالح.",403);
+        var crossBranch=t.Role==AcademyRole.AcademyOwner||external is not null;
         var collectionBranch=await db.Branches.Where(b=>b.Id==session.BranchId).Select(b=>b.ArabicName).SingleAsync();
         if(string.IsNullOrEmpty(search)||search.Length<2)return new{items=Array.Empty<object>(),crossBranch,collectionBranch};
         var items=await db.SportEnrollments.AsNoTracking().Where(e=>(crossBranch||e.BranchId==session.BranchId)&&e.IsActive&&e.Status==EnrollmentStatus.Active&&e.Player.IsActive&&e.Sport.IsActive&&e.Branch.IsActive&&(e.Player.ArabicName.Contains(search)||e.Player.PlayerCode.Contains(search)))
@@ -54,17 +57,20 @@ public sealed partial class CashRegisterService
             plansByBranch[branch]=await db.SubscriptionPlans.TrainingOnly().ForBranch(branch).Where(p=>p.IsActive&&p.Sport.IsActive&&p.Currency==register.Currency).OrderBy(p=>p.ArabicName).Select(p=>new CashPlanChoice(p.Id,p.ArabicName,p.SportId,p.TrainingFormat)).ToListAsync();
         return new{crossBranch,collectionBranch,items=items.Select(e=>new{e.enrollmentId,e.player,e.code,e.sport,e.BranchId,e.enrollmentBranch,plans=plansByBranch[e.BranchId].Where(p=>p.SportId==e.SportId&&PlanCatalog.FormatMatches(e.RegistrationFormat,p.TrainingFormat)).Select(p=>new{p.Id,name=p.Name})})};
     }
-    private async Task<PricedCashCollection> Price(Guid id,CashCollectionQuote body,TenantMembership t,Guid user,DiscountRules discounts)
+    private async Task<PricedCashCollection> Price(Guid id,CashCollectionQuote body,TenantMembership t,Guid user,DiscountRules discounts,VerifiedCashPayment? external=null)
     {
         var(session,register)=await CollectingSession(id,t);
-        var enrollment=await db.SportEnrollments.AsNoTracking().Include(e=>e.Branch).SingleOrDefaultAsync(e=>e.Id==body.EnrollmentId&&(t.Role==AcademyRole.AcademyOwner||e.BranchId==session.BranchId)&&e.IsActive&&e.Status==EnrollmentStatus.Active&&e.Player.IsActive&&e.Sport.IsActive&&e.Branch.IsActive);
+        external?.Check(new(t,user,id,session.BranchId),body.EnrollmentId,true,time.GetUtcNow());
+        var canCross=t.Role==AcademyRole.AcademyOwner||external is not null;
+        var enrollment=await db.SportEnrollments.AsNoTracking().Include(e=>e.Branch).SingleOrDefaultAsync(e=>e.Id==body.EnrollmentId&&(canCross||e.BranchId==session.BranchId)&&e.IsActive&&e.Status==EnrollmentStatus.Active&&e.Player.IsActive&&e.Sport.IsActive&&e.Branch.IsActive);
         if(enrollment is null)throw new CashRejected("تسجيل اللاعب غير متاح لفرع الصندوق.",404);
         var plan=await db.SubscriptionPlans.TrainingOnly().AsNoTracking().ForBranch(enrollment.BranchId).SingleOrDefaultAsync(p=>p.Id==body.PlanId&&p.SportId==enrollment.SportId&&p.IsActive&&p.Currency==register.Currency);
         if(plan is null)throw new CashRejected("الباقة غير متاحة لهذا التسجيل.",404);
         if(!PlanCatalog.FormatMatches(enrollment.RegistrationFormat,plan.TrainingFormat))throw new CashRejected("اختر باقة تطابق نوع تسجيل اللاعب.",422);
         var day=await AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
         var assignedGroupId=await db.SportEnrollments.Where(e=>e.Id==enrollment.Id).Select(e=>FoundationDbContext.AssignedGroupAt(t.AcademyId,e.Id,day)).SingleAsync();
-        if(!await db.TrainingGroups.AnyAsync(g=>g.Id==assignedGroupId&&g.IsActive&&g.BranchId==enrollment.BranchId&&g.SportId==enrollment.SportId))throw new CashRejected("أسند اللاعب لمجموعة فعالة قبل التحصيل.");
+        var groupVersion=await db.TrainingGroups.Where(g=>g.Id==assignedGroupId&&g.IsActive&&g.BranchId==enrollment.BranchId&&g.SportId==enrollment.SportId).Select(g=>(uint?)g.Version).SingleOrDefaultAsync();
+        if(groupVersion is null)throw new CashRejected("أسند اللاعب لمجموعة فعالة قبل التحصيل.");
         var price=await discounts.CalculateAsync(t.AcademyId,enrollment.PlayerId,plan.Price,user,plan:plan,branchId:enrollment.BranchId);
         if(price.FinalAmount<=0)throw new CashRejected("الخدمة بلا مبلغ نقدي مستحق؛ لا تنشئ إيصال قبض صفريًا.",422);
         // A second key must not collect the same reviewed renewal twice. The
@@ -72,7 +78,7 @@ public sealed partial class CashRegisterService
         // changes invalidate a review before any financial write.
         var service=await db.SubscriptionPeriods.AsNoTracking().Where(p=>p.SportEnrollmentId==enrollment.Id).OrderBy(p=>p.Id)
             .Select(p=>new{p.Id,p.Version,p.StartDate,p.EndDate,p.Status,p.RemainingSessions}).ToArrayAsync();
-        var hash=AcademyConfigurationService.Hash(JsonSerializer.Serialize(new{id,body.EnrollmentId,body.PlanId,user,enrollment.BranchId,collectionBranchId=session.BranchId,assignedGroupId,subscriptionClock.Today,service,terms=PlanTerms.From(plan),plan.Price,plan.Currency,price.OriginalAmount,price.DiscountType,price.DiscountValue,price.DiscountAmount,price.FinalAmount,price.DiscountReason,price.DiscountRuleId,price.DiscountRuleRevision}));
+        var hash=AcademyConfigurationService.Hash(JsonSerializer.Serialize(new{id,body.EnrollmentId,body.PlanId,user,enrollment.BranchId,enrollmentVersion=enrollment.Version,planVersion=plan.Version,collectionBranchId=session.BranchId,assignedGroupId,groupVersion,subscriptionClock.Today,service,terms=PlanTerms.From(plan),plan.Price,plan.Currency,price.OriginalAmount,price.DiscountType,price.DiscountValue,price.DiscountAmount,price.FinalAmount,price.DiscountReason,price.DiscountRuleId,price.DiscountRuleRevision}));
         var collectionBranch=await db.Branches.Where(b=>b.Id==session.BranchId).Select(b=>b.ArabicName).SingleAsync();
         return new(plan,price,hash,enrollment.BranchId,session.BranchId,enrollment.Branch.ArabicName,collectionBranch);
     }
@@ -81,7 +87,23 @@ public sealed partial class CashRegisterService
         var(t,user)=await Context(write:true);var q=await Price(id,body,t,user,discounts);
         return new{quoteHash=q.Hash,planName=q.Plan.ArabicName,originalAmount=Money(q.Price.OriginalAmount),discountAmount=Money(q.Price.DiscountAmount),amount=Money(q.Price.FinalAmount),q.Plan.Currency,q.Price.DiscountReason,q.EnrollmentBranchId,q.CollectionBranchId,q.EnrollmentBranch,q.CollectionBranch};
     }
-    public async Task<object> Collect(Guid id,CashCollectionWrite body,string key,DiscountRules discounts,CollectionService collections)
+    internal async Task<object> ExternalCollectionQuote(Guid id,CashCollectionQuote body,DiscountRules discounts,VerifiedCashPayment external)
+    {
+        var(t,user)=await Context(write:true);var q=await Price(id,body,t,user,discounts,external);
+        return new{quoteHash=q.Hash,planName=q.Plan.ArabicName,originalAmount=Money(q.Price.OriginalAmount),discountAmount=Money(q.Price.DiscountAmount),amount=Money(q.Price.FinalAmount),q.Plan.Currency,q.Price.DiscountReason,q.EnrollmentBranchId,q.CollectionBranchId,q.EnrollmentBranch,q.CollectionBranch};
+    }
+    internal async Task<CashPaymentActor> AuthorizeExternalPayment(Guid id,bool replay=false)
+    {
+        var(t,user)=await Context(write:true);await CollectionPermissions(t,true);
+        if(t.Role!=AcademyRole.AcademyOwner&&!await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="payments"&&g.IsActive&&g.Read&&g.Add))throw new CashRejected("يلزم تفويض قراءة وإضافة طلبات الدفع لاستخدام الدفع عبر الفروع.",403);
+        var session=await Session(id);
+        if(session.OpenedByMembershipId!=t.MembershipId)throw new CashRejected("التحصيل من ورديتك الشخصية فقط.",403);
+        if(!replay)await CollectingSession(id,t);
+        return new(t,user,id,session.BranchId);
+    }
+    public Task<object> Collect(Guid id,CashCollectionWrite body,string key,DiscountRules discounts,CollectionService collections)=>CollectCore(id,body,key,discounts,collections,null);
+    internal Task<object> CollectExternal(Guid id,CashCollectionWrite body,string key,DiscountRules discounts,CollectionService collections,VerifiedCashPayment external)=>CollectCore(id,body,key,discounts,collections,external);
+    private async Task<object> CollectCore(Guid id,CashCollectionWrite body,string key,DiscountRules discounts,CollectionService collections,VerifiedCashPayment? external)
     {
         var(t,user)=await Context(write:true);await CollectionPermissions(t,true);
         if(body.QuoteHash?.Length!=64)throw new CashRejected("راجع السعر قبل التحصيل.",422);
@@ -99,7 +121,7 @@ public sealed partial class CashRegisterService
         // Group transfers also lock this enrollment row before writing their
         // dated assignment. Keep the reviewed service location stable through commit.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SportEnrollments\" WHERE \"AcademyId\"={t.AcademyId} AND \"Id\"={body.EnrollmentId} FOR UPDATE");
-        var q=await Price(id,new(body.EnrollmentId,body.PlanId),t,user,discounts);
+        var q=await Price(id,new(body.EnrollmentId,body.PlanId),t,user,discounts,external);
         if(q.Hash!=body.QuoteHash)throw new CashRejected("تغير الاشتراك أو السعر أو الخصم أو شروط الباقة أو تسكين اللاعب. حدّث المراجعة قبل التأكيد.");
         var session=await Session(id);
         var paymentId=await collections.CreateCashAsync(t.AcademyId,user,body.EnrollmentId,body.PlanId,"cash-"+AcademyConfigurationService.Hash(request),"Cash",fixedSnapshot:q.Price,fixedTerms:PlanTerms.From(q.Plan));

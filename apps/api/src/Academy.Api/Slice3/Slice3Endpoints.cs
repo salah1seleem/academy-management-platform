@@ -111,7 +111,16 @@ public static class Slice3Endpoints
     {
         // Authorize/materialize the receipt BEFORE any independently scoped
         // attribution lookup. Never compose IgnoreQueryFilters into this query.
-        var receipt=await authorized.Where(x=>x.Id==id).Select(x=>new{x.Id,academyName=t.AcademyName,x.ReceiptNumber,x.PlayerNameSnapshot,x.SportNameSnapshot,x.PlanNameSnapshot,x.OriginalAmount,
+        var visible=authorized.Where(x=>x.Id==id);
+        if(!await visible.AnyAsync())
+        {
+            // A scoped staff member may read a financial receipt collected at
+            // their branch, not the child profile. Authorize the posting in an
+            // independent, normally branch-filtered query before this exact-ID read.
+            if(!staff||!await db.CashReceiptPostings.AnyAsync(p=>p.ReceiptId==id))return Results.NotFound();
+            visible=db.Receipts.IgnoreQueryFilters(["trusted-branches"]).Where(x=>x.AcademyId==t.AcademyId&&x.Id==id);
+        }
+        var receipt=await visible.Select(x=>new{x.Id,academyName=t.AcademyName,x.ReceiptNumber,x.PlayerNameSnapshot,x.SportNameSnapshot,x.PlanNameSnapshot,x.OriginalAmount,
             discountType=x.DiscountType==null?null:x.DiscountType.ToString(),x.DiscountValue,x.DiscountAmount,x.FinalAmount,x.Amount,x.Currency,
             enrollmentBranch=x.Collection.SportEnrollment.Branch.ArabicName,x.PaidAtUtc,x.PaymentMethod,x.ProviderReference}).SingleOrDefaultAsync();
         if(receipt is null)return Results.NotFound();

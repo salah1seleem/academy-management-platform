@@ -29,6 +29,10 @@ public static class CashRegisterEndpoints
         api.MapPost("/receipts/{id:guid}/void", async (Guid id, CashReceiptVoidWrite body, HttpRequest request, CashRegisterService service) => await Run(()=>service.VoidReceipt(id,body,Key(request)))).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/sessions/{id:guid}", async (Guid id, CashRegisterService service) => await Run(()=>service.Detail(id)));
         api.MapGet("/sessions/{id:guid}/collection-options", async (Guid id, string? search, CashRegisterService service) => await Run(()=>service.CollectionOptions(id,search)));
+        api.MapPost("/sessions/{id:guid}/collection-result", async (Guid id,CashCollectionResultRequest body,CashRegisterService service,CashPaymentReferences references)=>await Run(()=>service.CollectionResult(id,body,references))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/sessions/{id:guid}/cross-branch/search", async (Guid id,CrossBranchCashSearch body,CrossBranchCashPayments service)=>await Run(()=>service.Search(id,body))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/sessions/{id:guid}/cross-branch/quote", async (Guid id,CrossBranchCashQuote body,CrossBranchCashPayments service)=>await Run(()=>service.Quote(id,body))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/sessions/{id:guid}/cross-branch/collect", async (Guid id,CrossBranchCashWrite body,HttpRequest request,CrossBranchCashPayments service)=>await Run(()=>service.Collect(id,body,Key(request)))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/sessions/{id:guid}/family-quote", async (Guid id, CashFamilyQuote body, CashRegisterService service, Academy.Api.Slice3.FamilyRenewalQuoteService family) => await Run(()=>service.FamilyQuote(id,body,family))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/sessions/{id:guid}/family-collections", async (Guid id, CashFamilyCollect body, HttpRequest request, CashRegisterService service, Academy.Api.Slice3.FamilyRenewalQuoteService family, Academy.Api.Operations.CollectionService collections) => await Run(()=>service.CollectFamily(id,body,Key(request),family,collections))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/sessions/{id:guid}/collection-quote", async (Guid id, CashCollectionQuote body, CashRegisterService service, Academy.Api.Operations.DiscountRules discounts) => await Run(()=>service.CollectionQuote(id,body,discounts))).AddEndpointFilter<CsrfFilter>();
@@ -44,6 +48,7 @@ public static class CashRegisterEndpoints
     {
         try { return Results.Ok(await work()); }
         catch(CashRejected e) { return Results.Problem(statusCode:e.Status,title:e.Message); }
+        catch(ResourceScopeException) { return Results.Problem(statusCode:403,title:"هذه العملية خارج نطاق الدفع المصرح به."); }
         catch(DbUpdateConcurrencyException) { return Results.Problem(statusCode:409,title:"تغير السجل أثناء التنفيذ. حدّث المراجعة قبل التأكيد."); }
         catch(DbUpdateException e) when(e.InnerException is Npgsql.PostgresException {SqlState:"23505"}) { return Results.Problem(statusCode:409,title:"الصندوق أو الوردية مسجل بالفعل. حدّث القائمة وراجع العملية السابقة."); }
     }
@@ -117,7 +122,26 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         var (t,_)=await Context(); var session=await Session(id); var register=await Register(session.RegisterId);
         var canClose=t.Role==AcademyRole.AcademyOwner||session.OpenedByMembershipId==t.MembershipId&&await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive);
         var canCollect= !session.ClosedAtUtc.HasValue && session.OpenedByMembershipId==t.MembershipId && register.IsActive && (await config.Active(t.AcademyId))?.CashEnabled==true && await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive) && await CollectionPermissions(t,false);
-        return new {session,register.Name,register.Currency,canClose,canCollect,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts=await db.CashReceiptPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ReceiptId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Receipt.ReceiptNumber,p.Receipt.PlayerNameSnapshot,p.Receipt.PlanNameSnapshot}).ToListAsync(),productSales=await db.CashProductPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ProductSaleId,amount=Money(p.Amount),p.Currency,p.ProductSale.ProductName,p.ProductSale.Quantity,p.CreatedAtUtc}).ToListAsync(),refunds=await db.CashRefundPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new {p.Id,p.RefundId,p.Refund.PlayerId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,p.Refund.Reason,voidReceiptId=db.CashReceiptVoids.Where(v=>v.RefundId==p.RefundId).Select(v=>(Guid?)v.ReceiptId).SingleOrDefault()}).ToListAsync()};
+        var canCrossBranchPayment=canCollect&&t.Role==AcademyRole.AcademyAdmin&&await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="payments"&&g.IsActive&&g.Read&&g.Add);
+        // Session/register have ALREADY been authorized in normal branch scope.
+        // An exact-session financial projection may read receipt snapshots without
+        // acquiring operational access to a foreign child or group.
+        var receipts=await (from p in db.CashReceiptPostings
+            join r in db.Receipts.IgnoreQueryFilters(["trusted-branches"]).Where(r=>r.AcademyId==t.AcademyId) on p.ReceiptId equals r.Id
+            where p.AcademyId==t.AcademyId&&p.SessionId==session.Id
+            orderby p.CreatedAtUtc descending
+            select new{p.Id,p.ReceiptId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,r.ReceiptNumber,r.PlayerNameSnapshot,r.PlanNameSnapshot}).Take(100).ToListAsync();
+        var payouts=await(from p in db.CashRefundPostings
+            join refund in db.CollectionRefunds.IgnoreQueryFilters(["trusted-branches"]).Where(r=>r.AcademyId==t.AcademyId) on p.RefundId equals refund.Id
+            where p.AcademyId==t.AcademyId&&p.SessionId==session.Id
+            orderby p.CreatedAtUtc descending
+            select new{p.Id,p.RefundId,refund.PlayerId,amount=Money(p.Amount),p.Currency,p.CreatedAtUtc,refund.Reason,
+                receiptId=db.Receipts.Where(r=>r.AcademyId==t.AcademyId&&r.CollectionId==refund.CollectionId).Select(r=>r.Id).Single(),
+                voidReceiptId=db.CashReceiptVoids.Where(v=>v.AcademyId==t.AcademyId&&v.RefundId==p.RefundId).Select(v=>(Guid?)v.ReceiptId).SingleOrDefault()}).Take(100).ToListAsync();
+        var payoutPlayers=payouts.Select(p=>p.PlayerId).Distinct().ToArray();
+        var visiblePlayers=await db.Players.Where(p=>payoutPlayers.Contains(p.Id)).Select(p=>p.Id).ToListAsync();
+        var refunds=payouts.Select(p=>new{p.Id,p.RefundId,p.PlayerId,p.amount,p.Currency,p.CreatedAtUtc,p.Reason,p.receiptId,p.voidReceiptId,canReadPlayer=visiblePlayers.Contains(p.PlayerId)});
+        return new {session,register.Name,register.Currency,canClose,canCollect,canCrossBranchPayment,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts,productSales=await db.CashProductPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ProductSaleId,amount=Money(p.Amount),p.Currency,p.ProductSale.ProductName,p.ProductSale.Quantity,p.CreatedAtUtc}).ToListAsync(),refunds};
     }
     public async Task<object> Create(CashRegisterWrite body,string key)
     {

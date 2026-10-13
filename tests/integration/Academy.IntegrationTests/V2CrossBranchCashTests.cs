@@ -82,8 +82,11 @@ public sealed partial class V2ReceivablesTests
         // branch's cash merely because its immutable posting is outside their scope.
         var home=await db.SportEnrollments.Where(e=>e.Id==f.Enrollment).Select(e=>e.BranchId).SingleAsync();
         var ownerShift=await CashOpen(owner,f.Register,"100");var quote=await CashQuote(owner,ownerShift,f.Enrollment);var collected=await CashCollect(owner,ownerShift,f.Enrollment,quote.GetProperty("quoteHash").GetString()!);collected.EnsureSuccessStatusCode();var receiptId=(await collected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("receiptId").GetGuid();
-        Assert.Equal(HttpStatusCode.NotFound,(await admin.GetAsync($"/api/v1/subscriptions/receipts/{receiptId}")).StatusCode);
-        var collectingReport=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?allDates=true&search={code}");Assert.Equal(0,collectingReport.GetProperty("totalCount").GetInt32());
+        // V2-07E2 grants financial receipt facts at the collecting branch only;
+        // it still never grants the foreign child's operational profile.
+        Assert.Equal(HttpStatusCode.OK,(await admin.GetAsync($"/api/v1/subscriptions/receipts/{receiptId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await admin.GetAsync($"/api/v1/people/players/{f.Player}")).StatusCode);
+        var collectingReport=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?allDates=true&search={code}");Assert.Equal(1,collectingReport.GetProperty("totalCount").GetInt32());Assert.Equal("خدمة في فرع تسجيل آخر",collectingReport.GetProperty("items")[0].GetProperty("group").GetString());
         var access=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff/{member}/access"){Content=JsonContent.Create(new{allBranches=false,branches=new[]{home},actions})};var token=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");access.Headers.Add("X-CSRF-TOKEN",token.GetProperty("token").GetString());(await owner.SendAsync(access)).EnsureSuccessStatusCode();
         var homeReport=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?allDates=true&search={code}&branchId={home}");Assert.Equal(0,homeReport.GetProperty("totalCount").GetInt32());
         var unfiltered=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?allDates=true&search={code}");Assert.Equal(0,unfiltered.GetProperty("totalCount").GetInt32());

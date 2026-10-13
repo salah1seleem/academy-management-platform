@@ -702,6 +702,10 @@ footer {
 .cash-session-stats strong { font-size: 1.3rem; color: #155963; }
 @media(max-width:600px) { .cash-intro { flex-wrap: wrap; } .cash-intro > a { width: 100%; } .cash-register-card header { flex-wrap: wrap; } .cash-register-card header > .status-pill { margin-inline-start: 52px; } }
 .cash-collection-panel h2 { display: flex; align-items: center; gap: .6rem; }
+.cash-cross-choice { display: flex; align-items: center; gap: .7rem; border: 1px solid var(--border); border-radius: .85rem; padding: .85rem; margin-block: .8rem; cursor: pointer; }
+.cash-cross-choice input[type=checkbox] { width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; flex: 0 0 20px; accent-color: var(--primary); }
+.cash-cross-choice span { display: grid; gap: .25rem; min-width: 0; }
+.cash-cross-choice small { color: var(--muted); font-size: .8rem; line-height: 1.7; }
 .cash-collection-panel .form-shell { margin-block: 1rem; }
 .cash-quote { padding: 1.2rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
 .cash-quote dl { display: grid; gap: .7rem; margin-block: 1rem; }
