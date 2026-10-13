@@ -8,6 +8,7 @@ using Academy.Api.Slice2;
 using Academy.Api.Slice3;
 using Academy.Api.Slice8;
 using Academy.Infrastructure.Operations;
+using Academy.Infrastructure.Facilities;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
 using Academy.Infrastructure.Tenancy;
@@ -40,7 +41,7 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
     [Fact] public async Task Financial_export_contains_filtered_confirmed_rows_only() { using var c = await Staff(DemoSeed.OwnerEmail); var csv = await c.GetStringAsync($"/api/v1/reports/financial/export?from=2026-01-01&to=2026-12-31&sportId={Slice2DemoSeed.SwimmingId}"); Assert.Contains("السباحة", csv); Assert.DoesNotContain("فاشل", csv); }
     [Fact] public async Task Financial_export_rows_correspond_to_report() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, "/api/v1/reports/financial?from=2026-01-01&to=2026-12-31"); var csv = await c.GetStringAsync("/api/v1/reports/financial/export?from=2026-01-01&to=2026-12-31"); Assert.Equal(j.GetProperty("totalCount").GetInt32(), csv.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length - 1); }
     [Fact] public async Task Receipt_amount_equals_collection() { await using var s = Scope(); var db = Db(s); var r = await db.Receipts.Include(x => x.Collection).FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId); Assert.Equal(r.Collection.Amount, r.Amount); }
-    [Fact] public async Task Guardian_can_read_own_authorized_receipt() { var id = await ReceiptId(); using var c = await Guardian(); Assert.Equal(HttpStatusCode.OK, (await c.GetAsync($"/api/v1/guardian/subscriptions/receipts/{id}")).StatusCode); }
+    [Fact] public async Task Guardian_can_read_own_authorized_receipt() { var id = await ReceiptId(guardianLinked: true); using var c = await Guardian(); Assert.Equal(HttpStatusCode.OK, (await c.GetAsync($"/api/v1/guardian/subscriptions/receipts/{id}")).StatusCode); }
     [Fact] public async Task Guardian_cannot_read_another_payers_receipt() { using var c = await Guardian(); Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/v1/guardian/subscriptions/receipts/{Guid.NewGuid()}")).StatusCode); }
     [Fact] public async Task Academy_b_receipt_is_unavailable() { using var c = await Staff(DemoSeed.FutureOwnerEmail); var id = await ReceiptId(); Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/v1/subscriptions/receipts/{id}")).StatusCode); }
     [Fact] public async Task Attendance_filters_by_month_and_year() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, "/api/v1/reports/attendance?month=9&year=2026"); Assert.All(j.GetProperty("items").EnumerateArray(), x => Assert.StartsWith("2026-09", x.GetProperty("date").GetString())); }
@@ -68,7 +69,8 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
         Assert.Equal(await collections.SumAsync(x => x.Amount), await db.Receipts.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && collections.Select(c => c.Id).Contains(x.CollectionId)).SumAsync(x => x.Amount));
         var gross = await collections.SumAsync(x => x.Amount)
             + (await db.ProductSales.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.Status == "Confirmed" && x.ConfirmedAtUtc >= new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero) && x.ConfirmedAtUtc < new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero)).SumAsync(x => (decimal?)x.Amount) ?? 0)
-            + await ConfirmedTournamentRevenue(db);
+            + await ConfirmedTournamentRevenue(db)
+            + await ConfirmedDayPassRevenue(db);
         Assert.Equal(gross, report.GetProperty("totalAmount").GetDecimal());
     }
     [Fact] public async Task Content_areas_produce_no_financial_total() { var before = await CollectionSum(); using var c = await Guardian(); _ = await c.GetAsync("/api/v1/guardian/catalog"); _ = await c.GetAsync("/api/v1/guardian/nutrition?category=Breakfast"); Assert.Equal(before, await CollectionSum()); }
@@ -119,7 +121,17 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
         return (await db.Collections.Where(x => ids.Contains(x.Id)).SumAsync(x => (decimal?)x.Amount) ?? 0)
             - (await db.CollectionRefunds.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.CreatedAtUtc >= start && x.CreatedAtUtc < end && db.Collections.Any(c => c.AcademyId == x.AcademyId && c.Currency == "EGP" && c.Id == x.CollectionId)).SumAsync(x => (decimal?)x.Amount) ?? 0)
             + (await db.ProductSales.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Currency == "EGP" && x.Status == "Confirmed" && x.ConfirmedAtUtc >= start && x.ConfirmedAtUtc < end).SumAsync(x => (decimal?)x.Amount) ?? 0)
-            + await ConfirmedTournamentRevenue(db);
+            + await ConfirmedTournamentRevenue(db)
+            + await ConfirmedDayPassRevenue(db);
+    }
+    private static async Task<decimal> ConfirmedDayPassRevenue(FoundationDbContext db)
+    {
+        var start = new DateTimeOffset(2025, 12, 31, 22, 0, 0, TimeSpan.Zero);
+        var end = new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero);
+        return await db.DayPassTickets.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId
+            && x.Status == DayPassTicketStatus.Confirmed && x.Currency == "EGP"
+            && x.ReviewedAtUtc >= start && x.ReviewedAtUtc < end)
+            .SumAsync(x => (decimal?)x.Amount) ?? 0;
     }
     private static async Task<decimal> ConfirmedTournamentRevenue(FoundationDbContext db)
     {
@@ -131,7 +143,7 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
             .SumAsync(x => (decimal?)x.Amount) ?? 0;
     }
     private async Task<int> StoredPlayerAttendanceCount() { await using var s = Scope(); return await Db(s).PlayerAttendances.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.TrainingSession.SessionDate >= new DateOnly(2026, 9, 1) && x.TrainingSession.SessionDate <= new DateOnly(2026, 9, 30) && x.TrainingSession.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled); }
-    private async Task<Guid> ReceiptId() { await using var s = Scope(); return await Db(s).Receipts.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId).Select(x => x.Id).FirstAsync(); }
+    private async Task<Guid> ReceiptId(bool guardianLinked = false) { await using var s = Scope(); var db = Db(s); var receipts = db.Receipts.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId); if (guardianLinked) receipts = receipts.Where(x => db.GuardianPlayerLinks.Any(l => l.AcademyId == x.AcademyId && l.PlayerId == x.PlayerId && l.GuardianId == Slice2DemoSeed.MainGuardianId && l.IsActive)); return await receipts.Select(x => x.Id).FirstAsync(); }
     private AsyncServiceScope Scope() => factory.Services.CreateAsyncScope();
     private static FoundationDbContext Db(AsyncServiceScope scope) => scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
     private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(c, factory.Services); else (await Post(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); return c; }
