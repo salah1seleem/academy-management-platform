@@ -36,19 +36,22 @@ public static class SettlementComparisonEndpoints
         var api = app.MapGroup("/api/v1/finance/settlement-comparisons").RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         api.MapGet("/", async (DateOnly? from, DateOnly? to, int? page, SettlementComparisonService service) => await Run(() => service.Read(from, to, page)));
         api.MapGet("/options", async (SettlementComparisonService service) => await Run(service.Options));
+        api.MapGet("/import/template", async (SettlementComparisonService service) => await Run(service.ImportTemplate));
         api.MapPost("/preview", async (StatementLineWrite body, SettlementComparisonService service) => await Run(() => service.Preview(body))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/", async (StatementLineWrite body, SettlementComparisonService service) => await Run(() => service.Post(body))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/import/preview", async (StatementImportWrite body, SettlementComparisonService service) => await Run(() => service.PreviewImport(body))).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("import");
+        api.MapPost("/import", async (StatementImportWrite body, SettlementComparisonService service) => await Run(() => service.PostImport(body))).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("import");
         api.MapGet("/{id:guid}", async (Guid id, SettlementComparisonService service) => await Run(() => service.Detail(id)));
     }
     private static async Task<IResult> Run(Func<Task<object>> work)
     {
-        try { return Results.Ok(await work()); }
+        try { var result = await work(); return result is IResult response ? response : Results.Ok(result); }
         catch (CashRejected e) { return Results.Problem(title: e.Message, statusCode: e.Status); }
         catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23505" }) { return Results.Problem(title: "سطر الكشف أو التحصيل مطابق بالفعل. راجع السجل المحفوظ.", statusCode: 409); }
     }
 }
 
-public sealed class SettlementComparisonService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor accessor, TimeProvider time)
+public sealed partial class SettlementComparisonService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor accessor, TimeProvider time)
 {
     private async Task<(TenantMembership Tenant, Guid User)> Context()
     {
@@ -77,17 +80,21 @@ public sealed class SettlementComparisonService(FoundationDbContext db, CurrentT
         return await View(row);
     }
     private static bool Text(string? s, int max) => !string.IsNullOrWhiteSpace(s) && s.Length <= max && !s.Any(char.IsControl);
-    private async Task<StatementLineWrite> Validate(StatementLineWrite value, Guid academy)
+    private async Task<StatementLineWrite> Validate(StatementLineWrite value, Guid academy, bool checkBranch = true)
     {
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")).DateTime);
         if (value.SourceKind is not ("Bank" or "Provider") || !Text(value.AccountTag, 60) || !Text(value.StatementReference, 100) || !Text(value.LineReference, 100) || !Text(value.Provider, 60) || !Text(value.PaymentReference, 100) || value.SettlementDate < new DateOnly(2000, 1, 1) || value.SettlementDate > today || !StatementComparisonRules.Money(value.GrossAmount) || value.GrossAmount == 0 || !StatementComparisonRules.Money(value.FeeAmount) || value.FeeAmount > value.GrossAmount || !StatementComparisonRules.Money(value.NetAmount) || value.Currency?.Length != 3 || !value.Currency.All(c => c is >= 'A' and <= 'Z') || value.Note?.Length > 300 || value.Note?.Any(char.IsControl) == true)
             throw new CashRejected("راجع مرجع الكشف والمبالغ والعملة والتاريخ. لا تدخل أسرار الحساب أو بيانات بطاقة.", 422);
-        if (!await db.Branches.AnyAsync(b => b.AcademyId == academy && b.Id == value.BranchId)) throw new CashRejected("الفرع غير متاح.", 404);
+        if (checkBranch && !await db.Branches.AnyAsync(b => b.AcademyId == academy && b.Id == value.BranchId)) throw new CashRejected("الفرع غير متاح.", 404);
         return value with { AccountTag = value.AccountTag.Trim().ToUpperInvariant(), StatementReference = value.StatementReference.Trim(), LineReference = value.LineReference.Trim(), Provider = value.Provider.Trim(), PaymentReference = value.PaymentReference.Trim(), Note = string.IsNullOrWhiteSpace(value.Note) ? null : value.Note.Trim(), QuoteHash = null };
     }
     private async Task<SettlementComparison> Evaluate(StatementLineWrite body, Guid academy, Guid user)
     {
         var candidates = await db.Collections.AsNoTracking().Where(c => c.AcademyId == academy && c.SportEnrollment.BranchId == body.BranchId && c.PaymentMethod == "Online" && c.Provider == body.Provider && c.ProviderReference == body.PaymentReference).Take(2).ToListAsync();
+        return BuildComparison(body, academy, user, candidates);
+    }
+    private SettlementComparison BuildComparison(StatementLineWrite body, Guid academy, Guid user, IReadOnlyList<PaymentCollection> candidates)
+    {
         var c = candidates.Count == 1 ? candidates[0] : null;
         return new() { Id = Guid.NewGuid(), AcademyId = academy, BranchId = body.BranchId, CollectionId = c?.Id, SourceKind = body.SourceKind, AccountTag = body.AccountTag, StatementReference = body.StatementReference, LineReference = body.LineReference, Provider = body.Provider, PaymentReference = body.PaymentReference, SettlementDate = body.SettlementDate, GrossAmount = body.GrossAmount, FeeAmount = body.FeeAmount, NetAmount = body.NetAmount, Currency = body.Currency, ExpectedAmount = c?.Amount, ExpectedCurrency = c?.Currency, Result = StatementComparisonRules.Compare(body.GrossAmount, body.FeeAmount, body.NetAmount, body.Currency, c?.Amount, c?.Currency, candidates.Count > 1), ActorUserId = user, Note = body.Note, ContentHash = StatementComparisonRules.BodyHash(body), CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
     }
@@ -102,7 +109,7 @@ public sealed class SettlementComparisonService(FoundationDbContext db, CurrentT
         var (t, user) = await Context(); var clean = await Validate(body, t.AcademyId);
         if (!Text(body.QuoteHash, 64) || body.QuoteHash!.Length != 64) throw new CashRejected("اعرض المقارنة أولًا ثم أكد حفظها.", 422);
         await using var tx = await db.Database.BeginTransactionAsync();
-        // Serialize all line/collection comparisons for this tenant. This is deliberately small and manual, not a bulk import.
+        // Shared with CSV import: serialize source-line identities and per-account matched collections.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"statement-comparison:{t.AcademyId}"},0))");
         var hash = StatementComparisonRules.BodyHash(clean);
         var existing = await db.SettlementComparisons.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.SourceKind == clean.SourceKind && x.AccountTag == clean.AccountTag && x.StatementReference == clean.StatementReference && x.LineReference == clean.LineReference);

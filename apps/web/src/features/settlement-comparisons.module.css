@@ -14,3 +14,10 @@
 .fields { min-width: 0; margin-block: 1rem; }
 .fields legend { padding-inline: .5rem; font-size: .95rem; font-weight: 700; }
 .fields > label { min-width: 0; }
+.preview { display: grid; gap: 1rem; margin-block-start: 1.5rem; min-width: 0; }
+.preview h2, .preview p { margin: 0; }
+.upload { position: relative; }
+.upload .fileInput { position: absolute; width: 1px; height: 1px; opacity: 0; clip-path: inset(50%); }
+.uploadButton { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: .65rem 1rem; border: 1px solid var(--staff-border, var(--border)); border-radius: 10px; color: var(--staff-primary-700, var(--primary)); background: var(--staff-surface, #fff); cursor: pointer; }
+.upload:focus-within .uploadButton { outline: 2px solid var(--staff-primary-700, var(--primary)); outline-offset: 2px; }
+.upload:has(input:disabled) .uploadButton { cursor: default; opacity: .65; }

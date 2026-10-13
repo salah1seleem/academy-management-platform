@@ -7,20 +7,22 @@ import { formatMoneyAr } from "../lib/formatters";
 import { csrfRequest } from "./dashboard-api";
 import styles from "./settlement-comparisons.module.css";
 
-const api = "/api/v1/finance/settlement-comparisons", route = "/dashboard/finance/settlement-comparisons";
+export const statementApi = "/api/v1/finance/settlement-comparisons", statementRoute = "/dashboard/finance/settlement-comparisons";
+const api = statementApi, route = statementRoute;
 const todayCairo = () => monthToDate().to;
 export const statementResult: Record<string, string> = { Matched: "مطابق يدويًا", AmountMismatch: "المبلغ مختلف", CurrencyMismatch: "العملة مختلفة", NetMismatch: "الصافي لا يساوي الإجمالي ناقص الرسوم", Unmatched: "لا يوجد تحصيل مطابق للمرجع", Ambiguous: "المرجع غير حاسم" };
 type Row = { id: string; branchId: string; collectionId?: string; sourceKind: string; accountTag: string; statementReference: string; lineReference: string; provider: string; paymentReference: string; settlementDate: string; gross: string; fee: string; net: string; currency: string; expected?: string; expectedCurrency?: string; result: string; note?: string; actor?: string; createdAtUtc?: string; receiptId?: string };
-function useRead<T>(path: string) {
+export function useStatementRead<T>(path: string) {
   const [data, setData] = useState<T | null>(null), [error, setError] = useState("");
   useEffect(() => { let active = true; const abort = new AbortController(); void fetch(path, { signal: abort.signal, cache: "no-store" }).then(async r => { if (!r.ok) throw new Error(r.status === 403 ? "مطابقة الكشف متاحة للمالك فقط." : "تعذر تحميل المطابقة."); return r.json(); }).then(d => { if (active) setData(d); }).catch(e => { if (active && e.name !== "AbortError") setError(e.message); }); return () => { active = false; abort.abort(); }; }, [path]);
   return { data, error };
 }
-function Notice() { return <aside className={styles.notice}><strong>مقارنة كشف مُدخل يدويًا، وليست تأكيد دفع</strong><p>لسطر قبض اشتراك إلكتروني واحد، دون اتصال ببنك. لا تغيّر الإيصال أو الاشتراك؛ الرسوم لا تُرحّل مصروفًا تلقائيًا. استخدم اسم حساب مختصرًا دون أسرار أو بيانات بطاقة.</p></aside>; }
+const useRead = useStatementRead;
+function Notice() { return <aside className={styles.notice}><strong>مقارنة كشف مُدخل يدويًا، وليست تأكيد دفع</strong><p>لمقارنة أسطر قبض اشتراكات إلكترونية، دون اتصال ببنك. لا تغيّر الإيصال أو الاشتراك؛ الرسوم لا تُرحّل مصروفًا تلقائيًا. استخدم اسم حساب مختصرًا دون أسرار أو بيانات بطاقة.</p></aside>; }
 export function SettlementComparisons() {
   const [range, setRange] = useState(() => monthToDate()), [page, setPage] = useState(1);
   const query = new URLSearchParams({ page: String(page), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}) }).toString();
-  return <><PageHeader title="مطابقة كشوف التحصيل" context="المالية / مراجعة المالك" /><Link className="primary-button" href={`${route}/new`}>مقارنة سطر كشف</Link><Notice /><section className="filter-bar"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setPage(1); }}>مسح الفلاتر</button></section><Rows key={query} query={query} onPage={setPage} /></>;
+  return <><PageHeader title="مطابقة كشوف التحصيل" context="المالية / مراجعة المالك" /><div className="form-actions"><Link className="primary-button" href={`${route}/new`}>مقارنة سطر كشف</Link><Link className="secondary-button" href={`${route}/import`}>استيراد كشف CSV</Link></div><Notice /><section className="filter-bar"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setPage(1); }}>مسح الفلاتر</button></section><Rows key={query} query={query} onPage={setPage} /></>;
 }
 function Rows({ query, onPage }: { query: string; onPage: (page: number) => void }) {
   const { data, error } = useRead<{ total: number; page: number; pageSize: number; items: Row[] }>(`${api}?${query}`);
@@ -34,7 +36,8 @@ function Detail({ id }: { id: string }) {
   const { data: d, error } = useRead<Row>(`${api}/${id}`);
   return <><PageHeader title="تفاصيل مقارنة الكشف" context="المالية / مطابقة التحصيل" /><Link href={route}>العودة للمطابقة</Link><Notice />{error ? <ErrorState message={error} /> : !d ? <LoadingState /> : <section className="detail-card"><h2>{statementResult[d.result] ?? "تحتاج مراجعة"}</h2><p>{d.statementReference} · {d.lineReference} · {d.accountTag}</p><div className="cash-session-stats">{[["إجمالي الكشف", d.gross], ["الرسوم الواردة", d.fee], ["صافي الكشف", d.net]].map(([name, value]) => <div key={name}><small>{name}</small><strong>{formatMoneyAr(value, d.currency)}</strong></div>)}</div><p>التحصيل المسجل: {d.expected ? formatMoneyAr(d.expected, d.expectedCurrency) : "لم يُعثر على تحصيل مطابق"}</p><dl><dt>مرجع الدفع في الكشف</dt><dd dir="ltr">{d.paymentReference}</dd><dt>تاريخ التسوية في الكشف</dt><dd>{d.settlementDate}</dd><dt>المراجع</dt><dd>{d.actor}</dd>{d.note && <><dt>ملاحظة</dt><dd>{d.note}</dd></>}</dl>{d.receiptId && <Link className="secondary-button" href={`/dashboard/subscriptions/receipts/${d.receiptId}`}>الإيصال الأصلي</Link>}</section>}</>;
 }
-type Options = { branches: { id: string; name: string }[]; providers: string[] };
+export type StatementOptions = { branches: { id: string; name: string }[]; providers: string[] };
+type Options = StatementOptions;
 type Preview = { quoteHash: string; result: string; expected?: string; expectedCurrency?: string; gross: string; fee: string; net: string; currency: string };
 export function SettlementComparisonForm() {
   const { data, error } = useRead<Options>(`${api}/options`);
