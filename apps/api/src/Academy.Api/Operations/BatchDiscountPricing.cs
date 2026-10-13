@@ -3,6 +3,7 @@ using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
@@ -29,11 +30,14 @@ public sealed partial class DiscountRules
         var siblingEligible = (await db.GuardianPlayerLinks.IgnoreQueryFilters().Where(l => l.AcademyId == academy && l.IsActive && players.Contains(l.PlayerId) && l.Guardian.IsActive
             && db.GuardianPlayerLinks.IgnoreQueryFilters().Any(s => s.AcademyId == academy && s.IsActive && s.GuardianId == l.GuardianId && s.PlayerId != l.PlayerId && s.Player.IsActive && paidPlayers.Contains(s.PlayerId)))
             .Select(l => l.PlayerId).Distinct().ToArrayAsync()).ToHashSet();
-        // Prospective family pricing only for a verified guardian's selected, distinct children.
+        // Endpoint authorization validates the staff's read grants and every selected branch.
+        // Pricing additionally checks active same-academy membership; it never grants resource access.
+        // Prospective family pricing only for a verified family's selected, distinct children.
         // Selecting two sports for one child is not a sibling discount; a supplied phone is irrelevant.
         if (familyGuardianId.HasValue && players.Length > 1)
         {
-            var family = await db.GuardianPlayerLinks.IgnoreQueryFilters().Where(l => l.AcademyId == academy && l.GuardianId == familyGuardianId && l.IsActive && l.Guardian.IsActive && l.Guardian.UserId == actor && l.Player.IsActive && players.Contains(l.PlayerId)).Select(l => l.PlayerId).Distinct().ToArrayAsync();
+            var staff = await db.AcademyMemberships.AnyAsync(m => m.AcademyId == academy && m.UserId == actor && m.IsActive && (m.Role == AcademyRole.AcademyOwner || m.Role == AcademyRole.AcademyAdmin));
+            var family = await db.GuardianPlayerLinks.IgnoreQueryFilters().Where(l => l.AcademyId == academy && l.GuardianId == familyGuardianId && l.IsActive && l.Guardian.IsActive && (l.Guardian.UserId == actor || staff) && l.Player.IsActive && players.Contains(l.PlayerId)).Select(l => l.PlayerId).Distinct().ToArrayAsync();
             if (family.Length == players.Length) siblingEligible.UnionWith(family);
         }
         var sibling = await db.DiscountRules.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(r => r.AcademyId == academy && r.IsSiblingOffer)

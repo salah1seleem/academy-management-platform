@@ -164,7 +164,7 @@ public sealed partial class SubscriptionPaymentTests
     public async Task Family_transfer_does_not_turn_a_full_fee_waiver_into_zero_cash_collection()
     {
         await using var f = await NewFamily(); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var rule = new DiscountRule { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "إعفاء اختبار اصطناعي", Percentage = 100, Reason = "إعفاء معتمد للاختبار", Revision = 1 }; db.DiscountRules.Add(rule);
+        var rule = new DiscountRule { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, ArabicName = $"إعفاء اختبار اصطناعي {f.Guardian:N}", Percentage = 100, Reason = "إعفاء معتمد للاختبار", Revision = 1 }; db.DiscountRules.Add(rule);
         foreach (var player in await db.SportEnrollments.Where(e => f.Choices.Select(c => c.SportEnrollmentId).Contains(e.Id)).Select(e => e.PlayerId).ToListAsync()) db.PlayerDiscountLinks.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, PlayerId = player, DiscountRuleId = rule.Id });
         await db.SaveChangesAsync(); var body = await FamilyBody(f); Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Post(f.Client, FamilyRequests, body, await Csrf(f.Client))).StatusCode); Assert.False(await db.FamilyRenewalRequests.AnyAsync(r => r.RequestedByUserId == f.User)); Assert.False(await db.RenewalRequests.AnyAsync(r => r.RequestedByUserId == f.User));
     }

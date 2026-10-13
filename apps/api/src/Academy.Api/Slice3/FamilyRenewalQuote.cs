@@ -21,6 +21,10 @@ public static class FamilyRenewalEndpoints
         var api = app.MapGroup("/api/v1/guardian/subscriptions/family").RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
         api.MapGet("/options", async (FamilyRenewalQuoteService service) => await Run(service.Options));
         api.MapPost("/quote", async (FamilyRenewalWrite body, FamilyRenewalQuoteService service) => await Run(() => service.Quote(body))).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("renewal-search");
+        var staff = app.MapGroup("/api/v1/manage/family-renewals/quotes").RequireAuthorization(AcademyPermissions.SubscriptionRead, AcademyPermissions.PaymentRead);
+        staff.MapGet("/families", async (string? search, FamilyRenewalQuoteService service) => await Run(() => service.StaffFamilies(search))).RequireRateLimiting("renewal-search");
+        staff.MapGet("/{guardianId:guid}/options", async (Guid guardianId, FamilyRenewalQuoteService service) => await Run(() => service.StaffOptions(guardianId)));
+        staff.MapPost("/{guardianId:guid}/quote", async (Guid guardianId, FamilyRenewalWrite body, FamilyRenewalQuoteService service) => await Run(() => service.StaffQuote(guardianId, body))).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("renewal-search");
     }
     private static async Task<IResult> Run(Func<Task<object>> work)
     {
@@ -40,9 +44,43 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
     }
     private IQueryable<SportEnrollment> Own(Guid academy, Guid guardian) => db.SportEnrollments.AsNoTracking().Where(e => e.AcademyId == academy && e.IsActive && e.Status == EnrollmentStatus.Active && e.Player.IsActive && e.Branch.IsActive && e.Sport.IsActive && db.GuardianPlayerLinks.Any(l => l.AcademyId == academy && l.IsActive && l.Guardian.IsActive && l.GuardianId == guardian && l.PlayerId == e.PlayerId));
     private IQueryable<SubscriptionPlan> Available(Guid academy) => db.SubscriptionPlans.AsNoTracking().TrainingOnly().Where(p => p.AcademyId == academy && p.IsActive);
+    private async Task<(TenantMembership Tenant, Guid User, Guid Guardian)> StaffContext(Guid? guardian = null)
+    {
+        var t = await tenant.ResolveAsync() ?? throw new CashRejected("سجل الدخول أولًا.", 401);
+        if (t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin) || !Guid.TryParse(accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var user)) throw new CashRejected("مراجعة التجديد للإدارة المصرح لها فقط.", 403);
+        if (t.Role != AcademyRole.AcademyOwner && await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.UseActionGrants))
+        {
+            foreach (var module in new[] { "players", "subscriptions", "payments" })
+                if (!await db.StaffActionGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Module == module && g.Read)) throw new CashRejected("يلزم تفويض قراءة اللاعبين والاشتراكات وطلبات الدفع.", 403);
+        }
+        if (guardian.HasValue && (!await db.GuardianProfiles.AnyAsync(g => g.AcademyId == t.AcademyId && g.Id == guardian && g.IsActive) || !await Own(t.AcademyId, guardian.Value).AnyAsync())) throw new CashRejected("الأسرة غير متاحة في الفروع المصرح بها.", 404);
+        return (t, user, guardian ?? Guid.Empty);
+    }
+    public async Task<object> StaffFamilies(string? search)
+    {
+        var (t, _, _) = await StaffContext(); var term = search?.Trim();
+        if (term?.Length > 100) throw new CashRejected("البحث حتى100حرف.", 422);
+        if (string.IsNullOrEmpty(term) || term.Length < 3) return new { items = Array.Empty<object>() };
+        var phoneSearch = term.All(c => char.IsAsciiDigit(c) || c == '+'); var phone = EgyptPhoneNormalizer.Normalize(term);
+        if (phoneSearch && phone is null) return new { items = Array.Empty<object>() };
+        return new { items = await db.GuardianProfiles.AsNoTracking().Where(g => g.AcademyId == t.AcademyId && g.IsActive &&
+            (phoneSearch ? g.ContactPhone == phone || g.User.PhoneNumber == phone : g.DisplayName.Contains(term)) &&
+            db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.IsActive && e.Status == EnrollmentStatus.Active && e.Player.IsActive && e.Branch.IsActive && e.Sport.IsActive && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.GuardianId == g.Id && l.PlayerId == e.PlayerId && l.IsActive)))
+            .OrderBy(g => g.DisplayName).ThenBy(g => g.Id).Take(30).Select(g => new { g.Id, name = g.DisplayName, phone = g.ContactPhone ?? g.User.PhoneNumber }).ToListAsync() };
+    }
+    public async Task<object> StaffOptions(Guid guardian) => await OptionsFor(await StaffContext(guardian));
+    public async Task<object> StaffQuote(Guid guardian, FamilyRenewalWrite body)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        return (await PrepareFor(body, await StaffContext(guardian))).View;
+    }
     public async Task<object> Options()
     {
-        var (t, _, guardian) = await Context();
+        return await OptionsFor(await Context());
+    }
+    private async Task<object> OptionsFor((TenantMembership Tenant, Guid User, Guid Guardian) context)
+    {
+        var (t, _, guardian) = context;
         var enrollments = await Own(t.AcademyId, guardian).Include(e => e.Player).Include(e => e.Sport).Include(e => e.Branch).OrderBy(e => e.Player.ArabicName).ThenBy(e => e.Sport.ArabicName).ToListAsync();
         var sports = enrollments.Select(e => e.SportId).Distinct().ToArray();
         var plans = await Available(t.AcademyId).Where(p => sports.Contains(p.SportId)).Include(p => p.BranchPublications).ThenInclude(p => p.Branch).OrderBy(p => p.DisplayOrder).ThenBy(p => p.ArabicName).ToListAsync();
@@ -55,7 +93,11 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
     }
     internal async Task<(object View, string Hash, List<DiscountRules.PricingLine> Lines, Dictionary<Guid, RenewalFinancialSnapshot> Prices, Guid Guardian, Guid User)> Prepare(FamilyRenewalWrite body)
     {
-        var (t, user, guardian) = await Context();
+        return await PrepareFor(body, await Context());
+    }
+    private async Task<(object View, string Hash, List<DiscountRules.PricingLine> Lines, Dictionary<Guid, RenewalFinancialSnapshot> Prices, Guid Guardian, Guid User)> PrepareFor(FamilyRenewalWrite body, (TenantMembership Tenant, Guid User, Guid Guardian) context)
+    {
+        var (t, user, guardian) = context;
         if (body.Lines is not { Count: > 0 and <= 20 } choices || choices.Any(x => x is null || x.SportEnrollmentId == Guid.Empty || x.SubscriptionPlanId == Guid.Empty) || choices.Select(x => x.SportEnrollmentId).Distinct().Count() != choices.Count) throw new CashRejected("اختر من تسجيل واحد إلى 20 تسجيلًا، وباقة واحدة لكل تسجيل دون تكرار.", 422);
         // Caller owns the snapshot transaction, including when creating a family request.
         var ids = choices.Select(x => x.SportEnrollmentId).ToArray();

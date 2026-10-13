@@ -9,9 +9,9 @@ import { clearFinancialIntent, pendingFinancialIntent } from "../lib/pending-fin
 import styles from "./family-renewal-quote.module.css";
 
 const root = "/api/v1/guardian/subscriptions/family";
-type Plan = { id: string; name: string; amount: string; currency: string };
-type Enrollment = { id: string; playerId: string; player: string; sport: string; branch: string; plans: Plan[] };
-type Quote = { quoteHash: string; currency: string; pricingDate: string; originalAmount: string; discountAmount: string; totalAmount: string; items: { sportEnrollmentId: string; subscriptionPlanId: string; player: string; sport: string; branch: string; plan: string; originalAmount: string; discountAmount: string; finalAmount: string; discountReason?: string; currency: string }[] };
+export type Plan = { id: string; name: string; amount: string; currency: string };
+export type Enrollment = { id: string; playerId: string; player: string; sport: string; branch: string; plans: Plan[] };
+export type Quote = { quoteHash: string; currency: string; pricingDate: string; originalAmount: string; discountAmount: string; totalAmount: string; items: { sportEnrollmentId: string; subscriptionPlanId: string; player: string; sport: string; branch: string; plan: string; originalAmount: string; discountAmount: string; finalAmount: string; discountReason?: string; currency: string }[] };
 
 export function FamilyRenewalQuote() {
   const router = useRouter();

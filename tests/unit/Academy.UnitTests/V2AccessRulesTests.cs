@@ -13,6 +13,7 @@ public class V2AccessRulesTests
     [InlineData("/api/v1/people/players", "players")]
     [InlineData("/api/v1/manage/family-renewals/123", "payments")]
     [InlineData("/api/v1/manage/family-renewals/123/review", "payments")]
+    [InlineData("/api/v1/manage/family-renewals/quotes/123/quote", "payments")]
     public void Modules_have_deterministic_boundaries(string path, string module) => Assert.Equal(module, StaffAccessRules.ForPath(path));
     [Theory]
     [InlineData("GET", "/api/v1/people/players", "Read")]

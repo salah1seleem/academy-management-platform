@@ -177,7 +177,14 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     {
         using var c = await Owner(); _ = await Register(c);
         var result = await c.GetAsync($"/api/v1/manage/payment-requests?type=Renewal&status=Approved&branchId={Slice2DemoSeed.CityBranchId}&from=2026-01-01&to=2026-12-31"); Assert.True(result.IsSuccessStatusCode, await result.Content.ReadAsStringAsync() + string.Join("\n", factory.Errors));
-        var rows = (await result.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items").EnumerateArray().ToArray(); Assert.NotEmpty(rows); Assert.All(rows, x => { Assert.Equal("Renewal", x.GetProperty("type").GetString()); Assert.Equal("Approved", x.GetProperty("status").GetString()); Assert.False(string.IsNullOrWhiteSpace(x.GetProperty("sport").GetString())); Assert.Equal("فرع مدينة نصر", x.GetProperty("branch").GetString()); });
+        var rows = (await result.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items").EnumerateArray().ToArray(); Assert.NotEmpty(rows);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        foreach (var x in rows)
+        {
+            Assert.Contains(x.GetProperty("type").GetString(), new[] { "Renewal", "FamilyRenewal" }); Assert.Equal("Approved", x.GetProperty("status").GetString()); Assert.False(string.IsNullOrWhiteSpace(x.GetProperty("sport").GetString()));
+            if (x.GetProperty("type").GetString() == "FamilyRenewal") Assert.True(await db.FamilyRenewalLines.AnyAsync(l => l.AcademyId == DemoSeed.NogoomAcademyId && l.RequestId == x.GetProperty("id").GetGuid() && l.BranchId == Slice2DemoSeed.CityBranchId));
+            else Assert.Equal("فرع مدينة نصر", x.GetProperty("branch").GetString());
+        }
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await c.GetAsync("/api/v1/manage/payment-requests?from=2026-10-10&to=2026-01-01")).StatusCode);
     }
     private async Task<(Guid Id, string Email)> CreateStaff(HttpClient c, string role)

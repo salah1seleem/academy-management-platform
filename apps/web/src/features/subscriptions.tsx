@@ -168,6 +168,7 @@ export function AdminRenewalFlow() {
 
   return <>
     <PageHeader title="تجديد اشتراك" context="الاشتراكات / تجديد لاعب حالي" description="أنشئ طلب تجديد ودفع فقط؛ لا يتم التحصيل أو تمديد الاشتراك قبل تأكيد الدفع التجريبي." />
+    <Link className="secondary-button" href="/dashboard/family-renewals/quote">مراجعة تجديد عدة أبناء</Link>
     {error && <ErrorState message={error} />}
     {!initialEnrollment && <><FilterToolbar resultCount={rows.length} onReset={() => setSearch("")}>
       <SearchInput value={search} onChange={setSearch} placeholder="اسم اللاعب أو الكود أو هاتف ولي الأمر" />
