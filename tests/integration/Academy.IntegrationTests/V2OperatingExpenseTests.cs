@@ -1,0 +1,112 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Academy.Api.Auth;
+using Academy.Api.Finance;
+using Academy.Api.Operations;
+using Academy.Infrastructure.Finance;
+using Academy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Academy.IntegrationTests;
+
+public sealed partial class V2PlanPublicationTests
+{
+    [Fact]
+    public async Task Operating_expense_demo_seed_is_opt_in_repeatable_and_tenant_scoped()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        await GroupPlacementDemoSeed.Seed(db, scope.ServiceProvider.GetRequiredService<CollectionService>());
+        await OperatingExpenseDemoSeed.Seed(db, DateTimeOffset.UtcNow);
+        await OperatingExpenseDemoSeed.Seed(db, DateTimeOffset.UtcNow);
+        Assert.Equal(1, await db.OperatingExpenses.CountAsync(x => x.Id == OperatingExpenseDemoSeed.ExpenseId && x.AcademyId == DemoSeed.NogoomAcademyId));
+        Assert.Equal(1, await db.OperatingExpenseAllocations.CountAsync(x => x.ExpenseId == OperatingExpenseDemoSeed.ExpenseId));
+        Assert.False(await db.OperatingExpenses.AnyAsync(x => x.Id == OperatingExpenseDemoSeed.ExpenseId && x.AcademyId == DemoSeed.FutureAcademyId));
+    }
+
+    [Fact]
+    public async Task Operating_expense_posts_once_to_the_group_and_never_counts_as_a_receipt()
+    {
+        var f = await Fixture(); using var owner = await Staff(); using var admin = await Staff("admin.nogoom@example.test"); using var guardian = await Guardian();
+        const string root = "/api/v1/finance/operating-expenses";
+        var body = new OperatingExpenseWrite(f.A, OperatingExpenseScope.Group, f.Group, "Supplies", FacilityDay, FacilityDay, null, 200m, "EGP", "مستلزمات تدريب اصطناعية");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Write(guardian, root + "/", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, root + "/", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, root + "/", body with { Category = "Payroll" })).StatusCode);
+        var created = await Write(owner, root + "/", body); created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var before = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?allDates=true");
+        (await Write(owner, $"{root}/{id}/approve", new { })).EnsureSuccessStatusCode();
+        var quoteResponse = await Write(owner, $"{root}/{id}/quote", new { }); quoteResponse.EnsureSuccessStatusCode();
+        var quote = await quoteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(f.Group, quote.GetProperty("shares")[0].GetProperty("groupId").GetGuid());
+        Assert.Equal(200m, quote.GetProperty("total").GetDecimal());
+        var hash = quote.GetProperty("quoteHash").GetString()!;
+        var key = Guid.NewGuid().ToString();
+        var posted = await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(hash), key); posted.EnsureSuccessStatusCode();
+        var replay = await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(hash), key); replay.EnsureSuccessStatusCode();
+        Assert.True((await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("replay").GetBoolean());
+        Assert.Equal(HttpStatusCode.Conflict, (await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(hash), Guid.NewGuid().ToString())).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Equal(OperatingExpenseStatus.Posted, (await db.OperatingExpenses.SingleAsync(x => x.Id == id)).Status);
+        Assert.Equal(200m, (await db.OperatingExpenseAllocations.SingleAsync(x => x.ExpenseId == id)).Amount);
+        var groupResult = await owner.GetFromJsonAsync<JsonElement>($"{root}/allocations?groupId={f.Group}");
+        Assert.Contains(groupResult.GetProperty("items").EnumerateArray(), x => x.GetProperty("expenseId").GetGuid() == id && x.GetProperty("amount").GetDecimal() == 200m);
+        var after = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?allDates=true");
+        Assert.Equal(before.GetProperty("totalAmount").ToString(), after.GetProperty("totalAmount").ToString());
+        using var other = await Staff("owner.future@example.test");
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"{root}/{id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Facility_expense_preserves_an_unallocated_amount_and_blocks_mixed_service_loading()
+    {
+        await using var licensed = await FacilityLicenseScope.Begin(factory.Services);
+        var f = await Fixture(); using var owner = await Staff(); var resource = await FacilityFixture(owner, branch: f.A);
+        const string root = "/api/v1/finance/operating-expenses";
+        var body = new OperatingExpenseWrite(f.A, OperatingExpenseScope.Resource, resource, "Water", FacilityDay, FacilityDay, null, 100m, "EGP", null);
+        var created = await Write(owner, root + "/", body); created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Write(owner, $"{root}/{id}/approve", new { })).EnsureSuccessStatusCode();
+        var preview = await Write(owner, $"{root}/{id}/quote", new { }); preview.EnsureSuccessStatusCode();
+        var empty = await preview.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("shares")[0].GetProperty("groupId").ValueKind);
+        Assert.Equal(100m, empty.GetProperty("total").GetDecimal());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var source = await db.TrainingGroups.AsNoTracking().SingleAsync(g => g.Id == f.Group);
+        var otherGroup = Guid.NewGuid();
+        db.TrainingGroups.Add(new() { Id = otherGroup, AcademyId = DemoSeed.NogoomAcademyId, BranchId = f.A, SportId = source.SportId, AgeCategoryId = source.AgeCategoryId, TrainingLevelId = source.TrainingLevelId, ArabicName = $"مجموعة تكلفة اصطناعية {otherGroup:N}", Capacity = 10 });
+        db.ResourceBookings.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, BranchId = f.A, ResourceId = resource, TrainingGroupId = f.Group, Date = FacilityDay, StartTime = new(10,0), EndTime = new(11,0), ServiceKind = "Training", ReservedSeats = 1, ApprovedCapacitySnapshot = 10, ActorUserId = f.Owner, RequestKey = Guid.NewGuid().ToString(), RequestHash = "synthetic-expense-test" });
+        db.ResourceBookings.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, BranchId = f.A, ResourceId = resource, TrainingGroupId = otherGroup, Date = FacilityDay, StartTime = new(11,0), EndTime = new(12,0), ServiceKind = "Training", ReservedSeats = 1, ApprovedCapacitySnapshot = 10, ActorUserId = f.Owner, RequestKey = Guid.NewGuid().ToString(), RequestHash = "synthetic-expense-other-group" });
+        await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.Conflict, (await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(empty.GetProperty("quoteHash").GetString()!), Guid.NewGuid().ToString())).StatusCode);
+        var changedResponse = await Write(owner, $"{root}/{id}/quote", new { }); changedResponse.EnsureSuccessStatusCode();
+        var changed = await changedResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, changed.GetProperty("shares").GetArrayLength());
+        Assert.All(changed.GetProperty("shares").EnumerateArray(), s => Assert.Equal(50m, s.GetProperty("amount").GetDecimal()));
+        (await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(changed.GetProperty("quoteHash").GetString()!), Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
+        Assert.Equal(100m, await db.OperatingExpenseAllocations.Where(x => x.ExpenseId == id).SumAsync(x => x.Amount));
+        var groupOnly = await owner.GetFromJsonAsync<JsonElement>($"{root}/allocations?groupId={f.Group}");
+        var stored = groupOnly.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("expenseId").GetGuid() == id);
+        Assert.Equal(50m, stored.GetProperty("amount").GetDecimal());
+        Assert.Equal(100m, stored.GetProperty("expenseAmount").GetDecimal());
+
+        var mixedResponse = await Write(owner, root + "/", body with { Category = "Heating" }); mixedResponse.EnsureSuccessStatusCode();
+        var mixedId = (await mixedResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Write(owner, $"{root}/{mixedId}/approve", new { })).EnsureSuccessStatusCode();
+        db.ResourceBookings.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, BranchId = f.A, ResourceId = resource, Date = FacilityDay, StartTime = new(12,0), EndTime = new(13,0), ServiceKind = "DayPass", ReservedSeats = 1, ApprovedCapacitySnapshot = 10, ActorUserId = f.Owner, RequestKey = Guid.NewGuid().ToString(), RequestHash = "synthetic-mixed-cost-test" });
+        await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, $"{root}/{mixedId}/quote", new { })).StatusCode);
+        Assert.False(await db.OperatingExpenseAllocations.AnyAsync(x => x.ExpenseId == mixedId));
+    }
+
+    private static async Task<HttpResponseMessage> ExpenseCommand(HttpClient client, string path, object body, string key)
+    {
+        var csrf = await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
+        request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString());
+        request.Headers.Add("Idempotency-Key", key);
+        return await client.SendAsync(request);
+    }
+}

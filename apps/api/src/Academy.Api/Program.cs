@@ -149,6 +149,7 @@ builder.Services.AddScoped<SubscriptionAdjustmentService>();
 builder.Services.AddScoped<SubscriptionDiscountService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<PlayerCardService>();
+builder.Services.AddScoped<Academy.Api.Finance.OperatingExpenseService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ObservationService>();
 builder.Services.AddScoped<Academy.Api.Facilities.VisitService>();
 builder.Services.AddScoped<TrainingSessionGenerator>();
@@ -374,6 +375,7 @@ app.MapPayroll();
 app.MapVersionedConfiguration();
 app.MapReceivables();
 app.MapReceivableCredit();
+app.MapOperatingExpenses();
 app.MapCashRegisters();
 app.MapProviderQuarantine();
 app.MapSettlementComparisons();
@@ -452,6 +454,10 @@ if (app.Environment.IsEnvironment("Demo"))
             }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) { await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await TrainingFormatDemoSeed.Seed(db); await GroupTransferDemoSeed.Seed(db); await CompensationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await GroupCreationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); await AttendanceStatesDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>()); }
             if (app.Configuration.GetValue<bool>("Demo:GroupPlacementSeedEnabled")) await PlacementRecommendationDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+            if (app.Configuration.GetValue<bool>("Demo:OperatingExpenseSeedEnabled")) {
+                await GroupPlacementDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<CollectionService>());
+                await OperatingExpenseDemoSeed.Seed(db, app.Services.GetRequiredService<TimeProvider>().GetUtcNow());
+            }
         }
         await PlatformIdentity.SeedDemo(app.Services);
     }

@@ -18,6 +18,7 @@ const regressionSeeds = [
   "CrossBranchCash",
   "CrossBranchFamily",
   "DayPass",
+  "OperatingExpense",
 ].map(name => `Demo__${name}SeedEnabled=true`).join(" ");
 
 const localConnectionFallback = process.env.ConnectionStrings__Default

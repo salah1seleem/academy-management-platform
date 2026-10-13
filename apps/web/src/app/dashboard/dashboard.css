@@ -237,6 +237,21 @@
 
 /* Forms and details */
 .dashboard-shell .form-shell { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; max-width: 920px; padding: 24px; }
+.dashboard-shell .operating-expenses-page { display: grid; min-width: 0; gap: 16px; }
+.dashboard-shell .operating-expenses-page > * { min-width: 0; max-width: none; margin: 0; }
+.dashboard-shell .operating-expense-form { display: block; max-width: none; }
+.dashboard-shell .operating-expense-form .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; margin-block-end: 16px; }
+.dashboard-shell .operating-expense-form .form-grid > label,
+.dashboard-shell .operating-expenses-page > .filter-bar > label { display: grid; min-width: 0; gap: 5px; }
+.dashboard-shell .operating-expense-form .form-grid :is(input, select),
+.dashboard-shell .operating-expenses-page > .filter-bar input,
+.dashboard-shell .operating-expenses-page .detail-card select { width: 100%; min-width: 0; max-width: 100%; min-height: 42px; }
+.dashboard-shell .operating-expenses-page > .filter-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: 10px; align-items: end; padding: 14px; background: var(--staff-surface); border: 1px solid var(--staff-border); border-radius: var(--staff-radius-md); }
+.dashboard-shell .operating-expenses-page > .filter-bar button { min-height: 42px; }
+@media (max-width: 47.99rem) {
+  .dashboard-shell .operating-expense-form .form-grid,
+  .dashboard-shell .operating-expenses-page > .filter-bar { grid-template-columns: minmax(0, 1fr); }
+}
 .dashboard-shell .form-shell > h2 { grid-column: 1 / -1; margin: 14px 0 -2px; padding-block-end: 8px; border-block-end: 1px solid var(--staff-border); font-size: 17px; font-weight: 700; }
 .dashboard-shell .form-shell > label,
 .dashboard-shell .field,

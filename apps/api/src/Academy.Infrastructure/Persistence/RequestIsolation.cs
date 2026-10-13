@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.Facilities;
+using Academy.Infrastructure.Finance;
 using Academy.Infrastructure.Content;
 using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.Operations;
@@ -48,6 +49,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<CashReceiptPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashProductPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<DayPassTicket>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<OperatingExpense>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<OperatingExpenseAllocation>(b, x => OperatingExpenses.Any(e => e.Id == x.ExpenseId));
         BranchFilter<CashRefundPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashReceiptVoid>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ProviderEventQuarantine>(b, x => RequestBranchIds.Contains(x.BranchId));
