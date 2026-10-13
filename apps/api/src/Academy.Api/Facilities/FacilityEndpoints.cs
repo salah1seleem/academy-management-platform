@@ -98,8 +98,8 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         if (member.Role == AcademyRole.AcademyAdmin)
         {
             var grant = await db.StaffActionGrants.SingleOrDefaultAsync(x => x.MembershipId == member.Id && x.Module == "facilities" && x.IsActive);
-            var allowed = member.UseActionGrants ? grant?.Read == true && (action == "Add" ? grant.Add : grant.Edit)
-                : await db.StaffGrants.AnyAsync(x => x.MembershipId == member.Id && x.Permission == AcademyPermissions.FacilitiesManage && x.IsActive && x.Allowed);
+            var allowed = member.UseActionGrants ? grant?.Read == true && (action == "Read" || action == "Add" && grant.Add || action == "Edit" && grant.Edit)
+                : await db.StaffGrants.AnyAsync(x => x.MembershipId == member.Id && x.Permission == (action == "Read" ? AcademyPermissions.FacilitiesRead : AcademyPermissions.FacilitiesManage) && x.IsActive && x.Allowed);
             if (!allowed) throw new FacilityRejected("صلاحية إدارة المرافق غير متاحة.", 403);
         }
         return (t, actor);
@@ -206,6 +206,7 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         var row = await db.ResourceBookings.SingleOrDefaultAsync(x => x.Id == id) ?? throw new FacilityRejected("الحجز غير متاح.", 404); await Lock(row.ResourceId);
         // Re-read after the resource lock; retries do not rewrite the first cancellation.
         await db.Entry(row).ReloadAsync(); if (row.Date < await Today()) throw new FacilityRejected("الحجوزات التاريخية لا تعدل من هذه الشاشة.");
+        if (await db.DayPassTickets.AnyAsync(x => x.ResourceBookingId == row.Id && (x.Status == DayPassTicketStatus.Confirmed || x.Status == DayPassTicketStatus.UnderReview))) throw new FacilityRejected("للموعد تذاكر قيد المراجعة أو مؤكدة. سوّ الطلبات صراحة قبل تحرير المورد.");
         if (row.State == ResourceBookingState.Reserved && row.TrainingSessionId.HasValue && await db.TrainingSessions.AnyAsync(s => s.Id == row.TrainingSessionId && s.Status != TrainingSessionStatus.Cancelled)) throw new FacilityRejected("الحجز مرتبط بحصة قائمة. ألغِ الحصة أو عدّل جدول المجموعة حتى يبقى الموعد والمورد متزامنين.");
         if (row.State != ResourceBookingState.Cancelled) { row.State = ResourceBookingState.Cancelled; row.CancelledByUserId = actor; row.CancelledAtUtc = time.GetUtcNow(); row.UpdatedAtUtc = time.GetUtcNow(); await db.SaveChangesAsync(); }
         await tx.CommitAsync(); return row;

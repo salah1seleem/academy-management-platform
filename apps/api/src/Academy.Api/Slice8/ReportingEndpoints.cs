@@ -8,6 +8,7 @@ using Academy.Api.Operations;
 using Academy.Api.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Facilities;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
@@ -41,9 +42,11 @@ public static partial class ReportingEndpoints
         var collections = FinancialQuery(academyId, range.Currency, range.StartUtc, range.EndUtcExclusive, null, branchId, null, null, null, db);
         var products = ProductFinancialQuery(academyId, range.Currency, range.StartUtc, range.EndUtcExclusive, null, branchId, null, null, db);
         var tournaments = TournamentQuery(academyId, range.Currency, range.StartUtc, range.EndUtcExclusive, null, branchId, null, null, db);
+        var dayPasses = DayPassFinancialQuery(academyId, range.Currency, range.StartUtc, range.EndUtcExclusive, null, branchId, null, null, null, db);
         var c = await collections.Select(x => new { x.Id, x.Amount, x.PaymentMethod, x.ConfirmedAtUtc }).ToListAsync();
         var p = await products.Select(x => new { x.Id, x.Amount, x.PaymentMethod, ConfirmedAtUtc = x.ConfirmedAtUtc!.Value }).ToListAsync();
         p.AddRange(await tournaments.Select(x => new { x.Id, x.Amount, x.PaymentMethod, ConfirmedAtUtc = x.ConfirmedAtUtc!.Value }).ToListAsync());
+        p.AddRange(await dayPasses.Select(x => new { x.Id, x.Amount, PaymentMethod = (string?)"Online", ConfirmedAtUtc = x.ReviewedAtUtc!.Value }).ToListAsync());
         var refundRows = await RefundFinancialQuery(academyId,range.Currency,range.StartUtc,range.EndUtcExclusive,null,branchId,null,null,null,db)
             .Select(r=>new {amount=-r.Amount,PaymentMethod=r.PayoutMethod ?? (db.CashRefundPostings.Any(p=>p.RefundId==r.Id)?"Cash":"Unspecified"),ConfirmedAtUtc=r.CreatedAtUtc}).ToListAsync();
         var money = c.Select(x => new { amount = x.Amount, x.PaymentMethod, x.ConfirmedAtUtc }).Concat(p.Select(x => new { amount = x.Amount, PaymentMethod = x.PaymentMethod!, x.ConfirmedAtUtc })).Concat(refundRows).ToList();
@@ -56,6 +59,7 @@ public static partial class ReportingEndpoints
         var nr = await pendingRenewals.CountAsync(); var nn = await pendingNew.CountAsync(); var np = await pendingProducts.CountAsync();
         nr += await db.FamilyRenewalRequests.CountAsync(x => x.AcademyId == academyId && x.Status == FamilyRenewalStatus.Pending && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive && (!branchId.HasValue || x.Lines.Any(l => l.BranchId == branchId)));
         var nt = await db.TournamentPayments.CountAsync(x => x.AcademyId == academyId && x.Status == "Pending" && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive && (!branchId.HasValue || db.SportEnrollments.Any(e => e.AcademyId == academyId && e.Id == x.EnrollmentId && e.BranchId == branchId)));
+        var nd = await db.DayPassTickets.CountAsync(x => x.AcademyId == academyId && x.Status == DayPassTicketStatus.UnderReview && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive && (!branchId.HasValue || x.BranchId == branchId));
         var subscriptionTotal = await db.SubscriptionPeriods.Where(x => x.AcademyId == academyId && (!branchId.HasValue || x.SportEnrollment.BranchId == branchId) && x.SportEnrollment.IsActive && x.SportEnrollment.Player.IsActive && x.Status != SubscriptionPeriodStatus.Cancelled).Select(x => x.SportEnrollment.PlayerId).Distinct().CountAsync();
         var todayAttendance = db.PlayerAttendances.Where(x => x.AcademyId == academyId && x.TrainingSession.SessionDate >= range.From && x.TrainingSession.SessionDate <= range.To && (!branchId.HasValue || x.TrainingSession.BranchId == branchId) && x.TrainingSession.Status != TrainingSessionStatus.Cancelled);
         var bySport = await collections.GroupBy(x => x.SportEnrollment.Sport.ArabicName).Select(x => new { name = x.Key, amount = x.Sum(y => y.Amount), count = x.Count() }).ToListAsync();
@@ -82,8 +86,8 @@ public static partial class ReportingEndpoints
         return Results.Ok(new {
             asOfDate = today, from = range.From, to = range.To, currency = academy.DefaultCurrency,
             collections = new { total = money.Sum(x => x.amount), today = daily.Sum(x => x.amount), month = money.Sum(x => x.amount), todayCash = daily.Where(x => x.PaymentMethod == "Cash").Sum(x => x.amount), todayOnline = daily.Where(x => x.PaymentMethod != "Cash" && x.PaymentMethod!="Unspecified").Sum(x => x.amount), todayUnspecified=daily.Where(x=>x.PaymentMethod=="Unspecified").Sum(x=>x.amount), monthCash = money.Where(x => x.PaymentMethod == "Cash").Sum(x => x.amount), monthOnline = money.Where(x => x.PaymentMethod != "Cash" && x.PaymentMethod!="Unspecified").Sum(x => x.amount), monthUnspecified=money.Where(x=>x.PaymentMethod=="Unspecified").Sum(x=>x.amount) },
-            paymentRequests = new { total = nr + nn + np + nt, newEnrollments = nn, renewals = nr, products = np, tournaments = nt },
-            payments = new { confirmed = c.Count + p.Count, pending = nr + nn + np + nt },
+            paymentRequests = new { total = nr + nn + np + nt + nd, newEnrollments = nn, renewals = nr, products = np, tournaments = nt, dayPasses = nd },
+            payments = new { confirmed = c.Count + p.Count, pending = nr + nn + np + nt + nd },
             subscriptions = new { total = subscriptionTotal, active = await active.Select(x => x.SportEnrollment.PlayerId).Distinct().CountAsync(), expiring = await active.Where(x => x.EndDate <= range.To.AddDays(7)).Select(x => x.SportEnrollment.PlayerId).Distinct().CountAsync(), expired = await periods.Where(x => (x.EndDate < range.To || (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && x.RemainingSessions <= 0) && !active.Any(a => a.SportEnrollment.PlayerId == x.SportEnrollment.PlayerId)).Select(x => x.SportEnrollment.PlayerId).Distinct().CountAsync() },
             activePlayers = await active.Select(x => x.SportEnrollment.PlayerId).Distinct().CountAsync(),
             coaches = await db.AcademyMemberships.CountAsync(x => x.AcademyId == academyId && x.Role == AcademyRole.Coach && x.IsActive && (!branchId.HasValue || db.StaffGroupAssignments.Any(a => a.AcademyId == academyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive && a.TrainingGroup.BranchId == branchId))),
@@ -98,24 +102,27 @@ public static partial class ReportingEndpoints
         var current = (await tenant.ResolveAsync())!;
         var range = await FinancialRange(current.AcademyId, from, to, db, clock, allDates == true);
         if (range.Error is not null) return range.Error;
-        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament")) return Validation("collectionType", "نوع التحصيل غير صالح.");
+        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament" or "DayPass")) return Validation("collectionType", "نوع التحصيل غير صالح.");
         var query = FinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var productQuery = ProductFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
         var tournamentQuery = TournamentQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
+        var dayPassQuery = DayPassFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var refundQuery=RefundFinancialQuery(current.AcademyId,range.Currency,range.StartUtc,range.EndUtcExclusive,sportId,branchId,planId,provider,search,db);
-        if (collectionType is "Product" or "Tournament") query = query.Where(x => false);
-        if (collectionType is "Product" or "Tournament") refundQuery=refundQuery.Where(x=>false);
-        if (collectionType is "Subscription" or "Tournament" || planId.HasValue) productQuery = productQuery.Where(x => false);
-        if (collectionType is "Subscription" or "Product" || planId.HasValue) tournamentQuery = tournamentQuery.Where(x => false);
-        var count = await query.CountAsync() + await productQuery.CountAsync() + await tournamentQuery.CountAsync()+await refundQuery.CountAsync();
-        var total = (await query.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await productQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await tournamentQuery.SumAsync(x => (decimal?)x.Amount) ?? 0);
+        if (collectionType is "Product" or "Tournament" or "DayPass") query = query.Where(x => false);
+        if (collectionType is "Product" or "Tournament" or "DayPass") refundQuery=refundQuery.Where(x=>false);
+        if (collectionType is "Subscription" or "Tournament" or "DayPass" || planId.HasValue) productQuery = productQuery.Where(x => false);
+        if (collectionType is "Subscription" or "Product" or "DayPass" || planId.HasValue) tournamentQuery = tournamentQuery.Where(x => false);
+        if (collectionType is "Subscription" or "Product" or "Tournament") dayPassQuery = dayPassQuery.Where(x => false);
+        var count = await query.CountAsync() + await productQuery.CountAsync() + await tournamentQuery.CountAsync()+await refundQuery.CountAsync()+await dayPassQuery.CountAsync();
+        var total = (await query.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await productQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await tournamentQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await dayPassQuery.SumAsync(x => (decimal?)x.Amount) ?? 0);
         var refunds = await refundQuery.SumAsync(r => (decimal?)r.Amount) ?? 0;
         var size = Math.Clamp(pageSize ?? 50, 1, 100); var currentPage = Math.Clamp(page ?? 1, 1, 100000);
-        var ids = await query.Select(x => new { x.Id, Date = x.ConfirmedAtUtc }).Concat(productQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(tournamentQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(refundQuery.Select(x=>new{x.Id,Date=x.CreatedAtUtc})).OrderByDescending(x => x.Date).ThenBy(x => x.Id).Skip((currentPage - 1) * size).Take(size).Select(x => x.Id).ToListAsync();
+        var ids = await query.Select(x => new { x.Id, Date = x.ConfirmedAtUtc }).Concat(productQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(tournamentQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(refundQuery.Select(x=>new{x.Id,Date=x.CreatedAtUtc})).Concat(dayPassQuery.Select(x=>new{x.Id,Date=x.ReviewedAtUtc!.Value})).OrderByDescending(x => x.Date).ThenBy(x => x.Id).Skip((currentPage - 1) * size).Take(size).Select(x => x.Id).ToListAsync();
         var rows = await FinancialRows(query.Where(x => ids.Contains(x.Id)), current.AcademyId, db).ToListAsync();
         rows.AddRange(await ProductFinancialRows(productQuery.Where(x => ids.Contains(x.Id)), db).ToListAsync());
         rows.AddRange(await TournamentRows(tournamentQuery.Where(x => ids.Contains(x.Id)), db).ToListAsync());
         rows.AddRange(await RefundFinancialRows(refundQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
+        rows.AddRange(await DayPassFinancialRows(dayPassQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
         return Results.Ok(new { from = range.From, to = range.To, totalAmount = total, totalRefunds = refunds, netAmount = total - refunds, totalCount = count, currency = range.Currency, page = currentPage, pageSize = size, items = rows.OrderByDescending(x => x.ConfirmedAtUtc).ThenBy(x => x.CollectionId) });
     }
 
@@ -124,19 +131,21 @@ public static partial class ReportingEndpoints
         var current = (await tenant.ResolveAsync())!;
         var range = await FinancialRange(current.AcademyId, from, to, db, clock, allDates == true);
         if (range.Error is not null) return range.Error;
-        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament")) return Validation("collectionType", "نوع التحصيل غير صالح.");
+        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament" or "DayPass")) return Validation("collectionType", "نوع التحصيل غير صالح.");
         var query = FinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var products = ProductFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
         var tournaments = TournamentQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
+        var dayPasses = DayPassFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var refunds=RefundFinancialQuery(current.AcademyId,range.Currency,range.StartUtc,range.EndUtcExclusive,sportId,branchId,planId,provider,search,db);
-        var count = (collectionType is "Product" or "Tournament" ? 0 : await query.CountAsync()+await refunds.CountAsync()) + (collectionType is "Subscription" or "Tournament" || planId.HasValue ? 0 : await products.CountAsync()) + (collectionType is "Subscription" or "Product" || planId.HasValue ? 0 : await tournaments.CountAsync());
+        var count = (collectionType is "Product" or "Tournament" or "DayPass" ? 0 : await query.CountAsync()+await refunds.CountAsync()) + (collectionType is "Subscription" or "Tournament" or "DayPass" || planId.HasValue ? 0 : await products.CountAsync()) + (collectionType is "Subscription" or "Product" or "DayPass" || planId.HasValue ? 0 : await tournaments.CountAsync()) + (collectionType is "Subscription" or "Product" or "Tournament" ? 0 : await dayPasses.CountAsync());
         if (count > MaxExportRows) return Results.Problem(statusCode: 413, title: "نطاق التصدير كبير", detail: $"الحد الأقصى {MaxExportRows} سجل.");
-        var rows = collectionType is "Product" or "Tournament" ? new List<FinancialRow>() : await FinancialRows(query.OrderBy(x => x.ConfirmedAtUtc), current.AcademyId, db).ToListAsync();
-        if (collectionType is not ("Subscription" or "Tournament") && !planId.HasValue) rows.AddRange(await ProductFinancialRows(products, db).ToListAsync());
-        if (collectionType is not ("Subscription" or "Product") && !planId.HasValue) rows.AddRange(await TournamentRows(tournaments, db).ToListAsync());
-        if(collectionType is not ("Product" or "Tournament")) rows.AddRange(await RefundFinancialRows(refunds,db).ToListAsync());
+        var rows = collectionType is "Product" or "Tournament" or "DayPass" ? new List<FinancialRow>() : await FinancialRows(query.OrderBy(x => x.ConfirmedAtUtc), current.AcademyId, db).ToListAsync();
+        if (collectionType is not ("Subscription" or "Tournament" or "DayPass") && !planId.HasValue) rows.AddRange(await ProductFinancialRows(products, db).ToListAsync());
+        if (collectionType is not ("Subscription" or "Product" or "DayPass") && !planId.HasValue) rows.AddRange(await TournamentRows(tournaments, db).ToListAsync());
+        if(collectionType is not ("Product" or "Tournament" or "DayPass")) rows.AddRange(await RefundFinancialRows(refunds,db).ToListAsync());
+        if(collectionType is not ("Subscription" or "Product" or "Tournament")) rows.AddRange(await DayPassFinancialRows(dayPasses,db).ToListAsync());
         var csv = new List<string[]> { new[] { "رقم الإيصال", "اللاعب", "الرياضة", "الفرع", "المجموعة", "الباقة", "المبلغ", "العملة", "طريقة الدفع", "مزود الدفع", "مرجع المزود", "وقت التحصيل", "الاسترداد", "الصافي", "نوع التحصيل" } };
-        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="Void"?"عكس إيصال نقدي":x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
+        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="DayPass"?"زيارة يومية":x.CollectionType=="Void"?"عكس إيصال نقدي":x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
         return Csv(csv, $"financial-collections-{range.From:yyyy-MM}.csv");
     }
 
@@ -209,6 +218,26 @@ public static partial class ReportingEndpoints
         if (!string.IsNullOrWhiteSpace(search)) { var value = search.Trim(); query = query.Where(x => x.SportEnrollment.Player.ArabicName.Contains(value) || x.SportEnrollment.Player.PlayerCode.Contains(value) || db.Receipts.Any(r => r.AcademyId == academyId && r.CollectionId == x.Id && r.ReceiptNumber.Contains(value))); }
         return query;
     }
+
+    private static IQueryable<DayPassTicket> DayPassFinancialQuery(Guid academyId, string currency, DateTimeOffset start, DateTimeOffset end, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, FoundationDbContext db)
+    {
+        var query = db.DayPassTickets.AsNoTracking().Where(x => x.AcademyId == academyId && x.Status == DayPassTicketStatus.Confirmed && x.Currency == currency && x.ReviewedAtUtc >= start && x.ReviewedAtUtc < end);
+        if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        if (planId.HasValue) query = query.Where(x => x.SubscriptionPlanId == planId);
+        if (sportId.HasValue) query = query.Where(x => db.ResourceBookings.Any(b => b.Id == x.ResourceBookingId && db.FacilityResources.Any(r => r.Id == b.ResourceId && db.FacilitySpaces.Any(s => s.Id == r.FacilitySpaceId && s.SportId == sportId))));
+        if (!string.IsNullOrWhiteSpace(provider) && provider is not ("Online" or "Manual")) query = query.Where(x => false);
+        if (!string.IsNullOrWhiteSpace(search)) { var value = search.Trim(); query = query.Where(x => x.Player.ArabicName.Contains(value) || x.Player.PlayerCode.Contains(value)); }
+        return query;
+    }
+
+    private static IQueryable<FinancialRow> DayPassFinancialRows(IQueryable<DayPassTicket> query, FoundationDbContext db) =>
+        from ticket in query
+        join booking in db.ResourceBookings on ticket.ResourceBookingId equals booking.Id
+        join resource in db.FacilityResources on booking.ResourceId equals resource.Id
+        join space in db.FacilitySpaces on resource.FacilitySpaceId equals space.Id
+        join sport in db.Sports on space.SportId equals sport.Id
+        join branch in db.Branches on ticket.BranchId equals branch.Id
+        select new FinancialRow(ticket.Id, ticket.Id, "DP-" + ticket.Id.ToString(), ticket.Player.ArabicName, sport.ArabicName, branch.ArabicName, resource.Name, ticket.PlanName, ticket.Amount, ticket.Currency, "Online", "Manual", "proof-reviewed", ticket.ReviewedAtUtc!.Value, 0, "DayPass");
 
     private static IQueryable<FinancialRow> FinancialRows(IQueryable<PaymentCollection> query, Guid academyId, FoundationDbContext db) => query.Select(x => new FinancialRow(
         x.Id,

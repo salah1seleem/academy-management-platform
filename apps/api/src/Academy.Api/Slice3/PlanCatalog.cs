@@ -50,7 +50,7 @@ public static class PlanCatalog
         var plan = id.HasValue ? await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id) : null;
         if (id.HasValue && plan is null) return Results.NotFound();
         if (plan is not null && request.ExpectedRevision.HasValue && plan.Revision != request.ExpectedRevision.Value) return Results.Conflict(new { message = "عدّل مستخدم آخر هذه الباقة. أعد تحميلها قبل الحفظ." });
-        if (plan is not null && (plan.SportId != request.SportId || plan.ServiceKind != request.ServiceKind) && (await db.RenewalRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id) || await db.NewEnrollmentRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id)))
+        if (plan is not null && (plan.SportId != request.SportId || plan.ServiceKind != request.ServiceKind) && (await db.RenewalRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id) || await db.NewEnrollmentRequests.AnyAsync(x => x.SubscriptionPlanId == plan.Id) || await db.DayPassTickets.AnyAsync(x => x.SubscriptionPlanId == plan.Id)))
             return Results.Conflict(new { message = "الباقة مستخدمة. أنشئ باقة منفصلة للرياضة الأخرى مع حفظ التاريخ." });
         var currency = await db.Academies.Where(x => x.Id == t.AcademyId).Select(x => x.DefaultCurrency).SingleAsync();
         plan ??= new SubscriptionPlan { Id = planId, AcademyId = t.AcademyId, ArabicName = "", Currency = currency, CreatedAtUtc = clock.UtcNow };

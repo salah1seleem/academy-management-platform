@@ -141,6 +141,7 @@ builder.Services.AddScoped<SettlementComparisonService>();
 builder.Services.AddScoped<FamilyRenewalQuoteService>();
 builder.Services.AddScoped<FreeTrainingService>();
 builder.Services.AddScoped<ReceivableCreditService>();
+builder.Services.AddScoped<Academy.Api.Facilities.DayPassService>();
 builder.Services.AddScoped<FamilyRequestService>();
 builder.Services.AddScoped<DiscountRules>();
 builder.Services.AddScoped<RenewalCreationService>();
@@ -383,6 +384,7 @@ app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
 Academy.Api.Facilities.VisitEndpoints.MapVisits(app);
+Academy.Api.Facilities.DayPassEndpoints.MapDayPass(app);
 app.MapCoachOverrides();
 
 if (args.Contains("--reset-football-demo"))
@@ -422,6 +424,10 @@ if (app.Environment.IsEnvironment("Demo"))
             await DiscountPricingDemoSeed.SeedAsync(db);
             await RenewalOpportunityDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:FacilitiesSeedEnabled")) await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:DayPassSeedEnabled")) {
+                await Academy.Api.Facilities.FacilityDemoSeed.Seed(db);
+                await Academy.Api.Facilities.DayPassDemoSeed.Seed(db, app.Services.GetRequiredService<TimeProvider>());
+            }
             if (app.Configuration.GetValue<bool>("Demo:ResourceTimetableSeedEnabled")) await Academy.Api.Facilities.ResourceTimetableDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:UnassignedEnrollmentSeedEnabled")) await UnassignedEnrollmentDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ObservationSeedEnabled")) {

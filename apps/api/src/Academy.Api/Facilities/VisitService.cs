@@ -11,7 +11,7 @@ using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Facilities;
-public sealed record EntryWrite(Guid? EnrollmentId, Guid? GuardianId = null, Guid? AccompanyingVisitId = null, bool IdentityConfirmed = false);
+public sealed record EntryWrite(Guid? EnrollmentId, Guid? GuardianId = null, Guid? AccompanyingVisitId = null, bool IdentityConfirmed = false, Guid? DayPassTicketId = null);
 public sealed record ExitWrite(uint ExpectedVersion);
 public sealed record VisitCardWrite(string Code);
 public sealed partial class VisitService(FoundationDbContext db, FacilityService facilities, TimeProvider clock)
@@ -64,11 +64,19 @@ public sealed partial class VisitService(FoundationDbContext db, FacilityService
         if (period is null) throw new FacilityRejected("لا توجد خدمة تدريب صالحة: راجع الاشتراك أو التجميد أو رصيد الحصص. لم يسجل دخول أو حضور.");
         entitlement.SubscriptionPeriodId = period.Id; return entitlement;
     }
+    private async Task<AccessEntitlement> DayPass(ResourceBooking booking, Guid ticketId, Guid actor, (DateTimeOffset From, DateTimeOffset To) window)
+    {
+        if (booking.ServiceKind != nameof(AcademyServiceKind.DayPass) || booking.TrainingSessionId.HasValue) throw new FacilityRejected("التذكرة لا تخص هذا الموعد.", 404);
+        var ticket = await db.DayPassTickets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == ticketId && x.ResourceBookingId == booking.Id && x.Status == DayPassTicketStatus.Confirmed && x.BranchId == booking.BranchId) ?? throw new FacilityRejected("لا توجد تذكرة زيارة مؤكدة لهذا الموعد.", 404);
+        if (await db.AccessEntitlements.AnyAsync(x => x.DayPassTicketId == ticketId)) throw new FacilityRejected("استخدمت هذه التذكرة للدخول من قبل؛ لا تسجل زيارة ثانية.");
+        if (!await db.Players.AnyAsync(x => x.Id == ticket.PlayerId && x.IsActive)) throw new FacilityRejected("ملف الطفل غير متاح.", 404);
+        return new AccessEntitlement { Id = Guid.NewGuid(), AcademyId = booking.AcademyId, BranchId = booking.BranchId, ResourceId = booking.ResourceId, ResourceBookingId = booking.Id, PersonKind = EntryPersonKind.Participant, PlayerId = ticket.PlayerId, DayPassTicketId = ticketId, BookingDate = booking.Date, ValidFromUtc = window.From, ValidToUtc = window.To, AuthorizedByUserId = actor, Basis = "PaidDayPass", CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() };
+    }
     public async Task<object> Enter(Guid bookingId, EntryWrite body, string key)
     {
-        Key(key); var participant = body.EnrollmentId.HasValue;
+        Key(key); var participant = body.EnrollmentId.HasValue || body.DayPassTicketId.HasValue;
         if (!body.IdentityConfirmed) throw new FacilityRejected("تحقق من هوية الشخص قبل تسجيل دخوله؛ البطاقة وحدها لا تكفي.", 422);
-        if (participant ? body.GuardianId.HasValue || body.AccompanyingVisitId.HasValue : !body.GuardianId.HasValue || !body.AccompanyingVisitId.HasValue) throw new FacilityRejected("اختر لاعبًا أو ولي أمر مرافقًا لزيارة طفل محددة.", 422);
+        if ((body.EnrollmentId.HasValue && body.DayPassTicketId.HasValue) || (participant ? body.GuardianId.HasValue || body.AccompanyingVisitId.HasValue : !body.GuardianId.HasValue || !body.AccompanyingVisitId.HasValue)) throw new FacilityRejected("اختر تسجيل تدريب أو تذكرة واحدة أو ولي أمر مرافقًا لزيارة طفل محددة.", 422);
         await using var tx = await db.Database.BeginTransactionAsync(); var (t, actor) = await facilities.Authority("Add"); var booking = await Booking(bookingId);
         await Intent(t.AcademyId, actor, key); var hash = Hash(new { bookingId, body });
         var retry = await db.EntryVisits.AsNoTracking().SingleOrDefaultAsync(v => v.EnteredByUserId == actor && v.EntryKey == key);
@@ -81,7 +89,7 @@ public sealed partial class VisitService(FoundationDbContext db, FacilityService
         var resource = await facilities.Lock(booking.ResourceId); booking = await Booking(bookingId); await Available(booking, resource); var window = await Window(booking);
         AccessEntitlement entitlement;
         if (participant) {
-            entitlement = await Participant(booking, body.EnrollmentId!.Value, actor, window);
+            entitlement = body.DayPassTicketId.HasValue ? await DayPass(booking, body.DayPassTicketId.Value, actor, window) : await Participant(booking, body.EnrollmentId!.Value, actor, window);
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"visit-person:{t.AcademyId}:{entitlement.PlayerId}"},0))");
             if (await db.EntryVisits.IgnoreQueryFilters(["trusted-branches"]).AnyAsync(v => v.AcademyId == t.AcademyId && v.PlayerId == entitlement.PlayerId && v.ExitedAtUtc == null)) throw new FacilityRejected("للاعب زيارة مفتوحة؛ تحقق من الخروج قبل تسجيل زيارة أخرى.");
             if (await db.EntryVisits.CountAsync(v => v.ResourceBookingId == bookingId && v.PersonKind == EntryPersonKind.Participant && v.ExitedAtUtc == null) >= booking.ReservedSeats
@@ -120,12 +128,13 @@ public sealed partial class VisitService(FoundationDbContext db, FacilityService
         var visits = await db.EntryVisits.AsNoTracking().Where(v => v.ResourceBookingId == bookingId).OrderByDescending(v => v.EnteredAtUtc).ToArrayAsync();
         var result = new List<object>(); foreach (var v in visits) result.Add(await View(v));
         var players = booking.TrainingSessionId is Guid session ? await db.SportEnrollments.AsNoTracking().Where(e => e.IsActive && e.Player.IsActive && e.Status == EnrollmentStatus.Active && FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, session)).Select(e => new { enrollmentId = e.Id, e.PlayerId, name = e.Player.ArabicName, e.Player.PlayerCode }).ToArrayAsync() : [];
+        var tickets = booking.ServiceKind == nameof(AcademyServiceKind.DayPass) ? await db.DayPassTickets.AsNoTracking().Where(x => x.ResourceBookingId == bookingId && x.Status == DayPassTicketStatus.Confirmed && x.Player.IsActive).Select(x => new { ticketId = x.Id, x.PlayerId, name = x.Player.ArabicName, x.Player.PlayerCode, used = db.AccessEntitlements.Any(a => a.DayPassTicketId == x.Id) }).ToArrayAsync() : [];
         var openChildren = visits.Where(v => v.PersonKind == EntryPersonKind.Participant && !v.ExitedAtUtc.HasValue).ToArray(); var children = openChildren.Select(v => v.PlayerId!.Value).ToArray();
         var guardians = await db.GuardianPlayerLinks.AsNoTracking().Where(l => children.Contains(l.PlayerId) && l.IsActive && l.Guardian.IsActive).Select(l => new { l.GuardianId, l.PlayerId, name = l.Guardian.DisplayName }).ToArrayAsync();
         var names = await db.Players.Where(p => children.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.ArabicName);
         var zone = TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(a => a.Id == booking.AcademyId).Select(a => a.TimeZone).SingleAsync()); var canEnter = false;
         try { var window = VisitWindow.For(booking.Date,booking.StartTime,booking.EndTime,zone); canEnter = booking.State == ResourceBookingState.Reserved && booking.Date == DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(),zone).DateTime) && VisitWindow.Contains(clock.GetUtcNow(),window.From,window.To); } catch (ArgumentException) { /* History remains readable when a local-time booking needs review. */ }
-        return new { booking.Id, booking.ServiceKind, canEnter, visits = result, players, companions = guardians.SelectMany(g => openChildren.Where(v => v.PlayerId == g.PlayerId).Select(v => new { g.GuardianId, g.name, childName = names.GetValueOrDefault(v.PlayerId!.Value), accompanyingVisitId = v.Id })), message = "الزيارات المفتوحة تقدير إشغال، وليست عدًا فعليًا أو حضور حصة. المرافق غير متدرب." };
+        return new { booking.Id, booking.ServiceKind, canEnter, visits = result, players, tickets, companions = guardians.SelectMany(g => openChildren.Where(v => v.PlayerId == g.PlayerId).Select(v => new { g.GuardianId, g.name, childName = names.GetValueOrDefault(v.PlayerId!.Value), accompanyingVisitId = v.Id })), message = "الزيارات المفتوحة تقدير إشغال، وليست عدًا فعليًا أو حضور حصة. المرافق غير متدرب." };
     }
     public async Task<object> Resolve(Guid bookingId, VisitCardWrite body)
     {

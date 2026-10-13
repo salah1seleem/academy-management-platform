@@ -15,6 +15,7 @@ public sealed class AccessEntitlement : TenantEntity
     public Guid? GuardianId { get; set; }
     public Guid? SubscriptionPeriodId { get; set; }
     public Guid? CompensationBookingId { get; set; }
+    public Guid? DayPassTicketId { get; set; }
     public Guid? AccompanyingVisitId { get; set; }
     public DateOnly BookingDate { get; set; }
     public DateTimeOffset ValidFromUtc { get; set; }

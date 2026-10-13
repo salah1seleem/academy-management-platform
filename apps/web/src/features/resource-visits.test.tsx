@@ -15,3 +15,10 @@ it("read-only scope exposes history but neither admission nor checkout writes",a
 it("checkout sends the displayed version and does not pretend success on conflict",async()=>{
   global.fetch=vi.fn(async(url,init)=>new Response(JSON.stringify(String(url).endsWith("/csrf")?{token:"test"}:init?.method==="POST"?{title:"تغيرت الزيارة"}:data),{status:init?.method==="POST"?409:200})) as typeof fetch;const saved=vi.fn(async()=>{});render(<VisitDialog booking={{id:"b",resource:"A"}} canAdd={false} canEdit onSaved={saved} onClose={()=>{}} />);fireEvent.click(await screen.findByRole("button",{name:"تسجيل خروج طفل بالداخل"}));await screen.findByText("تغيرت الزيارة");expect(saved).not.toHaveBeenCalled();const call=vi.mocked(fetch).mock.calls.find(([,init])=>init?.method==="POST");expect(JSON.parse(String(call?.[1]?.body))).toEqual({expectedVersion:7});
 });
+it("admits a confirmed day-pass ticket only after explicit identity confirmation",async()=>{
+  const ticketData={...data,serviceKind:"DayPass",players:[],tickets:[{ticketId:"ticket",name:"طفل زيارة اصطناعي",playerCode:"P2",used:false}],visits:[]};
+  global.fetch=vi.fn(async(url,init)=>new Response(JSON.stringify(String(url).endsWith("/csrf")?{token:"test"}:init?.method==="POST"?{}:ticketData),{status:200})) as typeof fetch;
+  const saved=vi.fn(async()=>{});render(<VisitDialog booking={{id:"b",resource:"A"}} canAdd canEdit onSaved={saved} onClose={()=>{}} />);
+  const select=await screen.findByLabelText("اللاعب");fireEvent.change(select,{target:{value:"ticket"}});expect(screen.getByRole("button",{name:"تسجيل الدخول"})).toBeDisabled();fireEvent.click(screen.getByLabelText("تحققت من هوية الشخص الموجود أمامي"));fireEvent.click(screen.getByRole("button",{name:"تسجيل الدخول"}));await vi.waitFor(()=>expect(saved).toHaveBeenCalledOnce());
+  const call=vi.mocked(fetch).mock.calls.find(([url,init])=>String(url).endsWith("/entry")&&init?.method==="POST");expect(JSON.parse(String(call?.[1]?.body))).toEqual({dayPassTicketId:"ticket",identityConfirmed:true});
+});

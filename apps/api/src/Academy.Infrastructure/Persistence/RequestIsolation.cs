@@ -47,6 +47,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<CashMovement>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashReceiptPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashProductPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<DayPassTicket>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashRefundPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashReceiptVoid>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ProviderEventQuarantine>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -123,7 +124,7 @@ public sealed partial class FoundationDbContext
             || x.TrainingGroupId.HasValue && TrainingGroups.Any(g => g.Id == x.TrainingGroupId.Value)
             || Employees.Any(e => e.PhotoAssetId == x.Id)
             || PaymentProofs.Any(p => p.AssetId == x.Id) || FamilyRenewalRequests.Any(r => r.ProofAssetId == x.Id) || NewEnrollmentRequests.Any(r => r.ProofAssetId == x.Id)
-            || ProductSales.Any(s => s.ProofAssetId == x.Id) || TournamentPayments.Any(p => p.ProofAssetId == x.Id));
+            || ProductSales.Any(s => s.ProofAssetId == x.Id) || TournamentPayments.Any(p => p.ProofAssetId == x.Id) || DayPassTickets.Any(p => p.ProofAssetId == x.Id));
         BranchFilter<AcademyMatch>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchParticipant>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));

@@ -7,6 +7,7 @@ import { TimeField } from "../components/time-field";
 import { csrfRequest } from "./dashboard-api";
 import { ObservationDialog, ObservationSummary, type Observation } from "./resource-observation";
 import { OccupancySummary, VisitDialog, type Occupancy } from "./resource-visits";
+import { DayPassReviewPanel } from "./day-pass-review";
 import { useStaffAction } from "./use-staff-action";
 import { formatDateAr } from "../lib/formatters";
 type Option = { id: string; name: string };
@@ -22,6 +23,9 @@ const days = [{ id: 6, label: "السبت" }, { id: 0, label: "الأحد" }, { 
 export function FacilityOperations() {
   const canAdd = useStaffAction("facilities", "add"), canEdit = useStaffAction("facilities", "edit");
   const canReadAttendance = useStaffAction("attendance", "read");
+  const canReadPayments = useStaffAction("payments", "read");
+  const canEditPayments = useStaffAction("payments", "edit"), canAddFinance = useStaffAction("finance", "add");
+  const canReviewDayPass = canEditPayments && canAddFinance && canEdit;
   const [observing, setObserving] = useState<Booking | null>(null);
   const [visiting, setVisiting] = useState<Pick<Booking, "id" | "resource"> | null>(null);
   const [data, setData] = useState<Data | null>(null), [options, setOptions] = useState<Options | null>(null), [board, setBoard] = useState<Board | null>(null);
@@ -58,6 +62,7 @@ export function FacilityOperations() {
     setBusy(true); setError(""); try { const response = await csrfRequest(`/api/v1/facilities/bookings/${b.id}/cancel`, "POST", {}); await response.json(); setNotice("تم إلغاء الحجز دون تغيير التحصيل أو الحضور."); await load(); } catch (e) { setError(e instanceof Error ? e.message : "تعذر الإلغاء."); } finally { setBusy(false); }
   }
   return <>{visiting && <VisitDialog booking={visiting} canAdd={canAdd} canEdit={canEdit} onClose={() => setVisiting(null)} onSaved={load} />}{observing && <ObservationDialog booking={observing} onClose={() => setObserving(null)} onSaved={load} />}<PageHeader title="المرافق والحارات" context="التشغيل اليومي / الموارد" description="مكان واضح لكل مجموعة، وسعة معتمدة لا تتجاوزها الحجوزات." />
+    {canReadPayments && <DayPassReviewPanel canReview={canReviewDayPass} />}
     <div className="facility-tabs" role="tablist" aria-label="مساحة المرافق">{[["board", "تشغيل اليوم"], ["resources", "الموارد والحارات"]].map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{id === "board" ? <CalendarDays size={18} /> : <Waves size={18} />}{label}</button>)}</div>
     {error && <ErrorState message={error} />}{notice && <p role="status" className="notice">{notice}</p>}
     {!data || !options || !board ? !error && <LoadingState /> : <>
