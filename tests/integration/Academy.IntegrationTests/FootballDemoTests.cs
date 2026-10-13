@@ -86,6 +86,15 @@ public sealed class FootballDemoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Explicit_demo_reset_clears_only_marked_waiver_sources_and_preserves_other_academies()
+    {
+        using var owner=factory.CreateClient();
+        async Task<JsonElement> Write(string path, object body) { var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var r=new HttpRequestMessage(HttpMethod.Post,path){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString("N"));var reply=await owner.SendAsync(r);reply.EnsureSuccessStatusCode();return await reply.Content.ReadFromJsonAsync<JsonElement>(); }
+        _=await Write("/api/v1/auth/login",new{email="owner.football@example.test",password="Demo-Only-123!"});
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var enrollment=await db.SportEnrollments.Where(e=>e.AcademyId==AcademyId).Select(e=>e.Id).FirstAsync();var options=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/finance/free-training/{enrollment}/options");var plan=options.GetProperty("plans")[0].GetProperty("id").GetGuid();var quote=await Write("/api/v1/finance/free-training/quote",new{sportEnrollmentId=enrollment,subscriptionPlanId=plan,reason="إعفاء اختبار reset الاصطناعي"});var approval=await Write("/api/v1/finance/free-training/approve",new{sportEnrollmentId=enrollment,subscriptionPlanId=plan,reason="إعفاء اختبار reset الاصطناعي",quoteHash=quote.GetProperty("quoteHash").GetString()});
+        var other=await db.FreeTrainingApprovals.Where(a=>a.AcademyId!=AcademyId).Select(a=>a.Id).ToArrayAsync();Assert.True(await db.FreeTrainingApprovals.AnyAsync(a=>a.Id==approval.GetProperty("id").GetGuid()));await Reset();db.ChangeTracker.Clear();Assert.False(await db.FreeTrainingApprovals.AnyAsync(a=>a.AcademyId==AcademyId));Assert.Equal(other.Order(),(await db.FreeTrainingApprovals.Where(a=>a.AcademyId!=AcademyId).Select(a=>a.Id).ToArrayAsync()).Order());Assert.Equal(30,await db.Players.CountAsync(p=>p.AcademyId==AcademyId));
+    }
+    [Fact]
     public async Task Explicit_demo_reset_clears_only_marked_synthetic_price_history_and_restores_immutable_guard()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

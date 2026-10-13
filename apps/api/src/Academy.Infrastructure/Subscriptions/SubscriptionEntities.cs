@@ -4,7 +4,7 @@ using Academy.Infrastructure.Structure;
 namespace Academy.Infrastructure.Subscriptions;
 
 public enum SubscriptionPlanType { Duration = 1, Sessions = 2, Combined = 3 }
-public enum SubscriptionOrigin { Collected = 1, ImportedHistorical = 2 }
+public enum SubscriptionOrigin { Collected = 1, ImportedHistorical = 2, ApprovedWaiver = 3 }
 public enum SubscriptionPeriodStatus { Scheduled = 1, Active = 2, Expired = 3, Cancelled = 4, Frozen = 5 }
 public enum RenewalRequestStatus { PendingPayment = 1, PaymentInProgress = 2, Paid = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentRequestStatus { Created = 1, Pending = 2, Confirmed = 3, Failed = 4, Cancelled = 5, Expired = 6 }
@@ -61,6 +61,8 @@ public sealed class SubscriptionPeriod : TenantEntity, IPlanTermsSnapshot
     public Guid? CollectionId { get; set; }
     public SubscriptionOrigin Origin { get; set; } = SubscriptionOrigin.Collected;
     public Guid? ImportJobId { get; set; }
+    public Guid? FreeTrainingApprovalId { get; set; }
+    public FreeTrainingApproval? FreeTrainingApproval { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public int? InitialSessions { get; set; }

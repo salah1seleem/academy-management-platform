@@ -1,5 +1,6 @@
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/appearance.dart';
 
 import '../../core/auth/auth_controller.dart';
@@ -298,6 +299,8 @@ class PeriodPage extends StatelessWidget {
         return gList([
           Heading(textOf(d['plan'])),
           StatusPill(d['status']),
+          if (d['origin'] == 'ApprovedWaiver')
+            const UiText('تدريب مجاني بإعفاء معتمد'),
           UiText('${day(d['startDate'])} — ${day(d['endDate'])}'),
           if (d['frozenFromDate'] != null)
             UiText('مجمد من ${day(d['frozenFromDate'])}'),

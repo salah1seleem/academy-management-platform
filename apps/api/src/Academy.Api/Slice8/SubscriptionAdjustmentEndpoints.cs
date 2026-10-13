@@ -28,7 +28,7 @@ public static class SubscriptionAdjustmentEndpoints
         var period = await db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id)
             .Select(x => new
             {
-                x.Id, x.SportEnrollmentId, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version,
+                x.Id, x.SportEnrollmentId, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version, x.Origin,
                 plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType),
                 player = x.SportEnrollment.Player.ArabicName, playerCode = x.SportEnrollment.Player.PlayerCode,
                 sport = x.SportEnrollment.Sport.ArabicName, branch = x.SportEnrollment.Branch.ArabicName,
@@ -36,6 +36,7 @@ public static class SubscriptionAdjustmentEndpoints
                 receiptId = db.Receipts.Where(r => r.AcademyId == current.AcademyId && r.CollectionId == x.CollectionId).Select(r => (Guid?)r.Id).SingleOrDefault()
             }).SingleOrDefaultAsync();
         if (period is null) return Results.NotFound();
+        var waiver = current.Role == Academy.Infrastructure.Tenancy.AcademyRole.AcademyOwner ? await db.FreeTrainingApprovals.AsNoTracking().Where(a => a.AcademyId == current.AcademyId && db.SubscriptionPeriods.Any(p => p.Id == id && p.FreeTrainingApprovalId == a.Id)).Select(a => new { a.Id, a.Reason, a.WaivedAmount, a.Currency, a.CreatedAtUtc, approvedBy = db.Users.Where(u => u.Id == a.ActorUserId).Select(u => u.DisplayName).Single() }).SingleOrDefaultAsync() : null;
         var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, clock.Today);
         var history = await db.SubscriptionAdjustments.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.SubscriptionPeriodId == id)
             .OrderByDescending(x => x.PerformedAtUtc)
@@ -49,7 +50,7 @@ public static class SubscriptionAdjustmentEndpoints
             period.Id, period.SportEnrollmentId, period.player, period.playerCode, period.sport, period.branch, period.group, period.plan,
             planType = period.planType.ToString(), period.StartDate, period.EndDate, period.FrozenFromDate,
             period.InitialSessions, period.RemainingSessions, status = status.ToString(), period.Version,
-            period.PriceSnapshot, period.CurrencySnapshot, period.receiptId, adjustments = history
+            period.PriceSnapshot, period.CurrencySnapshot, period.receiptId, origin = period.Origin.ToString(), waiver, adjustments = history
         });
     }
 
@@ -59,13 +60,13 @@ public static class SubscriptionAdjustmentEndpoints
         var actor = UserId(principal);
         var period = await db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id &&
                 db.GuardianPlayerLinks.Any(link => link.AcademyId == current.AcademyId && link.Guardian.UserId == actor && link.PlayerId == x.SportEnrollment.PlayerId && link.IsActive))
-            .Select(x => new { x.Id, x.StartDate, x.EndDate, x.FrozenFromDate, x.RemainingSessions, x.Status, planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType), plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), sport = x.SportEnrollment.Sport.ArabicName })
+            .Select(x => new { x.Id, x.StartDate, x.EndDate, x.FrozenFromDate, x.RemainingSessions, x.Status, x.Origin, planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType), plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), sport = x.SportEnrollment.Sport.ArabicName })
             .SingleOrDefaultAsync();
         if (period is null) return Results.NotFound();
         var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, clock.Today);
         var events = await db.SubscriptionAdjustments.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.SubscriptionPeriodId == id)
             .OrderByDescending(x => x.PerformedAtUtc).Select(x => new { type = x.AdjustmentType.ToString(), x.EffectiveDate, x.DaysDelta, x.NewEndDate }).ToListAsync();
-        return Results.Ok(new { period.Id, period.plan, period.sport, period.StartDate, period.EndDate, period.FrozenFromDate, period.RemainingSessions, status = status.ToString(), adjustments = events });
+        return Results.Ok(new { period.Id, period.plan, period.sport, period.StartDate, period.EndDate, period.FrozenFromDate, period.RemainingSessions, status = status.ToString(), origin = period.Origin.ToString(), adjustments = events });
     }
 
     private static Task<IResult> Freeze(Guid id, AdjustmentDateRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, SubscriptionAdjustmentService service)

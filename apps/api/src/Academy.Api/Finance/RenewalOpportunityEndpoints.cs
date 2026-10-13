@@ -91,7 +91,7 @@ public static class RenewalOpportunityEndpoints
         {
             var history = byEnrollment[e.Id].OrderByDescending(p => p.StartDate).ThenByDescending(p => p.CreatedAtUtc).ThenByDescending(p => p.Id).ToArray();
             var last = history.FirstOrDefault();
-            if (last is null || !RenewalOpportunity.Expired(last, last.SubscriptionPlan, today)
+            if (last is null || !RenewalOpportunity.PaidForecastSource(last.Origin) || !RenewalOpportunity.Expired(last, last.SubscriptionPlan, today)
                 || history.Any(p => p.IsActive && p.Status != SubscriptionPeriodStatus.Cancelled && !RenewalOpportunity.Expired(p, p.SubscriptionPlan, today))
                 || last.Origin == SubscriptionOrigin.Collected && (!last.Collection.IsActive || last.Collection.PaymentRequest.Status != PaymentRequestStatus.Confirmed
                 || last.Collection.Amount - refunds.GetValueOrDefault(last.CollectionId!.Value) < last.PriceSnapshot)) continue;

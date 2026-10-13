@@ -51,6 +51,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<CashReceiptVoid>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ProviderEventQuarantine>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<SettlementComparison>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<FreeTrainingApproval>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashTransfer>(b, x => RequestBranchIds.Contains(x.BranchId) && RequestBranchIds.Contains(x.ToBranchId));
         BranchFilter<TrainingGroup>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<SportEnrollment>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -152,6 +153,9 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        if (ChangeTracker.Entries<FreeTrainingApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("اعتماد الإعفاء ثابت؛ لا يعدل أو يحذف.");
+        foreach (var entry in ChangeTracker.Entries<SubscriptionPeriod>().Where(e => e.State is EntityState.Modified or EntityState.Deleted && (e.Entity.Origin == SubscriptionOrigin.ApprovedWaiver || e.OriginalValues.GetValue<SubscriptionOrigin>(nameof(SubscriptionPeriod.Origin)) == SubscriptionOrigin.ApprovedWaiver)))
+            if (entry.State == EntityState.Deleted || new[] { nameof(SubscriptionPeriod.Origin), nameof(SubscriptionPeriod.FreeTrainingApprovalId), nameof(SubscriptionPeriod.AcademyId), nameof(SubscriptionPeriod.SportEnrollmentId), nameof(SubscriptionPeriod.SportId), nameof(SubscriptionPeriod.SubscriptionPlanId), nameof(SubscriptionPeriod.CollectionId), nameof(SubscriptionPeriod.ImportJobId), nameof(SubscriptionPeriod.PriceSnapshot), nameof(SubscriptionPeriod.CurrencySnapshot), nameof(SubscriptionPeriod.CreatedByUserId) }.Any(p => entry.Property(p).IsModified)) throw new InvalidOperationException("مصدر الإعفاء ثابت ولا يتحول إلى قبض.");
         foreach (var entry in ChangeTracker.Entries<FamilyRenewalLine>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
             if (entry.State == EntityState.Deleted || entry.OriginalValues.GetValue<Guid?>(nameof(FamilyRenewalLine.ResultPaymentId)).HasValue || entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(FamilyRenewalLine.ResultPaymentId) or nameof(FamilyRenewalLine.UpdatedAtUtc)))) throw new InvalidOperationException("أسعار وشروط سطور طلب الأسرة ثابتة ولا تعدل أو تحذف.");
         foreach (var entry in ChangeTracker.Entries<FamilyRenewalRequest>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))

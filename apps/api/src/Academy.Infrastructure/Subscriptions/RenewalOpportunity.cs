@@ -3,6 +3,7 @@ namespace Academy.Infrastructure.Subscriptions;
 // A forecast is neither a receivable nor cash. Eligibility uses captured service terms.
 public static class RenewalOpportunity
 {
+    public static bool PaidForecastSource(SubscriptionOrigin origin) => origin is SubscriptionOrigin.Collected or SubscriptionOrigin.ImportedHistorical;
     public static bool Expired(SubscriptionPeriod period, SubscriptionPlan legacyPlan, DateOnly today)
     {
         var terms = PlanTerms.From(period, legacyPlan);

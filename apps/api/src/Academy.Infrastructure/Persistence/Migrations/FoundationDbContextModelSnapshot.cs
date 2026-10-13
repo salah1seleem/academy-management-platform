@@ -6546,6 +6546,111 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.FreeTrainingApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("InitialSessions")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlanTermsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("QuoteHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SubscriptionPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<decimal>("WaivedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "ActorMembershipId");
+
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "IsActive");
+
+                    b.HasIndex("AcademyId", "SubscriptionPlanId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "CreatedAtUtc");
+
+                    b.ToTable("FreeTrainingApprovals", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FreeTrainingApproval_Source", "\"WaivedAmount\" >= 0 AND length(btrim(\"Reason\")) BETWEEN 1 AND 500 AND length(\"IdempotencyKey\") BETWEEN 8 AND 80 AND length(\"RequestHash\") = 64 AND length(\"QuoteHash\") = 64 AND (\"EndDate\" IS NULL OR \"EndDate\" >= \"StartDate\") AND (\"InitialSessions\" IS NULL OR \"InitialSessions\" > 0)");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.PaymentCollection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7875,6 +7980,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("FreeTrainingApprovalId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateOnly?>("FrozenFromDate")
                         .HasColumnType("date");
 
@@ -7954,6 +8062,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "CollectionId")
                         .IsUnique();
 
+                    b.HasIndex("AcademyId", "FreeTrainingApprovalId")
+                        .IsUnique();
+
                     b.HasIndex("AcademyId", "ImportJobId");
 
                     b.HasIndex("AcademyId", "IsActive");
@@ -7966,7 +8077,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SubscriptionPeriods", null, t =>
                         {
-                            t.HasCheckConstraint("CK_SubscriptionPeriod_Origin", "(\"Origin\" = 'Collected' AND \"CollectionId\" IS NOT NULL AND \"ImportJobId\" IS NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" >= 0) OR (\"Origin\" = 'ImportedHistorical' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NOT NULL AND (\"PriceSnapshot\" IS NULL OR \"PriceSnapshot\" >= 0))");
+                            t.HasCheckConstraint("CK_SubscriptionPeriod_Origin", "(\"Origin\" = 'Collected' AND \"CollectionId\" IS NOT NULL AND \"ImportJobId\" IS NULL AND \"FreeTrainingApprovalId\" IS NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" >= 0) OR (\"Origin\" = 'ImportedHistorical' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NOT NULL AND \"FreeTrainingApprovalId\" IS NULL AND (\"PriceSnapshot\" IS NULL OR \"PriceSnapshot\" >= 0)) OR (\"Origin\" = 'ApprovedWaiver' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NULL AND \"FreeTrainingApprovalId\" IS NOT NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" = 0)");
 
                             t.HasCheckConstraint("CK_SubscriptionPeriods_RemainingSessions", "\"RemainingSessions\" IS NULL OR \"RemainingSessions\" >= 0");
                         });
@@ -10983,6 +11094,49 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Navigation("Guardian");
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Subscriptions.FreeTrainingApproval", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ActorMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.SportEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportEnrollmentId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Subscriptions.SubscriptionPlan", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SubscriptionPlanId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Subscriptions.PaymentCollection", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -11364,6 +11518,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Academy.Infrastructure.Subscriptions.FreeTrainingApproval", "FreeTrainingApproval")
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "FreeTrainingApprovalId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Academy.Infrastructure.People.AcademyImportJob", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "ImportJobId")
@@ -11385,6 +11545,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Collection");
+
+                    b.Navigation("FreeTrainingApproval");
 
                     b.Navigation("SportEnrollment");
 

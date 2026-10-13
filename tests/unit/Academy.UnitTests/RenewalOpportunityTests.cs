@@ -5,6 +5,12 @@ namespace Academy.UnitTests;
 public class RenewalOpportunityTests
 {
     [Theory]
+    [InlineData(SubscriptionOrigin.Collected, true)]
+    [InlineData(SubscriptionOrigin.ImportedHistorical, true)]
+    [InlineData(SubscriptionOrigin.ApprovedWaiver, false)]
+    [InlineData((SubscriptionOrigin)999, false)]
+    public void Paid_forecast_excludes_waivers_and_unknown_sources(SubscriptionOrigin source, bool expected) => Assert.Equal(expected, RenewalOpportunity.PaidForecastSource(source));
+    [Theory]
     [InlineData(SubscriptionPlanType.Duration, null, -1, SubscriptionPeriodStatus.Active, true)]
     [InlineData(SubscriptionPlanType.Duration, null, 0, SubscriptionPeriodStatus.Active, false)]
     [InlineData(SubscriptionPlanType.Combined, 0, 10, SubscriptionPeriodStatus.Active, true)]

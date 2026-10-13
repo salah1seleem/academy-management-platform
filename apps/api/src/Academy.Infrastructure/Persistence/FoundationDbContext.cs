@@ -68,6 +68,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigurePlanPublication(builder);
         ConfigureDiscountPricing(builder);
         ConfigureImports(builder);
+        ConfigureFreeTraining(builder);
         ConfigureFacilities(builder);
         ConfigurePlacement(builder);
         ConfigureGroupTransfers(builder);

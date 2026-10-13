@@ -45,7 +45,7 @@ public sealed partial class FoundationDbContext
         });
         b.Entity<SubscriptionPeriod>().Property(x => x.Origin).HasConversion<string>().HasMaxLength(24).HasDefaultValue(SubscriptionOrigin.Collected);
         b.Entity<SubscriptionPeriod>().HasOne<AcademyImportJob>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ImportJobId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
-        b.Entity<SubscriptionPeriod>().ToTable(t => t.HasCheckConstraint("CK_SubscriptionPeriod_Origin", "(\"Origin\" = 'Collected' AND \"CollectionId\" IS NOT NULL AND \"ImportJobId\" IS NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" >= 0) OR (\"Origin\" = 'ImportedHistorical' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NOT NULL AND (\"PriceSnapshot\" IS NULL OR \"PriceSnapshot\" >= 0))"));
+        b.Entity<SubscriptionPeriod>().ToTable(t => t.HasCheckConstraint("CK_SubscriptionPeriod_Origin", "(\"Origin\" = 'Collected' AND \"CollectionId\" IS NOT NULL AND \"ImportJobId\" IS NULL AND \"FreeTrainingApprovalId\" IS NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" >= 0) OR (\"Origin\" = 'ImportedHistorical' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NOT NULL AND \"FreeTrainingApprovalId\" IS NULL AND (\"PriceSnapshot\" IS NULL OR \"PriceSnapshot\" >= 0)) OR (\"Origin\" = 'ApprovedWaiver' AND \"CollectionId\" IS NULL AND \"ImportJobId\" IS NULL AND \"FreeTrainingApprovalId\" IS NOT NULL AND \"PriceSnapshot\" IS NOT NULL AND \"PriceSnapshot\" = 0)"));
         b.Entity<ReceivableDocument>().HasOne<AcademyImportJob>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ImportJobId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
     }
 }
