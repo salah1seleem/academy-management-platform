@@ -111,6 +111,25 @@ class ReceivableBalanceContent extends StatelessWidget {
                 item['outstanding'],
                 item['currency'],
               ),
+              if (item['creditReceived'] != null &&
+                  !RegExp(r'^0(?:\.0+)?$')
+                      .hasMatch(textOf(item['creditReceived'])))
+                balanceLine(
+                  context,
+                  'تسوية برصيد دائن',
+                  'Credit applied',
+                  item['creditReceived'],
+                  item['currency'],
+                ),
+              if (item['creditUsed'] != null &&
+                  !RegExp(r'^0(?:\.0+)?$').hasMatch(textOf(item['creditUsed'])))
+                balanceLine(
+                  context,
+                  'رصيد دائن مستخدم',
+                  'Credit used',
+                  item['creditUsed'],
+                  item['currency'],
+                ),
               UiText(
                 '${localized(context, 'الاستحقاق', 'Due')}: ${day(item['dueDate'])}',
               ),

@@ -97,6 +97,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PlanPriceVersion>(b, x => SubscriptionPlans.Any(p => p.Id == x.SubscriptionPlanId));
         BranchFilter<ReceivableDocument>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ReceivableMovement>(b, x => ReceivableDocuments.Any(d => d.Id == x.DocumentId));
+        BranchFilter<ReceivableCreditApplication>(b, x => ReceivableDocuments.Any(d => d.Id == x.SourceDocumentId) && ReceivableDocuments.Any(d => d.Id == x.TargetDocumentId));
         BranchFilter<SubscriptionAdjustment>(b, x => SubscriptionPeriods.Any(p => p.Id == x.SubscriptionPeriodId));
         BranchFilter<RenewalRequest>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<FamilyRenewalLine>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -152,6 +153,7 @@ public sealed partial class FoundationDbContext
     }
     private async Task GuardWrites(CancellationToken token)
     {
+        if (ChangeTracker.Entries<ReceivableCreditApplication>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("تخصيص الرصيد الدائن ثابت ولا يعدل أو يحذف.");
         ChangeTracker.DetectChanges();
         if (ChangeTracker.Entries<FreeTrainingApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("اعتماد الإعفاء ثابت؛ لا يعدل أو يحذف.");
         foreach (var entry in ChangeTracker.Entries<SubscriptionPeriod>().Where(e => e.State is EntityState.Modified or EntityState.Deleted && (e.Entity.Origin == SubscriptionOrigin.ApprovedWaiver || e.OriginalValues.GetValue<SubscriptionOrigin>(nameof(SubscriptionPeriod.Origin)) == SubscriptionOrigin.ApprovedWaiver)))

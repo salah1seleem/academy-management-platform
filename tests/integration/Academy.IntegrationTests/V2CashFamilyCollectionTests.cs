@@ -22,7 +22,7 @@ public sealed partial class SubscriptionPaymentTests
     private async Task FamilyCashConfiguration(HttpClient owner,AcademyRuntimeSettings settings)
     {
         var draft=await Post(owner,"/api/v1/manage/configuration/drafts",settings,await Csrf(owner));draft.EnsureSuccessStatusCode();var id=(await draft.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        foreach(var target in new[]{ConfigurationState.Validated,ConfigurationState.Staged,ConfigurationState.Active}) { await using var s=factory.Services.CreateAsyncScope();var version=await s.ServiceProvider.GetRequiredService<FoundationDbContext>().AcademyConfigurationVersions.Where(v=>v.Id==id).Select(v=>v.Version).SingleAsync();(await Post(owner,$"/api/v1/manage/configuration/{id}/transition",new{target=target.ToString(),version},await Csrf(owner))).EnsureSuccessStatusCode(); }
+        foreach(var target in new[]{ConfigurationState.Validated,ConfigurationState.Staged,ConfigurationState.Active}) { await using var s=factory.Services.CreateAsyncScope();var version=await s.ServiceProvider.GetRequiredService<FoundationDbContext>().AcademyConfigurationVersions.Where(v=>v.Id==id).Select(v=>v.Version).SingleAsync();var response=await Post(owner,$"/api/v1/manage/configuration/{id}/transition",new{target=target.ToString(),version},await Csrf(owner));Assert.True(response.IsSuccessStatusCode,await response.Content.ReadAsStringAsync()); }
     }
     private async Task<(Guid Session,Guid Register,Guid Member)> FamilyCashShift(HttpClient owner)
     {

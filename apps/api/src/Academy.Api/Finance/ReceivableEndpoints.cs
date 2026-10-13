@@ -25,10 +25,13 @@ public static class ReceivableEndpoints
         });
         api.MapPost("/", Create).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/{id:guid}/movements", Move).AddEndpointFilter<CsrfFilter>();
-        api.MapGet("/{id:guid}", async (Guid id, CurrentTenant tenant, FoundationDbContext db) => {
+        api.MapGet("/{id:guid}", async (Guid id, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock) => {
             var t = (await tenant.ResolveAsync())!;
             var row = await db.ReceivableDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
-            return row is null ? Results.NotFound() : Results.Ok(new { document = row, movements = await db.ReceivableMovements.AsNoTracking().Where(x => x.DocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync() });
+            if (row is null) return Results.NotFound();
+            var balance = await Rows(db, t.AcademyId, clock.UtcNow, clock.Today, null, null, null).SingleOrDefaultAsync(x => x.Id == id);
+            if (balance is null) return Results.NotFound();
+            return Results.Ok(new { document = row, balance, canUseCredit = t.Role == AcademyRole.AcademyOwner && balance.Outstanding < 0, movements = await db.ReceivableMovements.AsNoTracking().Where(x => x.DocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync(), creditApplications = await db.ReceivableCreditApplications.AsNoTracking().Where(x => x.SourceDocumentId == id || x.TargetDocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync() });
         });
         api.MapGet("/{id:guid}/collections", async (Guid id, CurrentTenant tenant, FoundationDbContext db) => {
             var t = (await tenant.ResolveAsync())!; var doc = await db.ReceivableDocuments.SingleOrDefaultAsync(x => x.Id == id);
@@ -57,10 +60,12 @@ public static class ReceivableEndpoints
         [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Charge { get; init; }
         [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Credits { get; init; }
         [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Allocated { get; init; }
+        [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal CreditUsed { get; init; }
+        [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal CreditReceived { get; init; }
         [JsonNumberHandling(JsonNumberHandling.WriteAsString)] public decimal Outstanding { get; init; }
         public DateOnly DueDate { get; init; } public bool Overdue { get; init; } public required string Source { get; init; }
     }
-    private static IQueryable<BalanceRow> Rows(FoundationDbContext db, Guid academy, DateTimeOffset asOf, DateOnly day, Guid? branch, Guid? player, string? state, IQueryable<Guid>? own = null)
+    internal static IQueryable<BalanceRow> Rows(FoundationDbContext db, Guid academy, DateTimeOffset asOf, DateOnly day, Guid? branch, Guid? player, string? state, IQueryable<Guid>? own = null)
     {
         var query = db.ReceivableDocuments.AsNoTracking().Where(d => d.AcademyId == academy && d.CreatedAtUtc <= asOf);
         if (branch.HasValue) query = query.Where(d => d.BranchId == branch);
@@ -69,9 +74,11 @@ public static class ReceivableEndpoints
         var values = from d in query
                      let credits = db.ReceivableMovements.Where(m => m.DocumentId == d.Id && m.Kind == ReceivableMovementKind.CreditNote && m.CreatedAtUtc <= asOf).Sum(m => (decimal?)m.Amount) ?? 0
                      let paid = db.ReceivableMovements.Where(m => m.DocumentId == d.Id && m.Kind == ReceivableMovementKind.PaymentAllocation && m.CreatedAtUtc <= asOf).Sum(m => (decimal?)m.Amount) ?? 0
-                     let outstanding = d.Amount - credits - paid
+                     let used = db.ReceivableCreditApplications.Where(a => a.SourceDocumentId == d.Id && a.CreatedAtUtc <= asOf).Sum(a => (decimal?)a.Amount) ?? 0
+                     let received = db.ReceivableCreditApplications.Where(a => a.TargetDocumentId == d.Id && a.CreatedAtUtc <= asOf).Sum(a => (decimal?)a.Amount) ?? 0
+                     let outstanding = d.Amount - credits - paid + used - received
                      join b in db.Branches on d.BranchId equals b.Id
-                     select new BalanceRow { Id = d.Id, EnrollmentId = d.SportEnrollmentId, PlayerId = d.PlayerId, Player = d.PlayerNameSnapshot, BranchId = d.BranchId, Branch = b.ArabicName, Description = d.Description, Currency = d.Currency, Charge = d.Amount, Credits = credits, Allocated = paid, Outstanding = outstanding, DueDate = d.DueDate, Overdue = outstanding > 0 && d.DueDate < day, Source = d.Source.ToString() };
+                     select new BalanceRow { Id = d.Id, EnrollmentId = d.SportEnrollmentId, PlayerId = d.PlayerId, Player = d.PlayerNameSnapshot, BranchId = d.BranchId, Branch = b.ArabicName, Description = d.Description, Currency = d.Currency, Charge = d.Amount, Credits = credits, Allocated = paid, CreditUsed = used, CreditReceived = received, Outstanding = outstanding, DueDate = d.DueDate, Overdue = outstanding > 0 && d.DueDate < day, Source = d.Source.ToString() };
         return state switch { "overdue" => values.Where(x => x.Overdue), "future" => values.Where(x => x.Outstanding > 0 && x.DueDate >= day), "credit" => values.Where(x => x.Outstanding < 0), "settled" => values.Where(x => x.Outstanding == 0), "open" => values.Where(x => x.Outstanding > 0), _ => values };
     }
     private static string Money(decimal value) => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
@@ -96,9 +103,9 @@ public static class ReceivableEndpoints
         var accounting = await AccountingContext(db, t.AcademyId, instant);
         var rows = await Rows(db, t.AcademyId, instant, accounting.Day, branchId, playerId, state).OrderBy(x => x.DueDate).ThenBy(x => x.Id).ToListAsync();
         static string Cell(string value) => "\"" + (value.TrimStart() is { Length: > 0 } trimmed && "=+-@".Contains(trimmed[0]) || value.StartsWith('\t') || value.StartsWith('\r') ? "'" : "") + value.Replace("\"", "\"\"") + "\"";
-        var lines = new List<string> { "اللاعب,الفرع,الوصف,العملة,المطالبة,الدائن,المخصص,القائم,تاريخ الاستحقاق,متأخر" };
+        var lines = new List<string> { "اللاعب,الفرع,الوصف,العملة,المطالبة,الدائن,المخصص,القائم,تاريخ الاستحقاق,متأخر,رصيد مستخدم,رصيد مستلم" };
         var culture = System.Globalization.CultureInfo.InvariantCulture;
-        lines.AddRange(rows.Select(x => string.Join(',', Cell(x.Player), Cell(x.Branch), Cell(x.Description), x.Currency, x.Charge.ToString("0.00", culture), x.Credits.ToString("0.00", culture), x.Allocated.ToString("0.00", culture), x.Outstanding.ToString("0.00", culture), x.DueDate.ToString("yyyy-MM-dd"), x.Overdue ? "نعم" : "لا")));
+        lines.AddRange(rows.Select(x => string.Join(',', Cell(x.Player), Cell(x.Branch), Cell(x.Description), x.Currency, x.Charge.ToString("0.00", culture), x.Credits.ToString("0.00", culture), x.Allocated.ToString("0.00", culture), x.Outstanding.ToString("0.00", culture), x.DueDate.ToString("yyyy-MM-dd"), x.Overdue ? "نعم" : "لا", x.CreditUsed.ToString("0.00", culture), x.CreditReceived.ToString("0.00", culture))));
         return Results.File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(string.Join('\n', lines))).ToArray(), "text/csv; charset=utf-8", "receivables.csv");
     }
     private static bool Valid(decimal amount) => amount > 0 && amount <= 999999999m && amount == FinancialAmounts.Round(amount);

@@ -35,6 +35,8 @@ void main() {
                       'description': 'مطالبة موثقة',
                       'charge': '540.00',
                       'outstanding': '340.00',
+                      'creditReceived': '60.00',
+                      'creditUsed': '0.0',
                       'currency': 'EGP',
                       'dueDate': '2026-09-20',
                       'overdue': true,
@@ -48,6 +50,9 @@ void main() {
       );
       expect(find.text('1740.00 ج.م'), findsOneWidget);
       expect(find.text('1240.00 ج.م'), findsOneWidget);
+      expect(find.text('تسوية برصيد دائن'), findsOneWidget);
+      expect(find.text('60.00 ج.م'), findsOneWidget);
+      expect(find.text('رصيد دائن مستخدم'), findsNothing);
       expect(
         find.text(
           'انتهاء الاشتراك ليس دينًا. هذه أرصدة مستندات مثبتة وليست طلبات دفع معلقة.',

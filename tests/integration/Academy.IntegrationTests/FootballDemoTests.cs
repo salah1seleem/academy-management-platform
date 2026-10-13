@@ -95,6 +95,21 @@ public sealed class FootballDemoTests : IAsyncLifetime
         var other=await db.FreeTrainingApprovals.Where(a=>a.AcademyId!=AcademyId).Select(a=>a.Id).ToArrayAsync();Assert.True(await db.FreeTrainingApprovals.AnyAsync(a=>a.Id==approval.GetProperty("id").GetGuid()));await Reset();db.ChangeTracker.Clear();Assert.False(await db.FreeTrainingApprovals.AnyAsync(a=>a.AcademyId==AcademyId));Assert.Equal(other.Order(),(await db.FreeTrainingApprovals.Where(a=>a.AcademyId!=AcademyId).Select(a=>a.Id).ToArrayAsync()).Order());Assert.Equal(30,await db.Players.CountAsync(p=>p.AcademyId==AcademyId));
     }
     [Fact]
+    public async Task Explicit_demo_reset_clears_only_reserved_credit_applications()
+    {
+        using var owner = await Login("owner");
+        async Task<JsonElement> Write(string path, object body) { var csrf = await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString()); var reply = await owner.SendAsync(request); reply.EnsureSuccessStatusCode(); return await reply.Content.ReadFromJsonAsync<JsonElement>(); }
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var collection = await db.Collections.Where(c => c.AcademyId == AcademyId && c.Amount >= 200 && !db.ReceivableMovements.Any(m => m.CollectionId == c.Id) && !db.CollectionRefunds.Any(r => r.CollectionId == c.Id)).FirstAsync();
+        async Task<Guid> Charge(decimal amount) => (await Write("/api/v1/finance/receivables/", new { sportEnrollmentId = collection.SportEnrollmentId, amount, dueDate = "2026-09-20", source = "ManualCharge", description = "مطالبة reset اصطناعية" })).GetProperty("id").GetGuid();
+        var source = await Charge(100); var target = await Charge(300);
+        _ = await Write($"/api/v1/finance/receivables/{source}/movements", new { kind = "PaymentAllocation", amount = 200, collectionId = collection.Id, reason = "رصيد اصطناعي" });
+        var quote = await Write("/api/v1/finance/credit-applications/quote", new { sourceDocumentId = source, targetDocumentId = target, amount = 60, reason = "تخصيص reset اصطناعي" });
+        _ = await Write("/api/v1/finance/credit-applications/approve", new { sourceDocumentId = source, targetDocumentId = target, amount = 60, reason = "تخصيص reset اصطناعي", quoteHash = quote.GetProperty("quoteHash").GetString() });
+        var others = await db.ReceivableCreditApplications.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync(); Assert.True(await db.ReceivableCreditApplications.AnyAsync(x => x.AcademyId == AcademyId));
+        await Reset(); db.ChangeTracker.Clear(); Assert.False(await db.ReceivableCreditApplications.AnyAsync(x => x.AcademyId == AcademyId)); Assert.Equal(others.Order(), (await db.ReceivableCreditApplications.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync()).Order()); Assert.Equal(30, await db.Players.CountAsync(x => x.AcademyId == AcademyId));
+    }
+    [Fact]
     public async Task Explicit_demo_reset_clears_only_marked_synthetic_price_history_and_restores_immutable_guard()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

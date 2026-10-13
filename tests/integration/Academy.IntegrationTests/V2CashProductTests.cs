@@ -171,7 +171,9 @@ public sealed partial class V2ReceivablesTests
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var otherBranch = await db.Branches.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Id != f.Body.BranchId).Select(x => x.Id).FirstAsync();
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(ProductQuoteUrl(f.Body with { BranchId = otherBranch }))).StatusCode);
-        var player = await db.SportEnrollments.Where(e => e.AcademyId == DemoSeed.NogoomAcademyId && e.BranchId == f.Body.BranchId && e.IsActive).Select(e => e.PlayerId).FirstAsync();
+        // This assertion checks Players.Read before resource lookup. A cashier's active
+        // branch need not contain players, so use this test's own synthetic enrollment.
+        var player = (await Fixture()).Player;
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(ProductQuoteUrl(f.Body with { PlayerId = player }))).StatusCode);
     }
 }

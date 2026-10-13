@@ -15,16 +15,46 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 public sealed partial class V2PlanPublicationTests
 {
-    private sealed class FacilityLicenseScope(AsyncServiceScope scope, AcademyConfigurationVersion row, string original, AcademyFeatureEntitlement license, bool enabled) : IAsyncDisposable
+    private sealed class FacilityLicenseScope(AsyncServiceScope scope, string original, string originalHash, AcademyFeatureEntitlement license, bool enabled) : IAsyncDisposable
     {
         public static async Task<FacilityLicenseScope> Begin(IServiceProvider services)
         {
             var scope = services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-            var row = await db.AcademyConfigurationVersions.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.State == ConfigurationState.Active); var original = row.Payload;
+            var row = await db.AcademyConfigurationVersions.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.State == ConfigurationState.Active); var original = row.Payload; var originalHash = row.ContentHash;
             var license = await db.AcademyFeatureEntitlements.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Feature == "facilities"); var enabled = license.Enabled;
-            var settings = AcademyRuntimeSettings.Read(row.Payload); settings.Features["facilities"] = true; row.Payload = settings.Serialize(); row.ContentHash = AcademyConfigurationService.Hash(row.Payload); license.Enabled = true; await db.SaveChangesAsync(); return new(scope, row, original, license, enabled);
+            var settings = AcademyRuntimeSettings.Read(row.Payload); settings.Features["facilities"] = true; row.Payload = settings.Serialize(); row.ContentHash = AcademyConfigurationService.Hash(row.Payload); license.Enabled = true; await db.SaveChangesAsync(); return new(scope, original, originalHash, license, enabled);
         }
-        public async ValueTask DisposeAsync() { var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); await db.Entry(row).ReloadAsync(); await db.Entry(license).ReloadAsync(); row.Payload = original; row.ContentHash = AcademyConfigurationService.Hash(original); license.Enabled = enabled; await db.SaveChangesAsync(); await scope.DisposeAsync(); }
+        public async ValueTask DisposeAsync()
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            // A demo seed can supersede the captured version. Restore the active
+            // fixture, not the historical version, alongside its original license.
+            var current = await db.AcademyConfigurationVersions.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.State == ConfigurationState.Active);
+            await db.Entry(current).ReloadAsync(); await db.Entry(license).ReloadAsync();
+            current.Payload = original; current.ContentHash = originalHash; license.Enabled = enabled;
+            await db.SaveChangesAsync(); await scope.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Facility_fixture_restores_current_configuration_after_seed_supersedes_original_version()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var before = await db.AcademyConfigurationVersions.AsNoTracking().SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.State == ConfigurationState.Active);
+        var licensedBefore = await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Feature == "facilities").Select(x => x.Enabled).SingleAsync();
+        Guid currentId;
+        await using (var licensed = await FacilityLicenseScope.Begin(factory.Services))
+        {
+            var old = await db.AcademyConfigurationVersions.SingleAsync(x => x.Id == before.Id);
+            var payload = old.Payload; old.State = ConfigurationState.Superseded; await db.SaveChangesAsync();
+            var current = new AcademyConfigurationVersion { Id = Guid.NewGuid(), AcademyId = old.AcademyId, Revision = await db.AcademyConfigurationVersions.Where(x => x.AcademyId == old.AcademyId).MaxAsync(x => x.Revision) + 1, State = ConfigurationState.Active, Payload = payload, ContentHash = AcademyConfigurationService.Hash(payload), EffectiveAtUtc = DateTimeOffset.UtcNow };
+            db.AcademyConfigurationVersions.Add(current); await db.SaveChangesAsync(); currentId = current.Id;
+        }
+        db.ChangeTracker.Clear();
+        var restored = await db.AcademyConfigurationVersions.SingleAsync(x => x.State == ConfigurationState.Active && x.AcademyId == before.AcademyId);
+        Assert.Equal(currentId, restored.Id); Assert.Equal(before.Payload, restored.Payload); Assert.Equal(before.ContentHash, restored.ContentHash);
+        Assert.Equal(licensedBefore, await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == before.AcademyId && x.Feature == "facilities").Select(x => x.Enabled).SingleAsync());
+        Assert.Empty(await scope.ServiceProvider.GetRequiredService<AcademyConfigurationService>().Validate(restored));
     }
     private async Task<Guid> FacilityFixture(HttpClient owner, bool approve = true, Guid? branch = null)
     {
