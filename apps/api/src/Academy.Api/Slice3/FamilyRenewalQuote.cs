@@ -50,10 +50,14 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
     }
     public async Task<object> Quote(FamilyRenewalWrite body)
     {
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        return (await Prepare(body)).View;
+    }
+    internal async Task<(object View, string Hash, List<DiscountRules.PricingLine> Lines, Dictionary<Guid, RenewalFinancialSnapshot> Prices, Guid Guardian, Guid User)> Prepare(FamilyRenewalWrite body)
+    {
         var (t, user, guardian) = await Context();
         if (body.Lines is not { Count: > 0 and <= 20 } choices || choices.Any(x => x is null || x.SportEnrollmentId == Guid.Empty || x.SubscriptionPlanId == Guid.Empty) || choices.Select(x => x.SportEnrollmentId).Distinct().Count() != choices.Count) throw new CashRejected("اختر من تسجيل واحد إلى 20 تسجيلًا، وباقة واحدة لكل تسجيل دون تكرار.", 422);
-        // Read the family, publication, price and eligibility from one database snapshot.
-        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        // Caller owns the snapshot transaction, including when creating a family request.
         var ids = choices.Select(x => x.SportEnrollmentId).ToArray();
         var enrollments = await Own(t.AcademyId, guardian).Where(e => ids.Contains(e.Id)).Include(e => e.Player).Include(e => e.Sport).Include(e => e.Branch).ToDictionaryAsync(e => e.Id);
         if (enrollments.Count != ids.Length) throw new CashRejected("أحد التسجيلات غير متاح لأبنائك. حدّث القائمة قبل المتابعة.", 404);
@@ -71,7 +75,8 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
         var original = quotes.Values.Sum(x => x.OriginalAmount); var discount = quotes.Values.Sum(x => x.DiscountAmount); var total = quotes.Values.Sum(x => x.FinalAmount);
         if (total > 999999999m) throw new CashRejected("إجمالي الطلب كبير جدًا. قسّم التسجيلات إلى طلبات أصغر.", 422);
         var currency = pricing[0].Plan.Currency;
-        var hash = StatementComparisonRules.Hash(new { academy = t.AcademyId, user, guardian, day = clock.Today, lines = pricing.Select(x => new { x.EnrollmentId, x.Plan.Id, x.Plan.Revision, terms = PlanTerms.From(x.Plan), quotes[x.EnrollmentId].OriginalAmount, quotes[x.EnrollmentId].DiscountType, quotes[x.EnrollmentId].DiscountValue, quotes[x.EnrollmentId].DiscountAmount, quotes[x.EnrollmentId].FinalAmount, quotes[x.EnrollmentId].DiscountRuleId, quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() });
-        return new { quoteHash = hash, pricingDate = clock.Today, currency, originalAmount = CashRegisterService.Money(original), discountAmount = CashRegisterService.Money(discount), totalAmount = CashRegisterService.Money(total), items = pricing.Select(x => new { sportEnrollmentId = x.EnrollmentId, subscriptionPlanId = x.Plan.Id, player = enrollments[x.EnrollmentId].Player.ArabicName, sport = enrollments[x.EnrollmentId].Sport.ArabicName, branch = enrollments[x.EnrollmentId].Branch.ArabicName, plan = x.Plan.ArabicName, originalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].OriginalAmount), discountAmount = CashRegisterService.Money(quotes[x.EnrollmentId].DiscountAmount), finalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].FinalAmount), discountReason = quotes[x.EnrollmentId].DiscountReason, x.Plan.Currency, planRevision = x.Plan.Revision, discountRuleRevision = quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() };
+        var hash = StatementComparisonRules.Hash(new { academy = t.AcademyId, user, guardian, day = clock.Today, currency, lines = pricing.Select(x => new { x.EnrollmentId, x.PlayerId, x.BranchId, enrollments[x.EnrollmentId].RegistrationFormat, x.Plan.Id, x.Plan.Revision, x.Plan.Currency, terms = PlanTerms.From(x.Plan), quotes[x.EnrollmentId].OriginalAmount, quotes[x.EnrollmentId].DiscountType, quotes[x.EnrollmentId].DiscountValue, quotes[x.EnrollmentId].DiscountAmount, quotes[x.EnrollmentId].FinalAmount, quotes[x.EnrollmentId].DiscountRuleId, quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() });
+        object view = new { quoteHash = hash, pricingDate = clock.Today, currency, originalAmount = CashRegisterService.Money(original), discountAmount = CashRegisterService.Money(discount), totalAmount = CashRegisterService.Money(total), items = pricing.Select(x => new { sportEnrollmentId = x.EnrollmentId, subscriptionPlanId = x.Plan.Id, player = enrollments[x.EnrollmentId].Player.ArabicName, sport = enrollments[x.EnrollmentId].Sport.ArabicName, branch = enrollments[x.EnrollmentId].Branch.ArabicName, plan = x.Plan.ArabicName, originalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].OriginalAmount), discountAmount = CashRegisterService.Money(quotes[x.EnrollmentId].DiscountAmount), finalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].FinalAmount), discountReason = quotes[x.EnrollmentId].DiscountReason, x.Plan.Currency, planRevision = x.Plan.Revision, discountRuleRevision = quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() };
+        return (view, hash, pricing, quotes, guardian, user);
     }
 }

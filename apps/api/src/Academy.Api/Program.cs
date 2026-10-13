@@ -137,6 +137,7 @@ builder.Services.AddScoped<CollectionService>();
 builder.Services.AddScoped<CashRegisterService>();
 builder.Services.AddScoped<SettlementComparisonService>();
 builder.Services.AddScoped<FamilyRenewalQuoteService>();
+builder.Services.AddScoped<FamilyRequestService>();
 builder.Services.AddScoped<DiscountRules>();
 builder.Services.AddScoped<RenewalCreationService>();
 builder.Services.AddScoped<SubscriptionAdjustmentService>();
@@ -371,6 +372,7 @@ app.MapCashRegisters();
 app.MapProviderQuarantine();
 app.MapSettlementComparisons();
 app.MapFamilyRenewalQuotes();
+app.MapFamilyRenewalRequests();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
@@ -394,6 +396,7 @@ if (app.Environment.IsEnvironment("Demo"))
         await AcademyConfigurationService.SeedDemo(db, ids);
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
+            if (app.Configuration.GetValue<bool>("Demo:FamilyRenewalSeedEnabled")) await FamilyRenewalDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
             await ReceivableDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:SettlementComparisonsSeedEnabled")) await SettlementComparisonDemoSeed.Seed(db);

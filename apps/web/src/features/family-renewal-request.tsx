@@ -1,0 +1,49 @@
+"use client";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { GuardianShell } from "../components/guardian-shell";
+import { formatDateAr, formatMoneyAr } from "../lib/formatters";
+import { csrfRequest, DashboardRequestError, uploadAsset } from "./dashboard-api";
+import styles from "./family-renewal-quote.module.css";
+
+type Line = { id: string; player: string; sport: string; branch: string; plan: string; originalAmount: string; discountAmount: string; finalAmount: string; currency: string; groupId?: string; receiptId?: string; groups: { id: string; name: string }[] };
+export type FamilyRequest = { id: string; revision: number; status: string; canReview?: boolean; lineCount: number; originalAmount: string; discountAmount: string; totalAmount: string; currency: string; proofUrl?: string; decisionReason?: string; items: Line[] };
+const labels: Record<string, string> = { Pending: "بانتظار المراجعة", Approved: "تم تجديد الأسرة", Rejected: "لم يُقبل الطلب", Cancelled: "ملغي" };
+const guardianRoot = "/api/v1/guardian/subscriptions/family/requests";
+function failure(e: unknown) { return e instanceof DashboardRequestError ? e.message : "تعذر تأكيد العملية. حدّث الطلب أو أعد المحاولة؛ لا تكرر التحويل."; }
+
+export function FamilyRenewalRequests() {
+  const [data, setData] = useState<{ id: string; status: string; lineCount: number; amount: string; currency: string; createdAtUtc: string }[] | null>(null), [error, setError] = useState("");
+  useEffect(() => { const controller = new AbortController(); void fetch(guardianRoot, { cache: "no-store", signal: controller.signal }).then(async r => { if (!r.ok) throw new Error(); setData((await r.json()).items); }).catch(e => { if (e.name !== "AbortError") setError("تعذر تحميل طلبات الأسرة."); }); return () => controller.abort(); }, []);
+  return <GuardianShell><section className={styles.page}><Link href="/guardian/renew-family">تجديد الأسرة</Link><header><h1>طلبات تجديد الأسرة</h1><p>طلب واحد وإثبات واحد؛ ويمكنك متابعة كل إيصال بعد الاعتماد.</p></header>{error && <p role="alert">{error}</p>}{!data && !error && <p role="status">جارٍ التحميل…</p>}{data?.length === 0 && <p>لا توجد طلبات أسرة بعد.</p>}{data?.map(r => <Link className={styles.card} href={`/guardian/family-renewals/${r.id}`} key={r.id}><strong>{labels[r.status]} · {r.lineCount} تسجيل</strong><span>{formatMoneyAr(r.amount, r.currency)}</span><small>{formatDateAr(r.createdAtUtc)}</small></Link>)}</section></GuardianShell>;
+}
+
+export function FamilyRenewalRequest({ id, staff = false }: { id: string; staff?: boolean }) {
+  const root = staff ? "/api/v1/manage/family-renewals" : guardianRoot;
+  const [data, setData] = useState<FamilyRequest | null>(null), [groups, setGroups] = useState<Record<string, string>>({}), [reason, setReason] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false), [confirmCancel, setConfirmCancel] = useState(false);
+  useEffect(() => { const controller = new AbortController(); void fetch(`${root}/${id}`, { cache: "no-store", signal: controller.signal }).then(async r => { if (!r.ok) throw new Error(); const value = await r.json() as FamilyRequest; setData(value); setGroups(Object.fromEntries(value.items.map(l => [l.id, l.groupId ?? ""]))); }).catch(e => { if (e.name !== "AbortError") setError("طلب الأسرة غير متاح. حدّث الصفحة أو راجع صلاحيتك."); }); return () => controller.abort(); }, [id, root]);
+  async function decide(accept?: boolean) {
+    if (!data || busy) return; setBusy(true); setError("");
+    try { const next = await (await csrfRequest(`${root}/${id}/${staff ? "review" : "cancel"}`, "POST", staff ? { accept, revision: data.revision, reason, placements: accept ? data.items.map(l => ({ lineId: l.id, groupId: groups[l.id] })) : null } : { revision: data.revision }, {}, { announce: false })).json(); setData(next); setConfirmCancel(false); }
+    catch (e) { setError(failure(e)); } finally { setBusy(false); }
+  }
+  const content = <section className={styles.page}><Link href={staff ? "/dashboard/subscriptions/payments" : "/guardian/family-renewals"}>العودة للطلبات</Link><header><h1>{staff ? "مراجعة تجديد الأسرة" : "طلب تجديد الأسرة"}</h1><p>{data ? labels[data.status] : "جارٍ التحميل…"}</p></header>{error && <p className="error-message" role="alert">{error}</p>}{data && <>
+    <section className={styles.summary} aria-label="تفاصيل تجديد الأسرة"><div className={styles.totals}>{[["قبل الخصم", data.originalAmount], ["الخصم", data.discountAmount], ["الإجمالي", data.totalAmount]].map(([name, value]) => <div key={name}><small>{name}</small><strong>{formatMoneyAr(value, data.currency)}</strong></div>)}</div>{data.items.map(l => <article className={styles.card} key={l.id}><strong>{l.player}</strong><small>{l.sport} · {l.branch} · {l.plan}</small><strong>{formatMoneyAr(l.finalAmount, l.currency)}</strong>{staff && data.canReview && data.status === "Pending" && <label className={styles.plan}>مجموعة {l.player}<select disabled={busy || !!l.groupId} value={groups[l.id] ?? ""} onChange={e => setGroups(old => ({ ...old, [l.id]: e.target.value }))}><option value="">اختر المجموعة</option>{l.groups.map(g => <option value={g.id} key={g.id}>{g.name}</option>)}</select>{l.groupId && <small>المجموعة الحالية محفوظة؛ نقل اللاعب عملية منفصلة.</small>}</label>}{l.receiptId && <Link href={`${staff ? "/dashboard/subscriptions" : "/guardian"}/receipts/${l.receiptId}`}>إيصال {l.player}</Link>}</article>)}</section>
+    {data.proofUrl && <a href={data.proofUrl} target="_blank" rel="noreferrer">فتح إثبات التحويل الواحد</a>}{data.decisionReason && <p>{data.decisionReason}</p>}
+    {data.status === "Pending" && (staff ? data.canReview ? <section className={styles.card}><p>قارن الإثبات مع الإجمالي. القبول يجدد كل التسجيلات معًا، ولا يسمح باعتماد جزئي.</p><label>ملاحظة أو سبب الرفض (اختياري)<textarea maxLength={500} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} /></label><button className="primary-button" disabled={busy || !data.proofUrl || data.items.some(l => !groups[l.id])} onClick={() => void decide(true)}>قبول وتجديد كل التسجيلات</button><button className="danger-button" disabled={busy} onClick={() => void decide(false)}>رفض الطلب كاملًا</button></section> : <p>هذا الطلب للقراءة فقط. المراجعة تتطلب صلاحية تعديل طلبات الدفع.</p> : <>{!data.proofUrl ? <FamilyTransferProof id={id} revision={data.revision} onSaved={setData} /> : <aside className={styles.notice}>وصل إثبات الدفع. تنتظر الأسرة اعتماد الإدارة؛ لا تحتاج إلى الدفع مرة أخرى.</aside>}{confirmCancel ? <section className={styles.card}><p>إلغاء الطلب لا يسترد أي تحويل أرسلته. تواصل مع الإدارة إن كنت دفعت بالفعل.</p><button className="danger-button" disabled={busy} onClick={() => void decide()}>تأكيد إلغاء الطلب</button><button disabled={busy} onClick={() => setConfirmCancel(false)}>الاحتفاظ بالطلب</button></section> : <button className="secondary-button" disabled={busy} onClick={() => setConfirmCancel(true)}>إلغاء طلب التجديد</button>}</>)}
+    {data.status !== "Pending" && <Link href={staff ? "/dashboard/subscriptions/payments" : "/guardian"}>تمت المراجعة — العودة</Link>}
+  </>}</section>;
+  return staff ? content : <GuardianShell>{content}</GuardianShell>;
+}
+
+export function FamilyTransferProof({ id, revision, onSaved }: { id: string; revision: number; onSaved: (data: FamilyRequest) => void }) {
+  const [settings, setSettings] = useState<{ configured: boolean; recipientName?: string; instaPayAddress?: string; walletNumber?: string } | null>(null), [file, setFile] = useState<File | null>(null), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+  const [asset, setAsset] = useState<string | null>(null); const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { void fetch("/api/v1/payment-settings", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error(); setSettings(await r.json()); }).catch(() => setMessage("تعذر تحميل حساب التحويل. لا تدفع قبل التأكد من الأكاديمية.")); }, []);
+  async function submit() {
+    if (busy || !file) return; setBusy(true); setMessage("");
+    try { const assetId = asset ?? (await uploadAsset(file, "Proof")).id; setAsset(assetId); onSaved(await (await csrfRequest(`${guardianRoot}/${id}/proof`, "POST", { assetId, revision }, {}, { announce: false })).json()); }
+    catch (e) { setMessage(failure(e)); } finally { setBusy(false); }
+  }
+  return <section className={styles.card}><h2>تحويل واحد للأسرة</h2><p>حوّل الإجمالي الموضح ثم ارفع صورة الإيصال. لا يُعد رفع الإثبات تأكيدًا للتحصيل حتى تراجعه الإدارة.</p>{!settings && !message && <p role="status">جارٍ تحميل حساب التحويل…</p>}{settings && !settings.configured && <p>لم تضبط الأكاديمية حساب التحويل. تواصل مع الإدارة قبل الدفع.</p>}{settings?.configured && <>{settings.recipientName && <strong>{settings.recipientName}</strong>}{[["إنستا باي", settings.instaPayAddress], ["المحفظة", settings.walletNumber]].filter(([, value]) => value).map(([name, value]) => <div key={name}><small>{name}</small><p dir="ltr">{value}</p><button className="secondary-button" onClick={() => void navigator.clipboard.writeText(value!).then(() => setMessage("تم نسخ حساب التحويل.")).catch(() => setMessage("تعذر النسخ؛ يمكنك تحديد الحساب ونسخه يدويًا."))}>نسخ {name}</button></div>)}<input ref={input} aria-label="صورة إثبات الأسرة" type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { setFile(e.target.files?.[0] ?? null); setMessage(""); }} /><button className="secondary-button" disabled={busy || !!asset} onClick={() => input.current?.click()}>اختيار صورة إيصال التحويل</button>{file && <small>{file.name}</small>}<button className="primary-button" disabled={busy || !file} onClick={() => void submit()}>{busy ? "جارٍ إرسال الإثبات…" : asset ? "إعادة تأكيد نفس الإثبات" : "إرسال إثبات الأسرة"}</button></>}{message && <p role="status">{message}</p>}</section>;
+}

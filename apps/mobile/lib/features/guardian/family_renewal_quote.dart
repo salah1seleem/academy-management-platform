@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/api/api_client.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import 'guardian_ui.dart';
+import 'family_renewal_request.dart';
 
 class NativeFamilyRenewalQuote extends StatelessWidget {
   final AuthController auth;
@@ -23,6 +25,19 @@ class NativeFamilyRenewalQuote extends StatelessWidget {
             body: {'lines': lines},
           ),
         ),
+        onCreate: (body) async => obj(
+          await auth.request(
+            'POST',
+            '/api/v1/guardian/subscriptions/family/requests',
+            body: body,
+          ),
+        ),
+        onCreated: (value) => Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) =>
+                NativeFamilyRenewalRequest(auth: auth, id: textOf(value['id'])),
+          ),
+        ),
       ),
     ),
   );
@@ -31,10 +46,14 @@ class NativeFamilyRenewalQuote extends StatelessWidget {
 class FamilyRenewalChoices extends StatefulWidget {
   final List<Json> enrollments;
   final Future<Json> Function(List<Json>) onQuote;
+  final Future<Json> Function(Json)? onCreate;
+  final void Function(Json)? onCreated;
   const FamilyRenewalChoices({
     super.key,
     required this.enrollments,
     required this.onQuote,
+    this.onCreate,
+    this.onCreated,
   });
   @override
   State<FamilyRenewalChoices> createState() => _FamilyRenewalChoicesState();
@@ -45,6 +64,8 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
   Json? quote;
   bool busy = false;
   String? error;
+  String? requestKey;
+  bool uncertain = false;
   String l(String ar, String en) => localized(context, ar, en);
   void change(String id, String? value) => setState(() {
     error = null;
@@ -72,7 +93,13 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
             )
             .toList(),
       );
-      if (mounted) setState(() => quote = result);
+      if (mounted) {
+        setState(() {
+          quote = result;
+          requestKey = commandKey();
+          uncertain = false;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -87,11 +114,48 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
     }
   }
 
+  Future<void> create() async {
+    if (busy || quote == null || widget.onCreate == null) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final value = await widget.onCreate!({
+        'lines': selection.entries
+            .map(
+              (e) => <String, dynamic>{
+                'sportEnrollmentId': e.key,
+                'subscriptionPlanId': e.value,
+              },
+            )
+            .toList(),
+        'quoteHash': quote!['quoteHash'],
+        'idempotencyKey': requestKey,
+      });
+      if (mounted) widget.onCreated?.call(value);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          uncertain = !(e is ApiFailure && e.status >= 400 && e.status < 500);
+          error = uncertain
+              ? l(
+                  'لم يصل تأكيد الطلب. أعد تأكيد نفس الطلب أو راجع طلبات الأسرة؛ لا تدفع مرة أخرى.',
+                  'No confirmation received. Retry the same request or check family requests; do not pay again.',
+                )
+              : (e as ApiFailure).message;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Widget notice() => GCard(
     child: UiText(
       l(
-        'معاينة السعر فقط؛ لم يُنشأ طلب دفع أو إيصال ولم يُفعّل اشتراك. الإثبات الواحد والاعتماد الجماعي قيد الاستكمال. التجديد الفردي متاح كما هو.',
-        'Price preview only: no payment, receipt or activation. Single-proof approval is being completed; individual renewal remains available.',
+        'لم يُنشأ طلب دفع في هذه الخطوة. تابع لإنشاء طلب للأسرة وارفع إثباتًا واحدًا؛ يبدأ التجديد بعد اعتماد الإدارة لكل التسجيلات معًا.',
+        'No payment request yet. Continue to create a family request and upload one proof; all renewals activate together after staff approval.',
       ),
     ),
   );
@@ -131,8 +195,34 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
             ),
           ),
         notice(),
+        if (error != null)
+          UiText(
+            error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        if (widget.onCreate != null)
+          FilledButton.icon(
+            onPressed: busy ? null : create,
+            icon: const Icon(Icons.payment_outlined),
+            label: UiText(
+              l(
+                busy
+                    ? 'جارٍ إنشاء الطلب…'
+                    : uncertain
+                    ? 'إعادة تأكيد نفس الطلب'
+                    : 'متابعة الدفع للأسرة',
+                busy
+                    ? 'Creating request…'
+                    : uncertain
+                    ? 'Retry the same request'
+                    : 'Continue family payment',
+              ),
+            ),
+          ),
         OutlinedButton(
-          onPressed: () => setState(() => quote = null),
+          onPressed: busy || uncertain
+              ? null
+              : () => setState(() => quote = null),
           child: UiText(
             l('تعديل التسجيلات والباقات', 'Edit enrollments and plans'),
           ),

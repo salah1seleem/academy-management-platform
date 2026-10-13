@@ -7,6 +7,7 @@ import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
 import '../shared/transfer_payment.dart';
 import 'family_renewal_quote.dart';
+import 'family_renewal_request.dart';
 
 class RenewalPicker extends StatelessWidget {
   final AuthController auth;
@@ -27,7 +28,12 @@ class RenewalPicker extends StatelessWidget {
           'مراجعة تجديد الأبناء معًا',
           Icons.family_restroom_outlined,
           () => openPage(context, NativeFamilyRenewalQuote(auth: auth)),
-          subtitle: 'مراجعة الباقات والخصم والإجمالي فقط',
+          subtitle: 'الباقات والخصم وإثبات واحد للأسرة',
+        ),
+        GLink(
+          'طلبات تجديد الأسرة السابقة',
+          Icons.receipt_long_outlined,
+          () => openPage(context, NativeFamilyRenewalRequests(auth: auth)),
         ),
         const Heading('اختر الطفل والرياضة'),
         if (rows(value).isEmpty)

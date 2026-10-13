@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Cairo } from "next/font/google";
+import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import "./globals.css";
 
-const cairo = Cairo({
-  subsets: ["arabic", "latin"],
-  weight: ["400", "500", "600", "700"],
+// Share the checked-in SIL-OFL Cairo asset with native; no build-time font download.
+const cairo = localFont({
+  src: "../../../mobile/assets/fonts/Cairo.ttf",
+  weight: "400 700",
   variable: "--font-cairo",
   display: "swap",
 });

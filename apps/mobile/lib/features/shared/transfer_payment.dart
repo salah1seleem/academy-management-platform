@@ -13,12 +13,14 @@ class TransferPayment extends StatefulWidget {
   final String proofPath;
   final VoidCallback? onSubmitted;
   final bool subscription;
+  final Json proofFields;
   const TransferPayment({
     super.key,
     required this.auth,
     required this.proofPath,
     this.onSubmitted,
     this.subscription = true,
+    this.proofFields = const {},
   });
   @override
   State<TransferPayment> createState() => _TransferPaymentState();
@@ -27,6 +29,17 @@ class TransferPayment extends StatefulWidget {
 class _TransferPaymentState extends State<TransferPayment> {
   bool busy = false;
   String? message;
+  String? uploadedAssetId;
+  @override
+  void didUpdateWidget(covariant TransferPayment oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.proofPath != widget.proofPath ||
+        oldWidget.auth != widget.auth) {
+      uploadedAssetId = null;
+      message = null;
+    }
+  }
+
   Future<void> upload() async {
     if (busy) return;
     setState(() {
@@ -34,14 +47,17 @@ class _TransferPaymentState extends State<TransferPayment> {
       message = null;
     });
     try {
-      final asset = await pickAndUpload(widget.auth, {
-        'purpose': 'Proof',
-      }, imageOnly: true);
-      if (asset == null) return;
+      if (uploadedAssetId == null) {
+        final asset = await pickAndUpload(widget.auth, {
+          'purpose': 'Proof',
+        }, imageOnly: true);
+        if (asset == null) return;
+        uploadedAssetId = textOf(asset['id']);
+      }
       await widget.auth.request(
         'POST',
         widget.proofPath,
-        body: {'assetId': asset['id']},
+        body: {...widget.proofFields, 'assetId': uploadedAssetId},
       );
       if (mounted) {
         setState(
@@ -142,8 +158,16 @@ class _TransferPaymentState extends State<TransferPayment> {
                   label: UiText(
                     localized(
                       context,
-                      busy ? 'جارٍ الإرسال' : 'رفع إيصال الدفع',
-                      busy ? 'Uploading' : 'Upload payment receipt',
+                      busy
+                          ? 'جارٍ الإرسال'
+                          : uploadedAssetId != null
+                          ? 'إعادة تأكيد نفس الإثبات'
+                          : 'رفع إيصال الدفع',
+                      busy
+                          ? 'Uploading'
+                          : uploadedAssetId != null
+                          ? 'Retry the same proof'
+                          : 'Upload payment receipt',
                     ),
                   ),
                 ),

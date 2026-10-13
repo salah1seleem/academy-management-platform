@@ -72,7 +72,13 @@ public static class ManualPayments
         var rq = db.PaymentRequests.Where(x => x.AcademyId == academy && x.Id == x.RenewalRequest.PaymentRequestId && x.CreatedAtUtc >= bounds.Start && x.CreatedAtUtc < bounds.EndExclusive && (!branchId.HasValue || x.RenewalRequest.SportEnrollment.BranchId == branchId) && !db.NewEnrollmentRequests.Any(n => n.AcademyId == academy && n.PaymentRequestId == x.Id));
         var nq = db.NewEnrollmentRequests.Where(x => x.AcademyId == academy && x.CreatedAtUtc >= bounds.Start && x.CreatedAtUtc < bounds.EndExclusive && (!branchId.HasValue || x.PreferredBranchId == branchId));
         var sq = db.ProductSales.Where(x => x.AcademyId == academy && x.CreatedAtUtc >= bounds.Start && x.CreatedAtUtc < bounds.EndExclusive && (!branchId.HasValue || x.BranchId == branchId));
-        var nr = await rq.CountAsync(x => x.Status == PaymentRequestStatus.Pending || x.Status == PaymentRequestStatus.Created);
+        rq = rq.Where(x => !db.FamilyRenewalLines.Any(l => l.AcademyId == academy && l.ResultPaymentId == x.Id));
+        var fq = db.FamilyRenewalRequests.Where(x => x.AcademyId == academy && x.CreatedAtUtc >= bounds.Start && x.CreatedAtUtc < bounds.EndExclusive && (!branchId.HasValue || x.Lines.Any(l => l.BranchId == branchId)));
+        var nf = await fq.CountAsync(x => x.Status == FamilyRenewalStatus.Pending);
+        if (status == "Pending") fq = fq.Where(x => x.Status == FamilyRenewalStatus.Pending);
+        else if (status == "Approved") fq = fq.Where(x => x.Status == FamilyRenewalStatus.Approved);
+        else if (status == "Rejected") fq = fq.Where(x => x.Status == FamilyRenewalStatus.Rejected || x.Status == FamilyRenewalStatus.Cancelled);
+        var nr = await rq.CountAsync(x => x.Status == PaymentRequestStatus.Pending || x.Status == PaymentRequestStatus.Created) + nf;
         var nn = await nq.CountAsync(x => x.Status == NewEnrollmentRequestStatus.Pending || x.Status == NewEnrollmentRequestStatus.UnderReview);
         var ns = await sq.CountAsync(x => x.Status == "Pending");
         var tq = db.TournamentPayments.Where(x => x.AcademyId == academy && x.CreatedAtUtc >= bounds.Start && x.CreatedAtUtc < bounds.EndExclusive && (!branchId.HasValue || db.SportEnrollments.Any(e => e.AcademyId == academy && e.Id == x.EnrollmentId && e.BranchId == branchId)));
@@ -88,6 +94,7 @@ public static class ManualPayments
         var sales = sq.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new PaymentQueueItem(x.Id, "Product", x.PlayerId == null ? db.Users.Where(u => u.Id == x.RequestedByUserId).Select(u => u.DisplayName).FirstOrDefault() ?? "عميل" : db.Players.Where(p => p.AcademyId == academy && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault()!, x.SportName, x.BranchName ?? "—", x.ProductName, x.Amount, x.Currency, x.Status == "Confirmed" ? "Approved" : x.Status == "Rejected" ? "Rejected" : "Pending", x.ProofAssetId != null, x.CreatedAtUtc));
         var items = new List<PaymentQueueItem>();
         if (string.IsNullOrEmpty(type) || type == "Renewal") items.AddRange(await renewals.ToListAsync());
+        if (string.IsNullOrEmpty(type) || type == "Renewal") items.AddRange(await fq.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new PaymentQueueItem(x.Id, "FamilyRenewal", x.Guardian.DisplayName, "تجديد الأسرة", "فروع التسجيلات", "تجديد " + x.LineCount + " تسجيل", x.TotalAmount, x.Currency, x.Status == FamilyRenewalStatus.Approved ? "Approved" : x.Status == FamilyRenewalStatus.Pending ? "Pending" : "Rejected", x.ProofAssetId != null, x.CreatedAtUtc)).ToListAsync());
         if (string.IsNullOrEmpty(type) || type == "Enrollment") items.AddRange(await enrollments.ToListAsync());
         if (string.IsNullOrEmpty(type) || type == "Product") items.AddRange(await sales.ToListAsync());
         if (string.IsNullOrEmpty(type) || type == "Tournament") items.AddRange(await tq.OrderByDescending(x => x.CreatedAtUtc).Take(100).Join(db.SportEnrollments, p => new { p.AcademyId, Id = p.EnrollmentId }, e => new { e.AcademyId, e.Id }, (p, e) => new PaymentQueueItem(p.Id, "Tournament", e.Player.ArabicName, e.Sport.ArabicName, e.Branch.ArabicName, p.TournamentName, p.Amount, p.Currency, p.Status == "Confirmed" ? "Approved" : p.Status, p.ProofAssetId != null, p.CreatedAtUtc)).ToListAsync());

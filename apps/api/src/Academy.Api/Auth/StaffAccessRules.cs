@@ -25,6 +25,7 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        if (path.StartsWith("/api/v1/manage/family-renewals", StringComparison.Ordinal)) return "payments";
         if (path.StartsWith("/api/v1/facilities")) return "facilities";
         if (path.StartsWith("/api/v1/manage/training-levels")) return "academy";
         if (path.StartsWith("/api/v1/finance/")) return "finance";

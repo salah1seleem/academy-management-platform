@@ -7,6 +7,7 @@ import '../guardian/guardian_ui.dart';
 import '../guardian/guardian_content.dart';
 import '../guardian/guardian_profile.dart';
 import '../guardian/guardian_report.dart';
+import '../guardian/family_renewal_request.dart';
 import '../coach/coach_home.dart';
 import '../coach/coach_evaluation.dart';
 import '../admin/admin_home.dart';
@@ -415,6 +416,24 @@ class NativePaymentRequests extends StatelessWidget {
                   ),
                   UiText('${r['sport']} · ${r['branch']}'),
                   UiText(textOf(r['plan'])),
+                  if (r['type'] == 'FamilyRenewal')
+                    TextButton(
+                      onPressed: () => openPage(
+                        context,
+                        NativeFamilyRenewalRequest(
+                          auth: auth,
+                          id: textOf(r['id']),
+                          staff: true,
+                        ),
+                      ),
+                      child: UiText(
+                        localized(
+                          context,
+                          'تفاصيل الأسرة والإثبات',
+                          'Family details and proof',
+                        ),
+                      ),
+                    ),
                   UiText(money(r['amount'], r['currency'])),
                   UiText(
                     localized(

@@ -79,6 +79,7 @@ public sealed class RenewalCreationService(
 
         if (preventParallelOpenRenewal)
         {
+            if (await db.FamilyRenewalLines.IgnoreQueryFilters().AnyAsync(l => l.AcademyId == academyId && l.SportEnrollmentId == enrollmentId && l.Request.Status == FamilyRenewalStatus.Pending, ct)) return new(RenewalCreationState.OpenRenewalExists);
             var hasOpenRenewal = await db.RenewalRequests.AnyAsync(x =>
                 x.AcademyId == academyId &&
                 x.SportEnrollmentId == enrollmentId &&

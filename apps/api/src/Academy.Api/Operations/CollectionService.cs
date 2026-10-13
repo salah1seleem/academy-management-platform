@@ -36,8 +36,10 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         receipt.DiscountReason = r.DiscountReason;
         db.Receipts.Add(receipt); await db.SaveChangesAsync(); return receipt.Id;
     }
-    public async Task<Guid> CreateCashAsync(Guid academyId, Guid actorId, Guid enrollmentId, Guid planId, string key, string method, Guid? requestedBy = null, RenewalFinancialSnapshot? fixedSnapshot = null, string? registrationPayloadHash = null, PlanTerms? fixedTerms = null)
+    public async Task<Guid> CreateCashAsync(Guid academyId, Guid actorId, Guid enrollmentId, Guid planId, string key, string method, Guid? requestedBy = null, RenewalFinancialSnapshot? fixedSnapshot = null, string? registrationPayloadHash = null, PlanTerms? fixedTerms = null, Guid? familyRequestId = null, string? fixedCurrency = null)
     {
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"renewal-enrollment:{academyId:N}:{enrollmentId:N}"}, 0))");
+        if (await db.FamilyRenewalLines.IgnoreQueryFilters().AnyAsync(l => l.AcademyId == academyId && l.SportEnrollmentId == enrollmentId && l.RequestId != familyRequestId && l.Request.Status == FamilyRenewalStatus.Pending)) throw new Academy.Api.Finance.CashRejected("لهذا التسجيل طلب أسرة مفتوح؛ راجع الطلب كاملًا أولًا.", 409);
         await PlanCatalog.LockAsync(db, academyId, planId);
         var plan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == academyId && x.Id == planId && (fixedTerms != null || x.IsActive));
         await db.Entry(plan).ReloadAsync();
@@ -48,6 +50,11 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         var snapshot = fixedSnapshot ?? await discounts.CalculateAsync(academyId, enrollment.PlayerId, plan.Price, actorId, plan: plan, branchId: enrollment.BranchId);
         var r = new RenewalRequest { Id = Guid.NewGuid(), AcademyId = academyId, SportEnrollmentId = enrollmentId, SportId = enrollment.SportId, SubscriptionPlanId = planId, RequestedByUserId = requestedBy ?? actorId, RequestedAtUtc = now, OriginalAmount = plan.Price, DiscountType = snapshot.DiscountType, DiscountValue = snapshot.DiscountValue, DiscountAmount = snapshot.DiscountAmount, DiscountReason = snapshot.DiscountReason, DiscountAppliedByUserId = snapshot.DiscountAppliedByUserId, DiscountAppliedAtUtc = snapshot.DiscountAppliedAtUtc, FinalAmount = snapshot.FinalAmount, AmountExpected = snapshot.FinalAmount, Currency = plan.Currency, Status = RenewalRequestStatus.PaymentInProgress, IdempotencyKey = key, PaymentRequestId = pid, CreatedAtUtc = now, UpdatedAtUtc = now };
         var p = new PaymentRequest { Id = pid, AcademyId = academyId, RenewalRequestId = r.Id, Provider = "Manual", ProviderEnvironment = "Manual", Amount = snapshot.FinalAmount, Currency = plan.Currency, Status = PaymentRequestStatus.Pending, ProviderReference = $"manual-{pid:N}", CheckoutReference = $"manual-{pid:N}", CreatedAtUtc = now, UpdatedAtUtc = now };
+        if (fixedCurrency is not null)
+        {
+            if (familyRequestId is null || fixedSnapshot is null || fixedTerms is null) throw new InvalidOperationException("العملة المحفوظة تتطلب طلب أسرة محفوظًا.");
+            r.Currency = fixedCurrency; p.Currency = fixedCurrency;
+        }
         r.RegistrationPayloadHash = registrationPayloadHash;
         r.DiscountRuleIdSnapshot = snapshot.DiscountRuleId;
         r.DiscountRuleRevisionSnapshot = snapshot.DiscountRuleRevision;

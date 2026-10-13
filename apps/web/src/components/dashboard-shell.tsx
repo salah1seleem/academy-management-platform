@@ -83,6 +83,7 @@ function linkPermission(href: string) {
   if (href.includes("/players/medical")) return "content.medical.read";
   if (href.includes("/players/media")) return "content.media.read";
   if (href.includes("/players") || href.includes("/guardians")) return "people.manage";
+  if (href.includes("/family-renewals")) return "payment.read";
   if (href.includes("/subscriptions/payments")) return "payment.read";
   if (href.includes("/subscriptions/plans")) return "subscription.plan.manage";
   if (href.includes("/discounts")) return "subscription.discount.manage";
@@ -100,6 +101,7 @@ function currentModule(path: string) {
     .filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`)))
     .sort((a, b) => b.href.length - a.href.length)[0];
   if (match) return match.id;
+  if (path.startsWith("/dashboard/family-renewals")) return "players";
   if (path.startsWith("/dashboard/subscriptions")) return "players";
   return "home";
 }

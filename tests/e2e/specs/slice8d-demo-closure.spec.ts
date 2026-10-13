@@ -16,7 +16,8 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
 async function assertMobileArabicSurface(page: Page) {
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  expect(await page.locator("body").evaluate(element => getComputedStyle(element).fontFamily)).toContain("Cairo");
+  // CSS font-family names are case-insensitive; next/font/local emits "cairo".
+  expect(await page.locator("body").evaluate(element => getComputedStyle(element).fontFamily)).toMatch(/cairo/i);
   await expect(page.locator("body")).not.toContainText(/Pending|Confirmed|Failed|Cancelled|Duration|Sessions|Combined|EGP/);
 }
 

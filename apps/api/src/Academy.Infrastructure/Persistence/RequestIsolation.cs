@@ -98,6 +98,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<ReceivableMovement>(b, x => ReceivableDocuments.Any(d => d.Id == x.DocumentId));
         BranchFilter<SubscriptionAdjustment>(b, x => SubscriptionPeriods.Any(p => p.Id == x.SubscriptionPeriodId));
         BranchFilter<RenewalRequest>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<FamilyRenewalLine>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<FamilyRenewalRequest>(b, x => !FamilyRenewalLines.IgnoreQueryFilters().Any(l => l.AcademyId == x.AcademyId && l.RequestId == x.Id && !RequestBranchIds.Contains(l.BranchId)));
         BranchFilter<RenewalDiscountAdjustment>(b, x => RenewalRequests.Any(r => r.Id == x.RenewalRequestId));
         BranchFilter<PaymentRequest>(b, x => RenewalRequests.Any(r => r.Id == x.RenewalRequestId));
         BranchFilter<PaymentProviderEvent>(b, x => PaymentRequests.Any(p => p.Id == x.PaymentRequestId));
@@ -118,7 +120,7 @@ public sealed partial class FoundationDbContext
             || x.PlayerId.HasValue && SportEnrollments.Any(e => e.PlayerId == x.PlayerId.Value)
             || x.TrainingGroupId.HasValue && TrainingGroups.Any(g => g.Id == x.TrainingGroupId.Value)
             || Employees.Any(e => e.PhotoAssetId == x.Id)
-            || PaymentProofs.Any(p => p.AssetId == x.Id) || NewEnrollmentRequests.Any(r => r.ProofAssetId == x.Id)
+            || PaymentProofs.Any(p => p.AssetId == x.Id) || FamilyRenewalRequests.Any(r => r.ProofAssetId == x.Id) || NewEnrollmentRequests.Any(r => r.ProofAssetId == x.Id)
             || ProductSales.Any(s => s.ProofAssetId == x.Id) || TournamentPayments.Any(p => p.ProofAssetId == x.Id));
         BranchFilter<AcademyMatch>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
@@ -150,6 +152,10 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        foreach (var entry in ChangeTracker.Entries<FamilyRenewalLine>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
+            if (entry.State == EntityState.Deleted || entry.OriginalValues.GetValue<Guid?>(nameof(FamilyRenewalLine.ResultPaymentId)).HasValue || entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(FamilyRenewalLine.ResultPaymentId) or nameof(FamilyRenewalLine.UpdatedAtUtc)))) throw new InvalidOperationException("أسعار وشروط سطور طلب الأسرة ثابتة ولا تعدل أو تحذف.");
+        foreach (var entry in ChangeTracker.Entries<FamilyRenewalRequest>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
+            if (entry.State == EntityState.Deleted || entry.OriginalValues.GetValue<FamilyRenewalStatus>(nameof(FamilyRenewalRequest.Status)) != FamilyRenewalStatus.Pending || entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(FamilyRenewalRequest.Status) or nameof(FamilyRenewalRequest.Revision) or nameof(FamilyRenewalRequest.ProofAssetId) or nameof(FamilyRenewalRequest.DecidedByUserId) or nameof(FamilyRenewalRequest.DecidedAtUtc) or nameof(FamilyRenewalRequest.DecisionReason) or nameof(FamilyRenewalRequest.UpdatedAtUtc)))) throw new InvalidOperationException("طلب الأسرة ومصدره وقراره النهائي ثابتة ولا تحذف.");
         foreach (var entry in ChangeTracker.Entries<AttendanceCorrection>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if (entry.State==EntityState.Deleted || entry.OriginalValues.GetValue<AttendanceCorrectionState>(nameof(AttendanceCorrection.State)) is AttendanceCorrectionState.Approved or AttendanceCorrectionState.Rejected || entry.Properties.Any(p=>p.IsModified && p.Metadata.Name is not (nameof(AttendanceCorrection.State) or nameof(AttendanceCorrection.DecidedByUserId) or nameof(AttendanceCorrection.DecidedByMembershipId) or nameof(AttendanceCorrection.DecidedAtUtc) or nameof(AttendanceCorrection.DecisionReason) or nameof(AttendanceCorrection.AppliedAtUtc) or nameof(AttendanceCorrection.UpdatedAtUtc))))
                 throw new InvalidOperationException("Attendance correction source and terminal decisions are immutable.");
