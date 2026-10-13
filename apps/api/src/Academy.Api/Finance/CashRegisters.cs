@@ -22,13 +22,15 @@ public static class CashRegisterEndpoints
     public static void MapCashRegisters(this WebApplication app)
     {
         var api = app.MapGroup("/api/v1/finance/cash-registers").RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
-        api.MapGet("/", async (CashRegisterService service) => await Run(service.Read));
+        api.MapGet("/", async (string? search, int? offset, CashRegisterService service) => await Run(() => service.Read(search, offset ?? 0)));
         api.MapGet("/options", async (CashRegisterService service) => await Run(service.Options));
         api.MapGet("/receipts/{id:guid}/void-options", async (Guid id, CashRegisterService service) => await Run(()=>service.VoidOptions(id)));
         api.MapPost("/receipts/{id:guid}/void-quote", async (Guid id, CashReceiptVoidWrite body, CashRegisterService service) => await Run(()=>service.VoidQuote(id,body))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/receipts/{id:guid}/void", async (Guid id, CashReceiptVoidWrite body, HttpRequest request, CashRegisterService service) => await Run(()=>service.VoidReceipt(id,body,Key(request)))).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/sessions/{id:guid}", async (Guid id, CashRegisterService service) => await Run(()=>service.Detail(id)));
         api.MapGet("/sessions/{id:guid}/collection-options", async (Guid id, string? search, CashRegisterService service) => await Run(()=>service.CollectionOptions(id,search)));
+        api.MapPost("/sessions/{id:guid}/family-quote", async (Guid id, CashFamilyQuote body, CashRegisterService service, Academy.Api.Slice3.FamilyRenewalQuoteService family) => await Run(()=>service.FamilyQuote(id,body,family))).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/sessions/{id:guid}/family-collections", async (Guid id, CashFamilyCollect body, HttpRequest request, CashRegisterService service, Academy.Api.Slice3.FamilyRenewalQuoteService family, Academy.Api.Operations.CollectionService collections) => await Run(()=>service.CollectFamily(id,body,Key(request),family,collections))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/sessions/{id:guid}/collection-quote", async (Guid id, CashCollectionQuote body, CashRegisterService service, Academy.Api.Operations.DiscountRules discounts) => await Run(()=>service.CollectionQuote(id,body,discounts))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/sessions/{id:guid}/collections", async (Guid id, CashCollectionWrite body, HttpRequest request, CashRegisterService service, Academy.Api.Operations.DiscountRules discounts, Academy.Api.Operations.CollectionService collections) => await Run(()=>service.Collect(id,body,Key(request),discounts,collections))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/", async (CashRegisterWrite body, HttpRequest request, CashRegisterService service) => await Run(()=>service.Create(body,Key(request)))).AddEndpointFilter<CsrfFilter>();
@@ -84,10 +86,16 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         var (t,_)=await Context();
         return new { isOwner=t.Role==AcademyRole.AcademyOwner, branches=await db.Branches.Where(b=>b.IsActive).Select(b=>new{b.Id,name=b.ArabicName}).ToListAsync(), members=t.Role==AcademyRole.AcademyOwner ? await db.AcademyMemberships.Where(m=>m.IsActive&&m.User.IsActive&&(m.Role==AcademyRole.AcademyOwner||m.Role==AcademyRole.AcademyAdmin)).Select(m=>new{m.Id,name=m.User.DisplayName}).ToListAsync() : [] };
     }
-    public async Task<object> Read()
+    public async Task<object> Read(string? search = null, int offset = 0)
     {
         var (t,_)=await Context();
-        var registers=await db.CashRegisters.AsNoTracking().OrderBy(r=>r.Name).Take(100).ToListAsync();
+        search = search?.Trim();
+        if (search?.Length > 100 || offset < 0) throw new CashRejected("البحث حتى100حرف ورقم الصفحة غير سالب.", 422);
+        var query = db.CashRegisters.AsNoTracking();
+        if (!string.IsNullOrEmpty(search)) query = query.Where(r => r.Name.Contains(search));
+        const int pageSize = 100;
+        var total = await query.CountAsync();
+        var registers=await query.OrderByDescending(r=>r.CreatedAtUtc).ThenBy(r=>r.Id).Skip(offset).Take(pageSize).ToListAsync();
         var ids=registers.Select(r=>r.Id).ToArray();
         var sessions=await db.CashSessions.AsNoTracking().Where(s=>ids.Contains(s.RegisterId)&&s.ClosedAtUtc==null).ToListAsync();
         var sessionIds=sessions.Select(s=>s.Id).ToArray();
@@ -102,7 +110,7 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         var branches=await db.Branches.Where(b=>branchIds.Contains(b.Id)).ToDictionaryAsync(b=>b.Id,b=>b.ArabicName);
         var cashiers=await db.CashierAssignments.Where(a=>ids.Contains(a.RegisterId)).Join(db.AcademyMemberships,a=>a.MembershipId,m=>m.Id,(a,m)=>new{a.Id,a.RegisterId,a.MembershipId,a.IsActive,name=m.User.DisplayName}).ToListAsync();
         var history=await db.CashSessions.AsNoTracking().Where(s=>ids.Contains(s.RegisterId)&&s.ClosedAtUtc!=null).OrderByDescending(s=>s.ClosedAtUtc).Take(30).Select(s=>new{s.Id,s.RegisterId,s.ClosedAtUtc,s.CountedAmount,s.ExpectedAmount}).ToListAsync();
-        return new {cashEnabled=(await config.Active(t.AcademyId))?.CashEnabled==true,history,items=registers.Select(r=>new{r.Id,r.Name,r.BranchId,branch=branches.GetValueOrDefault(r.BranchId),r.Currency,r.IsActive,cashiers=cashiers.Where(a=>a.RegisterId==r.Id),canOpen=cashiers.Any(a=>a.RegisterId==r.Id&&a.MembershipId==t.MembershipId&&a.IsActive),session=sessions.Where(s=>s.RegisterId==r.Id).Select(s=>new{s.Id,s.OpenedAtUtc,s.OpenedByMembershipId,opening=Money(s.OpeningAmount),balance=Money(s.OpeningAmount+balances.GetValueOrDefault(s.Id)),canClose=t.Role==AcademyRole.AcademyOwner||s.OpenedByMembershipId==t.MembershipId&&cashiers.Any(a=>a.RegisterId==r.Id&&a.MembershipId==t.MembershipId&&a.IsActive)}).SingleOrDefault()})};
+        return new {total,offset,pageSize,cashEnabled=(await config.Active(t.AcademyId))?.CashEnabled==true,history,items=registers.Select(r=>new{r.Id,r.Name,r.BranchId,branch=branches.GetValueOrDefault(r.BranchId),r.Currency,r.IsActive,cashiers=cashiers.Where(a=>a.RegisterId==r.Id),canOpen=cashiers.Any(a=>a.RegisterId==r.Id&&a.MembershipId==t.MembershipId&&a.IsActive),session=sessions.Where(s=>s.RegisterId==r.Id).Select(s=>new{s.Id,s.OpenedAtUtc,s.OpenedByMembershipId,opening=Money(s.OpeningAmount),balance=Money(s.OpeningAmount+balances.GetValueOrDefault(s.Id)),canClose=t.Role==AcademyRole.AcademyOwner||s.OpenedByMembershipId==t.MembershipId&&cashiers.Any(a=>a.RegisterId==r.Id&&a.MembershipId==t.MembershipId&&a.IsActive)}).SingleOrDefault()})};
     }
     public async Task<object> Detail(Guid id)
     {

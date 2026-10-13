@@ -100,7 +100,13 @@ public static class Slice2Endpoints
         var groupDate = asOf ?? await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         if (subscriptionState is not (null or "" or "active" or "expiring" or "expired" or "subscribed" or "stable" or "other")) return Results.UnprocessableEntity();
         var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
-        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.ArabicName.Contains(search) || x.PlayerCode.Contains(search) || db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.Id && l.Guardian.ContactPhone == EgyptPhoneNormalizer.Normalize(search)));
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            var phone = EgyptPhoneNormalizer.Normalize(term);
+            query = query.Where(x => x.ArabicName.Contains(term) || x.PlayerCode.Contains(term) ||
+                (phone != null && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.Id && l.IsActive && l.Guardian.IsActive && l.Guardian.ContactPhone == phone)));
+        }
         if (branchId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.BranchId == branchId));
         if (sportId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.SportId == sportId));
         if (ageCategoryId.HasValue) query = query.Where(x => db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && db.TrainingGroups.Any(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate) && g.AgeCategoryId == ageCategoryId)));

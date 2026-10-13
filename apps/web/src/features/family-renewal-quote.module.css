@@ -24,4 +24,6 @@
 .line { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-block-start: 1px solid var(--border); padding-block-start: .8rem; }
 .line > strong { flex-shrink: 0; white-space: nowrap; }
 .notice { padding: 1rem; border-inline-start: 3px solid var(--primary); border-radius: 12px; background: var(--background, #f5f7fa); line-height: 1.8; font-size: .9rem; }
+.receipts { display: grid; gap: .65rem; }
+.receiptLink { display: block; padding: .7rem 1rem; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; color: var(--primary, #0d7772); text-decoration: underline; text-underline-offset: .2rem; overflow-wrap: anywhere; }
 @media (max-width: 380px) { .totals { grid-template-columns: 1fr; } .line { flex-wrap: wrap; } }

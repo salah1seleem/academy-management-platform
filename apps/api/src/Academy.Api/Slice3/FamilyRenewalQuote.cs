@@ -69,6 +69,7 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
             .OrderBy(g => g.DisplayName).ThenBy(g => g.Id).Take(30).Select(g => new { g.Id, name = g.DisplayName, phone = g.ContactPhone ?? g.User.PhoneNumber }).ToListAsync() };
     }
     public async Task<object> StaffOptions(Guid guardian) => await OptionsFor(await StaffContext(guardian));
+    internal async Task<(object View, string Hash, List<DiscountRules.PricingLine> Lines, Dictionary<Guid, RenewalFinancialSnapshot> Prices, Guid Guardian, Guid User)> PrepareStaff(Guid guardian, FamilyRenewalWrite body) => await PrepareFor(body, await StaffContext(guardian));
     public async Task<object> StaffQuote(Guid guardian, FamilyRenewalWrite body)
     {
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);

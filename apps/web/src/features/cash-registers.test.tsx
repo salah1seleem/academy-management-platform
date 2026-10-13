@@ -18,6 +18,23 @@ it("shows scoped cash registers and owner setup without inventing income", async
   expect(screen.getByRole("link", { name: "إعدادات الأكاديمية" })).toHaveAttribute("href", "/dashboard/settings");
   expect(screen.queryByText("تأكيد التحويل")).not.toBeInTheDocument();
 });
+it("pages and searches the bounded server list, and clear restores all authorized records", async () => {
+  const paths: string[] = [];
+  global.fetch = vi.fn(async url => {
+    const path = String(url); paths.push(path);
+    if (path.endsWith("options")) return response(options);
+    const second = path.includes("offset=100");
+    return response({ ...data, total: 101, pageSize: 100, items: [{ ...register, name: second ? "الصندوق القديم" : "صندوق اصطناعي" }] });
+  });
+  render(<CashRegisters />); await screen.findByText("صندوق اصطناعي");
+  fireEvent.click(screen.getByRole("button", { name: /^التالي$/ })); await screen.findByText("الصندوق القديم");
+  expect(paths.some(p => p.includes("offset=100"))).toBe(true);
+  fireEvent.change(screen.getByLabelText("البحث باسم الصندوق"), { target: { value: "القديم" } });
+  await waitFor(() => expect(paths.some(p => p.includes("offset=0") && new URL(p, "http://local.test").searchParams.get("search") === "القديم")).toBe(true));
+  fireEvent.click(screen.getByRole("button", { name: "مسح الفلاتر" }));
+  await waitFor(() => expect(screen.getByLabelText("البحث باسم الصندوق")).toHaveValue(""));
+  await waitFor(() => expect(paths.at(-2)).toBe("/api/v1/finance/cash-registers"));
+});
 it("disabled cash hides open even for an assigned cashier; read-only admin cannot configure", async () => {
   canAdd = false; global.fetch = vi.fn(async url => response(String(url).endsWith("options") ? { ...options, isOwner: false, members: [] } : { ...data, cashEnabled: false }));
   render(<CashRegisters />); await screen.findByText("النقدي متوقف");
