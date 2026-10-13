@@ -407,6 +407,7 @@ if (app.Environment.IsEnvironment("Demo"))
             await ReceivableDemoSeed.SeedAsync(db);
             if (app.Configuration.GetValue<bool>("Demo:ReceivableCreditSeedEnabled")) await ReceivableCreditDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:CrossBranchCashSeedEnabled")) await CrossBranchCashDemoSeed.Seed(db);
+            if (app.Configuration.GetValue<bool>("Demo:CrossBranchFamilySeedEnabled")) await CrossBranchFamilyDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
             if (app.Configuration.GetValue<bool>("Demo:CollectionFundsSeedEnabled")) await CollectionFundsDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:SettlementComparisonsSeedEnabled")) await SettlementComparisonDemoSeed.Seed(db);
             if (app.Configuration.GetValue<bool>("Demo:ProviderQuarantineSeedEnabled")) await ProviderQuarantineDemoSeed.Seed(db);

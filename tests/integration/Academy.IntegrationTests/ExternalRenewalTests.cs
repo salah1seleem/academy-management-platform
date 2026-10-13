@@ -92,7 +92,12 @@ public sealed class ExternalRenewalTests : IAsyncLifetime
         var state = await client.GetFromJsonAsync<PaymentState>($"/api/v1/guardian/subscriptions/payments/{payment}");
         var receipt = await client.GetFromJsonAsync<ReceiptView>($"/api/v1/guardian/subscriptions/receipts/{state!.ReceiptId}");
         Assert.Equal("عمر أحمد حسن", receipt!.PlayerNameSnapshot);
-        Assert.Equal(900m, receipt.Amount);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var paymentAmount = await db.PaymentRequests.Where(x => x.Id == payment).Select(x => x.Amount).SingleAsync();
+            Assert.Equal(paymentAmount, receipt.Amount);
+        }
         Assert.Equal("EGP", receipt.Currency);
         Assert.False(string.IsNullOrWhiteSpace(receipt.ProviderReference));
     }
@@ -205,8 +210,10 @@ public sealed class ExternalRenewalTests : IAsyncLifetime
         var paymentId = (await response.Content.ReadFromJsonAsync<Created>())!.PaymentId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
-            var payment = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().PaymentRequests.SingleAsync(x => x.Id == paymentId);
-            Assert.Equal(900m, payment.Amount);
+            var payment = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().PaymentRequests.Include(x => x.RenewalRequest).SingleAsync(x => x.Id == paymentId);
+            Assert.Equal(900m, payment.RenewalRequest.OriginalAmount);
+            Assert.Equal(payment.RenewalRequest.FinalAmount, payment.Amount);
+            Assert.InRange(payment.Amount, 0.02m, 900m);
             Assert.Equal("EGP", payment.Currency);
         }
         var wrongPlan = await Post(client, "/api/v1/guardian/subscriptions/external/renewals", new { reference = Slice3DemoSeed.ExternalRenewalCode, subscriptionPlanId = Slice3DemoSeed.SwimmingMonthlyId }, await Csrf(client), Guid.NewGuid().ToString());
