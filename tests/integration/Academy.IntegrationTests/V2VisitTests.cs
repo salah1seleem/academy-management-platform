@@ -108,7 +108,7 @@ public sealed partial class V2PlanPublicationTests
     [Fact]
     public async Task Visit_demo_seed_preserves_reviewed_visits_and_does_not_automatically_assume_presence()
     {
-        await using var licensed=await FacilityLicenseScope.Begin(factory.Services); SetVisitClock(); using var owner=await Staff(); await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var users=scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(); var collections=scope.ServiceProvider.GetRequiredService<CollectionService>(); await FacilityDemoSeed.Seed(db); await GroupPlacementDemoSeed.Seed(db,collections); await VisitDemoSeed.Seed(db,users,collections,factory.VisitClock); var booking=VisitDemoSeed.SlotId(PlacementToday,10,"booking"); Assert.True(await db.ResourceBookings.AnyAsync(b=>b.Id==booking));
+        await using var licensed=await FacilityLicenseScope.Begin(factory.Services); SetVisitClock(); using var owner=await Staff(); await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var users=scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(); var collections=scope.ServiceProvider.GetRequiredService<CollectionService>(); await FacilityDemoSeed.Seed(db); await GroupPlacementDemoSeed.Seed(db,collections); await VisitDemoSeed.Seed(db,users,collections,factory.VisitClock); var booking=VisitDemoSeed.SlotId(PlacementToday,10,"booking"); Assert.True(await db.ResourceBookings.AnyAsync(b=>b.Id==booking)); Assert.True(await db.ResourceBookings.AnyAsync(b=>b.Id==VisitDemoSeed.SlotId(PlacementToday,12,"booking")));
         var before=(await db.Players.CountAsync(),await db.Collections.CountAsync(),await db.EntryVisits.CountAsync(),await db.PlayerAttendances.CountAsync()); await VisitDemoSeed.Seed(db,users,collections,factory.VisitClock); Assert.Equal(before,(await db.Players.CountAsync(),await db.Collections.CountAsync(),await db.EntryVisits.CountAsync(),await db.PlayerAttendances.CountAsync()));
         // The preserved seed may have an expired subscription or an open visit
         // from an earlier review. Never renew it or assume it can be admitted.
@@ -116,6 +116,10 @@ public sealed partial class V2PlanPublicationTests
         var reviewed = await VisitReady(owner); var entry = await EnterVisit(owner, reviewed.Booking, reviewed.F.First); Assert.True(entry.IsSuccessStatusCode, await entry.Content.ReadAsStringAsync());
         var retained = await db.EntryVisits.CountAsync(v => v.ResourceBookingId == reviewed.Booking); Assert.Equal(1, retained);
         await VisitDemoSeed.Seed(db,users,collections,factory.VisitClock); Assert.Equal(retained,await db.EntryVisits.CountAsync(v=>v.ResourceBookingId==reviewed.Booking)); Assert.False(await db.PlayerAttendances.AnyAsync(a=>a.TrainingSessionId==VisitDemoSeed.SlotId(PlacementToday,10,"session")));
+        factory.VisitClock.Now = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(PlacementToday.ToDateTime(new TimeOnly(22,30)), TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")));
+        await VisitDemoSeed.Seed(db,users,collections,factory.VisitClock);
+        Assert.True(await db.ResourceBookings.AnyAsync(b=>b.Id==VisitDemoSeed.SlotId(PlacementToday,22,"booking")));
+        Assert.True(await db.ResourceBookings.AnyAsync(b=>b.Id==VisitDemoSeed.SlotId(PlacementToday.AddDays(1),0,"booking")));
     }
     [Fact]
     public async Task Visit_compensation_access_is_distinct_from_the_original_subscription_and_does_not_consume_it()
