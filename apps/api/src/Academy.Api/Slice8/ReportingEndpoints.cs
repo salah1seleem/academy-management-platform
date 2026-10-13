@@ -5,6 +5,7 @@ using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
 using Academy.Api.Operations;
+using Academy.Api.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.Operations;
@@ -58,7 +59,12 @@ public static partial class ReportingEndpoints
         var subscriptionTotal = await db.SubscriptionPeriods.Where(x => x.AcademyId == academyId && (!branchId.HasValue || x.SportEnrollment.BranchId == branchId) && x.SportEnrollment.IsActive && x.SportEnrollment.Player.IsActive && x.Status != SubscriptionPeriodStatus.Cancelled).Select(x => x.SportEnrollment.PlayerId).Distinct().CountAsync();
         var todayAttendance = db.PlayerAttendances.Where(x => x.AcademyId == academyId && x.TrainingSession.SessionDate >= range.From && x.TrainingSession.SessionDate <= range.To && (!branchId.HasValue || x.TrainingSession.BranchId == branchId) && x.TrainingSession.Status != TrainingSessionStatus.Cancelled);
         var bySport = await collections.GroupBy(x => x.SportEnrollment.Sport.ArabicName).Select(x => new { name = x.Key, amount = x.Sum(y => y.Amount), count = x.Count() }).ToListAsync();
-        var byBranch = await collections.GroupBy(x => new { x.SportEnrollment.BranchId, x.SportEnrollment.Branch.ArabicName }).Select(x => new { id = x.Key.BranchId, name = x.Key.ArabicName, amount = x.Sum(y => y.Amount), count = x.Count() }).ToListAsync();
+        var byBranch = await (from collection in collections
+            join posting in db.CashReceiptPostings on collection.Id equals posting.CollectionId into postings
+            from posting in postings.DefaultIfEmpty()
+            join b in db.Branches on (posting == null ? collection.SportEnrollment.BranchId : posting.BranchId) equals b.Id
+            group collection by new { b.Id, b.ArabicName } into g
+            select new { id = g.Key.Id, name = g.Key.ArabicName, amount = g.Sum(c => c.Amount), count = g.Count() }).ToListAsync();
         var latest = await collections.OrderByDescending(x => x.ConfirmedAtUtc).Take(5).Select(x => new LatestCollection(db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.Id).Single(), db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.ReceiptNumber).Single(), x.SportEnrollment.Player.ArabicName, x.Amount, x.Currency, x.ConfirmedAtUtc)).ToListAsync();
         object? payroll = null;
         if ((await authorization.AuthorizeAsync(context.User, AcademyPermissions.PayrollRead)).Succeeded)
@@ -187,8 +193,16 @@ public static partial class ReportingEndpoints
     private static IQueryable<PaymentCollection> FinancialQuery(Guid academyId, string currency, DateTimeOffset start, DateTimeOffset end, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, FoundationDbContext db)
     {
         var query = db.Collections.AsNoTracking().Where(x => x.AcademyId == academyId && x.Currency == currency && x.ConfirmedAtUtc >= start && x.ConfirmedAtUtc < end);
+        var actualPostings=CashFinancialAttribution.ReceiptSources(db,academyId);
+        // IgnoreQueryFilters in a composed subquery affects the query compilation,
+        // not just that subquery. Therefore branch visibility is explicit here:
+        // both the operational record AND any posted collecting branch must be visible.
+        query=query.Where(x=>!db.BranchScopeRestricted || db.RequestBranchIds.Contains(x.SportEnrollment.BranchId) &&
+            (!actualPostings.Any(p=>p.CollectionId==x.Id)||actualPostings.Any(p=>p.CollectionId==x.Id&&db.RequestBranchIds.Contains(p.BranchId))));
         if (sportId.HasValue) query = query.Where(x => x.SportEnrollment.SportId == sportId);
-        if (branchId.HasValue) query = query.Where(x => x.SportEnrollment.BranchId == branchId);
+        // Cash belongs to the immutable collecting shift, not the player's
+        // operational branch. Legacy/non-cash rows retain their existing attribution.
+        if (branchId.HasValue) query = query.Where(x => db.CashReceiptPostings.Any(p=>p.CollectionId==x.Id&&p.BranchId==branchId) || !db.CashReceiptPostings.Any(p=>p.CollectionId==x.Id)&&x.SportEnrollment.BranchId==branchId);
         if (planId.HasValue) query = query.Where(x => x.RenewalRequest.SubscriptionPlanId == planId);
         if (!string.IsNullOrWhiteSpace(provider)) query = query.Where(x => x.Provider == provider.Trim() || x.PaymentMethod == provider.Trim());
         if (!string.IsNullOrWhiteSpace(search)) { var value = search.Trim(); query = query.Where(x => x.SportEnrollment.Player.ArabicName.Contains(value) || x.SportEnrollment.Player.PlayerCode.Contains(value) || db.Receipts.Any(r => r.AcademyId == academyId && r.CollectionId == x.Id && r.ReceiptNumber.Contains(value))); }
@@ -201,7 +215,7 @@ public static partial class ReportingEndpoints
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.ReceiptNumber).Single(),
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.PlayerNameSnapshot).Single(),
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.SportNameSnapshot).Single(),
-        x.SportEnrollment.Branch.ArabicName,
+        db.CashReceiptPostings.Where(p=>p.CollectionId==x.Id).Select(p=>db.Branches.Where(b=>b.Id==p.BranchId).Select(b=>b.ArabicName).Single()).SingleOrDefault() ?? x.SportEnrollment.Branch.ArabicName,
         x.SportEnrollment.TrainingGroup == null ? "في انتظار المجموعة" : x.SportEnrollment.TrainingGroup.ArabicName,
         db.Receipts.Where(r => r.AcademyId == academyId && r.CollectionId == x.Id).Select(r => r.PlanNameSnapshot).Single(),
         x.Amount, x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc,
@@ -211,8 +225,11 @@ public static partial class ReportingEndpoints
     // outside the period. Source queries still enforce tenant/resource/branch scope.
     private static IQueryable<CollectionRefund> RefundFinancialQuery(Guid academy,string currency,DateTimeOffset start,DateTimeOffset end,Guid? sport,Guid? branch,Guid? plan,string? method,string? search,FoundationDbContext db)
     {
-        var sources=FinancialQuery(academy,currency,DateTimeOffset.MinValue,DateTimeOffset.MaxValue,sport,branch,plan,null,search,db);
+        var sources=FinancialQuery(academy,currency,DateTimeOffset.MinValue,DateTimeOffset.MaxValue,sport,null,plan,null,search,db);
         var q=db.CollectionRefunds.AsNoTracking().Where(r=>r.AcademyId==academy&&r.Currency==currency&&r.CreatedAtUtc>=start&&r.CreatedAtUtc<end&&sources.Any(c=>c.Id==r.CollectionId));
+        var actualPayouts=CashFinancialAttribution.RefundSources(db,academy);
+        q=q.Where(r=>!db.BranchScopeRestricted || !actualPayouts.Any(p=>p.RefundId==r.Id)||actualPayouts.Any(p=>p.RefundId==r.Id&&db.RequestBranchIds.Contains(p.BranchId)));
+        if(branch.HasValue) q=q.Where(r=>db.CashRefundPostings.Any(p=>p.RefundId==r.Id&&p.BranchId==branch) || !db.CashRefundPostings.Any(p=>p.RefundId==r.Id)&&db.Collections.Any(c=>c.Id==r.CollectionId&&(db.CashReceiptPostings.Any(p=>p.CollectionId==c.Id&&p.BranchId==branch)||!db.CashReceiptPostings.Any(p=>p.CollectionId==c.Id)&&c.SportEnrollment.BranchId==branch)));
         if(!string.IsNullOrWhiteSpace(method)) {
             var value=method.Trim();q=q.Where(r=>(r.PayoutMethod ?? (db.CashRefundPostings.Any(p=>p.RefundId==r.Id)?"Cash":"Unspecified"))==value);
         }
@@ -220,7 +237,9 @@ public static partial class ReportingEndpoints
     }
     private static IQueryable<FinancialRow> RefundFinancialRows(IQueryable<CollectionRefund> q,FoundationDbContext db) =>
         from r in q join c in db.Collections on r.CollectionId equals c.Id join receipt in db.Receipts on r.CollectionId equals receipt.CollectionId
-        select new FinancialRow(r.Id,receipt.Id,"استرداد — "+receipt.ReceiptNumber,receipt.PlayerNameSnapshot,receipt.SportNameSnapshot,c.SportEnrollment.Branch.ArabicName,
+        select new FinancialRow(r.Id,receipt.Id,"استرداد — "+receipt.ReceiptNumber,receipt.PlayerNameSnapshot,receipt.SportNameSnapshot,
+            db.CashRefundPostings.Where(p=>p.RefundId==r.Id).Select(p=>db.Branches.Where(b=>b.Id==p.BranchId).Select(b=>b.ArabicName).Single()).SingleOrDefault()
+            ?? db.CashReceiptPostings.Where(p=>p.CollectionId==c.Id).Select(p=>db.Branches.Where(b=>b.Id==p.BranchId).Select(b=>b.ArabicName).Single()).SingleOrDefault() ?? c.SportEnrollment.Branch.ArabicName,
             c.SportEnrollment.TrainingGroup==null?"في انتظار المجموعة":c.SportEnrollment.TrainingGroup.ArabicName,receipt.PlanNameSnapshot,0,r.Currency,
             r.PayoutMethod ?? (db.CashRefundPostings.Any(p=>p.RefundId==r.Id)?"Cash":"Unspecified"),"Manual",r.Id.ToString(),r.CreatedAtUtc,r.Amount,db.CashReceiptVoids.Any(v=>v.RefundId==r.Id)?"Void":"Refund");
 

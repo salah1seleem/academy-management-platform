@@ -15,6 +15,7 @@ const regressionSeeds = [
   "FamilyRenewal",
   "FreeTraining",
   "ReceivableCredit",
+  "CrossBranchCash",
 ].map(name => `Demo__${name}SeedEnabled=true`).join(" ");
 
 const localConnectionFallback = process.env.ConnectionStrings__Default

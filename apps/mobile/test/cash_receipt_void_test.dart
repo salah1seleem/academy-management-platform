@@ -21,6 +21,8 @@ void main() {
           'discountAmount': 0,
           'currency': 'EGP',
           'isVoided': true,
+          'enrollmentBranch': 'فرع التدريب',
+          'collectionBranch': 'فرع الصندوق',
           'paidAtUtc': '2026-09-28T06:00:00Z',
         },
       );
@@ -30,6 +32,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('إيصال معكوس'), findsOneWidget);
       expect(find.textContaining('المدفوع: 800'), findsOneWidget);
+      expect(find.textContaining('فرع التسجيل: فرع التدريب'), findsOneWidget);
+      expect(find.textContaining('فرع التحصيل: فرع الصندوق'), findsOneWidget);
     },
   );
   testWidgets(
@@ -57,9 +61,7 @@ void main() {
                 ],
               },
       );
-      await tester.pumpWidget(
-        owner.shell(OwnerReports(auth: auth)),
-      );
+      await tester.pumpWidget(owner.shell(OwnerReports(auth: auth)));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('عكس إيصال نقدي · الفترة ملغاة'),

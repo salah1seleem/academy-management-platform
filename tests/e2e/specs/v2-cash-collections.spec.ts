@@ -12,8 +12,8 @@ test("Cashier reviews a price, collects once, sees the receipt and closes an exa
   const register = await write(root, { branchId: "31000000-0000-0000-0000-000000000001", name: `قبض اختباري ${Date.now()}` });
   await write(`${root}/${register.id}/cashiers`, { membershipId: member.id, enabled: true }, "PUT"); const shift = await write(`${root}/${register.id}/open`, { openingAmount: "50.00" });
   await page.goto(`/dashboard/finance/cash-registers/sessions/${shift.id}`);
-  await page.getByLabel("البحث باللاعب أو كوده").fill("NG-0001"); await page.getByRole("button", { name: "بحث في الفرع", exact: true }).click();
-  const enrollment = page.getByRole("combobox", { name: "تسجيل اللاعب", exact: true }); await expect(enrollment.locator("option")).toHaveCount(2); await enrollment.selectOption({ index: 1 });
+  await page.getByLabel("البحث باللاعب أو كوده").fill("NG-0001"); await page.getByRole("button", { name: "بحث عن اللاعب", exact: true }).click();
+  const enrollment = page.getByRole("combobox", { name: "تسجيل اللاعب", exact: true }); const football = enrollment.locator("option").filter({ hasText: "كرة القدم" }); await expect(football).toHaveCount(1); await enrollment.selectOption((await football.getAttribute("value"))!);
   await page.getByRole("combobox", { name: "باقة التدريب", exact: true }).selectOption("51000000-0000-0000-0000-000000000001");
   await page.getByRole("button", { name: "مراجعة مبلغ القبض", exact: true }).click(); await expect(page.getByLabel("مراجعة القبض", { exact: true })).toBeVisible();
   const preview = await page.request.get(`${root}/sessions/${shift.id}`).then(r => r.json()); expect(preview.balance).toBe("50.00"); expect(preview.receipts).toHaveLength(0);

@@ -575,6 +575,16 @@ class ReceiptPage extends StatelessWidget {
             ),
           ),
           UiText('تاريخ الدفع: ${day(d['paidAtUtc'])}'),
+          if (d['enrollmentBranch'] is String &&
+              (d['enrollmentBranch'] as String).isNotEmpty)
+            UiText(
+              '${localized(context, 'فرع التسجيل', 'Enrollment branch')}: ${d['enrollmentBranch']}',
+            ),
+          if (d['collectionBranch'] is String &&
+              (d['collectionBranch'] as String).isNotEmpty)
+            UiText(
+              '${localized(context, 'فرع التحصيل', 'Collecting branch')}: ${d['collectionBranch']}',
+            ),
           UiText('مرجع الدفع: ${d['providerReference']}'),
           const UiText('الإيصال صادر من سجل التحصيل على الخادم.'),
         ]);

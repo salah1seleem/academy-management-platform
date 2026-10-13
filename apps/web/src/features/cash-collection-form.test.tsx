@@ -12,7 +12,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function choose() {
-  fireEvent.change(screen.getByLabelText("البحث باللاعب أو كوده"), { target: { value: "لاعب" } }); fireEvent.click(screen.getByRole("button", { name: "بحث في الفرع" }));
+  fireEvent.change(screen.getByLabelText("البحث باللاعب أو كوده"), { target: { value: "لاعب" } }); fireEvent.click(screen.getByRole("button", { name: "بحث عن اللاعب" }));
   await screen.findByLabelText("تسجيل اللاعب"); fireEvent.change(screen.getByLabelText("تسجيل اللاعب"), { target: { value: "enrollment" } }); fireEvent.change(screen.getByLabelText("باقة التدريب"), { target: { value: "plan" } });
 }
 it("requires a branch-scoped selection and server price review before accepting money", async () => {
@@ -34,6 +34,15 @@ it("retry after an uncertain connection uses the same reviewed request and idemp
 });
 it("cancelled confirmation never records a collection", async () => {
   vi.mocked(window.confirm).mockReturnValue(false); render(<CashCollectionForm sessionId="shift" onCollected={vi.fn()} />); await choose(); fireEvent.click(screen.getByText("مراجعة مبلغ القبض")); fireEvent.click(await screen.findByText("تأكيد استلام النقدية وإصدار الإيصال"));
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/collections"))).toBe(false);
+});
+it("separates enrollment and collecting branches and explains that training is not moved", async () => {
+  global.fetch = vi.fn(async url => response(String(url).endsWith("csrf") ? { token: "csrf" } : String(url).endsWith("collection-quote") ? { ...quote, enrollmentBranchId: "home", collectionBranchId: "cash", enrollmentBranch: "فرع التدريب", collectionBranch: "فرع الصندوق" } : { items: [{ ...items[0], enrollmentBranch: "فرع التدريب" }] }));
+  render(<CashCollectionForm sessionId="shift" onCollected={vi.fn()} />); await choose();
+  expect(screen.getByRole("option", { name: /فرع التدريب/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByText("مراجعة مبلغ القبض")); await screen.findByLabelText("مراجعة القبض");
+  expect(screen.getByText("فرع التسجيل")).toBeInTheDocument(); expect(screen.getByText("فرع التحصيل")).toBeInTheDocument();
+  expect(screen.getByRole("note")).toHaveTextContent("يبقى تدريب اللاعب ومجموعته في فرع التسجيل");
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/collections"))).toBe(false);
 });
 it("shows unavailable plans and does not invent a price or automatic payment", async () => {

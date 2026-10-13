@@ -49,7 +49,7 @@ public static class CashRegisterEndpoints
     }
 }
 
-public sealed partial class CashRegisterService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor accessor, AcademyConfigurationService config, TimeProvider time)
+public sealed partial class CashRegisterService(FoundationDbContext db, CurrentTenant tenant, IHttpContextAccessor accessor, AcademyConfigurationService config, TimeProvider time, Academy.Api.Slice3.ISubscriptionClock subscriptionClock)
 {
     private async Task<(TenantMembership Tenant, Guid User)> Context(bool owner = false, bool write = false)
     {

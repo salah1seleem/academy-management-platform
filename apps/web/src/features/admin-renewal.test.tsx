@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminRenewalFlow } from "./subscriptions";
 
@@ -26,6 +26,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("admin renewal flow", () => {
+  it("a late unfiltered response never replaces the newer searched player", async () => {
+    let initial!: (value: Response) => void, searched!: (value: Response) => void;
+    global.fetch = vi.fn(input => new Promise<Response>(resolve => { if (String(input).endsWith("?search=")) initial = resolve; else searched = resolve; }));
+    render(<AdminRenewalFlow />);
+    fireEvent.change(screen.getByPlaceholderText("اسم اللاعب أو الكود أو هاتف ولي الأمر"), { target: { value: "NEW-1" } });
+    await act(async () => searched(response([{ ...row, id: "new-enrollment", player: "لاعب البحث الجديد", playerCode: "NEW-1" }]) as Response));
+    expect(await screen.findByText(/لاعب البحث الجديد/)).toBeVisible();
+    await act(async () => initial(response([row]) as Response));
+    expect(screen.getByText(/لاعب البحث الجديد/)).toBeVisible(); expect(screen.queryByText(/عمر أحمد حسن/)).not.toBeInTheDocument();
+  });
   it("searches by player, code, or guardian phone", async () => { render(<AdminRenewalFlow />); expect(await screen.findByPlaceholderText("اسم اللاعب أو الكود أو هاتف ولي الأمر")).toBeVisible(); expect(await screen.findByText(/عمر أحمد حسن/)).toBeVisible(); });
   it("shows enrollment context and Arabic plan values", async () => { render(<AdminRenewalFlow />); fireEvent.click(await screen.findByRole("button", { name: "اختيار" })); expect(await screen.findByText("بداية الفترة المتوقعة")).toBeVisible(); expect(screen.getByText("بالمدة", { exact: false })).toBeVisible(); expect(screen.queryByText("Duration")).not.toBeInTheDocument(); expect(screen.queryByText("EGP")).not.toBeInTheDocument(); });
   it("shows that creation has no immediate financial effect", async () => { render(<AdminRenewalFlow />); fireEvent.click(await screen.findByRole("button", { name: "اختيار" })); expect(await screen.findByText(/لا يتم التحصيل أو تمديد الاشتراك قبل تأكيد الدفع التجريبي/)).toBeVisible(); });

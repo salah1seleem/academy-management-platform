@@ -136,18 +136,22 @@ export function AdminRenewalFlow() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (initialEnrollment) return;
-    fetch(`/api/v1/subscriptions/admin-renewals/enrollments?search=${encodeURIComponent(search)}`)
-      .then(async response => { if (!response.ok) throw new Error(); setRows(await response.json() as AdminRenewalEnrollmentRow[]); })
-      .catch(() => setError("تعذر تحميل تسجيلات اللاعبين."))
-      .finally(() => setLoading(false));
-  }, [initialEnrollment, search]);
+    if (initialEnrollment || selectedEnrollment) return;
+    let active = true; const controller = new AbortController();
+    fetch(`/api/v1/subscriptions/admin-renewals/enrollments?search=${encodeURIComponent(search)}`, { signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error(); const value = await response.json() as AdminRenewalEnrollmentRow[]; if (active) setRows(value); })
+      .catch(() => { if (active) setError("تعذر تحميل تسجيلات اللاعبين."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [initialEnrollment, search, selectedEnrollment]);
   useEffect(() => {
     if (!selectedEnrollment) return;
-    fetch(`/api/v1/subscriptions/admin-renewals/enrollments/${selectedEnrollment}`)
+    let active = true; const controller = new AbortController();
+    fetch(`/api/v1/subscriptions/admin-renewals/enrollments/${selectedEnrollment}`, { signal: controller.signal })
       .then(async response => { if (!response.ok) throw new Error(); return response.json() as Promise<AdminRenewalContext>; })
-      .then(value => { setContext(value); setSelectedPlan(""); })
-      .catch(() => setError("تعذر تحميل بيانات التسجيل أو أنه خارج نطاق الأكاديمية."));
+      .then(value => { if (active) { setContext(value); setSelectedPlan(""); } })
+      .catch(() => { if (active) setError("تعذر تحميل بيانات التسجيل أو أنه خارج نطاق الأكاديمية."); });
+    return () => { active = false; controller.abort(); };
   }, [selectedEnrollment]);
 
   const plan = context?.plans.find(item => item.id === selectedPlan);
@@ -171,14 +175,14 @@ export function AdminRenewalFlow() {
     <Link className="secondary-button" href="/dashboard/family-renewals/quote">مراجعة تجديد عدة أبناء</Link>
     {error && <ErrorState message={error} />}
     {!initialEnrollment && <><FilterToolbar resultCount={rows.length} onReset={() => setSearch("")}>
-      <SearchInput value={search} onChange={setSearch} placeholder="اسم اللاعب أو الكود أو هاتف ولي الأمر" />
+      <SearchInput value={search} onChange={value => { setLoading(true); setRows([]); setError(""); setSearch(value); }} placeholder="اسم اللاعب أو الكود أو هاتف ولي الأمر" />
     </FilterToolbar>
     <section className="list-card">
       <h2>اختر تسجيل اللاعب</h2>
       {loading ? <LoadingState /> : rows.length === 0 ? <EmptyState message="لا توجد تسجيلات مطابقة." /> : <div className="data-list">
         {rows.map(row => <article key={row.id} className={selectedEnrollment === row.id ? "selected-record" : ""}>
           <div><strong>{row.player} · {row.playerCode}</strong><small>{row.sport} · {row.branch} · {row.group}</small>{row.period && <small>{row.period.plan} — {statusLabel(row.period.status)} — حتى {formatDateAr(row.period.endDate)}</small>}</div>
-          <button type="button" onClick={() => { setSelectedEnrollment(row.id); router.push(`/dashboard/subscriptions/renew/new?enrollmentId=${row.id}`); }}>اختيار</button>
+          <button type="button" onClick={() => { setContext(null); setSelectedPlan(""); setError(""); setSelectedEnrollment(row.id); router.push(`/dashboard/subscriptions/renew/new?enrollmentId=${row.id}`); }}>اختيار</button>
         </article>)}
       </div>}
     </section></>}

@@ -13,12 +13,13 @@ namespace Academy.IntegrationTests;
 
 public sealed partial class V2ReceivablesTests
 {
-    private async Task<(Guid Session,Guid Enrollment,Guid Player,Guid Register,Guid Member,Guid Branch)> CashCollectionFixture(HttpClient owner)
+    private async Task<(Guid Session,Guid Enrollment,Guid Player,Guid Register,Guid Member,Guid Branch)> CashCollectionFixture(HttpClient owner, bool otherBranch = false)
     {
         var f=await Fixture();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var response=await Post(owner,CashRoot,new{branchId=f.Branch,name="قبض اشتراك اختبار "+Guid.NewGuid().ToString("N")[..10]});response.EnsureSuccessStatusCode();var register=(await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var branch=otherBranch?await db.Branches.Where(b=>b.AcademyId==DemoSeed.NogoomAcademyId&&b.Id!=f.Branch&&b.IsActive).Select(b=>b.Id).FirstAsync():f.Branch;
+        var response=await Post(owner,CashRoot,new{branchId=branch,name="قبض اشتراك اختبار "+Guid.NewGuid().ToString("N")[..10]});response.EnsureSuccessStatusCode();var register=(await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var member=await db.AcademyMemberships.Where(m=>m.AcademyId==DemoSeed.NogoomAcademyId&&m.UserId==f.Owner).Select(m=>m.Id).SingleAsync();(await CashAssign(owner,register,member)).EnsureSuccessStatusCode();
-        return(await CashOpen(owner,register,"100"),f.Enrollment,f.Player,register,member,f.Branch);
+        return(await CashOpen(owner,register,"100"),f.Enrollment,f.Player,register,member,branch);
     }
     private async Task<JsonElement> CashQuote(HttpClient owner,Guid session,Guid enrollment)
     {
