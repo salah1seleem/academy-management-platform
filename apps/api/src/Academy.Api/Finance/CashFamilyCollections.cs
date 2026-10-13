@@ -25,7 +25,7 @@ public sealed partial class CashRegisterService
     private async Task FamilyCashEligible(Guid id, TenantMembership t, IReadOnlyList<DiscountRules.PricingLine> lines, Dictionary<Guid, RenewalFinancialSnapshot> prices)
     {
         var (session, register) = await CollectingSession(id, t);
-        if (lines.Any(l => l.BranchId != session.BranchId || l.Plan.Currency != register.Currency)) throw new CashRejected("اختر تسجيلات من فرع الوردية وبعملتها. جدد الفروع الأخرى بعمليات منفصلة.", 422);
+        if (lines.Any(l => l.Plan.Currency != register.Currency || t.Role != AcademyRole.AcademyOwner && l.BranchId != session.BranchId)) throw new CashRejected("اختر تسجيلات من فرع الوردية وبعملتها. جدد الفروع الأخرى بعمليات منفصلة.", 422);
         if (prices.Values.Any(p => p.FinalAmount <= 0)) throw new CashRejected("الإعفاء الكامل يحتاج مساره المستقل؛ لا يمكن إنشاء قبض نقدي صفري.", 422);
         var day = await AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         foreach (var line in lines)
@@ -37,13 +37,27 @@ public sealed partial class CashRegisterService
         if (await db.FamilyRenewalLines.IgnoreQueryFilters().AnyAsync(l => l.AcademyId == t.AcademyId && ids.Contains(l.SportEnrollmentId) && l.Request.Status == FamilyRenewalStatus.Pending) || await db.RenewalRequests.IgnoreQueryFilters().AnyAsync(r => r.AcademyId == t.AcademyId && ids.Contains(r.SportEnrollmentId) && (r.Status == RenewalRequestStatus.PendingPayment || r.Status == RenewalRequestStatus.PaymentInProgress) && db.PaymentRequests.IgnoreQueryFilters().Any(p => p.AcademyId == t.AcademyId && p.Id == r.PaymentRequestId && (p.Status == PaymentRequestStatus.Pending || p.Status == PaymentRequestStatus.Created))))
             throw new CashRejected("أحد التسجيلات له طلب دفع مفتوح. أكمله أو ألغِه قبل التحصيل الجماعي.");
     }
-    private static string FamilyCashHash(Guid session, string familyHash) => StatementComparisonRules.Hash(new { session, familyHash });
+    private async Task<string> FamilyCashHash(Guid session, string familyHash, IReadOnlyList<DiscountRules.PricingLine> lines, Guid academy)
+    {
+        var day=await AttendanceCalendar.TodayAsync(academy,db,time);var ids=lines.Select(l=>l.EnrollmentId).ToArray();
+        var enrollments=await db.SportEnrollments.AsNoTracking().Where(e=>ids.Contains(e.Id)).OrderBy(e=>e.Id).Select(e=>new{e.Id,e.Version,e.BranchId,e.Status,e.TrainingGroupId}).ToArrayAsync();
+        var groups=new List<object>();
+        foreach(var e in enrollments)
+        {
+            var assigned=await db.SportEnrollments.Where(x=>x.Id==e.Id).Select(x=>FoundationDbContext.AssignedGroupAt(academy,x.Id,day)).SingleAsync();
+            var version=await db.TrainingGroups.Where(g=>g.Id==assigned).Select(g=>(uint?)g.Version).SingleOrDefaultAsync();
+            groups.Add(new{e.Id,assigned,version});
+        }
+        var service=await db.SubscriptionPeriods.AsNoTracking().Where(p=>ids.Contains(p.SportEnrollmentId)).OrderBy(p=>p.Id)
+            .Select(p=>new{p.Id,p.SportEnrollmentId,p.Version,p.StartDate,p.EndDate,p.Status,p.RemainingSessions}).ToArrayAsync();
+        return StatementComparisonRules.Hash(new{session,familyHash,enrollments,groups,service});
+    }
     public async Task<object> FamilyQuote(Guid id, CashFamilyQuote body, FamilyRenewalQuoteService family)
     {
         FamilyChoices(body.Lines); var (t, _) = await Context(write: true); await CollectionPermissions(t, true);
         await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         var q = await family.PrepareStaff(body.GuardianId, new(body.Lines)); await FamilyCashEligible(id, t, q.Lines, q.Prices);
-        return new { quoteHash = FamilyCashHash(id, q.Hash), family = q.View };
+        return new { quoteHash = await FamilyCashHash(id, q.Hash, q.Lines, t.AcademyId), family = q.View };
     }
     private async Task TryFamilyLock(string resource)
     {
@@ -67,8 +81,10 @@ public sealed partial class CashRegisterService
         foreach (var plan in choices.Select(l => l.SubscriptionPlanId).Distinct().Order()) await TryFamilyLock($"plan-publication:{t.AcademyId}:{plan}");
         await TryFamilyLock($"cash:{t.AcademyId}:session:{id}");
         foreach (var enrollment in choices.Select(l => l.SportEnrollmentId).Order()) await TryFamilyLock($"renewal-enrollment:{t.AcademyId:N}:{enrollment:N}");
+        foreach (var enrollment in choices.Select(l => l.SportEnrollmentId).Order()) await TryFamilyLock($"collection-enrollment:{t.AcademyId}:{enrollment}");
+        foreach (var enrollment in choices.Select(l => l.SportEnrollmentId).Order()) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SportEnrollments\" WHERE \"AcademyId\"={t.AcademyId} AND \"Id\"={enrollment} FOR UPDATE");
         var q = await family.PrepareStaff(body.GuardianId, new(body.Lines)); await FamilyCashEligible(id, t, q.Lines, q.Prices);
-        if (FamilyCashHash(id, q.Hash) != body.QuoteHash) throw new CashRejected("تغير السعر أو الأهلية. حدّث المراجعة ثم أكد المبلغ الجديد.");
+        if (await FamilyCashHash(id, q.Hash, q.Lines, t.AcademyId) != body.QuoteHash) throw new CashRejected("تغير الاشتراك أو السعر أو الأهلية أو التسكين. حدّث المراجعة ثم أكد المبلغ الجديد.");
         var session = await Session(id); List<CashReceiptPosting> postings = [];
         foreach (var line in q.Lines)
         {

@@ -50,17 +50,39 @@ public sealed partial class SubscriptionPaymentTests
         finally{await FamilyCashConfiguration(owner,settings);}
     }
     [Fact]
-    public async Task Cash_family_changed_price_pending_request_wrong_branch_role_and_csrf_are_rejected()
+    public async Task Cash_family_changed_price_pending_request_role_and_csrf_are_rejected()
     {
-        await using var f=await NewFamily();await using var mixed=await NewFamily(true);using var owner=await InboxStaff(DemoSeed.OwnerEmail);using var coach=await InboxStaff(DemoSeed.CoachEmail);using var foreign=await InboxStaff(DemoSeed.FutureOwnerEmail);var settings=await FamilyCashSettings();await FamilyCashConfiguration(owner,settings with{CashEnabled=true});
+        await using var f=await NewFamily();using var owner=await InboxStaff(DemoSeed.OwnerEmail);using var coach=await InboxStaff(DemoSeed.CoachEmail);using var foreign=await InboxStaff(DemoSeed.FutureOwnerEmail);var settings=await FamilyCashSettings();await FamilyCashConfiguration(owner,settings with{CashEnabled=true});
         try
         {
             var shift=await FamilyCashShift(owner);var body=await FamilyCashBody(owner,shift.Session,f);
             Assert.Equal(HttpStatusCode.Forbidden,(await CashFamilySend(coach,shift.Session,body)).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await CashFamilySend(f.Client,shift.Session,body)).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await CashFamilySend(foreign,shift.Session,body)).StatusCode);Assert.Equal(HttpStatusCode.BadRequest,(await owner.PostAsJsonAsync($"{FamilyCashRoot}/sessions/{shift.Session}/family-quote",new CashFamilyQuote(f.Guardian,f.Choices))).StatusCode);
-            Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Post(owner,$"{FamilyCashRoot}/sessions/{shift.Session}/family-quote",new CashFamilyQuote(mixed.Guardian,mixed.Choices),await Csrf(owner))).StatusCode);
             await using var s=factory.Services.CreateAsyncScope();var db=s.ServiceProvider.GetRequiredService<FoundationDbContext>();var plan=await db.SubscriptionPlans.SingleAsync(p=>p.Id==f.Choices[0].SubscriptionPlanId);var price=plan.Price;
             try{plan.Price+=1;await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.Conflict,(await CashFamilySend(owner,shift.Session,body)).StatusCode);}finally{plan.Price=price;await db.SaveChangesAsync();}
             _=await CreateFamily(f);Assert.Equal(HttpStatusCode.Conflict,(await CashFamilySend(owner,shift.Session,body)).StatusCode);Assert.False(await db.CashReceiptPostings.AnyAsync(p=>p.SessionId==shift.Session));Assert.False(await db.Receipts.AnyAsync(r=>f.Choices.Select(l=>l.SportEnrollmentId).Contains(r.SportEnrollmentId)));
+        }
+        finally{await FamilyCashConfiguration(owner,settings);}
+    }
+    [Fact]
+    public async Task Owner_collects_two_branch_family_in_one_shift_without_moving_service_or_double_collecting()
+    {
+        await using var f=await NewFamily(true);using var owner=await InboxStaff(DemoSeed.OwnerEmail);var settings=await FamilyCashSettings();await FamilyCashConfiguration(owner,settings with{CashEnabled=true});
+        try
+        {
+            await using(var setup=factory.Services.CreateAsyncScope())
+            {
+                var setupDb=setup.ServiceProvider.GetRequiredService<FoundationDbContext>();var row=await setupDb.SportEnrollments.SingleAsync(e=>e.Id==f.Choices[1].SportEnrollmentId);var now=DateTimeOffset.UtcNow;var group=new Academy.Infrastructure.Structure.TrainingGroup{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,ArabicName="مجموعة أسرة فرع ثانٍ "+f.Guardian.ToString("N")[..8],BranchId=Slice2DemoSeed.FifthBranchId,SportId=Slice2DemoSeed.FootballId,AgeCategoryId=Slice2DemoSeed.U10Id,CreatedAtUtc=now,UpdatedAtUtc=now};setupDb.TrainingGroups.Add(group);row.TrainingGroupId=group.Id;await setupDb.SaveChangesAsync();
+            }
+            var shift=await FamilyCashShift(owner);var body=await FamilyCashBody(owner,shift.Session,f);var key=Guid.NewGuid().ToString("N");
+            await using(var changed=factory.Services.CreateAsyncScope())
+            {
+                var changedDb=changed.ServiceProvider.GetRequiredService<FoundationDbContext>();var e=await changedDb.SportEnrollments.SingleAsync(x=>x.Id==f.Choices[1].SportEnrollmentId);var group=await changedDb.TrainingGroups.SingleAsync(g=>g.Id==e.TrainingGroupId);group.ArabicName+=" محدثة";await changedDb.SaveChangesAsync();
+            }
+            Assert.Equal(HttpStatusCode.Conflict,(await CashFamilySend(owner,shift.Session,body,key)).StatusCode);
+            body=await FamilyCashBody(owner,shift.Session,f);var response=await CashFamilySend(owner,shift.Session,body,key);response.EnsureSuccessStatusCode();var result=await response.Content.ReadFromJsonAsync<JsonElement>();Assert.Equal(2,result.GetProperty("items").GetArrayLength());
+            await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var ids=f.Choices.Select(l=>l.SportEnrollmentId).ToArray();var receipts=await db.Receipts.Where(r=>ids.Contains(r.SportEnrollmentId)).ToArrayAsync();Assert.Equal(2,receipts.Length);Assert.All(await db.CashReceiptPostings.Where(p=>receipts.Select(r=>r.Id).Contains(p.ReceiptId)).ToArrayAsync(),p=>Assert.Equal(Slice2DemoSeed.CityBranchId,p.BranchId));Assert.Equal(Slice2DemoSeed.FifthBranchId,(await db.SportEnrollments.SingleAsync(e=>e.Id==f.Choices[1].SportEnrollmentId)).BranchId);
+            Assert.Equal(HttpStatusCode.Conflict,(await CashFamilySend(owner,shift.Session,body,Guid.NewGuid().ToString("N"))).StatusCode);Assert.Equal(2,await db.Receipts.CountAsync(r=>ids.Contains(r.SportEnrollmentId)));
+            foreach(var item in result.GetProperty("items").EnumerateArray())Assert.Equal(HttpStatusCode.OK,(await f.Client.GetAsync($"/api/v1/guardian/subscriptions/receipts/{item.GetProperty("receiptId").GetGuid()}")).StatusCode);
         }
         finally{await FamilyCashConfiguration(owner,settings);}
     }
