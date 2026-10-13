@@ -6,6 +6,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
 import '../shared/transfer_payment.dart';
+import 'family_renewal_quote.dart';
 
 class RenewalPicker extends StatelessWidget {
   final AuthController auth;
@@ -22,6 +23,12 @@ class RenewalPicker extends StatelessWidget {
       auth: auth,
       path: '/api/v1/guardian/subscriptions/enrollments',
       builder: (context, value) => gList([
+        GLink(
+          'مراجعة تجديد الأبناء معًا',
+          Icons.family_restroom_outlined,
+          () => openPage(context, NativeFamilyRenewalQuote(auth: auth)),
+          subtitle: 'مراجعة الباقات والخصم والإجمالي فقط',
+        ),
         const Heading('اختر الطفل والرياضة'),
         if (rows(value).isEmpty)
           const EmptyMessage('لا توجد تسجيلات متاحة للتجديد.'),

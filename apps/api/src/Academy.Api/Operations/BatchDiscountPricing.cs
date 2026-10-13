@@ -11,7 +11,7 @@ public sealed partial class DiscountRules
 {
     public sealed record PricingLine(Guid EnrollmentId, Guid PlayerId, Guid BranchId, SubscriptionPlan Plan);
     // Same eligibility, rounding and winner as an individual quote, without an N+1 report.
-    public async Task<Dictionary<Guid, RenewalFinancialSnapshot>> CalculateManyAsync(Guid academy, Guid actor, IReadOnlyCollection<PricingLine> lines)
+    public async Task<Dictionary<Guid, RenewalFinancialSnapshot>> CalculateManyAsync(Guid academy, Guid actor, IReadOnlyCollection<PricingLine> lines, Guid? familyGuardianId = null)
     {
         if (lines.Count == 0) return [];
         var players = lines.Select(l => l.PlayerId).Distinct().ToArray();
@@ -29,6 +29,13 @@ public sealed partial class DiscountRules
         var siblingEligible = (await db.GuardianPlayerLinks.IgnoreQueryFilters().Where(l => l.AcademyId == academy && l.IsActive && players.Contains(l.PlayerId) && l.Guardian.IsActive
             && db.GuardianPlayerLinks.IgnoreQueryFilters().Any(s => s.AcademyId == academy && s.IsActive && s.GuardianId == l.GuardianId && s.PlayerId != l.PlayerId && s.Player.IsActive && paidPlayers.Contains(s.PlayerId)))
             .Select(l => l.PlayerId).Distinct().ToArrayAsync()).ToHashSet();
+        // Prospective family pricing only for a verified guardian's selected, distinct children.
+        // Selecting two sports for one child is not a sibling discount; a supplied phone is irrelevant.
+        if (familyGuardianId.HasValue && players.Length > 1)
+        {
+            var family = await db.GuardianPlayerLinks.IgnoreQueryFilters().Where(l => l.AcademyId == academy && l.GuardianId == familyGuardianId && l.IsActive && l.Guardian.IsActive && l.Guardian.UserId == actor && l.Player.IsActive && players.Contains(l.PlayerId)).Select(l => l.PlayerId).Distinct().ToArrayAsync();
+            if (family.Length == players.Length) siblingEligible.UnionWith(family);
+        }
         var sibling = await db.DiscountRules.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(r => r.AcademyId == academy && r.IsSiblingOffer)
             ?? new DiscountRule { AcademyId = academy, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي" };
         return lines.ToDictionary(l => l.EnrollmentId, l => Quote(rules.Where(r => byPlayer[l.PlayerId].Contains(r.Id))
