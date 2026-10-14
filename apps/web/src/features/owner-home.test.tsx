@@ -26,10 +26,14 @@ it("does not invent a pie when there are no stored records", () => {
   expect(screen.queryByRole("img")).not.toBeInTheDocument(); expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
 });
 it("shows stored coach ratings and actionable family feedback without inventing an AI score", async () => {
-  const operational = { ...summary, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], unpaidExpenses: [{ currency: "EGP", count: 2, amount: 450 }], receivables: [{ currency: "EGP", outstanding: 1740, overdue: 1240, openCount: 3 }], accessChanges: 2, openComplaints: 1, openSuggestions: 1, attentionRule: "غياب متكرر" } };
+  const operational = { ...summary, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [{ id: "group-1", name: "مجموعة تجربة", hasCoach: false, sessions: 1, absent: 0, notRecorded: 0 }], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], unpaidExpenses: [{ currency: "EGP", count: 2, amount: 450 }], receivables: [{ currency: "EGP", outstanding: 1740, overdue: 1240, openCount: 3 }], accessChanges: 2, openComplaints: 1, openSuggestions: 1, attentionRule: "غياب متكرر" } };
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(operational)) as typeof fetch;
   render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
   expect(await screen.findByText(/4\.5\/5 من 2/)).toBeVisible();
+  const decisions = screen.getByRole("region", { name: "قرارات تحتاجك" });
+  expect(decisions.querySelectorAll("a")).toHaveLength(3);
+  expect(screen.getByRole("link", { name: /راجع طلبات الدفع/ })).toHaveAttribute("href", expect.stringContaining("status=Pending"));
+  expect(screen.getByRole("link", { name: /مجموعة بلا مدرب/ })).toHaveAttribute("href", "/dashboard/academy/groups/group-1?tab=coaches");
   expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));
