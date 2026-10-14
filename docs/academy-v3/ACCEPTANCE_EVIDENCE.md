@@ -23,6 +23,8 @@ F10 / الدفتر / الإعلانات / إثبات الجهاز / بيانات
 
 ## B2 — تشغيل سباحة معزول في المرافق
 
+Code commit: `13c500331040684ba6fd3f33f639e79d5f921e4c` مرفوع؛ migrationالوحيدة لهذه الدفعة`20261014152943_V3SportScopedSwimmingPolicies`. النسخ المرئية الدائمة: [360](evidence/b2/sport-settings-360.png)، [390](evidence/b2/sport-settings-390.png)، [430](evidence/b2/sport-settings-430.png)، [Desktop](evidence/b2/sport-settings-1440.png)، [صلاحيات390](evidence/b2/staff-template-390.png)، [صلاحياتDesktop](evidence/b2/staff-template-1440.png). نسخ من لقطات التطبيق الفعلية، لا mockups أو صور مرجع، ولا تستبدل أدلة الصلاحيات.
+
 القاعدة `academy_v3_dev_20261014` للاختبارات و`academy_v3_e2e_20261014` للمتصفح فقط؛ PG16 محلي، لا قاعدة مراجعة/عملاء. migration `20261014152943_V3SportScopedSwimmingPolicies` طبقت على الاثنتين، بما فيها backfill المسبح القديم فيE2E. `dotnet ef migrations has-pending-model-changes ... --no-build` نجح: لا تغييرات معلقة.
 
 Backend: فلتر `V3_swimming|Resource_capacity_requires|Last_capacity_is_atomic|Shared_adjacent_bookings|Coach_conflicts_are_checked|Facility_tenant_branch_role|Day_pass_` **10/10**؛ بعد حراسةseed واختبارها، `V3_swimming|Day_pass_` **6/6**؛ المستهلكون `Resource_timetable_preview|Generated_sessions_reserve|Visit_entry_retry|Visit_demo_seed|Observation_expected6|Observation_demo_seed` **6/6**. ليست أعدادًا تجمع كاختبارات فريدة. تشمل رفضtenant/football/coach/guardian/CSRF، version409، تعطيلAوبقاءB، quoteوعروضالولي بعدالإيقاف، حفظ التاريخ وعدمإنشاءمال، وseedلايعيدالتفعيل.
