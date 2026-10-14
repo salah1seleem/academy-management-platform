@@ -187,6 +187,26 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         }
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await c.GetAsync("/api/v1/manage/payment-requests?from=2026-10-10&to=2026-01-01")).StatusCode);
     }
+    [Fact] public async Task Owner_decision_backlog_keeps_older_pending_requests_outside_the_chart_period()
+    {
+        using var owner = await Owner(); using var guardian = await Guardian();
+        var path = $"/api/v1/reports/owner-summary?from=2026-09-28&to=2026-09-28&branchId={Slice2DemoSeed.CityBranchId}";
+        var before = await owner.GetFromJsonAsync<JsonElement>(path);
+        var name = "لاعب اختبار التسجيل " + Guid.NewGuid();
+        var request = await Send(guardian, "/api/v1/guardian/enrollment-requests", new { requestType = "NewChild", newChildArabicName = name, newChildDateOfBirth = "2017-05-01", sportId = Slice2DemoSeed.FootballId, preferredBranchId = Slice2DemoSeed.CityBranchId, subscriptionPlanId = Slice3DemoSeed.FootballMonthlyId }, Guid.NewGuid().ToString());
+        Assert.Equal(HttpStatusCode.Created, request.StatusCode);
+        var id = (await request.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            await db.NewEnrollmentRequests.Where(x => x.Id == id && x.AcademyId == DemoSeed.NogoomAcademyId)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CreatedAtUtc, new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero)));
+        }
+        var after = await owner.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal(before.GetProperty("paymentRequests").GetProperty("total").GetInt32(), after.GetProperty("paymentRequests").GetProperty("total").GetInt32());
+        Assert.Equal(before.GetProperty("operations").GetProperty("pendingPaymentBacklog").GetInt32() + 1, after.GetProperty("operations").GetProperty("pendingPaymentBacklog").GetInt32());
+        Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(path)).StatusCode);
+    }
     private async Task<(Guid Id, string Email)> CreateStaff(HttpClient c, string role)
     {
         var email = "owner-review-test-" + Guid.NewGuid().ToString("N") + "@example.test";

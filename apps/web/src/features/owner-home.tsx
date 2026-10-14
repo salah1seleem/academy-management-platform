@@ -17,6 +17,7 @@ type Summary = {
     unpaidExpenses: { currency: string; count: number; amount: number }[];
     receivables?: { currency: string; outstanding: number; overdue: number; openCount: number }[];
     accessChanges: number;
+    pendingPaymentBacklog?: number;
     openComplaints: number;
     openSuggestions: number;
     attentionRule: string;
@@ -53,7 +54,7 @@ export function PremiumOwnerDashboard() {
   const p = d?.paymentRequests ?? { total: d?.payments.pending ?? 0, newEnrollments: 0, renewals: d?.payments.pending ?? 0, products: 0 };
   const s = d?.subscriptions ?? { active: 0, expiring: 0, expired: 0 }, total = s.total ?? s.active + s.expired, other = Math.max(0, total - s.active - s.expired);
   const decisions = d ? [
-    ...(p.total > 0 ? [{ title: "راجع طلبات الدفع", detail: `${number(p.total)} طلب بانتظار قرار`, href: queue() }] : []),
+    ...((d.operations?.pendingPaymentBacklog ?? p.total) > 0 ? [{ title: "راجع طلبات الدفع", detail: `${number(d.operations?.pendingPaymentBacklog ?? p.total)} طلب بانتظار قرار`, href: `/dashboard/subscriptions/payments?${params({ branchId: filters.branchId ?? "", status: "Pending" })}` }] : []),
     ...(d.operations?.openComplaints ? [{ title: "تابع شكاوى الأسر", detail: `${number(d.operations.openComplaints)} شكوى لم تُغلق`, href: "/dashboard/feedback?kind=Complaint&status=Unresolved" }] : []),
     ...(d.operations?.groupAttention.filter(g => !g.hasCoach).slice(0, 1).map(g => ({ title: "مجموعة بلا مدرب", detail: g.name, href: `/dashboard/academy/groups/${g.id}?tab=coaches` })) ?? []),
   ].slice(0, 3) : [];
