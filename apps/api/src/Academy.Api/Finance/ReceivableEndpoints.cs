@@ -36,10 +36,14 @@ public static class ReceivableEndpoints
         api.MapGet("/{id:guid}/collections", async (Guid id, CurrentTenant tenant, FoundationDbContext db) => {
             var t = (await tenant.ResolveAsync())!; var doc = await db.ReceivableDocuments.SingleOrDefaultAsync(x => x.Id == id);
             if (doc is null) return Results.NotFound();
+            // Materialize scoped roots BEFORE historical fund usage queries. An
+            // IgnoreQueryFilters subquery must not widen the visible collection set.
             var rows = await db.Collections.Where(c => c.SportEnrollmentId == doc.SportEnrollmentId && c.Currency == doc.Currency)
-                .Select(c => new { c.Id, c.ConfirmedAtUtc, c.Amount, available = c.Amount - (db.ReceivableMovements.IgnoreQueryFilters().Where(m => m.AcademyId == t.AcademyId && m.CollectionId == c.Id && m.Kind == ReceivableMovementKind.PaymentAllocation).Sum(m => (decimal?)m.Amount) ?? 0) - (db.CollectionRefunds.IgnoreQueryFilters().Where(r => r.AcademyId == t.AcademyId && r.CollectionId == c.Id).Sum(r => (decimal?)r.Amount) ?? 0) })
-                .Where(c => c.available > 0).OrderByDescending(c => c.ConfirmedAtUtc).ToListAsync();
-            return Results.Ok(rows.Select(c => new { c.Id, c.ConfirmedAtUtc, amount = Money(c.Amount), available = Money(c.available) }));
+                .OrderByDescending(c => c.ConfirmedAtUtc).Select(c => new { c.Id, c.ConfirmedAtUtc, c.Amount }).ToListAsync();
+            var ids = rows.Select(c => c.Id).ToArray();
+            var used = await db.ReceivableMovements.IgnoreQueryFilters().Where(m => m.AcademyId == t.AcademyId && m.CollectionId.HasValue && ids.Contains(m.CollectionId.Value) && m.Kind == ReceivableMovementKind.PaymentAllocation).GroupBy(m => m.CollectionId!.Value).Select(g => new { Id = g.Key, Amount = g.Sum(m => m.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
+            var refunded = await db.CollectionRefunds.IgnoreQueryFilters().Where(r => r.AcademyId == t.AcademyId && ids.Contains(r.CollectionId)).GroupBy(r => r.CollectionId).Select(g => new { Id = g.Key, Amount = g.Sum(r => r.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
+            return Results.Ok(rows.Select(c => new { c.Id, c.ConfirmedAtUtc, amount = Money(c.Amount), available = c.Amount - used.GetValueOrDefault(c.Id) - refunded.GetValueOrDefault(c.Id) }).Where(c => c.available > 0).Select(c => new { c.Id, c.ConfirmedAtUtc, c.amount, available = Money(c.available) }));
         });
         app.MapGet("/api/v1/guardian/receivables", async (CurrentTenant tenant, ClaimsPrincipal actor, FoundationDbContext db, ISubscriptionClock clock) => {
             var t = (await tenant.ResolveAsync())!; var user = Actor(actor);

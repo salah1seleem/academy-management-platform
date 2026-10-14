@@ -47,7 +47,7 @@ public sealed partial class GroupPlacementService
         if (await db.EnrollmentSessionMoves.AnyAsync(m => m.SportEnrollmentId == enrollment && (ids.Contains(m.SourceSessionId) || ids.Contains(m.TargetSessionId)))) conflicts.Add("إحدى الحصص لها نقل معتمد؛ لا نعيد نقلها أو نستبدل القرار بصمت.");
         if (await db.CompensationBookings.AnyAsync(c => c.SportEnrollmentId == enrollment && ids.Contains(c.TrainingSessionId) && c.State == Academy.Infrastructure.People.CompensationBookingState.Reserved)) conflicts.Add("الحصة لها تعويض محجوز؛ راجعه قبل النقل.");
         var impacts = new List<SessionTransferImpact>(); var eligibility = new List<object>();
-        var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches"]);
+        var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]);
         foreach (var p in pairs)
         {
             var source = slots.Single(s => s.Id == p.SourceSessionId); var target = slots.Single(s => s.Id == p.TargetSessionId);
@@ -56,7 +56,7 @@ public sealed partial class GroupPlacementService
             var (_, group) = await Group(target.TrainingGroupId, false);
             var review = await Inspect(group, [enrollment], effectiveDate: target.SessionDate, transfer: true, occurrence: target.Id);
             eligibility.Add(review.Fingerprint); conflicts.AddRange(review.Conflicts); conflicts.AddRange(review.Players.SelectMany(x => x.Reasons));
-            if (await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).AnyAsync(s => s.AcademyId == t.AcademyId && !ids.Contains(s.Id) && s.SessionDate == target.SessionDate && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < target.EndTime && target.StartTime < s.EndTime && allEnrollments.Any(x => x.AcademyId == t.AcademyId && x.PlayerId == e.PlayerId && x.IsActive && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, s.Id)))) conflicts.Add("الحصة البديلة تتعارض مع موعد آخر للاعب.");
+            if (await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).AnyAsync(s => s.AcademyId == t.AcademyId && !ids.Contains(s.Id) && s.SessionDate == target.SessionDate && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < target.EndTime && target.StartTime < s.EndTime && allEnrollments.Any(x => x.AcademyId == t.AcademyId && x.PlayerId == e.PlayerId && x.IsActive && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, s.Id)))) conflicts.Add("الحصة البديلة تتعارض مع موعد آخر للاعب.");
             impacts.Add(new(Slot(source), Slot(target), review.CurrentPlayers + 1, group.Capacity));
         }
         var targetIds = pairs.Select(p => p.TargetSessionId).ToArray(); var targets = slots.Where(s => targetIds.Contains(s.Id)).ToArray();

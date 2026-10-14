@@ -1,5 +1,17 @@
 # أدلة قبول V2 + V3
 
+## B3a — نطاق الرياضة التشغيلي، 14 أكتوبر 2026
+
+نفس قاعدتي الاختبار المعزولتين B2؛ لا reset أو تغيير لقاعدة المراجعة. Migrations `20261014165922_V3MembershipSportScope` و`20261014170814_V3PlanSportScopeLookup` مطبقتان على الاثنتين؛ `has-pending-model-changes --no-build` نجح.
+
+الأمر النهائي المستهدف `dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family|FullyQualifiedName~Family_request_and_proof_require_every_branch|FullyQualifiedName~Branch_admin_cannot_publish_outside_scope|FullyQualifiedName~IMP_06_branch_admin_can_publish|FullyQualifiedName~Scoped_admin_collects_linked_family_across_branches' --no-restore` باستخدام اتصال قاعدة V3: **18/18 في61s**. يشمل 8 اختبارات V3 جديدة: نطاق/IDOR/CSV/كتابة صحيحة ومرفوضة، مدخلات أجنبية وتوافق عميل قديم، منع المجالات المشتركة وworker، كائن tracked وهوية طفل متعدد الرياضات، دور ثان لا يوسع الدور المختار وتعارض مدرب عبر الرياضات، سحب scope/action قبل حفظ أمر، seed آمن متكرر، طلب أسرة وإثبات متعدد الرياضات. الستة القديمة وأربعة مستهلكين اجتازوا دون خفض assertions.
+
+مجموعة إضافية محددة للحصص والحجز/إنشاء المجموعة **7/7**، تضم 3 حالات V3 متداخلة أعيدت بعد توسيع التحقق؛ لا تجمع الأرقام كاختبارات فريدة. Web: staff-access / sport-operations-settings / facilities **12/12**؛ typecheck/lint ناجحان. متصفح mobile-chromium: v2-staff-access / v3-staff-templates **2/2 في25.9s** مع production build على5186/3106. تحقق حفظ ثم reload ثم دخول إداري مستقل ثم سحب الرياضة من المالك وانعكاسه في نفس الجلسة. صور فعلية [390](evidence/b3a/staff-scope-390.png) و[1440](evidence/b3a/staff-scope-1440.png)، assertions تمنع overflow. مراجعة لقطة390 الكاملة؛ ليست صور كل أدوار V3.
+
+أول محاولة خادم كشفت دورة EF بين الباقة ونشرها بسبب فلاتر الرياضة؛ أصلحت بـlookup SQL tenant-parameterized، لا تعطيل حماية الأكاديمية. اختبار tracked أولي حاول تغيير مفتاح EF ثابت، فعدل السيناريو لاختبار تغيير حالة كائن مخفي وهوية مشتركة باستخدام عضوية فعلية مفوضة، مع بقاء رفض الكتابة وعدم الحفظ. أخطاء compilation في سيناريوهات الاختبار صُححت قبل النتائج النهائية. لا إخفاء فشل أو وصف تشغيل aborted بأنه ناجح.
+
+القيود: تفويض رياضي ضيق ليس كل وظائف الإدارة أو دورًا مخصصًا متعدد المنح. توجد عمليات مشتركة ممنوعة صراحة حتى تطبيق مساراتها، والمالك والتفويض السابق الواسع لم يتغيرا. لا Full Regression موحد أو Flutter/device جديد أو ledger/F10 أو إعلانات أو بيانات V3 الشاملة. CI اللاحق نتيجة مستقلة؛ التشغيلات السابقة كانت Backend جاريًا ولا توصف خضراء بالكامل.
+
 ## خط أساس 2026-10-14
 
 - Starting HEAD: `3d5a60d5026a5b8cd54bcf3f1f43abcf1ea6934e` على `codex/15-native-mobile-app`، شجرة نظيفة ومطابقةorigin. main لم يُغيّر.

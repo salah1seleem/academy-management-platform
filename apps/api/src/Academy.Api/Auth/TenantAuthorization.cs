@@ -113,7 +113,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
                 // Explicit V2 grants use the actual endpoint module, not that legacy alias.
                 // Export is an additional permission, not an alias for the route's
                 // read policy. Both requirements must pass for a financial export.
-                var module = requirement.Permission == AcademyPermissions.ReportsExport
+                var module = requirement.Permission == AcademyPermissions.ReportsExport || context.Resource is HttpContext assetRequest && MembershipScope.IsAssetRead(assetRequest.Request.Path.Value ?? "", assetRequest.Request.Method)
                     ? StaffAccessRules.ForPermission(requirement.Permission)
                     : context.Resource is HttpContext request ? StaffAccessRules.ForPath(request.Request.Path.Value ?? "") : null;
                 module ??= StaffAccessRules.ForPermission(requirement.Permission);
@@ -123,6 +123,10 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
                 allowed = await db.AcademyMemberships.AnyAsync(x => x.Id == membership.MembershipId && x.UseActionGrants)
                     && await db.StaffActionGrants.AnyAsync(x => x.AcademyId == membership.AcademyId && x.MembershipId == membership.MembershipId && x.IsActive && x.Read && (x.Module == "players" || x.Module == "subscriptions" || x.Module == "attendance" || x.Module == "evaluations"));
         }
+        if (allowed && db.SportScopeRestricted && requirement.Permission is AcademyPermissions.OwnerDashboardRead
+            or AcademyPermissions.AcademySettingsManage or AcademyPermissions.StaffProvision or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage
+            or AcademyPermissions.NutritionRead or AcademyPermissions.NutritionManage or AcademyPermissions.MedicalRecordRead or AcademyPermissions.MedicalRecordManage
+            or AcademyPermissions.PlayerMediaRead or AcademyPermissions.PlayerMediaManage) allowed = false;
         if (allowed && membership.Role == AcademyRole.Coach && requirement.Permission == AcademyPermissions.AttendanceManage)
             allowed = await db.AcademyExperiences.AnyAsync(x => x.AcademyId == membership.AcademyId && x.CoachAttendancePolicyConfirmed && x.CoachAttendanceEnabled);
         var feature = requirement.Permission switch {

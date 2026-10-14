@@ -15,6 +15,10 @@ public static class ImportAuthority
         if (m is null || m.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) throw new ImportRejected("authority");
         if (m.Role == AcademyRole.AcademyAdmin)
         {
+            // A queued job must not bypass a newly narrowed sport grant. The
+            // current import format provisions shared identities; keep it owner/
+            // all-sport only until its shared-record review is implemented.
+            if (!m.AllSports) throw new ImportRejected("authority");
             var grants = await db.StaffActionGrants.IgnoreQueryFilters().Where(g => g.AcademyId == academy && g.MembershipId == membership && g.IsActive && g.Read && g.Add).Select(g => g.Module).ToArrayAsync();
             if (!m.UseActionGrants || !grants.Contains("players") || !grants.Contains("subscriptions") || balances && !grants.Contains("finance")) throw new ImportRejected("authority");
         }

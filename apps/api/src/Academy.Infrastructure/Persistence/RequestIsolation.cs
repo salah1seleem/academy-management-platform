@@ -26,11 +26,17 @@ public sealed partial class FoundationDbContext
     public Guid RequestMembershipId { get; private set; }
     public bool BranchScopeRestricted { get; private set; }
     public Guid[] RequestBranchIds { get; private set; } = [];
-    public void BindRequestScope(Guid academy, Guid user, Guid member, Guid[]? branches)
+    public bool SportScopeRestricted { get; private set; }
+    public Guid[] RequestSportIds { get; private set; } = [];
+    public string? RequestModule { get; private set; }
+    public string RequestOperation { get; private set; } = "Read";
+    public void BindRequestScope(Guid academy, Guid user, Guid member, Guid[]? branches, Guid[]? sports = null, string? module = null, string operation = "Read")
     {
         if (RequestScopeEnabled) throw new InvalidOperationException("Request scope already bound");
         RequestAcademyId = academy; RequestUserId = user; RequestMembershipId = member;
         BranchScopeRestricted = branches is not null; RequestBranchIds = branches ?? [];
+        SportScopeRestricted = sports is not null; RequestSportIds = sports ?? [];
+        RequestModule = module; RequestOperation = operation;
         RequestScopeEnabled = true;
     }
     private void ConfigureRequestIsolation(ModelBuilder b)
@@ -107,7 +113,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<SubscriptionAdjustment>(b, x => SubscriptionPeriods.Any(p => p.Id == x.SubscriptionPeriodId));
         BranchFilter<RenewalRequest>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<FamilyRenewalLine>(b, x => RequestBranchIds.Contains(x.BranchId));
-        BranchFilter<FamilyRenewalRequest>(b, x => !FamilyRenewalLines.IgnoreQueryFilters().Any(l => l.AcademyId == x.AcademyId && l.RequestId == x.Id && !RequestBranchIds.Contains(l.BranchId)));
+        BranchFilter<FamilyRenewalRequest>(b, x => x.LineCount > 0 && FamilyRenewalLines.Count(l => l.RequestId == x.Id) == x.LineCount);
         BranchFilter<RenewalDiscountAdjustment>(b, x => RenewalRequests.Any(r => r.Id == x.RenewalRequestId));
         BranchFilter<PaymentRequest>(b, x => RenewalRequests.Any(r => r.Id == x.RenewalRequestId));
         BranchFilter<PaymentProviderEvent>(b, x => PaymentRequests.Any(p => p.Id == x.PaymentRequestId));
@@ -141,6 +147,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         // Permissions and employee financial administration are not delegated by branch visibility.
+        ConfigureSportIsolation(b);
     }
     private void BranchFilter<T>(ModelBuilder b, Expression<Func<T, bool>> predicate) where T : class
     {
@@ -149,13 +156,18 @@ public sealed partial class FoundationDbContext
     }
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        using var scopeTransaction = SportScopeRestricted && Database.CurrentTransaction is null ? Database.BeginTransaction() : null;
         GuardWrites(CancellationToken.None).GetAwaiter().GetResult();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
+        var saved = base.SaveChanges(acceptAllChangesOnSuccess);
+        scopeTransaction?.Commit(); return saved;
     }
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        await using var scopeTransaction = SportScopeRestricted && Database.CurrentTransaction is null ? await Database.BeginTransactionAsync(cancellationToken) : null;
         await GuardWrites(cancellationToken);
-        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        if (scopeTransaction is not null) await scopeTransaction.CommitAsync(cancellationToken);
+        return saved;
     }
     private async Task GuardWrites(CancellationToken token)
     {
@@ -200,23 +212,25 @@ public sealed partial class FoundationDbContext
             if (new[] { nameof(SubscriptionPeriod.Origin), nameof(SubscriptionPeriod.ImportJobId), nameof(SubscriptionPeriod.CollectionId), nameof(SubscriptionPeriod.PriceSnapshot) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("اتفاق الاستيراد ثابت، ولا يتحول إلى تحصيل أو يعاد تسعيره تلقائيًا.");
         if (!RequestScopeEnabled) return;
+        if (SportScopeRestricted) await RevalidateSportAuthority(token);
         ChangeTracker.DetectChanges();
         var entries = ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted && e.Metadata.FindProperty("AcademyId") is not null).ToArray();
         foreach (var entry in entries)
         {
             if (entry.Property("AcademyId").CurrentValue is not Guid academy || academy != RequestAcademyId) throw new ResourceScopeException();
-            if (!BranchScopeRestricted) continue;
-            if (entry.Entity is DiscountRule rule && (!rule.BranchId.HasValue || entry.State != EntityState.Added && entry.Property(nameof(DiscountRule.BranchId)).OriginalValue is null)) throw new ResourceScopeException();
-            if (entry.Entity is SubscriptionPlan plan)
+            if (SportScopeRestricted) await GuardSportWrite(entry, entries, token);
+            if (!BranchScopeRestricted && !SportScopeRestricted) continue;
+            if (BranchScopeRestricted && entry.Entity is DiscountRule rule && (!rule.BranchId.HasValue || entry.State != EntityState.Added && entry.Property(nameof(DiscountRule.BranchId)).OriginalValue is null)) throw new ResourceScopeException();
+            if (BranchScopeRestricted && entry.Entity is SubscriptionPlan plan)
             {
                 if (plan.AllBranches || entry.State != EntityState.Added && (bool)entry.Property(nameof(SubscriptionPlan.AllBranches)).OriginalValue!) throw new ResourceScopeException();
                 // Reading a shared product is not authority to change other branches' prices.
                 if (entry.State != EntityState.Added && await PlanBranchPublications.IgnoreQueryFilters()
                     .AnyAsync(p => p.AcademyId == RequestAcademyId && p.SubscriptionPlanId == plan.Id && !RequestBranchIds.Contains(p.BranchId), token)) throw new ResourceScopeException();
             }
-            if (entry.Entity is Branch scopedBranch && !RequestBranchIds.Contains(scopedBranch.Id)) throw new ResourceScopeException();
+            if (BranchScopeRestricted && entry.Entity is Branch scopedBranch && !RequestBranchIds.Contains(scopedBranch.Id)) throw new ResourceScopeException();
             foreach (var name in new[] { "BranchId", "PreferredBranchId" })
-                if (entry.Metadata.FindProperty(name) is not null && entry.Property(name).CurrentValue is Guid branch && !RequestBranchIds.Contains(branch)) throw new ResourceScopeException();
+                if (BranchScopeRestricted && entry.Metadata.FindProperty(name) is not null && entry.Property(name).CurrentValue is Guid branch && !RequestBranchIds.Contains(branch)) throw new ResourceScopeException();
             foreach (var fk in entry.Metadata.GetForeignKeys().Where(f => f.PrincipalEntityType.FindProperty("AcademyId") is not null))
             {
                 var key = fk.PrincipalKey.Properties.Select((p, i) => (p.Name, Value: entry.Property(fk.Properties[i].Name).CurrentValue)).SingleOrDefault(x => x.Name == "Id");

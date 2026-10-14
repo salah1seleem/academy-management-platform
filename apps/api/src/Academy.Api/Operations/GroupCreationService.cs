@@ -32,12 +32,12 @@ public sealed class GroupCreationService(FoundationDbContext db, GroupPlacementS
     {
         // Only opaque revision metadata is returned. Ignore branch scope solely for
         // academy-wide coach/player collision detection; never ignore tenant scope.
-        var sessions = await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches"]).Where(s => s.SessionDate >= b.Timetable.From && s.SessionDate <= b.Timetable.To).OrderBy(s => s.Id).Select(s => new { s.Id, s.Version }).ToArrayAsync();
-        var bookings = await db.ResourceBookings.IgnoreQueryFilters(["trusted-branches"]).Where(s => s.Date >= b.Timetable.From && s.Date <= b.Timetable.To).OrderBy(s => s.Id).Select(s => new { s.Id, s.Version }).ToArrayAsync();
+        var sessions = await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).Where(s => s.SessionDate >= b.Timetable.From && s.SessionDate <= b.Timetable.To).OrderBy(s => s.Id).Select(s => new { s.Id, s.Version }).ToArrayAsync();
+        var bookings = await db.ResourceBookings.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).Where(s => s.Date >= b.Timetable.From && s.Date <= b.Timetable.To).OrderBy(s => s.Id).Select(s => new { s.Id, s.Version }).ToArrayAsync();
         var resourceId = b.Timetable.Resource?.ResourceId ?? Guid.Empty;
         var resource = await db.FacilityResources.AsNoTracking().Where(r => r.Id == resourceId).Select(r => new { r.Id, r.Version }).SingleOrDefaultAsync();
         var closures = await db.ResourceClosures.Where(c => c.ResourceId == resourceId).OrderBy(c => c.Id).Select(c => new { c.Id, c.Version }).ToArrayAsync();
-        var assignments = await db.StaffGroupAssignments.IgnoreQueryFilters(["trusted-branches"]).Where(a => a.AcademyMembershipId == b.CoachMembershipId).OrderBy(a => a.Id).Select(a => new { a.Id, a.Version }).ToArrayAsync();
+        var assignments = await db.StaffGroupAssignments.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).Where(a => a.AcademyMembershipId == b.CoachMembershipId).OrderBy(a => a.Id).Select(a => new { a.Id, a.Version }).ToArrayAsync();
         var coach = await db.AcademyMemberships.Where(m => m.Id == b.CoachMembershipId).Select(m => new { m.UpdatedAtUtc, user = m.User.UpdatedAtUtc }).SingleAsync();
         var branch = await db.Branches.Where(x => x.Id == b.BranchId).Select(x => x.Version).SingleAsync(); var sport = await db.Sports.Where(x => x.Id == b.SportId).Select(x => x.Version).SingleAsync(); var age = await db.AgeCategories.Where(x => x.Id == b.AgeCategoryId).Select(x => x.Version).SingleAsync(); var level = await db.TrainingLevels.Where(x => x.Id == b.LevelId).Select(x => x.Version).SingleAsync();
         var enrollments = await db.SportEnrollments.Where(e => b.EnrollmentIds.Contains(e.Id)).OrderBy(e => e.Id).Select(e => new { e.Id, e.Version, player = e.Player.Version }).ToArrayAsync();

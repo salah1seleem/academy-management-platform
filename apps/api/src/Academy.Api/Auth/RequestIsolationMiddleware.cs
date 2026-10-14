@@ -21,7 +21,15 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
                 Guid[]? branches = null;
                 if (t.Role == AcademyRole.AcademyAdmin && !await db.AcademyMemberships.Where(x => x.Id == t.MembershipId && x.AcademyId == t.AcademyId).Select(x => x.AllBranches).SingleAsync(context.RequestAborted))
                     branches = await db.MembershipBranchAccesses.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.IsActive && db.Branches.Any(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId && b.IsActive)).Select(x => x.BranchId).ToArrayAsync(context.RequestAborted);
-                db.BindRequestScope(t.AcademyId, Guid.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!), t.MembershipId, branches);
+                var sports = await MembershipScope.Sports(db, t, context.RequestAborted);
+                db.BindRequestScope(t.AcademyId, Guid.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!), t.MembershipId, branches, sports,
+                    StaffAccessRules.ForPath(path), StaffAccessRules.Operation(context.Request.Method, path));
+                if (sports is not null && !MembershipScope.AllowsNarrowSportPath(path, context.Request.Method))
+                {
+                    context.Response.StatusCode = 403;
+                    await context.Response.WriteAsJsonAsync(new { title = "هذه العملية تشمل بيانات مشتركة بين الرياضات وتحتاج تفويضًا أوسع من المالك", status = 403 });
+                    return;
+                }
                 if (t.Role == AcademyRole.AcademyAdmin && await db.AcademyMemberships.Where(x => x.Id == t.MembershipId).Select(x => x.UseActionGrants).SingleAsync(context.RequestAborted))
                 {
                     var module = StaffAccessRules.ForPath(path);
@@ -30,6 +38,9 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
                         var grant = await db.StaffActionGrants.AsNoTracking().SingleOrDefaultAsync(x => x.MembershipId == t.MembershipId && x.Module == module && x.IsActive, context.RequestAborted);
                         var operation = StaffAccessRules.Operation(context.Request.Method, path);
                         var allowed = grant?.Read == true && (operation == "Read" || operation == "Add" && grant.Add || operation == "Edit" && grant.Edit || operation == "Delete" && grant.Delete);
+                        // A scoped photo/proof download is authorized by its actual
+                        // purpose in AssetEndpoints, not by a blanket media grant.
+                        if (sports is not null && MembershipScope.IsAssetRead(path, context.Request.Method)) allowed = true;
                         if (!allowed && context.Request.Method == "GET" && path.TrimEnd('/') == "/api/v1/manage/structure/options")
                             allowed = await db.StaffActionGrants.AnyAsync(x => x.MembershipId == t.MembershipId && x.IsActive && x.Read && (x.Module == "players" || x.Module == "subscriptions" || x.Module == "attendance" || x.Module == "evaluations"), context.RequestAborted);
                         if (!allowed) { await Deny(context); return; }

@@ -415,6 +415,7 @@ if (app.Environment.IsEnvironment("Demo"))
         await AcademyConfigurationService.SeedDemo(db, ids);
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
+            if (app.Configuration.GetValue<bool>("Demo:SportScopeSeedEnabled")) await SportScopeDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
             if (app.Configuration.GetValue<bool>("Demo:FamilyRenewalSeedEnabled")) await FamilyRenewalDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
             if (app.Configuration.GetValue<bool>("Demo:FreeTrainingSeedEnabled")) await FreeTrainingDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
             await ReceivableDemoSeed.SeedAsync(db);

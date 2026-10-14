@@ -2,6 +2,19 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { StaffAccessEditor } from "./staff-access";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it("requires sports, previews the correlated scope and saves it without widening", async () => {
+  const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith("/csrf") ? { token: "csrf" } : { ...value, allSports: false, sports: [{ id: "football", name: "كرة القدم" }, { id: "swimming", name: "السباحة" }], selectedSports: ["football"] } }));
+  global.fetch = fetcher; const close = vi.fn(); render(<StaffAccessEditor id="admin" name="إداري كرة القدم" onClose={close} />);
+  const selected = await screen.findByRole("checkbox", { name: "كرة القدم" });
+  expect(selected).toBeChecked(); expect(screen.getByRole("radio", { name: "رياضات محددة" })).toBeChecked();
+  fireEvent.click(selected); expect(screen.getByRole("button", { name: "اعتماد الصلاحيات" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: "السباحة" }));
+  expect(screen.getByRole("region", { name: "معاينة أثر الصلاحيات" })).toHaveTextContent("كل فروع الأكاديمية · السباحة");
+  fireEvent.click(screen.getByRole("button", { name: "اعتماد الصلاحيات" }));
+  fireEvent.click(screen.getByRole("button", { name: "تأكيد الاعتماد" }));
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  expect(JSON.parse(fetcher.mock.calls.find(([, init]) => init?.method === "PUT")![1].body)).toMatchObject({ allBranches: true, branches: [], allSports: false, sports: ["swimming"] });
+});
 const value = { allBranches: true, useActionGrants: false, modules: ["players", "attendance"], branches: [{ id: "branch-a", name: "فرع الاختبار" }], selectedBranches: [], actions: [], history: [] };
 function setup() {
   const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith("/csrf") ? { token: "csrf" } : value }));

@@ -16,6 +16,11 @@ public sealed class StaffActionGrant : TenantEntity
     public bool Edit { get; set; }
     public bool Delete { get; set; }
 }
+public sealed class MembershipSportAccess : TenantEntity
+{
+    public Guid MembershipId { get; set; }
+    public Guid SportId { get; set; }
+}
 public sealed class StaffAccessAudit : TenantEntity
 {
     public Guid ActorUserId { get; set; }
