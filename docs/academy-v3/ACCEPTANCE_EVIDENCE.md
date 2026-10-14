@@ -9,6 +9,8 @@
 
 ## تنفيذ B1
 
+B1 commit: `ee102e8844af289d5d7002c21503d99873ef3378`، مرفوع. CI38588910233: frontend/flutter/e2e success؛ backend كانin_progress عند الفحص، لا ادعاءCIكامل.
+
 ### B1 — تحقق فعلي على قاعدة academy_v3_dev_20261014
 
 قاعدةPG16 جديدة معزولة، طبقت عليهاmigrationsالقائمة فقط، دونresetأو بيانات عميل. الأوامر: `dotnet test tests/integration/Academy.IntegrationTests/Academy.IntegrationTests.csproj --no-restore --filter FullyQualifiedName~V2StaffScopeTests` **6/6**؛ `npm test -- src/features/staff-access.test.tsx` **4/4**؛ `npm run typecheck` و`npm run lint` وproductionbuild ناجحة. `npx playwright test ... v2-feedback-followup.spec.ts` علىfootballconfig **1/1**؛ `npm test -- v3-staff-templates.spec.ts v2-staff-access.spec.ts` علىports5186/3106 **2/2** معproductionbuild.
@@ -18,3 +20,15 @@
 F10 / الدفتر / الإعلانات / إثبات الجهاز / بيانات3أكاديميات / النهائي الموحد / صورV3 / الأجهزة الحقيقية: **لم تنفذ**. لا تكامل خارجي مهيأ يعلن ناجحًا. نتائجV2 القديمة موثقة فيdocs/delivery/V2_EXECUTION.md وليست نتائجV3.
 
 الإعادة النهائية للمتصفح **2/2 في32.3s** على قاعدة ثانية نظيفة `academy_v3_e2e_20261014` حتى لا تلوث فروع اختبارات التكامل صور العرض. البحث عن فرع والقائمة محدودة الارتفاع؛ أعدناWeb4/4 وtypecheck/lint بعد التغيير. روجعت لقطة390 النهائية. الصور تتضمن شاشةصلاحياتB1فقط؛ بقيةصورV3لمتنفذ.
+
+## B2 — تشغيل سباحة معزول في المرافق
+
+القاعدة `academy_v3_dev_20261014` للاختبارات و`academy_v3_e2e_20261014` للمتصفح فقط؛ PG16 محلي، لا قاعدة مراجعة/عملاء. migration `20261014152943_V3SportScopedSwimmingPolicies` طبقت على الاثنتين، بما فيها backfill المسبح القديم فيE2E. `dotnet ef migrations has-pending-model-changes ... --no-build` نجح: لا تغييرات معلقة.
+
+Backend: فلتر `V3_swimming|Resource_capacity_requires|Last_capacity_is_atomic|Shared_adjacent_bookings|Coach_conflicts_are_checked|Facility_tenant_branch_role|Day_pass_` **10/10**؛ بعد حراسةseed واختبارها، `V3_swimming|Day_pass_` **6/6**؛ المستهلكون `Resource_timetable_preview|Generated_sessions_reserve|Visit_entry_retry|Visit_demo_seed|Observation_expected6|Observation_demo_seed` **6/6**. ليست أعدادًا تجمع كاختبارات فريدة. تشمل رفضtenant/football/coach/guardian/CSRF، version409، تعطيلAوبقاءB، quoteوعروضالولي بعدالإيقاف، حفظ التاريخ وعدمإنشاءمال، وseedلايعيدالتفعيل.
+
+Web: `npm test -- src/features/sport-operations-settings.test.tsx src/features/facilities.test.tsx src/features/staff-access.test.tsx` **11/11**، typecheck/lint ناجحان. E2E: `npm test -- v3-sport-settings.spec.ts v3-staff-templates.spec.ts` **2/2 في24s** معproductionbuild على5186/3106. الرحلة: رياضةGeneral→Swimming؛ حفظ فرع؛ reload؛ فرع آخرoff؛ إنشاءPoolوحارةواعتماد؛ حجزOpenSwim؛ إيقاف؛ POSTآخر403؛ الحجزالأولباقدونحذف؛ رابطالمرافقيحفظالفرع.
+
+صور360/390/430/1440 تحت `tests/e2e/test-results/v3-sport-settings-Owner-co-24939-y-and-disables-new-bookings-mobile-chromium/`، مع overflow assertions؛ فحص390/1440فعليًا، وإصلاحselectخامفيالواجهةبمقاس48pxوتباعدمقروء، ثم إعادة2/2. محاولةE2Eالأولى تعثرتgetByLabelلـselect؛ الثانيةstatusغيرفريد بسببnoticeعام؛ استُخدمrolecomboboxوstatusخاصبنصالحفظ، ثم1/1و2/2 دونحذفassertions. lint كشفeffectloadوعولجباستدعاءfetchداخلeffectبـAbortController؛ typecheckكشفmockfetchوعولجبـstubGlobal. أمرmigrationالأولافتقدمتغيرconnectionوتصححعلىقاعدةالاختبار؛ لا مشكلةشبكة أو retryبلاسبب.
+
+لا اختبار جهاز/Flutter جديد فيB2 ولا دور رياضة مترابط أو ledger أو3أكاديمياتDemo كاملة؛ هذه فجوات محفوظة. CIالجديد بعدpush مستقل عن النتائج المحلية.

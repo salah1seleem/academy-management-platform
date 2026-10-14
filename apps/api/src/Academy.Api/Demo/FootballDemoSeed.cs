@@ -48,6 +48,8 @@ public static class FootballDemoSeed
         if (reset && academy is null) throw new InvalidOperationException("Cannot reset an unmarked/unseeded academy.");
         if (academy is not null && !reset)
         {
+            var syntheticSport = await db.Sports.SingleOrDefaultAsync(x => x.AcademyId == AcademyId && x.Id == Id("sport"), ct);
+            if (syntheticSport?.Kind == SportKind.General) { syntheticSport.Kind = SportKind.Football; await db.SaveChangesAsync(ct); }
             await SeedExperience(services, db, ct);
             await SeedReviewExtensions(db, services.GetRequiredService<ISubscriptionClock>().UtcNow, ct);
             await PayrollDemoSeed.AddOnce(db, ct);
@@ -77,7 +79,7 @@ public static class FootballDemoSeed
             await User(users, db, $"guardian{i + 1}", name, 100 + i, AcademyRole.Guardian, null, now, ct);
             Add(db, new GuardianProfile { DisplayName = name, UserId = Id($"user/guardian{i + 1}"), ContactPhone = Phone(100 + i) }, $"guardian/{i}", now);
         }
-        Add(db, new Sport { ArabicName = "كرة القدم", EnglishName = "Football" }, "sport", now);
+        Add(db, new Sport { ArabicName = "كرة القدم", EnglishName = "Football", Kind = SportKind.Football }, "sport", now);
         string[] branches = ["فرع مدينة نصر", "فرع مدينتي", "فرع الشروق"];
         for (var i = 0; i < 3; i++) Add(db, new Branch { ArabicName = branches[i] }, $"branch/{i}", now);
         for (var i = 0; i < 6; i++)

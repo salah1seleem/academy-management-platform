@@ -42,6 +42,8 @@ public sealed partial class FoundationDbContext
             b.Entity(type).HasQueryFilter("trusted-academy", Expression.Lambda(predicate, row));
         }
         BranchFilter<Branch>(b, x => RequestBranchIds.Contains(x.Id));
+        BranchFilter<SwimmingBranchPolicy>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<SportSettingsAudit>(b, x => !x.BranchId.HasValue || RequestBranchIds.Contains(x.BranchId.Value));
         BranchFilter<CashRegister>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashierAssignment>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashSession>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -160,6 +162,7 @@ public sealed partial class FoundationDbContext
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
         GuardCashFamilyPurpose();
+        if (ChangeTracker.Entries<SportSettingsAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل إعدادات الرياضة ثابت ولا يعدل أو يحذف.");
         if (ChangeTracker.Entries<ReceivableCreditApplication>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("تخصيص الرصيد الدائن ثابت ولا يعدل أو يحذف.");
         ChangeTracker.DetectChanges();
         if (ChangeTracker.Entries<FreeTrainingApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("اعتماد الإعفاء ثابت؛ لا يعدل أو يحذف.");

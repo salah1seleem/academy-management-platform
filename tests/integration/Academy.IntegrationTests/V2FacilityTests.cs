@@ -58,6 +58,14 @@ public sealed partial class V2PlanPublicationTests
     }
     private async Task<Guid> FacilityFixture(HttpClient owner, bool approve = true, Guid? branch = null)
     {
+        var policyResponse = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/sport-settings/{Slice2DemoSeed.SwimmingId}/swimming");
+        var branchId = branch ?? Slice2DemoSeed.FifthBranchId;
+        var current = policyResponse.GetProperty("policies").EnumerateArray().FirstOrDefault(x => x.GetProperty("branchId").GetGuid() == branchId);
+        var version = current.ValueKind == JsonValueKind.Undefined ? 0u : current.GetProperty("version").GetUInt32();
+        var csrf = await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");
+        using var policy = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/manage/sport-settings/{Slice2DemoSeed.SwimmingId}/swimming/{branchId}") { Content = JsonContent.Create(new SwimmingPolicyWrite(true, true, true, true, version)) };
+        policy.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString());
+        (await owner.SendAsync(policy)).EnsureSuccessStatusCode();
         var facility = await Write(owner, "/api/v1/facilities", new FacilityWrite("مرفق اختبار " + Guid.NewGuid().ToString("N")[..8], branch ?? Slice2DemoSeed.FifthBranchId)); facility.EnsureSuccessStatusCode(); var id = (await facility.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var space = await Write(owner, "/api/v1/facilities/spaces", new SpaceWrite("مسبح اختبار", id, Slice2DemoSeed.SwimmingId, FacilitySpaceKind.Pool)); space.EnsureSuccessStatusCode(); id = (await space.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var resource = await Write(owner, "/api/v1/facilities/resources", new ResourceWrite("A", id, 8, true, [0, 1, 2, 3, 4, 5, 6], new(8, 0), new(22, 0), ["Training", "DayPass", "OpenSwim"])); resource.EnsureSuccessStatusCode(); id = (await resource.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();

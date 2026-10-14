@@ -24,6 +24,7 @@ public static class VisitDemoSeed
         await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:"+academy},0))");
         var source = await db.TrainingGroups.SingleOrDefaultAsync(g=>g.Id==GroupPlacementDemoSeed.Id(1));
         if (source is null || !source.IsActive || !await db.Branches.AnyAsync(b=>b.Id==source.BranchId&&b.IsActive) || !await db.Sports.AnyAsync(s=>s.Id==source.SportId&&s.IsActive) || !await db.Academies.AnyAsync(a=>a.Id==academy && a.Slug=="nogoom-demo" && a.IsActive) || !await db.FacilitySpaces.AnyAsync(s=>s.Id==FacilityDemoSeed.SpaceId && s.IsActive && db.Facilities.Any(f=>f.Id==s.FacilityId&&f.IsActive))) return;
+        if (!await SwimmingPolicyGate.AllowsSyntheticPoolSeed(db, source.SportId, source.BranchId, "Training")) return;
         // Keep the second rehearsal child's companion independent of the first
         // child's guardian, including when this two-hour slot already exists.
         if (await db.Players.AnyAsync(p=>p.Id==GroupPlacementDemoSeed.Id(280)) && !await db.GuardianPlayerLinks.AnyAsync(l=>l.Id==GroupPlacementDemoSeed.Id(284)))

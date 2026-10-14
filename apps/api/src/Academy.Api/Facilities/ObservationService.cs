@@ -21,6 +21,7 @@ public sealed class ObservationService(FoundationDbContext db, FacilityService f
         var retry = await db.ResourceObservations.AsNoTracking().SingleOrDefaultAsync(o => o.AcademyId == t.AcademyId && o.ActorUserId == actor && o.RequestKey == key);
         if (retry is not null) { if (retry.RequestHash != hash) throw new FacilityRejected("معرف العملية مستخدم لعد مختلف."); await tx.CommitAsync(); return View(retry); }
         var resource = await facilities.Lock(booking.ResourceId); booking = await db.ResourceBookings.AsNoTracking().SingleAsync(b => b.Id == bookingId);
+        await SwimmingPolicyGate.ForResource(db, resource.Id, booking.ServiceKind, booking.TrainingGroupId);
         var zone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync(); var now = clock.GetUtcNow(); var local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.FindSystemTimeZoneById(zone)); var today = DateOnly.FromDateTime(local.DateTime);
         if (booking.Date != today || booking.State != ResourceBookingState.Reserved || !resource.IsActive || resource.ApprovedAtUtc is null || !await db.FacilitySpaces.AnyAsync(s => s.Id == resource.FacilitySpaceId && s.IsActive && db.Facilities.Any(f => f.Id == s.FacilityId && f.IsActive))) throw new FacilityRejected("يسجل العد لحجز اليوم الفعلي على مورد فعال ومعتمد فقط.");
         int expected = booking.ReservedSeats; int? present = null, recorded = null;

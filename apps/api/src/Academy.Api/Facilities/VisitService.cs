@@ -29,6 +29,7 @@ public sealed partial class VisitService(FoundationDbContext db, FacilityService
     }
     private async Task Available(ResourceBooking booking, FacilityResource resource)
     {
+        await SwimmingPolicyGate.ForResource(db, resource.Id, booking.ServiceKind, booking.TrainingGroupId);
         if (booking.State != ResourceBookingState.Reserved || !resource.IsActive || resource.ApprovedAtUtc is null || !resource.ServiceKinds.Contains(booking.ServiceKind)
             || !await db.FacilitySpaces.AnyAsync(s => s.Id == resource.FacilitySpaceId && s.IsActive && db.Sports.Any(x => x.Id == s.SportId && x.IsActive) && db.Facilities.Any(f => f.Id == s.FacilityId && f.IsActive))
             || !await db.Branches.AnyAsync(b => b.Id == booking.BranchId && b.IsActive)

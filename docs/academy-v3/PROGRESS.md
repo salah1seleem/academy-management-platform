@@ -14,7 +14,7 @@
 |---|---|---|---|---|
 | V2-00 | verified_reuse | مصدر V2 و85 حالة قبول محفوظة؛ المرجع المرفق مطابق SHA-256. | docs/delivery/V2_EXECUTION.md | توثيق خريطة V3 الجديدة |
 | V2-01 | partial | tokens/navigation/tabs وجداول وFlutter للأدوار موجودة. | apps/web/src/components؛ apps/mobile/lib/features | إعادة تركيب الرحلات وقياسات360/390/430/200% |
-| V2-02 | partial | هوية منصة، configuration versions، entitlement، branch/CRUD. | Auth/StaffAccessRules؛ Configuration؛ V2StaffScopeTests | قوالب ونطاق رياضة مرتبط بالدور؛ wizard ودعم محدود؛ فصل سباحة |
+| V2-02 | partial | هوية منصة، configuration versions، entitlement، branch/CRUD؛ قوالب بداية B1 ونوع رياضة وإعداد مسبح لكل فرع B2. | Auth/StaffAccessRules؛ SportSettingsEndpoints؛ V2StaffScopeTests؛ V3SwimmingSettingsTests | نطاق رياضة مرتبط بالدور وأدوار مخصصة؛ wizard ودعم محدود؛ إكمال gating بقية الخدمات |
 | V2-03 | partial | Products/quotes/discounts/receivables وفرص التجديد. | V2PlanPublicationTests؛ V2ReceivablesTests | الخدمات المستقلة وربط استحقاق الإيراد |
 | V2-04 | partial | schema/template/preview/commit وإعادة آمنة للوضع البسيط. | V2ImportPreviewTests؛ V2ImportCommitTests | مستويات وعلاقات متقدمة/أرصدة مع الدفتر الجديد |
 | V2-05 | partial | مرافق وحارات وحجوزات وتسكين ونقل وسعة. | V2FacilityTests؛ V2ResourceTimetableTests؛ V2GroupPlacementTests | بوابات نهائية؛ دمج خاص/خارجي مع الفصل الرياضي |
@@ -38,9 +38,9 @@
 | V3-AC01 | verified | قراءة كامل V2 ومقارنة hash + هذه الخريطة | اكتمل جرد الشرائح؛ إثبات كل فجوة يُحدّث أثناء التنفيذ |
 | V3-AC02 | partial | FootballDemoTests؛ V2RegressionSeedTests | seedV3 بالحجم المحدد لم يُنفذ |
 | V3-AC03 | partial | V2RegressionSeedTests | guardV3 للبيئة الجديدة لم يتحقق بعد |
-| V3-AC04 | missing | FacilityEndpoints؛ Sport | لا نوع رياضة مضبوط أو إعداد سباحة منفصل |
-| V3-AC05 | missing | AcademyRuntimeSettings | فصل sport/branch مطلوب |
-| V3-AC06 | partial | configuration versions/feature gate | التاريخ المالي لمعالجة تعطيل السباحة يحتاج اختبار |
+| V3-AC04 | partial | Sport.Kind وSwimmingPolicyGate وUI نوع الرياضة؛ رفضPool/إعدادSwimming لكرة القدم | تحقق API/مرافق؛ قبول3أكاديميات وبقية عمليات التدريب/التصدير النهائي باق |
+| V3-AC05 | partial | SwimmingBranchPolicy بمفاتيح أكاديمية/رياضة/فرع وسجل؛ اختبار تعطيل فرع ونجاح الآخر | تحقق B2؛ بياناتV3الثلاث وأدوار نطاق الرياضة باقية |
+| V3-AC06 | partial | إيقاف خدمات المسبح يمنع الحجز/الدخول/العرض الجديد ويحفظ التاريخ؛ seed يحترم الإيقاف | التاريخ المالي للموديولات الجديدة وdowngradeالشامل في القبول النهائي |
 | V3-AC07 | partial | MobileAuthenticationTests؛ coach-create | دعوة/تفعيل هاتف وربط مهني تحتاج إعادة قبول |
 | V3-AC08 | partial | TenantAuthenticationTests؛ MobileAuthenticationTests | جلسات موجودة؛ إعادة قبول V3 وسحبها باق |
 | V3-AC09 | partial | StaffAccessEndpoints؛ staff-access | CRUD/فروع موجودة؛ القوالب والأدوار المخصصة ناقصة |
@@ -104,8 +104,16 @@
 
 ### B1 — قوالب بداية وصلاحيات مفهومة — متحققة محليًا
 
+Commit مرفوع: `ee102e8844af289d5d7002c21503d99873ef3378`. CI run38588910233 نجح Frontend/Flutter/E2E؛ Backend ما زال جاريًا عند آخر فحص.
+
 خمس قوالب من الخادم تملأ المصفوفة الموجودة دون تغيير الدور أو حفظ تلقائي. اختيار قالب يطلب فروعًا صريحة؛ لا حذف أو إعدادات أو إدارة مستخدمين أو طب أو رواتب في القوالب. القالب الرياضي لا يمنح التحصيل؛ المراجع المالي قراءة. شاشة التفويض مستقلة عن القائمة، مع بحث الوحدات ومعاينة المنح/السحب ونطاق الفرع قبل الاعتماد، وسجل يشمل قالب البداية. تعديل المصفوفة يبقى متاحًا للمالك ولا يحول القالب إلى صلاحية أعلى. Backend نطاق/رفض/سحب وتحقق سجل6/6، Web4/4، typecheck/lint/build ناجحة، E2Eحفظ/إعادة فتح وصلاحية جلسة2/2، وFootball1/1 بعد إصلاحprofile. لا migration فيB1. V3-AC09 ما زالتpartial: أدوار مخصصة ونطاق رياضة مترابط غير منفذين بعد. التاليةB2 لفصل إعدادات الرياضة/السباحة.
 
-أول عيب تحقق مثبت: CI للأساس نجح Backend/Frontend/Flutter وفشل E2E حالة واحدة؛ اختبار Football الجديد وضع خطأ في suite LegacyRegression. نُقل إلى suite Football دون حذف أو تخفيف assertions. التشغيل المستهدف والتحقق من CI التالي مطلوبان. بعدها B: قوالب مستخدمين ونطاقات ثم فصل إعدادات الرياضة/السباحة؛ C: اتفاقات ورواتب/خاص/خارجي ودفتر بالمصادر نفسها. لا إعادة Full Regression لكل تعديل صغير. الجولات النهائيةV2-17+V3 واحدة علىcandidate معلوم.
+### B2 — نوع الرياضة وخدمات المسبح لكل فرع — متحققة محليًا
+
+نوع مضبوط General/Football/Swimming دون مقارنة الاسم. واجهة مالك في `/dashboard/settings/sports` تحفظ النوع وسياسة خدمات المسبح لكل فرع (التشغيل/خاص/حرة/زيارة)، بمعاينة الحالة وحفظ متزامن مع xmin وسجل المنفذ. المسبح الجديد لا ينشأ لرياضة كرة قدم ولا لفرع غير مهيأ، ولا تتغير سياسة فرع آخر. حجز المورد وتوليد الحصص المرتبطة به والدخول والعد وعرض/طلب الزيارة تتحقق من السياسة نفسها. seed الاصطناعي للحصص/الزيارات/العد يحترم الإيقاف ولا يعيد التفعيل. إيقاف المسبح لا يحذف السجلات أو ينشئ قبضًا/غيابًا/استردادًا. هذه خدمات المرافق؛ لا ادعاء اكتمال كل المنتجات أو sport-scoped roles أو الجانب الماليV3.
+
+Migration `20261014152943_V3SportScopedSwimmingPolicies` على قاعدتي الاختبار الجديدتين فقط؛ تحافظ على تشغيل Pool سابق ثابت الهوية ضمن فرعه، دون الاستنتاج من الاسم أو النسخ من عميل آخر. نوع له Pool وموارد غيرPool معًا يترك للمراجعة ولا يفترض. EF بلا pending model changes. Backend المرافق/السياسة10/10 ثم السياسة/DayPass6/6 بعد حراسةseed؛ استهلاكات الجدول/الدخول/العد6/6. Web11/11 وtypecheck/lint، والمتصفح2/2 معproductionbuild، وصور360/390/430/1440؛ فحص390/1440بصريًا. لا Flutterجديد أو أجهزة فعلية أو انحدار نهائي جديد.
+
+التالي: استكمال منح مترابطة دور/فرع/رياضة ومسؤولية دون خلط النطاقات، ثم C للاتفاقات/الخاص/الخارجي ودفتر الاستحقاق والسداد، وفقF01–F12. لا إعادة بناء الوظائف الصحيحة. حالة كل18شريحة و48قبول أعلاه؛ النهائيV2-17+V3 جولة موحدة علىcandidate معلوم.
 
 لا نشر أو إرسال أو دفع حقيقي. لا ادعاء اكتمال V2+V3 أو اجتيازPilot أو اختبارات جهاز غير مشغلة. كل checkpoint لاحق يحدّث هذه الخريطة والدليل والقرار، وتستمر الشريحة التالية في الجلسة ما دامت الأدوات متاحة.

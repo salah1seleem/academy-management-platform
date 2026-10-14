@@ -381,6 +381,7 @@ app.MapStaffDeviceCheckIn();
 app.MapGuardianFeedback();
 app.MapPayroll();
 app.MapVersionedConfiguration();
+app.MapSportSettings();
 app.MapReceivables();
 app.MapReceivableCredit();
 app.MapOperatingExpenses();

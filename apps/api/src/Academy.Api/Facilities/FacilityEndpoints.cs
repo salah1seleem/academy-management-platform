@@ -28,7 +28,7 @@ public static class FacilityEndpoints
         var api = app.MapGroup("/api/v1/facilities").RequireAuthorization(AcademyPermissions.FacilitiesRead);
         api.MapGet("/options", async (FoundationDbContext db) => Results.Ok(new {
             branches = await db.Branches.Where(x => x.IsActive).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
-            sports = await db.Sports.Where(x => x.IsActive).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
+            sports = await db.Sports.Where(x => x.IsActive).Select(x => new { x.Id, name = x.ArabicName, x.Kind }).ToListAsync(),
             groups = await db.TrainingGroups.Where(x => x.IsActive && x.Branch.IsActive && x.Sport.IsActive).Select(x => new { x.Id, name = x.ArabicName, x.BranchId, x.SportId }).ToListAsync(),
             coaches = await db.StaffGroupAssignments.Where(x => x.IsActive && x.TrainingGroup.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.Role == AcademyRole.Coach && x.AcademyMembership.User.IsActive).Select(x => new { id = x.AcademyMembershipId, name = x.AcademyMembership.User.DisplayName, groupId = x.TrainingGroupId }).Distinct().ToListAsync()
         }));
@@ -131,6 +131,7 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         var f = await db.Facilities.SingleOrDefaultAsync(x => x.Id == b.FacilityId && x.IsActive) ?? throw new FacilityRejected("اختر مرفقًا متاحًا.", 422);
         await Branch(f.BranchId);
         if (!Enum.IsDefined(b.Kind) || !await db.Sports.AnyAsync(x => x.Id == b.SportId && x.IsActive)) throw new FacilityRejected("اختر الرياضة ونوع المساحة.", 422);
+        await SwimmingPolicyGate.Require(db, b.SportId, f.BranchId, b.Kind);
         var row = new FacilitySpace { Id = Guid.NewGuid(), AcademyId = t.AcademyId, FacilityId = f.Id, BranchId = f.BranchId, SportId = b.SportId, Name = b.Name.Trim(), Kind = b.Kind, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
         db.FacilitySpaces.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return row;
     }
@@ -139,7 +140,9 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         await using var tx = await db.Database.BeginTransactionAsync(); var (t, _) = await Authority("Add"); Name(b.Name, 60);
         var space = await db.FacilitySpaces.SingleOrDefaultAsync(x => x.Id == b.SpaceId && x.IsActive && db.Facilities.Any(f => f.Id == x.FacilityId && f.IsActive)) ?? throw new FacilityRejected("اختر مساحة متاحة.", 422);
         await Branch(space.BranchId);
+        await SwimmingPolicyGate.Require(db, space.SportId, space.BranchId, space.Kind);
         if (b.Capacity is < 1 or > 10000 || b.OpensAt >= b.ClosesAt || b.Days is null || b.Days.Length is < 1 or > 7 || b.Days.Any(d => d is < 0 or > 6) || b.Days.Distinct().Count() != b.Days.Length || b.ServiceKinds is null || b.ServiceKinds.Length is < 1 or > 5 || b.ServiceKinds.Distinct().Count() != b.ServiceKinds.Length || b.ServiceKinds.Any(k => !Enum.GetNames<AcademyServiceKind>().Contains(k))) throw new FacilityRejected("راجع السعة وأيام التشغيل والتوقيت وأنواع الخدمة.", 422);
+        foreach (var service in b.ServiceKinds) await SwimmingPolicyGate.Require(db, space.SportId, space.BranchId, space.Kind, service);
         var row = new FacilityResource { Id = Guid.NewGuid(), AcademyId = t.AcademyId, BranchId = space.BranchId, FacilitySpaceId = space.Id, Name = b.Name.Trim(), Capacity = b.Capacity, SharedBookingsAllowed = b.Shared, OperatingDays = b.Days, OpensAt = b.OpensAt, ClosesAt = b.ClosesAt, ServiceKinds = b.ServiceKinds, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
         db.FacilityResources.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return row;
     }
@@ -172,6 +175,7 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
     internal async Task CheckSlot(BookingWrite b, FacilityResource r, Guid[] excludedBookings, Guid[] excludedSessions)
     {
         var space = await db.FacilitySpaces.SingleAsync(x => x.Id == r.FacilitySpaceId);
+        await SwimmingPolicyGate.Require(db, space.SportId, space.BranchId, space.Kind, b.ServiceKind, b.GroupId);
         var today = await Today();
         if (!r.IsActive || !space.IsActive || !await db.Facilities.AnyAsync(x => x.Id == space.FacilityId && x.IsActive) || !await db.Branches.AnyAsync(x => x.Id == r.BranchId && x.IsActive) || !await db.Sports.AnyAsync(x => x.Id == space.SportId && x.IsActive) || !r.ApprovedByUserId.HasValue) throw new FacilityRejected("المورد غير مفعل أو سياسة سعته لم تعتمد بعد.");
         if (b.Date < today || b.Date > today.AddDays(366) || b.Start < r.OpensAt || b.End > r.ClosesAt || b.Start >= b.End || !r.OperatingDays.Contains((int)b.Date.DayOfWeek) || !r.ServiceKinds.Contains(b.ServiceKind)) throw new FacilityRejected("الحجز خارج فترة أو نوع تشغيل المورد المسموح.", 422);

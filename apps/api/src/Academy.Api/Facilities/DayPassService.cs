@@ -53,6 +53,7 @@ public sealed class DayPassService(FoundationDbContext db, CurrentTenant tenant,
         var booking = await db.ResourceBookings.AsNoTracking().SingleOrDefaultAsync(b => b.AcademyId == t.AcademyId && b.Id == choice.BookingId && b.State == ResourceBookingState.Reserved && b.ServiceKind == nameof(AcademyServiceKind.DayPass) && b.TrainingSessionId == null && b.TrainingGroupId == null) ?? throw new FacilityRejected("موعد الزيارة غير متاح.", 404);
         if (booking.Date < await Today(t.AcademyId)) throw new FacilityRejected("انتهى موعد الزيارة؛ اختر موعدًا جديدًا.");
         var resource = await db.FacilityResources.AsNoTracking().Where(r => r.Id == booking.ResourceId && r.IsActive && r.ApprovedAtUtc != null && r.ServiceKinds.Contains(nameof(AcademyServiceKind.DayPass)) && db.FacilitySpaces.Any(s => s.Id == r.FacilitySpaceId && s.IsActive && db.Facilities.Any(f => f.Id == s.FacilityId && f.IsActive))).Select(r => new { r.Name, r.FacilitySpaceId }).SingleOrDefaultAsync() ?? throw new FacilityRejected("المورد غير متاح.", 404);
+        await SwimmingPolicyGate.ForResource(db, booking.ResourceId, nameof(AcademyServiceKind.DayPass));
         var sport = await db.FacilitySpaces.Where(s => s.Id == resource.FacilitySpaceId).Select(s => s.SportId).SingleAsync();
         var plan = await db.SubscriptionPlans.AsNoTracking().ForBranch(booking.BranchId).SingleOrDefaultAsync(p => p.AcademyId == t.AcademyId && p.Id == choice.PlanId && p.ServiceKind == AcademyServiceKind.DayPass && p.SportId == sport && p.IsActive && p.Price > 0 && p.Currency == db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).Single()) ?? throw new FacilityRejected("باقة الزيارة غير منشورة لهذا الفرع والرياضة.", 404);
         var player = await db.Players.Where(p => p.Id == choice.PlayerId).Select(p => p.ArabicName).SingleAsync();
@@ -65,6 +66,8 @@ public sealed class DayPassService(FoundationDbContext db, CurrentTenant tenant,
         var children = await db.GuardianPlayerLinks.AsNoTracking().Where(l => l.Guardian.UserId == Actor && l.IsActive && l.Player.IsActive).Select(l => new { id = l.PlayerId, name = l.Player.ArabicName }).OrderBy(x => x.name).ToArrayAsync();
         var bookings = await (from b in db.ResourceBookings.AsNoTracking() join r in db.FacilityResources on b.ResourceId equals r.Id join s in db.FacilitySpaces on r.FacilitySpaceId equals s.Id
             where b.State == ResourceBookingState.Reserved && b.ServiceKind == nameof(AcademyServiceKind.DayPass) && b.Date >= today && b.Date <= today.AddDays(30) && r.IsActive && r.ApprovedAtUtc != null && s.IsActive
+                && (s.Kind != FacilitySpaceKind.Pool || db.Sports.Any(sp => sp.Id == s.SportId && sp.Kind == Academy.Infrastructure.Structure.SportKind.Swimming && sp.IsActive)
+                    && db.SwimmingBranchPolicies.Any(p => p.SportId == s.SportId && p.BranchId == b.BranchId && p.IsActive && p.Enabled && p.DayPassEnabled))
             orderby b.Date,b.StartTime select new { b.Id,b.BranchId,b.Date,b.StartTime,b.EndTime,b.ReservedSeats,resource=r.Name,sportId=s.SportId }).Take(50).ToArrayAsync();
         var result = new List<object>();
         foreach (var b in bookings)
@@ -85,6 +88,7 @@ public sealed class DayPassService(FoundationDbContext db, CurrentTenant tenant,
     {
         var t = await Guardian(); if (key.Length is <8 or >100 || body.QuoteHash?.Length !=64) throw new FacilityRejected("راجع الزيارة والمبلغ قبل إنشاء الطلب.",422);
         await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + t.AcademyId},0))");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"day-pass:{t.AcademyId}:{Actor}:{key}"},0))");
         var requestHash = Hash(new { body.PlayerId,body.BookingId,body.PlanId,body.QuoteHash });
         var existing = await db.DayPassTickets.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == Actor && x.RequestKey == key);

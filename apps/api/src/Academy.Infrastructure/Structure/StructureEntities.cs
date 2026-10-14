@@ -21,8 +21,10 @@ public sealed class Branch : TenantEntity
     public double? CheckInLongitude { get; set; }
 }
 
+public enum SportKind { General, Football, Swimming }
 public sealed class Sport : TenantEntity
 {
+    public SportKind Kind { get; set; }
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }
 }

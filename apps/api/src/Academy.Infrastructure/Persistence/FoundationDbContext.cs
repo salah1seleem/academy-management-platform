@@ -60,6 +60,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         base.OnModelCreating(builder);
         ConfigurePlatformIdentity(builder);
         ConfigureStaffAccess(builder);
+        ConfigureSwimming(builder);
         ConfigureReceivables(builder);
         ConfigureReceivableCredit(builder);
         ConfigureOperatingExpenses(builder);
@@ -165,6 +166,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureTenantEntity<Sport>(builder, "Sports");
         builder.Entity<Sport>(entity =>
         {
+            entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(SportKind.General);
             entity.Property(x => x.ArabicName).HasMaxLength(120);
             entity.Property(x => x.EnglishName).HasMaxLength(120);
             entity.HasIndex(x => new { x.AcademyId, x.ArabicName }).IsUnique();

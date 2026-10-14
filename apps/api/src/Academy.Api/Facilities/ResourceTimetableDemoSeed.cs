@@ -23,6 +23,7 @@ public static class ResourceTimetableDemoSeed
         var resourceId = Guid.Parse("58000000-0000-0000-0000-000000000010");
         var resource = await db.FacilityResources.SingleOrDefaultAsync(x => x.Id == resourceId && x.AcademyId == academy && x.IsActive && x.ApprovedAtUtc != null);
         if (resource is null || resource.Capacity < 4) return;
+        if (!await SwimmingPolicyGate.AllowsSyntheticPoolSeed(db, Slice2DemoSeed.SwimmingId, resource.BranchId, "Training")) return;
         var config = await db.AcademyConfigurationVersions.Where(x => x.AcademyId == academy && x.State == ConfigurationState.Active).Select(x => x.Payload).SingleAsync(); var settings = AcademyRuntimeSettings.Read(config);
         if (!settings.Features.GetValueOrDefault("facilities") || !settings.Features.GetValueOrDefault("training") || await db.AcademyFeatureEntitlements.CountAsync(x => x.AcademyId == academy && (x.Feature == "facilities" || x.Feature == "training") && x.Enabled && x.IsActive) != 2) return;
         var coach = await db.AcademyMemberships.Where(x => x.AcademyId == academy && x.User.Email == DemoSeed.CoachEmail && x.IsActive).Select(x => x.Id).SingleAsync();

@@ -34,8 +34,11 @@ public static class Slice2DemoSeed
         await AddIfMissing(db, new Branch { Id = CityBranchId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "فرع مدينة نصر", Address = "مدينة نصر — بيانات تجريبية", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         await AddIfMissing(db, new Branch { Id = FifthBranchId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "فرع التجمع الخامس", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         await AddIfMissing(db, new Branch { Id = ZagazigBranchId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "فرع الزقازيق", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
-        await AddIfMissing(db, new Sport { Id = FootballId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "كرة القدم", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
-        await AddIfMissing(db, new Sport { Id = SwimmingId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "السباحة", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
+        await AddIfMissing(db, new Sport { Id = FootballId, AcademyId = DemoSeed.NogoomAcademyId, Kind = SportKind.Football, ArabicName = "كرة القدم", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
+        await AddIfMissing(db, new Sport { Id = SwimmingId, AcademyId = DemoSeed.NogoomAcademyId, Kind = SportKind.Swimming, ArabicName = "السباحة", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
+        // Known synthetic identities only; never classify customer sports by name.
+        foreach (var sport in await db.Sports.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Kind == SportKind.General && (x.Id == FootballId || x.Id == SwimmingId)).ToArrayAsync(ct)) sport.Kind = sport.Id == SwimmingId ? SportKind.Swimming : SportKind.Football;
+        await db.SaveChangesAsync(ct);
         await AddIfMissing(db, new Sport { Id = BasketballId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "كرة السلة", CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         await AddIfMissing(db, new AgeCategory { Id = U8Id, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "تحت 8 سنوات", MinimumBirthYear = 2018, MaximumBirthYear = 2020, CreatedAtUtc = now, UpdatedAtUtc = now }, ct);
         await AddIfMissing(db, new AgeCategory { Id = U10Id, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "تحت 10 سنوات", MinimumBirthYear = 2016, MaximumBirthYear = 2017, CreatedAtUtc = now, UpdatedAtUtc = now }, ct);

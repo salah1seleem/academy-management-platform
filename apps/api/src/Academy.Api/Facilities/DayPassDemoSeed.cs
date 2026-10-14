@@ -26,6 +26,8 @@ public static class DayPassDemoSeed
         var bookingId = BookingId(day);
         var resourceId = Guid.Parse("58000000-0000-0000-0000-000000000010");
         await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + academy},0))");
+        if (!await SwimmingPolicyGate.AllowsSyntheticPoolSeed(db, Slice2DemoSeed.SwimmingId, Slice2DemoSeed.FifthBranchId, "DayPass")) return;
         await PlanCatalog.LockAsync(db, academy, PlanId);
         if (!await db.SubscriptionPlans.AnyAsync(p => p.Id == PlanId))
         {
