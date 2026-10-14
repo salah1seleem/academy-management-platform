@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Academy.Api.Auth;
+using Academy.Api.Slice4;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
@@ -20,6 +21,7 @@ public static class GuardianFeedbackEndpoints
         var owner = app.MapGroup("/api/v1/manage/feedback").RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         owner.MapGet("/", List);
         owner.MapPost("/{id:guid}/review", Review).AddEndpointFilter<CsrfFilter>();
+        owner.MapPost("/{id:guid}/due", SetDue).AddEndpointFilter<CsrfFilter>();
         owner.MapPost("/{id:guid}/resolve", Resolve).AddEndpointFilter<CsrfFilter>();
     }
 
@@ -81,14 +83,32 @@ public static class GuardianFeedbackEndpoints
         return Results.Created($"/api/v1/guardian/children/{playerId}/feedback-options", new { feedback.Id });
     }
 
-    private static async Task<IResult> List(Guid? branchId, Guid? coachId, string? kind, string? status, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> List(Guid? branchId, Guid? coachId, string? kind, string? status, bool? overdue, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
         if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status is not (null or "Open" or "Reviewed" or "Resolved" or "Unresolved")) return Results.BadRequest(new { message = "فلتر غير صالح." });
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) return Results.NotFound();
-        return Results.Ok(await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (!coachId.HasValue || x.CoachMembershipId == coachId) && (kind == null || x.Kind == kind) && (status == null || status == "Unresolved" && (x.Status == "Open" || x.Status == "Reviewed") || x.Status == status))
+        var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
+        return Results.Ok(await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (!coachId.HasValue || x.CoachMembershipId == coachId) && (kind == null || x.Kind == kind) && (status == null || status == "Unresolved" && (x.Status == "Open" || x.Status == "Reviewed") || x.Status == status)
+            && (overdue != true || x.Status != "Resolved" && x.DueOn != null && x.DueOn < today))
             .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Take(200)
-            .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.OwnerResponse, x.RespondedAtUtc, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());
+            .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.DueOn, overdue = x.Status != "Resolved" && x.DueOn != null && x.DueOn < today, x.OwnerResponse, x.RespondedAtUtc, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());
+    }
+
+    private static async Task<IResult> SetDue(Guid id, FeedbackDueDate body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    {
+        var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        if (body.DueOn == default) return Results.UnprocessableEntity(new { message = "اختر تاريخ متابعة صالحًا." });
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"guardian-feedback-resolve:{t.AcademyId}:{id}"}, 0))");
+        var item = await db.GuardianFeedbacks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
+        if (item is null) return Results.NotFound();
+        if (item.Kind == "Rating" || item.Status == "Resolved") return Results.UnprocessableEntity(new { message = "الموعد للشكاوى والاقتراحات المفتوحة فقط." });
+        if (item.DueOn.HasValue) return item.DueOn == body.DueOn ? Results.Ok(new { item.Id, replay = true }) : Results.Conflict(new { message = "حُدد موعد المتابعة بالفعل؛ لا يُبدل بصمت." });
+        var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
+        if (body.DueOn < today) return Results.UnprocessableEntity(new { message = "موعد المتابعة لا يسبق اليوم." });
+        item.DueOn = body.DueOn; item.DueSetByUserId = Actor(principal); item.DueSetAtUtc = clock.GetUtcNow(); item.UpdatedAtUtc = clock.GetUtcNow();
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { item.Id, item.DueOn });
     }
 
     private static async Task<IResult> Review(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
@@ -131,3 +151,4 @@ public static class GuardianFeedbackEndpoints
 
 public sealed record FeedbackWrite(Guid TrainingGroupId, Guid? CoachMembershipId, string Kind, int? Score, string? Message);
 public sealed record FeedbackResolution(string? Response);
+public sealed record FeedbackDueDate(DateOnly DueOn);

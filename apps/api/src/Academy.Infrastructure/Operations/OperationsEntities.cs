@@ -175,6 +175,10 @@ public sealed class GuardianFeedback : TenantEntity
     public required string IdempotencyKey { get; set; }
     public Guid? ReviewedByUserId { get; set; }
     public DateTimeOffset? ReviewedAtUtc { get; set; }
+    // An owner-set, one-time follow-up deadline. It is not an automated resolution promise.
+    public DateOnly? DueOn { get; set; }
+    public Guid? DueSetByUserId { get; set; }
+    public DateTimeOffset? DueSetAtUtc { get; set; }
     public string? OwnerResponse { get; set; }
     public Guid? RespondedByUserId { get; set; }
     public DateTimeOffset? RespondedAtUtc { get; set; }

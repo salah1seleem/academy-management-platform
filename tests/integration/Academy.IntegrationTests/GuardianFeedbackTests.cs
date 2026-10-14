@@ -66,6 +66,25 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, (await Send(guardian, path, rating, Guid.NewGuid().ToString())).StatusCode);
         var complaint = await Send(guardian, path, new { trainingGroupId = group, coachMembershipId = coach, kind = "Complaint", score = (int?)null, message = "نحتاج متابعة الموعد" }, Guid.NewGuid().ToString());
         Assert.Equal(HttpStatusCode.Created, complaint.StatusCode); var complaintId = (await complaint.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); created.Add(complaintId);
+        var duePath = $"/api/v1/manage/feedback/{complaintId}/due";
+        var due = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(guardian, duePath, new { dueOn = due })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(foreign, duePath, new { dueOn = due })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, duePath, new { dueOn = new DateOnly(2020, 1, 1) })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, $"/api/v1/manage/feedback/{id}/due", new { dueOn = due })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send(owner, duePath, new { dueOn = due })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send(owner, duePath, new { dueOn = due })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, duePath, new { dueOn = due.AddDays(1) })).StatusCode);
+        Assert.DoesNotContain((await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?overdue=true")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
+        // Simulate elapsed time on this isolated synthetic fixture, never on the review database.
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            await db.GuardianFeedbacks.Where(x => x.Id == complaintId).ExecuteUpdateAsync(s => s.SetProperty(x => x.DueOn, new DateOnly(2020, 1, 1)));
+        }
+        Assert.Contains((await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?overdue=true")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId && x.GetProperty("overdue").GetBoolean());
+        var overdueSummary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
+        Assert.True(overdueSummary.GetProperty("operations").GetProperty("overdueFeedback").GetInt32() >= 1);
         Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync("/api/v1/manage/feedback")).StatusCode);
         var list = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?kind=Complaint&status=Open"); Assert.Contains(list.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         var foreignList = await foreign.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback"); Assert.DoesNotContain(foreignList.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
@@ -94,6 +113,7 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
             x.GetProperty("status").GetString() == "Resolved" && x.GetProperty("ownerResponse").GetString() == "تم تعديل موعد الإشعار للأسرة.");
         unresolved = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?kind=Complaint&status=Unresolved");
         Assert.DoesNotContain(unresolved.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
+        Assert.DoesNotContain((await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?overdue=true")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         var summary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
         var operations = summary.GetProperty("operations");
         Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == 5);
@@ -114,9 +134,9 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING")!;
         using var football = new Factory(connection, "Football"); _ = football.CreateClient();
         await using var scope = football.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        Assert.Equal(5, await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == FootballDemoSeed.AcademyId && x.IdempotencyKey.StartsWith("demo-")));
+        Assert.Equal(6, await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == FootballDemoSeed.AcademyId && x.IdempotencyKey.StartsWith("demo-")));
         await FootballDemoSeed.RunAsync(scope.ServiceProvider, false);
-        Assert.Equal(5, await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == FootballDemoSeed.AcademyId && x.IdempotencyKey.StartsWith("demo-")));
+        Assert.Equal(6, await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == FootballDemoSeed.AcademyId && x.IdempotencyKey.StartsWith("demo-")));
     }
     private sealed class Factory(string connection, string profile = "LegacyRegression") : WebApplicationFactory<Program>
     {

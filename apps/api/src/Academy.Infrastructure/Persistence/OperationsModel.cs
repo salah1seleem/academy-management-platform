@@ -65,6 +65,7 @@ public sealed partial class FoundationDbContext
         b.Entity<GuardianFeedback>().HasOne<TrainingGroup>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.GuardianUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.DueSetByUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.RespondedByUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasIndex(x => new { x.AcademyId, x.GuardianUserId, x.IdempotencyKey }).IsUnique();
         b.Entity<GuardianFeedback>().HasIndex(x => new { x.AcademyId, x.GuardianUserId, x.PlayerId, x.CoachMembershipId, x.PeriodMonth }).IsUnique().HasFilter("\"Kind\" = 'Rating'");

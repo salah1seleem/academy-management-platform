@@ -3394,6 +3394,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateOnly?>("DueOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("DueSetAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DueSetByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("GuardianUserId")
                         .HasColumnType("uuid");
 
@@ -3460,6 +3469,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("DueSetByUserId");
 
                     b.HasIndex("GuardianUserId");
 
@@ -10407,6 +10418,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DueSetByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()

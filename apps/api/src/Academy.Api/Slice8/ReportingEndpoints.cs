@@ -183,6 +183,7 @@ public static partial class ReportingEndpoints
             openCount = x.Count(y => y.Outstanding > 0)
         }).OrderBy(x => x.currency).ToArray();
         var accessChanges = await db.StaffAccessAudits.CountAsync(x => x.AcademyId == academyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive);
+        var feedbackToday = await AttendanceCalendar.TodayAsync(academyId, db, realClock);
         return Results.Ok(new {
             asOfDate = today, from = range.From, to = range.To, currency = academy.DefaultCurrency,
             collections = new { total = money.Sum(x => x.amount), today = daily.Sum(x => x.amount), month = money.Sum(x => x.amount), todayCash = daily.Where(x => x.PaymentMethod == "Cash").Sum(x => x.amount), todayOnline = daily.Where(x => x.PaymentMethod != "Cash" && x.PaymentMethod!="Unspecified").Sum(x => x.amount), todayUnspecified=daily.Where(x=>x.PaymentMethod=="Unspecified").Sum(x=>x.amount), monthCash = money.Where(x => x.PaymentMethod == "Cash").Sum(x => x.amount), monthOnline = money.Where(x => x.PaymentMethod != "Cash" && x.PaymentMethod!="Unspecified").Sum(x => x.amount), monthUnspecified=money.Where(x=>x.PaymentMethod=="Unspecified").Sum(x=>x.amount) },
@@ -195,6 +196,7 @@ public static partial class ReportingEndpoints
             attendance = new { sessions = await db.TrainingSessions.CountAsync(x => x.AcademyId == academyId && x.SessionDate >= range.From && x.SessionDate <= range.To && (!branchId.HasValue || x.BranchId == branchId) && x.Status != TrainingSessionStatus.Cancelled), present = await todayAttendance.CountAsync(x => (x.Status == AttendanceStatus.Present || x.Status == AttendanceStatus.Late)), late = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Late), excused = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Excused), absent = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Absent), notRecorded = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.NotRecorded) },
             bySport, byBranch, latest, payroll,
             operations = new { coachPerformance, groupAttention, pendingExpenses, unpaidExpenses, receivables, accessChanges, pendingPaymentBacklog,
+                overdueFeedback = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Status != "Resolved" && x.DueOn != null && x.DueOn < feedbackToday && (!branchId.HasValue || x.BranchId == branchId)),
                 openComplaints = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Complaint" && x.Status != "Resolved" && (!branchId.HasValue || x.BranchId == branchId)),
                 openSuggestions = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Suggestion" && x.Status != "Resolved" && (!branchId.HasValue || x.BranchId == branchId)),
                 attentionRule = "مدرب غير مسند، أو 3 سجلات حضور غير مسجلة، أو غياب 30% فأكثر من 5 سجلات على الأقل" }
