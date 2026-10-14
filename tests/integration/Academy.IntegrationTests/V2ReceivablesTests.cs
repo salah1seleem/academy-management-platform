@@ -44,6 +44,22 @@ public sealed partial class V2ReceivablesTests : IAsyncLifetime
         return (player.Id, enrollment.Id, group.BranchId, owner);
     }
     [Fact]
+    public async Task Owner_balance_card_matches_the_posted_branch_ledger_not_period_cash()
+    {
+        var f = await Fixture(); using var owner = await Staff(DemoSeed.OwnerEmail); using var guardian = await Guardian();
+        var before = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/owner-summary?branchId={f.Branch}");
+        var original = before.GetProperty("operations").GetProperty("receivables").EnumerateArray().FirstOrDefault(x => x.GetProperty("currency").GetString() == "EGP");
+        var originalAmount = original.ValueKind == JsonValueKind.Undefined ? 0m : original.GetProperty("outstanding").GetDecimal();
+        await Charge(owner, f.Enrollment, 123m);
+        var card = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/owner-summary?branchId={f.Branch}");
+        var balance = card.GetProperty("operations").GetProperty("receivables").EnumerateArray().Single(x => x.GetProperty("currency").GetString() == "EGP");
+        var ledger = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/finance/receivables?branchId={f.Branch}");
+        Assert.Equal(originalAmount + 123m, balance.GetProperty("outstanding").GetDecimal());
+        Assert.Equal(decimal.Parse(ledger.GetProperty("outstanding").GetString()!, System.Globalization.CultureInfo.InvariantCulture), balance.GetProperty("outstanding").GetDecimal());
+        Assert.Equal(decimal.Parse(ledger.GetProperty("overdue").GetString()!, System.Globalization.CultureInfo.InvariantCulture), balance.GetProperty("overdue").GetDecimal());
+        Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync("/api/v1/reports/owner-summary")).StatusCode);
+    }
+    [Fact]
     public async Task FIN_02_posted_records_cards_rows_and_csv_share_exact_asOf_and_no_fake_cash()
     {
         var f = await Fixture(); using var owner = await Staff(DemoSeed.OwnerEmail);

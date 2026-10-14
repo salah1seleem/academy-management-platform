@@ -22,7 +22,7 @@ it("does not invent a pie when there are no stored records", () => {
   expect(screen.queryByRole("img")).not.toBeInTheDocument(); expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
 });
 it("shows stored coach ratings and actionable family feedback without inventing an AI score", async () => {
-  const operational = { ...summary, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], unpaidExpenses: [{ currency: "EGP", count: 2, amount: 450 }], accessChanges: 2, openComplaints: 1, openSuggestions: 1, attentionRule: "غياب متكرر" } };
+  const operational = { ...summary, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], unpaidExpenses: [{ currency: "EGP", count: 2, amount: 450 }], receivables: [{ currency: "EGP", outstanding: 1740, overdue: 1240, openCount: 3 }], accessChanges: 2, openComplaints: 1, openSuggestions: 1, attentionRule: "غياب متكرر" } };
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(operational)) as typeof fetch;
   render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
   expect(await screen.findByText(/4\.5\/5 من 2/)).toBeVisible();
@@ -31,6 +31,10 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));
   expect(screen.getByRole("link", { name: /مصروفات تشغيلية غير مسددة/ })).toHaveAttribute("href", expect.stringContaining("unpaid=true"));
   expect(screen.getByRole("link", { name: /مصروفات تشغيلية غير مسددة/ })).toHaveTextContent("450 جنيه");
+  expect(screen.getByRole("link", { name: /رصيد قائم حتى الآن/ })).toHaveTextContent("1,740 جنيه");
+  expect(screen.getByRole("link", { name: /رصيد قائم حتى الآن/ })).toHaveAttribute("href", expect.stringContaining("state=open"));
+  expect(screen.getByRole("link", { name: /منه متأخر/ })).toHaveTextContent("1,240 جنيه");
+  expect(screen.getByRole("link", { name: /منه متأخر/ })).toHaveAttribute("href", expect.stringContaining("state=overdue"));
   fireEvent.click(screen.getByRole("button", { name: "مسح" }));
   await waitFor(() => expect(screen.getByRole("link", { name: /مدرب تجريبي/ })).toHaveAttribute("href", expect.stringContaining("allDates=true")));
   expect(screen.queryByText(/ذكاء اصطناعي يحلل/)).not.toBeInTheDocument();

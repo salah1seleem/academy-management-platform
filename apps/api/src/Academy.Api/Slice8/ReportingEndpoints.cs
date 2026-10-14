@@ -166,6 +166,13 @@ public static partial class ReportingEndpoints
             .GroupBy(x => x.Currency).Select(x => new { currency = x.Key, count = x.Count(), amount = x.Sum(y => y.Amount) }).ToListAsync();
         var unpaidExpenses = await db.OperatingExpenses.Where(x => x.AcademyId == academyId && (x.Status == OperatingExpenseStatus.Approved || x.Status == OperatingExpenseStatus.Posted) && x.PaidOn == null && (!branchId.HasValue || x.BranchId == branchId))
             .GroupBy(x => x.Currency).Select(x => new { currency = x.Key, count = x.Count(), amount = x.Sum(y => y.Amount) }).ToListAsync();
+        var receivableRows = await ReceivableEndpoints.Rows(db, academyId, clock.UtcNow, clock.Today, branchId, null, null).ToListAsync();
+        var receivables = receivableRows.GroupBy(x => x.Currency).Select(x => new {
+            currency = x.Key,
+            outstanding = x.Sum(y => Math.Max(0, y.Outstanding)),
+            overdue = x.Where(y => y.Overdue).Sum(y => y.Outstanding),
+            openCount = x.Count(y => y.Outstanding > 0)
+        }).OrderBy(x => x.currency).ToArray();
         var accessChanges = await db.StaffAccessAudits.CountAsync(x => x.AcademyId == academyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive);
         return Results.Ok(new {
             asOfDate = today, from = range.From, to = range.To, currency = academy.DefaultCurrency,
@@ -178,7 +185,7 @@ public static partial class ReportingEndpoints
             newSubscriptions = await db.SubscriptionPeriods.Where(x => x.AcademyId == academyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive && (!branchId.HasValue || x.SportEnrollment.BranchId == branchId) && !db.SubscriptionPeriods.Any(old => old.AcademyId == academyId && old.SportEnrollmentId == x.SportEnrollmentId && old.CreatedAtUtc < x.CreatedAtUtc)).CountAsync(),
             attendance = new { sessions = await db.TrainingSessions.CountAsync(x => x.AcademyId == academyId && x.SessionDate >= range.From && x.SessionDate <= range.To && (!branchId.HasValue || x.BranchId == branchId) && x.Status != TrainingSessionStatus.Cancelled), present = await todayAttendance.CountAsync(x => (x.Status == AttendanceStatus.Present || x.Status == AttendanceStatus.Late)), late = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Late), excused = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Excused), absent = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Absent), notRecorded = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.NotRecorded) },
             bySport, byBranch, latest, payroll,
-            operations = new { coachPerformance, groupAttention, pendingExpenses, unpaidExpenses, accessChanges,
+            operations = new { coachPerformance, groupAttention, pendingExpenses, unpaidExpenses, receivables, accessChanges,
                 openComplaints = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Complaint" && x.Status != "Resolved" && (!branchId.HasValue || x.BranchId == branchId)),
                 openSuggestions = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Suggestion" && x.Status != "Resolved" && (!branchId.HasValue || x.BranchId == branchId)),
                 attentionRule = "مدرب غير مسند، أو 3 سجلات حضور غير مسجلة، أو غياب 30% فأكثر من 5 سجلات على الأقل" }

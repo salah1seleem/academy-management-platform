@@ -6,7 +6,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 const ledger = { asOf: "2026-09-28T09:00:00Z", currency: "EGP", count: 1, outstanding: "1740.00", overdue: "1240.00", notYetDue: "500.00", overpaymentCredit: "0.00", items: [{ id: "doc", player: "لاعب اختبار", branch: "فرع اختبار", description: "مطالبة موثقة", currency: "EGP", charge: "540.00", outstanding: "340.00", credits: "0.00", allocated: "200.00", dueDate: "2026-09-20", overdue: true }] };
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, "", "/"); });
 beforeEach(() => { push.mockReset(); sessionStorage.clear(); vi.stubGlobal("crypto", webcrypto); global.fetch = vi.fn(async url => String(url).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(url).endsWith("my-access") ? response({ actions: [] }) : response(ledger)); });
 it("drills into posted balances and exports the exact displayed asOf", async () => {
   render(<Receivables />); await screen.findByRole("link", { name: "التفاصيل والحركات" });
@@ -14,6 +14,17 @@ it("drills into posted balances and exports the exact displayed asOf", async () 
   fireEvent.click(screen.getByRole("button", { name: /المتأخر المستحق/ }));
   await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/finance/receivables?state=overdue", expect.anything()));
   await screen.findByRole("link", { name: "التفاصيل والحركات" }); fireEvent.click(screen.getByRole("button", { name: "مسح الفلتر" }));
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/finance/receivables?state=", expect.anything()));
+});
+it("keeps the owner card branch and balance state in rows and export, then clears both", async () => {
+  const branchId = "11111111-1111-1111-1111-111111111111";
+  window.history.replaceState({}, "", `/dashboard/finance/receivables?state=overdue&branchId=${branchId}`);
+  global.fetch = vi.fn(async url => String(url).includes("structure/options") ? response({ branches: [{ id: branchId, arabicName: "فرع اختبار" }] }) : String(url).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(url).endsWith("my-access") ? response({ actions: [] }) : response(ledger));
+  render(<Receivables />);
+  await screen.findByRole("link", { name: "التفاصيل والحركات" });
+  expect(fetch).toHaveBeenCalledWith(`/api/v1/finance/receivables?state=overdue&branchId=${branchId}`, expect.anything());
+  expect(screen.getByRole("link", { name: /تصدير CSV/ })).toHaveAttribute("href", expect.stringContaining(`branchId=${branchId}`));
+  fireEvent.click(screen.getByRole("button", { name: "مسح الفلتر" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/finance/receivables?state=", expect.anything()));
 });
 it("read-only Admin has no charge action or movement form", async () => {
