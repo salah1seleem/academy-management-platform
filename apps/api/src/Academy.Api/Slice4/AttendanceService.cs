@@ -30,6 +30,7 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
         var presentIds = changes.Where(c => AttendanceRules.Attended(c.Status)).Select(c => c.SportEnrollmentId).ToArray();
         if (await db.CompensationGrants.AnyAsync(g => g.AcademyId == academyId && presentIds.Contains(g.SportEnrollmentId) && g.SourceSessionId == sessionId, ct)) throw new AttendanceConflictException("الحصة الأصلية لها تعويض معتمد؛ لا نثبت حضورًا وخدمة تعويضية لنفس الواقعة.");
         var results = new List<AttendanceSaveResult>();
+        var newlyAbsent = new List<Guid>();
         foreach (var change in changes.OrderBy(x => x.SportEnrollmentId))
         {
             var attendance = await db.PlayerAttendances.SingleOrDefaultAsync(x => x.AcademyId == academyId && x.TrainingSessionId == sessionId && x.SportEnrollmentId == change.SportEnrollmentId, ct);
@@ -52,9 +53,12 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
                 else { var effect = await ConsumeAsync(attendance, session.SessionDate, actorId, ct); consumed = effect.consumed; remaining = effect.remaining; warning = effect.warning; }
             }
             if (previous != change.Status || db.Entry(attendance).State == EntityState.Added) { attendance.Status = change.Status; attendance.RecordedByUserId = actorId; attendance.UpdatedAtUtc = clock.GetUtcNow(); }
+            if (previous != AttendanceStatus.Absent && change.Status == AttendanceStatus.Absent) newlyAbsent.Add(change.SportEnrollmentId);
             results.Add(new AttendanceSaveResult(change.SportEnrollmentId, change.Status.ToString(), consumed, remaining, warning));
         }
-        await db.SaveChangesAsync(ct); if(tx is not null) await tx.CommitAsync(ct); return results;
+        await db.SaveChangesAsync(ct);
+        await GuardianAbsenceNotice.AddForNewAbsencesAsync(db, clock, academyId, sessionId, newlyAbsent, ct);
+        if(tx is not null) await tx.CommitAsync(ct); return results;
     }
 
     public async Task<IReadOnlyList<AttendanceSaveResult>> SaveStaffAsync(Guid academyId, Guid sessionId, Guid actorId, IReadOnlyList<StaffAttendanceChange> changes, CancellationToken ct = default, Guid? approvedCorrectionId = null)

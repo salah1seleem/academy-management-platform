@@ -64,6 +64,55 @@ public sealed class AttendanceIntegrationTests : IAsyncLifetime
     [Fact] public async Task Absent_does_not_decrement_balance()
     { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Absent); Assert.Equal(before, await Balance(s)); }
 
+    [Fact] public async Task Three_consecutive_actual_absences_notify_linked_guardians_once()
+    {
+        var scenario = await Scenario(SubscriptionPlanType.Sessions);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var service = scope.ServiceProvider.GetRequiredService<AttendanceService>();
+        var actor = await OwnerId(scope);
+        var group = await db.TrainingGroups.SingleAsync(x => x.Id == scenario.GroupId);
+        var child = await db.SportEnrollments.Where(x => x.Id == scenario.EnrollmentId).Select(x => new { x.PlayerId, x.Player.ArabicName }).SingleAsync();
+        var linked = await db.GuardianPlayerLinks.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == child.PlayerId && x.IsActive && x.Guardian.IsActive).Select(x => x.Guardian.UserId).Distinct().ToArrayAsync();
+        Assert.NotEmpty(linked);
+        var before = await db.AcademyNotices.Select(x => x.Id).ToArrayAsync();
+        var sessions = Enumerable.Range(0, 5).Select(i => new TrainingSession { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId,
+            TrainingGroupId = group.Id, BranchId = group.BranchId, SportId = group.SportId, AgeCategoryId = group.AgeCategoryId,
+            SessionDate = new DateOnly(2026, 9, 22), StartTime = new TimeOnly(12, 54 + i), EndTime = new TimeOnly(12, 55 + i),
+            Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, CreatedByUserId = actor }).ToArray();
+        try
+        {
+            db.TrainingSessions.AddRange(sessions.Take(4)); await db.SaveChangesAsync();
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[0].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.NotRecorded)]);
+            for (var i = 1; i < 3; i++) await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[i].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            Assert.Empty(await db.AcademyNotices.Where(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")).ToArrayAsync());
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[3].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            var localNow = TimeZoneInfo.ConvertTime(scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo"));
+            Assert.Equal(new DateOnly(2026, 9, 22), DateOnly.FromDateTime(localNow.DateTime));
+            Assert.True(TimeOnly.FromDateTime(localNow.DateTime) >= sessions[3].StartTime);
+            var recent = await db.TrainingSessions.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Status != TrainingSessionStatus.Cancelled &&
+                    (x.SessionDate < new DateOnly(2026, 9, 22) || x.SessionDate == new DateOnly(2026, 9, 22) && x.StartTime <= TimeOnly.FromDateTime(localNow.DateTime)) &&
+                    FoundationDbContext.IsSessionAssigned(DemoSeed.NogoomAcademyId, scenario.EnrollmentId, x.Id))
+                .OrderByDescending(x => x.SessionDate).ThenByDescending(x => x.StartTime).ThenByDescending(x => x.Id).Take(4).Select(x => x.Id).ToArrayAsync();
+            Assert.Equal(sessions[3].Id, recent[0]);
+            Assert.Equal(3, await db.PlayerAttendances.CountAsync(x => x.SportEnrollmentId == scenario.EnrollmentId && recent.Take(3).Contains(x.TrainingSessionId) && x.Status == AttendanceStatus.Absent));
+            var notices = await db.AcademyNotices.Where(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")).ToArrayAsync();
+            Assert.Equal(linked.Length, notices.Length);
+            Assert.All(notices, x => { Assert.Equal(DemoSeed.NogoomAcademyId, x.AcademyId); Assert.Contains(x.UserId, linked); Assert.Contains(child.ArabicName, x.Message); });
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[3].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            db.TrainingSessions.Add(sessions[4]); await db.SaveChangesAsync();
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[4].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            Assert.Equal(notices.Length, await db.AcademyNotices.CountAsync(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")));
+        }
+        finally
+        {
+            var sessionIds = sessions.Select(x => x.Id).ToArray();
+            await db.AcademyNotices.Where(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")).ExecuteDeleteAsync();
+            await db.PlayerAttendances.Where(x => sessionIds.Contains(x.TrainingSessionId)).ExecuteDeleteAsync();
+            await db.TrainingSessions.Where(x => sessionIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+    }
+
     [Fact] public async Task NotRecorded_does_not_decrement_balance()
     { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.NotRecorded); Assert.Equal(before, await Balance(s)); }
 
