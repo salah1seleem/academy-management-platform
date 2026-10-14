@@ -113,7 +113,7 @@ public static partial class ReportingEndpoints
             var hasCoach = assignments.Any(a => a.TrainingGroupId == group.Id);
             return new { group.Id, name = group.ArabicName, group.BranchId, hasCoach, sessions = sessionCounts.GetValueOrDefault(group.Id), absent, notRecorded, recorded, needsAttention = !hasCoach || notRecorded >= 3 || recorded >= 5 && absent * 100 >= recorded * 30 };
         }).Where(x => x.needsAttention).OrderByDescending(x => !x.hasCoach).ThenByDescending(x => x.notRecorded).ThenByDescending(x => x.absent).Take(3).ToArray();
-        var pendingExpenses = await db.OperatingExpenses.Where(x => x.AcademyId == academyId && x.Status == OperatingExpenseStatus.Approved && (!branchId.HasValue || x.BranchId == branchId))
+        var pendingExpenses = await db.OperatingExpenses.Where(x => x.AcademyId == academyId && x.Status == OperatingExpenseStatus.Approved && x.PeriodTo >= range.From && x.PeriodFrom <= range.To && (!branchId.HasValue || x.BranchId == branchId))
             .GroupBy(x => x.Currency).Select(x => new { currency = x.Key, count = x.Count(), amount = x.Sum(y => y.Amount) }).ToListAsync();
         var accessChanges = await db.StaffAccessAudits.CountAsync(x => x.AcademyId == academyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive);
         return Results.Ok(new {

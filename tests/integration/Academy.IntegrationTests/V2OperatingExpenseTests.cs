@@ -38,6 +38,11 @@ public sealed partial class V2PlanPublicationTests
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var before = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?allDates=true");
         (await Write(owner, $"{root}/{id}/approve", new { })).EnsureSuccessStatusCode();
+        var ownerQueue = await owner.GetFromJsonAsync<JsonElement>($"{root}/?from={FacilityDay:yyyy-MM-dd}&to={FacilityDay:yyyy-MM-dd}&branchId={f.A}&status=Approved");
+        Assert.Contains(ownerQueue.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        var draftQueue = await owner.GetFromJsonAsync<JsonElement>($"{root}/?from={FacilityDay:yyyy-MM-dd}&to={FacilityDay:yyyy-MM-dd}&branchId={f.A}&status=Draft");
+        Assert.DoesNotContain(draftQueue.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"{root}/?branchId={Guid.NewGuid()}")).StatusCode);
         var quoteResponse = await Write(owner, $"{root}/{id}/quote", new { }); quoteResponse.EnsureSuccessStatusCode();
         var quote = await quoteResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(f.Group, quote.GetProperty("shares")[0].GetProperty("groupId").GetGuid());

@@ -43,3 +43,20 @@ it("does not expose expense records when the owner API denies access", async () 
   await screen.findByText(/تعذر تحميل الفروع والمجموعات والمرافق/);
   expect(screen.queryByRole("button", { name: "ترحيل التكلفة مرة واحدة" })).not.toBeInTheDocument();
 });
+
+it("keeps owner KPI period, branch and approved status in the expense list", async () => {
+  const calls: string[] = [];
+  global.fetch = vi.fn(async input => {
+    const path = String(input); calls.push(path);
+    if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [] });
+    if (path === "/api/v1/facilities") return response({ resources: [] });
+    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [] });
+    if (path.includes("/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
+    if (path.includes("operating-expenses/?")) return response({ count: 0, items: [] });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  render(<OperatingExpenses initialFrom="2026-09-01" initialTo="2026-09-28" initialBranchId="branch-1" initialStatus="Approved" />);
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&from=2026-09-01&to=2026-09-28&branchId=branch-1&status=Approved"));
+  fireEvent.click(screen.getByRole("button", { name: "مسح الفلاتر" }));
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1"));
+});

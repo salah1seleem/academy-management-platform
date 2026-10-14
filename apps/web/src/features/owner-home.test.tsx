@@ -28,6 +28,7 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   expect(await screen.findByText(/4\.5\/5 من 2/)).toBeVisible();
   expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
+  expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));
   expect(screen.queryByText(/ذكاء اصطناعي يحلل/)).not.toBeInTheDocument();
 });
 it("does not pretend historical refunds have a documented electronic method", async () => {
