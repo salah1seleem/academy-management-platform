@@ -4,6 +4,8 @@ test("FIN-01 forecast drills down to 20 expired paid players and exports 12700 w
   test.setTimeout(90_000);
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
   const branch = "a2030100-0001-0000-0000-000000000001";
+  const ownerFilters = page.getByRole("button", { name: /الفترة والفرع/ });
+  await expect(ownerFilters).toBeVisible(); await ownerFilters.click();
   const summary = page.waitForResponse(r => r.url().includes("/reports/owner-summary?") && r.url().includes(branch));
   await page.getByRole("combobox", { name: "الفرع", exact: true }).selectOption(branch); expect((await summary).status()).toBe(200);
   const card = page.getByRole("region", { name: "فرص التجديد الحالية" }); await expect(card.getByRole("link")).toHaveAttribute("href", `/dashboard/finance/renewals?branchId=${branch}`); await expect(card).toContainText("12,700"); await card.getByRole("link").click();
