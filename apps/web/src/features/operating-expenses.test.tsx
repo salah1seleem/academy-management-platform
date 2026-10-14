@@ -60,3 +60,19 @@ it("keeps owner KPI period, branch and approved status in the expense list", asy
   fireEvent.click(screen.getByRole("button", { name: "مسح الفلاتر" }));
   await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1"));
 });
+
+it("opens the all-time unpaid owner KPI without silently applying a month filter", async () => {
+  const calls: string[] = [];
+  global.fetch = vi.fn(async input => {
+    const path = String(input); calls.push(path);
+    if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [] });
+    if (path === "/api/v1/facilities") return response({ resources: [] });
+    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [] });
+    if (path.includes("/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
+    if (path.includes("operating-expenses/?")) return response({ count: 0, items: [] });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  render(<OperatingExpenses initialBranchId="branch-1" initialUnpaid />);
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&branchId=branch-1&unpaid=true"));
+  expect(screen.getByLabelText("السداد")).toHaveValue("unpaid");
+});

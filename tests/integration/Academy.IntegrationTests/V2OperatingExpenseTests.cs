@@ -37,7 +37,13 @@ public sealed partial class V2PlanPublicationTests
         var created = await Write(owner, root + "/", body); created.EnsureSuccessStatusCode();
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var before = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?allDates=true");
+        var draftUnpaid = await owner.GetFromJsonAsync<JsonElement>($"{root}/?unpaid=true&branchId={f.A}");
+        Assert.DoesNotContain(draftUnpaid.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
         (await Write(owner, $"{root}/{id}/approve", new { })).EnsureSuccessStatusCode();
+        var unpaid = await owner.GetFromJsonAsync<JsonElement>($"{root}/?unpaid=true&branchId={f.A}");
+        Assert.Contains(unpaid.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        var dashboard = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/owner-summary?allDates=true&branchId={f.A}");
+        Assert.Contains(dashboard.GetProperty("operations").GetProperty("unpaidExpenses").EnumerateArray(), x => x.GetProperty("currency").GetString() == "EGP" && x.GetProperty("amount").GetDecimal() >= 200m);
         var ownerQueue = await owner.GetFromJsonAsync<JsonElement>($"{root}/?from={FacilityDay:yyyy-MM-dd}&to={FacilityDay:yyyy-MM-dd}&branchId={f.A}&status=Approved");
         Assert.Contains(ownerQueue.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
         var draftQueue = await owner.GetFromJsonAsync<JsonElement>($"{root}/?from={FacilityDay:yyyy-MM-dd}&to={FacilityDay:yyyy-MM-dd}&branchId={f.A}&status=Draft");

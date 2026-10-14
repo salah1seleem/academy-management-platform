@@ -17,26 +17,27 @@ const categories: Record<string, string> = { Facility: "تشغيل مرفق", El
 const statuses: Record<string, string> = { Draft: "مسودة", Approved: "معتمد للمراجعة", Posted: "مرحّل", Reversed: "معكوس" };
 const services: Record<string, string> = { Training: "التدريب", DayPass: "زيارة يومية", OpenSwim: "سباحة حرة", FacilityBooking: "حجز مرفق", Event: "فعالية", Unallocated: "غير موزع" };
 
-export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, initialStatus }: { initialFrom?: string; initialTo?: string; initialBranchId?: string; initialStatus?: string } = {}) {
+export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, initialStatus, initialUnpaid = false }: { initialFrom?: string; initialTo?: string; initialBranchId?: string; initialStatus?: string; initialUnpaid?: boolean } = {}) {
   const [options, setOptions] = useState<{ branches: Option[]; groups: Option[] }>();
   const [currency, setCurrency] = useState("");
   const [resources, setResources] = useState<Resource[]>([]), [items, setItems] = useState<Expense[]>([]);
   const [selected, setSelected] = useState<Expense>(), [quote, setQuote] = useState<Quote>();
   const [allocationGroupId, setAllocationGroupId] = useState(""), [allocationData, setAllocationData] = useState<{ count: number; items: AllocationRow[]; total: number; truncated: boolean }>();
-  const [range, setRange] = useState(() => ({ from: initialFrom ?? monthToDate().from, to: initialTo ?? monthToDate().to })), [page, setPage] = useState(1), [total, setTotal] = useState(0);
+  const [range, setRange] = useState(() => ({ from: initialFrom ?? (initialUnpaid ? "" : monthToDate().from), to: initialTo ?? (initialUnpaid ? "" : monthToDate().to) })), [page, setPage] = useState(1), [total, setTotal] = useState(0);
   const [listBranchId, setListBranchId] = useState(initialBranchId ?? ""), [listStatus, setListStatus] = useState(statuses[initialStatus ?? ""] ? initialStatus! : "");
+  const [unpaidOnly, setUnpaidOnly] = useState(initialUnpaid);
   const [branchId, setBranchId] = useState(""), [scope, setScope] = useState<"Group" | "Resource">("Group"), [targetId, setTargetId] = useState("");
   const [category, setCategory] = useState("Facility"), [periodFrom, setPeriodFrom] = useState(() => monthToDate().from), [periodTo, setPeriodTo] = useState(() => monthToDate().to);
   const [paidOn, setPaidOn] = useState(""), [amount, setAmount] = useState(""), [note, setNote] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const createKey = useRef(crypto.randomUUID()), postKey = useRef(crypto.randomUUID());
   const load = useCallback(async () => {
-    const query = new URLSearchParams({ page: String(page), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}), ...(listBranchId ? { branchId: listBranchId } : {}), ...(listStatus ? { status: listStatus } : {}) });
+    const query = new URLSearchParams({ page: String(page), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}), ...(listBranchId ? { branchId: listBranchId } : {}), ...(listStatus ? { status: listStatus } : {}), ...(unpaidOnly ? { unpaid: "true" } : {}) });
     const response = await fetch(`${root}/?${query}`, { cache: "no-store" });
     if (!response.ok) throw new Error(response.status === 403 ? "هذه الصفحة متاحة للمالك فقط." : "تعذر تحميل المصروفات.");
     const data = await response.json() as { count: number; items: Expense[] };
     setItems(data.items); setTotal(data.count);
-  }, [page, range, listBranchId, listStatus]);
+  }, [page, range, listBranchId, listStatus, unpaidOnly]);
   const loadAllocations = useCallback(async () => {
     const query = new URLSearchParams({ ...(allocationGroupId ? { groupId: allocationGroupId } : {}), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}) });
     const response = await fetch(`${root}/allocations?${query}`, { cache: "no-store" });
@@ -99,7 +100,7 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
       <label>تاريخ السداد · اختياري<input type="date" value={paidOn} onChange={e => setPaidOn(e.target.value)} /></label><label>المبلغ · {currency}<input required type="number" min="0.01" max="999999999" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} /></label>
       <label>ملاحظة · اختياري<input maxLength={400} value={note} onChange={e => setNote(e.target.value)} /></label>
     </div><button className="primary-button" disabled={busy || !branchId || !targetId}>حفظ مسودة المصروف</button></form></section>}
-    <section className="filter-bar" aria-label="فلاتر المصروفات"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><label>الفرع<select value={listBranchId} onChange={e => { setListBranchId(e.target.value); setPage(1); }}><option value="">كل الفروع</option>{options?.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label><label>الحالة<select value={listStatus} onChange={e => { setListStatus(e.target.value); setPage(1); }}><option value="">كل الحالات</option>{Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setListBranchId(""); setListStatus(""); setPage(1); }}>مسح الفلاتر</button></section>
+    <section className="filter-bar" aria-label="فلاتر المصروفات"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><label>الفرع<select value={listBranchId} onChange={e => { setListBranchId(e.target.value); setPage(1); }}><option value="">كل الفروع</option>{options?.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label><label>الحالة<select value={listStatus} onChange={e => { setListStatus(e.target.value); setPage(1); }}><option value="">كل الحالات</option>{Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>السداد<select value={unpaidOnly ? "unpaid" : ""} onChange={e => { setUnpaidOnly(e.target.value === "unpaid"); setPage(1); }}><option value="">الكل</option><option value="unpaid">غير مسدد مسجلًا</option></select></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setListBranchId(""); setListStatus(""); setUnpaidOnly(false); setPage(1); }}>مسح الفلاتر</button></section>
     {error && <ErrorState message={error} />}{notice && <p role="status" className="success-note">{notice}</p>}
     {!items.length ? <EmptyState title="لا توجد مصروفات ضمن الفترة" /> : <DataTable label="المصروفات التشغيلية" rows={items} rowKey={r => r.id} columns={[
       { key: "category", header: "المصروف", primary: true, render: r => <><strong>{categories[r.category] ?? r.category}</strong><small>{r.periodFrom} — {r.periodTo}</small></> },
