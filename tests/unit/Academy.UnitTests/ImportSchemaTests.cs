@@ -130,4 +130,22 @@ public sealed class ImportSchemaTests
         Assert.Throws<ImportFileException>(() => ImportXlsx.Read(Encoding.UTF8.GetBytes("not Excel")));
         Assert.False(ImportPreview.Validate(Filled(count: 1001), Refs(), "hash").CanApprove);
     }
+    [Theory]
+    [InlineData("A01")]
+    [InlineData("AAA1")]
+    [InlineData("A1x")]
+    public void Malformed_cell_address_is_rejected_without_regex(string address)
+    {
+        using var bytes = new MemoryStream(); bytes.Write(ImportXlsx.Write(Filled()));
+        using (var zip = new ZipArchive(bytes, ZipArchiveMode.Update, true))
+        {
+            var entry = zip.GetEntry("xl/worksheets/sheet1.xml")!;
+            string xml;
+            using (var reader = new StreamReader(entry.Open(), Encoding.UTF8)) xml = reader.ReadToEnd();
+            entry.Delete();
+            using var writer = new StreamWriter(zip.CreateEntry("xl/worksheets/sheet1.xml").Open(), Encoding.UTF8);
+            writer.Write(xml.Replace("r=\"A1\"", $"r=\"{address}\"", StringComparison.Ordinal));
+        }
+        Assert.Throws<ImportFileException>(() => ImportXlsx.Read(bytes.ToArray()));
+    }
 }
