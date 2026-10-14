@@ -72,16 +72,16 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
     {
         using var owner = await Staff(); using var coach = factory.CreateClient(); await MobileCoachTestSession.SignInAsync(coach, factory.Services);
         var e = await Employee(owner, AcademyRole.Coach); var reason = await Reason(owner);
-        var request = new AdditionWrite(reason, 150); var key = Guid.NewGuid().ToString();
+        var request = new AdditionWrite(reason); var key = Guid.NewGuid().ToString();
         var pending = await Send(coach, "/api/v1/staff/payroll/requests", request, key); pending.EnsureSuccessStatusCode(); var id = (await pending.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         Assert.Equal(0, (await Row(owner, e.Id)).GetProperty("additions").GetDecimal());
         Assert.Equal(HttpStatusCode.OK, (await Send(coach, "/api/v1/staff/payroll/requests", request, key)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await Send(coach, "/api/v1/staff/payroll/requests", request with { Amount = 151 }, key)).StatusCode);
-        var review = new AdditionReview(true, day, null);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(coach, "/api/v1/staff/payroll/requests", request with { Amount = 151 }, Guid.NewGuid().ToString())).StatusCode);
+        var review = new AdditionReview(true, day, null, 150);
         (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", review)).EnsureSuccessStatusCode();
         (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", review)).EnsureSuccessStatusCode();
-        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", review with { Accept = false })).StatusCode);
-        var rejected = await Send(coach, "/api/v1/staff/payroll/requests", new AdditionWrite(reason, 200), Guid.NewGuid().ToString()); rejected.EnsureSuccessStatusCode(); var rejectedId = (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", review with { Accept = false, Amount = null })).StatusCode);
+        var rejected = await Send(coach, "/api/v1/staff/payroll/requests", new AdditionWrite(reason), Guid.NewGuid().ToString()); rejected.EnsureSuccessStatusCode(); var rejectedId = (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         (await Send(owner, $"/api/v1/manage/payroll/requests/{rejectedId}/review", new AdditionReview(false, null, "غير مستحق تجريبيًا"))).EnsureSuccessStatusCode();
         var dailyBody = new { date = day, status = "Absent", approvedDeduction = 50, reason = "خصم غياب اختبار الرواتب" };
         (await Send(owner, $"/api/v1/manage/staff-attendance/{e.Body.MembershipId}", dailyBody, put: true)).EnsureSuccessStatusCode();
@@ -147,10 +147,11 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
         using var owner = await Staff(); using var admin = await Staff(DemoSeed.AdminEmail); var e = await Employee(owner, AcademyRole.AcademyAdmin); var reason = await Reason(owner);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         foreach (var permission in new[] { AcademyPermissions.PayrollRead, AcademyPermissions.PayrollManage }) { var grant = new StaffGrant { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, MembershipId = e.Body.MembershipId!.Value, Permission = permission, Allowed = true }; db.StaffGrants.Add(grant); grants.Add(grant.Id); } await db.SaveChangesAsync();
-        var response = await Send(admin, "/api/v1/staff/payroll/requests", new AdditionWrite(reason, 200), Guid.NewGuid().ToString()); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, day, null))).StatusCode);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, DateOnly.MinValue, null))).StatusCode);
-        (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, day, null))).EnsureSuccessStatusCode();
+        var response = await Send(admin, "/api/v1/staff/payroll/requests", new AdditionWrite(reason), Guid.NewGuid().ToString()); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, day, null, 200))).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, DateOnly.MinValue, null, 200))).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, day, null))).StatusCode);
+        (await Send(owner, $"/api/v1/manage/payroll/requests/{id}/review", new AdditionReview(true, day, null, 200))).EnsureSuccessStatusCode();
         Assert.Equal(200, (await Row(owner, e.Id)).GetProperty("additions").GetDecimal());
     }
 

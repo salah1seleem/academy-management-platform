@@ -11,6 +11,11 @@ internal static class PayrollDemoSeed
     {
         var academy = FootballDemoSeed.AcademyId;
         var marker = FootballDemoSeed.Id("payroll-demo/upgrade-marker");
+        if (!await db.PayrollReasons.AnyAsync(x => x.AcademyId == academy && x.Name == "سبب آخر", ct))
+        {
+            db.PayrollReasons.Add(new PayrollReason { Id = FootballDemoSeed.Id("payroll-demo/reason/other"), AcademyId = academy, Name = "سبب آخر", CreatedAtUtc = DateTimeOffset.Parse("2026-10-08T06:00:00Z"), UpdatedAtUtc = DateTimeOffset.Parse("2026-10-08T06:00:00Z") });
+            await db.SaveChangesAsync(ct);
+        }
         if (await db.PayrollReasons.AnyAsync(x => x.AcademyId == academy && x.Id == marker, ct)) return;
         var time = DateTimeOffset.Parse("2026-10-08T06:00:00Z"); var date = new DateOnly(2026, 10, 8);
         var owner = FootballDemoSeed.Id("user/owner");
@@ -42,7 +47,7 @@ internal static class PayrollDemoSeed
             var employeeId = Id($"employee/{i}");
             if (!await db.Employees.AnyAsync(x => x.AcademyId == academy && x.Id == employeeId, ct)) continue;
             var status = i == 0 ? "Approved" : i == 1 ? "Pending" : "Rejected";
-            var row = new PayrollAdditionRequest { Id = Id($"request/{i}"), AcademyId = academy, EmployeeId = Id($"employee/{i}"), ReasonId = reasonIds[i], ReasonName = reasons[i], Amount = i == 0 ? 300 : 150, Currency = "EGP", Status = status, RequestedByUserId = FootballDemoSeed.Id($"user/coach{i + 1}"), ReviewedByUserId = i == 1 ? null : owner, ReviewedAtUtc = i == 1 ? null : time, DueDate = i == 0 ? date : null, ReviewNote = i == 2 ? "مثال رفض: اليوم الإضافي غير معتمد" : null, IdempotencyKey = $"demo-request-{i}", CreatedAtUtc = time, UpdatedAtUtc = time };
+            var row = new PayrollAdditionRequest { Id = Id($"request/{i}"), AcademyId = academy, EmployeeId = Id($"employee/{i}"), ReasonId = reasonIds[i], ReasonName = reasons[i], Amount = i == 0 ? 300 : 0, Currency = "EGP", Status = status, RequestedByUserId = FootballDemoSeed.Id($"user/coach{i + 1}"), ReviewedByUserId = i == 1 ? null : owner, ReviewedAtUtc = i == 1 ? null : time, DueDate = i == 0 ? date : null, ReviewNote = i == 2 ? "مثال رفض: اليوم الإضافي غير معتمد" : null, IdempotencyKey = $"demo-request-{i}", CreatedAtUtc = time, UpdatedAtUtc = time };
             db.PayrollAdditionRequests.Add(row);
             if (i == 0) db.PayrollAdjustments.Add(new PayrollAdjustment { Id = Id("addition"), AcademyId = academy, EmployeeId = row.EmployeeId, Kind = "Addition", AdditionRequestId = row.Id, Amount = row.Amount, Currency = "EGP", DueDate = date, Reason = row.ReasonName, PerformedByUserId = owner, IdempotencyKey = "demo-approved-addition", CreatedAtUtc = time, UpdatedAtUtc = time });
         }

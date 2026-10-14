@@ -27,6 +27,8 @@ public sealed partial class FoundationDbContext
     public DbSet<StaffGrant> StaffGrants => Set<StaffGrant>();
     public DbSet<StaffWorkSchedule> StaffWorkSchedules => Set<StaffWorkSchedule>();
     public DbSet<StaffDailyAttendance> StaffDailyAttendances => Set<StaffDailyAttendance>();
+    public DbSet<BranchCheckInSiteAudit> BranchCheckInSiteAudits => Set<BranchCheckInSiteAudit>();
+    public DbSet<GuardianFeedback> GuardianFeedbacks => Set<GuardianFeedback>();
 
     private static void ConfigureOperations(ModelBuilder b)
     {
@@ -54,7 +56,20 @@ public sealed partial class FoundationDbContext
         Tenant<PrivateAsset>(b); Tenant<PrivateAssetAudience>(b); Tenant<AcademyTransferSettings>(b); Tenant<PaymentProof>(b);
         Tenant<DiscountRule>(b); Tenant<PlayerDiscountLink>(b); Tenant<CollectionRefund>(b);
         Tenant<ProductSale>(b); Tenant<AcademyNotice>(b); Tenant<AcademyNews>(b);
-        Tenant<StaffGrant>(b); Tenant<StaffWorkSchedule>(b); Tenant<StaffDailyAttendance>(b);
+        Tenant<StaffGrant>(b); Tenant<StaffWorkSchedule>(b); Tenant<StaffDailyAttendance>(b); Tenant<BranchCheckInSiteAudit>(b); Tenant<GuardianFeedback>(b);
+        b.Entity<BranchCheckInSiteAudit>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<BranchCheckInSiteAudit>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<Player>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CoachMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<TrainingGroup>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.GuardianUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasIndex(x => new { x.AcademyId, x.GuardianUserId, x.IdempotencyKey }).IsUnique();
+        b.Entity<GuardianFeedback>().HasIndex(x => new { x.AcademyId, x.GuardianUserId, x.PlayerId, x.CoachMembershipId, x.PeriodMonth }).IsUnique().HasFilter("\"Kind\" = 'Rating'");
+        b.Entity<GuardianFeedback>().Property(x => x.Kind).HasMaxLength(16); b.Entity<GuardianFeedback>().Property(x => x.Status).HasMaxLength(16);
+        b.Entity<GuardianFeedback>().Property(x => x.Message).HasMaxLength(500); b.Entity<GuardianFeedback>().Property(x => x.IdempotencyKey).HasMaxLength(100);
+        b.Entity<GuardianFeedback>().ToTable(t => t.HasCheckConstraint("CK_GuardianFeedback_KindScore", "(\"Kind\" = 'Rating' AND \"CoachMembershipId\" IS NOT NULL AND \"Score\" BETWEEN 1 AND 5) OR (\"Kind\" IN ('Complaint','Suggestion') AND \"Score\" IS NULL)"));
         b.Entity<PrivateAsset>().Property(x => x.StorageName).HasMaxLength(100);
         b.Entity<RenewalRequest>().Property(x => x.RegistrationPayloadHash).HasMaxLength(64);
         b.Entity<PrivateAssetAudience>().HasIndex(x => new { x.AcademyId, x.AssetId, x.PlayerId }).IsUnique();

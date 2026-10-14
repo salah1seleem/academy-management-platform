@@ -135,30 +135,35 @@ public static class PayrollEndpoints
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role is not (AcademyRole.Coach or AcademyRole.AcademyAdmin)) return Results.Forbid();
         var e = await db.Employees.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.IsActive); if (e is null) return Results.Ok(new { configured = false });
-        return Results.Ok(new { configured = true, employee = new { e.Id, e.Name }, reasons = await db.PayrollReasons.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Id, x.Name }).ToListAsync(), requests = await db.PayrollAdditionRequests.Where(x => x.AcademyId == t.AcademyId && x.EmployeeId == e.Id).OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.Amount, x.Currency, x.ReasonName, x.Status, x.DueDate, x.ReviewNote }).ToListAsync() });
+        return Results.Ok(new { configured = true, employee = new { e.Id, e.Name }, reasons = await db.PayrollReasons.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Id, x.Name }).ToListAsync(), requests = await db.PayrollAdditionRequests.Where(x => x.AcademyId == t.AcademyId && x.EmployeeId == e.Id).OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, Amount = x.Status == "Approved" ? (decimal?)x.Amount : null, x.Currency, x.ReasonName, x.Status, x.DueDate, x.ReviewNote }).ToListAsync() });
     }
     private static async Task<IResult> RequestAddition(AdditionWrite body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role is not (AcademyRole.Coach or AcademyRole.AcademyAdmin)) return Results.Forbid(); var key = Key(context); var actor = Actor(context.User);
-        if (key is null || !Money(body.Amount)) return Results.UnprocessableEntity(new { message = "أدخل مبلغًا صحيحًا واختر سببًا." });
+        if (key is null || body.Amount.HasValue) return Results.UnprocessableEntity(new { message = "اختر سبب الطلب فقط؛ المسؤول يحدد المبلغ عند الاعتماد." });
         await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"payroll-request:{t.AcademyId}:{actor}:{key}"}, 0))");
-        var old = await db.PayrollAdditionRequests.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actor && x.IdempotencyKey == key); if (old is not null) return old.Amount == body.Amount && old.ReasonId == body.ReasonId ? Results.Ok(new { old.Id, replay = true }) : Results.Conflict();
         var e = await db.Employees.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.IsActive); var reason = await db.PayrollReasons.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.ReasonId && x.IsActive); if (e is null || reason is null) return Results.NotFound();
-        var row = new PayrollAdditionRequest { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = e.Id, ReasonId = reason.Id, ReasonName = reason.Name, Amount = body.Amount, Currency = e.Currency, Status = "Pending", RequestedByUserId = actor, IdempotencyKey = key, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() }; db.PayrollAdditionRequests.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Created("/api/v1/staff/payroll/", new { row.Id });
+        var other = body.OtherReason?.Trim(); var isOther = reason.Name == "سبب آخر";
+        if (isOther && (string.IsNullOrWhiteSpace(other) || other.Length > 80) || !isOther && !string.IsNullOrWhiteSpace(other)) return Results.UnprocessableEntity(new { message = "اكتب تفاصيل السبب الآخر فقط عند اختياره." });
+        var reasonName = isOther ? $"سبب آخر: {other}" : reason.Name;
+        if (reasonName.Length > 100) return Results.UnprocessableEntity(new { message = "تفاصيل السبب طويلة جدًا." });
+        var old = await db.PayrollAdditionRequests.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.RequestedByUserId == actor && x.IdempotencyKey == key); if (old is not null) return old.ReasonId == body.ReasonId && old.ReasonName == reasonName ? Results.Ok(new { old.Id, replay = true }) : Results.Conflict();
+        var row = new PayrollAdditionRequest { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = e.Id, ReasonId = reason.Id, ReasonName = reasonName, Amount = 0, Currency = e.Currency, Status = "Pending", RequestedByUserId = actor, IdempotencyKey = key, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() }; db.PayrollAdditionRequests.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Created("/api/v1/staff/payroll/", new { row.Id });
     }
     private static async Task<IResult> Requests(CurrentTenant tenant, FoundationDbContext db)
-    { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.PayrollAdditionRequests.Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Take(1000).Select(x => new { x.Id, x.EmployeeId, name = db.Employees.Where(e => e.AcademyId == t.AcademyId && e.Id == x.EmployeeId).Select(e => e.Name).FirstOrDefault(), x.Amount, x.Currency, x.ReasonName, x.Status, x.DueDate, x.ReviewNote }).ToListAsync()); }
+    { var t = (await tenant.ResolveAsync())!; return Results.Ok(await db.PayrollAdditionRequests.Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Take(1000).Select(x => new { x.Id, x.EmployeeId, name = db.Employees.Where(e => e.AcademyId == t.AcademyId && e.Id == x.EmployeeId).Select(e => e.Name).FirstOrDefault(), Amount = x.Status == "Approved" ? (decimal?)x.Amount : null, x.Currency, x.ReasonName, x.Status, x.DueDate, x.ReviewNote }).ToListAsync()); }
     private static async Task<IResult> Review(Guid id, AdditionReview body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
-        var t = (await tenant.ResolveAsync())!; var actor = Actor(context.User); if (body.Note?.Length > 500 || body.Accept && (body.DueDate is null || body.DueDate.Value.Year is < 2000 or > 9998)) return Results.UnprocessableEntity(new { message = "اختر تاريخ استحقاق المبلغ المقبول." });
+        var t = (await tenant.ResolveAsync())!; var actor = Actor(context.User); if (body.Note?.Length > 500 || body.Accept && (body.DueDate is null || body.DueDate.Value.Year is < 2000 or > 9998 || body.Amount is null || !Money(body.Amount.Value)) || !body.Accept && body.Amount.HasValue) return Results.UnprocessableEntity(new { message = "حدد المبلغ الصحيح وتاريخ الاستحقاق عند قبول الطلب فقط." });
         await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"payroll-review:{t.AcademyId}:{id}"}, 0))");
         var row = await db.PayrollAdditionRequests.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (row is null) return Results.NotFound();
         if (row.RequestedByUserId == actor) return Results.Forbid(); // A delegated approver cannot approve their own claim.
         var state = body.Accept ? "Approved" : "Rejected";
-        if (row.Status != "Pending") return row.Status == state && row.DueDate == (body.Accept ? body.DueDate : null) && row.ReviewNote == body.Note?.Trim() ? Results.Ok(new { row.Id, replay = true }) : Results.Conflict(new { message = "الطلب تمت مراجعته بالفعل." });
+        if (row.Status != "Pending") return row.Status == state && row.DueDate == (body.Accept ? body.DueDate : null) && row.Amount == (body.Accept ? body.Amount : row.Amount) && row.ReviewNote == body.Note?.Trim() ? Results.Ok(new { row.Id, replay = true }) : Results.Conflict(new { message = "الطلب تمت مراجعته بالفعل." });
         if (body.Accept)
         {
             await Lock(db, t.AcademyId, row.EmployeeId, body.DueDate!.Value); if (await Locked(db, t.AcademyId, row.EmployeeId, body.DueDate.Value)) return Results.Conflict(new { message = "راتب شهر الاستحقاق سُدد؛ اختر شهرًا مفتوحًا." });
+            row.Amount = body.Amount!.Value;
             db.PayrollAdjustments.Add(new PayrollAdjustment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = row.EmployeeId, Kind = "Addition", DueDate = body.DueDate.Value, Amount = row.Amount, Currency = row.Currency, Reason = row.ReasonName, AdditionRequestId = row.Id, PerformedByUserId = actor, IdempotencyKey = "request-" + row.Id, CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
         }
         row.Status = state; row.DueDate = body.Accept ? body.DueDate : null; row.ReviewNote = body.Note?.Trim(); row.ReviewedByUserId = actor; row.ReviewedAtUtc = clock.GetUtcNow(); row.UpdatedAtUtc = clock.GetUtcNow();
@@ -187,8 +192,8 @@ public static class PayrollEndpoints
 }
 public sealed record EmployeeWrite(string Name, string Phone, string JobTitle, Guid BranchId, decimal MonthlySalary, DateOnly ContractStart, DateOnly? ContractEnd, Guid? MembershipId, Guid? PhotoAssetId, bool IsActive = true);
 public sealed record AdjustmentWrite(Guid EmployeeId, string Kind, decimal Amount, DateOnly DueDate, string? Reason);
-public sealed record AdditionWrite(Guid ReasonId, decimal Amount);
-public sealed record AdditionReview(bool Accept, DateOnly? DueDate, string? Note);
+public sealed record AdditionWrite(Guid ReasonId, string? OtherReason = null, decimal? Amount = null);
+public sealed record AdditionReview(bool Accept, DateOnly? DueDate, string? Note, decimal? Amount = null);
 public sealed record SalaryPay(DateOnly Month, decimal? ExpectedNetDue = null);
 public sealed record ReasonWrite(string Name);
 public sealed record PayrollRow(Guid EmployeeId, string Name, string JobTitle, Guid BranchId, decimal MonthlySalary, int ContractDays, decimal BaseDue, decimal Deductions, decimal Additions, decimal NetDue, string Currency, bool IsPaid, DateTimeOffset? PaidAtUtc);

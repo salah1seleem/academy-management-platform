@@ -51,6 +51,7 @@ public static class FootballDemoSeed
             await SeedExperience(services, db, ct);
             await SeedReviewExtensions(db, services.GetRequiredService<ISubscriptionClock>().UtcNow, ct);
             await PayrollDemoSeed.AddOnce(db, ct);
+            await GuardianFeedbackDemoSeed.AddOnce(db, ct);
             await transaction.CommitAsync(ct);
             return; // Never reset players, collections or manual demo edits during startup.
         }
@@ -105,6 +106,7 @@ public static class FootballDemoSeed
         await SeedReviewExtensions(db, now, ct);
         await SeedExperience(services, db, ct);
         await PayrollDemoSeed.AddOnce(db, ct);
+        await GuardianFeedbackDemoSeed.AddOnce(db, ct);
         // A deliberate synthetic reset removes tenant configuration too. Restore its
         // known demo grants within the same transaction, not a fail-open API fallback.
         await AcademyConfigurationService.SeedDemo(db, [AcademyId]);

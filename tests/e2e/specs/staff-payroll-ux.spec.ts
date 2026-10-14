@@ -42,12 +42,18 @@ test("Attendance UX: today's default, clear returns records, named coach page an
 test("Additional amounts UX: configure a reason, accept one request and reject another", async ({ page, browser, baseURL }, info) => {
   await page.setViewportSize({ width: 1440, height: 1000 }); await owner(page);
   const reasonName = `ساعة إضافية واجهة ${Date.now()}`;
+  const rejectedReasonName = `حضور مباراة واجهة ${Date.now()}`;
   await page.goto("/dashboard/payroll/requests");
   await page.getByLabel("سبب جديد").fill(reasonName);
   await page.getByRole("button", { name: "إضافة السبب", exact: true }).click();
   await expect(page.getByText(reasonName, { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "إضافة السبب", exact: true })).toBeEnabled();
+  await page.getByLabel("سبب جديد").fill(rejectedReasonName);
+  await page.getByRole("button", { name: "إضافة السبب", exact: true }).click();
+  await expect(page.getByText(rejectedReasonName, { exact: false })).toBeVisible();
   const reasons = await (await page.request.get("/api/v1/manage/payroll/reasons")).json();
   const reason = reasons.find((r: { name: string }) => r.name === reasonName); expect(reason).toBeTruthy();
+  const rejectedReason = reasons.find((r: { name: string }) => r.name === rejectedReasonName); expect(rejectedReason).toBeTruthy();
   const employeeOptions = await (await page.request.get("/api/v1/manage/employees/")).json();
   // This linked account is a synthetic LegacyRegression fixture, not review data.
   const account = employeeOptions.accounts.find((a: { name: string }) => a.name === "منى السيد");
@@ -60,23 +66,23 @@ test("Additional amounts UX: configure a reason, accept one request and reject a
     const own = await (await staffPage.request.get("/api/v1/staff/payroll/")).json(); expect(own.configured).toBe(true);
     const before = await (await page.request.get("/api/v1/manage/payroll/?month=2026-10-01")).json();
     const beforeAddition = before.items.find((e: { employeeId: string }) => e.employeeId === own.employee.id).additions;
-    await command(staffPage, "/api/v1/staff/payroll/requests", { reasonId: reason.id, amount: 150 }, `approved-${Date.now()}`);
-    await command(staffPage, "/api/v1/staff/payroll/requests", { reasonId: reason.id, amount: 200 }, `rejected-${Date.now()}`);
+    const rejectedRequest = await command(staffPage, "/api/v1/staff/payroll/requests", { reasonId: rejectedReason.id }, `rejected-${Date.now()}`);
+    const approvedRequest = await command(staffPage, "/api/v1/staff/payroll/requests", { reasonId: reason.id }, `approved-${Date.now()}`);
     await page.reload();
-    const approved = page.getByRole("row").filter({ hasText: reasonName }).filter({ has: page.getByRole("cell", { name: "150 جنيه", exact: true }) });
+    const approved = page.getByRole("row").filter({ hasText: reasonName }).filter({ has: page.getByRole("button", { name: "مراجعة", exact: true }) }).first();
     await approved.getByRole("button", { name: "مراجعة", exact: true }).click();
     const dialog = page.getByRole("dialog"); await expect(dialog).toBeVisible();
-    await dialog.getByLabel("تاريخ الاستحقاق").fill("2026-10-08"); await dialog.getByRole("button", { name: "حفظ القرار" }).click();
-    await expect(approved).toContainText("مقبول");
-    const rejected = page.getByRole("row").filter({ hasText: reasonName }).filter({ has: page.getByRole("cell", { name: "200 جنيه", exact: true }) });
+    await dialog.getByLabel("المبلغ المعتمد").fill("150"); await dialog.getByLabel("تاريخ الاستحقاق").fill("2026-10-08"); await dialog.getByRole("button", { name: "حفظ القرار" }).click();
+    await expect(page.getByRole("row").filter({ hasText: reasonName }).first()).toContainText("مقبول");
+    const rejected = page.getByRole("row").filter({ hasText: rejectedReasonName }).filter({ has: page.getByRole("button", { name: "مراجعة", exact: true }) }).first();
     await rejected.getByRole("button", { name: "مراجعة", exact: true }).click();
     await dialog.getByLabel("القرار").selectOption("reject"); await expect(dialog.getByLabel("تاريخ الاستحقاق")).toBeDisabled();
-    await dialog.getByRole("button", { name: "حفظ القرار" }).click(); await expect(rejected).toContainText("مرفوض");
+    await dialog.getByRole("button", { name: "حفظ القرار" }).click(); await expect(page.getByRole("row").filter({ hasText: rejectedReasonName }).first()).toContainText("مرفوض");
     const after = await (await page.request.get("/api/v1/manage/payroll/?month=2026-10-01")).json();
     expect(after.items.find((e: { employeeId: string }) => e.employeeId === own.employee.id).additions).toBe(beforeAddition + 150);
     const ownAfter = await (await staffPage.request.get("/api/v1/staff/payroll/")).json();
-    expect(ownAfter.requests.find((r: { reasonName: string; amount: number }) => r.reasonName === reasonName && r.amount === 150).status).toBe("Approved");
-    expect(ownAfter.requests.find((r: { reasonName: string; amount: number }) => r.reasonName === reasonName && r.amount === 200).status).toBe("Rejected");
+    expect(ownAfter.requests.find((r: { id: string }) => r.id === approvedRequest.id).amount).toBe(150);
+    expect(ownAfter.requests.find((r: { id: string }) => r.id === rejectedRequest.id).status).toBe("Rejected");
     await page.screenshot({ path: info.outputPath("additional-requests-reviewed.png"), fullPage: true, animations: "disabled" });
   } finally { await staffContext.close(); }
 });

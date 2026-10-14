@@ -17,6 +17,8 @@ public sealed class Branch : TenantEntity
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }
     public string? Address { get; set; }
+    public double? CheckInLatitude { get; set; }
+    public double? CheckInLongitude { get; set; }
 }
 
 public sealed class Sport : TenantEntity

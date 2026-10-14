@@ -8,7 +8,9 @@ using Academy.Api.Operations;
 using Academy.Api.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.Facilities;
+using Academy.Infrastructure.Finance;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
@@ -83,6 +85,37 @@ public static partial class ReportingEndpoints
                 payroll = new { month = payrollMonth, employeeCount = await staff.CountAsync(), expiringContracts = await staff.CountAsync(x => x.ContractEnd != null && x.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Where(x => !x.IsPaid).Sum(x => x.NetDue) };
             }
         }
+        var coachMembers = await db.AcademyMemberships.Where(x => x.AcademyId == academyId && x.Role == AcademyRole.Coach && x.IsActive)
+            .Select(x => new { x.Id, x.UserId, name = x.User.DisplayName }).ToListAsync();
+        var groups = await db.TrainingGroups.Where(x => x.AcademyId == academyId && x.IsActive && (!branchId.HasValue || x.BranchId == branchId))
+            .Select(x => new { x.Id, x.ArabicName, x.BranchId }).ToListAsync();
+        var groupIds = groups.Select(x => x.Id).ToArray();
+        var assignments = await db.StaffGroupAssignments.Where(x => x.AcademyId == academyId && x.IsActive && groupIds.Contains(x.TrainingGroupId))
+            .Select(x => new { x.AcademyMembershipId, x.TrainingGroupId }).ToListAsync();
+        var sessionCounts = await db.TrainingSessions.Where(x => x.AcademyId == academyId && groupIds.Contains(x.TrainingGroupId) && x.SessionDate >= range.From && x.SessionDate <= range.To && x.Status != TrainingSessionStatus.Cancelled)
+            .GroupBy(x => x.TrainingGroupId).Select(x => new { groupId = x.Key, count = x.Count() }).ToDictionaryAsync(x => x.groupId, x => x.count);
+        var groupAttendance = await db.PlayerAttendances.Where(x => x.AcademyId == academyId && groupIds.Contains(x.TrainingGroupId) && x.TrainingSession.SessionDate >= range.From && x.TrainingSession.SessionDate <= range.To && x.TrainingSession.Status != TrainingSessionStatus.Cancelled)
+            .GroupBy(x => new { x.TrainingGroupId, x.Status }).Select(x => new { x.Key.TrainingGroupId, x.Key.Status, count = x.Count() }).ToListAsync();
+        var evaluations = await db.PlayerEvaluations.Where(x => x.AcademyId == academyId && x.Status == EvaluationStatus.Published && groupIds.Contains(x.TrainingGroupId) && x.EvaluationDate >= range.From && x.EvaluationDate <= range.To)
+            .GroupBy(x => x.EvaluatedByUserId).Select(x => new { userId = x.Key, count = x.Count() }).ToDictionaryAsync(x => x.userId, x => x.count);
+        var feedback = await db.GuardianFeedbacks.Where(x => x.AcademyId == academyId && groupIds.Contains(x.TrainingGroupId) && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive)
+            .GroupBy(x => new { x.CoachMembershipId, x.Kind }).Select(x => new { x.Key.CoachMembershipId, x.Key.Kind, count = x.Count(), scoreTotal = x.Sum(y => y.Score ?? 0) }).ToArrayAsync();
+        var coachPerformance = coachMembers.Select(coach => {
+            var assigned = assignments.Where(a => a.AcademyMembershipId == coach.Id).Select(a => a.TrainingGroupId).Distinct().ToArray();
+            var ratings = feedback.FirstOrDefault(f => f.CoachMembershipId == coach.Id && f.Kind == "Rating");
+            return new { coach.Id, coach.name, groupCount = assigned.Length, sessionCount = assigned.Sum(id => sessionCounts.GetValueOrDefault(id)), publishedEvaluations = evaluations.GetValueOrDefault(coach.UserId), parentRating = ratings is null ? (decimal?)null : Math.Round((decimal)ratings.scoreTotal / ratings.count, 1), parentRatingCount = ratings?.count ?? 0, complaintCount = feedback.FirstOrDefault(f => f.CoachMembershipId == coach.Id && f.Kind == "Complaint")?.count ?? 0 };
+        }).Where(x => x.groupCount > 0 || !branchId.HasValue).OrderByDescending(x => x.groupCount).ThenByDescending(x => x.sessionCount).ThenBy(x => x.name).Take(8).ToArray();
+        var groupAttention = groups.Select(group => {
+            var attendanceRows = groupAttendance.Where(a => a.TrainingGroupId == group.Id).ToArray();
+            var absent = attendanceRows.Where(a => a.Status == AttendanceStatus.Absent).Sum(a => a.count);
+            var notRecorded = attendanceRows.Where(a => a.Status == AttendanceStatus.NotRecorded).Sum(a => a.count);
+            var recorded = attendanceRows.Where(a => a.Status != AttendanceStatus.NotRecorded).Sum(a => a.count);
+            var hasCoach = assignments.Any(a => a.TrainingGroupId == group.Id);
+            return new { group.Id, name = group.ArabicName, group.BranchId, hasCoach, sessions = sessionCounts.GetValueOrDefault(group.Id), absent, notRecorded, recorded, needsAttention = !hasCoach || notRecorded >= 3 || recorded >= 5 && absent * 100 >= recorded * 30 };
+        }).Where(x => x.needsAttention).OrderByDescending(x => !x.hasCoach).ThenByDescending(x => x.notRecorded).ThenByDescending(x => x.absent).Take(3).ToArray();
+        var pendingExpenses = await db.OperatingExpenses.Where(x => x.AcademyId == academyId && x.Status == OperatingExpenseStatus.Approved && (!branchId.HasValue || x.BranchId == branchId))
+            .GroupBy(x => x.Currency).Select(x => new { currency = x.Key, count = x.Count(), amount = x.Sum(y => y.Amount) }).ToListAsync();
+        var accessChanges = await db.StaffAccessAudits.CountAsync(x => x.AcademyId == academyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive);
         return Results.Ok(new {
             asOfDate = today, from = range.From, to = range.To, currency = academy.DefaultCurrency,
             collections = new { total = money.Sum(x => x.amount), today = daily.Sum(x => x.amount), month = money.Sum(x => x.amount), todayCash = daily.Where(x => x.PaymentMethod == "Cash").Sum(x => x.amount), todayOnline = daily.Where(x => x.PaymentMethod != "Cash" && x.PaymentMethod!="Unspecified").Sum(x => x.amount), todayUnspecified=daily.Where(x=>x.PaymentMethod=="Unspecified").Sum(x=>x.amount), monthCash = money.Where(x => x.PaymentMethod == "Cash").Sum(x => x.amount), monthOnline = money.Where(x => x.PaymentMethod != "Cash" && x.PaymentMethod!="Unspecified").Sum(x => x.amount), monthUnspecified=money.Where(x=>x.PaymentMethod=="Unspecified").Sum(x=>x.amount) },
@@ -93,7 +126,11 @@ public static partial class ReportingEndpoints
             coaches = await db.AcademyMemberships.CountAsync(x => x.AcademyId == academyId && x.Role == AcademyRole.Coach && x.IsActive && (!branchId.HasValue || db.StaffGroupAssignments.Any(a => a.AcademyId == academyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive && a.TrainingGroup.BranchId == branchId))),
             newSubscriptions = await db.SubscriptionPeriods.Where(x => x.AcademyId == academyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive && (!branchId.HasValue || x.SportEnrollment.BranchId == branchId) && !db.SubscriptionPeriods.Any(old => old.AcademyId == academyId && old.SportEnrollmentId == x.SportEnrollmentId && old.CreatedAtUtc < x.CreatedAtUtc)).CountAsync(),
             attendance = new { sessions = await db.TrainingSessions.CountAsync(x => x.AcademyId == academyId && x.SessionDate >= range.From && x.SessionDate <= range.To && (!branchId.HasValue || x.BranchId == branchId) && x.Status != TrainingSessionStatus.Cancelled), present = await todayAttendance.CountAsync(x => (x.Status == AttendanceStatus.Present || x.Status == AttendanceStatus.Late)), late = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Late), excused = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Excused), absent = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Absent), notRecorded = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.NotRecorded) },
-            bySport, byBranch, latest, payroll
+            bySport, byBranch, latest, payroll,
+            operations = new { coachPerformance, groupAttention, pendingExpenses, accessChanges,
+                openComplaints = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Complaint" && x.Status == "Open" && (!branchId.HasValue || x.BranchId == branchId)),
+                openSuggestions = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Suggestion" && x.Status == "Open" && (!branchId.HasValue || x.BranchId == branchId)),
+                attentionRule = "مدرب غير مسند، أو 3 سجلات حضور غير مسجلة، أو غياب 30% فأكثر من 5 سجلات على الأقل" }
         });
     }
 

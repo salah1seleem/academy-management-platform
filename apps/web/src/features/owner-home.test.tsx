@@ -21,6 +21,15 @@ it("does not invent a pie when there are no stored records", () => {
   render(<DonutChart center="0" caption="لاعبًا" rows={[{ name: "فعال", value: 0, href: "/players" }]} />);
   expect(screen.queryByRole("img")).not.toBeInTheDocument(); expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
 });
+it("shows stored coach ratings and actionable family feedback without inventing an AI score", async () => {
+  const operational = { ...summary, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], accessChanges: 2, openComplaints: 1, openSuggestions: 1, attentionRule: "غياب متكرر" } };
+  global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(operational)) as typeof fetch;
+  render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
+  expect(await screen.findByText(/4\.5\/5 من 2/)).toBeVisible();
+  expect(screen.getByRole("link", { name: /شكاوى تنتظر المراجعة/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Open");
+  expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
+  expect(screen.queryByText(/ذكاء اصطناعي يحلل/)).not.toBeInTheDocument();
+});
 it("does not pretend historical refunds have a documented electronic method", async () => {
   const historic = { ...summary, collections: { today: -40, month: 5600, todayCash: 0, todayOnline: 0, todayUnspecified: -40, monthUnspecified: 0 } };
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(historic)) as typeof fetch;

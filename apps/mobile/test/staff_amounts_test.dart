@@ -28,14 +28,13 @@ void main() {
       await tester.tap(find.text('إرسال للمراجعة'));
       await tester.pumpAndSettle();
       expect(calls, isEmpty);
-      await tester.enterText(find.byType(TextFormField), '150');
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ساعة إضافية').last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('إرسال للمراجعة'));
       await tester.pumpAndSettle();
-      expect(calls.single, {'reasonId': 'overtime', 'amount': 150.0});
+      expect(calls.single, {'reasonId': 'overtime'});
       expect(find.text('تم إرسال الطلب للمراجعة.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

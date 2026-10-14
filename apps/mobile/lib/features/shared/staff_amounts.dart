@@ -15,14 +15,15 @@ class StaffAmounts extends StatefulWidget {
 
 class _StaffAmountsState extends State<StaffAmounts> {
   final form = GlobalKey<FormState>();
-  final amount = TextEditingController();
+  final otherReason = TextEditingController();
   String? reason;
+  bool isOther = false;
   String operationKey = commandKey(), message = '';
   int revision = 0;
   bool busy = false;
   @override
   void dispose() {
-    amount.dispose();
+    otherReason.dispose();
     super.dispose();
   }
 
@@ -36,14 +37,15 @@ class _StaffAmountsState extends State<StaffAmounts> {
       await widget.auth.request(
         'POST',
         '/api/v1/staff/payroll/requests',
-        body: {'reasonId': reason, 'amount': double.parse(amount.text)},
+        body: {'reasonId': reason, if (isOther) 'otherReason': otherReason.text.trim()},
         idempotencyKey: operationKey,
       );
       if (mounted) {
         setState(() {
           operationKey = commandKey();
-          amount.clear();
+          otherReason.clear();
           reason = null;
+          isOther = false;
           revision++;
           message = localized(
             context,
@@ -94,35 +96,10 @@ class _StaffAmountsState extends State<StaffAmounts> {
                   UiText(
                     localized(
                       context,
-                      'طلب مبلغ إضافي',
-                      'Request an additional amount',
+                      'طلب مبلغ إضافي — الإدارة تحدد القيمة',
+                      'Additional amount request — management sets the amount',
                     ),
                   ),
-                  TextFormField(
-                    controller: amount,
-                    enabled: !busy,
-                    decoration: InputDecoration(
-                      labelText: localized(context, 'المبلغ', 'Amount'),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) {
-                      operationKey = commandKey();
-                    },
-                    validator: (v) =>
-                        v != null &&
-                            RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(v.trim()) &&
-                            (double.tryParse(v.trim()) ?? 0) > 0 &&
-                            double.parse(v.trim()) <= 100000000
-                        ? null
-                        : localized(
-                            context,
-                            'أدخل مبلغًا صحيحًا بمنزلتين عشريتين كحد أقصى.',
-                            'Enter a valid amount with up to two decimal places.',
-                          ),
-                  ),
-                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: reason,
                     decoration: InputDecoration(
@@ -139,6 +116,7 @@ class _StaffAmountsState extends State<StaffAmounts> {
                         ? null
                         : (v) => setState(() {
                             reason = v;
+                            isOther = reasons.any((r) => textOf(r['id']) == v && textOf(r['name']) == 'سبب آخر');
                             operationKey = commandKey();
                           }),
                     validator: (v) => v == null
@@ -149,6 +127,19 @@ class _StaffAmountsState extends State<StaffAmounts> {
                           )
                         : null,
                   ),
+                  if (isOther) ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: otherReason,
+                      enabled: !busy,
+                      maxLength: 80,
+                      decoration: InputDecoration(labelText: localized(context, 'تفاصيل السبب', 'Reason details')),
+                      onChanged: (_) => operationKey = commandKey(),
+                      validator: (v) => v != null && v.trim().isNotEmpty
+                          ? null
+                          : localized(context, 'اكتب تفاصيل السبب.', 'Enter reason details.'),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: busy || reasons.isEmpty ? null : save,
@@ -169,7 +160,7 @@ class _StaffAmountsState extends State<StaffAmounts> {
             GCard(
               child: ListTile(
                 title: UiText(
-                  '${r['reasonName']} · ${r['amount']} ${r['currency']}',
+                  '${r['reasonName']}${r['status'] == 'Approved' ? ' · ${r['amount']} ${r['currency']}' : ''}',
                 ),
                 subtitle: UiText(
                   '${localized(context, switch (r['status']) {

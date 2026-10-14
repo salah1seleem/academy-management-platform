@@ -12,6 +12,7 @@ import 'group_transfer_notice.dart';
 import 'compensation_card.dart';
 import 'player_card.dart';
 import 'guardian_visits.dart';
+import 'coach_feedback.dart';
 
 class ChildProfile extends StatelessWidget {
   final AuthController auth;
@@ -102,6 +103,11 @@ class ChildProfile extends StatelessWidget {
               context,
               ReportHistory(auth: auth, playerId: playerId),
             ),
+          ),
+          GLink(
+            'تقييم المدرب أو إرسال ملاحظة',
+            Icons.rate_review_outlined,
+            () => openPage(context, CoachFeedbackPage(auth: auth, playerId: playerId)),
           ),
           GLink(
             'التدريب والمواعيد',

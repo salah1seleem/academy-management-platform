@@ -11,6 +11,7 @@ import '../guardian/guardian_ui.dart';
 import '../shared/academy_news.dart';
 import '../shared/role_navigation.dart';
 import 'owner_reports.dart';
+import 'owner_feedback.dart';
 
 class OwnerDashboard extends StatefulWidget {
   final AuthController auth;
@@ -73,6 +74,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                     'products': null,
                   };
         final currency = d['currency'];
+        final operations = d['operations'] is Map ? obj(d['operations']) : <String, dynamic>{};
         void requests([String type = '']) => openPage(
           context,
           NativePaymentRequests(
@@ -430,6 +432,27 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 ),
             ],
           ),
+          if (operations.isNotEmpty) ...[
+            const Heading('متابعة تحتاج قرارًا'),
+            GCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const UiText('المجموعات التي تحتاج متابعة'),
+              for (final group in rows(operations['groupAttention'])) UiText('${group['name']} · ${group['hasCoach'] == false ? 'بلا مدرب · ' : ''}${group['notRecorded']} حضور غير مسجل · ${group['absent']} غياب'),
+              if (rows(operations['groupAttention']).isEmpty) const UiText('لا توجد تنبيهات حسب القواعد الحالية.'),
+              UiText(textOf(operations['attentionRule']), style: Theme.of(context).textTheme.bodySmall),
+            ])),
+            GCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const UiText('المدربون وتقييم الأسرة'),
+              for (final coach in rows(operations['coachPerformance'])) UiText('${coach['name']} · ${coach['groupCount']} مجموعات · ${coach['sessionCount']} حصص · ${coach['parentRating'] == null ? 'لا تقييم بعد' : '${coach['parentRating']}/5 (${coach['parentRatingCount']})'}'),
+            ])),
+            GLink('شكاوى ${operations['openComplaints']} · اقتراحات ${operations['openSuggestions']}', Icons.feedback_outlined,
+              () => openPage(context, OwnerFeedbackInbox(auth: widget.auth))),
+            GCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const UiText('مصروفات معتمدة لم تُرحّل بعد'),
+              for (final expense in rows(operations['pendingExpenses'])) UiText('${expense['count']} قيد · ${money(expense['amount'], expense['currency'])}'),
+              if (rows(operations['pendingExpenses']).isEmpty) const UiText('لا توجد مصروفات معلقة.'),
+              UiText('${operations['accessChanges']} تغييرات صلاحيات خلال الفترة'),
+            ])),
+          ],
           NewsStrip(auth: widget.auth),
           NextMatchStrip(auth: widget.auth),
           FilledButton.icon(

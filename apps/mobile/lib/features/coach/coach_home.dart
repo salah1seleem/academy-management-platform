@@ -13,6 +13,7 @@ import 'coach_evaluation.dart';
 import '../shared/private_media.dart';
 import '../shared/academy_news.dart';
 import '../shared/staff_amounts.dart';
+import 'device_check_in.dart';
 
 class CoachHome extends StatelessWidget {
   final AuthController auth;
@@ -71,6 +72,11 @@ class CoachHome extends StatelessWidget {
               onPressed: () => openPage(context, StaffAmounts(auth: auth)),
               icon: const Icon(Icons.add_card_outlined),
               label: const UiText('طلب مبلغ إضافي'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => openPage(context, DeviceCheckIn(auth: auth)),
+              icon: const Icon(Icons.fingerprint),
+              label: const UiText('تسجيل حضوري بالبصمة والموقع'),
             ),
             const SizedBox(height: 18),
             UiText(

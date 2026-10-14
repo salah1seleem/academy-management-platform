@@ -28,6 +28,17 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
     public async Task DisposeAsync() => await factory.DisposeAsync();
 
     [Fact] public async Task Owner_dashboard_total_equals_collections_sum() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, "/api/v1/reports/owner-summary?from=2026-01-01&to=2026-12-31"); Assert.Equal(await NetRevenue(), j.GetProperty("collections").GetProperty("total").GetDecimal()); }
+    [Fact] public async Task Owner_operations_are_tenant_scoped_and_expose_stored_coach_group_expense_signals()
+    {
+        using var c = await Staff(DemoSeed.OwnerEmail);
+        var summary = await Get(c, "/api/v1/reports/owner-summary?from=2026-01-01&to=2026-12-31");
+        var operations = summary.GetProperty("operations");
+        Assert.Equal(JsonValueKind.Array, operations.GetProperty("coachPerformance").ValueKind);
+        Assert.Equal(JsonValueKind.Array, operations.GetProperty("groupAttention").ValueKind);
+        Assert.Equal(JsonValueKind.Array, operations.GetProperty("pendingExpenses").ValueKind);
+        Assert.DoesNotContain("أكاديمية المستقبل", operations.ToString());
+        Assert.All(operations.GetProperty("coachPerformance").EnumerateArray(), x => Assert.True(x.GetProperty("groupCount").GetInt32() >= 0));
+    }
     [Fact] public async Task Failed_payment_is_excluded_from_revenue() { await AssertPaymentStatusNotRevenue(PaymentRequestStatus.Failed); }
     [Fact] public async Task Pending_payment_is_excluded_from_revenue() { await AssertPaymentStatusNotRevenue(PaymentRequestStatus.Pending); }
     [Fact] public async Task Cancelled_payment_is_excluded_from_revenue() { await AssertPaymentStatusNotRevenue(PaymentRequestStatus.Cancelled); }

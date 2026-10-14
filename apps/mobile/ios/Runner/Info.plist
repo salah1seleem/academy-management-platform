@@ -12,6 +12,10 @@
 	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>الاتصال بخادم الأكاديمية المحلي في بيئة العرض التجريبي.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>تأكيد هوية المدرب عند تسجيل الحضور من موقع الفرع.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>التحقق من وجود المدرب داخل نطاق فرع الأكاديمية أثناء تسجيل الحضور فقط.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

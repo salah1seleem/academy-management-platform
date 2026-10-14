@@ -76,6 +76,12 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("renewal-search", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("guardian-feedback", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("device-check-in", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("import", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
@@ -371,6 +377,8 @@ app.MapProductSales();
 app.MapNews();
 app.MapStaffManagement();
 app.MapDailyStaffAttendance();
+app.MapStaffDeviceCheckIn();
+app.MapGuardianFeedback();
 app.MapPayroll();
 app.MapVersionedConfiguration();
 app.MapReceivables();

@@ -1,0 +1,22 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { AdminDataTable, EmptyState, ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { csrfRequest } from "./dashboard-api";
+
+type Feedback = { id: string; kind: string; score: number | null; message: string; status: string; createdAtUtc: string; playerId: string; playerName: string; branchName: string; coachName: string | null };
+const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح" };
+export function GuardianFeedbackInbox({ initialKind = "", initialStatus = "" }: { initialKind?: string; initialStatus?: string }) {
+  const [kind, setKind] = useState(initialKind);
+  const [status, setStatus] = useState(initialStatus);
+  const [branchId, setBranchId] = useState("");
+  const [branches, setBranches] = useState<{ id: string; arabicName: string }[]>([]);
+  const [rows, setRows] = useState<Feedback[] | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState("");
+  useEffect(() => { fetch("/api/v1/manage/structure/options").then(r => r.ok ? r.json() : null).then(x => setBranches(x?.branches ?? [])).catch(() => {}); }, []);
+  const load = useCallback(async () => { try { const query = new URLSearchParams(); if (kind) query.set("kind", kind); if (status) query.set("status", status); if (branchId) query.set("branchId", branchId); const response = await fetch(`/api/v1/manage/feedback?${query}`); if (!response.ok) throw new Error(); setRows(await response.json()); setError(""); } catch { setError("تعذر تحميل ملاحظات الأسر أو لا تملك صلاحية عرضها."); } }, [kind, status, branchId]);
+  useEffect(() => { const query = new URLSearchParams(); if (kind) query.set("kind", kind); if (status) query.set("status", status); if (branchId) query.set("branchId", branchId); const controller = new AbortController(); fetch(`/api/v1/manage/feedback?${query}`, { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error(); return response.json(); }).then(data => { setRows(data); setError(""); }).catch(() => { if (!controller.signal.aborted) setError("تعذر تحميل ملاحظات الأسر أو لا تملك صلاحية عرضها."); }); return () => controller.abort(); }, [kind, status, branchId]);
+  async function review(id: string) { if (busy) return; setBusy(id); try { await csrfRequest(`/api/v1/manage/feedback/${id}/review`, "POST", {}); await load(); } catch { setError("تعذر تسجيل المراجعة."); } finally { setBusy(""); } }
+  return <><PageHeader title="ملاحظات أولياء الأمور" context="المتابعة التشغيلية" /><div className="report-filters"><label>النوع<select value={kind} onChange={e => setKind(e.target.value)}><option value="">كل الأنواع</option>{Object.entries(kinds).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>الحالة<select value={status} onChange={e => setStatus(e.target.value)}><option value="">كل الحالات</option><option value="Open">تنتظر المراجعة</option><option value="Reviewed">تمت المراجعة</option></select></label><label>الفرع<select value={branchId} onChange={e => setBranchId(e.target.value)}><option value="">كل الفروع</option>{branches.map(b => <option value={b.id} key={b.id}>{b.arabicName}</option>)}</select></label><button onClick={() => { setKind(""); setStatus(""); setBranchId(""); }}>مسح</button></div>
+    {error && <ErrorState message={error} />}{!rows && !error ? <LoadingState /> : <section className="list-card">{!rows?.length ? <EmptyState message="لا توجد ملاحظات ضمن الفلاتر." /> : <AdminDataTable label="ملاحظات أولياء الأمور" rows={rows} rowKey={x => x.id} columns={[{ key: "kind", header: "النوع", render: x => kinds[x.kind] ?? x.kind }, { key: "child", header: "اللاعب", primary: true, render: x => <Link href={`/dashboard/players/${x.playerId}`}>{x.playerName}</Link> }, { key: "coach", header: "المدرب", render: x => x.coachName ?? "—" }, { key: "branch", header: "الفرع", render: x => x.branchName }, { key: "note", header: "الملاحظة", render: x => <span>{x.score ? `${x.score}/5 · ` : ""}{x.message || "—"}</span> }, { key: "state", header: "الحالة", render: x => x.status === "Open" ? "تنتظر المراجعة" : "تمت المراجعة" }, { key: "action", header: "الإجراء", render: x => x.status === "Open" ? <button disabled={busy === x.id} onClick={() => void review(x.id)}>تسجيل المراجعة</button> : "—" }]} />}</section>}</>;
+}

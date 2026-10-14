@@ -148,3 +148,31 @@ public sealed class StaffDailyAttendance : TenantEntity
     public string? DeductionReason { get; set; }
     public Guid RecordedByUserId { get; set; }
 }
+
+public sealed class BranchCheckInSiteAudit : TenantEntity
+{
+    public Guid BranchId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public double? BeforeLatitude { get; set; }
+    public double? BeforeLongitude { get; set; }
+    public double? AfterLatitude { get; set; }
+    public double? AfterLongitude { get; set; }
+}
+
+// Feedback is child-linked and private to academy management; it is never a public coach score.
+public sealed class GuardianFeedback : TenantEntity
+{
+    public Guid PlayerId { get; set; }
+    public Guid GuardianUserId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid? CoachMembershipId { get; set; }
+    public Guid TrainingGroupId { get; set; }
+    public required string Kind { get; set; }
+    public int? Score { get; set; }
+    public required string Message { get; set; }
+    public DateOnly PeriodMonth { get; set; }
+    public required string Status { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+}
