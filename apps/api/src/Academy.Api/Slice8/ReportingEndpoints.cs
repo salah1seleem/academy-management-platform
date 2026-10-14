@@ -36,11 +36,11 @@ public static partial class ReportingEndpoints
         reports.MapGet("/receipts", ReceiptList).RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
     }
 
-    private static async Task<IResult> CoachPerformance(Guid coachId, DateOnly? from, DateOnly? to, Guid? branchId,
+    private static async Task<IResult> CoachPerformance(Guid coachId, DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId,
         CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var current = (await tenant.ResolveAsync())!; var academyId = current.AcademyId;
-        var range = await FinancialRange(academyId, from, to, db, clock, false);
+        var range = await FinancialRange(academyId, from, to, db, clock, allDates == true);
         if (range.Error is not null) return range.Error;
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == academyId && x.Id == branchId)) return Results.NotFound();
         var coach = await db.AcademyMemberships.Where(x => x.AcademyId == academyId && x.Id == coachId && x.Role == AcademyRole.Coach)

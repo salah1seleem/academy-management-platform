@@ -31,6 +31,8 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));
   expect(screen.getByRole("link", { name: /مصروفات تشغيلية غير مسددة/ })).toHaveAttribute("href", expect.stringContaining("unpaid=true"));
   expect(screen.getByRole("link", { name: /مصروفات تشغيلية غير مسددة/ })).toHaveTextContent("450 جنيه");
+  fireEvent.click(screen.getByRole("button", { name: "مسح" }));
+  await waitFor(() => expect(screen.getByRole("link", { name: /مدرب تجريبي/ })).toHaveAttribute("href", expect.stringContaining("allDates=true")));
   expect(screen.queryByText(/ذكاء اصطناعي يحلل/)).not.toBeInTheDocument();
 });
 it("does not pretend historical refunds have a documented electronic method", async () => {

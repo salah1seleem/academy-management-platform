@@ -102,6 +102,7 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         Assert.Equal(5, coachDetail.GetProperty("parentRating").GetDecimal());
         Assert.Equal(1, coachDetail.GetProperty("parentRatingCount").GetInt32());
         Assert.Contains(coachDetail.GetProperty("groups").EnumerateArray(), x => x.GetProperty("id").GetGuid() == group);
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/v1/reports/coach-performance/{coach}?allDates=true")).StatusCode);
         Assert.Contains((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/feedback?coachId={coach}&kind=Rating")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
         Assert.DoesNotContain((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/feedback?coachId={Guid.NewGuid()}" )).EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
         Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(coachDetailPath)).StatusCode);
