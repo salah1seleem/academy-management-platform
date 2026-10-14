@@ -11,6 +11,7 @@ beforeEach(() => { push.mockReset(); sessionStorage.clear(); vi.stubGlobal("cryp
 it("drills into posted balances and exports the exact displayed asOf", async () => {
   render(<Receivables />); await screen.findByRole("link", { name: "التفاصيل والحركات" });
   expect(screen.getByRole("link", { name: /تصدير CSV/ })).toHaveAttribute("href", expect.stringContaining("asOf=2026-09-28T09%3A00%3A00Z"));
+  expect(screen.getByRole("link", { name: /تصدير CSV/ })).not.toHaveAttribute("href", expect.stringContaining("branchId="));
   fireEvent.click(screen.getByRole("button", { name: /المتأخر المستحق/ }));
   await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/finance/receivables?state=overdue", expect.anything()));
   await screen.findByRole("link", { name: "التفاصيل والحركات" }); fireEvent.click(screen.getByRole("button", { name: "مسح الفلتر" }));
