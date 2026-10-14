@@ -86,7 +86,7 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage> {
             const Heading('ملاحظاتي السابقة'),
             for (final item in rows(data['mine'])) GCard(child: ListTile(
               title: UiText(switch (item['kind']) { 'Rating' => 'تقييم المدرب · ${item['score']}/5', 'Complaint' => 'شكوى', _ => 'اقتراح' }),
-              subtitle: UiText('${item['message']?.toString().isEmpty == true ? 'بدون تعليق' : item['message']} · ${item['status'] == 'Reviewed' ? 'راجعتها الإدارة' : 'بانتظار المراجعة'}'),
+              subtitle: UiText('${item['message']?.toString().isEmpty == true ? 'بدون تعليق' : item['message']} · ${item['status'] == 'Resolved' ? 'تم الرد والحل' : item['status'] == 'Reviewed' ? 'راجعتها الإدارة' : 'بانتظار المراجعة'}${textOf(item['ownerResponse']).isNotEmpty ? '\nرد الإدارة: ${item['ownerResponse']}' : ''}'),
             )),
           ],
         ]);

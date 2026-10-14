@@ -175,4 +175,7 @@ public sealed class GuardianFeedback : TenantEntity
     public required string IdempotencyKey { get; set; }
     public Guid? ReviewedByUserId { get; set; }
     public DateTimeOffset? ReviewedAtUtc { get; set; }
+    public string? OwnerResponse { get; set; }
+    public Guid? RespondedByUserId { get; set; }
+    public DateTimeOffset? RespondedAtUtc { get; set; }
 }

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Academy.Api.Auth;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.People;
@@ -18,6 +20,7 @@ public static class GuardianFeedbackEndpoints
         var owner = app.MapGroup("/api/v1/manage/feedback").RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         owner.MapGet("/", List);
         owner.MapPost("/{id:guid}/review", Review).AddEndpointFilter<CsrfFilter>();
+        owner.MapPost("/{id:guid}/resolve", Resolve).AddEndpointFilter<CsrfFilter>();
     }
 
     private static Guid Actor(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -39,7 +42,7 @@ public static class GuardianFeedbackEndpoints
             .Select(a => new { a.TrainingGroupId, id = a.AcademyMembershipId, name = a.AcademyMembership.User.DisplayName }).ToArrayAsync();
         var groups = groupRows.Select(g => new { g.id, g.name, g.sport, coaches = assigned.Where(a => a.TrainingGroupId == g.id).Select(a => new { a.id, a.name }).Distinct().ToArray() }).ToArray();
         var mine = await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.GuardianUserId == actor)
-            .OrderByDescending(x => x.CreatedAtUtc).Take(30).Select(x => new { x.Id, x.Kind, x.CoachMembershipId, x.TrainingGroupId, x.Score, x.Message, x.Status, x.PeriodMonth, x.CreatedAtUtc }).ToArrayAsync();
+            .OrderByDescending(x => x.CreatedAtUtc).Take(30).Select(x => new { x.Id, x.Kind, x.CoachMembershipId, x.TrainingGroupId, x.Score, x.Message, x.Status, x.OwnerResponse, x.RespondedAtUtc, x.PeriodMonth, x.CreatedAtUtc }).ToArrayAsync();
         return Results.Ok(new { periodMonth, groups, mine });
     }
 
@@ -81,22 +84,50 @@ public static class GuardianFeedbackEndpoints
     private static async Task<IResult> List(Guid? branchId, string? kind, string? status, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status is not (null or "Open" or "Reviewed")) return Results.BadRequest(new { message = "فلتر غير صالح." });
+        if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status is not (null or "Open" or "Reviewed" or "Resolved")) return Results.BadRequest(new { message = "فلتر غير صالح." });
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) return Results.NotFound();
         return Results.Ok(await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (kind == null || x.Kind == kind) && (status == null || x.Status == status))
             .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Take(200)
-            .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());
+            .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.OwnerResponse, x.RespondedAtUtc, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());
     }
 
     private static async Task<IResult> Review(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"guardian-feedback-resolve:{t.AcademyId}:{id}"}, 0))");
         var item = await db.GuardianFeedbacks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
         if (item is null) return Results.NotFound();
-        if (item.Status == "Reviewed") return Results.Ok(new { item.Id, replay = true });
+        if (item.Status != "Open") return Results.Ok(new { item.Id, replay = true });
         item.Status = "Reviewed"; item.ReviewedByUserId = Actor(principal); item.ReviewedAtUtc = clock.GetUtcNow(); item.UpdatedAtUtc = clock.GetUtcNow();
-        await db.SaveChangesAsync(); return Results.Ok(new { item.Id });
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { item.Id });
+    }
+
+    private static async Task<IResult> Resolve(Guid id, FeedbackResolution body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    {
+        var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        var response = body.Response?.Trim() ?? "";
+        if (response.Length is < 5 or > 500) return Results.UnprocessableEntity(new { message = "اكتب ردًا واضحًا من 5 إلى 500 حرف." });
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"guardian-feedback-resolve:{t.AcademyId}:{id}"}, 0))");
+        var item = await db.GuardianFeedbacks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
+        if (item is null) return Results.NotFound();
+        if (item.Kind == "Rating") return Results.UnprocessableEntity(new { message = "الردّ متاح للشكاوى والاقتراحات فقط." });
+        if (item.Status == "Resolved") return item.OwnerResponse == response
+            ? Results.Ok(new { item.Id, replay = true }) : Results.Conflict(new { message = "حُلّت الملاحظة برد مختلف بالفعل." });
+        var now = clock.GetUtcNow(); var actor = Actor(principal);
+        item.Status = "Resolved"; item.OwnerResponse = response; item.RespondedByUserId = actor; item.RespondedAtUtc = now;
+        item.ReviewedByUserId ??= actor; item.ReviewedAtUtc ??= now; item.UpdatedAtUtc = now;
+        if (await Linked(db, t.AcademyId, item.GuardianUserId, item.PlayerId))
+        {
+            var noticeId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"academy/feedback-response/v1/{t.AcademyId:N}/{id:N}"))[..16]);
+            db.AcademyNotices.Add(new AcademyNotice { Id = noticeId, AcademyId = t.AcademyId, UserId = item.GuardianUserId,
+                Message = "ردت إدارة الأكاديمية على ملاحظتك. افتح ملاحظاتك لقراءة الرد.", CreatedAtUtc = now, UpdatedAtUtc = now });
+        }
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+        return Results.Ok(new { item.Id });
     }
 }
 
 public sealed record FeedbackWrite(Guid TrainingGroupId, Guid? CoachMembershipId, string Kind, int? Score, string? Message);
+public sealed record FeedbackResolution(string? Response);

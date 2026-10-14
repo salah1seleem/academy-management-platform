@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { GuardianFeedbackInbox } from "./guardian-feedback";
 
@@ -9,4 +9,6 @@ it("keeps guardian complaints private in an owner inbox with a clear review acti
   expect(await screen.findByRole("table", { name: "ملاحظات أولياء الأمور" })).toHaveTextContent("اقتراح موعد أوضح");
   expect(screen.getByRole("link", { name: "لاعب تجريبي" })).toHaveAttribute("href", "/dashboard/players/player-1");
   expect(screen.getByRole("button", { name: "تسجيل المراجعة" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "الرد والحل" }));
+  expect(screen.getByRole("textbox", { name: "الرد على الملاحظة" })).toBeVisible();
 });

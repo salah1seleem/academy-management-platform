@@ -17,11 +17,14 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
 {
     private Factory factory = null!;
     private readonly List<Guid> created = [];
+    private readonly List<Guid> createdNotices = [];
     public Task InitializeAsync() { factory = new(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Isolated test database required")); _ = factory.CreateClient(); return Task.CompletedTask; }
     public async Task DisposeAsync()
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().GuardianFeedbacks.Where(x => created.Contains(x.Id)).ExecuteDeleteAsync();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        await db.AcademyNotices.Where(x => createdNotices.Contains(x.Id)).ExecuteDeleteAsync();
+        await db.GuardianFeedbacks.Where(x => created.Contains(x.Id)).ExecuteDeleteAsync();
         await factory.DisposeAsync();
     }
     private static async Task<HttpResponseMessage> Send(HttpClient client, string path, object body, string? key = null)
@@ -68,6 +71,25 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var foreignList = await foreign.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback"); Assert.DoesNotContain(foreignList.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         Assert.Equal(HttpStatusCode.NotFound, (await Send(foreign, $"/api/v1/manage/feedback/{complaintId}/review", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Send(owner, $"/api/v1/manage/feedback/{complaintId}/review", new { })).StatusCode);
+        var resolutionPath = $"/api/v1/manage/feedback/{complaintId}/resolve";
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(guardian, resolutionPath, new { response = "راجعنا الشكوى" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(foreign, resolutionPath, new { response = "راجعنا الشكوى" })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, resolutionPath, new { response = "قصير" })).StatusCode);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var beforeNotices = await db.AcademyNotices.Select(x => x.Id).ToArrayAsync();
+            Assert.Equal(HttpStatusCode.OK, (await Send(owner, resolutionPath, new { response = "تم تعديل موعد الإشعار للأسرة." })).StatusCode);
+            var newNotices = await db.AcademyNotices.Where(x => !beforeNotices.Contains(x.Id)).ToArrayAsync();
+            Assert.Single(newNotices); createdNotices.Add(newNotices[0].Id);
+            Assert.DoesNotContain("نحتاج متابعة الموعد", newNotices[0].Message);
+            Assert.Equal(HttpStatusCode.OK, (await Send(owner, resolutionPath, new { response = "تم تعديل موعد الإشعار للأسرة." })).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, resolutionPath, new { response = "رد آخر مختلف" })).StatusCode);
+            Assert.Single(await db.AcademyNotices.Where(x => createdNotices.Contains(x.Id)).ToArrayAsync());
+        }
+        var mine = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{child}/feedback-options");
+        Assert.Contains(mine.GetProperty("mine").EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId &&
+            x.GetProperty("status").GetString() == "Resolved" && x.GetProperty("ownerResponse").GetString() == "تم تعديل موعد الإشعار للأسرة.");
         var summary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
         var operations = summary.GetProperty("operations");
         Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == 5);

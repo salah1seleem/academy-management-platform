@@ -3410,10 +3410,20 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("OwnerResponse")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<DateOnly>("PeriodMonth")
                         .HasColumnType("date");
 
                     b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RespondedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RespondedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("ReviewedAtUtc")
@@ -3447,6 +3457,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasAlternateKey("AcademyId", "Id");
 
                     b.HasIndex("GuardianUserId");
+
+                    b.HasIndex("RespondedByUserId");
 
                     b.HasIndex("ReviewedByUserId");
 
@@ -10390,6 +10402,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("GuardianUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RespondedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()

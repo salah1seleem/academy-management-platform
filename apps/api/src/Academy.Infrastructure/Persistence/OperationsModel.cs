@@ -65,10 +65,12 @@ public sealed partial class FoundationDbContext
         b.Entity<GuardianFeedback>().HasOne<TrainingGroup>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TrainingGroupId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.GuardianUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<GuardianFeedback>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.RespondedByUserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasIndex(x => new { x.AcademyId, x.GuardianUserId, x.IdempotencyKey }).IsUnique();
         b.Entity<GuardianFeedback>().HasIndex(x => new { x.AcademyId, x.GuardianUserId, x.PlayerId, x.CoachMembershipId, x.PeriodMonth }).IsUnique().HasFilter("\"Kind\" = 'Rating'");
         b.Entity<GuardianFeedback>().Property(x => x.Kind).HasMaxLength(16); b.Entity<GuardianFeedback>().Property(x => x.Status).HasMaxLength(16);
         b.Entity<GuardianFeedback>().Property(x => x.Message).HasMaxLength(500); b.Entity<GuardianFeedback>().Property(x => x.IdempotencyKey).HasMaxLength(100);
+        b.Entity<GuardianFeedback>().Property(x => x.OwnerResponse).HasMaxLength(500);
         b.Entity<GuardianFeedback>().ToTable(t => t.HasCheckConstraint("CK_GuardianFeedback_KindScore", "(\"Kind\" = 'Rating' AND \"CoachMembershipId\" IS NOT NULL AND \"Score\" BETWEEN 1 AND 5) OR (\"Kind\" IN ('Complaint','Suggestion') AND \"Score\" IS NULL)"));
         b.Entity<PrivateAsset>().Property(x => x.StorageName).HasMaxLength(100);
         b.Entity<RenewalRequest>().Property(x => x.RegistrationPayloadHash).HasMaxLength(64);

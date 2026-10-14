@@ -578,6 +578,10 @@ footer {
 .report-filters label { display: grid; gap: .35rem; color: var(--muted); font-size: .82rem; font-weight: 800; }
 .report-filters input, .report-filters select { min-width: 0; padding: .7rem; background: white; border: 1px solid var(--border); border-radius: .65rem; }
 .report-filters .primary-button, .report-filters .secondary-button { align-self: end; text-align: center; text-decoration: none; }
+.feedback-reply { display: grid; gap: .8rem; margin: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--background); }
+.feedback-reply label { display: grid; gap: .4rem; font-weight: 700; }
+.feedback-reply textarea { width: 100%; min-height: 6rem; padding: .75rem; border: 1px solid var(--border); border-radius: .7rem; color: var(--text); background: white; resize: vertical; }
+.feedback-reply div { display: flex; flex-wrap: wrap; gap: .5rem; }
 .report-total { display: grid; gap: .3rem; margin-block-end: 1rem; padding: 1rem; color: white; background: var(--primary); border-radius: .85rem; }
 .report-total small { color: #d5f1ed; }
 .report-total strong { font-size: 1.45rem; }
