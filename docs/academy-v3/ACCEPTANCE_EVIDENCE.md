@@ -2,6 +2,8 @@
 
 ## B3a — نطاق الرياضة التشغيلي، 14 أكتوبر 2026
 
+Code SHA `70f217fa57e58844b58a7dad35f02aa956fee9e4` مرفوع. CI [38609005372](https://github.com/salah1seleem/academy-management-platform/actions/runs/38609005372) **in_progress** عند الفحص، ولا تعادل النتائج المحلية نجاح CI. بعد مراجعة نطاق HR أضيف منع الحضور الوظيفي اليومي المشترك من التفويض الرياضي الضيق وأعيد الاختبار المتأثر **1/1**؛ لم تمس بقية نتائج الاختبارات أو assertions.
+
 نفس قاعدتي الاختبار المعزولتين B2؛ لا reset أو تغيير لقاعدة المراجعة. Migrations `20261014165922_V3MembershipSportScope` و`20261014170814_V3PlanSportScopeLookup` مطبقتان على الاثنتين؛ `has-pending-model-changes --no-build` نجح.
 
 الأمر النهائي المستهدف `dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family|FullyQualifiedName~Family_request_and_proof_require_every_branch|FullyQualifiedName~Branch_admin_cannot_publish_outside_scope|FullyQualifiedName~IMP_06_branch_admin_can_publish|FullyQualifiedName~Scoped_admin_collects_linked_family_across_branches' --no-restore` باستخدام اتصال قاعدة V3: **18/18 في61s**. يشمل 8 اختبارات V3 جديدة: نطاق/IDOR/CSV/كتابة صحيحة ومرفوضة، مدخلات أجنبية وتوافق عميل قديم، منع المجالات المشتركة وworker، كائن tracked وهوية طفل متعدد الرياضات، دور ثان لا يوسع الدور المختار وتعارض مدرب عبر الرياضات، سحب scope/action قبل حفظ أمر، seed آمن متكرر، طلب أسرة وإثبات متعدد الرياضات. الستة القديمة وأربعة مستهلكين اجتازوا دون خفض assertions.
