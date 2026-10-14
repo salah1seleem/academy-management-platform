@@ -15,6 +15,7 @@
 .dashboard-shell .nav-module.current > .module-toggle { background: var(--staff-primary-700); color: white; }
 .dashboard-shell .sidebar-account-top { border-inline-start-color: var(--staff-primary-700); }
 .dashboard-shell .owner-filter-bar { align-items: flex-end; gap: 14px; background: #fff; padding: 18px; border-radius: 18px; border: 1px solid var(--staff-border); }
+.dashboard-shell .owner-filter-toggle { display: none; }
 .dashboard-shell .filter-period-note { display: flex; align-items: center; gap: 6px; color: var(--staff-text-muted); font-size: 11px; margin-block-end: 12px; }
 .dashboard-shell .owner-command-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin-block: 20px; }
 .dashboard-shell .command-card { display: flex; flex-direction: column; gap: 5px; padding: 20px 16px 14px; background: white; border: 1px solid var(--staff-border); border-radius: 20px; box-shadow: 0 6px 24px #17192304; min-width: 0; }
@@ -53,7 +54,13 @@
 .dashboard-shell .match-workspace .team-roster label { display: flex; flex-direction: row; gap: 10px; align-items: center; font-size: 13px; }
 .dashboard-shell .match-workspace .team-roster input { width: auto; }
 @media(max-width:1200px) { .dashboard-shell .owner-command-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .dashboard-shell .owner-chart-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media(max-width:600px) { .dashboard-shell .owner-command-grid { gap: 10px; } .dashboard-shell .command-card { padding: 14px 10px 10px; } .dashboard-shell .money-value { white-space: normal; font-size: 21px; } .dashboard-shell .command-splits span { font-size: 9px; } .dashboard-shell .owner-secondary-metrics,.dashboard-shell .owner-chart-grid { grid-template-columns: 1fr; } }
+@media(max-width:600px) { .dashboard-shell .owner-command-grid { gap: 10px; } .dashboard-shell .command-card { padding: 14px 10px 10px; } .dashboard-shell .money-value { white-space: normal; font-size: 21px; } .dashboard-shell .command-splits span { font-size: 9px; } .dashboard-shell .owner-secondary-metrics,.dashboard-shell .owner-chart-grid { grid-template-columns: 1fr; }
+  .dashboard-shell .owner-filter-bar { padding: 8px 12px; gap: 8px; }
+  .dashboard-shell .owner-filter-toggle { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 4px; border: 0; background: transparent; color: var(--staff-text); text-align: start; }
+  .dashboard-shell .owner-filter-toggle > span:nth-child(2) { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .dashboard-shell .owner-filter-toggle small { color: var(--staff-text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-shell .owner-filter-bar:not(.expanded) > :not(.owner-filter-toggle) { display: none; }
+}
 .dashboard-shell .form-shell input:is([type="checkbox"],[type="radio"]) { width: 18px; min-height: 18px; height: 18px; padding: 0; flex: 0 0 18px; accent-color: var(--staff-primary-700); }
 .dashboard-shell .weekdays-field, .dashboard-shell .time-field { min-width: 0; margin: 0; padding: 0; border: 0; }
 .dashboard-shell .weekdays-field { grid-column: 1 / -1; }

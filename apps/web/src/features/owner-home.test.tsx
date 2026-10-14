@@ -9,6 +9,10 @@ const summary = { from: "2026-09-01", to: "2026-09-28", currency: "EGP", collect
 it("has no welcome/latest blocks and every total/category retains matching drill-down", async () => {
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [{ id: "b1", arabicName: "فرع تجريبي" }] }) : response(summary)) as typeof fetch;
   render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
+  const mobileFilters = await screen.findByRole("button", { name: /الفترة والفرع/ });
+  expect(mobileFilters).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(mobileFilters);
+  expect(mobileFilters).toHaveAttribute("aria-expanded", "true");
   expect(await screen.findByRole("link", { name: "إجمالي الاشتراكات: 30" })).toHaveAttribute("href", expect.stringContaining("subscriptionState=subscribed"));
   expect(screen.getByRole("img", { name: /فعالة — لا تنتهي قريبًا/ })).toHaveAttribute("aria-label", "فعالة — لا تنتهي قريبًا: 15، تنتهي قريبًا: 5، منتهية: 7، مجمدة / لم تبدأ: 3");
   expect(screen.queryByText("أحدث التحصيلات")).not.toBeInTheDocument(); expect(screen.queryByText(/أهلًا/)).not.toBeInTheDocument();
