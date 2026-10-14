@@ -24,14 +24,13 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
     }
   }
   Future<void> resolve(String id) async {
-    final controller = TextEditingController();
+    var draft = '';
     final response = await showDialog<String>(context: context, builder: (dialog) => AlertDialog(
       title: const UiText('الرد على ولي الأمر'),
-      content: TextField(controller: controller, maxLength: 500, maxLines: 4, decoration: const InputDecoration(labelText: 'رد الإدارة')),
+      content: TextField(onChanged: (value) => draft = value, maxLength: 500, maxLines: 4, decoration: const InputDecoration(labelText: 'رد الإدارة')),
       actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: const UiText('إلغاء')),
-        FilledButton(onPressed: () => Navigator.pop(dialog, controller.text.trim()), child: const UiText('إرسال الرد وحل الملاحظة'))],
+        FilledButton(onPressed: () => Navigator.pop(dialog, draft.trim()), child: const UiText('إرسال الرد وحل الملاحظة'))],
     ));
-    controller.dispose();
     if (response == null) return;
     if (response.length < 5) { if (mounted) setState(() => message = 'اكتب ردًا من خمسة أحرف على الأقل.'); return; }
     try {
