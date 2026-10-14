@@ -19,7 +19,7 @@
 .dashboard-shell .filter-period-note { display: flex; align-items: center; gap: 6px; color: var(--staff-text-muted); font-size: 11px; margin-block-end: 12px; }
 .dashboard-shell .owner-decision-strip { margin-block: 16px 0; padding: 14px 16px; border: 1px solid color-mix(in srgb,var(--staff-primary-700),white 72%); border-radius: 18px; background: linear-gradient(115deg,var(--staff-primary-50),white 58%); }
 .dashboard-shell .owner-decision-strip h2 { margin: 0 0 10px; color: var(--staff-primary-900); font-size: 15px; }
-.dashboard-shell .owner-decision-strip > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.dashboard-shell .owner-decision-strip > div { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 8px; }
 .dashboard-shell .owner-decision-strip a { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--staff-border); border-radius: 12px; color: var(--staff-text); background: white; text-decoration: none; }
 .dashboard-shell .owner-decision-strip a:hover,.dashboard-shell .owner-decision-strip a:focus-visible { border-color: var(--staff-primary-700); outline-offset: 2px; }
 .dashboard-shell .owner-decision-strip a span { grid-column: 1; color: var(--staff-text-secondary); font-size: 11px; }
@@ -38,6 +38,7 @@
 .dashboard-shell .requests-card .command-value { color: var(--staff-primary-700); }
 .dashboard-shell .owner-secondary-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-bottom: 20px; }
 .dashboard-shell .owner-chart-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-items: start; gap: 14px; }
+.dashboard-shell .owner-operations-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .dashboard-shell .owner-chart-grid + .owner-chart-grid { margin-top: 14px; }
 .dashboard-shell .owner-action-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 12px 0; }
 .dashboard-shell .owner-action-list a { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--staff-border); border-radius: 12px; background: var(--staff-surface-muted); color: var(--staff-text); text-decoration: none; }
@@ -60,7 +61,7 @@
 .dashboard-shell .match-workspace .team-roster { max-height: 220px; overflow: auto; display: grid; gap: 8px; padding: 12px; background: var(--staff-surface-muted); border-radius: 12px; }
 .dashboard-shell .match-workspace .team-roster label { display: flex; flex-direction: row; gap: 10px; align-items: center; font-size: 13px; }
 .dashboard-shell .match-workspace .team-roster input { width: auto; }
-@media(max-width:1200px) { .dashboard-shell .owner-command-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .dashboard-shell .owner-chart-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .dashboard-shell .owner-decision-strip > div { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width:1200px) { .dashboard-shell .owner-command-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .dashboard-shell .owner-chart-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .dashboard-shell .owner-command-grid { gap: 10px; } .dashboard-shell .command-card { padding: 14px 10px 10px; } .dashboard-shell .money-value { white-space: normal; font-size: 21px; } .dashboard-shell .command-splits span { font-size: 9px; } .dashboard-shell .owner-secondary-metrics,.dashboard-shell .owner-chart-grid { grid-template-columns: 1fr; }
   .dashboard-shell .owner-decision-strip > div { grid-template-columns: 1fr; }
   .dashboard-shell .owner-filter-bar { padding: 8px 12px; gap: 8px; }
