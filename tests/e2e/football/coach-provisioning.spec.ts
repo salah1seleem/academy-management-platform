@@ -28,7 +28,7 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   await page.locator(`a[href="/dashboard/academy/coaches/${membershipId}"]`).click();
   await expect(page).toHaveURL(/\/academy\/coaches\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: `مدرب رحلة عرض ${width}` })).toBeVisible();
-  await expect(page.getByText("براعم 2018 — مجموعة أ", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "براعم 2018 — مجموعة أ", exact: true })).toBeVisible();
   const request = await page.request.post("/api/v1/mobile/auth/otp/request", { data: { phoneNumber: phone } }); expect(request.status()).toBe(202);
   const verified = await page.request.post("/api/v1/mobile/auth/otp/verify", { data: { phoneNumber: phone, challengeId: (await request.json()).challengeId, code: "246810", deviceName: "Coach web flow E2E" } }); expect(verified.ok()).toBeTruthy();
   const credentials = await verified.json();
