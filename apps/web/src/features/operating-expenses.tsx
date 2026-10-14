@@ -17,7 +17,7 @@ const categories: Record<string, string> = { Facility: "تشغيل مرفق", El
 const statuses: Record<string, string> = { Draft: "مسودة", Approved: "معتمد للمراجعة", Posted: "مرحّل", Reversed: "معكوس" };
 const services: Record<string, string> = { Training: "التدريب", DayPass: "زيارة يومية", OpenSwim: "سباحة حرة", FacilityBooking: "حجز مرفق", Event: "فعالية", Unallocated: "غير موزع" };
 
-export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, initialStatus, initialUnpaid = false }: { initialFrom?: string; initialTo?: string; initialBranchId?: string; initialStatus?: string; initialUnpaid?: boolean } = {}) {
+export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, initialStatus, initialUnpaid = false, initialExpenseId }: { initialFrom?: string; initialTo?: string; initialBranchId?: string; initialStatus?: string; initialUnpaid?: boolean; initialExpenseId?: string } = {}) {
   const [options, setOptions] = useState<{ branches: Option[]; groups: Option[] }>();
   const [currency, setCurrency] = useState("");
   const [resources, setResources] = useState<Resource[]>([]), [items, setItems] = useState<Expense[]>([]);
@@ -31,6 +31,12 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
   const [paidOn, setPaidOn] = useState(""), [amount, setAmount] = useState(""), [note, setNote] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const createKey = useRef(crypto.randomUUID()), postKey = useRef(crypto.randomUUID());
+  useEffect(() => {
+    if (!initialExpenseId) return;
+    const controller = new AbortController();
+    fetch(`${root}/${initialExpenseId}`, { signal: controller.signal }).then(r => r.ok ? r.json() : Promise.reject()).then(x => setSelected(x.expense)).catch(() => {});
+    return () => controller.abort();
+  }, [initialExpenseId]);
   const load = useCallback(async () => {
     const query = new URLSearchParams({ page: String(page), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}), ...(listBranchId ? { branchId: listBranchId } : {}), ...(listStatus ? { status: listStatus } : {}), ...(unpaidOnly ? { unpaid: "true" } : {}) });
     const response = await fetch(`${root}/?${query}`, { cache: "no-store" });

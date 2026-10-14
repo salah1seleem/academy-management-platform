@@ -26,6 +26,10 @@ public sealed partial class V2PlanPublicationTests
         var path = $"/api/v1/manage/payments/{paymentId}/review"; Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, path, new ReviewWrite(true, f.Group, null))).StatusCode); Assert.False(await db.Collections.AnyAsync(c => c.PaymentRequestId == paymentId)); Assert.False(await db.SportEnrollments.AnyAsync(e => e.Id == f.Second && e.TrainingGroupId != null));
         var resource = await FacilityFixture(owner, branch: f.Branch); var day = PlacementToday.AddDays(1); var timetable = await Reviewed(owner, f.Group, new TimetableWrite(day, day, [day.DayOfWeek], new(10, 0), new(11, 0), new(resource, f.Coach, 2, false))); (await SaveTimetable(owner, f.Group, timetable, Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
         var saved = await Write(owner, path, new ReviewWrite(true, f.Group, null)); Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync()); (await Write(owner, path, new ReviewWrite(true, f.Group, null))).EnsureSuccessStatusCode(); Assert.Equal(1, await db.Collections.CountAsync(c => c.PaymentRequestId == paymentId)); Assert.True(await db.SportEnrollments.AnyAsync(e => e.Id == f.Second && e.TrainingGroupId == f.Group));
+        var decisions = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial-decisions?allDates=true&branchId={f.Branch}");
+        var proofDecisions = decisions.GetProperty("items").EnumerateArray().Where(x => x.GetProperty("sourceId").GetGuid() == paymentId && x.GetProperty("kind").GetString() == "RenewalProof").ToArray();
+        Assert.Single(proofDecisions);
+        Assert.Equal("Accepted", proofDecisions[0].GetProperty("state").GetString());
     }
     [Fact]
     public async Task Training_format_guardian_can_request_parallel_private_sport_but_not_duplicate_active_track()

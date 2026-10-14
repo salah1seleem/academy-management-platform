@@ -30,6 +30,7 @@ public static partial class ReportingEndpoints
         reports.MapGet("/owner-summary", OwnerSummary).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/coach-performance/{coachId:guid}", CoachPerformance).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/staff-access-audit", StaffAccessAudit).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
+        reports.MapGet("/financial-decisions", FinancialDecisions).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/financial", FinancialReport).RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         reports.MapGet("/financial/export", FinancialExport).RequireAuthorization(AcademyPermissions.ReportsFinancialRead).RequireAuthorization(AcademyPermissions.ReportsExport);
         reports.MapGet("/attendance", AttendanceReport).RequireAuthorization(AcademyPermissions.ReportsAttendanceRead);

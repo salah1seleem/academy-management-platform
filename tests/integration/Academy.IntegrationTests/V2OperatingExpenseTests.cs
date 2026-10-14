@@ -62,12 +62,22 @@ public sealed partial class V2PlanPublicationTests
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         Assert.Equal(OperatingExpenseStatus.Posted, (await db.OperatingExpenses.SingleAsync(x => x.Id == id)).Status);
         Assert.Equal(200m, (await db.OperatingExpenseAllocations.SingleAsync(x => x.ExpenseId == id)).Amount);
+        var decisions = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial-decisions?allDates=true&branchId={f.A}");
+        var expenseDecisions = decisions.GetProperty("items").EnumerateArray()
+            .Where(x => x.GetProperty("kind").GetString() == "Expense" && x.GetProperty("sourceId").GetGuid() == id).ToArray();
+        Assert.Equal(3, expenseDecisions.Length);
+        Assert.Equal(new[] { "Approved", "Created", "Posted" }, expenseDecisions.Select(x => x.GetProperty("state").GetString()!).Order().ToArray());
+        Assert.All(expenseDecisions, x => Assert.False(string.IsNullOrWhiteSpace(x.GetProperty("actorName").GetString())));
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/financial-decisions?allDates=true")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync("/api/v1/reports/financial-decisions?allDates=true")).StatusCode);
         var groupResult = await owner.GetFromJsonAsync<JsonElement>($"{root}/allocations?groupId={f.Group}");
         Assert.Contains(groupResult.GetProperty("items").EnumerateArray(), x => x.GetProperty("expenseId").GetGuid() == id && x.GetProperty("amount").GetDecimal() == 200m);
         var after = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?allDates=true");
         Assert.Equal(before.GetProperty("totalAmount").ToString(), after.GetProperty("totalAmount").ToString());
         using var other = await Staff("owner.future@example.test");
         Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"{root}/{id}")).StatusCode);
+        var otherDecisions = await other.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial-decisions?allDates=true");
+        Assert.DoesNotContain(otherDecisions.GetProperty("items").EnumerateArray(), x => x.GetProperty("sourceId").GetGuid() == id);
     }
 
     [Fact]
