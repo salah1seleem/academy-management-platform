@@ -212,3 +212,9 @@ Migration `20261014202341_V3CorrelatedAdministrativeContexts` طبقت على `a
 مراجعة الأمان الأخيرة أضافت إعادة تحقق payroll.read أيضًا للحساب السابق للمصفوفة، لا payroll.manage وحده: الرواتب والاختبارات الجديدة **10/10**، ثم حالة الحساب القديم وسحب القراءة **1/1** بعد إضافة assertions الخاصة بها. لا تجمع هذه الإعادات مع الأعداد السابقة.
 
 main والمتطلبات المعتمدة و.env وقاعدة المراجعة وProduction لم تتغير. لا اختبار جهاز فعلي أو جاهزية إصدار كاملة.
+
+### checkpoint المرفوع — B3b3A
+
+Code SHA: `dd8117ead412349023059c18cdde8afd67a578ef` على `origin/codex/15-native-mobile-app`. [CI38644466213](https://github.com/salah1seleem/academy-management-platform/actions/runs/38644466213) بدأ وهو in_progress عند التوثيق، لا ادعاء أخضر كامل. CI للأساس5fdf467: Frontend/Flutter/E2E success، وBackend في خطوة الاختبارات بعد نجاح restore/build/migrations، لا خطأ شبكة مثبت. الشجرة نظيفة عقب commit الكود وpush، وmain المحلي/البعيد لا يزال عند `abda1ed273030e69812321e5c14d260bbc2e2275`.
+
+الاستئناف من هذا SHA أو commit توثيق checkpoint اللاحق، لا من 086a52f القديم. افحص CI ولا تعاود بناء التفويضين أو السياقات؛ ابدأ C1 المذكورة أعلاه، مع حفظ بقية خريطة V2/V3 وحواجز البصمة/الإعلانات/المالية والقبول الموحد. لم تنته الخطة؛ لا توقف المتابعة باعتبار هذه الشريحة إصدارًا نهائيًا.
