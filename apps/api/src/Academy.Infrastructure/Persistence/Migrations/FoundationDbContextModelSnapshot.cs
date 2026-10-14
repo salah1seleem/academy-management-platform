@@ -2209,6 +2209,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<int>("Scope")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("SportId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -2236,6 +2239,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "ResourceId");
 
+                    b.HasIndex("AcademyId", "SportId");
+
                     b.HasIndex("AcademyId", "TrainingGroupId");
 
                     b.HasIndex("AcademyId", "CreatedByUserId", "RequestKey")
@@ -2245,7 +2250,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("OperatingExpenses", null, t =>
                         {
-                            t.HasCheckConstraint("CK_OperatingExpense_Terms", "\"Amount\">0 AND \"PeriodFrom\"<=\"PeriodTo\" AND \"Status\" BETWEEN 1 AND 4 AND ((\"Scope\"=1 AND \"TrainingGroupId\" IS NOT NULL AND \"ResourceId\" IS NULL) OR (\"Scope\"=2 AND \"ResourceId\" IS NOT NULL AND \"TrainingGroupId\" IS NULL))");
+                            t.HasCheckConstraint("CK_OperatingExpense_Terms", "\"Amount\">0 AND \"PeriodFrom\"<=\"PeriodTo\" AND \"Status\" BETWEEN 1 AND 4 AND ((\"Scope\"=1 AND \"TrainingGroupId\" IS NOT NULL AND \"ResourceId\" IS NULL AND \"SportId\" IS NULL) OR (\"Scope\"=2 AND \"ResourceId\" IS NOT NULL AND \"TrainingGroupId\" IS NULL AND \"SportId\" IS NULL) OR (\"Scope\"=3 AND \"TrainingGroupId\" IS NULL AND \"ResourceId\" IS NULL AND \"SportId\" IS NULL) OR (\"Scope\"=4 AND \"SportId\" IS NOT NULL AND \"TrainingGroupId\" IS NULL AND \"ResourceId\" IS NULL))");
                         });
                 });
 
@@ -10071,6 +10076,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Facilities.FacilityResource", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "ResourceId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Structure.Sport", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 

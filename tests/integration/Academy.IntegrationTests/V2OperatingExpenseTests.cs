@@ -4,8 +4,11 @@ using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Api.Finance;
 using Academy.Api.Operations;
+using Academy.Api.Slice2;
+using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.Finance;
 using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.Structure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +17,67 @@ namespace Academy.IntegrationTests;
 public sealed partial class V2PlanPublicationTests
 {
     [Fact]
+    public async Task Shared_branch_and_sport_costs_use_only_operational_groups_and_requote_after_schedule_change()
+    {
+        var f = await Fixture(); using var owner = await Staff(); using var admin = await Staff("admin.nogoom@example.test");
+        var second = Guid.NewGuid(); var addedLater = Guid.NewGuid(); var football = Guid.NewGuid(); var otherBranch = Guid.NewGuid();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var category = await db.TrainingGroups.Where(g => g.Id == f.Group).Select(g => g.AgeCategoryId).SingleAsync();
+            foreach (var (groupId, branch, sport) in new[] { (second, f.A, Slice2DemoSeed.SwimmingId), (addedLater, f.A, Slice2DemoSeed.SwimmingId), (football, f.A, Slice2DemoSeed.FootballId), (otherBranch, f.B, Slice2DemoSeed.SwimmingId) })
+                db.TrainingGroups.Add(new TrainingGroup { Id = groupId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "مجموعة مصروف اصطناعية " + groupId.ToString("N")[..8], BranchId = branch, SportId = sport, AgeCategoryId = category, Capacity = 10 });
+            foreach (var (groupId, branch, sport) in new[] { (f.Group, f.A, Slice2DemoSeed.SwimmingId), (second, f.A, Slice2DemoSeed.SwimmingId), (football, f.A, Slice2DemoSeed.FootballId), (otherBranch, f.B, Slice2DemoSeed.SwimmingId) })
+                db.TrainingSessions.Add(new TrainingSession { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, TrainingGroupId = groupId, BranchId = branch, SportId = sport, AgeCategoryId = category, SessionDate = FacilityDay, StartTime = new(11, 0), EndTime = new(12, 0), Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, CreatedByUserId = f.Owner });
+            await db.SaveChangesAsync();
+        }
+        const string root = "/api/v1/finance/operating-expenses";
+        var sportBody = new OperatingExpenseWrite(f.A, OperatingExpenseScope.Sport, Slice2DemoSeed.SwimmingId, "Water", FacilityDay, FacilityDay, null, 100m, "EGP", "مصروف سباحة مشترك اصطناعي");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, root + "/", sportBody)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Write(owner, root + "/", sportBody with { TargetId = Guid.NewGuid() })).StatusCode);
+        var created = await Write(owner, root + "/", sportBody); created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Write(owner, $"{root}/{id}/approve", new { })).EnsureSuccessStatusCode();
+        var initial = await Write(owner, $"{root}/{id}/quote", new { }); initial.EnsureSuccessStatusCode();
+        var firstQuote = await initial.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, firstQuote.GetProperty("shares").GetArrayLength());
+        Assert.All(firstQuote.GetProperty("shares").EnumerateArray(), s => Assert.Equal(50m, s.GetProperty("amount").GetDecimal()));
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var category = await db.TrainingGroups.Where(g => g.Id == f.Group).Select(g => g.AgeCategoryId).SingleAsync();
+            db.TrainingSessions.Add(new TrainingSession { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, TrainingGroupId = addedLater, BranchId = f.A, SportId = Slice2DemoSeed.SwimmingId, AgeCategoryId = category, SessionDate = FacilityDay, StartTime = new(13, 0), EndTime = new(14, 0), Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, CreatedByUserId = f.Owner });
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Conflict, (await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(firstQuote.GetProperty("quoteHash").GetString()!), Guid.NewGuid().ToString())).StatusCode);
+        var refreshed = await Write(owner, $"{root}/{id}/quote", new { }); refreshed.EnsureSuccessStatusCode();
+        var quote = await refreshed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(3, quote.GetProperty("shares").GetArrayLength());
+        Assert.Equal(100m, quote.GetProperty("shares").EnumerateArray().Sum(s => s.GetProperty("amount").GetDecimal()));
+        (await ExpenseCommand(owner, $"{root}/{id}/post", new OperatingExpensePost(quote.GetProperty("quoteHash").GetString()!), Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
+        var branchBody = sportBody with { Scope = OperatingExpenseScope.Branch, TargetId = f.A };
+        var branchCreated = await Write(owner, root + "/", branchBody); branchCreated.EnsureSuccessStatusCode();
+        var branchId = (await branchCreated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Write(owner, $"{root}/{branchId}/approve", new { })).EnsureSuccessStatusCode();
+        var branchQuoteResponse = await Write(owner, $"{root}/{branchId}/quote", new { }); branchQuoteResponse.EnsureSuccessStatusCode();
+        var branchQuote = await branchQuoteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(4, branchQuote.GetProperty("shares").GetArrayLength());
+        Assert.All(branchQuote.GetProperty("shares").EnumerateArray(), s => Assert.Equal(25m, s.GetProperty("amount").GetDecimal()));
+        var emptyBody = branchBody with { PeriodFrom = new DateOnly(2037, 1, 1), PeriodTo = new DateOnly(2037, 1, 1) };
+        var emptyCreated = await Write(owner, root + "/", emptyBody); emptyCreated.EnsureSuccessStatusCode();
+        var emptyId = (await emptyCreated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Write(owner, $"{root}/{emptyId}/approve", new { })).EnsureSuccessStatusCode();
+        var emptyQuoteResponse = await Write(owner, $"{root}/{emptyId}/quote", new { }); emptyQuoteResponse.EnsureSuccessStatusCode();
+        var emptyQuote = await emptyQuoteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, emptyQuote.GetProperty("shares").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, emptyQuote.GetProperty("shares")[0].GetProperty("groupId").ValueKind);
+        Assert.Equal(100m, emptyQuote.GetProperty("shares")[0].GetProperty("amount").GetDecimal());
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, root + "/", branchBody with { TargetId = f.B })).StatusCode);
+        using var foreignOwner = await Staff("owner.future@example.test");
+        Assert.Equal(HttpStatusCode.NotFound, (await foreignOwner.GetAsync($"{root}/{id}")).StatusCode);
+    }
+
+    [Fact]
     public async Task Operating_expense_demo_seed_is_opt_in_repeatable_and_tenant_scoped()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
@@ -21,8 +85,10 @@ public sealed partial class V2PlanPublicationTests
         await OperatingExpenseDemoSeed.Seed(db, DateTimeOffset.UtcNow);
         await OperatingExpenseDemoSeed.Seed(db, DateTimeOffset.UtcNow);
         Assert.Equal(1, await db.OperatingExpenses.CountAsync(x => x.Id == OperatingExpenseDemoSeed.ExpenseId && x.AcademyId == DemoSeed.NogoomAcademyId));
+        Assert.Equal(1, await db.OperatingExpenses.CountAsync(x => x.Id == OperatingExpenseDemoSeed.SharedDraftId && x.AcademyId == DemoSeed.NogoomAcademyId && x.Status == OperatingExpenseStatus.Draft));
         Assert.Equal(1, await db.OperatingExpenseAllocations.CountAsync(x => x.ExpenseId == OperatingExpenseDemoSeed.ExpenseId));
         Assert.False(await db.OperatingExpenses.AnyAsync(x => x.Id == OperatingExpenseDemoSeed.ExpenseId && x.AcademyId == DemoSeed.FutureAcademyId));
+        Assert.False(await db.OperatingExpenses.AnyAsync(x => x.Id == OperatingExpenseDemoSeed.SharedDraftId && x.AcademyId == DemoSeed.FutureAcademyId));
     }
 
     [Fact]

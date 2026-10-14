@@ -3,7 +3,7 @@ using Academy.Infrastructure.Structure;
 namespace Academy.Infrastructure.Finance;
 
 public enum OperatingExpenseStatus { Draft = 1, Approved = 2, Posted = 3, Reversed = 4 }
-public enum OperatingExpenseScope { Group = 1, Resource = 2 }
+public enum OperatingExpenseScope { Group = 1, Resource = 2, Branch = 3, Sport = 4 }
 
 // A manual operating expense is not a payroll source or a payment receipt.
 // Later recurring instances must reference their own unique occurrence.
@@ -13,6 +13,7 @@ public sealed class OperatingExpense : TenantEntity
     public OperatingExpenseScope Scope { get; set; }
     public Guid? TrainingGroupId { get; set; }
     public Guid? ResourceId { get; set; }
+    public Guid? SportId { get; set; }
     public required string Category { get; set; }
     public DateOnly PeriodFrom { get; set; }
     public DateOnly PeriodTo { get; set; }

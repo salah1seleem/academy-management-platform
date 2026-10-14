@@ -77,7 +77,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         if (unpaid == true) query = query.Where(x => x.PaidOn == null && (x.Status == OperatingExpenseStatus.Approved || x.Status == OperatingExpenseStatus.Posted));
         var count = await query.CountAsync();
         var rows = await query.OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(((page ?? 1) - 1) * 50).Take(50)
-            .Select(x => new { x.Id, x.BranchId, x.Scope, x.TrainingGroupId, x.ResourceId, x.Category, x.PeriodFrom, x.PeriodTo, x.PaidOn, x.Amount, x.Currency, x.Status, x.CreatedAtUtc }).ToArrayAsync();
+            .Select(x => new { x.Id, x.BranchId, x.Scope, x.TrainingGroupId, x.ResourceId, x.SportId, x.Category, x.PeriodFrom, x.PeriodTo, x.PaidOn, x.Amount, x.Currency, x.Status, x.CreatedAtUtc }).ToArrayAsync();
         return new { count, page = page ?? 1, items = rows };
     }
     public async Task<object> Detail(Guid id)
@@ -107,13 +107,17 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         var (t, actor) = await Owner(); Key(key);
         if (body.BranchId == Guid.Empty || body.TargetId == Guid.Empty || !Categories.Contains(body.Category) || body.PeriodFrom == default || body.PeriodTo == default || body.PeriodFrom > body.PeriodTo || (body.PaidOn.HasValue && body.PaidOn.Value == default)
             || body.Amount <= 0 || body.Amount > 999999999m || decimal.Round(body.Amount, 2) != body.Amount || body.Currency is { Length: not 3 } || body.Note?.Trim().Length > 400
-            || body.Scope is not (OperatingExpenseScope.Group or OperatingExpenseScope.Resource)) throw new OperatingExpenseRejected("راجع بيانات المصروف والفترة والمبلغ.", 422);
+            || body.Scope is not (OperatingExpenseScope.Group or OperatingExpenseScope.Resource or OperatingExpenseScope.Branch or OperatingExpenseScope.Sport)
+            || body.Scope == OperatingExpenseScope.Branch && body.TargetId != body.BranchId) throw new OperatingExpenseRejected("راجع بيانات المصروف والفترة والمبلغ.", 422);
         var currency = await db.Academies.Where(a => a.Id == t.AcademyId && a.IsActive).Select(a => a.DefaultCurrency).SingleAsync();
         if (body.Currency is not null && !string.Equals(body.Currency, currency, StringComparison.Ordinal)) throw new OperatingExpenseRejected("عملة المصروف يجب أن تطابق عملة الأكاديمية في هذه المرحلة.", 422);
         if (!await db.Branches.AnyAsync(b => b.Id == body.BranchId && b.AcademyId == t.AcademyId)) throw new OperatingExpenseRejected("الفرع غير متاح.", 404);
-        var targetValid = body.Scope == OperatingExpenseScope.Group
-            ? await db.TrainingGroups.AnyAsync(g => g.Id == body.TargetId && g.AcademyId == t.AcademyId && g.BranchId == body.BranchId)
-            : await db.FacilityResources.AnyAsync(r => r.Id == body.TargetId && r.AcademyId == t.AcademyId && r.BranchId == body.BranchId);
+        var targetValid = body.Scope switch {
+            OperatingExpenseScope.Group => await db.TrainingGroups.AnyAsync(g => g.Id == body.TargetId && g.AcademyId == t.AcademyId && g.BranchId == body.BranchId),
+            OperatingExpenseScope.Resource => await db.FacilityResources.AnyAsync(r => r.Id == body.TargetId && r.AcademyId == t.AcademyId && r.BranchId == body.BranchId),
+            OperatingExpenseScope.Sport => await db.Sports.AnyAsync(s => s.Id == body.TargetId && s.AcademyId == t.AcademyId && s.IsActive),
+            _ => true
+        };
         if (!targetValid) throw new OperatingExpenseRejected("هدف المصروف لا يتبع هذا الفرع.", 404);
         var normalized = body with { Category = body.Category.Trim(), Currency = currency, Note = body.Note?.Trim() };
         var hash = StatementComparisonRules.Hash(normalized);
@@ -124,6 +128,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         var at = time.GetUtcNow();
         var row = new OperatingExpense { Id = Guid.NewGuid(), AcademyId = t.AcademyId, BranchId = body.BranchId, Scope = body.Scope,
             TrainingGroupId = body.Scope == OperatingExpenseScope.Group ? body.TargetId : null, ResourceId = body.Scope == OperatingExpenseScope.Resource ? body.TargetId : null,
+            SportId = body.Scope == OperatingExpenseScope.Sport ? body.TargetId : null,
             Category = normalized.Category, PeriodFrom = body.PeriodFrom, PeriodTo = body.PeriodTo, PaidOn = body.PaidOn, Amount = body.Amount, Currency = currency,
             Note = normalized.Note, CreatedByUserId = actor, RequestKey = key, RequestHash = hash, CreatedAtUtc = at, UpdatedAtUtc = at };
         db.OperatingExpenses.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, replay = false };
@@ -143,6 +148,21 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         IReadOnlyList<ExpenseShare> shares;
         object? bookingInputs = null;
         if (row.Scope == OperatingExpenseScope.Group) shares = OperatingExpenseAllocation.Equal(row.Amount, [row.TrainingGroupId!.Value]);
+        else if (row.Scope is OperatingExpenseScope.Branch or OperatingExpenseScope.Sport)
+        {
+            // A group is operational if a dated session or a reserved training booking exists
+            // in the expense period, even if its current roster is empty or it was later deactivated.
+            var sessions = await db.TrainingSessions.AsNoTracking().Where(s => s.AcademyId == row.AcademyId && s.SessionDate >= row.PeriodFrom && s.SessionDate <= row.PeriodTo
+                && s.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled && s.BranchId == row.BranchId
+                && (row.Scope == OperatingExpenseScope.Branch || s.SportId == row.SportId))
+                .Select(s => new { s.Id, s.TrainingGroupId, s.SessionDate, s.Version }).ToArrayAsync();
+            var bookings = await db.ResourceBookings.AsNoTracking().Where(b => b.AcademyId == row.AcademyId && b.BranchId == row.BranchId && b.Date >= row.PeriodFrom && b.Date <= row.PeriodTo
+                && b.State == ResourceBookingState.Reserved && b.ServiceKind == "Training" && b.TrainingGroupId != null
+                && (row.Scope == OperatingExpenseScope.Branch || db.TrainingGroups.Any(g => g.AcademyId == row.AcademyId && g.Id == b.TrainingGroupId && g.SportId == row.SportId)))
+                .Select(b => new { b.Id, b.TrainingGroupId, b.Date, b.Version }).ToArrayAsync();
+            bookingInputs = new { sessions = sessions.OrderBy(x => x.Id).ToArray(), bookings = bookings.OrderBy(x => x.Id).ToArray() };
+            shares = OperatingExpenseAllocation.Equal(row.Amount, sessions.Select(x => x.TrainingGroupId).Concat(bookings.Select(x => x.TrainingGroupId!.Value)));
+        }
         else
         {
             var bookings = await db.ResourceBookings.AsNoTracking().Where(b => b.AcademyId == row.AcademyId && b.ResourceId == row.ResourceId && b.BranchId == row.BranchId
@@ -154,7 +174,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
                 new ExpenseBooking(b.Id, b.ServiceKind, b.TrainingGroupId, (int)(b.EndTime.ToTimeSpan() - b.StartTime.ToTimeSpan()).TotalMinutes))); }
             catch (ArgumentException) { throw new OperatingExpenseRejected("بيانات حجز المرفق غير صالحة للتوزيع؛ راجع الخدمة والمدة.", 422); }
         }
-        var hash = StatementComparisonRules.Hash(new { row.AcademyId, row.Id, row.Version, row.BranchId, row.Scope, row.ResourceId, row.TrainingGroupId,
+        var hash = StatementComparisonRules.Hash(new { row.AcademyId, row.Id, row.Version, row.BranchId, row.Scope, row.ResourceId, row.TrainingGroupId, row.SportId,
             row.PeriodFrom, row.PeriodTo, row.Amount, row.Currency, bookingInputs, shares });
         return (shares, hash);
     }
@@ -162,8 +182,8 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     {
         var (t, _) = await Owner(); var row = await Find(t.AcademyId, id); var (shares, hash) = await Prepare(row);
         return new { quoteHash = hash, shares, total = shares.Sum(s => s.Amount), row.Currency,
-            method = row.Scope == OperatingExpenseScope.Group ? "مجموعة مباشرة" : "دقائق الحجوزات بين الخدمات، ثم بالتساوي بين مجموعات التدريب",
-            warning = shares.Count == 1 && shares[0].ServiceKind == "Unallocated" ? "لا توجد حجوزات مؤهلة؛ سيبقى المصروف غير موزع." : null };
+            method = row.Scope switch { OperatingExpenseScope.Group => "مجموعة مباشرة", OperatingExpenseScope.Resource => "دقائق الحجوزات بين الخدمات، ثم بالتساوي بين مجموعات التدريب", _ => "بالتساوي بين المجموعات ذات حصص أو حجوزات تدريب محفوظة في الفرع والفترة" },
+            warning = shares.Count == 1 && shares[0].GroupId is null ? "لا توجد مجموعات تشغيلية مؤهلة؛ سيبقى المصروف غير موزع." : null };
     }
     public async Task<object> Post(Guid id, OperatingExpensePost body, string key)
     {

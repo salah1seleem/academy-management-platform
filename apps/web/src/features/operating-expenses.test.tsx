@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OperatingExpenses } from "./operating-expenses";
 
@@ -75,4 +75,32 @@ it("opens the all-time unpaid owner KPI without silently applying a month filter
   render(<OperatingExpenses initialBranchId="branch-1" initialUnpaid />);
   await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&branchId=branch-1&unpaid=true"));
   expect(screen.getByLabelText("السداد")).toHaveValue("unpaid");
+});
+
+it("offers branch and branch-scoped sport shared costs without a misleading group target", async () => {
+  const created: unknown[] = [];
+  global.fetch = vi.fn(async (input, init) => {
+    const path = String(input);
+    if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [], sports: [{ id: "sport-1", arabicName: "سباحة" }] });
+    if (path === "/api/v1/facilities") return response({ resources: [] });
+    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [] });
+    if (path.includes("/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
+    if (path.includes("operating-expenses/?")) return response({ count: 0, items: [] });
+    if (path === "/api/v1/auth/csrf") return response({ token: "demo-token" });
+    if (path === "/api/v1/finance/operating-expenses/" && init?.method === "POST") { created.push(JSON.parse(String(init.body))); return response({ id: "expense-1" }); }
+    if (path.endsWith("/expense-1")) return response({ expense: { ...row, status: "Draft" } });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  render(<OperatingExpenses />);
+  await screen.findByRole("heading", { name: "تسجيل مصروف" });
+  fireEvent.change(screen.getAllByLabelText("الفرع")[0], { target: { value: "branch-1" } });
+  fireEvent.change(screen.getByLabelText("نطاق التكلفة"), { target: { value: "Branch" } });
+  const form = screen.getByRole("button", { name: "حفظ مسودة المصروف" }).closest("form")!;
+  expect(within(form).queryByLabelText("المجموعة")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/المبلغ/), { target: { value: "100" } });
+  fireEvent.click(screen.getByRole("button", { name: "حفظ مسودة المصروف" }));
+  await waitFor(() => expect(created).toHaveLength(1));
+  expect(created[0]).toMatchObject({ branchId: "branch-1", scope: "Branch", targetId: "branch-1" });
+  fireEvent.change(screen.getByLabelText("نطاق التكلفة"), { target: { value: "Sport" } });
+  expect(screen.getByLabelText("الرياضة")).toContainHTML("سباحة");
 });

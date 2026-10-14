@@ -9,7 +9,8 @@ import { csrfRequest } from "./dashboard-api";
 const root = "/api/v1/finance/operating-expenses";
 type Option = { id: string; arabicName: string; branchId?: string };
 type Resource = { id: string; name: string; branchId: string };
-type Expense = { id: string; branchId: string; scope: "Group" | "Resource"; trainingGroupId?: string; resourceId?: string; category: string; periodFrom: string; periodTo: string; paidOn?: string; amount: number; currency: string; status: "Draft" | "Approved" | "Posted" | "Reversed" };
+type ExpenseScope = "Group" | "Resource" | "Branch" | "Sport";
+type Expense = { id: string; branchId: string; scope: ExpenseScope; trainingGroupId?: string; resourceId?: string; sportId?: string; category: string; periodFrom: string; periodTo: string; paidOn?: string; amount: number; currency: string; status: "Draft" | "Approved" | "Posted" | "Reversed" };
 type Share = { groupId: string | null; serviceKind: string; weight: number; amount: number };
 type Quote = { quoteHash: string; shares: Share[]; total: number; currency: string; method: string; warning?: string };
 type AllocationRow = { expenseId: string; trainingGroupId: string | null; serviceKind: string; amount: number; currency: string; expenseAmount: number; category: string; periodFrom: string; periodTo: string };
@@ -18,7 +19,7 @@ const statuses: Record<string, string> = { Draft: "مسودة", Approved: "مع�
 const services: Record<string, string> = { Training: "التدريب", DayPass: "زيارة يومية", OpenSwim: "سباحة حرة", FacilityBooking: "حجز مرفق", Event: "فعالية", Unallocated: "غير موزع" };
 
 export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, initialStatus, initialUnpaid = false, initialExpenseId }: { initialFrom?: string; initialTo?: string; initialBranchId?: string; initialStatus?: string; initialUnpaid?: boolean; initialExpenseId?: string } = {}) {
-  const [options, setOptions] = useState<{ branches: Option[]; groups: Option[] }>();
+  const [options, setOptions] = useState<{ branches: Option[]; groups: Option[]; sports: Option[] }>();
   const [currency, setCurrency] = useState("");
   const [resources, setResources] = useState<Resource[]>([]), [items, setItems] = useState<Expense[]>([]);
   const [selected, setSelected] = useState<Expense>(), [quote, setQuote] = useState<Quote>();
@@ -26,7 +27,7 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
   const [range, setRange] = useState(() => ({ from: initialFrom ?? (initialUnpaid ? "" : monthToDate().from), to: initialTo ?? (initialUnpaid ? "" : monthToDate().to) })), [page, setPage] = useState(1), [total, setTotal] = useState(0);
   const [listBranchId, setListBranchId] = useState(initialBranchId ?? ""), [listStatus, setListStatus] = useState(statuses[initialStatus ?? ""] ? initialStatus! : "");
   const [unpaidOnly, setUnpaidOnly] = useState(initialUnpaid);
-  const [branchId, setBranchId] = useState(""), [scope, setScope] = useState<"Group" | "Resource">("Group"), [targetId, setTargetId] = useState("");
+  const [branchId, setBranchId] = useState(""), [scope, setScope] = useState<ExpenseScope>("Group"), [targetId, setTargetId] = useState("");
   const [category, setCategory] = useState("Facility"), [periodFrom, setPeriodFrom] = useState(() => monthToDate().from), [periodTo, setPeriodTo] = useState(() => monthToDate().to);
   const [paidOn, setPaidOn] = useState(""), [amount, setAmount] = useState(""), [note, setNote] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -60,7 +61,7 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
   }, []);
   useEffect(() => { void Promise.resolve().then(load).catch(e => setError(e instanceof Error ? e.message : "تعذر التحميل.")); }, [load]);
   useEffect(() => { void Promise.resolve().then(loadAllocations).catch(e => setError(e instanceof Error ? e.message : "تعذر التحميل.")); }, [loadAllocations]);
-  const targets = scope === "Group" ? options?.groups.filter(g => g.branchId === branchId) ?? [] : resources.filter(r => r.branchId === branchId);
+  const targets = scope === "Group" ? options?.groups.filter(g => g.branchId === branchId) ?? [] : scope === "Resource" ? resources.filter(r => r.branchId === branchId) : scope === "Sport" ? options?.sports ?? [] : [];
   async function act(work: () => Promise<void>) {
     if (busy) return; setBusy(true); setError(""); setNotice("");
     try { await work(); await Promise.all([load(), loadAllocations()]); } catch (e) { setError(e instanceof Error ? e.message : "تعذر إتمام العملية."); } finally { setBusy(false); }
@@ -69,8 +70,8 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await act(async () => {
-      if (!targetId) throw new Error("اختر المجموعة أو المرفق.");
-      const response = await csrfRequest(`${root}/`, "POST", { branchId, scope, targetId, category, periodFrom, periodTo, paidOn: paidOn || null, amount, currency, note: note || null }, { "Idempotency-Key": createKey.current }, { announce: false });
+      if (scope !== "Branch" && !targetId) throw new Error("اختر هدف المصروف.");
+      const response = await csrfRequest(`${root}/`, "POST", { branchId, scope, targetId: scope === "Branch" ? branchId : targetId, category, periodFrom, periodTo, paidOn: paidOn || null, amount, currency, note: note || null }, { "Idempotency-Key": createKey.current }, { announce: false });
       const saved = await response.json() as { id: string };
       const detail = await fetch(`${root}/${saved.id}`).then(r => r.json()) as { expense: Expense };
       choose(detail.expense); createKey.current = crypto.randomUUID(); setNotice("حُفظ المصروف مسودة دون أثر على التحصيل. اعتمده وراجع التوزيع قبل الترحيل.");
@@ -96,16 +97,16 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
   }
   if (!options && !error) return <LoadingState />;
   return <div className="operating-expenses-page"><PageHeader title="المصروفات التشغيلية" context="المالية / توزيع تكلفة" />
-    <section className="detail-card"><h2>مصدر تكلفة واحد</h2><p>هذه الدفعة للمصروفات التشغيلية اليدوية فقط، وليست رواتب أو تحصيلًا. في المرفق المشترك تُقسم التكلفة أولًا حسب دقائق حجز كل خدمة، ثم بالتساوي بين مجموعات التدريب؛ وتبقى تكلفة الخدمات الأخرى ظاهرة خارج المجموعات.</p></section>
+    <section className="detail-card"><h2>مصدر تكلفة واحد</h2><p>المصروفات التشغيلية اليدوية فقط، وليست رواتب أو تحصيلًا. المرفق المشترك يُقسم بين الخدمات حسب دقائق الحجز. مصروف الفرع أو الرياضة يُوزع بالتساوي على مجموعات التدريب ذات حصة أو حجز محفوظ في الفترة؛ إن لم توجد مجموعة يبقى غير موزع. راجع المعاينة قبل الترحيل.</p></section>
     {options && <section className="detail-card"><h2>تسجيل مصروف</h2><form className="form-shell" onSubmit={e => void create(e)}><div className="form-grid">
       <label>الفرع<select required value={branchId} onChange={e => { setBranchId(e.target.value); setTargetId(""); }}><option value="">اختر الفرع</option>{options.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label>
-      <label>نطاق التكلفة<select value={scope} onChange={e => { setScope(e.target.value as "Group" | "Resource"); setTargetId(""); }}><option value="Group">مجموعة مباشرة</option>{resources.length > 0 && <option value="Resource">مرفق تدريب مشترك</option>}</select></label>
-      <label>{scope === "Group" ? "المجموعة" : "المرفق"}<select required value={targetId} onChange={e => setTargetId(e.target.value)}><option value="">اختر {scope === "Group" ? "المجموعة" : "المرفق"}</option>{targets.map(t => <option key={t.id} value={t.id}>{"arabicName" in t ? t.arabicName : t.name}</option>)}</select></label>
+      <label>نطاق التكلفة<select value={scope} onChange={e => { setScope(e.target.value as ExpenseScope); setTargetId(""); }}><option value="Group">مجموعة مباشرة</option>{resources.length > 0 && <option value="Resource">مرفق تدريب مشترك</option>}<option value="Branch">الفرع كله</option><option value="Sport">رياضة داخل الفرع</option></select></label>
+      {scope !== "Branch" && <label>{scope === "Group" ? "المجموعة" : scope === "Resource" ? "المرفق" : "الرياضة"}<select required value={targetId} onChange={e => setTargetId(e.target.value)}><option value="">اختر {scope === "Group" ? "المجموعة" : scope === "Resource" ? "المرفق" : "الرياضة"}</option>{targets.map(t => <option key={t.id} value={t.id}>{"arabicName" in t ? t.arabicName : t.name}</option>)}</select></label>}
       <label>الفئة<select value={category} onChange={e => setCategory(e.target.value)}>{Object.entries(categories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>من فترة الاستحقاق<input required type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} /></label><label>إلى فترة الاستحقاق<input required type="date" min={periodFrom} value={periodTo} onChange={e => setPeriodTo(e.target.value)} /></label>
       <label>تاريخ السداد · اختياري<input type="date" value={paidOn} onChange={e => setPaidOn(e.target.value)} /></label><label>المبلغ · {currency}<input required type="number" min="0.01" max="999999999" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} /></label>
       <label>ملاحظة · اختياري<input maxLength={400} value={note} onChange={e => setNote(e.target.value)} /></label>
-    </div><button className="primary-button" disabled={busy || !branchId || !targetId}>حفظ مسودة المصروف</button></form></section>}
+    </div><button className="primary-button" disabled={busy || !branchId || scope !== "Branch" && !targetId}>حفظ مسودة المصروف</button></form></section>}
     <section className="filter-bar" aria-label="فلاتر المصروفات"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><label>الفرع<select value={listBranchId} onChange={e => { setListBranchId(e.target.value); setPage(1); }}><option value="">كل الفروع</option>{options?.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label><label>الحالة<select value={listStatus} onChange={e => { setListStatus(e.target.value); setPage(1); }}><option value="">كل الحالات</option>{Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>السداد<select value={unpaidOnly ? "unpaid" : ""} onChange={e => { setUnpaidOnly(e.target.value === "unpaid"); setPage(1); }}><option value="">الكل</option><option value="unpaid">غير مسدد مسجلًا</option></select></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setListBranchId(""); setListStatus(""); setUnpaidOnly(false); setPage(1); }}>مسح الفلاتر</button></section>
     {error && <ErrorState message={error} />}{notice && <p role="status" className="success-note">{notice}</p>}
     {!items.length ? <EmptyState title="لا توجد مصروفات ضمن الفترة" /> : <DataTable label="المصروفات التشغيلية" rows={items} rowKey={r => r.id} columns={[
