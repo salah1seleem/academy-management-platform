@@ -74,10 +74,17 @@
 .access-editor { max-width: none; }
 .access-editor .section-heading { align-items: start; }
 .access-editor .section-heading > button { width: auto; }
+.staff-template-picker, .staff-access-preview { margin-block: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--primary-soft); }
+.staff-template-picker h3, .staff-access-preview h3 { margin-block-start: 0; }
+.staff-template-picker label { display: grid; gap: .5rem; max-width: 32rem; }
+.staff-access-preview p, .staff-template-picker p { overflow-wrap: anywhere; }
+.staff-access-preview summary { min-height: 44px; cursor: pointer; font-weight: 700; }
+.staff-access-preview li { margin-block: .4rem; }
 .access-branches { border: 1px solid var(--border); border-radius: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; }
 .access-branches label, .access-branch-options label { display: flex; gap: .6rem; align-items: center; min-height: 44px; }
 .access-branches input { width: 1.2rem; height: 1.2rem; accent-color: var(--primary); }
-.access-branch-options { display: flex; flex-wrap: wrap; gap: 1rem; flex-basis: 100%; }
+.access-branch-options { display: flex; flex-wrap: wrap; gap: .75rem; flex-basis: 100%; max-block-size: 16rem; overflow-y: auto; padding: .3rem; }
+.access-branch-search { display: grid !important; flex-basis: 100%; gap: .4rem; }
 .access-table-scroll { overflow-x: auto; margin-block: 1rem; border: 1px solid var(--border); border-radius: 1rem; }
 .access-table { width: 100%; border-collapse: collapse; text-align: start; }
 .access-table caption { text-align: start; font-weight: 700; padding: 1rem; }

@@ -1,0 +1,20 @@
+# أدلة قبول V2 + V3
+
+## خط أساس 2026-10-14
+
+- Starting HEAD: `3d5a60d5026a5b8cd54bcf3f1f43abcf1ea6934e` على `codex/15-native-mobile-app`، شجرة نظيفة ومطابقةorigin. main لم يُغيّر.
+- سلامة ZIP: حسابSHA-256 لجميع8 ملفات فيmanifest وطولbytes؛ **8/8** مطابقة. مرجعV2 مطابق لنسخة المستودع. المعرفات:V2-00..17=18، مصفوفةV2=85، V3-AC01..48=48. المرجع الحسابي يحوي29قيمة expected ولم ينفذ على المنتج بعد.
+- CI للأساس: [run38570922252](https://github.com/salah1seleem/academy-management-platform/actions/runs/38570922252): backend/frontend/flutter success؛ e2e failure. logs تؤكد timeout دخولowner.football ضمنprofileLegacyRegression؛ النقل إلىtests/e2e/football يبقي نفس الرحلة والتوقعات. لا Passed للإعادة قبل تشغيلها.
+- V3-AC01: قراءة ومطابقة المصادر والجرد مثبتة فيPROGRESS؛ لا تعني تنفيذ بقية48حالة.
+
+## تنفيذ B1
+
+### B1 — تحقق فعلي على قاعدة academy_v3_dev_20261014
+
+قاعدةPG16 جديدة معزولة، طبقت عليهاmigrationsالقائمة فقط، دونresetأو بيانات عميل. الأوامر: `dotnet test tests/integration/Academy.IntegrationTests/Academy.IntegrationTests.csproj --no-restore --filter FullyQualifiedName~V2StaffScopeTests` **6/6**؛ `npm test -- src/features/staff-access.test.tsx` **4/4**؛ `npm run typecheck` و`npm run lint` وproductionbuild ناجحة. `npx playwright test ... v2-feedback-followup.spec.ts` علىfootballconfig **1/1**؛ `npm test -- v3-staff-templates.spec.ts v2-staff-access.spec.ts` علىports5186/3106 **2/2** معproductionbuild.
+
+الصور390/1440 في`tests/e2e/test-results/v3-staff-templates-Owner-a-2bbbd-nd-reopens-the-saved-grants-mobile-chromium/`؛ روجعت390 فعليًا وفحصoverflowبالاختبار. محاولةBackendالأولى5/6 بسببContainsعلىjsonbفيtest، صُحح بقراءةJSONوالتأكد منTemplateKey، ثم6/6. محاولةtypecheck/buildالأولى كشفتrenderقديمًا unreachable فحذفناه؛ E2Eالأولى0/2 بسبب عنوانين متطابقين وتوقع201لعقدإنشاء200؛ صحح العنوان والتوقع وفقAPIثم2/2. لم تُحذفassertionsحفظ/عزل/أثر. القوالب ليستroleengineV3كاملًا. CIبعدpushبوابة مستقلة.
+
+F10 / الدفتر / الإعلانات / إثبات الجهاز / بيانات3أكاديميات / النهائي الموحد / صورV3 / الأجهزة الحقيقية: **لم تنفذ**. لا تكامل خارجي مهيأ يعلن ناجحًا. نتائجV2 القديمة موثقة فيdocs/delivery/V2_EXECUTION.md وليست نتائجV3.
+
+الإعادة النهائية للمتصفح **2/2 في32.3s** على قاعدة ثانية نظيفة `academy_v3_e2e_20261014` حتى لا تلوث فروع اختبارات التكامل صور العرض. البحث عن فرع والقائمة محدودة الارتفاع؛ أعدناWeb4/4 وtypecheck/lint بعد التغيير. روجعت لقطة390 النهائية. الصور تتضمن شاشةصلاحياتB1فقط؛ بقيةصورV3لمتنفذ.

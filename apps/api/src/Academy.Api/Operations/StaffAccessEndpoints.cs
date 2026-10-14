@@ -24,7 +24,7 @@ public static class StaffAccessEndpoints
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
         var m = await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.AcademyAdmin);
         if (m is null) return Results.NotFound();
-        return Results.Ok(new { m.AllBranches, m.UseActionGrants, modules = StaffAccessRules.Modules,
+        return Results.Ok(new { m.AllBranches, m.UseActionGrants, modules = StaffAccessRules.Modules, templates = StaffAccessTemplates.All,
             branches = await db.Branches.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             selectedBranches = await db.MembershipBranchAccesses.Where(x => x.MembershipId == id && x.IsActive).Select(x => x.BranchId).ToListAsync(),
             actions = await db.StaffActionGrants.Where(x => x.MembershipId == id && x.IsActive).Select(x => new { x.Module, x.Read, x.Add, x.Edit, x.Delete }).ToListAsync(),
@@ -33,7 +33,7 @@ public static class StaffAccessEndpoints
     private static async Task<IResult> Save(Guid id, StaffAccessWrite body, CurrentTenant tenant, FoundationDbContext db, ClaimsPrincipal actor, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        if (body.Branches is null || body.Actions is null || body.Branches.Length > 100 || body.Branches.Distinct().Count() != body.Branches.Length || body.Actions.Length != StaffAccessRules.Modules.Length || body.Actions.Select(x => x.Module).Distinct().Count() != body.Actions.Length || body.Actions.Any(x => !StaffAccessRules.Modules.Contains(x.Module) || !x.Read && (x.Add || x.Edit || x.Delete)) || !body.AllBranches && body.Branches.Length == 0)
+        if (body.TemplateKey is not null && !StaffAccessTemplates.All.Any(x => x.Key == body.TemplateKey) || body.Branches is null || body.Actions is null || body.Branches.Length > 100 || body.Branches.Distinct().Count() != body.Branches.Length || body.Actions.Length != StaffAccessRules.Modules.Length || body.Actions.Select(x => x.Module).Distinct().Count() != body.Actions.Length || body.Actions.Any(x => !StaffAccessRules.Modules.Contains(x.Module) || !x.Read && (x.Add || x.Edit || x.Delete)) || !body.AllBranches && body.Branches.Length == 0)
             return Results.Problem(statusCode: 422, title: "راجع الفروع والصلاحيات؛ الإضافة والتعديل والحذف تتطلب القراءة");
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{id}"}, 0))");
@@ -64,4 +64,4 @@ public static class StaffAccessEndpoints
     }
 }
 public sealed record StaffActionValue(string Module, bool Read, bool Add, bool Edit, bool Delete);
-public sealed record StaffAccessWrite(bool AllBranches, Guid[] Branches, StaffActionValue[] Actions);
+public sealed record StaffAccessWrite(bool AllBranches, Guid[] Branches, StaffActionValue[] Actions, string? TemplateKey = null);

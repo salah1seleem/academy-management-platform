@@ -138,6 +138,31 @@ public sealed class V2StaffScopeTests : IAsyncLifetime
         Assert.All(await other.Branches.ToListAsync(), x => Assert.Equal(DemoSeed.FutureAcademyId, x.AcademyId));
         Assert.False(await other.Branches.AnyAsync(x => x.Id == branches[0]));
     }
+    [Fact]
+    public async Task V3_templates_fill_existing_grants_without_role_escalation_and_preserve_branch_enforcement()
+    {
+        var fixture = await CreateAdmin(); using var owner = fixture.Owner; using var admin = fixture.Admin;
+        var data = await Data();
+        var page = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff/{fixture.Member}/access");
+        Assert.Equal(5, page.GetProperty("templates").GetArrayLength());
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync($"/api/v1/manage/staff/{fixture.Member}/access")).StatusCode);
+        var preset = StaffAccessTemplates.All.Single(x => x.Key == "branch-operator");
+        Assert.All(StaffAccessTemplates.All.SelectMany(x => x.Actions), x => Assert.False(x.Delete));
+        Assert.DoesNotContain(StaffAccessTemplates.All.SelectMany(x => x.Actions), x => x.Module is "staff" or "settings" or "medical" or "payroll" && x.Read);
+        var write = new StaffAccessWrite(false, [data.A], preset.Actions, preset.Key);
+        (await Write(owner, $"/api/v1/manage/staff/{fixture.Member}/access", write)).EnsureSuccessStatusCode();
+        var options = await admin.GetFromJsonAsync<JsonElement>("/api/v1/manage/structure/options");
+        Assert.Equal([data.A], options.GetProperty("branches").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/v1/people/players/{data.PlayerB}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/manage/payroll")).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Write(owner, $"/api/v1/manage/staff/{fixture.Member}/access", write with { TemplateKey = "owner" })).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Equal(AcademyRole.AcademyAdmin, (await db.AcademyMemberships.SingleAsync(x => x.Id == fixture.Member)).Role);
+        var audit = await db.StaffAccessAudits.Where(x => x.MembershipId == fixture.Member).Select(x => x.After).SingleAsync();
+        using var auditJson = JsonDocument.Parse(audit);
+        Assert.Equal("branch-operator", auditJson.RootElement.GetProperty("TemplateKey").GetString());
+    }
     private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); (await Write(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, false)).EnsureSuccessStatusCode(); return c; }
     private static async Task<HttpResponseMessage> Write(HttpClient c, string path, object body, bool put = true) { var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var r = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(body) }; r.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); return await c.SendAsync(r); }
     private sealed class Factory(string connection) : WebApplicationFactory<Program>

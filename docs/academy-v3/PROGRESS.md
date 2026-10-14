@@ -1,0 +1,111 @@
+# تقدم أكاديميتي V2 + V3
+
+آخر تحديث: 2026-10-14. المستودع `salah1seleem/academy-management-platform`؛ الفرع `codex/15-native-mobile-app`؛ Starting HEAD `3d5a60d5026a5b8cd54bcf3f1f43abcf1ea6934e`، الحالة كانت نظيفة. `main` محفوظ عند `abda1ed273030e69812321e5c14d260bbc2e2275`.
+
+## المصادر والصدق
+
+قرئت ملفات V3 الأربعة المطلوبة كاملة، مع README/Start/Sources/manifest؛ hashes **8/8** مطابقة. نسخة V2 داخل ZIP تطابق نسخة المستودع SHA-256 `e43554ccc6738324903a1a0291fd02c87ca1005caa0fafea978b1b471624a25d`؛ لا استبدال لها. خطة V2 كاملة و85 حالة قبول وسجل التنفيذ ومراجعة صلاح هي أساس المطابقة. [V3](../requirements/v3/specifications/Academity_Master_Plan_V3_AR.md) إضافة معتمدة بطلب المستخدم؛ لا تغيير ملفات baseline القديمة.
+
+الحالات: verified_reuse = إعادة استخدام بدليل محدد؛ verified = تحقق منفذ؛ partial = جزء موجود مع فجوة؛ missing = لم ينفذ؛ implemented_pending_verification = كود لم يكتمل إثباته؛ blocked_external = مانع خارجي حقيقي؛ explicitly_superseded = تعديل صريح بمرجع. وجود اختبار قديم دون إعادة تشغيل لا يعني اجتياز V3. مسارات الاختبارات في الجدول تحت `tests/integration/Academy.IntegrationTests` ما لم يذكر خلافه.
+
+## كل شرائح V2
+
+| الشريحة | الحالة | الموجود | الدليل/المصدر | المتبقي |
+|---|---|---|---|---|
+| V2-00 | verified_reuse | مصدر V2 و85 حالة قبول محفوظة؛ المرجع المرفق مطابق SHA-256. | docs/delivery/V2_EXECUTION.md | توثيق خريطة V3 الجديدة |
+| V2-01 | partial | tokens/navigation/tabs وجداول وFlutter للأدوار موجودة. | apps/web/src/components؛ apps/mobile/lib/features | إعادة تركيب الرحلات وقياسات360/390/430/200% |
+| V2-02 | partial | هوية منصة، configuration versions، entitlement، branch/CRUD. | Auth/StaffAccessRules؛ Configuration؛ V2StaffScopeTests | قوالب ونطاق رياضة مرتبط بالدور؛ wizard ودعم محدود؛ فصل سباحة |
+| V2-03 | partial | Products/quotes/discounts/receivables وفرص التجديد. | V2PlanPublicationTests؛ V2ReceivablesTests | الخدمات المستقلة وربط استحقاق الإيراد |
+| V2-04 | partial | schema/template/preview/commit وإعادة آمنة للوضع البسيط. | V2ImportPreviewTests؛ V2ImportCommitTests | مستويات وعلاقات متقدمة/أرصدة مع الدفتر الجديد |
+| V2-05 | partial | مرافق وحارات وحجوزات وتسكين ونقل وسعة. | V2FacilityTests؛ V2ResourceTimetableTests؛ V2GroupPlacementTests | بوابات نهائية؛ دمج خاص/خارجي مع الفصل الرياضي |
+| V2-06 | partial | حضور وQR وعد وملاحظات وبديل وصلاحيات الماضي. | V2AttendanceStatesTests؛ V2CoachOverrideTests؛ V2VisitTests | تصريح الخدمات الأخرى؛ حضور موظف بإثبات خادمي واستثناء |
+| V2-07 | partial | قبض/وردية/استرداد/مطابقة/تجديد أسرة عبر فروع. | V2CashFamilyCollectionTests؛ V2SettlementComparisonTests | فائض مزود وخدمات أخرى والدفتر؛ انحدار موحد |
+| V2-08 | partial | مصروفات واعتماد وتوزيع محفوظ لمجموعة/مرفق/فرع/رياضة. | V2OperatingExpenseTests؛ OperatingExpenseAllocationTests | استحقاق/سداد جزئي/قيود؛ ربحية/رواتب هجينة وإغلاق |
+| V2-09 | missing | لا عقود/كشوف شركاء متكاملة مثبتة. | الفجوة في V2_EXECUTION | عقود خاص/حارات/خارجي واتجاه أموال مستقل |
+| V2-10 | partial | تقييمات مسودة/منشورة موجودة من النسخة السابقة. | EvaluationIntegrationTests | مهارات/خطط/أهداف/ترقية/رحلة وشهادات |
+| V2-11 | partial | مباريات وأخبار وملاحظات أسر ورد/حل/موعد متابعة. | BrandingMatchesTests؛ GuardianFeedbackTests | تقويم/جمهور/إسناد/SLA/مساعدة/onboarding |
+| V2-12 | partial | Owner KPI وروابط تفاصيل وقرارات مالية محفوظة. | ReportingEndpoints؛ financial-decisions؛ owner-home | مهام ودورة حياة وأدلة وربط مصادر جديدة |
+| V2-13 | missing | لا محاكي متكامل مثبت. | خطة V2 §24 | سيناريوهات مستقلة وحفظ ومقارنة دون أثر تشغيلي |
+| V2-14 | missing | لا CRM منصة/أكاديمية ومركز تواصل متكامل. | خطة V2 §28 | حفظ/نطاق/موافقات/قنوات حقيقية أو fallback صادق |
+| V2-15 | partial | رفع ومعرض وقراءة مقيدة موجودة من v1.9. | Slice7ContentIntegrationTests؛ private_media | جمهور وموافقات زمنية/ذكريات/صوت وAI مقيد |
+| V2-16 | missing | entitlement community_ads فقط، لا تنفيذ حملات. | AcademyConfiguration | اعتماد كل أكاديمية/فرع وplacement/قياس ومنع |
+| V2-17 | partial | CI واختبارات قديمة كثيرة؛ ليست قبول V2 النهائي. | .github/workflows/ci.yml | جولة موحدة V2+V3 وmanifest/UAT/استعادة/تقرير |
+
+## كل حالات قبول V3 — 48 معرفًا فريدًا
+
+| المعرف | الحالة | الموجود/الدليل | الفجوة أو حد النتيجة |
+|---|---|---|---|
+| V3-AC01 | verified | قراءة كامل V2 ومقارنة hash + هذه الخريطة | اكتمل جرد الشرائح؛ إثبات كل فجوة يُحدّث أثناء التنفيذ |
+| V3-AC02 | partial | FootballDemoTests؛ V2RegressionSeedTests | seedV3 بالحجم المحدد لم يُنفذ |
+| V3-AC03 | partial | V2RegressionSeedTests | guardV3 للبيئة الجديدة لم يتحقق بعد |
+| V3-AC04 | missing | FacilityEndpoints؛ Sport | لا نوع رياضة مضبوط أو إعداد سباحة منفصل |
+| V3-AC05 | missing | AcademyRuntimeSettings | فصل sport/branch مطلوب |
+| V3-AC06 | partial | configuration versions/feature gate | التاريخ المالي لمعالجة تعطيل السباحة يحتاج اختبار |
+| V3-AC07 | partial | MobileAuthenticationTests؛ coach-create | دعوة/تفعيل هاتف وربط مهني تحتاج إعادة قبول |
+| V3-AC08 | partial | TenantAuthenticationTests؛ MobileAuthenticationTests | جلسات موجودة؛ إعادة قبول V3 وسحبها باق |
+| V3-AC09 | partial | StaffAccessEndpoints؛ staff-access | CRUD/فروع موجودة؛ القوالب والأدوار المخصصة ناقصة |
+| V3-AC10 | missing | MembershipBranchAccess + StaffActionGrant | لا تمثيل grants مترابطة دور/فرع/رياضة |
+| V3-AC11 | partial | V2StaffScopeTests | رفض عند سحب الإذن موجود؛ إعادة قبول export/cacheV3 |
+| V3-AC12 | partial | TenantAuthenticationTests؛ StaffManagement | رفض الأدوار موجود؛ آخر مالك يحتاج قبول موحد |
+| V3-AC13 | missing | FacilityService وTrainingSession كأصول إعادة استخدام | private مالي من ملف مدرب لم ينفذ |
+| V3-AC14 | missing | PayrollEndpoints أساسي فقط | عمولة منفذ/محصل واتفاق معتمد ناقصة |
+| V3-AC15 | missing | لا نسخ اتفاق خاص | حفظ شروط وعملات وتاريخ عدم الرجعية |
+| V3-AC16 | missing | finance_golden_v3.json | تناسب تحصيل الباقة وترحيل فرق100 |
+| V3-AC17 | missing | EmployeeProfile موجود | عقد شريك وكشف مستقل وربطهما بالشخص |
+| V3-AC18 | missing | ResourceBooking موجود | وحدات عقود حارات شهر/ساعة |
+| V3-AC19 | partial | V2FacilityTests؛ V2ResourceTimetableTests | إعادة قبول دمج الخاص/الخارجي |
+| V3-AC20 | missing | F10 + golden fixture | دفتر مزدوج ومصادر فعلية وتقارير مطابقة ناقصة |
+| V3-AC21 | partial | V2ProviderQuarantineTests؛ SubscriptionPaymentTests | موجود للدفع؛ تكامل القيد الجديد ناقص |
+| V3-AC22 | partial | V2CashRefundTests؛ PayrollIntegrationTests | دفعات راتب جزئية/سلف/تصحيح شهر مغلق ناقصة |
+| V3-AC23 | partial | GuardianCoreIntegrationTests؛ V2ReceivablesTests | فواتير موحدة scoped وتبويب المدرب ناقص |
+| V3-AC24 | partial | V2FamilyRenewalRequestTests | الأسرة بإيصالات مستقلة؛ مستند متعدد أسطر يحتاج تحقق |
+| V3-AC25 | partial | matches.tsx؛ BrandingMatchesTests | نسخ Draft وحفظ وإضافة أخرى ناقص |
+| V3-AC26 | partial | my-matches؛ matches | roster تاريخي وتبويبات ملفات وتقويم تحتاج توسعة |
+| V3-AC27 | explicitly_superseded | V3 Master §06.1 | غير مطلوب للإغلاق إذا لا bulk editor؛ يدوي+نسخ يكفي |
+| V3-AC28 | missing | StaffDeviceCheckInTests يختبر Demo فقط | WebAuthn/مفتاح وتحقق خادمي غير منفذ |
+| V3-AC29 | partial | StaffDeviceCheckInTests | GPS Demo guard موجود؛ إثبات/استثناءV3 ناقص |
+| V3-AC30 | missing | StaffDeviceCheckIn.cs | Boolean محلي Demo لا يغلق مطلب الإثبات الخادمي |
+| V3-AC31 | missing | DailyStaffAttendance بديل إداري | طلب استثناء بهوية منفصلة ومراجعة ناقص |
+| V3-AC32 | partial | DailyStaffAttendance | فترات عمل متعددة/منتصف الليل تحتاج نموذج وقبول |
+| V3-AC33 | partial | حضور وظيفي مفصول عن PlayerAttendance | إعادة قبول V3 عند تكامل الجهاز |
+| V3-AC34 | partial | coach_home؛ coach_attendance | إعادة تركيب الحصة/المجموعة والحالات وصور الأحجام |
+| V3-AC35 | partial | guardian_home؛ guardian_profile | ترتيبV3 وإعلان ومؤشرات وUX جديدة |
+| V3-AC36 | missing | community_ads entitlement | لا حملة/اعتماد/جمهور منفذ |
+| V3-AC37 | missing | guardian_home | تنبيه عاجل ثم placement إعلان |
+| V3-AC38 | missing | لا نسخة حملة | اعتماد كل تعديل وإبطال الكاش |
+| V3-AC39 | missing | لا measurement service | عرض فعلي/dedup ومجاميع بلا بيانات طفل |
+| V3-AC40 | partial | owner-home؛ financial-decisions؛ feedback | دورة مهام/مصادر كاملة وربط المالي الجديد |
+| V3-AC41 | partial | V2RenewalOpportunityTests | مثال12700 قائم؛ إعادة قبول موحدةV3 |
+| V3-AC42 | partial | V2OperatingExpenseTests؛ ReportingIntegrationTests | نتيجة مكتملة/ناقصة وcutoff ledger |
+| V3-AC43 | partial | TenantAuthenticationTests؛ V2StaffScopeTests | تغطية الموديولات الجديدة ونطاق الرياضة ناقصة |
+| V3-AC44 | partial | OperatingExpenseAllocationTests؛ PayrollCalculatorTests | التوزيع موجود؛ نتيجة المجموعة والأجر المركب الفعلي ناقص |
+| V3-AC45 | partial | V2ImportCommitTests | 1000 صف موجود تاريخيًا؛ توسعاتV3/reconciliation باقية |
+| V3-AC46 | partial | tests/e2e/specs + football | جولة موحدة على candidate لاحقًا |
+| V3-AC47 | partial | لقطاتV2 سابقة | جرد قبل/بعد ومقاساتV3 لكل الرحلات |
+| V3-AC48 | missing | هذه الخريطة | بوابة نهائية بعد إغلاق/تصنيف جميع البنود |
+
+## التفصيل المالي F01–F12
+
+| المرجع | الحالة | الربط والفجوة |
+|---|---|---|
+| F01/F02 | partial | إعادة استخدام المطالبات والقبض والمصروفات؛ لا دفتر عام مكتمل |
+| F03 | missing | اتفاق خاص/نسخ وأهلية العمولة وخدمات منفذة |
+| F04 | partial | payroll أساسي موجود؛ اعتماد وترحيل ودفعات جزئية ونسخ هجينة ناقصة |
+| F05 | missing | شريك/اتفاق/إيجار واتجاه أموال وكشف مستقل |
+| F06 | partial | Charges/Receipts/Refunds موجودة؛ توحيد مستندات/مصروف جزئي/أرصدة ترحيل للدفتر |
+| F07 | missing | دفتر مزدوج بسيط بقيد مصدر فريد وفترة/عكس |
+| F08 | partial | تقارير قبض/ذمم موجودة؛ استحقاق/وضع مالي/ميزان وربحية ناقصة |
+| F09 | partial | مقارنة كشف مزود موجودة؛ إغلاق شهر ومراجعة أرصدة ناقصة |
+| F10 | missing | تنفيذ scenario من مصادر المنتج ومطابقة29قيمة؛ JSON مرجع فقط |
+| F11 | partial | التكرار/الاسترداد/التوزيع منV2؛ أمثلة الاتفاق/الخاص/الخارجي ناقصة |
+| F12 | missing | بوابة مالية نهائية مترابطة لم تنفذ |
+
+## نقطة الاستئناف والعمل الجاري
+
+### B1 — قوالب بداية وصلاحيات مفهومة — متحققة محليًا
+
+خمس قوالب من الخادم تملأ المصفوفة الموجودة دون تغيير الدور أو حفظ تلقائي. اختيار قالب يطلب فروعًا صريحة؛ لا حذف أو إعدادات أو إدارة مستخدمين أو طب أو رواتب في القوالب. القالب الرياضي لا يمنح التحصيل؛ المراجع المالي قراءة. شاشة التفويض مستقلة عن القائمة، مع بحث الوحدات ومعاينة المنح/السحب ونطاق الفرع قبل الاعتماد، وسجل يشمل قالب البداية. تعديل المصفوفة يبقى متاحًا للمالك ولا يحول القالب إلى صلاحية أعلى. Backend نطاق/رفض/سحب وتحقق سجل6/6، Web4/4، typecheck/lint/build ناجحة، E2Eحفظ/إعادة فتح وصلاحية جلسة2/2، وFootball1/1 بعد إصلاحprofile. لا migration فيB1. V3-AC09 ما زالتpartial: أدوار مخصصة ونطاق رياضة مترابط غير منفذين بعد. التاليةB2 لفصل إعدادات الرياضة/السباحة.
+
+أول عيب تحقق مثبت: CI للأساس نجح Backend/Frontend/Flutter وفشل E2E حالة واحدة؛ اختبار Football الجديد وضع خطأ في suite LegacyRegression. نُقل إلى suite Football دون حذف أو تخفيف assertions. التشغيل المستهدف والتحقق من CI التالي مطلوبان. بعدها B: قوالب مستخدمين ونطاقات ثم فصل إعدادات الرياضة/السباحة؛ C: اتفاقات ورواتب/خاص/خارجي ودفتر بالمصادر نفسها. لا إعادة Full Regression لكل تعديل صغير. الجولات النهائيةV2-17+V3 واحدة علىcandidate معلوم.
+
+لا نشر أو إرسال أو دفع حقيقي. لا ادعاء اكتمال V2+V3 أو اجتيازPilot أو اختبارات جهاز غير مشغلة. كل checkpoint لاحق يحدّث هذه الخريطة والدليل والقرار، وتستمر الشريحة التالية في الجلسة ما دامت الأدوات متاحة.

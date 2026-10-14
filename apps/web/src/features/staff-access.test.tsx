@@ -29,3 +29,22 @@ it("does not offer save when the server denies the access editor", async () => {
   expect(await screen.findByText("تعذر تحميل صلاحيات الموظف.")).toBeVisible();
   expect(screen.queryByRole("button", { name: "اعتماد الصلاحيات" })).not.toBeInTheDocument();
 });
+it("applies a template without saving, restricts branches, previews changes and retains hidden matrix rows", async () => {
+  const preset = { key: "branch-operator", name: "إداري فرع", description: "قالب تشغيل بلا رواتب", actions: [{ module: "players", read: true, add: true, edit: true, delete: false }, { module: "attendance", read: true, add: true, edit: true, delete: false }] };
+  const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith("/csrf") ? { token: "csrf" } : { ...value, templates: [preset] } }));
+  global.fetch = fetcher; const close = vi.fn(); render(<StaffAccessEditor id="admin" name="إداري تجريبي" onClose={close} />);
+  fireEvent.change(await screen.findByRole("combobox", { name: "قالب الصلاحيات" }), { target: { value: "branch-operator" } });
+  expect(screen.getByRole("radio", { name: "فروع محددة" })).toBeChecked();
+  expect(screen.getByRole("switch", { name: "إضافة اللاعبون وأولياء الأمور" })).toBeChecked();
+  expect(screen.getByRole("button", { name: "اعتماد الصلاحيات" })).toBeDisabled();
+  expect(fetcher.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("checkbox", { name: "فرع الاختبار" }));
+  fireEvent.change(screen.getByLabelText("البحث عن وحدة"), { target: { value: "الحضور" } });
+  expect(screen.queryByRole("switch", { name: "إضافة اللاعبون وأولياء الأمور" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "اعتماد الصلاحيات" }));
+  fireEvent.click(screen.getByRole("button", { name: "تأكيد الاعتماد" }));
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  const sent = fetcher.mock.calls.find(([, init]) => init?.method === "PUT"); const body = JSON.parse(sent![1].body);
+  expect(body).toMatchObject({ allBranches: false, branches: ["branch-a"], templateKey: "branch-operator" });
+  expect(body.actions).toEqual(preset.actions);
+});
