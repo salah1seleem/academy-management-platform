@@ -39,7 +39,8 @@ public sealed class FootballDemoTests : IAsyncLifetime
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var employees = await db.Employees.Where(x => x.AcademyId == AcademyId).ToListAsync(); Assert.Equal(7, employees.Count); Assert.Equal(2, employees.Count(x => x.MembershipId is null));
-        Assert.Equal(3, await db.PayrollReasons.CountAsync(x => x.AcademyId == AcademyId && x.IsActive));
+        Assert.Equal(new[] { "ساعة إضافية", "سبب آخر", "حضور مباراة", "يوم إضافي" }.Order(),
+            (await db.PayrollReasons.Where(x => x.AcademyId == AcademyId && x.IsActive).Select(x => x.Name).ToArrayAsync()).Order());
         Assert.Equal(new[] { "Approved", "Pending", "Rejected" }, await db.PayrollAdditionRequests.Where(x => x.AcademyId == AcademyId).OrderBy(x => x.Status).Select(x => x.Status).ToArrayAsync());
         Assert.Equal(300, await db.PayrollAdjustments.Where(x => x.AcademyId == AcademyId && x.Kind == "Addition").SumAsync(x => x.Amount));
         Assert.Equal(100, await db.PayrollAdjustments.Where(x => x.AcademyId == AcademyId && x.Kind == "Deduction").SumAsync(x => x.Amount));
