@@ -8,7 +8,13 @@ Web staff-access/staff-role-templates **10/10** مع typecheck/lint. E2E v2-staf
 
 بعد مراجعة السجل أضيفت حالة المصدر/الإصدار/التخصيص الفعلية من الخادم إلى `AppliedTemplate` داخل audit After مع إبقاء TemplateKey والجسم القديم للتوافق. أضيف assertion على التخصيص والمصدر، وأعيدت القوالب ومستهلك القالب السابق **5/5 في17s**؛ لا جمعها مع18 كعدد فريد. EF بلا pending model بعد التغيير.
 
-CI السابق B1/B2/c0d339e أصبحsuccess؛ B3a وCI الدفعة الجديدة نتائج مستقلة. لا Full Regression محلي أو Flutter/device جديد أو اكتمال V2/V3. قوالب قابلة لإعادة الاستخدام فقط؛ المنح المتعددة حسب الدور/العلاقة والأفعال الحساسة باقية كما PROGRESS.
+Code SHA `fe52bfe6bab7eb8962c136db0c15a5143f7715f0`؛ CI [38623096545](https://github.com/salah1seleem/academy-management-platform/actions/runs/38623096545): Frontend/Flutter/E2E success وBackend in_progress عند آخر فحص. CI السابق B1/B2/c0d339e أصبحsuccess؛ B3a فشل كما التحديث أدناه. لا Full Regression محلي أو Flutter/device جديد أو اكتمال V2/V3. قوالب قابلة لإعادة الاستخدام فقط؛ المنح المتعددة حسب الدور/العلاقة والأفعال الحساسة باقية كما PROGRESS.
+
+### نتيجة CI وإصلاح تداخل بيانات الاختبارات
+
+CI B3a [38609005372](https://github.com/salah1seleem/academy-management-platform/actions/runs/38609005372): المعمارية1/1 والوحدة190/190؛ التكامل799/800؛ بقية الوظائفFrontend/Flutter/E2E success. الفاشل Group_filter_returns_only_group_players رأى طفل الأسرة الاصطناعية الإضافي في مجموعة السباحة المشتركة، كما أثبت log. أصلح `5aad08c616d8f8ec82fd0c08d060e9365b64a6a1` مصدر التداخل، لا الاختبار القديم: مجموعة سباحة مستقلة للأسرة مع assertions تمنع تغيير المجموعة المشتركة أو خلط الفلتر.
+
+إعادة على قاعدة V3 السابقة18/19 احتوت خمسة أعضاء سبق أن تركتهم التشغيلات القديمة؛ لم يُحذف أحد. قاعدة جديدة `academy_v3_fixture_20261014` مع migrations القائمة: الاختبار القديم1/1، ثم الأسرة1/1، ثم `dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~StructurePeopleEnrollmentTests|FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family' --no-build --no-restore --nologo -v minimal` **36/36 في98s** بعد رحلة الأسرة. EF has-pending-model-changes ناجح؛ لا migration أخرى. نجاح الاختبارات المستهدفة لا يساوي اجتياز CI الكامل على الإصلاح؛ يلزم فحص تشغيل HEAD الجديد في الاستئناف.
 
 ## B3a — نطاق الرياضة التشغيلي، 14 أكتوبر 2026
 
