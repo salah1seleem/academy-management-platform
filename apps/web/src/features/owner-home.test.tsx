@@ -34,7 +34,7 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   expect(decisions.querySelectorAll("a")).toHaveLength(3);
   expect(screen.getByRole("link", { name: /راجع طلبات الدفع/ })).toHaveTextContent("7 طلب بانتظار قرار");
   expect(screen.getByRole("link", { name: /راجع طلبات الدفع/ })).toHaveAttribute("href", expect.stringContaining("allDates=true"));
-  expect(screen.getByRole("link", { name: /مجموعة بلا مدرب/ })).toHaveAttribute("href", "/dashboard/academy/groups/group-1?tab=coaches");
+  expect(screen.getByRole("link", { name: /إسناد مدرب للمجموعة/ })).toHaveAttribute("href", "/dashboard/academy/coaches/new?groupId=group-1");
   expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));
