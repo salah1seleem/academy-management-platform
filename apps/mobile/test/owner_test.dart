@@ -195,9 +195,11 @@ void main() {
     final auth = await owner((m, p, b, t) async {
       if (p.contains('/structure/options')) return {'branches': []};
       if (p.endsWith('/news')) return [];
-      if (p.contains('/manage/feedback')) return [
-        {'id': 'note-1', 'kind': 'Complaint', 'score': null, 'message': 'تغيير موعد تجريبي', 'status': 'Open', 'playerName': 'لاعب تجريبي', 'branchName': 'فرع تجريبي', 'coachName': 'مدرب تجريبي'},
-      ];
+      if (p.contains('/manage/feedback')) {
+        return [
+          {'id': 'note-1', 'kind': 'Complaint', 'score': null, 'message': 'تغيير موعد تجريبي', 'status': 'Open', 'playerName': 'لاعب تجريبي', 'branchName': 'فرع تجريبي', 'coachName': 'مدرب تجريبي'},
+        ];
+      }
       return {...summary(), 'operations': {
         'groupAttention': [], 'attentionRule': 'غياب متكرر',
         'coachPerformance': [{'name': 'مدرب تجريبي', 'groupCount': 2, 'sessionCount': 7, 'parentRating': 4.5, 'parentRatingCount': 2}],

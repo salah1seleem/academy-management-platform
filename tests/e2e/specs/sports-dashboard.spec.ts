@@ -25,7 +25,7 @@ for (const role of ["owner", "admin"] as const) for (const size of sizes) {
       await info.attach(path, { path: image, contentType: "image/png" });
       if (path === "/dashboard" && role === "owner") {
         const widgets = info.outputPath(`${role}-${size.width}-widgets.png`);
-        await page.locator(".owner-chart-grid").screenshot({ path: widgets, scale: "css", animations: "disabled" });
+        await page.locator(".owner-chart-grid").filter({ has: page.getByText("حالة الاشتراكات", { exact: true }) }).screenshot({ path: widgets, scale: "css", animations: "disabled" });
         await info.attach("real-data widgets", { path: widgets, contentType: "image/png" });
       }
     }
