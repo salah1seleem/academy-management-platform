@@ -19,7 +19,7 @@ public static class StaffManagement
         staff.MapGet("/", List);
         staff.MapPost("/", Create).AddEndpointFilter<CsrfFilter>();
         staff.MapPut("/{id:guid}/grants", Grants).AddEndpointFilter<CsrfFilter>();
-        app.MapGet("/api/v1/my-permissions", async (HttpContext context, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization) => { var allowed = new List<string>(); foreach (var p in Permissions.Concat([AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage])) if ((await authorization.AuthorizeAsync(context.User, p)).Succeeded) allowed.Add(p); return Results.Ok(allowed); }).RequireAuthorization(AcademyPermissions.TenantAccess);
+        app.MapGet("/api/v1/my-permissions", async (HttpContext context, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization) => { context.Response.Headers.CacheControl = "no-store"; var allowed = new List<string>(); foreach (var p in Permissions.Concat([AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage]).Concat(PayrollSensitiveAccess.Permissions)) if ((await authorization.AuthorizeAsync(context.User, p)).Succeeded) allowed.Add(p); return Results.Ok(allowed); }).RequireAuthorization(AcademyPermissions.TenantAccess);
     }
     private static async Task<IResult> List(CurrentTenant tenant, FoundationDbContext db)
     {

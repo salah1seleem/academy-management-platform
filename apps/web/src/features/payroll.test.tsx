@@ -13,11 +13,26 @@ const response = (data: unknown, status = 200) => Promise.resolve(new Response(J
 const renderPage = (page: React.ReactNode) => render(<DateFilterDefaults range={range}>{page}</DateFilterDefaults>);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); push.mockReset(); params.forEach((_, key) => params.delete(key)); });
 
+it("module management alone exposes neither salary payment nor addition review", async () => {
+  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage"]) : String(input).includes("requests") ? response([{ id: "claim", name: "موظف تجريبي", reasonName: "مباراة", status: "Pending" }]) : String(input).includes("reasons") ? response([]) : response({ currency: "EGP", items: [{ employeeId: "worker", name: employee.name, contractDays: 31, baseDue: 3100, netDue: 3100, deductions: 0, additions: 0, currency: "EGP", isPaid: false }] })) as typeof fetch;
+  const view = renderPage(<PayrollWorkspace />); await screen.findByText("لم يُدفع");
+  expect(screen.queryByRole("button", { name: "تأكيد الدفع" })).not.toBeInTheDocument(); view.unmount();
+  renderPage(<PayrollRequests />); await screen.findByText("مباراة");
+  expect(screen.queryByRole("button", { name: "مراجعة" })).not.toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "أسباب المبالغ الإضافية" })).toBeVisible();
+});
+
+it("review-only permission does not imply payroll configuration or salary payment", async () => {
+  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.addition.review"]) : response([{ id: "claim", name: "موظف تجريبي", reasonName: "مباراة", status: "Pending" }])) as typeof fetch;
+  renderPage(<PayrollRequests />); expect(await screen.findByRole("button", { name: "مراجعة" })).toBeVisible();
+  expect(screen.queryByRole("heading", { name: "أسباب المبالغ الإضافية" })).not.toBeInTheDocument();
+});
+
 it("does not replace the selected payroll month with a slower previous response", async () => {
   let finishOld!: (response: Response) => void;
   const salary = { employeeId: employee.id, name: employee.name, monthlySalary: 3100, contractDays: 5, baseDue: 516.67, deductions: 0, additions: 0, netDue: 516.67, currency: "EGP", isPaid: false };
   global.fetch = vi.fn(input => {
-    if (String(input).includes("my-permissions")) return response(["payroll.manage"]);
+    if (String(input).includes("my-permissions")) return response(["payroll.manage", "payroll.pay", "payroll.addition.review"]);
     if (String(input).includes("month=2026-10-01")) return new Promise<Response>(resolve => { finishOld = resolve; });
     return response({ currency: "EGP", items: [salary] });
   }) as typeof fetch;
@@ -31,7 +46,7 @@ it("does not replace the selected payroll month with a slower previous response"
 });
 
 it("shows employees without accounts and opens an editable fixed contract", async () => {
-  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage"]) : response(options)) as typeof fetch;
+  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : response(options)) as typeof fetch;
   renderPage(<EmployeeList />); expect(await screen.findByText("بدون حساب دخول")).toBeVisible();
   expect(screen.getByRole("link", { name: "تعديل" })).toHaveAttribute("href", "/dashboard/staff/employees/worker");
   expect(screen.getByRole("link", { name: "المستحقات" })).toHaveAttribute("href", "/dashboard/payroll?employeeId=worker");
@@ -55,7 +70,7 @@ it("creates a fixed contract without credentials or photo and returns only after
 
 it("salary payment retries preserve the operation key and never mark a failed operation paid", async () => {
   const salary = { employeeId: employee.id, name: employee.name, monthlySalary: 3100, contractDays: 11, baseDue: 1100, deductions: 100, additions: 50, netDue: 1050, currency: "EGP", isPaid: false };
-  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? response({ message: "اتصال تجريبي غير مكتمل" }, 503) : response({ currency: "EGP", totalBase: 1100, totalDeductions: 100, totalAdditions: 50, totalNet: 1050, unpaid: 1050, items: [salary] })) as typeof fetch;
+  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? response({ message: "اتصال تجريبي غير مكتمل" }, 503) : response({ currency: "EGP", totalBase: 1100, totalDeductions: 100, totalAdditions: 50, totalNet: 1050, unpaid: 1050, items: [salary] })) as typeof fetch;
   vi.spyOn(window, "confirm").mockReturnValue(true); renderPage(<PayrollWorkspace />);
   await screen.findByRole("button", { name: "تأكيد الدفع" }); fireEvent.click(screen.getByRole("button", { name: "تأكيد الدفع" })); await screen.findByText("اتصال تجريبي غير مكتمل");
   fireEvent.click(screen.getByRole("button", { name: "تأكيد الدفع" }));
@@ -66,7 +81,7 @@ it("salary payment retries preserve the operation key and never mark a failed op
 
 it("refreshes changed salary after a rejected stale confirmation without marking it paid", async () => {
   let netDue = 1100;
-  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? (netDue = 1000, response({ message: "تغيرت المستحقات. راجع الصافي المحدّث." }, 409)) : response({ currency: "EGP", items: [{ employeeId: employee.id, name: employee.name, contractDays: 11, baseDue: 1100, deductions: 1100 - netDue, additions: 0, netDue, currency: "EGP", isPaid: false }] })) as typeof fetch;
+  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? (netDue = 1000, response({ message: "تغيرت المستحقات. راجع الصافي المحدّث." }, 409)) : response({ currency: "EGP", items: [{ employeeId: employee.id, name: employee.name, contractDays: 11, baseDue: 1100, deductions: 1100 - netDue, additions: 0, netDue, currency: "EGP", isPaid: false }] })) as typeof fetch;
   vi.spyOn(window, "confirm").mockReturnValue(true); renderPage(<PayrollWorkspace />);
   fireEvent.click(await screen.findByRole("button", { name: "تأكيد الدفع" }));
   await screen.findByText("تغيرت المستحقات. راجع الصافي المحدّث.");
@@ -89,7 +104,7 @@ it("salary cards follow the selected employee and name filter instead of hidden 
 it("employee deductions include attendance deductions and save the selected employee", async () => {
   params.set("employeeId", "worker");
   const rows = [{ id: "daily", name: employee.name, amount: 100, currency: "EGP", dueDate: range.to, reason: "غياب تجريبي" }];
-  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? response({ id: "saved" }, 201) : String(input).includes("employees") ? response(options) : response(rows)) as typeof fetch;
+  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? response({ id: "saved" }, 201) : String(input).includes("employees") ? response(options) : response(rows)) as typeof fetch;
   renderPage(<EmployeeDeductions />); await screen.findByText("غياب تجريبي");
   fireEvent.change(screen.getByLabelText("المبلغ"), { target: { value: "50" } }); fireEvent.change(screen.getByLabelText("سبب الخصم"), { target: { value: "خصم اختبار" } });
   fireEvent.click(screen.getByRole("button", { name: "حفظ الخصم" }));
@@ -101,7 +116,7 @@ it("reviews a selected request in a dialog; rejection requires neither date nor 
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.setAttribute("open", ""); } });
   Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.removeAttribute("open"); } });
   const request = { id: "claim", employeeId: "worker", name: employee.name, amount: 100, currency: "EGP", reasonName: "ساعة إضافية", status: "Pending" };
-  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? response({ status: "Rejected" }) : String(input).includes("reasons") ? response([]) : response([request])) as typeof fetch;
+  global.fetch = vi.fn((input, init) => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : String(input).includes("csrf") ? response({ token: "demo" }) : init?.method === "POST" ? response({ status: "Rejected" }) : String(input).includes("reasons") ? response([]) : response([request])) as typeof fetch;
   renderPage(<PayrollRequests />); fireEvent.click(await screen.findByRole("button", { name: "مراجعة" }));
   expect(screen.getByRole("dialog")).toBeVisible(); expect(screen.getByLabelText("تاريخ الاستحقاق")).toBeRequired();
   fireEvent.change(screen.getByLabelText("القرار"), { target: { value: "reject" } }); expect(screen.getByLabelText("تاريخ الاستحقاق")).not.toBeRequired();

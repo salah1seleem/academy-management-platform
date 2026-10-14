@@ -118,6 +118,8 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(PlatformIdentity.Policy, policy => policy.AddAuthenticationSchemes(PlatformIdentity.Scheme).RequireAuthenticatedUser().AddRequirements(new PlatformAccessRequirement()));
     options.AddPolicy("mobile-session", policy => policy.AddAuthenticationSchemes(MobileAuthenticationHandler.SchemeName).RequireAuthenticatedUser());
+    foreach (var permission in PayrollSensitiveAccess.Permissions)
+        options.AddPolicy(permission, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(permission)));
     options.AddPolicy(AcademyPermissions.AcademySettingsManage, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(AcademyPermissions.AcademySettingsManage)));
     options.AddPolicy(AcademyPermissions.TenantAccess, policy => policy.RequireAuthenticatedUser()
         .AddRequirements(new TenantPermissionRequirement(AcademyPermissions.TenantAccess)));

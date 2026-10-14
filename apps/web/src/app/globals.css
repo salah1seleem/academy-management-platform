@@ -116,11 +116,11 @@
 .access-table th, .access-table td { padding: .6rem; border-bottom: 1px solid var(--border); }
 .access-table thead { background: var(--primary-soft); }
 .access-table th[scope="row"] { font-size: .85rem; min-width: 10rem; }
-.access-table input[role="switch"] { appearance: none; width: 44px; height: 26px; border: 1px solid #9ba9b6; border-radius: 20px; background: #e7ebef; position: relative; cursor: pointer; vertical-align: middle; margin: 9px 0; }
-.access-table input[role="switch"]::after { content: ""; width: 18px; height: 18px; position: absolute; top: 3px; inset-inline-start: 3px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }
-.access-table input[role="switch"]:checked { background: var(--primary); border-color: var(--primary); }
-.access-table input[role="switch"]:checked::after { inset-inline-start: 21px; }
-.access-table input[role="switch"]:focus-visible { outline: 3px solid #f0b44b; outline-offset: 2px; }
+:is(.access-table, .payroll-sensitive-grants) input[role="switch"] { appearance: none; width: 44px; height: 26px; border: 1px solid #9ba9b6; border-radius: 20px; background: #e7ebef; position: relative; cursor: pointer; vertical-align: middle; margin: 9px 0; }
+:is(.access-table, .payroll-sensitive-grants) input[role="switch"]::after { content: ""; width: 18px; height: 18px; position: absolute; top: 3px; inset-inline-start: 3px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }
+:is(.access-table, .payroll-sensitive-grants) input[role="switch"]:checked { background: var(--primary); border-color: var(--primary); }
+:is(.access-table, .payroll-sensitive-grants) input[role="switch"]:checked::after { inset-inline-start: 21px; }
+:is(.access-table, .payroll-sensitive-grants) input[role="switch"]:focus-visible { outline: 3px solid #f0b44b; outline-offset: 2px; }
 .staff-action-toggle { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; cursor: pointer; }
 .staff-action-cell-label { display: none; }
 @media (max-width: 640px) {
@@ -133,6 +133,11 @@
   .staff-action-cell-label { display: block; font-size: .8rem; font-weight: 600; }
 }
 .platform-academies { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
+.payroll-sensitive-grants > p, .payroll-sensitive-grants > details { flex-basis: 100%; margin: 0; font-size: .88rem; }
+.payroll-sensitive-grants .staff-action-toggle { flex: 1 1 16rem; flex-direction: row; justify-content: start; border: 1px solid var(--border); border-radius: .8rem; padding: .5rem .75rem; font-size: .9rem; }
+.payroll-sensitive-grants input[role="switch"] { flex: 0 0 44px; }
+.payroll-sensitive-grants label:has(input:checked) { background: var(--primary-soft); border-color: var(--primary); }
+.payroll-sensitive-grants label:has(input:disabled) { opacity: .6; cursor: not-allowed; }
 .platform-academy { flex-direction: column; align-items: start !important; padding: 1.15rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 1rem; text-align: start; }
 .platform-academy[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
 .platform-academy:hover { background: var(--primary-soft); color: var(--text); }

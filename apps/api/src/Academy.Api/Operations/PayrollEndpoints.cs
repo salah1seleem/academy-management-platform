@@ -25,8 +25,8 @@ public static class PayrollEndpoints
         var payroll = app.MapGroup("/api/v1/manage/payroll").RequireAuthorization(AcademyPermissions.PayrollRead);
         payroll.MapGet("/", Report); payroll.MapGet("/adjustments", Adjustments); payroll.MapGet("/requests", Requests);
         payroll.MapPost("/adjustments", AddAdjustment).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
-        payroll.MapPost("/requests/{id:guid}/review", Review).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
-        payroll.MapPost("/{id:guid}/pay", Pay).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
+        payroll.MapPost("/requests/{id:guid}/review", Review).RequireAuthorization(AcademyPermissions.PayrollManage, AcademyPermissions.PayrollAdditionReview).AddEndpointFilter<CsrfFilter>();
+        payroll.MapPost("/{id:guid}/pay", Pay).RequireAuthorization(AcademyPermissions.PayrollManage, AcademyPermissions.PayrollPay).AddEndpointFilter<CsrfFilter>();
         payroll.MapGet("/reasons", Reasons); payroll.MapPost("/reasons", CreateReason).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
         var self = app.MapGroup("/api/v1/staff/payroll").RequireAuthorization(AcademyPermissions.TenantAccess);
         self.MapGet("/", Own); self.MapPost("/requests", RequestAddition).AddEndpointFilter<CsrfFilter>();
@@ -155,8 +155,13 @@ public static class PayrollEndpoints
     private static async Task<IResult> Review(Guid id, AdditionReview body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; var actor = Actor(context.User); if (body.Note?.Length > 500 || body.Accept && (body.DueDate is null || body.DueDate.Value.Year is < 2000 or > 9998 || body.Amount is null || !Money(body.Amount.Value)) || !body.Accept && body.Amount.HasValue) return Results.UnprocessableEntity(new { message = "حدد المبلغ الصحيح وتاريخ الاستحقاق عند قبول الطلب فقط." });
-        await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"payroll-review:{t.AcademyId}:{id}"}, 0))");
+        await using var tx = await db.Database.BeginTransactionAsync();
+        if (!await PayrollSensitiveAccess.LockAndAuthorize(context, tenant, db, AcademyPermissions.PayrollAdditionReview)) return Results.Forbid();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"payroll-review:{t.AcademyId}:{id}"}, 0))");
         var row = await db.PayrollAdditionRequests.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (row is null) return Results.NotFound();
+        await Lock(db, t.AcademyId, row.EmployeeId, body.DueDate ?? new DateOnly(2000, 1, 1));
+        var branch = await db.Employees.Where(e => e.Id == row.EmployeeId).Select(e => (Guid?)e.BranchId).SingleOrDefaultAsync();
+        if (branch is null || !await PayrollSensitiveAccess.BranchAllowed(db, t, branch.Value)) return Results.Forbid();
         if (row.RequestedByUserId == actor) return Results.Forbid(); // A delegated approver cannot approve their own claim.
         var state = body.Accept ? "Approved" : "Rejected";
         if (row.Status != "Pending") return row.Status == state && row.DueDate == (body.Accept ? body.DueDate : null) && row.Amount == (body.Accept ? body.Amount : row.Amount) && row.ReviewNote == body.Note?.Trim() ? Results.Ok(new { row.Id, replay = true }) : Results.Conflict(new { message = "الطلب تمت مراجعته بالفعل." });
@@ -178,6 +183,10 @@ public static class PayrollEndpoints
             return Results.UnprocessableEntity(new { message = "راجع الشهر والمبلغ المعروض قبل تأكيد السداد." });
         var actor = Actor(context.User);
         await using var tx = await db.Database.BeginTransactionAsync();
+        if (!await PayrollSensitiveAccess.LockAndAuthorize(context, tenant, db, AcademyPermissions.PayrollPay)) return Results.Forbid();
+        var branch = await db.Employees.Where(e => e.Id == id).Select(e => (Guid?)e.BranchId).SingleOrDefaultAsync();
+        if (branch is null) return Results.NotFound();
+        if (!await PayrollSensitiveAccess.BranchAllowed(db, t, branch.Value)) return Results.Forbid();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"payroll-pay:{t.AcademyId}:{actor}:{key}"}, 0))");
         var reusedKey = await db.PayrollSettlements.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.PaidByUserId == actor && x.IdempotencyKey == key);
         if (reusedKey is not null && (reusedKey.EmployeeId != id || reusedKey.Month != month || reusedKey.NetDue != body.ExpectedNetDue)) return Results.Conflict(new { message = "مفتاح السداد مستخدم لموظف أو شهر أو مبلغ آخر." });

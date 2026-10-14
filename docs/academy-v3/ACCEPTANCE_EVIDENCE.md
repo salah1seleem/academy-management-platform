@@ -78,3 +78,18 @@ Web: `npm test -- src/features/sport-operations-settings.test.tsx src/features/f
 صور360/390/430/1440 تحت `tests/e2e/test-results/v3-sport-settings-Owner-co-24939-y-and-disables-new-bookings-mobile-chromium/`، مع overflow assertions؛ فحص390/1440فعليًا، وإصلاحselectخامفيالواجهةبمقاس48pxوتباعدمقروء، ثم إعادة2/2. محاولةE2Eالأولى تعثرتgetByLabelلـselect؛ الثانيةstatusغيرفريد بسببnoticeعام؛ استُخدمrolecomboboxوstatusخاصبنصالحفظ، ثم1/1و2/2 دونحذفassertions. lint كشفeffectloadوعولجباستدعاءfetchداخلeffectبـAbortController؛ typecheckكشفmockfetchوعولجبـstubGlobal. أمرmigrationالأولافتقدمتغيرconnectionوتصححعلىقاعدةالاختبار؛ لا مشكلةشبكة أو retryبلاسبب.
 
 لا اختبار جهاز/Flutter جديد فيB2 ولا دور رياضة مترابط أو ledger أو3أكاديمياتDemo كاملة؛ هذه فجوات محفوظة. CIالجديد بعدpush مستقل عن النتائج المحلية.
+
+## B3b3A — تفويضات الرواتب الحساسة، 2026-10-15
+
+الدليل البرمجي: PayrollSensitiveAccess وStaffAccessEndpoints وPayrollEndpoints؛ الاختبارات الجديدة الأربعة في V3PayrollSensitiveTests. الأوامر:
+
+- `ACADEMY_TEST_CONNECTION_STRING=...academy_v3_fixture_20261014... dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~PayrollIntegrationTests'`: **33/33**.
+- بعد تكامل سجل التدقيق: فلتر `V3_payroll_review|V3_sensitive_grants|V3_pending_sensitive|V3_inflight_payment|PayrollIntegrationTests|OwnerReviewOperationsTests` (FullyQualifiedName لكل جزء): **27/27**. لا تعتبر المجموعتين اختبارات فريدة مجتمعة.
+- `npm run test --workspace apps/web -- src/features/payroll.test.tsx src/features/staff-access.test.tsx src/features/staff-access-contexts.test.tsx src/features/staff-role-templates.test.tsx src/features/staff-access-audit.test.tsx`: **25/25**؛ typecheck/lint ناجحان.
+- `flutter test test/staff_amounts_test.dart`: **2/2**؛ لا تغيير Dart أو اختبار بصمة/جهاز فعلي.
+- `npm run test:e2e -- v3-payroll-sensitive.spec.ts v3-access-contexts.spec.ts` بقاعدة academy_v3_e2e_20261014 ومنافذ5186/3106: **2/2 في53.4s**، مع production build. [390](evidence/b3b3a/payroll-grants-390.png) و[1440](evidence/b3b3a/payroll-grants-1440.png) روجعتا فعليًا.
+- `dotnet ef migrations has-pending-model-changes ... --no-build`: لا تغييرات؛ لا migration لهذه الشريحة.
+
+يثبت السيناريو رفض CRUD وحده، فصل الاعتماد/الصرف، منع الطلب الذاتي وIDOR وفرع آخر وأكاديمية ثانية، رفض المنح المجهولة/المكررة والنطاق غير المدعوم، replay متزامن بلا مضاعفة، وسحب الإذن/الفرع أثناء طلب صرف HTTP منتظر قفل المنح بلا كتابة. القيمة الفعلية 3100+150=3250 محفوظة في PayrollSettlement، وليست دفعًا مصرفيًا حقيقيًا. تقرير التدقيق يميز تغيير التفويض واسم منفذه.
+
+محاولات الفشل والإصلاح والاستئناف وحدود B3b3A في PROGRESS. هذه أدلة مستهدفة فقط؛ لم تنفذ البوابة الموحدة أو F10 أو اعتماد إصدار V2/V3. CI البعيد بوابة منفصلة عن النتائج المحلية.

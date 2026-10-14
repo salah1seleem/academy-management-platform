@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, MetricCard, PageHeader } from "../components/dashboard-shell";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { csrfRequest } from "./dashboard-api";
-import { usePayrollManage } from "./payroll-access";
+import { usePayrollManage, usePayrollPermission } from "./payroll-access";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 
 type Salary = { employeeId: string; name: string; monthlySalary: number; contractDays: number; baseDue: number; deductions: number; additions: number; netDue: number; currency: string; isPaid: boolean };
@@ -27,7 +27,8 @@ export function PayrollWorkspace() {
   const defaults = useDateFilterDefaults(), incoming = useSearchParams();
   const idempotency = useOperationKey();
   const [month, setMonth] = useState(incoming.get("month") && /^\d{4}-\d{2}$/.test(incoming.get("month")!) ? incoming.get("month")! : defaults.to.slice(0, 7)), [search, setSearch] = useState("");
-  const [data, setData] = useState<Report | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(""), [canManage, setCanManage] = useState(false);
+  const [data, setData] = useState<Report | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState("");
+  const canManage = usePayrollPermission("payroll.pay");
   const branch = incoming.get("branchId") ?? "";
   const query = `/api/v1/manage/payroll/?month=${month}-01${branch ? `&branchId=${encodeURIComponent(branch)}` : ""}`;
   const requestVersion = useRef(0), currentQuery = useRef(query);
@@ -44,7 +45,6 @@ export function PayrollWorkspace() {
     });
   }, [query]);
   useEffect(() => { const requests = requestVersion; currentQuery.current = query; void load(); return () => { ++requests.current; }; }, [load, query]);
-  useEffect(() => { fetch("/api/v1/my-permissions").then(r => r.ok ? r.json() : []).then(p => setCanManage(p.includes("payroll.manage"))).catch(() => setCanManage(false)); }, []);
   async function pay(x: Salary) { if (busy || !window.confirm(`تأكيد صرف ${formatMoneyAr(x.netDue, x.currency)} إلى ${x.name}؟`)) return; setBusy(x.employeeId); try { const payload = { month: `${month}-01`, expectedNetDue: x.netDue }; await csrfRequest(`/api/v1/manage/payroll/${x.employeeId}/pay`, "POST", payload, idempotency({ employee: x.employeeId, ...payload })); await load(); } catch (e) { await load(); setError(e instanceof Error ? e.message : "تعذر تسجيل السداد."); } finally { setBusy(""); } }
   const rows = data?.items.filter(x => x.name.includes(search) && (!incoming.get("employeeId") || x.employeeId === incoming.get("employeeId"))) ?? [];
   // Display totals follow the same visible records as the table. Aggregate cents,
@@ -80,12 +80,13 @@ export function EmployeeDeductions() {
 
 export function PayrollRequests() {
   const canManage = usePayrollManage();
+  const canReview = usePayrollPermission("payroll.addition.review");
   const defaults = useDateFilterDefaults(); const [rows, setRows] = useState<Claim[] | null>(null), [selected, setSelected] = useState<Claim | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [accept, setAccept] = useState(true);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { const node = dialog.current; if (selected && node && !node.open) node.showModal(); return () => node?.close(); }, [selected]);
   const load = useCallback(() => fetch("/api/v1/manage/payroll/requests").then(r => r.ok ? r.json() : Promise.reject()).then(setRows).catch(() => setError("تعذر تحميل المبالغ الإضافية.")), []); useEffect(() => { void load(); }, [load]);
   async function review(e: FormEvent<HTMLFormElement>) { e.preventDefault(); if (!selected || busy) return; const f = new FormData(e.currentTarget); const approving = f.get("decision") === "accept"; setBusy(true); try { await csrfRequest(`/api/v1/manage/payroll/requests/${selected.id}/review`, "POST", { accept: approving, amount: approving ? Number(f.get("amount")) : null, dueDate: approving ? f.get("date") || null : null, note: f.get("note") }); setSelected(null); await load(); } catch (e) { setError(e instanceof Error ? e.message : "تعذر مراجعة الطلب."); } finally { setBusy(false); } }
-  return <><PageHeader title="المبالغ الإضافية" context="الرواتب" secondaryActions={[{ label: "الرواتب", href: "/dashboard/payroll" }]} />{error && <ErrorState message={error} />}{!rows && !error ? <LoadingState /> : <section className="list-card">{!rows?.length ? <EmptyState message="لا توجد طلبات مبالغ إضافية." /> : <AdminDataTable label="طلبات الإضافة" rows={rows} rowKey={x => x.id} columns={[{ key: "name", header: "الموظف", primary: true, render: x => x.name }, { key: "reason", header: "السبب", render: x => x.reasonName }, { key: "amount", header: "المبلغ", render: x => x.amount == null ? "يحدده المسؤول" : formatMoneyAr(x.amount, x.currency) }, { key: "state", header: "الحالة", render: x => states[x.status] }, { key: "action", header: "الإجراء", render: x => x.status === "Pending" && canManage ? <button onClick={() => { setAccept(true); setSelected(x); }}>مراجعة</button> : <span>{x.reviewNote ?? "—"}</span> }]} />}</section>}
+  return <><PageHeader title="المبالغ الإضافية" context="الرواتب" secondaryActions={[{ label: "الرواتب", href: "/dashboard/payroll" }]} />{error && <ErrorState message={error} />}{!rows && !error ? <LoadingState /> : <section className="list-card">{!rows?.length ? <EmptyState message="لا توجد طلبات مبالغ إضافية." /> : <AdminDataTable label="طلبات الإضافة" rows={rows} rowKey={x => x.id} columns={[{ key: "name", header: "الموظف", primary: true, render: x => x.name }, { key: "reason", header: "السبب", render: x => x.reasonName }, { key: "amount", header: "المبلغ", render: x => x.amount == null ? "يحدده المسؤول" : formatMoneyAr(x.amount, x.currency) }, { key: "state", header: "الحالة", render: x => states[x.status] }, { key: "action", header: "الإجراء", render: x => x.status === "Pending" && canReview ? <button onClick={() => { setAccept(true); setSelected(x); }}>مراجعة</button> : <span>{x.reviewNote ?? "—"}</span> }]} />}</section>}
     {selected && <dialog ref={dialog} aria-label={`مراجعة طلب ${selected.name}`} className="detail-card payroll-dialog" onCancel={e => { if (busy) e.preventDefault(); else setSelected(null); }}><h2>طلب {selected.name}</h2><p>{selected.reasonName} · يحدد المسؤول القيمة عند الاعتماد</p><form className="form-shell" onSubmit={e => void review(e)}><label>القرار<select name="decision" defaultValue="accept" onChange={e => setAccept(e.target.value === "accept")}><option value="accept">قبول</option><option value="reject">رفض</option></select></label>{accept && <label>المبلغ المعتمد<input name="amount" type="number" min="0.01" max="100000000" step="0.01" required /></label>}<label>تاريخ الاستحقاق<input name="date" type="date" defaultValue={defaults.to} required={accept} disabled={!accept} /></label><label>ملاحظة (اختياري)<textarea name="note" maxLength={500} /></label><div className="form-actions"><button className="primary-button" disabled={busy}>حفظ القرار</button><button type="button" disabled={busy} onClick={() => { setSelected(null); setAccept(true); }}>إلغاء</button></div></form></dialog>}
     {canManage && <PayrollReasons />}
   </>;

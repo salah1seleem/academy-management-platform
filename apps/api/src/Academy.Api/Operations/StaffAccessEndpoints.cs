@@ -28,6 +28,8 @@ public static class StaffAccessEndpoints
         var custom = await db.StaffRoleTemplates.AsNoTracking().Where(r => r.AcademyId == t.AcademyId && r.IsActive).OrderBy(r => r.Name).Take(100).ToArrayAsync();
         var source = await db.StaffRoleTemplates.AsNoTracking().Where(r => r.Id == m.PermissionTemplateId && r.AcademyId == t.AcademyId).Select(r => new { r.Id, r.Name, r.IsActive, currentRevision = r.Revision, appliedRevision = m.PermissionTemplateRevision, customized = m.PermissionTemplateCustomized }).SingleOrDefaultAsync();
         return Results.Ok(new { m.AllBranches, m.AllSports, m.UseActionGrants, m.PrimaryMembershipId, m.AccessContextName, source, modules = StaffAccessRules.Modules, templates = StaffAccessTemplates.All.Concat(custom.Select(StaffRoleTemplateEndpoints.View)),
+            sensitivePermissions = PayrollSensitiveAccess.Permissions,
+            selectedSensitivePermissions = await db.StaffGrants.Where(g => g.MembershipId == id && g.IsActive && g.Allowed && PayrollSensitiveAccess.Permissions.Contains(g.Permission)).Select(g => g.Permission).ToArrayAsync(),
             branches = await db.Branches.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             sports = await db.Sports.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             selectedSports = await db.MembershipSportAccesses.Where(x => x.MembershipId == id && x.IsActive).Select(x => x.SportId).ToListAsync(),
@@ -39,6 +41,10 @@ public static class StaffAccessEndpoints
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
         var isCustom = StaffRoleTemplateEndpoints.CustomId(body.TemplateKey, out var templateId);
+        if (body.SensitivePermissions is not null && (body.SensitivePermissions.Length > PayrollSensitiveAccess.Permissions.Length
+            || body.SensitivePermissions.Distinct().Count() != body.SensitivePermissions.Length
+            || body.SensitivePermissions.Any(p => !PayrollSensitiveAccess.Contains(p))))
+            return Results.Problem(statusCode: 422, title: "اختر تفويضات الرواتب المتاحة دون تكرار");
         if (body.TemplateKey is not null && !isCustom && !StaffAccessTemplates.All.Any(x => x.Key == body.TemplateKey) || !isCustom && body.TemplateRevision.HasValue || body.Branches is null || !StaffRoleTemplateEndpoints.Valid(body.Actions) || body.Branches.Length > 100 || body.Branches.Distinct().Count() != body.Branches.Length || !body.AllBranches && body.Branches.Length == 0)
             return Results.Problem(statusCode: 422, title: "راجع الفروع والصلاحيات؛ الإضافة والتعديل والحذف تتطلب القراءة");
         await using var tx = await db.Database.BeginTransactionAsync();
@@ -46,6 +52,11 @@ public static class StaffAccessEndpoints
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{id}"}, 0))");
         var m = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.AcademyAdmin);
         if (m is null) return Results.NotFound();
+        if (body.SensitivePermissions is { Length: > 0 } && (m.PrimaryMembershipId.HasValue || (body.AllSports ?? m.AllSports) == false
+            || !body.Actions.Any(a => a.Module == "payroll" && a.Read
+                && (!body.SensitivePermissions.Contains(AcademyPermissions.PayrollPay) || a.Add)
+                && (!body.SensitivePermissions.Contains(AcademyPermissions.PayrollAdditionReview) || a.Edit))))
+            return Results.Problem(statusCode: 422, title: "تفويض الرواتب يحتاج نطاق كل الرياضات وقراءة الوحدة، مع الإضافة للصرف والتعديل للمراجعة؛ لا يمنح لسياق تشغيل إضافي");
         if (m.PrimaryMembershipId is Guid primary)
         {
             await StaffAccessContextEndpoints.Lock(db, t.AcademyId, primary);
@@ -70,7 +81,8 @@ public static class StaffAccessEndpoints
         var branches = await db.MembershipBranchAccesses.Where(x => x.MembershipId == id).ToListAsync(); var actions = await db.StaffActionGrants.Where(x => x.MembershipId == id).ToListAsync();
         var sports = await db.MembershipSportAccesses.Where(x => x.MembershipId == id).ToListAsync();
         var previous = actions.Where(x => x.IsActive).Select(x => new StaffActionValue(x.Module, x.Read, x.Add, x.Edit, x.Delete)).ToArray();
-        var before = JsonSerializer.Serialize(new { m.AllBranches, m.AllSports, m.UseActionGrants, m.PermissionTemplateId, m.PermissionTemplateRevision, m.PermissionTemplateCustomized, branches = branches.Where(x => x.IsActive).Select(x => x.BranchId), sports = sports.Where(x => x.IsActive).Select(x => x.SportId), actions = previous });
+        var previousSensitive = await db.StaffGrants.Where(g => g.MembershipId == id && g.IsActive && g.Allowed && PayrollSensitiveAccess.Permissions.Contains(g.Permission)).Select(g => g.Permission).ToArrayAsync();
+        var before = JsonSerializer.Serialize(new { m.AllBranches, m.AllSports, m.UseActionGrants, m.PermissionTemplateId, m.PermissionTemplateRevision, m.PermissionTemplateCustomized, branches = branches.Where(x => x.IsActive).Select(x => x.BranchId), sports = sports.Where(x => x.IsActive).Select(x => x.SportId), actions = previous, sensitivePermissions = previousSensitive });
         var now = clock.GetUtcNow(); m.AllBranches = body.AllBranches; m.UseActionGrants = true; m.UpdatedAtUtc = now; m.ContextRevision++;
         if (template is not null)
         {
@@ -95,6 +107,15 @@ public static class StaffAccessEndpoints
             row.Read = a.Read; row.Add = a.Add; row.Edit = a.Edit; row.Delete = a.Delete; row.IsActive = true; row.UpdatedAtUtc = now;
         }
         var legacy = await db.StaffGrants.Where(x => x.MembershipId == id).ToListAsync();
+        // Omission preserves explicit grants for old callers. An empty array
+        // revokes both. No template can silently grant these operations.
+        if (body.SensitivePermissions is not null)
+            foreach (var permission in PayrollSensitiveAccess.Permissions)
+            {
+                var row = legacy.SingleOrDefault(g => g.Permission == permission);
+                if (row is null) { row = new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, Permission = permission, CreatedAtUtc = now }; db.StaffGrants.Add(row); }
+                row.Allowed = body.SensitivePermissions.Contains(permission); row.IsActive = true; row.UpdatedAtUtc = now;
+            }
         foreach (var permission in StaffManagement.Permissions)
         {
             var module = StaffAccessRules.ForPermission(permission); var a = body.Actions.SingleOrDefault(x => x.Module == module);
@@ -104,10 +125,12 @@ public static class StaffAccessEndpoints
         }
         var effective = body with { AllSports = m.AllSports, Sports = m.AllSports ? [] : body.Sports ?? sports.Where(x => x.IsActive).Select(x => x.SportId).ToArray() };
         var after = JsonSerializer.SerializeToNode(effective)!;
+        after["SensitivePermissions"] = JsonSerializer.SerializeToNode(body.SensitivePermissions ?? previousSensitive);
+        after["SensitivePermissionsChanged"] = !previousSensitive.Order().SequenceEqual((body.SensitivePermissions ?? previousSensitive).Order());
         after["AppliedTemplate"] = JsonSerializer.SerializeToNode(new { m.PermissionTemplateId, m.PermissionTemplateRevision, m.PermissionTemplateCustomized });
         db.StaffAccessAudits.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, ActorUserId = Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!), Before = before, After = after.ToJsonString(), CreatedAtUtc = now, UpdatedAtUtc = now });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 }
 public sealed record StaffActionValue(string Module, bool Read, bool Add, bool Edit, bool Delete);
-public sealed record StaffAccessWrite(bool AllBranches, Guid[] Branches, StaffActionValue[] Actions, string? TemplateKey = null, bool? AllSports = null, Guid[]? Sports = null, int? TemplateRevision = null);
+public sealed record StaffAccessWrite(bool AllBranches, Guid[] Branches, StaffActionValue[] Actions, string? TemplateKey = null, bool? AllSports = null, Guid[]? Sports = null, int? TemplateRevision = null, string[]? SensitivePermissions = null);

@@ -55,7 +55,15 @@ public static partial class ReportingEndpoints
             .ToArrayAsync();
         return Results.Ok(new { count, page = page ?? 1, from = range.From, to = range.To,
             items = rows.Select(x => new { x.Id, x.MembershipId, x.CreatedAtUtc, x.actorName, x.staffName,
-                change = x.After.Contains("cashierEnabled", StringComparison.Ordinal) ? "صلاحية التحصيل النقدي" : "صلاحيات الوحدات أو نطاق الفروع" }).ToArray() });
+                change = StaffAuditChange(x.After) }).ToArray() });
+    }
+
+    private static string StaffAuditChange(string after)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(after);
+        if (document.RootElement.TryGetProperty("SensitivePermissionsChanged", out var changed) && changed.ValueKind == System.Text.Json.JsonValueKind.True)
+            return "تفويضات اعتماد أو صرف الرواتب، مع مراجعة الوحدات والنطاق";
+        return after.Contains("cashierEnabled", StringComparison.Ordinal) ? "صلاحية التحصيل النقدي" : "صلاحيات الوحدات أو نطاق الفروع";
     }
 
     private static async Task<IResult> CoachPerformance(Guid coachId, DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId,

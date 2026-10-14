@@ -49,6 +49,8 @@ public static class AcademyPermissions
     public const string OwnerDashboardRead = "dashboard.owner.read";
     public const string PayrollRead = "payroll.read";
     public const string PayrollManage = "payroll.manage";
+    public const string PayrollAdditionReview = "payroll.addition.review";
+    public const string PayrollPay = "payroll.pay";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;
@@ -60,6 +62,13 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
     {
         var membership = await currentTenant.ResolveAsync();
         if (membership is null) return;
+
+        if (PayrollSensitiveAccess.Contains(requirement.Permission))
+        {
+            if (await PayrollSensitiveAccess.Allowed(db, membership, requirement.Permission)
+                && await configuration.Enabled(membership.AcademyId, "payroll")) context.Succeed(requirement);
+            return;
+        }
 
         var allowed = requirement.Permission switch
         {
