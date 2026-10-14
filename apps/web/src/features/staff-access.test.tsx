@@ -2,6 +2,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { StaffAccessEditor } from "./staff-access";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it("sends the selected custom template revision while retaining explicit branch and sport review", async () => {
+  const custom = { key: "custom:role-a", name: "منسق الحضور", description: "قالب مخصص", custom: true, revision: 4, actions: [{ module: "players", read: true, add: false, edit: false, delete: false }, { module: "attendance", read: true, add: true, edit: true, delete: false }] };
+  const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith("/csrf") ? { token: "csrf" } : { ...value, templates: [custom], source: { name: "منسق سابق", appliedRevision: 1, currentRevision: 2, customized: true, isActive: false } } }));
+  global.fetch = fetcher; const close = vi.fn(); render(<StaffAccessEditor id="admin" name="إداري تجربة" onClose={close} />);
+  expect(await screen.findByText(/المنح الحالية لم تتغير/)).toBeVisible();
+  fireEvent.change(screen.getByRole("combobox", { name: "قالب الصلاحيات" }), { target: { value: custom.key } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "فرع الاختبار" }));
+  fireEvent.click(screen.getByRole("button", { name: "اعتماد الصلاحيات" })); fireEvent.click(screen.getByRole("button", { name: "تأكيد الاعتماد" }));
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  expect(JSON.parse(fetcher.mock.calls.find(([, init]) => init?.method === "PUT")![1].body)).toMatchObject({ templateKey: custom.key, templateRevision: 4, allBranches: false, branches: ["branch-a"], actions: custom.actions });
+});
 it("requires sports, previews the correlated scope and saves it without widening", async () => {
   const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith("/csrf") ? { token: "csrf" } : { ...value, allSports: false, sports: [{ id: "football", name: "كرة القدم" }, { id: "swimming", name: "السباحة" }], selectedSports: ["football"] } }));
   global.fetch = fetcher; const close = vi.fn(); render(<StaffAccessEditor id="admin" name="إداري كرة القدم" onClose={close} />);

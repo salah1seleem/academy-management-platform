@@ -174,6 +174,7 @@ public sealed partial class FoundationDbContext
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
         GuardCashFamilyPurpose();
+        if (ChangeTracker.Entries<StaffRoleTemplateAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل قوالب الصلاحيات ثابت ولا يعدل أو يحذف.");
         if (ChangeTracker.Entries<SportSettingsAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل إعدادات الرياضة ثابت ولا يعدل أو يحذف.");
         if (ChangeTracker.Entries<ReceivableCreditApplication>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("تخصيص الرصيد الدائن ثابت ولا يعدل أو يحذف.");
         ChangeTracker.DetectChanges();

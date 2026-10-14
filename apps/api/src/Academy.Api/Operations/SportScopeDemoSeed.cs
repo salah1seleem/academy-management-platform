@@ -15,6 +15,7 @@ public static class SportScopeDemoSeed
     public static readonly Guid UserId = Guid.Parse("a3000000-0000-0000-0000-000000000301");
     public static readonly Guid MembershipId = Guid.Parse("a3000000-0000-0000-0000-000000000302");
     public const string Email = "football.operator.v3@example.test";
+    public static readonly Guid TemplateId = Guid.Parse("a3000000-0000-0000-0000-000000000350");
     public static async Task Seed(FoundationDbContext db, UserManager<ApplicationUser> users, IHostEnvironment env, DemoOptions options)
     {
         if (!env.IsEnvironment("Demo") || !options.SeedEnabled || options.SeedProfile != "LegacyRegression")
@@ -35,10 +36,23 @@ public static class SportScopeDemoSeed
             var created = await users.CreateAsync(user, options.StaffPassword);
             if (!created.Succeeded) throw new InvalidOperationException("تعذر إنشاء حساب العرض دون تغيير حساب قائم.");
         }
+        var template = await db.StaffRoleTemplates.SingleOrDefaultAsync(r => r.Id == TemplateId);
+        var marker = Guid.Parse("a3000000-0000-0000-0000-000000000351");
+        if (template is not null && (template.AcademyId != academy || !await db.StaffRoleTemplateAudits.AnyAsync(a => a.Id == marker && a.TemplateId == TemplateId && a.AcademyId == academy)))
+            throw new InvalidOperationException("قالب محجوز مستخدم دون علامة العرض المعروفة؛ لم يتغير.");
+        if (template is null)
+        {
+            var name = "منسق متابعة كرة القدم — نموذج اصطناعي";
+            template = new() { Id = TemplateId, AcademyId = academy, Name = name, NormalizedName = name, Description = "نقطة بداية للقراءة؛ اختر الحساب والفرع والرياضة ثم اعتمدها صراحة.", ActionsJson = JsonSerializer.Serialize(StaffAccessTemplates.All.Single(t => t.Key == "read-only").Actions, StaffRoleTemplateEndpoints.Json), CreatedAtUtc = now, UpdatedAtUtc = now };
+            db.StaffRoleTemplates.Add(template);
+            var seedActor = await db.Users.Where(u => u.Email == DemoSeed.OwnerEmail).Select(u => u.Id).SingleAsync();
+            db.StaffRoleTemplateAudits.Add(new() { Id = marker, AcademyId = academy, TemplateId = TemplateId, ActorUserId = seedActor, Before = "{}", After = JsonSerializer.Serialize(new { source = "synthetic-v3-sport-template", template = StaffRoleTemplateEndpoints.View(template) }, StaffRoleTemplateEndpoints.Json), CreatedAtUtc = now, UpdatedAtUtc = now });
+        }
         var existing = await db.AcademyMemberships.SingleOrDefaultAsync(m => m.Id == MembershipId);
         if (existing is not null)
         {
             if (existing.AcademyId != academy || existing.UserId != UserId || existing.Role != AcademyRole.AcademyAdmin) throw new InvalidOperationException("عضوية محجوزة مستخدمة بسياق آخر؛ لم تتغير.");
+            await db.SaveChangesAsync(); await tx.CommitAsync();
             return; // Preserve owner edits, revocations and disabled accounts on every restart.
         }
         db.AcademyMemberships.Add(new() { Id = MembershipId, AcademyId = academy, UserId = UserId, Role = AcademyRole.AcademyAdmin, JobTitle = "تشغيل كرة القدم — عرض اصطناعي", AllBranches = false, AllSports = false, UseActionGrants = true, CreatedAtUtc = now, UpdatedAtUtc = now });

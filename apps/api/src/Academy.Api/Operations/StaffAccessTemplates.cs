@@ -4,7 +4,7 @@ namespace Academy.Api.Operations;
 
 // Templates fill the existing grant matrix; a key never grants a role or permission.
 // New templates deliberately exclude deletion, user administration and settings.
-public sealed record StaffAccessTemplate(string Key, string Name, string Description, StaffActionValue[] Actions);
+public sealed record StaffAccessTemplate(string Key, string Name, string Description, StaffActionValue[] Actions, int? Revision = null, bool Custom = false);
 public static class StaffAccessTemplates
 {
     public static readonly StaffAccessTemplate[] All = [

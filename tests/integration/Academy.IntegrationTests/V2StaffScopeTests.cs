@@ -144,7 +144,7 @@ public sealed partial class V2StaffScopeTests : IAsyncLifetime
         var fixture = await CreateAdmin(); using var owner = fixture.Owner; using var admin = fixture.Admin;
         var data = await Data();
         var page = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff/{fixture.Member}/access");
-        Assert.Equal(5, page.GetProperty("templates").GetArrayLength());
+        Assert.Equal(5, page.GetProperty("templates").EnumerateArray().Count(t => !t.GetProperty("custom").GetBoolean()));
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync($"/api/v1/manage/staff/{fixture.Member}/access")).StatusCode);
         var preset = StaffAccessTemplates.All.Single(x => x.Key == "branch-operator");
         Assert.All(StaffAccessTemplates.All.SelectMany(x => x.Actions), x => Assert.False(x.Delete));

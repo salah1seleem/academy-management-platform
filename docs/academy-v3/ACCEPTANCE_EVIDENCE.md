@@ -1,5 +1,15 @@
 # أدلة قبول V2 + V3
 
+## B3b1 — القوالب المخصصة
+
+Migration `20261014185336_V3ReusableStaffPermissionTemplates` مطبقة على قاعدتي الاختبار V3 فقط؛ has-pending-model-changes نجح. `dotnet test ... --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family' --no-restore` **18/18 في63s**. الاختبارات الأربع الجديدة في V3StaffRoleTemplateTests تشمل owner/tenant/CSRF، رفض مصفوفة ناقصة أو write بلاread، اسم مكرر، stale revision، مصدر أجنبي، الاسم لا يغير Role، حفظ مصدر/تخصيص/نطاق، عدم تغيير الجلسة بتعديل/أرشفة تعريف ثم التغيير الفعلي عند اعتماد نسخة جديدة، immutability عبرEF وSQL23514، وseed متكرر يحفظ الأرشفة ولا يمنح تلقائيًا.
+
+Web staff-access/staff-role-templates **10/10** مع typecheck/lint. E2E v2-staff-access/v3-staff-templates/v3-custom-role-templates **3/3 في34.9s** مع production build؛ صور390/1440 محفوظة. الرحلة الجديدة فشلت أولًا لأن اختبارGET سبق اكتمالPUT؛ أضيف انتظار response204 وعودة القائمة قبل فحص المصدر، دون حذف assertion أو تغيير منطق الحفظ. إعادة1/1 نجحت، ثم كشفت مراجعة الصورة قص أعمدة المصفوفة على الموبايل، فعولج العرض لا المنح، وأعيد3/3 مع assertion يمنع overflow داخل المصفوفة أيضًا. مراجعة390 النهائية تمت.
+
+بعد مراجعة السجل أضيفت حالة المصدر/الإصدار/التخصيص الفعلية من الخادم إلى `AppliedTemplate` داخل audit After مع إبقاء TemplateKey والجسم القديم للتوافق. أضيف assertion على التخصيص والمصدر، وأعيدت القوالب ومستهلك القالب السابق **5/5 في17s**؛ لا جمعها مع18 كعدد فريد. EF بلا pending model بعد التغيير.
+
+CI السابق B1/B2/c0d339e أصبحsuccess؛ B3a وCI الدفعة الجديدة نتائج مستقلة. لا Full Regression محلي أو Flutter/device جديد أو اكتمال V2/V3. قوالب قابلة لإعادة الاستخدام فقط؛ المنح المتعددة حسب الدور/العلاقة والأفعال الحساسة باقية كما PROGRESS.
+
 ## B3a — نطاق الرياضة التشغيلي، 14 أكتوبر 2026
 
 Code SHA `70f217fa57e58844b58a7dad35f02aa956fee9e4` مرفوع. CI [38609005372](https://github.com/salah1seleem/academy-management-platform/actions/runs/38609005372) **in_progress** عند الفحص، ولا تعادل النتائج المحلية نجاح CI. بعد مراجعة نطاق HR أضيف منع الحضور الوظيفي اليومي المشترك من التفويض الرياضي الضيق وأعيد الاختبار المتأثر **1/1**؛ لم تمس بقية نتائج الاختبارات أو assertions.

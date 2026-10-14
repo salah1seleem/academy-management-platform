@@ -19,12 +19,15 @@ public static class StaffAccessEndpoints
             return Results.Ok(new { m.AllBranches, m.AllSports, m.UseActionGrants, branches = await db.MembershipBranchAccesses.Where(x => x.MembershipId == m.Id && x.IsActive).Select(x => x.BranchId).ToListAsync(), sports = await db.MembershipSportAccesses.Where(x => x.MembershipId == m.Id && x.IsActive).Select(x => x.SportId).ToListAsync(), actions = await db.StaffActionGrants.Where(x => x.MembershipId == m.Id && x.IsActive).Select(x => new { x.Module, x.Read, x.Add, x.Edit, x.Delete }).ToListAsync() });
         }).RequireAuthorization(AcademyPermissions.TenantAccess);
     }
-    private static async Task<IResult> Get(Guid id, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> Get(Guid id, CurrentTenant tenant, FoundationDbContext db, HttpResponse response)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
         var m = await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.AcademyAdmin);
         if (m is null) return Results.NotFound();
-        return Results.Ok(new { m.AllBranches, m.AllSports, m.UseActionGrants, modules = StaffAccessRules.Modules, templates = StaffAccessTemplates.All,
+        response.Headers.CacheControl = "no-store";
+        var custom = await db.StaffRoleTemplates.AsNoTracking().Where(r => r.AcademyId == t.AcademyId && r.IsActive).OrderBy(r => r.Name).Take(100).ToArrayAsync();
+        var source = await db.StaffRoleTemplates.AsNoTracking().Where(r => r.Id == m.PermissionTemplateId && r.AcademyId == t.AcademyId).Select(r => new { r.Id, r.Name, r.IsActive, currentRevision = r.Revision, appliedRevision = m.PermissionTemplateRevision, customized = m.PermissionTemplateCustomized }).SingleOrDefaultAsync();
+        return Results.Ok(new { m.AllBranches, m.AllSports, m.UseActionGrants, source, modules = StaffAccessRules.Modules, templates = StaffAccessTemplates.All.Concat(custom.Select(StaffRoleTemplateEndpoints.View)),
             branches = await db.Branches.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             sports = await db.Sports.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             selectedSports = await db.MembershipSportAccesses.Where(x => x.MembershipId == id && x.IsActive).Select(x => x.SportId).ToListAsync(),
@@ -35,12 +38,22 @@ public static class StaffAccessEndpoints
     private static async Task<IResult> Save(Guid id, StaffAccessWrite body, CurrentTenant tenant, FoundationDbContext db, ClaimsPrincipal actor, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        if (body.TemplateKey is not null && !StaffAccessTemplates.All.Any(x => x.Key == body.TemplateKey) || body.Branches is null || body.Actions is null || body.Branches.Length > 100 || body.Branches.Distinct().Count() != body.Branches.Length || body.Actions.Length != StaffAccessRules.Modules.Length || body.Actions.Select(x => x.Module).Distinct().Count() != body.Actions.Length || body.Actions.Any(x => !StaffAccessRules.Modules.Contains(x.Module) || !x.Read && (x.Add || x.Edit || x.Delete)) || !body.AllBranches && body.Branches.Length == 0)
+        var isCustom = StaffRoleTemplateEndpoints.CustomId(body.TemplateKey, out var templateId);
+        if (body.TemplateKey is not null && !isCustom && !StaffAccessTemplates.All.Any(x => x.Key == body.TemplateKey) || !isCustom && body.TemplateRevision.HasValue || body.Branches is null || !StaffRoleTemplateEndpoints.Valid(body.Actions) || body.Branches.Length > 100 || body.Branches.Distinct().Count() != body.Branches.Length || !body.AllBranches && body.Branches.Length == 0)
             return Results.Problem(statusCode: 422, title: "راجع الفروع والصلاحيات؛ الإضافة والتعديل والحذف تتطلب القراءة");
         await using var tx = await db.Database.BeginTransactionAsync();
+        if (!await StaffRoleTemplateEndpoints.LockOwner(db, t, actor)) return Results.Forbid();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{id}"}, 0))");
         var m = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.AcademyAdmin);
         if (m is null) return Results.NotFound();
+        StaffRoleTemplate? template = null;
+        if (isCustom)
+        {
+            await StaffRoleTemplateEndpoints.Lock(db, t.AcademyId, templateId);
+            template = await db.StaffRoleTemplates.AsNoTracking().SingleOrDefaultAsync(r => r.AcademyId == t.AcademyId && r.Id == templateId);
+            if (template is null) return Results.NotFound();
+            if (!template.IsActive || body.TemplateRevision != template.Revision) return Results.Problem(statusCode: 409, title: "القالب تغير أو أُوقف؛ أعد تحميله وراجع الصلاحيات قبل الاعتماد");
+        }
         // Old callers omit both fields: preserve the current sport scope rather
         // than silently widening an existing restricted grant.
         if (body.AllSports.HasValue != (body.Sports is not null) || body.Sports is { Length: > 100 }
@@ -51,8 +64,16 @@ public static class StaffAccessEndpoints
         if (await db.Branches.CountAsync(x => body.Branches.Contains(x.Id) && x.IsActive) != body.Branches.Length) return Results.Problem(statusCode: 422, title: "فرع غير صالح أو خارج الأكاديمية");
         var branches = await db.MembershipBranchAccesses.Where(x => x.MembershipId == id).ToListAsync(); var actions = await db.StaffActionGrants.Where(x => x.MembershipId == id).ToListAsync();
         var sports = await db.MembershipSportAccesses.Where(x => x.MembershipId == id).ToListAsync();
-        var before = JsonSerializer.Serialize(new { m.AllBranches, m.AllSports, m.UseActionGrants, branches = branches.Where(x => x.IsActive).Select(x => x.BranchId), sports = sports.Where(x => x.IsActive).Select(x => x.SportId), actions = actions.Where(x => x.IsActive).Select(x => new StaffActionValue(x.Module, x.Read, x.Add, x.Edit, x.Delete)) });
+        var previous = actions.Where(x => x.IsActive).Select(x => new StaffActionValue(x.Module, x.Read, x.Add, x.Edit, x.Delete)).ToArray();
+        var before = JsonSerializer.Serialize(new { m.AllBranches, m.AllSports, m.UseActionGrants, m.PermissionTemplateId, m.PermissionTemplateRevision, m.PermissionTemplateCustomized, branches = branches.Where(x => x.IsActive).Select(x => x.BranchId), sports = sports.Where(x => x.IsActive).Select(x => x.SportId), actions = previous });
         var now = clock.GetUtcNow(); m.AllBranches = body.AllBranches; m.UseActionGrants = true; m.UpdatedAtUtc = now;
+        if (template is not null)
+        {
+            m.PermissionTemplateId = template.Id; m.PermissionTemplateRevision = template.Revision;
+            m.PermissionTemplateCustomized = !StaffRoleTemplateEndpoints.Same(body.Actions, StaffRoleTemplateEndpoints.View(template).Actions);
+        }
+        else if (body.TemplateKey is not null) { m.PermissionTemplateId = null; m.PermissionTemplateRevision = null; m.PermissionTemplateCustomized = false; }
+        else if (m.PermissionTemplateId.HasValue && !StaffRoleTemplateEndpoints.Same(previous, body.Actions)) m.PermissionTemplateCustomized = true;
         if (body.AllSports.HasValue)
         {
             m.AllSports = body.AllSports.Value;
@@ -77,9 +98,11 @@ public static class StaffAccessEndpoints
             row.Allowed = a?.Read == true; row.IsActive = true; row.UpdatedAtUtc = now;
         }
         var effective = body with { AllSports = m.AllSports, Sports = m.AllSports ? [] : body.Sports ?? sports.Where(x => x.IsActive).Select(x => x.SportId).ToArray() };
-        db.StaffAccessAudits.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, ActorUserId = Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!), Before = before, After = JsonSerializer.Serialize(effective), CreatedAtUtc = now, UpdatedAtUtc = now });
+        var after = JsonSerializer.SerializeToNode(effective)!;
+        after["AppliedTemplate"] = JsonSerializer.SerializeToNode(new { m.PermissionTemplateId, m.PermissionTemplateRevision, m.PermissionTemplateCustomized });
+        db.StaffAccessAudits.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, ActorUserId = Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!), Before = before, After = after.ToJsonString(), CreatedAtUtc = now, UpdatedAtUtc = now });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 }
 public sealed record StaffActionValue(string Module, bool Read, bool Add, bool Edit, bool Delete);
-public sealed record StaffAccessWrite(bool AllBranches, Guid[] Branches, StaffActionValue[] Actions, string? TemplateKey = null, bool? AllSports = null, Guid[]? Sports = null);
+public sealed record StaffAccessWrite(bool AllBranches, Guid[] Branches, StaffActionValue[] Actions, string? TemplateKey = null, bool? AllSports = null, Guid[]? Sports = null, int? TemplateRevision = null);

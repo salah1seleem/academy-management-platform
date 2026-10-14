@@ -135,7 +135,7 @@ public sealed partial class FoundationDbContext
         // Shared academy-wide configuration/identities cannot be edited through a
         // narrow operational grant. The owner keeps the reviewed administration path.
         if (entry.Entity is Branch or AgeCategory or Facility or AcademyMembership or MembershipBranchAccess or MembershipSportAccess
-            or StaffActionGrant or StaffGrant or Operations.AcademyExperience or Operations.AcademyNews or NutritionItem
+            or StaffActionGrant or StaffGrant or StaffRoleTemplate or StaffRoleTemplateAudit or Operations.AcademyExperience or Operations.AcademyNews or NutritionItem
             || entry.Entity is DiscountRule rule && (!rule.SportId.HasValue || entry.State != EntityState.Added && entry.Property(nameof(DiscountRule.SportId)).OriginalValue is null)) throw new ResourceScopeException();
         if (entry.Metadata.FindProperty("SportId")?.ClrType == typeof(Guid?) && entry.Property("SportId").CurrentValue is null) throw new ResourceScopeException();
         Guid? player = entry.Entity is Player p ? p.Id : entry.Metadata.FindProperty("PlayerId") is not null ? entry.Property("PlayerId").CurrentValue as Guid? : null;

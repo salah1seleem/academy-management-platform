@@ -10,6 +10,8 @@ public sealed partial class FoundationDbContext
     public DbSet<StaffActionGrant> StaffActionGrants => Set<StaffActionGrant>();
     public DbSet<StaffAccessAudit> StaffAccessAudits => Set<StaffAccessAudit>();
     public DbSet<MembershipSportAccess> MembershipSportAccesses => Set<MembershipSportAccess>();
+    public DbSet<StaffRoleTemplate> StaffRoleTemplates => Set<StaffRoleTemplate>();
+    public DbSet<StaffRoleTemplateAudit> StaffRoleTemplateAudits => Set<StaffRoleTemplateAudit>();
     private static void ConfigureStaffAccess(ModelBuilder b)
     {
         Tenant<MembershipBranchAccess>(b); Tenant<StaffActionGrant>(b); Tenant<StaffAccessAudit>(b);
@@ -17,6 +19,17 @@ public sealed partial class FoundationDbContext
         b.Entity<AcademyMembership>().Property(x => x.AllBranches).HasDefaultValue(true);
         b.Entity<AcademyMembership>().Property(x => x.AllSports).HasDefaultValue(true);
         Tenant<MembershipSportAccess>(b);
+        Tenant<StaffRoleTemplate>(b); Tenant<StaffRoleTemplateAudit>(b);
+        b.Entity<StaffRoleTemplate>().Property(x => x.Name).HasMaxLength(80);
+        b.Entity<StaffRoleTemplate>().Property(x => x.NormalizedName).HasMaxLength(160);
+        b.Entity<StaffRoleTemplate>().Property(x => x.Description).HasMaxLength(300);
+        b.Entity<StaffRoleTemplate>().Property(x => x.ActionsJson).HasColumnType("jsonb");
+        b.Entity<StaffRoleTemplate>().HasIndex(x => new { x.AcademyId, x.NormalizedName }).IsUnique();
+        b.Entity<AcademyMembership>().HasOne<StaffRoleTemplate>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PermissionTemplateId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<StaffRoleTemplateAudit>().HasOne<StaffRoleTemplate>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TemplateId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<StaffRoleTemplateAudit>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<StaffRoleTemplateAudit>().Property(x => x.Before).HasColumnType("jsonb");
+        b.Entity<StaffRoleTemplateAudit>().Property(x => x.After).HasColumnType("jsonb");
         b.Entity<MembershipSportAccess>().ToTable("MembershipSportAccess");
         b.Entity<MembershipSportAccess>().HasIndex(x => new { x.AcademyId, x.MembershipId, x.SportId }).IsUnique();
         b.Entity<MembershipSportAccess>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.MembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

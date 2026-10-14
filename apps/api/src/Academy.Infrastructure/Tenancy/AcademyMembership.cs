@@ -13,6 +13,9 @@ public sealed class AcademyMembership
     public bool AllBranches { get; set; } = true;
     public bool AllSports { get; set; } = true;
     public bool UseActionGrants { get; set; }
+    public Guid? PermissionTemplateId { get; set; }
+    public int? PermissionTemplateRevision { get; set; }
+    public bool PermissionTemplateCustomized { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public Academy Academy { get; set; } = null!;

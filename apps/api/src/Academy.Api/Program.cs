@@ -190,6 +190,7 @@ app.MapMobileAuth();
 app.MapPlatformIdentity();
 app.MapPlatformAcademies();
 app.MapStaffAccess();
+app.MapStaffRoleTemplates();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false, ResponseWriter = HealthResponseWriter.WriteAsync });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready"), ResponseWriter = HealthResponseWriter.WriteAsync });
