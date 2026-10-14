@@ -84,9 +84,9 @@ public static class GuardianFeedbackEndpoints
     private static async Task<IResult> List(Guid? branchId, string? kind, string? status, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status is not (null or "Open" or "Reviewed" or "Resolved")) return Results.BadRequest(new { message = "فلتر غير صالح." });
+        if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status is not (null or "Open" or "Reviewed" or "Resolved" or "Unresolved")) return Results.BadRequest(new { message = "فلتر غير صالح." });
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) return Results.NotFound();
-        return Results.Ok(await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (kind == null || x.Kind == kind) && (status == null || x.Status == status))
+        return Results.Ok(await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (kind == null || x.Kind == kind) && (status == null || status == "Unresolved" && (x.Status == "Open" || x.Status == "Reviewed") || x.Status == status))
             .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Take(200)
             .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.OwnerResponse, x.RespondedAtUtc, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());
     }

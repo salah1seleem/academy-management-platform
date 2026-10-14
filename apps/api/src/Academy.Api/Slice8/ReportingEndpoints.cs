@@ -128,8 +128,8 @@ public static partial class ReportingEndpoints
             attendance = new { sessions = await db.TrainingSessions.CountAsync(x => x.AcademyId == academyId && x.SessionDate >= range.From && x.SessionDate <= range.To && (!branchId.HasValue || x.BranchId == branchId) && x.Status != TrainingSessionStatus.Cancelled), present = await todayAttendance.CountAsync(x => (x.Status == AttendanceStatus.Present || x.Status == AttendanceStatus.Late)), late = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Late), excused = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Excused), absent = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.Absent), notRecorded = await todayAttendance.CountAsync(x => x.Status == AttendanceStatus.NotRecorded) },
             bySport, byBranch, latest, payroll,
             operations = new { coachPerformance, groupAttention, pendingExpenses, accessChanges,
-                openComplaints = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Complaint" && x.Status == "Open" && (!branchId.HasValue || x.BranchId == branchId)),
-                openSuggestions = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Suggestion" && x.Status == "Open" && (!branchId.HasValue || x.BranchId == branchId)),
+                openComplaints = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Complaint" && x.Status != "Resolved" && (!branchId.HasValue || x.BranchId == branchId)),
+                openSuggestions = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.Kind == "Suggestion" && x.Status != "Resolved" && (!branchId.HasValue || x.BranchId == branchId)),
                 attentionRule = "مدرب غير مسند، أو 3 سجلات حضور غير مسجلة، أو غياب 30% فأكثر من 5 سجلات على الأقل" }
         });
     }

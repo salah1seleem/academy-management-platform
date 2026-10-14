@@ -26,7 +26,7 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(operational)) as typeof fetch;
   render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
   expect(await screen.findByText(/4\.5\/5 من 2/)).toBeVisible();
-  expect(screen.getByRole("link", { name: /شكاوى تنتظر المراجعة/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Open");
+  expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
   expect(screen.queryByText(/ذكاء اصطناعي يحلل/)).not.toBeInTheDocument();
 });

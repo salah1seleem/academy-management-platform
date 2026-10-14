@@ -71,6 +71,8 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var foreignList = await foreign.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback"); Assert.DoesNotContain(foreignList.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         Assert.Equal(HttpStatusCode.NotFound, (await Send(foreign, $"/api/v1/manage/feedback/{complaintId}/review", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Send(owner, $"/api/v1/manage/feedback/{complaintId}/review", new { })).StatusCode);
+        var unresolved = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?kind=Complaint&status=Unresolved");
+        Assert.Contains(unresolved.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId && x.GetProperty("status").GetString() == "Reviewed");
         var resolutionPath = $"/api/v1/manage/feedback/{complaintId}/resolve";
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(guardian, resolutionPath, new { response = "راجعنا الشكوى" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Send(foreign, resolutionPath, new { response = "راجعنا الشكوى" })).StatusCode);
@@ -90,6 +92,8 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var mine = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{child}/feedback-options");
         Assert.Contains(mine.GetProperty("mine").EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId &&
             x.GetProperty("status").GetString() == "Resolved" && x.GetProperty("ownerResponse").GetString() == "تم تعديل موعد الإشعار للأسرة.");
+        unresolved = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?kind=Complaint&status=Unresolved");
+        Assert.DoesNotContain(unresolved.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         var summary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
         var operations = summary.GetProperty("operations");
         Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == 5);
