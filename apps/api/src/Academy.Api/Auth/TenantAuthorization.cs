@@ -123,7 +123,7 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
                 allowed = await db.AcademyMemberships.AnyAsync(x => x.Id == membership.MembershipId && x.UseActionGrants)
                     && await db.StaffActionGrants.AnyAsync(x => x.AcademyId == membership.AcademyId && x.MembershipId == membership.MembershipId && x.IsActive && x.Read && (x.Module == "players" || x.Module == "subscriptions" || x.Module == "attendance" || x.Module == "evaluations"));
         }
-        if (allowed && db.SportScopeRestricted && requirement.Permission is AcademyPermissions.OwnerDashboardRead
+        if (allowed && (db.SportScopeRestricted || db.AdditionalContextScope) && requirement.Permission is AcademyPermissions.OwnerDashboardRead or AcademyPermissions.ReportsFinancialRead
             or AcademyPermissions.AcademySettingsManage or AcademyPermissions.StaffProvision or AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage
             or AcademyPermissions.NutritionRead or AcademyPermissions.NutritionManage or AcademyPermissions.MedicalRecordRead or AcademyPermissions.MedicalRecordManage
             or AcademyPermissions.PlayerMediaRead or AcademyPermissions.PlayerMediaManage) allowed = false;

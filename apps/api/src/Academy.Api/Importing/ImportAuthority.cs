@@ -12,7 +12,7 @@ public static class ImportAuthority
     public static async Task<Guid[]?> Check(FoundationDbContext db, Guid academy, Guid actor, Guid membership, bool balances, bool bind = false)
     {
         var m = await db.AcademyMemberships.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == membership && x.AcademyId == academy && x.UserId == actor && x.IsActive && x.User.IsActive && x.Academy.IsActive);
-        if (m is null || m.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) throw new ImportRejected("authority");
+        if (m is null || m.PrimaryMembershipId.HasValue || m.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) throw new ImportRejected("authority");
         if (m.Role == AcademyRole.AcademyAdmin)
         {
             // A queued job must not bypass a newly narrowed sport grant. The

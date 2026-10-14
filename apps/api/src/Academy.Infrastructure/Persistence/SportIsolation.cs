@@ -111,11 +111,16 @@ public sealed partial class FoundationDbContext
         await Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{RequestAcademyId}:{RequestMembershipId}"}, 0))", token);
         var m = await AcademyMemberships.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == RequestAcademyId && x.Id == RequestMembershipId && x.UserId == RequestUserId && x.IsActive && x.User.IsActive && x.Academy.IsActive, token);
         if (m is null || m.Role != AcademyRole.AcademyAdmin || !m.UseActionGrants) throw new ResourceScopeException();
+        if (m.PrimaryMembershipId is Guid primary)
+        {
+            await Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{RequestAcademyId}:{primary}"}, 0))", token);
+            if (!await AcademyMemberships.IgnoreQueryFilters().AnyAsync(p => p.Id == primary && p.AcademyId == RequestAcademyId && p.UserId == RequestUserId && p.PrimaryMembershipId == null && p.Role == AcademyRole.AcademyAdmin && p.IsActive, token)) throw new ResourceScopeException();
+        }
         if (!m.AllSports)
         {
             var sports = await MembershipSportAccesses.IgnoreQueryFilters().Where(a => a.AcademyId == RequestAcademyId && a.MembershipId == m.Id && a.IsActive
                 && Sports.IgnoreQueryFilters().Any(s => s.AcademyId == RequestAcademyId && s.Id == a.SportId && s.IsActive)).Select(a => a.SportId).ToArrayAsync(token);
-            if (RequestSportIds.Any(id => !sports.Contains(id))) throw new ResourceScopeException();
+            if (!SportScopeRestricted || RequestSportIds.Any(id => !sports.Contains(id))) throw new ResourceScopeException();
         }
         if (!m.AllBranches)
         {

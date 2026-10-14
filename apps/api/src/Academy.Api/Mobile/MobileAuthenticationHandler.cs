@@ -37,6 +37,8 @@ public sealed class MobileAuthenticationHandler(
             !session.Membership.Academy.IsActive || session.Membership.UserId != session.UserId ||
             session.Membership.Role is not (AcademyRole.Guardian or AcademyRole.Coach or AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)))
             return AuthenticateResult.Fail("Inactive mobile membership");
+        if (session.Membership?.PrimaryMembershipId is Guid primary && !await db.AcademyMemberships.AnyAsync(m => m.Id == primary && m.AcademyId == session.Membership.AcademyId && m.UserId == session.UserId && m.PrimaryMembershipId == null && m.Role == AcademyRole.AcademyAdmin && m.IsActive))
+            return AuthenticateResult.Fail("Inactive primary mobile membership");
         var identity = new ClaimsIdentity(SchemeName, ClaimTypes.Name, ClaimTypes.Role);
         identity.AddClaim(new(ClaimTypes.NameIdentifier, session.UserId.ToString()));
         identity.AddClaim(new(ClaimTypes.Name, session.User.UserName ?? session.UserId.ToString()));

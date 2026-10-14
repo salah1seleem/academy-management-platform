@@ -38,7 +38,7 @@ public static class PayrollEndpoints
         return Results.Ok(new {
             items = await db.Employees.Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.Phone, x.JobTitle, x.BranchId, x.MonthlySalary, x.Currency, x.ContractStart, x.ContractEnd, x.MembershipId, x.IsActive, photoUrl = x.PhotoAssetId == null ? null : "/api/v1/assets/" + x.PhotoAssetId }).ToListAsync(),
             branches = await db.Branches.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
-            accounts = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && (x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyAdmin) && x.IsActive && !db.Employees.Any(e => e.AcademyId == t.AcademyId && e.MembershipId == x.Id)).Select(x => new { x.Id, name = x.User.DisplayName, phone = x.User.PhoneNumber }).ToListAsync()
+            accounts = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.PrimaryMembershipId == null && (x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyAdmin) && x.IsActive && !db.Employees.Any(e => e.AcademyId == t.AcademyId && e.MembershipId == x.Id)).Select(x => new { x.Id, name = x.User.DisplayName, phone = x.User.PhoneNumber }).ToListAsync()
         });
     }
     private static async Task<IResult> EmployeeDetail(Guid id, CurrentTenant tenant, FoundationDbContext db)
@@ -51,7 +51,7 @@ public static class PayrollEndpoints
         var phone = EgyptPhoneNormalizer.Normalize(body.Phone);
         if (string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 160 || string.IsNullOrWhiteSpace(body.JobTitle) || body.JobTitle.Length > 100 || phone is null || body.MonthlySalary < 0 || body.MonthlySalary > 100_000_000 || decimal.Round(body.MonthlySalary, 2) != body.MonthlySalary || body.ContractStart == default || body.ContractEnd < body.ContractStart) return "أدخل بيانات موظف وراتب وتواريخ عقد صحيحة.";
         if (!await db.Branches.AnyAsync(x => x.AcademyId == academy && x.Id == body.BranchId && x.IsActive)) return "اختر فرعًا فعالًا من الأكاديمية.";
-        if (body.MembershipId.HasValue && !await db.AcademyMemberships.AnyAsync(x => x.AcademyId == academy && x.Id == body.MembershipId && x.IsActive && (x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyAdmin))) return "اختر حساب موظف صالحًا داخل الأكاديمية.";
+        if (body.MembershipId.HasValue && !await db.AcademyMemberships.AnyAsync(x => x.AcademyId == academy && x.Id == body.MembershipId && x.PrimaryMembershipId == null && x.IsActive && (x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyAdmin))) return "اختر حساب موظف صالحًا داخل الأكاديمية، وليس سياق صلاحيات إضافيًا.";
         if (await db.Employees.AnyAsync(x => x.AcademyId == academy && x.Id != id && (x.Phone == phone || body.MembershipId.HasValue && x.MembershipId == body.MembershipId))) return "الهاتف أو الحساب مرتبط بموظف آخر.";
         if (body.PhotoAssetId.HasValue && !await db.PrivateAssets.AnyAsync(x => x.AcademyId == academy && x.Id == body.PhotoAssetId && x.Purpose == "StaffPhoto" && x.IsActive)) return "اختر صورة موظف مرفوعة في هذه الأكاديمية.";
         return null;

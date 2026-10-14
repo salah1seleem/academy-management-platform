@@ -191,6 +191,7 @@ app.MapPlatformIdentity();
 app.MapPlatformAcademies();
 app.MapStaffAccess();
 app.MapStaffRoleTemplates();
+app.MapStaffAccessContexts();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false, ResponseWriter = HealthResponseWriter.WriteAsync });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready"), ResponseWriter = HealthResponseWriter.WriteAsync });
@@ -212,13 +213,14 @@ api.MapPost("/auth/login", async (LoginRequest request, UserManager<ApplicationU
     if (user is null || !user.IsActive || passwordResult is null || !passwordResult.Succeeded)
         return Results.Problem(statusCode: 401, title: "تعذر تسجيل الدخول", detail: "بيانات الدخول غير صحيحة.");
     var membership = await db.AcademyMemberships.AsNoTracking()
-        .Where(x => x.UserId == user.Id && x.IsActive && x.Academy.IsActive &&
+        .Where(x => x.UserId == user.Id && x.IsActive && x.Academy.IsActive && (x.PrimaryMembershipId == null || x.PrimaryMembership!.IsActive && x.PrimaryMembership.PrimaryMembershipId == null && x.PrimaryMembership.Role == AcademyRole.AcademyAdmin) &&
             (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin))
-        .OrderBy(x => x.CreatedAtUtc).FirstOrDefaultAsync();
+        .OrderBy(x => x.PrimaryMembershipId != null).ThenBy(x => x.CreatedAtUtc).FirstOrDefaultAsync();
     if (membership is null)
         return Results.Problem(statusCode: 403, title: "الدخول غير متاح", detail: "لوحة الإدارة متاحة للمالك والإداري فقط.");
-    await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
-    return Results.Ok(new { authenticated = true });
+    var requiresContextSelection = await db.AcademyMemberships.CountAsync(x => x.UserId == user.Id && x.IsActive && x.Academy.IsActive && (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin) && (x.PrimaryMembershipId == null || x.PrimaryMembership!.IsActive && x.PrimaryMembership.PrimaryMembershipId == null && x.PrimaryMembership.Role == AcademyRole.AcademyAdmin)) > 1;
+    await Program.SignInAsync(context, user, membership.AcademyId, membership.Id, contextPending: requiresContextSelection);
+    return Results.Ok(new { authenticated = true, requiresContextSelection });
 }).AddEndpointFilter<CsrfFilter>();
 
 api.MapPost("/auth/guardian/otp/request", async (GuardianOtpRequest request, FoundationDbContext db,
@@ -270,23 +272,27 @@ api.MapPost("/auth/logout", async (HttpContext context) =>
     return Results.NoContent();
 }).RequireAuthorization().AddEndpointFilter<CsrfFilter>();
 
-api.MapGet("/me", async (ClaimsPrincipal principal, UserManager<ApplicationUser> users, CurrentTenant tenant) =>
+api.MapGet("/me", async (ClaimsPrincipal principal, UserManager<ApplicationUser> users, CurrentTenant tenant, FoundationDbContext db) =>
 {
     var user = await users.GetUserAsync(principal);
     var current = await tenant.ResolveAsync();
     return user is null || current is null ? Results.Unauthorized() : Results.Ok(new
     {
-        userId = user.Id, user.DisplayName, academyId = current.AcademyId, academyName = current.AcademyName, role = current.Role.ToString()
+        userId = user.Id, user.DisplayName, academyId = current.AcademyId, academyName = current.AcademyName, role = current.Role.ToString(), membershipId = current.MembershipId,
+        contextName = await db.AcademyMemberships.Where(m => m.Id == current.MembershipId).Select(m => m.AccessContextName).SingleAsync()
     });
 }).RequireAuthorization(AcademyPermissions.TenantAccess);
 
-api.MapGet("/my-academies", async (ClaimsPrincipal principal, FoundationDbContext db) =>
+api.MapGet("/my-academies", async (ClaimsPrincipal principal, FoundationDbContext db, HttpResponse response) =>
 {
     var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var items = await db.AcademyMemberships.AsNoTracking()
-        .Where(x => x.UserId == userId && x.IsActive && x.Academy.IsActive)
+        .Where(x => x.UserId == userId && x.User.IsActive && x.IsActive && x.Academy.IsActive && (x.PrimaryMembershipId == null || x.PrimaryMembership!.IsActive && x.PrimaryMembership.PrimaryMembershipId == null && x.PrimaryMembership.Role == AcademyRole.AcademyAdmin))
         .OrderBy(x => x.Academy.ArabicName)
-        .Select(x => new { academyId = x.AcademyId, academyName = x.Academy.ArabicName, role = x.Role.ToString() }).ToListAsync();
+        .Select(x => new { membershipId = x.Id, academyId = x.AcademyId, academyName = x.Academy.ArabicName, role = x.Role.ToString(), contextName = x.AccessContextName, x.AllBranches, x.AllSports,
+            branchNames = db.Branches.Where(b => db.MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.BranchId == b.Id && a.IsActive)).Select(b => b.ArabicName).ToArray(),
+            sportNames = db.Sports.Where(s => db.MembershipSportAccesses.Any(a => a.MembershipId == x.Id && a.SportId == s.Id && a.IsActive)).Select(s => s.ArabicName).ToArray() }).ToListAsync();
+    response.Headers.CacheControl = "no-store";
     return Results.Ok(items);
 }).RequireAuthorization();
 
@@ -296,11 +302,16 @@ api.MapPost("/session/academy", async (SelectAcademyRequest request, ClaimsPrinc
     if (principal.Identity?.AuthenticationType == MobileAuthenticationHandler.SchemeName) return Results.Forbid();
     var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var memberships = await db.AcademyMemberships.AsNoTracking()
-        .Where(x => x.UserId == userId && x.AcademyId == request.AcademyId && x.IsActive && x.Academy.IsActive).ToListAsync();
+        .Where(x => x.UserId == userId && x.AcademyId == request.AcademyId && x.User.IsActive && x.IsActive && x.Academy.IsActive && (x.PrimaryMembershipId == null || x.PrimaryMembership!.IsActive && x.PrimaryMembership.PrimaryMembershipId == null && x.PrimaryMembership.Role == AcademyRole.AcademyAdmin)).ToListAsync();
     var selectedId = principal.FindFirstValue("membership_id");
-    var membership = memberships.FirstOrDefault(x => x.Id.ToString() == selectedId)
-        ?? (memberships.Count == 1 ? memberships[0] : null);
+    var membership = request.MembershipId.HasValue ? memberships.SingleOrDefault(x => x.Id == request.MembershipId)
+        : memberships.FirstOrDefault(x => x.Id.ToString() == selectedId) ?? (memberships.Count == 1 ? memberships[0] : null);
     if (membership is null) return Results.Forbid();
+    // A web staff session cannot use this endpoint to become a coach or guardian.
+    var oldRole = Guid.TryParse(selectedId, out var oldId) ? await db.AcademyMemberships.Where(x => x.Id == oldId && x.UserId == userId).Select(x => (AcademyRole?)x.Role).SingleOrDefaultAsync() : null;
+    if (principal.FindFirstValue("web_staff_context_pending") == "true" || oldRole is AcademyRole.AcademyAdmin or AcademyRole.AcademyOwner)
+    { if (membership.Role is not (AcademyRole.AcademyAdmin or AcademyRole.AcademyOwner)) return Results.Forbid(); }
+    else if (oldRole != membership.Role) return Results.Forbid();
     var user = await users.FindByIdAsync(userId.ToString());
     if (user is null || !user.IsActive) return Results.Unauthorized();
     // Same authenticated account only. Revoking and signing in in one request
@@ -417,6 +428,11 @@ if (app.Environment.IsEnvironment("Demo"))
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
             if (app.Configuration.GetValue<bool>("Demo:SportScopeSeedEnabled")) await SportScopeDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+            if (app.Configuration.GetValue<bool>("Demo:AccessContextSeedEnabled"))
+            {
+                await SportScopeDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+                await AccessContextDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+            }
             if (app.Configuration.GetValue<bool>("Demo:FamilyRenewalSeedEnabled")) await FamilyRenewalDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
             if (app.Configuration.GetValue<bool>("Demo:FreeTrainingSeedEnabled")) await FreeTrainingDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
             await ReceivableDemoSeed.SeedAsync(db);
@@ -478,20 +494,21 @@ app.Run();
 public sealed record LoginRequest(string Email, string Password);
 public sealed record GuardianOtpRequest(string PhoneNumber);
 public sealed record GuardianOtpVerifyRequest(Guid ChallengeId, string PhoneNumber, string Code);
-public sealed record SelectAcademyRequest(Guid AcademyId);
+public sealed record SelectAcademyRequest(Guid AcademyId, Guid? MembershipId = null);
 public sealed record CreateStaffRequest(string Email, string DisplayName, string TemporaryPassword, AcademyRole Role);
 
 public partial class Program
 {
     public static IResult ActiveSessionConflict() => Results.Problem(statusCode:409, title:"توجد جلسة دخول نشطة",detail:"سجّل الخروج أولًا قبل الدخول بحساب آخر.");
-    public static async Task SignInAsync(HttpContext context, ApplicationUser user, Guid academyId, Guid membershipId, AuthenticationProperties? current = null)
+    public static async Task SignInAsync(HttpContext context, ApplicationUser user, Guid academyId, Guid membershipId, AuthenticationProperties? current = null, bool contextPending = false)
     {
         var identity = new ClaimsIdentity(IdentityConstants.ApplicationScheme, ClaimTypes.Name, ClaimTypes.Role);
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
         identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName ?? user.Id.ToString()));
         identity.AddClaim(new Claim("AspNet.Identity.SecurityStamp", user.SecurityStamp ?? string.Empty));
         identity.AddClaim(new Claim("academy_id", academyId.ToString()));
-        identity.AddClaim(new Claim("membership_id", membershipId.ToString()));
+        if (contextPending) identity.AddClaim(new Claim("web_staff_context_pending", "true"));
+        else identity.AddClaim(new Claim("membership_id", membershipId.ToString()));
         identity.AddClaim(new Claim("attendance_session", current is null ? Guid.NewGuid().ToString("N") : context.User.FindFirstValue("attendance_session") ?? Guid.NewGuid().ToString("N")));
         var principal = new ClaimsPrincipal(identity);
         var now = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();

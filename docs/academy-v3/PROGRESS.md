@@ -1,6 +1,6 @@
 # تقدم أكاديميتي V2 + V3
 
-آخر تحديث: 2026-10-14. المستودع `salah1seleem/academy-management-platform`؛ الفرع `codex/15-native-mobile-app`؛ Starting HEAD `3d5a60d5026a5b8cd54bcf3f1f43abcf1ea6934e`، الحالة كانت نظيفة. `main` محفوظ عند `abda1ed273030e69812321e5c14d260bbc2e2275`.
+آخر تحديث: 2026-10-15 (القاهرة). المستودع `salah1seleem/academy-management-platform`؛ الفرع `codex/15-native-mobile-app`؛ Starting HEAD `3d5a60d5026a5b8cd54bcf3f1f43abcf1ea6934e`، الحالة كانت نظيفة. `main` محفوظ عند `abda1ed273030e69812321e5c14d260bbc2e2275`.
 
 ## المصادر والصدق
 
@@ -14,7 +14,7 @@
 |---|---|---|---|---|
 | V2-00 | verified_reuse | مصدر V2 و85 حالة قبول محفوظة؛ المرجع المرفق مطابق SHA-256. | docs/delivery/V2_EXECUTION.md | توثيق خريطة V3 الجديدة |
 | V2-01 | partial | tokens/navigation/tabs وجداول وFlutter للأدوار موجودة. | apps/web/src/components؛ apps/mobile/lib/features | إعادة تركيب الرحلات وقياسات360/390/430/200% |
-| V2-02 | partial | هوية منصة، configuration versions، entitlement، branch/CRUD؛ قوالب بداية B1 ونوع رياضة وإعداد مسبح لكل فرع B2. | Auth/StaffAccessRules؛ SportSettingsEndpoints؛ V2StaffScopeTests؛ V3SwimmingSettingsTests | نطاق رياضة مرتبط بالدور وأدوار مخصصة؛ wizard ودعم محدود؛ إكمال gating بقية الخدمات |
+| V2-02 | partial | هوية منصة/configuration/entitlement؛ B2 إعداد مسبح لكل فرع؛ B3a نطاق رياضة؛ B3b1 قوالب مخصصة وB3b2 سياقات إدارية مستقلة. | Auth/StaffAccessRules؛ SportSettingsEndpoints؛ V2StaffScopeTests؛ V3SwimmingSettingsTests؛ V3AccessContextTests | relation_scope مخصص وأفعال حساسة مستقلة؛ wizard ودعم محدود؛ gating بقية الخدمات |
 | V2-03 | partial | Products/quotes/discounts/receivables وفرص التجديد. | V2PlanPublicationTests؛ V2ReceivablesTests | الخدمات المستقلة وربط استحقاق الإيراد |
 | V2-04 | partial | schema/template/preview/commit وإعادة آمنة للوضع البسيط. | V2ImportPreviewTests؛ V2ImportCommitTests | مستويات وعلاقات متقدمة/أرصدة مع الدفتر الجديد |
 | V2-05 | partial | مرافق وحارات وحجوزات وتسكين ونقل وسعة. | V2FacilityTests؛ V2ResourceTimetableTests؛ V2GroupPlacementTests | بوابات نهائية؛ دمج خاص/خارجي مع الفصل الرياضي |
@@ -43,9 +43,9 @@
 | V3-AC06 | partial | إيقاف خدمات المسبح يمنع الحجز/الدخول/العرض الجديد ويحفظ التاريخ؛ seed يحترم الإيقاف | التاريخ المالي للموديولات الجديدة وdowngradeالشامل في القبول النهائي |
 | V3-AC07 | partial | MobileAuthenticationTests؛ coach-create | دعوة/تفعيل هاتف وربط مهني تحتاج إعادة قبول |
 | V3-AC08 | partial | TenantAuthenticationTests؛ MobileAuthenticationTests | جلسات موجودة؛ إعادة قبول V3 وسحبها باق |
-| V3-AC09 | partial | B1 قوالب ومعاينة؛ B3a نطاق فرع/رياضة؛ B3b1 إنشاء/نسخ/تعديل/أرشفة قوالب مخصصة وتطبيق نسخة بعد المراجعة | قوالب محفوظة وليست محرك أدوار متعددة؛ مسؤوليات ومنح مستقلة لكل سياق باقية |
-| V3-AC10 | partial | B3a: MembershipSportAccess مع نفس العضوية المختارة ونطاق فروعها؛ اختبار منع خلط الدور الثاني | تكوين عدة أدوار مخصصة ومنح علاقة مستقلة لكل دور باق |
-| V3-AC11 | partial | B3a: سحب أثناء جلسة وأثناء أمر معلق؛ قراءة/كتابة/CSV وطلب أسرة متعدد الرياضات | بقية السياقات والأدوار المخصصة والكاش في الجولة النهائية |
+| V3-AC09 | partial | B3b1 قوالب مخصصة؛ B3b2 سياقات إدارية مسماة بمصفوفة/فرع/رياضة مستقلين ومراجعة وتفعيل | تخصيص self/assigned والأفعال الحساسة المستقلة ودعوات/ربط الملفات باقي |
+| V3-AC10 | implemented_pending_verification | V3AccessContextTests: سياق قوي فيA/رياضة1 وآخر قراءة فيB/رياضة2؛ Web/Flutter يختاران عضوية واحدة؛ E2E3/3 | تحقق مستهدف مثبت؛ إعادة القبول الموحدة مع المجالات المالية القادمة باقية |
+| V3-AC11 | partial | B3b2: سحب/إيقاف أثناء الجلسة والحفظ، parent activity، تدوير tokens وإصدار يعيد بناء صفحات Flutter عند refresh | الجولة الموحدة وسياقات/مصادر المال القادمة باقية؛ استيراد السياق الإضافي مرفوض حاليًا |
 | V3-AC12 | partial | TenantAuthenticationTests؛ StaffManagement | رفض الأدوار موجود؛ آخر مالك يحتاج قبول موحد |
 | V3-AC13 | missing | FacilityService وTrainingSession كأصول إعادة استخدام | private مالي من ملف مدرب لم ينفذ |
 | V3-AC14 | missing | PayrollEndpoints أساسي فقط | عمولة منفذ/محصل واتفاق معتمد ناقصة |
@@ -77,7 +77,7 @@
 | V3-AC40 | partial | owner-home؛ financial-decisions؛ feedback | دورة مهام/مصادر كاملة وربط المالي الجديد |
 | V3-AC41 | partial | V2RenewalOpportunityTests | مثال12700 قائم؛ إعادة قبول موحدةV3 |
 | V3-AC42 | partial | V2OperatingExpenseTests؛ ReportingIntegrationTests | نتيجة مكتملة/ناقصة وcutoff ledger |
-| V3-AC43 | partial | TenantAuthenticationTests؛ V2StaffScopeTests؛ V3SportScopeTests؛ V3MixedSportFamilyScopeTests | عزل الرياضة التشغيلي متحقق؛ أدوار مخصصة والموديولات المالية الجديدة والقبول النهائي باقية |
+| V3-AC43 | partial | TenantAuthenticationTests؛ V3SportScopeTests؛ V3MixedSportFamilyScopeTests؛ V3AccessContextTests | عزل الرياضة والسياق التشغيلي متحقق؛ علاقة مخصصة وأفعال حساسة والمجالات المالية الجديدة والقبول النهائي باقية |
 | V3-AC44 | partial | OperatingExpenseAllocationTests؛ PayrollCalculatorTests | التوزيع موجود؛ نتيجة المجموعة والأجر المركب الفعلي ناقص |
 | V3-AC45 | partial | V2ImportCommitTests | 1000 صف موجود تاريخيًا؛ توسعاتV3/reconciliation باقية |
 | V3-AC46 | partial | tests/e2e/specs + football | جولة موحدة على candidate لاحقًا |
@@ -171,3 +171,21 @@ CI B3a [38609005372](https://github.com/salah1seleem/academy-management-platform
 قاعدة الاختبار السابقة احتفظت بخمس تسجيلات من التشغيلات القديمة، لذلك أعادت الجولة الأولى18/19 هذا الفشل المتوقع؛ لم تمسح أو تعدل تلك البيانات. أنشئت `academy_v3_fixture_20261014` مستقلة على PostgreSQL المحلي، وطبقت migrations القائمة كما هي. الاختبار القديم **1/1 قبل** رحلة الأسرة، ثم رحلة الأسرة المصححة **1/1**، ثم مجموعة `StructurePeopleEnrollmentTests|V2StaffScopeTests|V3_mixed_sport_family` **36/36 في98s** على نفس القاعدة بعد الرحلة؛ تضم الاختبار القديم مجددًا. EF بلا pending model. الإصلاح في `5aad08c616d8f8ec82fd0c08d060e9365b64a6a1`، ولا وصف لانحدار CI جديد بالنجاح قبل انتهائه.
 
 نقطة الاستئناف الحالية: افحص CI لأحدث HEAD أولًا، ولا تعاود إنشاء القوالب أو إصلاح fixture المغلق. B3b2 هي الفجوة التالية: منح مرتبطة بدور/فرع/رياضة/مسؤولية، مع سياق مختار لا يجمع أذونات النطاقات؛ أعِد استخدام مصفوفة B3a والقوالب والأقفال والتحقق الحي، واختبر دورًا قويًا فيA وأضعف فيB وسحب المنحة أثناء الجلسة. ثم C وF10 وبقية الخريطة؛ لا انتظار موافقة UI روتينية ولا ادعاء اكتمال V2+V3 أو استمرار خارج التشغيل.
+
+## B3b2 — سياقات إدارية مترابطة واختيار آمن — 14–15 أكتوبر 2026
+
+البداية `8fccd9c1f91bdb12e350e05553188da6a9bdd041`، فرع `codex/15-native-mobile-app` نظيف ومطابق origin. بطاقة: توصية Sol/High للتفويض والعزل؛ لا تغيير لإعدادات المستخدم ولا subagents. CI السابق38625309723 نجح Frontend/Flutter/E2E؛ Backend كان جاريًا في آخر فحص، لا ادعاء انحدار كامل جديد.
+
+من الموظفين → سياقات العمل، يضيف المالك سياقًا مسمى إلى الإداري **بنفس User**، لا ينشئ حسابًا أو موظفًا/راتبًا مكررًا. يبدأ موقوفًا بلا منح؛ يفتح محرر الصلاحيات الحالي ليختار قالبًا وفروعًا ورياضات، ثم يفعله بعد مراجعة صريحة. الاسم والحالة لهما revision؛ تعارض النسخة409 لا يمحو المدخلات. يمكن إيقاف سياق دون سحب بقية سياقات الشخص أو عضوياته في أكاديميات أخرى. الاسم «مالك» لا يغير AcademyRole أو يمنح منصة.
+
+تُعاد الاستفادة من AcademyMembership كوحدة تفويض مختارة، ومن StaffActionGrants/MembershipBranchAccess/MembershipSportAccess القائمة لكل وحدة؛ لا اتحاد بين المصفوفات ولا محرك صلاحيات موازٍ. PrimaryMembershipId يربط السياق الإداري الإضافي بالعضوية الأساسية لنفس user/academy، بمفتاح مركب وحارس PostgreSQL يمنع الأب الأجنبي/سياقًا أبًا/تغيير الهوية أو Role. الفهرس الفريد السابق باقٍ للعضويات الأساسية؛ لا تحويل آلي أو توسيع منحها. إيقاف الأساس يمنع سياقاته في HTTP وMobile refresh، ولا يتغير آخر مالك أو حسابه.
+
+Web: دخول متعدد السياقات لا يملك بيانات تشغيل قبل اختيار صريح؛ اختيار membership/academy يُتحقق من صاحبه ونشاطه، ويبقى دخول الداشبورد للمالك/الإداري. التبديل يعيد تحميل الصفحة بالكامل لإسقاط حالة السياق السابق. Flutter: نفس شاشة الاختيار القائمة تعرض الاسم والفرع/الرياضة، وتدوير access/refresh tokens يستمر عبر الخدمة القائمة. ContextRevision في رد الجلسة يغير مفتاح navigator عند refresh بعد تعديل المنح، فلا تبقى صفحات خاصة من الإصدار السابق. كل طلب خادمي يتحقق من المنح الحية؛ الأوامر تعيد التحقق تحت أقفال السياق ثم الأساس حتى مع all-sports. worker يرفض الاستيراد بالسياق الإضافي؛ لا job يخمن نطاقًا أوسع.
+
+**الحد المحافظ المعلن:** السياقات الجديدة للتشغيل المفوض، وليست تفويض رواتب/إدارة مستخدمين/صناديق أو بيانات طفل مشتركة غير قابلة للتجزئة. الخادم يرفض تلك المسارات ويوضحها محرر الصلاحيات، حتى لو نسخ قالبًا يحتوي إذنها؛ المالك/التفويض الواسع الأساسي الصحيح لم يتغير. دعم الأفعال المالية المستقلة وrelation_scope مخصص للمدير الرياضي/المعالج/الذات ما زال مطلوبًا، لا يُلغى بهذا الحد. V2-02 وV3-AC09/11/12 لا تُغلق؛ AC10 منفذ بانتظار القبول الموحد.
+
+Migration `20261014202341_V3CorrelatedAdministrativeContexts` طبقت على `academy_v3_fixture_20261014` و`academy_v3_e2e_20261014` فقط، دون reset. downgrade يرفض قبل حذف أعمدة إن وُجدت سياقات؛ لم يُنفذ. EF بلا pending model. لا تعديل `.env` أو قاعدة المراجعة أو المتطلبات أو main. بيانات العرض opt-in `Demo__AccessContextSeedEnabled=true` مع Demo/LegacyRegression/seed المأمون المعتاد: نفس `football.operator.v3@example.test` له سياق كرة قدم أساسي وسياق «متابعة السباحة — التجمع — عرض اصطناعي» قراءة؛ seed يحفظ الإيقاف والتعديلات ويرفض Production. ليست بيانات V3 الشاملة لثلاث أكاديميات.
+
+التحقق النهائي: **69/69 تكامل في221s** للصلاحيات/هوية الويب والموبايل/فلتر المجموعة، بينها6 حالات سياق جديدة؛ **38/38 Web**، typecheck/lint؛ **19/19 Flutter** وanalyze؛ **3/3 E2E في36s** مع production build. رحلة الإنشاء → نطاق → تفعيل → دخول pending → اختيار الضعيف ومنع الكتابة → القوي وكتابة مخولة. صور [390](evidence/b3b2/context-selection-390.png) و[1440](evidence/b3b2/context-selection-1440.png) مراجعة فعليًا، مع overflow assertion. لا اختبار iOS/Android جهاز فعلي أو جولة V2+V3 موحدة أو Production.
+
+الاستئناف: افحص Git/CI للـHEAD المرفوع ولا تعد إنشاء السياقات. التالية B3b3 للأفعال الحساسة المستقلة وإظهار أثرها في المصفوفة ومعاينة النطاق، مع الحفاظ على self/assigned للمدرب وولي الأمر وعدم تفويض رواتب من تعديل مدرب. ثم C: اتفاق خاص/خارجي ودفتر استحقاق/سداد من المصادر القائمة وgolden F10، يليها بقية V2 وFlutter/الإعلانات/إثبات الجهاز والبوابة الموحدة. كل البنود غير المغلقة في الخريطة ما زالت مطلوبة؛ لا ادعاء اكتمال الخطة.

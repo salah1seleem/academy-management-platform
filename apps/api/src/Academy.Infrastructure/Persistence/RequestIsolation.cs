@@ -30,13 +30,15 @@ public sealed partial class FoundationDbContext
     public Guid[] RequestSportIds { get; private set; } = [];
     public string? RequestModule { get; private set; }
     public string RequestOperation { get; private set; } = "Read";
-    public void BindRequestScope(Guid academy, Guid user, Guid member, Guid[]? branches, Guid[]? sports = null, string? module = null, string operation = "Read")
+    public bool AdditionalContextScope { get; private set; }
+    public void BindRequestScope(Guid academy, Guid user, Guid member, Guid[]? branches, Guid[]? sports = null, string? module = null, string operation = "Read", bool additionalContext = false)
     {
         if (RequestScopeEnabled) throw new InvalidOperationException("Request scope already bound");
         RequestAcademyId = academy; RequestUserId = user; RequestMembershipId = member;
         BranchScopeRestricted = branches is not null; RequestBranchIds = branches ?? [];
         SportScopeRestricted = sports is not null; RequestSportIds = sports ?? [];
         RequestModule = module; RequestOperation = operation;
+        AdditionalContextScope = additionalContext;
         RequestScopeEnabled = true;
     }
     private void ConfigureRequestIsolation(ModelBuilder b)
@@ -156,14 +158,14 @@ public sealed partial class FoundationDbContext
     }
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        using var scopeTransaction = SportScopeRestricted && Database.CurrentTransaction is null ? Database.BeginTransaction() : null;
+        using var scopeTransaction = (SportScopeRestricted || AdditionalContextScope) && Database.CurrentTransaction is null ? Database.BeginTransaction() : null;
         GuardWrites(CancellationToken.None).GetAwaiter().GetResult();
         var saved = base.SaveChanges(acceptAllChangesOnSuccess);
         scopeTransaction?.Commit(); return saved;
     }
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        await using var scopeTransaction = SportScopeRestricted && Database.CurrentTransaction is null ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        await using var scopeTransaction = (SportScopeRestricted || AdditionalContextScope) && Database.CurrentTransaction is null ? await Database.BeginTransactionAsync(cancellationToken) : null;
         await GuardWrites(cancellationToken);
         var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         if (scopeTransaction is not null) await scopeTransaction.CommitAsync(cancellationToken);
@@ -213,7 +215,7 @@ public sealed partial class FoundationDbContext
             if (new[] { nameof(SubscriptionPeriod.Origin), nameof(SubscriptionPeriod.ImportJobId), nameof(SubscriptionPeriod.CollectionId), nameof(SubscriptionPeriod.PriceSnapshot) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("اتفاق الاستيراد ثابت، ولا يتحول إلى تحصيل أو يعاد تسعيره تلقائيًا.");
         if (!RequestScopeEnabled) return;
-        if (SportScopeRestricted) await RevalidateSportAuthority(token);
+        if (SportScopeRestricted || AdditionalContextScope) await RevalidateSportAuthority(token);
         ChangeTracker.DetectChanges();
         var entries = ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted && e.Metadata.FindProperty("AcademyId") is not null).ToArray();
         foreach (var entry in entries)

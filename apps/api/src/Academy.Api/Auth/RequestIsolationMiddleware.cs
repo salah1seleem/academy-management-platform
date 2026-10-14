@@ -23,11 +23,11 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
                     branches = await db.MembershipBranchAccesses.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.IsActive && db.Branches.Any(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId && b.IsActive)).Select(x => x.BranchId).ToArrayAsync(context.RequestAborted);
                 var sports = await MembershipScope.Sports(db, t, context.RequestAborted);
                 db.BindRequestScope(t.AcademyId, Guid.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!), t.MembershipId, branches, sports,
-                    StaffAccessRules.ForPath(path), StaffAccessRules.Operation(context.Request.Method, path));
-                if (sports is not null && !MembershipScope.AllowsNarrowSportPath(path, context.Request.Method))
+                    StaffAccessRules.ForPath(path), StaffAccessRules.Operation(context.Request.Method, path), t.AdditionalContext);
+                if ((sports is not null || t.AdditionalContext) && !MembershipScope.AllowsNarrowSportPath(path, context.Request.Method))
                 {
                     context.Response.StatusCode = 403;
-                    await context.Response.WriteAsJsonAsync(new { title = "هذه العملية تشمل بيانات مشتركة بين الرياضات وتحتاج تفويضًا أوسع من المالك", status = 403 });
+                    await context.Response.WriteAsJsonAsync(new { title = t.AdditionalContext ? "هذا السياق التشغيلي لا يفتح الرواتب أو المستخدمين أو العمليات المشتركة؛ استخدم التفويض الأوسع المخول" : "هذه العملية تشمل بيانات مشتركة بين الرياضات وتحتاج تفويضًا أوسع من المالك", status = 403 });
                     return;
                 }
                 if (t.Role == AcademyRole.AcademyAdmin && await db.AcademyMemberships.Where(x => x.Id == t.MembershipId).Select(x => x.UseActionGrants).SingleAsync(context.RequestAborted))

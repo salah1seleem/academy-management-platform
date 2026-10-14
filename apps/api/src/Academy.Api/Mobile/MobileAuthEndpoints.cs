@@ -52,11 +52,13 @@ public static class MobileAuthEndpoints
     private static Guid UserId(ClaimsPrincipal p) => Guid.Parse(p.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static Guid SessionId(ClaimsPrincipal p) => Guid.Parse(p.FindFirstValue("mobile_session_id")!);
     private static IQueryable<AcademyMembership> Eligible(FoundationDbContext db, Guid user) =>
-        db.AcademyMemberships.Where(x => x.UserId == user && x.IsActive && x.User.IsActive && x.Academy.IsActive &&
+        db.AcademyMemberships.Where(x => x.UserId == user && x.IsActive && x.User.IsActive && x.Academy.IsActive && (x.PrimaryMembershipId == null || x.PrimaryMembership!.IsActive && x.PrimaryMembership.PrimaryMembershipId == null && x.PrimaryMembership.Role == AcademyRole.AcademyAdmin) &&
             (x.Role == AcademyRole.Guardian || x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin));
     private static Task<List<MobileMembership>> Memberships(FoundationDbContext db, Guid user) =>
         Eligible(db, user).OrderBy(x => x.Academy.ArabicName).ThenBy(x => x.Id)
-            .Select(x => new MobileMembership(x.Id, x.AcademyId, x.Academy.ArabicName, x.Role.ToString())).ToListAsync();
+            .Select(x => new MobileMembership(x.Id, x.AcademyId, x.Academy.ArabicName, x.Role.ToString(), x.AccessContextName, x.AllBranches, x.AllSports,
+                db.Branches.Where(b => db.MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.BranchId == b.Id && a.IsActive)).Select(b => b.ArabicName).ToArray(),
+                db.Sports.Where(s => db.MembershipSportAccesses.Any(a => a.MembershipId == x.Id && a.SportId == s.Id && a.IsActive)).Select(s => s.ArabicName).ToArray(), x.ContextRevision)).ToListAsync();
 
     private static async Task<IResult> RequestOtp(MobileOtpRequest request, FoundationDbContext db,
         IOptions<DemoOptions> options, IHostEnvironment env, TimeProvider clock)
@@ -177,6 +179,6 @@ public sealed record MobileOtpRequest(string PhoneNumber);
 public sealed record MobileOtpVerify(Guid ChallengeId, string PhoneNumber, string Code, string DeviceName);
 public sealed record MobileRefresh(string RefreshToken);
 public sealed record MobileRoleSelection(Guid MembershipId);
-public sealed record MobileMembership(Guid Id, Guid AcademyId, string AcademyName, string Role);
+public sealed record MobileMembership(Guid Id, Guid AcademyId, string AcademyName, string Role, string? ContextName = null, bool AllBranches = true, bool AllSports = true, string[]? BranchNames = null, string[]? SportNames = null, int ContextRevision = 0);
 public sealed record MobileCredentials(string AccessToken, string RefreshToken, DateTimeOffset AccessExpiresAtUtc,
     DateTimeOffset RefreshExpiresAtUtc, Guid? MembershipId, string DisplayName, List<MobileMembership> Memberships);

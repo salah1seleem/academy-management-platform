@@ -24,7 +24,7 @@ public static class StaffManagement
     private static async Task<IResult> List(CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        var members = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && (x.Role == AcademyRole.AcademyAdmin || x.Role == AcademyRole.Coach)).OrderBy(x => x.User.DisplayName).Select(x => new { x.Id, name = x.User.DisplayName, x.User.Email, x.User.PhoneNumber, role = x.Role.ToString(), x.JobTitle, x.IsActive, grants = db.StaffGrants.Where(g => g.AcademyId == t.AcademyId && g.MembershipId == x.Id).Select(g => new { g.Permission, g.Allowed }).ToList() }).ToListAsync();
+        var members = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.PrimaryMembershipId == null && (x.Role == AcademyRole.AcademyAdmin || x.Role == AcademyRole.Coach)).OrderBy(x => x.User.DisplayName).Select(x => new { x.Id, name = x.User.DisplayName, x.User.Email, x.User.PhoneNumber, role = x.Role.ToString(), x.JobTitle, x.IsActive, grants = db.StaffGrants.Where(g => g.AcademyId == t.AcademyId && g.MembershipId == x.Id).Select(g => new { g.Permission, g.Allowed }).ToList() }).ToListAsync();
         return Results.Ok(new { permissions = Permissions, members });
     }
     private static async Task<IResult> Create(StaffWrite body, CurrentTenant tenant, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock)

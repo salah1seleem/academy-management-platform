@@ -1,5 +1,17 @@
 # أدلة قبول V2 + V3
 
+## B3b2 — السياق الإداري المستقل
+
+Migration `20261014202341_V3CorrelatedAdministrativeContexts` على fixture/E2E المعزولتين، وEF has-pending-model-changes ناجح. تحفظ فهرس تفرد العضويات الأساسية وتضيف ارتباط user/academy مركبًا وحارس هوية السياق؛ لا ترحيل آلي لصلاحيات أو بيانات عملاء ولا downgrade فعلي.
+
+`dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~MobileAuthenticationTests|FullyQualifiedName~TenantAuthenticationTests|FullyQualifiedName~Group_filter_returns_only_group_players' --no-restore --nologo -v minimal`، باتصال `academy_v3_fixture_20261014`: **69/69 في221s**. ست حالات جديدة تغطي Owner/CSRF/tenant/حالة افتراضية/منع إنشاء موظف مكرر/رفض worker وحارسSQL23514؛ قويA/رياضة1 وضعيفB/رياضة2، قراءة وCSV/منع كتابة وIDOR وسحب فوري؛ دخول Web pending قبل الاختيار؛ حفظ معلق بعد الإيقاف/all-sports وبعد إيقاف الأساس؛ Mobile token rotation واختيار صريح وإصدار3→4 عند تعديل المنح ورفض refresh بعد الإيقاف؛ seed متكرر وحفظ السحب ورفض Production. كان68/68 قبل إضافة بوابة pending الخادمية، ثم أعيدت المجموعة المتأثرة69/69 بعد آخر تغيير، فلا تجمع العددين.
+
+Web **38/38** في11 ملفًا، typecheck/lint ناجحان؛ الاختيار الصريح والرفض يحفظان المدخلات، الإنشاء لا يفعّل، التفعيل/الإيقاف مؤكدان بالنسخة، ودخول متعدد السياقات يفتح الاختيار. Flutter **19/19** فيaccess_context/auth_controller/widget معanalyze؛ ثلاثة اختبارات سياق جديدة تشمل الاسم والنطاق والإصدار وعرض دورين إداريين مميزين. لا تشغيل simulator أو اختبار جهاز خادمي بهذه الشريحة.
+
+E2E `v3-access-contexts.spec.ts v3-custom-role-templates.spec.ts v2-staff-access.spec.ts` على5186/3106 وقاعدةE2E: **3/3 في36s** مع production build. إنشاء ومراجعة وتفعيل من UI، دخول بلا بيانات قبل الاختيار، نطاق الضعيف ومنع كتابة، ثم نطاق القوي وكتابة صحيحة؛ القوالب وتفويض V2 السابقان بقيا يعملان. صور390/1440 تحتevidence/b3b2، مراجعة فعلية وأبعاد بلا overflow. المحاولة الأولى2/3: عنوان الاختبار «اللاعبون» لا يطابق العنوان الفعلي «قائمة اللاعبين»؛ صُحح locator إلى الاسم الفعلي دون حذف assertion. أخطاء إعداد الاختبار الأولى كانت تغيير مفتاح BranchId بدل إنشاء مجموعة مستقلة، وLIKE علىjsonb، ومسارoptions غير موجود؛ صححت fixtures/قراءةJSON/المسار، لا منطق المنتج أو assertions الأمن. أمر EF الأول افتقدConnectionStrings، وأمر npm نُفذ منmobile بدلالجذر؛ صحح السياق فقط، بلا تثبيت أو تغيير إعدادات.
+
+الدليل يخص السياقات الإدارية التشغيلية. الأفعال المالية الحساسة المستقلة وrelation_scope المخصص وبقية48قبول والانحدار النهائي باقية؛ لا CI أخضر لهذا الكود قبل تشغيله عن بُعد.
+
 ## B3b1 — القوالب المخصصة
 
 Migration `20261014185336_V3ReusableStaffPermissionTemplates` مطبقة على قاعدتي الاختبار V3 فقط؛ has-pending-model-changes نجح. `dotnet test ... --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family' --no-restore` **18/18 في63s**. الاختبارات الأربع الجديدة في V3StaffRoleTemplateTests تشمل owner/tenant/CSRF، رفض مصفوفة ناقصة أو write بلاread، اسم مكرر، stale revision، مصدر أجنبي، الاسم لا يغير Role، حفظ مصدر/تخصيص/نطاق، عدم تغيير الجلسة بتعديل/أرشفة تعريف ثم التغيير الفعلي عند اعتماد نسخة جديدة، immutability عبرEF وSQL23514، وseed متكرر يحفظ الأرشفة ولا يمنح تلقائيًا.

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { WorkContextLink } from "../features/work-context-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle, BarChart3, Building2, Check, ChevronDown, ChevronLeft,
@@ -107,6 +108,7 @@ function currentModule(path: string) {
 }
 
 function visibleModules(role: string) {
+  if (role === "PendingContext") return [];
   if (role !== "Coach") return modules;
   return modules.filter(module => ["operations", "development", "analytics"].includes(module.id)).map(module => ({
     ...module,
@@ -132,7 +134,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }, []);
   const [navOverride, setNavOverride] = useState<{ path: string; id: string | null } | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [identity, setIdentity] = useState({ name: "", role: "", academyName: "" });
+  const [identity, setIdentity] = useState({ name: "", role: "", academyName: "", contextName: "" });
   const [brand, setBrand] = useState<{ displayName?: string; primaryColor?: string; secondaryColor?: string; logoUrl?: string; platformBrandOperator?: boolean }>({});
   const toggleRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -149,10 +151,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetch("/api/v1/me").then(async response => {
-      if (!response.ok) return router.replace("/login");
-      const me = await response.json() as { displayName: string; role: string; academyName?: string };
+      if (!response.ok) {
+        if (path === "/dashboard/context" && response.status === 403) { setIdentity({ name: "اختر سياق العمل", role: "PendingContext", academyName: "", contextName: "" }); return; }
+        return router.replace("/login");
+      }
+      const me = await response.json() as { displayName: string; role: string; academyName?: string; contextName?: string };
       if (!["AcademyOwner", "AcademyAdmin"].includes(me.role)) return router.replace("/");
-      setIdentity({ name: me.displayName, role: me.role, academyName: me.academyName ?? "الأكاديمية" });
+      setIdentity({ name: me.displayName, role: me.role, academyName: me.academyName ?? "الأكاديمية", contextName: me.contextName ?? "" });
       fetch("/api/v1/academy/experience").then(r => r.ok ? r.json() : {}).then(setBrand).catch(() => setBrand({}));
       fetch("/api/v1/my-permissions").then(r => r.ok ? r.json() : []).then(p => setPermissions(Array.isArray(p) ? p : [])).catch(() => setPermissions([]));
     }).catch(() => router.replace("/login"));
@@ -182,7 +187,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     <aside ref={sidebarRef} id="staff-sidebar" tabIndex={-1} className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="التنقل الرئيسي" data-workspace={activeModule}>
       {brand.logoUrl && <div className="sidebar-watermark" aria-hidden="true" style={{ backgroundImage: `url(${brand.logoUrl})` }} />}
       <div className="sidebar-brand">{brand.logoUrl ? <Image unoptimized width={52} height={64} className="academy-logo" src={brand.logoUrl} alt={brand.displayName ?? identity.academyName} /> : <span className="brand-mark" aria-hidden="true"><Trophy /></span>}<span><b>{brand.displayName || identity.academyName || "منصة الأكاديمية"}</b><small>نظام إدارة الأكاديمية</small></span></div>
-      <div className="sidebar-account sidebar-account-top"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span><b>{identity.name || "جارٍ تحميل الحساب…"}</b><small className="role-badge"><ShieldCheck />{roleLabels[identity.role] ?? "حساب موظف"}</small></span></div>
+      <div className="sidebar-account sidebar-account-top"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span><b>{identity.name || "جارٍ تحميل الحساب…"}</b><small className="role-badge"><ShieldCheck />{identity.contextName || roleLabels[identity.role] || "حساب موظف"}</small></span></div>
+      <WorkContextLink />
       <nav className="sidebar-navigation" aria-label={identity.role === "Coach" ? "مساحة المدرب" : "مساحة الإدارة"}>
         {navigation.map(module => {
           const isExpanded = openModule === module.id;

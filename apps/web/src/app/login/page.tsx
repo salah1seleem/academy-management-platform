@@ -25,7 +25,8 @@ export default function LoginPage() {
       });
       if (response.status === 409) throw new Error("توجد جلسة دخول نشطة. سجّل الخروج أولًا قبل الدخول بحساب آخر.");
       if (!response.ok) throw new Error("بيانات الدخول غير صحيحة.");
-      router.replace("/dashboard");
+      const result = await response.json();
+      router.replace(result.requiresContextSelection ? "/dashboard/context" : "/dashboard");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تسجيل الدخول."); setBusy(false); }
   }
 

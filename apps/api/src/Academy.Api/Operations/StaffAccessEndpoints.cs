@@ -27,7 +27,7 @@ public static class StaffAccessEndpoints
         response.Headers.CacheControl = "no-store";
         var custom = await db.StaffRoleTemplates.AsNoTracking().Where(r => r.AcademyId == t.AcademyId && r.IsActive).OrderBy(r => r.Name).Take(100).ToArrayAsync();
         var source = await db.StaffRoleTemplates.AsNoTracking().Where(r => r.Id == m.PermissionTemplateId && r.AcademyId == t.AcademyId).Select(r => new { r.Id, r.Name, r.IsActive, currentRevision = r.Revision, appliedRevision = m.PermissionTemplateRevision, customized = m.PermissionTemplateCustomized }).SingleOrDefaultAsync();
-        return Results.Ok(new { m.AllBranches, m.AllSports, m.UseActionGrants, source, modules = StaffAccessRules.Modules, templates = StaffAccessTemplates.All.Concat(custom.Select(StaffRoleTemplateEndpoints.View)),
+        return Results.Ok(new { m.AllBranches, m.AllSports, m.UseActionGrants, m.PrimaryMembershipId, m.AccessContextName, source, modules = StaffAccessRules.Modules, templates = StaffAccessTemplates.All.Concat(custom.Select(StaffRoleTemplateEndpoints.View)),
             branches = await db.Branches.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             sports = await db.Sports.Where(x => x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             selectedSports = await db.MembershipSportAccesses.Where(x => x.MembershipId == id && x.IsActive).Select(x => x.SportId).ToListAsync(),
@@ -46,6 +46,11 @@ public static class StaffAccessEndpoints
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{id}"}, 0))");
         var m = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.AcademyAdmin);
         if (m is null) return Results.NotFound();
+        if (m.PrimaryMembershipId is Guid primary)
+        {
+            await StaffAccessContextEndpoints.Lock(db, t.AcademyId, primary);
+            if (!await db.AcademyMemberships.AnyAsync(p => p.Id == primary && p.PrimaryMembershipId == null && p.IsActive && p.User.IsActive)) return Results.Problem(statusCode: 409, title: "عضوية الإداري الأساسية موقوفة؛ لا يمكن تغيير سياقها");
+        }
         StaffRoleTemplate? template = null;
         if (isCustom)
         {
@@ -66,7 +71,7 @@ public static class StaffAccessEndpoints
         var sports = await db.MembershipSportAccesses.Where(x => x.MembershipId == id).ToListAsync();
         var previous = actions.Where(x => x.IsActive).Select(x => new StaffActionValue(x.Module, x.Read, x.Add, x.Edit, x.Delete)).ToArray();
         var before = JsonSerializer.Serialize(new { m.AllBranches, m.AllSports, m.UseActionGrants, m.PermissionTemplateId, m.PermissionTemplateRevision, m.PermissionTemplateCustomized, branches = branches.Where(x => x.IsActive).Select(x => x.BranchId), sports = sports.Where(x => x.IsActive).Select(x => x.SportId), actions = previous });
-        var now = clock.GetUtcNow(); m.AllBranches = body.AllBranches; m.UseActionGrants = true; m.UpdatedAtUtc = now;
+        var now = clock.GetUtcNow(); m.AllBranches = body.AllBranches; m.UseActionGrants = true; m.UpdatedAtUtc = now; m.ContextRevision++;
         if (template is not null)
         {
             m.PermissionTemplateId = template.Id; m.PermissionTemplateRevision = template.Revision;

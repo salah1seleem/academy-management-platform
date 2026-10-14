@@ -111,7 +111,9 @@ class _AcademyAppState extends State<AcademyApp> {
               // Session-scoped nested navigator: logout/role selection disposes every
               // private route, not only home. No child data survives account switching.
               return SessionNavigation(
-                key: ValueKey(auth.session!.membershipId),
+                key: ValueKey(
+                  '${auth.session!.membershipId}:${auth.session!.selected?.contextRevision ?? 0}',
+                ),
                 auth: auth,
                 environment: environment,
               );
@@ -252,7 +254,11 @@ class _RoleFoundationState extends State<RoleFoundation> {
               Card(
                 child: ListTile(
                   title: UiText(item.academyName),
-                  subtitle: UiText(item.label),
+                  subtitle: UiText(
+                    item.role == 'AcademyAdmin'
+                        ? '${item.label}\n${item.scopeLabel}'
+                        : item.label,
+                  ),
                   selected: item.id == session.membershipId,
                   trailing: const Icon(Icons.chevron_left),
                   onTap: widget.auth.busy ? null : () => select(item),

@@ -761,3 +761,12 @@ footer {
 .form-shell .registration-payment-method { align-content: start; }
 .form-shell .registration-cash-options { grid-column: 1 / -1; min-width: 0; }
 .registration-cash-options h3 { margin-block: .25rem .8rem; font-size: 1rem; }
+.access-context-manager { display: grid; gap: 1rem; max-width: 72rem; }
+.context-options { border: 0; padding: 0; display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); min-width: 0; }
+.context-options legend { font-weight: 700; margin-bottom: .8rem; }
+.context-option { display: flex; align-items: flex-start; gap: .8rem; cursor: pointer; border: 2px solid var(--staff-border, #dce4e8); min-width: 0; }
+.context-option.selected { border-color: var(--staff-primary-700); background: var(--staff-primary-50); }
+.context-option input[type="radio"] { width: 1.25rem; min-width: 1.25rem; height: 1.25rem; margin: .25rem 0 0; accent-color: var(--staff-primary-700); }
+.context-option span { display: grid; gap: .4rem; overflow-wrap: anywhere; }
+.context-option small { color: var(--staff-text-muted, #546575); }
+.work-context-link { display: block; margin: 0 1rem .7rem; padding: .65rem .8rem; border: 1px solid #ffffff30; border-radius: .7rem; text-align: center; color: #fff; font-size: .85rem; }

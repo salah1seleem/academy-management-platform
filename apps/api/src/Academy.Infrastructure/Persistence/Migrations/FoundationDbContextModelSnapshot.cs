@@ -8950,6 +8950,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AcademyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AccessContextName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<bool>("AllBranches")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -8960,6 +8964,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<int>("ContextRevision")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -8969,6 +8976,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("JobTitle")
                         .HasColumnType("text");
 
+                    b.Property<string>("NormalizedContextName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
                     b.Property<bool>("PermissionTemplateCustomized")
                         .HasColumnType("boolean");
 
@@ -8977,6 +8988,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("PermissionTemplateRevision")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("PrimaryMembershipId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -8996,12 +9010,21 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "PermissionTemplateId");
 
-                    b.HasIndex("UserId", "IsActive");
-
-                    b.HasIndex("AcademyId", "UserId", "Role")
+                    b.HasIndex("PrimaryMembershipId", "NormalizedContextName")
                         .IsUnique();
 
-                    b.ToTable("AcademyMemberships", (string)null);
+                    b.HasIndex("UserId", "IsActive");
+
+                    b.HasIndex("AcademyId", "UserId", "PrimaryMembershipId");
+
+                    b.HasIndex("AcademyId", "UserId", "Role")
+                        .IsUnique()
+                        .HasFilter("\"PrimaryMembershipId\" IS NULL");
+
+                    b.ToTable("AcademyMemberships", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Membership_ContextShape", "(\"PrimaryMembershipId\" IS NULL AND \"AccessContextName\" IS NULL AND \"NormalizedContextName\" IS NULL) OR (\"PrimaryMembershipId\" IS NOT NULL AND \"PrimaryMembershipId\" <> \"Id\" AND \"Role\" = 'AcademyAdmin' AND \"UseActionGrants\" AND length(trim(\"AccessContextName\")) > 0 AND length(trim(\"NormalizedContextName\")) > 0)");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Tenancy.ConfigurationTransition", b =>
@@ -12705,7 +12728,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", "PrimaryMembership")
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "UserId", "PrimaryMembershipId")
+                        .HasPrincipalKey("AcademyId", "UserId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Academy");
+
+                    b.Navigation("PrimaryMembership");
 
                     b.Navigation("User");
                 });

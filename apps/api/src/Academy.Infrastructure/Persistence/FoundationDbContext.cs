@@ -107,11 +107,16 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
 
         builder.Entity<AcademyMembership>(entity =>
         {
-            entity.ToTable("AcademyMemberships");
+            entity.ToTable("AcademyMemberships", t => t.HasCheckConstraint("CK_Membership_ContextShape", "(\"PrimaryMembershipId\" IS NULL AND \"AccessContextName\" IS NULL AND \"NormalizedContextName\" IS NULL) OR (\"PrimaryMembershipId\" IS NOT NULL AND \"PrimaryMembershipId\" <> \"Id\" AND \"Role\" = 'AcademyAdmin' AND \"UseActionGrants\" AND length(trim(\"AccessContextName\")) > 0 AND length(trim(\"NormalizedContextName\")) > 0)"));
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Role).HasConversion<string>().HasMaxLength(32);
-            entity.HasIndex(x => new { x.AcademyId, x.UserId, x.Role }).IsUnique();
+            entity.HasIndex(x => new { x.AcademyId, x.UserId, x.Role }).IsUnique().HasFilter("\"PrimaryMembershipId\" IS NULL");
             entity.HasAlternateKey(x => new { x.AcademyId, x.Id });
+            entity.HasAlternateKey(x => new { x.AcademyId, x.UserId, x.Id });
+            entity.Property(x => x.AccessContextName).HasMaxLength(80);
+            entity.Property(x => x.NormalizedContextName).HasMaxLength(160);
+            entity.HasIndex(x => new { x.PrimaryMembershipId, x.NormalizedContextName }).IsUnique();
+            entity.HasOne(x => x.PrimaryMembership).WithMany().HasForeignKey(x => new { x.AcademyId, x.UserId, x.PrimaryMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.UserId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.UserId, x.IsActive });
             entity.HasOne(x => x.Academy).WithMany().HasForeignKey(x => x.AcademyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
