@@ -174,6 +174,8 @@ CI B3a [38609005372](https://github.com/salah1seleem/academy-management-platform
 
 ## B3b2 — سياقات إدارية مترابطة واختيار آمن — 14–15 أكتوبر 2026
 
+Code commit مرفوع ومطابق origin: `9fdb815af29d70b9b10ccf17cbabfee891eabd7b`، `feat: add isolated administrative work contexts across web and mobile`. CI [38637100984](https://github.com/salah1seleem/academy-management-platform/actions/runs/38637100984) **in_progress** عند الرفع؛ ليس passed. شجرة الكود نظيفة بعد الرفع، وmain المحلي والبعيد عند `abda1ed273030e69812321e5c14d260bbc2e2275`. هذه إضافة دليل commit، لا شريحة جديدة.
+
 البداية `8fccd9c1f91bdb12e350e05553188da6a9bdd041`، فرع `codex/15-native-mobile-app` نظيف ومطابق origin. بطاقة: توصية Sol/High للتفويض والعزل؛ لا تغيير لإعدادات المستخدم ولا subagents. CI السابق38625309723 نجح Frontend/Flutter/E2E؛ Backend كان جاريًا في آخر فحص، لا ادعاء انحدار كامل جديد.
 
 من الموظفين → سياقات العمل، يضيف المالك سياقًا مسمى إلى الإداري **بنفس User**، لا ينشئ حسابًا أو موظفًا/راتبًا مكررًا. يبدأ موقوفًا بلا منح؛ يفتح محرر الصلاحيات الحالي ليختار قالبًا وفروعًا ورياضات، ثم يفعله بعد مراجعة صريحة. الاسم والحالة لهما revision؛ تعارض النسخة409 لا يمحو المدخلات. يمكن إيقاف سياق دون سحب بقية سياقات الشخص أو عضوياته في أكاديميات أخرى. الاسم «مالك» لا يغير AcademyRole أو يمنح منصة.

@@ -2,6 +2,8 @@
 
 ## B3b2 — السياق الإداري المستقل
 
+Code SHA `9fdb815af29d70b9b10ccf17cbabfee891eabd7b` مرفوع. [CI38637100984](https://github.com/salah1seleem/academy-management-platform/actions/runs/38637100984) بدأ وهوin_progress عند checkpoint؛ نتائج التشغيل البعيد مستقلة عن الاختبارات المحلية أدناه. مراجعة Git/check/المتطلبات: لا تعديلات خارج الشريحة، لا تغيير baseline، وmain المحلي/البعيد محفوظ.
+
 Migration `20261014202341_V3CorrelatedAdministrativeContexts` على fixture/E2E المعزولتين، وEF has-pending-model-changes ناجح. تحفظ فهرس تفرد العضويات الأساسية وتضيف ارتباط user/academy مركبًا وحارس هوية السياق؛ لا ترحيل آلي لصلاحيات أو بيانات عملاء ولا downgrade فعلي.
 
 `dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~MobileAuthenticationTests|FullyQualifiedName~TenantAuthenticationTests|FullyQualifiedName~Group_filter_returns_only_group_players' --no-restore --nologo -v minimal`، باتصال `academy_v3_fixture_20261014`: **69/69 في221s**. ست حالات جديدة تغطي Owner/CSRF/tenant/حالة افتراضية/منع إنشاء موظف مكرر/رفض worker وحارسSQL23514؛ قويA/رياضة1 وضعيفB/رياضة2، قراءة وCSV/منع كتابة وIDOR وسحب فوري؛ دخول Web pending قبل الاختيار؛ حفظ معلق بعد الإيقاف/all-sports وبعد إيقاف الأساس؛ Mobile token rotation واختيار صريح وإصدار3→4 عند تعديل المنح ورفض refresh بعد الإيقاف؛ seed متكرر وحفظ السحب ورفض Production. كان68/68 قبل إضافة بوابة pending الخادمية، ثم أعيدت المجموعة المتأثرة69/69 بعد آخر تغيير، فلا تجمع العددين.
