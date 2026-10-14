@@ -62,7 +62,7 @@ public static partial class ReportingEndpoints
     {
         using var document = System.Text.Json.JsonDocument.Parse(after);
         if (document.RootElement.TryGetProperty("SensitivePermissionsChanged", out var changed) && changed.ValueKind == System.Text.Json.JsonValueKind.True)
-            return "تفويضات اعتماد أو صرف الرواتب، مع مراجعة الوحدات والنطاق";
+            return "تفويضات الرواتب واتفاقات الأجر، مع مراجعة الوحدات والنطاق";
         return after.Contains("cashierEnabled", StringComparison.Ordinal) ? "صلاحية التحصيل النقدي" : "صلاحيات الوحدات أو نطاق الفروع";
     }
 

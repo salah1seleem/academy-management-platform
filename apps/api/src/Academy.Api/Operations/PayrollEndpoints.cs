@@ -73,7 +73,7 @@ public static class PayrollEndpoints
         await Lock(db, t.AcademyId, id, body.ContractStart);
         var x = await db.Employees.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (x is null) return Results.NotFound();
         var error = await ValidateEmployee(body, t.AcademyId, db, id); if (error is not null) return Results.UnprocessableEntity(new { message = error });
-        if (body.MembershipId != x.MembershipId && await db.PayrollSettlements.AnyAsync(s => s.AcademyId == t.AcademyId && s.EmployeeId == id)) return Results.Conflict(new { message = "لا يمكن تغيير ربط الحساب بعد سداد راتب. أنشئ ربطًا جديدًا موثقًا." });
+        if (body.MembershipId != x.MembershipId && (await db.PayrollSettlements.AnyAsync(s => s.AcademyId == t.AcademyId && s.EmployeeId == id) || await db.CoachCompensationAgreements.AnyAsync(a => a.EmployeeId == id))) return Results.Conflict(new { message = "لا يمكن تغيير ربط الحساب بعد سداد راتب أو إنشاء اتفاق مدرب. أنشئ ربطًا جديدًا موثقًا." });
         Apply(x, body); x.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 

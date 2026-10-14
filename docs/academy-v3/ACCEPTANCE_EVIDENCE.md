@@ -93,3 +93,16 @@ Web: `npm test -- src/features/sport-operations-settings.test.tsx src/features/f
 يثبت السيناريو رفض CRUD وحده، فصل الاعتماد/الصرف، منع الطلب الذاتي وIDOR وفرع آخر وأكاديمية ثانية، رفض المنح المجهولة/المكررة والنطاق غير المدعوم، replay متزامن بلا مضاعفة، وسحب الإذن/الفرع أثناء طلب صرف HTTP منتظر قفل المنح بلا كتابة. القيمة الفعلية 3100+150=3250 محفوظة في PayrollSettlement، وليست دفعًا مصرفيًا حقيقيًا. تقرير التدقيق يميز تغيير التفويض واسم منفذه.
 
 محاولات الفشل والإصلاح والاستئناف وحدود B3b3A في PROGRESS. هذه أدلة مستهدفة فقط؛ لم تنفذ البوابة الموحدة أو F10 أو اعتماد إصدار V2/V3. CI البعيد بوابة منفصلة عن النتائج المحلية.
+
+## C1 — اتفاقات أجر الخاص، 2026-10-15
+
+المنفذ: CoachAgreementEndpoints وCoachCompensationAgreement/Approval ومحرر CoachAgreements في ملف المدرب وCoachAgreementsPage داخل Flutter. Migration `20261014231750_V3CoachPrivateAgreements` على قاعدتي fixture/e2e المعزولتين فقط؛ EF بلا pending model.
+
+أوامر ونتائج فعلية:
+- `dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~V3_agreement|FullyQualifiedName~PayrollIntegrationTests'` مع academy_v3_fixture_20261014: **11/11**. مجموعة13/13 السابقة تشمل مستهلكي التفويض كذلك ولا تجمع كاختبارات فريدة.
+- `npm run test --workspace apps/web -- src/features/coach-agreements.test.tsx src/features/structure-record.test.tsx src/features/staff-access.test.tsx src/features/payroll.test.tsx`: **23/23**، typecheck/lint ناجحان.
+- `flutter test test/coach_agreements_test.dart test/staff_amounts_test.dart test/v2_role_workspaces_test.dart`: **17/17**؛ flutter analyze بلا ملاحظات.
+- `npm run test:e2e -- v3-coach-agreements.spec.ts v3-payroll-sensitive.spec.ts` بقاعدة academy_v3_e2e_20261014 ومنافذ5186/3106: **2/2 في30.8s** معproduction build. يتضمن OTP Demo202 ثمverify200 وقراءة المدرب عبرBearer؛ لا اختبار جهاز/Flutter حي.
+- [390](evidence/c1/coach-agreements-390.png) و[1440](evidence/c1/coach-agreements-1440.png) Web فعلية مراجعة؛ لا overflow. next-env أُعيد إلى المسارات الأصلية بعدbuild ثمtypecheck.
+
+الخمسة الجديدة تثبت المصدر/العزل/الصفر الصريح/التكرار/نسخ40→30/عدم الرجعية/انتهاء الخليفة/cutoff/ثباتEFوSQL/سحب الربط/دورAdmin+Coach/seed والمحافظة على البيانات وProduction rejection. الراتب3000 لم يزد ولم يسدد بسبب الاتفاق. لا استحقاق خاص أو دفتر أوF10 ناجح في هذه الدفعة؛ مصدر النسبة أصبح جاهزًا للربط فيC2 وليس المنتج المالي كاملًا. المحاولات المصححة وحدود/استئناف الدفعة فيPROGRESS.

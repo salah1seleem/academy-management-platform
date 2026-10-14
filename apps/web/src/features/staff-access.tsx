@@ -6,7 +6,7 @@ import { csrfRequest } from "./dashboard-api";
 export const accessModuleLabels: Record<string, string> = { academy: "الهيكل والمجموعات والحصص", players: "اللاعبون وأولياء الأمور", subscriptions: "الباقات والاشتراكات والخصومات", payments: "طلبات الدفع والتحصيل", attendance: "الحضور", evaluations: "التقييمات", catalog: "المنتجات الرياضية", nutrition: "التغذية", medical: "السجلات الطبية", media: "الوسائط", finance: "الرئيسية والتقارير المالية", reports: "التقارير والتصدير", payroll: "الموظفون والرواتب", settings: "إعدادات الأكاديمية", staff: "إنشاء حسابات الفريق", news: "الأخبار", matches: "المباريات", facilities: "المرافق والحارات والحجوزات" };
 export type Action = { module: string; read: boolean; add: boolean; edit: boolean; delete: boolean };
 export type Template = { key: string; name: string; description: string; actions: Action[]; revision?: number; custom?: boolean };
-export const sensitivePayrollLabels: Record<string, string> = { "payroll.addition.review": "اعتماد أو رفض المبالغ الإضافية", "payroll.pay": "تسجيل صرف الرواتب" };
+export const sensitivePayrollLabels: Record<string, string> = { "payroll.addition.review": "اعتماد أو رفض المبالغ الإضافية", "payroll.pay": "تسجيل صرف الرواتب", "payroll.agreement.manage": "إنشاء واعتماد شروط أجر الخاص" };
 type Access = { sensitivePermissions?: string[]; selectedSensitivePermissions?: string[]; source?: { name: string; appliedRevision: number; currentRevision: number; customized: boolean; isActive: boolean } | null; allBranches: boolean; allSports?: boolean; sports?: { id: string; name: string }[]; selectedSports?: string[]; useActionGrants: boolean; modules: string[]; branches: { id: string; name: string }[]; selectedBranches: string[]; actions: Action[]; history: { createdAtUtc: string }[]; templates?: Template[] };
 const actionLabels = { read: "قراءة", add: "إضافة", edit: "تعديل", delete: "حذف" } as const;
 export type StaffActionKey = keyof typeof actionLabels;
@@ -24,7 +24,7 @@ export function StaffAccessEditor({ id, name, onClose }: { id: string; name: str
   function toggle(module: string, action: StaffActionKey, enabled: boolean) { setActions(rows => toggleStaffAction(rows, module, action, enabled)); }
   function sensitiveEligible(permission: string) {
     const payroll = actions.find(a => a.module === "payroll");
-    return !data?.primaryMembershipId && allSports && payroll?.read === true && (permission === "payroll.pay" ? payroll.add : payroll.edit);
+    return !data?.primaryMembershipId && allSports && payroll?.read === true && (permission === "payroll.pay" ? payroll.add : permission === "payroll.agreement.manage" ? payroll.add && payroll.edit : payroll.edit);
   }
   const effectiveSensitive = sensitive.filter(sensitiveEligible);
   function applyTemplate(key: string) { if (!key) { setTemplateKey(""); return; } const preset = data?.templates?.find(x => x.key === key); if (!preset || !data) return; setTemplateKey(key); setActions(data.modules.map(module => ({ ...(preset.actions.find(x => x.module === module) ?? { module, read: false, add: false, edit: false, delete: false }) }))); setAll(false); setConfirm(false); }

@@ -15,6 +15,7 @@ import '../owner/owner_reports.dart';
 import 'academy_news.dart';
 import 'matches.dart';
 import 'staff_amounts.dart';
+import 'coach_agreements.dart';
 import 'facility_board.dart';
 
 class NativeRoleTabs extends StatefulWidget {
@@ -170,6 +171,12 @@ class NativeMore extends StatelessWidget {
           localized(context, 'طلب مبلغ إضافي', 'Request extra amount'),
           Icons.add_card_outlined,
           () => openPage(context, StaffAmounts(auth: auth)),
+        ),
+      if (role == 'Coach')
+        GLink(
+          localized(context, 'اتفاقات أجر الخاص', 'Private coaching agreements'),
+          Icons.receipt_long_outlined,
+          () => openPage(context, CoachAgreementsPage(auth: auth)),
         ),
       GLink(
         localized(context, 'الأخبار', 'News'),

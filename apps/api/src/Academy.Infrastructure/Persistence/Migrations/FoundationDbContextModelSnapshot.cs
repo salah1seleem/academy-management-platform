@@ -3091,6 +3091,186 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("BrandingAudits");
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.CoachCompensationAgreement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BaseCoverage")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal>("BaseSalarySnapshot")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CalculationBasis")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CoachMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CollectionAllocationPolicy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Eligibility")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SettlementCycle")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VariableMethod")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("VariableValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "CoachMembershipId");
+
+                    b.HasIndex("AcademyId", "EmployeeId");
+
+                    b.HasIndex("AcademyId", "SportId");
+
+                    b.HasIndex("AcademyId", "CreatedByMembershipId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.ToTable("CoachCompensationAgreements", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CoachAgreement_Terms", "\"VariableMethod\" IN ('Percent','PerSession') AND \"Eligibility\" IN ('DeliveredCollected','Delivered') AND \"BaseCoverage\" IN ('GroupOnly','IncludesPrivate') AND \"VariableValue\" >= 0 AND \"VariableValue\" <= CASE WHEN \"VariableMethod\"='Percent' THEN 100 ELSE 100000000 END AND (\"BaseCoverage\" <> 'IncludesPrivate' OR \"VariableValue\"=0) AND (\"EffectiveTo\" IS NULL OR \"EffectiveTo\" >= \"EffectiveFrom\")");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.CoachCompensationApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AgreementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ApprovedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "AgreementId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ApprovedByMembershipId");
+
+                    b.HasIndex("AcademyId", "AgreementId", "EmployeeId", "BranchId", "SportId");
+
+                    b.HasIndex("AcademyId", "EmployeeId", "BranchId", "SportId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("CoachCompensationApprovals", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CoachApproval_Revision", "\"Revision\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.CollectionRefund", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10613,6 +10793,73 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.CoachCompensationAgreement", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CoachMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CreatedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "EmployeeId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Sport", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.CoachCompensationApproval", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ApprovedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.CoachCompensationAgreement", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AgreementId", "EmployeeId", "BranchId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "EmployeeId", "BranchId", "SportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

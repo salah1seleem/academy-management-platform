@@ -44,7 +44,8 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var branch = await db.Branches.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.IsActive).Select(x => x.Id).FirstAsync();
-        var member = role.HasValue ? await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == role && x.IsActive).Select(x => (Guid?)x.Id).FirstAsync() : null;
+        var accountEmail = role == AcademyRole.Coach ? DemoSeed.CoachEmail : DemoSeed.AdminEmail;
+        var member = role.HasValue ? await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == role && x.PrimaryMembershipId == null && x.IsActive && x.User.Email == accountEmail).Select(x => (Guid?)x.Id).SingleAsync() : null;
         var random = Random.Shared.Next(1_000_000, 9_999_999);
         var body = new EmployeeWrite("موظف اختبار " + random, "0102" + random, role == AcademyRole.Coach ? "مدرب تجريبي" : "موظف تجريبي", branch, 3100, partial ? new(2026, 10, 10) : new(2026, 10, 1), partial ? new(2026, 10, 20) : null, member, null);
         var response = await Send(owner, "/api/v1/manage/employees/", body); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); employees.Add(id); return (id, body);

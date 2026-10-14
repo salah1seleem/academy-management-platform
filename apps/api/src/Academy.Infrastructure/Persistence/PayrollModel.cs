@@ -13,10 +13,31 @@ public sealed partial class FoundationDbContext
     public DbSet<PayrollAdjustment> PayrollAdjustments => Set<PayrollAdjustment>();
     public DbSet<PayrollAdditionRequest> PayrollAdditionRequests => Set<PayrollAdditionRequest>();
     public DbSet<PayrollSettlement> PayrollSettlements => Set<PayrollSettlement>();
+    public DbSet<CoachCompensationAgreement> CoachCompensationAgreements => Set<CoachCompensationAgreement>();
+    public DbSet<CoachCompensationApproval> CoachCompensationApprovals => Set<CoachCompensationApproval>();
 
     private static void ConfigurePayroll(ModelBuilder b)
     {
         Tenant<Employee>(b); Tenant<PayrollReason>(b); Tenant<PayrollAdjustment>(b); Tenant<PayrollAdditionRequest>(b); Tenant<PayrollSettlement>(b);
+        Tenant<CoachCompensationAgreement>(b); Tenant<CoachCompensationApproval>(b);
+        var agreement = b.Entity<CoachCompensationAgreement>();
+        agreement.HasAlternateKey(x => new { x.AcademyId, x.Id, x.EmployeeId, x.BranchId, x.SportId });
+        agreement.HasOne<Employee>().WithMany().HasForeignKey(x => new { x.AcademyId, x.EmployeeId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        agreement.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CoachMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        agreement.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CreatedByMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        agreement.HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        agreement.HasOne<Sport>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        agreement.HasIndex(x => new { x.AcademyId, x.CreatedByMembershipId, x.IdempotencyKey }).IsUnique();
+        agreement.Property(x => x.VariableMethod).HasMaxLength(20); agreement.Property(x => x.Eligibility).HasMaxLength(30); agreement.Property(x => x.BaseCoverage).HasMaxLength(30);
+        agreement.Property(x => x.Note).HasMaxLength(500); agreement.Property(x => x.IdempotencyKey).HasMaxLength(100); agreement.Property(x => x.Currency).HasMaxLength(3);
+        agreement.Property(x => x.BaseSalarySnapshot).HasPrecision(18, 2); agreement.Property(x => x.VariableValue).HasPrecision(18, 2);
+        agreement.ToTable(t => t.HasCheckConstraint("CK_CoachAgreement_Terms", "\"VariableMethod\" IN ('Percent','PerSession') AND \"Eligibility\" IN ('DeliveredCollected','Delivered') AND \"BaseCoverage\" IN ('GroupOnly','IncludesPrivate') AND \"VariableValue\" >= 0 AND \"VariableValue\" <= CASE WHEN \"VariableMethod\"='Percent' THEN 100 ELSE 100000000 END AND (\"BaseCoverage\" <> 'IncludesPrivate' OR \"VariableValue\"=0) AND (\"EffectiveTo\" IS NULL OR \"EffectiveTo\" >= \"EffectiveFrom\")"));
+        var approval = b.Entity<CoachCompensationApproval>();
+        approval.HasOne<CoachCompensationAgreement>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AgreementId, x.EmployeeId, x.BranchId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id, x.EmployeeId, x.BranchId, x.SportId }).OnDelete(DeleteBehavior.Restrict);
+        approval.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ApprovedByMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        approval.HasIndex(x => new { x.AcademyId, x.AgreementId }).IsUnique();
+        approval.HasIndex(x => new { x.AcademyId, x.EmployeeId, x.BranchId, x.SportId, x.Revision }).IsUnique();
+        approval.ToTable(t => t.HasCheckConstraint("CK_CoachApproval_Revision", "\"Revision\" > 0"));
         b.Entity<Employee>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.MembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Employee>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Employee>().HasOne<PrivateAsset>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PhotoAssetId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

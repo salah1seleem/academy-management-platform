@@ -145,6 +145,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<PayrollAdditionRequest>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollAdjustment>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollSettlement>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
+        BranchFilter<CoachCompensationAgreement>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
+        BranchFilter<CoachCompensationApproval>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<AcademyMembership>(b, x => x.Id == RequestMembershipId || MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.IsActive && RequestBranchIds.Contains(a.BranchId)) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.Id) || Employees.Any(e => e.MembershipId == x.Id));
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
@@ -175,6 +177,9 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
+        if (ChangeTracker.Entries<CoachCompensationAgreement>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<CoachCompensationApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("شروط اتفاق المدرب واعتمادها ثابتة؛ أنشئ نسخة جديدة بدل تعديل التاريخ.");
         GuardCashFamilyPurpose();
         if (ChangeTracker.Entries<StaffRoleTemplateAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل قوالب الصلاحيات ثابت ولا يعدل أو يحذف.");
         if (ChangeTracker.Entries<SportSettingsAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل إعدادات الرياضة ثابت ولا يعدل أو يحذف.");
