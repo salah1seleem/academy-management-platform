@@ -97,6 +97,15 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var summary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
         var operations = summary.GetProperty("operations");
         Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == 5);
+        var coachDetailPath = $"/api/v1/reports/coach-performance/{coach}?from=2026-10-01&to=2026-10-31";
+        var coachDetail = await owner.GetFromJsonAsync<JsonElement>(coachDetailPath);
+        Assert.Equal(5, coachDetail.GetProperty("parentRating").GetDecimal());
+        Assert.Equal(1, coachDetail.GetProperty("parentRatingCount").GetInt32());
+        Assert.Contains(coachDetail.GetProperty("groups").EnumerateArray(), x => x.GetProperty("id").GetGuid() == group);
+        Assert.Contains((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/feedback?coachId={coach}&kind=Rating")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        Assert.DoesNotContain((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/feedback?coachId={Guid.NewGuid()}" )).EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(coachDetailPath)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(coachDetailPath)).StatusCode);
     }
     [Fact]
     public async Task Football_demo_feedback_is_synthetic_and_idempotent()

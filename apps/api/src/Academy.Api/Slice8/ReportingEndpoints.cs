@@ -28,11 +28,39 @@ public static partial class ReportingEndpoints
     {
         var reports = app.MapGroup("/api/v1/reports");
         reports.MapGet("/owner-summary", OwnerSummary).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
+        reports.MapGet("/coach-performance/{coachId:guid}", CoachPerformance).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/financial", FinancialReport).RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         reports.MapGet("/financial/export", FinancialExport).RequireAuthorization(AcademyPermissions.ReportsFinancialRead).RequireAuthorization(AcademyPermissions.ReportsExport);
         reports.MapGet("/attendance", AttendanceReport).RequireAuthorization(AcademyPermissions.ReportsAttendanceRead);
         reports.MapGet("/attendance/export", AttendanceExport).RequireAuthorization(AcademyPermissions.ReportsAttendanceRead).RequireAuthorization(AcademyPermissions.ReportsExport);
         reports.MapGet("/receipts", ReceiptList).RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
+    }
+
+    private static async Task<IResult> CoachPerformance(Guid coachId, DateOnly? from, DateOnly? to, Guid? branchId,
+        CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    {
+        var current = (await tenant.ResolveAsync())!; var academyId = current.AcademyId;
+        var range = await FinancialRange(academyId, from, to, db, clock, false);
+        if (range.Error is not null) return range.Error;
+        if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == academyId && x.Id == branchId)) return Results.NotFound();
+        var coach = await db.AcademyMemberships.Where(x => x.AcademyId == academyId && x.Id == coachId && x.Role == AcademyRole.Coach)
+            .Select(x => new { x.Id, x.UserId, name = x.User.DisplayName, x.IsActive }).SingleOrDefaultAsync();
+        if (coach is null) return Results.NotFound();
+        var assigned = await db.StaffGroupAssignments.Where(x => x.AcademyId == academyId && x.AcademyMembershipId == coachId && x.IsActive && x.TrainingGroup.IsActive && (!branchId.HasValue || x.TrainingGroup.BranchId == branchId))
+            .Select(x => new { x.TrainingGroupId, name = x.TrainingGroup.ArabicName, branch = x.TrainingGroup.Branch.ArabicName }).Distinct().ToArrayAsync();
+        if (assigned.Length == 0 && (branchId.HasValue || db.BranchScopeRestricted)) return Results.NotFound();
+        var groupIds = assigned.Select(x => x.TrainingGroupId).ToArray();
+        var sessionCounts = await db.TrainingSessions.Where(x => x.AcademyId == academyId && groupIds.Contains(x.TrainingGroupId) && x.SessionDate >= range.From && x.SessionDate <= range.To && x.Status != TrainingSessionStatus.Cancelled)
+            .GroupBy(x => x.TrainingGroupId).Select(x => new { groupId = x.Key, count = x.Count() }).ToDictionaryAsync(x => x.groupId, x => x.count);
+        var evaluationCount = await db.PlayerEvaluations.CountAsync(x => x.AcademyId == academyId && x.EvaluatedByUserId == coach.UserId && x.Status == EvaluationStatus.Published && groupIds.Contains(x.TrainingGroupId) && x.EvaluationDate >= range.From && x.EvaluationDate <= range.To);
+        var feedback = await db.GuardianFeedbacks.Where(x => x.AcademyId == academyId && x.CoachMembershipId == coachId && groupIds.Contains(x.TrainingGroupId) && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive)
+            .GroupBy(x => x.Kind).Select(x => new { kind = x.Key, count = x.Count(), scoreTotal = x.Sum(y => y.Score ?? 0) }).ToArrayAsync();
+        var ratings = feedback.FirstOrDefault(x => x.kind == "Rating");
+        return Results.Ok(new { coach.Id, coach.name, coach.IsActive, from = range.From, to = range.To,
+            groups = assigned.Select(x => new { id = x.TrainingGroupId, x.name, x.branch, sessions = sessionCounts.GetValueOrDefault(x.TrainingGroupId) }).OrderBy(x => x.name).ToArray(),
+            sessionCount = sessionCounts.Values.Sum(), publishedEvaluations = evaluationCount,
+            parentRating = ratings is null ? (decimal?)null : Math.Round((decimal)ratings.scoreTotal / ratings.count, 1), parentRatingCount = ratings?.count ?? 0,
+            complaintCount = feedback.FirstOrDefault(x => x.kind == "Complaint")?.count ?? 0 });
     }
 
     private static async Task<IResult> OwnerSummary(DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider realClock, HttpContext context, IAuthorizationService authorization)
