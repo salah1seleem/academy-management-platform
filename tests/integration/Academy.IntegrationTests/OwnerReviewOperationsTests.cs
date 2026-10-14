@@ -203,7 +203,10 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         // V2 newly created staff remain default-deny: legacy read flags cannot bypass the CRUD matrix.
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
         (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/access", new StaffAccessWrite(true, [], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, m == "finance", false, false, false)).ToArray()), put: true)).EnsureSuccessStatusCode();
+        var accessAudit = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/staff-access-audit?allDates=true");
+        Assert.Contains(accessAudit.GetProperty("items").EnumerateArray(), x => x.GetProperty("membershipId").GetGuid() == staff.Id && x.GetProperty("actorName").GetString() is { Length: > 0 });
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode); Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/reports/owner-summary")).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/people/players")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/v1/reports/staff-access-audit?allDates=true")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, $"/api/v1/manage/staff/{staff.Id}/grants", new { grants = Array.Empty<object>() }, put: true)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/manage/staff/{staff.Id}/grants", new { grants = new[] { new { permission = AcademyPermissions.ReportsFinancialRead, allowed = false } } }, put: true)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/reports/financial")).StatusCode);

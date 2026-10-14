@@ -29,11 +29,32 @@ public static partial class ReportingEndpoints
         var reports = app.MapGroup("/api/v1/reports");
         reports.MapGet("/owner-summary", OwnerSummary).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/coach-performance/{coachId:guid}", CoachPerformance).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
+        reports.MapGet("/staff-access-audit", StaffAccessAudit).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/financial", FinancialReport).RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         reports.MapGet("/financial/export", FinancialExport).RequireAuthorization(AcademyPermissions.ReportsFinancialRead).RequireAuthorization(AcademyPermissions.ReportsExport);
         reports.MapGet("/attendance", AttendanceReport).RequireAuthorization(AcademyPermissions.ReportsAttendanceRead);
         reports.MapGet("/attendance/export", AttendanceExport).RequireAuthorization(AcademyPermissions.ReportsAttendanceRead).RequireAuthorization(AcademyPermissions.ReportsExport);
         reports.MapGet("/receipts", ReceiptList).RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
+    }
+
+    private static async Task<IResult> StaffAccessAudit(DateOnly? from, DateOnly? to, bool? allDates, int? page,
+        CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    {
+        var current = (await tenant.ResolveAsync())!;
+        if (current.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        if (page is < 1 or > 10000) return Validation("page", "رقم الصفحة غير صالح.");
+        var range = await FinancialRange(current.AcademyId, from, to, db, clock, allDates == true);
+        if (range.Error is not null) return range.Error;
+        var query = db.StaffAccessAudits.Where(x => x.AcademyId == current.AcademyId && x.CreatedAtUtc >= range.StartUtc && x.CreatedAtUtc < range.EndUtcExclusive);
+        var count = await query.CountAsync();
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id).Skip(((page ?? 1) - 1) * 50).Take(50)
+            .Select(x => new { x.Id, x.MembershipId, x.CreatedAtUtc, x.After,
+                actorName = db.Users.Where(u => u.Id == x.ActorUserId).Select(u => u.DisplayName).FirstOrDefault(),
+                staffName = db.AcademyMemberships.Where(m => m.AcademyId == current.AcademyId && m.Id == x.MembershipId).Select(m => m.User.DisplayName).FirstOrDefault() })
+            .ToArrayAsync();
+        return Results.Ok(new { count, page = page ?? 1, from = range.From, to = range.To,
+            items = rows.Select(x => new { x.Id, x.MembershipId, x.CreatedAtUtc, x.actorName, x.staffName,
+                change = x.After.Contains("cashierEnabled", StringComparison.Ordinal) ? "صلاحية التحصيل النقدي" : "صلاحيات الوحدات أو نطاق الفروع" }).ToArray() });
     }
 
     private static async Task<IResult> CoachPerformance(Guid coachId, DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId,
