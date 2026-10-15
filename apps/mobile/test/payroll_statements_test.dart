@@ -1,0 +1,60 @@
+import 'package:academy_mobile/features/shared/payroll_statements.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'coach_test.dart' show coach, shell;
+
+void main() {
+  testWidgets(
+    'Own approved monthly dues show 3600 earned, 2500 paid, 1100 remaining with no mutation',
+    (tester) async {
+      final calls = <String>[];
+      final auth = await coach((m, p, b, t) async {
+        calls.add('$m $p');
+        return {
+          'configured': true,
+          'items': [
+            {
+              'month': '2026-10-01',
+              'currency': 'EGP',
+              'netDue': 3600,
+              'paid': 2500,
+              'remaining': 1100,
+              'baseDue': 3000,
+              'deductions': 0,
+              'additions': 600,
+              'payments': [
+                {'amount': 2500},
+              ],
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(find.text('المستحق: 3600 EGP'), findsOneWidget);
+      expect(find.text('المدفوع: 2500 EGP'), findsOneWidget);
+      expect(find.text('المتبقي: 1100 EGP'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(calls, ['GET /api/v1/staff/payroll/statements']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'No approved statement does not imply zero wages or a verified opening',
+    (tester) async {
+      final auth = await coach(
+        (m, p, b, t) async => {'configured': true, 'items': []},
+      );
+      await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('هذا لا يعني أن مستحقاتك صفر'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('السلف غير موثقين'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+}

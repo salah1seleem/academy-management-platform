@@ -55,7 +55,7 @@ public static class DailyStaffAttendance
         if (employee.HasValue)
         {
             await PayrollEndpoints.Lock(db, t.AcademyId, employee.Value, body.Date);
-            if (body.ApprovedDeduction != (row?.ApprovedDeduction ?? 0) && await PayrollEndpoints.Locked(db, t.AcademyId, employee.Value, body.Date)) return Results.Conflict(new { message = "راتب هذا الشهر سُدد؛ لا يمكن تعديل خصمه." });
+            if (body.ApprovedDeduction != (row?.ApprovedDeduction ?? 0) && await PayrollEndpoints.Finalized(db, t.AcademyId, employee.Value, body.Date)) return Results.Conflict(new { message = "كشف هذا الشهر معتمد أو مسدد؛ لا يمكن تعديل خصمه." });
         }
         if (row is null) { row = new StaffDailyAttendance { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, WorkDate = body.Date, Status = body.Status, CreatedAtUtc = clock.GetUtcNow() }; db.StaffDailyAttendances.Add(row); }
         var schedule = await db.StaffWorkSchedules.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.DayOfWeek == body.Date.DayOfWeek && x.IsActive);

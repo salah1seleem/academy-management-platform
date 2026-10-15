@@ -1,0 +1,44 @@
+using Academy.Infrastructure.Structure;
+namespace Academy.Infrastructure.Operations;
+
+// Approved compensation is not a payment and does not duplicate the payroll engine.
+public sealed class PayrollStatement : TenantEntity
+{
+    public Guid EmployeeId { get; set; }
+    public Guid BranchId { get; set; }
+    public DateOnly Month { get; set; }
+    public required string EmployeeName { get; set; }
+    public required string Currency { get; set; }
+    public decimal MonthlySalary { get; set; }
+    public int ContractDays { get; set; }
+    public decimal BaseDue { get; set; }
+    public decimal Deductions { get; set; }
+    public decimal Additions { get; set; }
+    public decimal PrivateCompensation { get; set; }
+    public decimal NetDue { get; set; }
+    public required string SourceSnapshot { get; set; }
+    public required string SourceHash { get; set; }
+    public Guid ApprovedByMembershipId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public string? Note { get; set; }
+    public required string RequestKey { get; set; }
+    public required string RequestHash { get; set; }
+}
+
+// One payout against an approved statement; never also creates a legacy settlement.
+public sealed class PayrollDisbursement : TenantEntity
+{
+    public Guid StatementId { get; set; }
+    public Guid EmployeeId { get; set; }
+    public Guid BranchId { get; set; }
+    public int Sequence { get; set; }
+    public decimal Amount { get; set; }
+    public decimal PaidBefore { get; set; }
+    public decimal RemainingAfter { get; set; }
+    public required string Currency { get; set; }
+    public Guid ActorMembershipId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public string? Reference { get; set; }
+    public required string RequestKey { get; set; }
+    public required string RequestHash { get; set; }
+}

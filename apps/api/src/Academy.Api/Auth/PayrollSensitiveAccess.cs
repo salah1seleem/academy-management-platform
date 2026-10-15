@@ -8,7 +8,7 @@ namespace Academy.Api.Auth;
 // Reuse StaffGrants. CRUD and starting templates never imply sensitive grants.
 public static class PayrollSensitiveAccess
 {
-    public static readonly string[] Permissions = [AcademyPermissions.PayrollAdditionReview, AcademyPermissions.PayrollPay, AcademyPermissions.CoachAgreementManage,AcademyPermissions.SalaryManage];
+    public static readonly string[] Permissions = [AcademyPermissions.PayrollAdditionReview, AcademyPermissions.PayrollPay, AcademyPermissions.CoachAgreementManage,AcademyPermissions.SalaryManage,AcademyPermissions.PayrollStatementApprove];
     public static bool Contains(string permission) => Permissions.Contains(permission);
 
     public static async Task<bool> Allowed(FoundationDbContext db, TenantMembership tenant, string permission)

@@ -6,7 +6,7 @@ import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 
 type Version={id:string;kind:string;revision:number;effectiveFrom:string;monthlySalary:number;approvedBy:string;note?:string};
-type Data={id:string;name:string;currency:string;currentSalary:number;hasVerifiedHistory:boolean;revision:number;canChange:boolean;currentMonth:string;currentMonthPaid:boolean;items:Version[]};
+type Data={id:string;name:string;currency:string;currentSalary:number;hasVerifiedHistory:boolean;revision:number;canChange:boolean;currentMonth:string;currentMonthPaid:boolean;currentMonthApproved?:boolean;items:Version[]};
 const kind:Record<string,string>={Initial:"الراتب الأول المعتمد",LegacyBaseline:"مرجع قائم من شهر المراجعة",Change:"تغيير راتب معتمد"};
 export function SalaryHistory({id}:{id:string}){
   const path=`/api/v1/manage/employees/${id}/salary-versions`;
@@ -18,7 +18,7 @@ export function SalaryHistory({id}:{id:string}){
   async function save(){if(!pending||busy)return;setBusy(true);const signature=JSON.stringify(pending);if(!keys.current.has(signature))keys.current.set(signature,crypto.randomUUID());
     try{await csrfRequest(path,"POST",pending,{"Idempotency-Key":keys.current.get(signature)!});await load();setPending(null);setMessage("تم اعتماد التغيير المؤرخ دون تعديل راتب مسدد أو إنشاء صرف.");}
     catch(e){setPending(null);setError(e instanceof DashboardRequestError?e.message:"تعذر تأكيد الحفظ. أعد المراجعة؛ لا تكرر تغييرًا مختلفًا قبل التحقق.");}finally{setBusy(false);}}
-  const first=data?.currentMonth??"";const date=first?new Date(`${first}T12:00:00Z`):null;if(date&&data?.currentMonthPaid)date.setUTCMonth(date.getUTCMonth()+1);
+  const first=data?.currentMonth??"";const date=first?new Date(`${first}T12:00:00Z`):null;if(date&&(data?.currentMonthPaid||data?.currentMonthApproved))date.setUTCMonth(date.getUTCMonth()+1);
   const openMonth=date?date.toISOString().slice(0,7):"";const latestMonth=data?.items[0]?.effectiveFrom.slice(0,7)??"";const next=latestMonth>openMonth?latestMonth:openMonth;
   return <><PageHeader title="سجل الراتب وتغييراته" context={data?.name??"فريق الأكاديمية"} secondaryActions={[{label:"الموظفون",href:"/dashboard/staff/employees"},{label:"كشف الرواتب",href:`/dashboard/payroll?employeeId=${id}`}]} />{error&&<ErrorState message={error}/>} {!data&&!error?<LoadingState/>:data&&<>
     <section className="detail-card salary-history-summary"><div><small>الراتب الشهري الحالي — ليس سدادًا</small><h2>{formatMoneyAr(data.currentSalary,data.currency)}</h2></div><div><p>كل تغيير له شهر سريان ومصدر اعتماد محفوظ. لا تغيير لشهر سابق أو مسدد، ولا تعديل تلقائي لنسبة الخاص.</p>{!data.hasVerifiedHistory&&<p role="alert">الراتب القائم مرجع غير مؤرخ للماضي. أول تغيير يثبت مرجعه من الشهر الحالي فقط، ولا يخترع تاريخ رواتب سابقًا.</p>}{data.currentMonthPaid&&<p>الشهر الحالي مسدد؛ اختر شهرًا لاحقًا.</p>}</div></section>

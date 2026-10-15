@@ -6,6 +6,7 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'salary_history.dart';
+import 'payroll_statements.dart';
 
 class StaffAmounts extends StatefulWidget {
   final AuthController auth;
@@ -91,6 +92,11 @@ class _StaffAmountsState extends State<StaffAmounts> {
         }
         final reasons = rows(data['reasons']);
         return gList([
+          GLink(
+            localized(context, 'مستحقاتي والصرف', 'My approved dues'),
+            Icons.account_balance_wallet_outlined,
+            () => openPage(context, StaffPayrollStatements(auth: widget.auth)),
+          ),
           GLink(
             localized(context, 'راتبي وتغييراته', 'My salary history'),
             Icons.history_outlined,

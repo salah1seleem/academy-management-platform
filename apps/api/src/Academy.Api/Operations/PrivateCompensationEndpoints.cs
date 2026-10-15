@@ -33,7 +33,7 @@ public static class PrivateCompensationEndpoints
         var snapshot = JsonSerializer.Serialize(facts); var factsHash = StatementComparisonRules.Hash(facts);
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId,db,time); var revision = entries.LastOrDefault()?.Revision ?? 0;
         var review = entries.LastOrDefault(e => e.Kind == "Review" && e.FactsHash == factsHash && e.PostedBefore == a.PostedAmount && !entries.Any(r => r.ReviewEntryId == e.Id));
-        var paid = await PayrollEndpoints.Locked(db,t.AcademyId,d.EmployeeId,today);
+        var paid = await PayrollEndpoints.Finalized(db,t.AcademyId,d.EmployeeId,today);
         var delta = a.PendingDelta;
         var canReverse = delta < 0 && review is not null && !paid && entries.Where(e => e.PayrollAdjustmentId.HasValue).All(e => Month(e.DueDate) == Month(today));
         var action = a.RequiresReview || delta < 0 ? review is null ? "Review" : canReverse ? "Reversal" : "ReviewPending" : delta > 0 ? paid ? "Blocked" : "Accrual" : "None";
@@ -42,7 +42,7 @@ public static class PrivateCompensationEndpoints
             "Review" => "حفظ استثناء للمراجعة دون تغيير الرواتب؛ انخفاض الاستحقاق أو تعارض التنفيذ لا يخصم تلقائيًا.",
             "Reversal" => "عكس صريح لجزء من عمولة هذا الشهر غير المسددة فقط؛ تبقى الحركات الأصلية، ولا تمس الأساسي أو شهرًا مسددًا.",
             "ReviewPending" => "الاستثناء محفوظ للمراجعة. لا مقاصة مع الأساسي أو شهر آخر/مسدد؛ التسوية المنفصلة بعد الصرف تحتاج مسار المستحقات الجزئية القادم.",
-            "Blocked" => "راتب الشهر الحالي سُدد؛ لا نعيد كتابته أو ننقل الفرق لشهر مستقبلي صامتًا.",
+            "Blocked" => "كشف الشهر الحالي معتمد أو مسدد؛ لا نعيد كتابته أو ننقل الفرق لشهر مستقبلي صامتًا.",
             _ => "لا فرق جديد لترحيله؛ المصدر السابق محفوظ دون تكرار." };
         var hash = StatementComparisonRules.Hash(new { t.AcademyId,t.MembershipId,delivery,factsHash,revision,a.PostedAmount,dueDate = today,action, reviewId = review?.Id });
         return new(d,a,today,factsHash,snapshot,hash,action,message,revision,review?.Id);

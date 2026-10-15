@@ -148,7 +148,7 @@ public static partial class ReportingEndpoints
                 var payrollMonth = new DateOnly(payrollDate.Year, payrollDate.Month, 1);
                 var salaries = await PayrollEndpoints.Rows(academyId, payrollMonth, branchId, db);
                 var staff = db.Employees.Where(x => x.AcademyId == academyId && x.IsActive && x.ContractStart <= realToday && (x.ContractEnd == null || x.ContractEnd >= realToday) && (!branchId.HasValue || x.BranchId == branchId));
-                payroll = new { month = payrollMonth, employeeCount = await staff.CountAsync(), expiringContracts = await staff.CountAsync(x => x.ContractEnd != null && x.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Where(x => !x.IsPaid).Sum(x => x.NetDue) };
+                payroll = new { month = payrollMonth, employeeCount = await staff.CountAsync(), expiringContracts = await staff.CountAsync(x => x.ContractEnd != null && x.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Sum(x=>x.RemainingAmount) };
             }
         }
         var coachMembers = await db.AcademyMemberships.Where(x => x.AcademyId == academyId && x.Role == AcademyRole.Coach && x.IsActive)

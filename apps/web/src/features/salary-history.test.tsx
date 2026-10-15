@@ -27,6 +27,9 @@ it("paid months and already scheduled changes bound the next date without hiding
   global.fetch=vi.fn(()=>response({...initial,currentMonthPaid:true,items:[{...initial.items[0],effectiveFrom:"2026-12-01"}]})) as typeof fetch;
   render(<SalaryHistory id="worker"/>);expect(await screen.findByLabelText("شهر السريان")).toHaveValue("2026-12");expect(screen.getByLabelText("شهر السريان")).toHaveAttribute("min","2026-12");expect(screen.getByText(/الشهر الحالي مسدد/)).toBeVisible();
 });
+it("an approved unpaid statement also prevents selecting the current salary month",async()=>{
+  global.fetch=vi.fn(()=>response({...initial,currentMonthApproved:true})) as typeof fetch;render(<SalaryHistory id="worker"/>);expect(await screen.findByLabelText("شهر السريان")).toHaveValue("2026-11");expect(screen.getByLabelText("شهر السريان")).toHaveAttribute("min","2026-11");
+});
 it("legacy and read-only access never invent approvals or render mutation controls",async()=>{
   global.fetch=vi.fn(()=>response({...initial,canChange:false,hasVerifiedHistory:false,revision:0,items:[]})) as typeof fetch;
   render(<SalaryHistory id="worker"/>);await screen.findByText(/الراتب القائم مرجع غير مؤرخ/);expect(screen.queryByRole("form")).not.toBeInTheDocument();expect(screen.getByText(/القراءة وحدها لا تنشئ سجلًا/)).toBeVisible();expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
