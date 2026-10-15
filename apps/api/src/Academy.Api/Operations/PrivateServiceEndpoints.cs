@@ -45,7 +45,8 @@ public static class PrivateServiceEndpoints
         response.Headers.CacheControl = "no-store";
         // Only the coach's delivery/rate/compensation, no children, family balances or invoice total.
         var rows = await Assessments(db, t.MembershipId);
-        return Results.Ok(new { postedToPayroll = rows.Any(r => r.PostingCount > 0), items = rows.Select(r => new { r.Id, r.ServiceDate, r.Branch, r.Sport, r.Eligible, r.Earned, r.Contingent, r.RequiresReview, r.PostedAmount, r.PendingDelta, r.PostingCount, r.Currency, r.AgreementId, r.VariableValue, r.VariableMethod }) });
+        var corrections = await db.PrivateCompensationEntries.AsNoTracking().Where(e => e.Kind == "Correction" && db.PrivateServiceDeliveries.Any(d => d.Id == e.DeliveryId && d.CoachMembershipId == t.MembershipId)).OrderByDescending(e => e.Revision).Select(e => new { e.DeliveryId, e.DueDate, e.Delta }).ToArrayAsync();
+        return Results.Ok(new { postedToPayroll = rows.Any(r => r.PostingCount > 0), items = rows.Select(r => new { r.Id, r.ServiceDate, r.Branch, r.Sport, r.Eligible, r.Earned, r.Contingent, r.RequiresReview, r.PostedAmount, r.PendingDelta, r.PostingCount, r.Currency, r.AgreementId, r.VariableValue, r.VariableMethod, corrections = corrections.Where(c => c.DeliveryId == r.Id).Select(c => new { c.DueDate, c.Delta }) }) });
     }
     private static async Task<IResult> Options(Guid coachId, CurrentTenant current, FoundationDbContext db, TimeProvider time)
     {

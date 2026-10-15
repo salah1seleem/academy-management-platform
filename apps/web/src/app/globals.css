@@ -162,6 +162,15 @@
 .private-posting-action .payroll-dialog h3 { font-size: 1rem; }
 .private-posting-action .payroll-dialog p { font-size: .9rem; line-height: 1.8; }
 .private-posting-action .payroll-dialog ul { font-size: .85rem; line-height: 1.8; padding-inline-start: 1.25rem; }
+.private-posting-action .private-correction-form { display: grid; gap: .85rem; margin-block: 1rem; min-width: 0; padding: 1rem; }
+.private-posting-action .private-correction-form h3,
+.private-posting-action .private-correction-form p { margin: 0; }
+.private-posting-action .private-correction-form label { display: grid; gap: .5rem; font-size: .85rem; font-weight: 600; min-width: 0; }
+.private-posting-action .private-correction-form input,
+.private-posting-action .private-correction-form textarea { display: block; box-sizing: border-box; width: 100%; min-width: 0; min-height: 3rem; border: 1px solid var(--border, #dce4e8); border-radius: .65rem; background: var(--surface, #fff); color: var(--staff-text, #172637); font: inherit; padding: .65rem .8rem; }
+.private-posting-action .private-correction-form textarea { min-height: 5rem; resize: vertical; }
+.private-posting-action .private-correction-form strong { display: block; font-size: 1rem; }
+.private-posting-action .private-correction-form button { white-space: normal; }
 @media (max-width: 640px) { .coach-private-services .section-heading { flex-direction: column; align-items: stretch; gap: .75rem; } .coach-private-services .summary-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .coach-agreements .section-heading { flex-direction: column; align-items: stretch; gap: .75rem; } .coach-agreements .section-heading > button { align-self: start; } }
 .platform-academy { flex-direction: column; align-items: start !important; padding: 1.15rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 1rem; text-align: start; }

@@ -4733,7 +4733,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("PrivateCompensationEntries", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PrivateEntry_Amounts", "\"Component\"='PrivateVariable' AND \"Revision\">0 AND \"PostedBefore\">=0 AND (\"TargetAmount\" IS NULL OR \"TargetAmount\">=0) AND ((\"Kind\"='Review' AND \"Delta\"=0 AND \"PayrollAdjustmentId\" IS NULL AND \"ReviewEntryId\" IS NULL) OR (\"Kind\"='Accrual' AND \"Delta\">0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NULL) OR (\"Kind\"='Reversal' AND \"Delta\"<0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NOT NULL))");
+                            t.HasCheckConstraint("CK_PrivateEntry_Amounts", "\"Component\"='PrivateVariable' AND \"Revision\">0 AND \"PostedBefore\">=0 AND (\"TargetAmount\" IS NULL OR \"TargetAmount\">=0) AND ((\"Kind\"='Review' AND \"Delta\"=0 AND \"PayrollAdjustmentId\" IS NULL AND \"ReviewEntryId\" IS NULL) OR (\"Kind\"='Accrual' AND \"Delta\">0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NULL) OR (\"Kind\" IN ('Reversal','Correction') AND \"Delta\"<0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NOT NULL))");
                         });
                 });
 

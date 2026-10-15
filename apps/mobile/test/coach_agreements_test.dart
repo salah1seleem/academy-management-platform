@@ -6,6 +6,41 @@ import 'coach_test.dart' show coach, shell;
 
 void main() {
   testWidgets(
+    'Reviewed correction shows its target month without salary mutation controls',
+    (tester) async {
+      final auth = await coach(
+        (m, p, b, t) async => {
+          'items': [
+            {
+              'branch': 'الرحاب',
+              'sport': 'كرة القدم',
+              'serviceDate': '2026-10-01',
+              'earned': 80,
+              'postedAmount': 80,
+              'pendingDelta': 0,
+              'contingent': 0,
+              'currency': 'EGP',
+              'variableMethod': 'Percent',
+              'variableValue': 40,
+              'corrections': [
+                {'dueDate': '2026-11-01', 'delta': -20},
+              ],
+            },
+          ],
+        },
+      );
+      await tester.pumpWidget(shell(CoachPrivateServicesPage(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('تصحيح عمولة — ليس صرفًا: -20 EGP · 2026-11-01'),
+        findsOneWidget,
+      );
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'A disputed private delivery shows review instead of null or zero money',
     (tester) async {
       final auth = await coach(

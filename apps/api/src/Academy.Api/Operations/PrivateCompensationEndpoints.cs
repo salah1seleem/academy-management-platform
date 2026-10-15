@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
 
-public static class PrivateCompensationEndpoints
+public static partial class PrivateCompensationEndpoints
 {
     public static void MapPrivateCompensation(this WebApplication app)
     {
@@ -18,6 +18,8 @@ public static class PrivateCompensationEndpoints
         api.MapGet("/posting-preview", Preview);
         api.MapGet("/entries", History);
         api.MapPost("/entries", Post).AddEndpointFilter<CsrfFilter>();
+        api.MapGet("/correction-preview", CorrectionPreview);
+        api.MapPost("/corrections", Correct).AddEndpointFilter<CsrfFilter>();
     }
     private static DateOnly Month(DateOnly date) => new(date.Year,date.Month,1);
     private sealed record Prepared(PrivateServiceDelivery Delivery, PrivateAssessment Assessment, DateOnly DueDate, string FactsHash, string Snapshot, string QuoteHash, string Action, string Message, int Revision, Guid? ReviewId);
@@ -41,7 +43,7 @@ public static class PrivateCompensationEndpoints
             "Accrual" => "ترحيل فرق العمولة إلى كشف الشهر الحالي فقط؛ لا سداد أو قبض أو مصروف مكرر.",
             "Review" => "حفظ استثناء للمراجعة دون تغيير الرواتب؛ انخفاض الاستحقاق أو تعارض التنفيذ لا يخصم تلقائيًا.",
             "Reversal" => "عكس صريح لجزء من عمولة هذا الشهر غير المسددة فقط؛ تبقى الحركات الأصلية، ولا تمس الأساسي أو شهرًا مسددًا.",
-            "ReviewPending" => "الاستثناء محفوظ للمراجعة. لا مقاصة مع الأساسي أو شهر آخر/مسدد؛ التسوية المنفصلة بعد الصرف تحتاج مسار المستحقات الجزئية القادم.",
+            "ReviewPending" => "الاستثناء محفوظ بلا خصم. إذا كان الفرق محسوبًا، يمكن للمالك مراجعة تصحيح عمولة مستقل في شهر راتب غير معتمد؛ لا إعادة كتابة كشف سابق أو مقاصة دين خارجي.",
             "Blocked" => "كشف الشهر الحالي معتمد أو مسدد؛ لا نعيد كتابته أو ننقل الفرق لشهر مستقبلي صامتًا.",
             _ => "لا فرق جديد لترحيله؛ المصدر السابق محفوظ دون تكرار." };
         var hash = StatementComparisonRules.Hash(new { t.AcademyId,t.MembershipId,delivery,factsHash,revision,a.PostedAmount,dueDate = today,action, reviewId = review?.Id });

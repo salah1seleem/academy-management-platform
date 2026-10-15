@@ -1,5 +1,21 @@
 # تقدم أكاديميتي V2 + V3
 
+## أحدث شريحة — C2C3C: تصحيح عمولة بعد اعتماد/صرف الراتب، 2026-10-15
+
+استئناف من `653e12f52f70553a5a2ee832591aea5e31888305` على `codex/15-native-mobile-app`، شجرة نظيفة وremote Academy الصحيح. CI38706184667: Web/Flutter/E2E **success**، Backend **in_progress** عند الفحص؛ لا فشل اتصال مثبت أو نجاح شامل مفترض. لا إعادة للسلف/الكشوف أو تغيير main/إعدادات/موديل أو subagents.
+
+**المنفذ:** إكمال الاستثناء السالب المحسوب في مصدر الخاص القائم، لا نظام رواتب آخر. بعد حفظ Review بلا أثر، يعاين المالك شهر التصحيح ويؤكده صراحة؛ شهر الراتب الحالي أو حتى12 شهرًا تالية، أول الشهر، غير معتمد/مسدد ويغطيه العقد. اقتراح خادمي لأول شهر متاح لا ينفذ ترحيلًا تلقائيًا. Correction نسخة جديدة في PrivateCompensationEntry مرتبطة بمراجعتها، وPayrollAdjustment واحد بقيمة الفرق فقط، دون تغيير المصدر أو كشفه أو الأساسي أو صرف/تحصيل/مصروف جديد أو مقاصة تعامل خارجي. يحتفظ بسلسلة المصدر والمراجع وfacts/quote/hash/actor/cutoff؛ لا مبلغ قابل للتحرير. الـfuture PayrollStatement لا يُعتمد قبل شهره. الرواتب والمالك يظلان من المصدر القديم للشهر المعتمد، ويظهر التصحيح في مصدر شهره؛ قراءة Flutter تعرض شهر التصحيح وقيمته فقط، دون ملاحظة المالك/الطفل/الفاتورة أو صلاحية مالية.
+
+**الأمان والحدود:** Owner-only إلى حين تفويض مالي مستقل موثق، لا منح منPay/تعديل الاتفاق/CRUD/حضور Coach. إعادة التفويض الحي داخل المعاملة، ثم قفل الموظف/الباقة/المطالبة/الحضور بنفس الترتيب. Quote تغير أو شهر أغلق →409، retry مطابق يعيد الحركة، تأكيدان متزامنان →تصحيح واحد. حارس SQL مستقل لـCorrection يحفظ حارس الأنواع القديمة، يثبت نفس snapshot المراجعة/السلسلة/الشهر/الفاعل وحركة الراتب، وimmutability وFK review الواحد يمنعان العكس/التخصيص المكرر. تعارض تنفيذ أو تقييمnull لا يولد خصمًا. عقد منتهٍ بلا شهر راتب صالح يبقى للمراجعة، ولا ينشئ راتبًا سلبيًا؛ تسوية نهاية الخدمة باقية. هذا **شهر راتب غير معتمد**، وليس ادعاء وجود فترة دفتر عام مفتوحة؛ F07 ناقص. الزيادة الموجبة بعد شهر معتمد ومسار إنهاء الخدمة العام والافتتاح والعقد المؤرخ ليست منفذة هنا.
+
+**التحقق الفعلي:** التكامل الجديد أولًا3/3 في23s، المستهلكون17/17 في1m18s، ثم الأربع حالات النهائية **4/4 في25s** بعد إضافة حدود العقد وحراسة SQL؛ مجموعات متداخلة لا تجمع كاختبارات فريدة. معتمد3100 أو مسدد3100 →Credit400 →Review0 →Correction−20 في الشهر التالي؛ الأساسي3000، صافي الشهر التالي2980، والكشف الأصلي/المالك3100، والصرف والتحصيل لا يتغيران. LegacyPaid محفوظ أيضًا. تشمل CSRF والأكاديمية الثانية/الإداري المفوض/Coach، تواريخ الماضي/الشهر المغلق/أكثر12شهرًا، تغير المصدر، التزامن/replay، منع تعديل/حذف/تزوير المصدر. Flutter8/8 وanalyze بلا ملاحظات؛ Web24/24؛ وحدة12/12 ومعمارية1/1؛ typecheck/lint/production build ناجحة؛ EF بلا pending model. سجلات `/tmp/academy-v3-c2c3c-{integration-first,consumers,integration-final,integration-postlabel,web-final,mobile-final,analyze,unit,architecture,types-final,lint-final,build-final,model}.log`.
+
+**E2E/بصري:** أول جولة5/6؛ الجديد حاول إنشاء اتفاق بتاريخ سابق فرفضه الخادم409. صحح fixture إلى تاريخ اليوم الخادمي وحصة منتهية في اليوم نفسه، دون تغيير حماية المنتج أو assertions؛ الجديد1/1 في16.3s. كشفت الصور تداخلlabel/textarea، فعُزل تنسيق النموذج وأضيف فحصcomputed grid وعرض الحقل. النهائي **6/6 في43.2s** على `academy_v3_c2c3c_final_20261015` جديدة بعد **90migration** من الصفر: التصحيح والعكس/الترحيل والكشف/الصرف والحساب والسلفة والأساسي، مع Mobile API ذاتي. [390](evidence/c2c3c/private-correction-390.png)/[1440](evidence/c2c3c/private-correction-1440.png) صور Web فعلية مراجعة بلا تداخل/overflow؛ ليست صور Flutter جهاز أو fullV2/V3 regression أوF10. سجل `e2e-final` و`migrations-final`. أول Flutter فشل من corrections الغائب في payload قديم واسم ملف اختبار غير موجود؛ أضيف fallback لقائمة غائبة، وشغل اسم الملف الفعلي؛ لم تُخفف assertions. أول EF احتاجusingAuth ثمConnectionStrings محلية صريحة؛ لا مشكلة شبكة أو تعديل.env.
+
+**Migration/Demo:** الجديدة `20261015085300_V3ReviewedPrivateCorrections` فقط، توسعة constraint وحراسة أمامية بلا جدول مالي آخر أو تعديلmigration معتمدة قديمة. قواعد اختبارPG16 محلي مؤقت فقط؛ لا ادعاء اختبارPG17Production. مصادر PrivateDemo opt-in القائمة وبيانات رحلة عربية اصطناعية محفوظة في قاعدة الاختبار الجديدة؛ لا seed يخصم تلقائيًا راتب المستخدم عند كل فتح أو reset لقاعدة المراجعة. .env/main/المتطلبات وخدمات5080/3000/Simulator محفوظة؛ لا دفع أو إرسال فعلي.
+
+**التالي المحدد:** C2C3D لتأريخ شروط العقد دون إعادة كتابة كشف، ثم C2C3E للافتتاح الموثق ومسار تسوية نهاية الخدمة/التصحيح الموجب، وصولًا إلىF07/F10. ربط الاشتراك المحصل والحجز المالي المسبق/الخارجي والتكلفة/الربحية والجهاز والإعلانات وإعادة تركيب الموبايل والديمو الشامل والقبول الموحد باقية في الخريطة. F04/V2-08/V3-AC14/22 **جزئية**؛ هذه نتيجة شريحة، لا اكتمالV2/V3 أو استمرار عمل خارج الجلسة مدعى. SHA/CI النهائيان يسجلان بعدpush.
+
 ## أحدث شريحة — C2C3B: سلفة مصروفة وتخصيصها مرة واحدة، 2026-10-15
 
 **نقطة الاستئناف المرفوعة:** Code `637eeb2e133978c5c56551fcf5344807caaf062a` على `origin/codex/15-native-mobile-app`، شجرة نظيفة ومطابقة بعدpush. [CI38705926897](https://github.com/salah1seleem/academy-management-platform/actions/runs/38705926897) **in_progress** عند الفحص؛ لا green مفترض. main المحلي/البعيد مؤكد عند `abda1ed273030e69812321e5c14d260bbc2e2275`. خريطة18V2/48V3 بلا missing/duplicate؛ المتطلبات/.env/next-env محفوظة، migration جديدة واحدة دون تعديل القديمة. افحصCI ثم ابدأC2C3C للتصحيح بعد الاعتماد/الصرف والافتتاح/العقد المؤرخ؛ لا تكرر السلفة أو حساب المصادر. commit توثيق هذه النقطة لا يغير أدلة الكود، والخطة غير مكتملة.
@@ -168,7 +184,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V2-05 | partial | مرافق وحارات وحجوزات وتسكين ونقل وسعة. | V2FacilityTests؛ V2ResourceTimetableTests؛ V2GroupPlacementTests | بوابات نهائية؛ دمج خاص/خارجي مع الفصل الرياضي |
 | V2-06 | partial | حضور وQR وعد وملاحظات وبديل وصلاحيات الماضي. | V2AttendanceStatesTests؛ V2CoachOverrideTests؛ V2VisitTests | تصريح الخدمات الأخرى؛ حضور موظف بإثبات خادمي واستثناء |
 | V2-07 | partial | قبض/وردية/استرداد/مطابقة/تجديد أسرة عبر فروع. | V2CashFamilyCollectionTests؛ V2SettlementComparisonTests | فائض مزود وخدمات أخرى والدفتر؛ انحدار موحد |
-| V2-08 | partial | مصروفات وتوزيع؛ خاص وأساس مؤرخ؛ كشف/حساب وصرف جزئي؛ C2C3B سلفة وتخصيص دون مضاعفة المال. | V2OperatingExpenseTests؛ V3PrivatePostingTests؛ V3SalaryHistoryTests؛ V3PayrollStatementTests؛ V3PayrollAccountTests؛ V3PayrollAdvanceTests | افتتاح موثق/تسويات/قيود؛ تكلفة وربحية وإغلاق |
+| V2-08 | partial | مصروفات وتوزيع؛ خاص وأساس مؤرخ؛ كشف/حساب وصرف جزئي؛ سلفة وتخصيص؛ C2C3C تصحيح عمولة سالب مراجع بعد الاعتماد/الصرف. | V2OperatingExpenseTests؛ V3PrivatePostingTests؛ V3SalaryHistoryTests؛ V3PayrollStatementTests؛ V3PayrollAccountTests؛ V3PayrollAdvanceTests؛ V3PrivateCorrectionTests | افتتاح/عقد مؤرخ/نهاية خدمة وتصحيح موجب؛ دفتر وتكلفة وربحية وإغلاق |
 | V2-09 | missing | لا عقود/كشوف شركاء متكاملة مثبتة. | الفجوة في V2_EXECUTION | عقود خاص/حارات/خارجي واتجاه أموال مستقل |
 | V2-10 | partial | تقييمات مسودة/منشورة موجودة من النسخة السابقة. | EvaluationIntegrationTests | مهارات/خطط/أهداف/ترقية/رحلة وشهادات |
 | V2-11 | partial | مباريات وأخبار وملاحظات أسر ورد/حل/موعد متابعة. | BrandingMatchesTests؛ GuardianFeedbackTests | تقويم/جمهور/إسناد/SLA/مساعدة/onboarding |
@@ -196,7 +212,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V3-AC11 | partial | B3b2 سحب السياق وتدوير tokens؛ B3b3A إعادة تفويض الصرف والمراجعة تحت قفل المنح، ورفض طلب صرف HTTP ينتظر القفل بعد سحب الإذن أو الفرع | الجولة الموحدة ومصادر المال القادمة باقية؛ استيراد السياق الإضافي مرفوض حاليًا |
 | V3-AC12 | partial | TenantAuthenticationTests؛ StaffManagement | رفض الأدوار موجود؛ آخر مالك يحتاج قبول موحد |
 | V3-AC13 | partial | C1 اتفاقات؛ C2A تنفيذ مرتبط بالحصة/المطالبة؛ C2B ترحيل فرق صريح من ملف المدرب | الحجز المالي المسبق والاشتراك المحصل مباشرة باقيان |
-| V3-AC14 | partial | خاص/أساس مؤرخ؛ كشف/حساب وصرف جزئي؛ سلفة وتخصيص وFlutter ذاتي | تكلفة النشاط/الدفتر والافتتاح/تسوية بعد الصرف باقية |
+| V3-AC14 | partial | خاص/أساس مؤرخ؛ كشف/حساب وصرف جزئي؛ سلفة وتخصيص؛ تصحيح عمولة سالب مراجع بعد الاعتماد/الصرف وFlutter ذاتي | تكلفة النشاط/الدفتر والافتتاح/العقد المؤرخ ونهاية الخدمة والتصحيح الموجب باقية |
 | V3-AC15 | partial | AgreementId ثابت؛ C2B snapshot/cutoff/نسخة مصدر لا يعيدها تغير النسبة أو المصدر | snapshot الحجز المالي المسبق وتصحيحه والقبول الموحد باقيان |
 | V3-AC16 | implemented_pending_verification | C2B مثال8/2000/2/1000/40% يرحّل100 ثم فرق100 فقط؛ تزامن/replay؛ الاختبار المحدد مثبت | إعادة القبول الموحدة ببياناتV3 باقية؛ تصحيح ما بعد الصرف والدفتر متطلبات أخرى مفتوحة ولا يسقطان |
 | V3-AC17 | missing | EmployeeProfile موجود | عقد شريك وكشف مستقل وربطهما بالشخص |
@@ -204,7 +220,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V3-AC19 | partial | V2FacilityTests؛ V2ResourceTimetableTests | إعادة قبول دمج الخاص/الخارجي |
 | V3-AC20 | missing | F10 + golden fixture | دفتر مزدوج ومصادر فعلية وتقارير مطابقة ناقصة |
 | V3-AC21 | partial | V2ProviderQuarantineTests؛ SubscriptionPaymentTests | موجود للدفع؛ تكامل القيد الجديد ناقص |
-| V3-AC22 | partial | V2CashRefundTests؛ V3PayrollStatementTests؛ V3PayrollAccountTests؛ V3PayrollAdvanceTests؛ صرف جزئي وسلفة/تخصيص لا تخصم مرتين | افتتاح موثق/تسوية فترة مفتوحة وتصحيح شهر مغلق ناقصة |
+| V3-AC22 | partial | V2CashRefundTests؛ V3PayrollStatementTests؛ V3PayrollAccountTests؛ V3PayrollAdvanceTests؛ V3PrivateCorrectionTests؛ صرف جزئي وسلفة وتصحيح عمولة مراجع لا يعيدان الصرف أو الكشف | افتتاح/نهاية خدمة وتصحيح موجب ودفتر بفترات محاسبية مغلقة باقية؛ غير المعتمد هنا شهر راتب فقط |
 | V3-AC23 | partial | GuardianCoreIntegrationTests؛ V2ReceivablesTests | فواتير موحدة scoped وتبويب المدرب ناقص |
 | V3-AC24 | partial | V2FamilyRenewalRequestTests | الأسرة بإيصالات مستقلة؛ مستند متعدد أسطر يحتاج تحقق |
 | V3-AC25 | partial | matches.tsx؛ BrandingMatchesTests | نسخ Draft وحفظ وإضافة أخرى ناقص |

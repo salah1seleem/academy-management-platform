@@ -151,6 +151,10 @@ class CoachPrivateServicesPage extends StatelessWidget {
                   UiText(
                     '${localized(context, 'فرق التقييم', 'Assessment difference')}: ${row['pendingDelta'] ?? localized(context, 'يتطلب مراجعة', 'Needs review')} ${row['pendingDelta'] == null ? '' : row['currency']}',
                   ),
+                  for (final correction in rows(row['corrections'] ?? const []))
+                    UiText(
+                      '${localized(context, 'تصحيح عمولة — ليس صرفًا', 'Commission correction — not a payment')}: ${correction['delta']} ${row['currency']} · ${correction['dueDate']}',
+                    ),
                   if (row['requiresReview'] == true)
                     UiText(
                       localized(
