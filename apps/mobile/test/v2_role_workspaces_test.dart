@@ -97,13 +97,22 @@ void main() {
       final calls = <String>[];
       final auth = await authenticate('AcademyAdmin', (m, p, b, t) async {
         calls.add(p);
-        return ['payment.read'];
+        return p == '/api/v1/my-permissions'
+            ? ['payment.read']
+            : {'pending': 0, 'items': []};
       });
       await tester.pumpWidget(app(AdminHome(auth: auth)));
       await tester.pumpAndSettle();
       expect(find.text('طلبات الدفع'), findsOneWidget);
       expect(find.text('حضور اللاعبين'), findsNothing);
-      expect(calls, ['/api/v1/my-permissions']);
+      expect(calls, [
+        '/api/v1/my-permissions',
+        '/api/v1/manage/payment-requests?status=Pending&allDates=true',
+      ]);
+      expect(
+        calls.any((p) => p.contains('/attendance/') || p.contains('/reports/')),
+        isFalse,
+      );
       expect(auth.session!.selected!.label, 'إداري');
       auth.dispose();
     },

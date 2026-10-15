@@ -12,6 +12,7 @@ import '../coach/coach_home.dart';
 import '../coach/coach_player.dart';
 import '../admin/admin_home.dart';
 import '../owner/owner_reports.dart';
+import '../owner/owner_operations.dart';
 import 'academy_news.dart';
 import 'matches.dart';
 import 'staff_amounts.dart';
@@ -86,7 +87,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
           )
         : owner
         ? selected == 1
-              ? NativePaymentRequests(auth: widget.auth)
+              ? OwnerDecisionsPage(auth: widget.auth)
               : OwnerReports(auth: widget.auth)
         : admin
         ? selected == 1
@@ -386,7 +387,7 @@ class NativePaymentRequests extends StatelessWidget {
     child: RemoteBody(
       auth: auth,
       path:
-          '/api/v1/manage/payment-requests?${Uri(queryParameters: {...filters, 'status': 'Pending'}).query}',
+          '/api/v1/manage/payment-requests?${Uri(queryParameters: {...filters, if (filters['from']?.isNotEmpty != true && filters['to']?.isNotEmpty != true) 'allDates': 'true', 'status': 'Pending'}).query}',
       builder: (context, value) {
         final d = obj(value);
         return gList([

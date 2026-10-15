@@ -205,6 +205,9 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         var after = await owner.GetFromJsonAsync<JsonElement>(path);
         Assert.Equal(before.GetProperty("paymentRequests").GetProperty("total").GetInt32(), after.GetProperty("paymentRequests").GetProperty("total").GetInt32());
         Assert.Equal(before.GetProperty("operations").GetProperty("pendingPaymentBacklog").GetInt32() + 1, after.GetProperty("operations").GetProperty("pendingPaymentBacklog").GetInt32());
+        Assert.Equal(before.GetProperty("operations").GetProperty("pendingPaymentQueueBacklog").GetInt32() + 1, after.GetProperty("operations").GetProperty("pendingPaymentQueueBacklog").GetInt32());
+        var queue = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/payment-requests?status=Pending&allDates=true&branchId={Slice2DemoSeed.CityBranchId}");
+        Assert.Equal(queue.GetProperty("pending").GetInt32(), after.GetProperty("operations").GetProperty("pendingPaymentQueueBacklog").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(path)).StatusCode);
     }
     private async Task<(Guid Id, string Email)> CreateStaff(HttpClient c, string role)

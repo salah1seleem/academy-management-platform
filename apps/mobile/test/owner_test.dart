@@ -191,39 +191,74 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   });
-  testWidgets('Owner sees stored coach/family signals and opens private feedback', (tester) async {
-    Map<String, dynamic>? resolutionBody;
-    final auth = await owner((m, p, b, t) async {
-      if (p.contains('/structure/options')) return {'branches': []};
-      if (p.endsWith('/news')) return [];
-      if (p.endsWith('/manage/feedback/note-1/resolve') && m == 'POST') {
-        resolutionBody = Map<String, dynamic>.from(b as Map);
-        return {'id': 'note-1'};
-      }
-      if (p.contains('/manage/feedback')) {
-        return [
-          {'id': 'note-1', 'kind': 'Complaint', 'score': null, 'message': 'تغيير موعد تجريبي', 'status': 'Open', 'playerName': 'لاعب تجريبي', 'branchName': 'فرع تجريبي', 'coachName': 'مدرب تجريبي'},
-        ];
-      }
-      return {...summary(), 'operations': {
-        'groupAttention': [], 'attentionRule': 'غياب متكرر',
-        'coachPerformance': [{'name': 'مدرب تجريبي', 'groupCount': 2, 'sessionCount': 7, 'parentRating': 4.5, 'parentRatingCount': 2}],
-        'pendingExpenses': [], 'accessChanges': 1, 'openComplaints': 1, 'openSuggestions': 0,
-      }};
-    });
-    await tester.pumpWidget(shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())));
-    await tester.pumpAndSettle();
-    final feedbackLink = find.textContaining('شكاوى 1');
-    await tester.scrollUntilVisible(feedbackLink, 250);
-    await tester.tap(feedbackLink); await tester.pumpAndSettle();
-    expect(find.text('تغيير موعد تجريبي'), findsOneWidget);
-    expect(find.text('تسجيل المراجعة'), findsOneWidget);
-    await tester.tap(find.text('الرد والحل'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'تم تعديل موعد الإشعار للأسرة.');
-    await tester.tap(find.text('إرسال الرد وحل الملاحظة'));
-    await tester.pumpAndSettle();
-    expect(resolutionBody?['response'], 'تم تعديل موعد الإشعار للأسرة.');
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'Owner sees stored coach/family signals and opens private feedback',
+    (tester) async {
+      Map<String, dynamic>? resolutionBody;
+      final auth = await owner((m, p, b, t) async {
+        if (p.contains('/structure/options')) return {'branches': []};
+        if (p.endsWith('/news')) return [];
+        if (p.endsWith('/manage/feedback/note-1/resolve') && m == 'POST') {
+          resolutionBody = Map<String, dynamic>.from(b as Map);
+          return {'id': 'note-1'};
+        }
+        if (p.contains('/manage/feedback')) {
+          return [
+            {
+              'id': 'note-1',
+              'kind': 'Complaint',
+              'score': null,
+              'message': 'تغيير موعد تجريبي',
+              'status': 'Open',
+              'playerName': 'لاعب تجريبي',
+              'branchName': 'فرع تجريبي',
+              'coachName': 'مدرب تجريبي',
+            },
+          ];
+        }
+        return {
+          ...summary(),
+          'operations': {
+            'groupAttention': [],
+            'attentionRule': 'غياب متكرر',
+            'coachPerformance': [
+              {
+                'name': 'مدرب تجريبي',
+                'groupCount': 2,
+                'sessionCount': 7,
+                'parentRating': 4.5,
+                'parentRatingCount': 2,
+              },
+            ],
+            'pendingExpenses': [],
+            'accessChanges': 1,
+            'openComplaints': 1,
+            'openSuggestions': 0,
+          },
+        };
+      });
+      await tester.pumpWidget(
+        shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())),
+      );
+      await tester.pumpAndSettle();
+      final feedbackLink = find.textContaining('شكاوى 1');
+      await tester.scrollUntilVisible(feedbackLink, 250);
+      await tester.ensureVisible(feedbackLink);
+      await tester.pumpAndSettle();
+      await tester.tap(feedbackLink);
+      await tester.pumpAndSettle();
+      expect(find.text('تغيير موعد تجريبي'), findsOneWidget);
+      expect(find.text('تسجيل المراجعة'), findsOneWidget);
+      await tester.tap(find.text('الرد والحل'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).last,
+        'تم تعديل موعد الإشعار للأسرة.',
+      );
+      await tester.tap(find.text('إرسال الرد وحل الملاحظة'));
+      await tester.pumpAndSettle();
+      expect(resolutionBody?['response'], 'تم تعديل موعد الإشعار للأسرة.');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
