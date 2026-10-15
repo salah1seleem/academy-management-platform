@@ -2,6 +2,8 @@
 
 ## C2C3B — سلفة وتخصيصها دون ازدواج — 2026-10-15
 
+Code `637eeb2e133978c5c56551fcf5344807caaf062a` مرفوع علىorigin؛ [CI38705926897](https://github.com/salah1seleem/academy-management-platform/actions/runs/38705926897) in_progress عند الفحص. التالية CI ثمC2C3C، لا اكتمالV2/V3 أو تنفيذ خارج الجلسة مدعى.
+
 PayrollAdvance مصدر صرف سلفة مسجل، وليس مصروف راتب. تخصيصه في PayrollDisbursement القائم ليس صرفًا أو خصمًا جديدًا. حساب الموظف وCSV وPayroll والمالك يميزون السداد عن خروج المال؛ Flutter ذاتي بلا كتابة أو مرجع داخلي. تفويض السلف مستقل مع Pay/CRUD، وعزل وقفل وتكرار وself وثبات SQL/EF؛ تنبيه غير المخصص قبل صرف جديد، ولا مقاصة تلقائية. Demo opt-in محروس ويحفظ الموجود. migration الجديدة `20261015074148_V3PayrollAdvances` على اختبار فقط؛ لا تغيير .env أو المتطلبات/main أو قاعدة وخدمات المراجعة.
 
 تكامل 21/21 ثم 6/6 ثم fresh SQL 2/2 متداخلة؛ وحدة 12/12 ومعمارية 1/1، Web 32/32 وFlutter 8/8 وanalyze، وtypecheck/lint/build، وEF بلا pending model. E2E 4/5 ثم 1/1 ثم fresh 5/5؛ صور 390/1440 وأدلة ومحاولات وSHA/CI في [PROGRESS](../academy-v3/PROGRESS.md). ليست جولة V2/V3 الموحدة أو F10 أو جهاز Flutter فعليًا. التالية C2C3C للتصحيح بعد الاعتماد/الصرف والعقد المؤرخ والافتتاح، ثم F07/F10 وبقية الخطة؛ لا اكتمال أو Production/دفع حقيقي أو عمل خارج الجلسة مدعى.

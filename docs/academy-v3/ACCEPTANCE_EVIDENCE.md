@@ -2,6 +2,8 @@
 
 ## C2C3B — السلفة لا تصرف أو تخصم مرتين — 2026-10-15
 
+Code `637eeb2e133978c5c56551fcf5344807caaf062a` مرفوع؛ [CI38705926897](https://github.com/salah1seleem/academy-management-platform/actions/runs/38705926897) in_progress عند الفحص، لا قبول شامل مفترض. main محفوظ وخريطة18/48 بلا missing/duplicate.
+
 PayrollAdvance خروج مال مسجل، وتخصيصه فيPayrollDisbursement القائم تسوية لا صرف جديد. تستعمل الرواتب/المالك/الحساب/CSV نفس المصادر؛ فصلDirectPaid وAdvanceApplied وRecordedAdvanceTotal/UnallocatedAdvances وCashOutRecorded. لاPayrollAdjustment أو مصروف/قبض/PayrollSettlement مكرر، ولا مقاصة تلقائية أو بنك فعلي. Grant مستقل معPay/CRUD، منعAdminself عبرCoach، وعزل/سحب/مرجع اختياري وقيودSQL/EF. F04/AC14/22 **جزئية**: التصحيح بعد الاعتماد/الصرف والافتتاح/العقد المؤرخ والدفتر باقية.
 
 Backend21/21 للمستهلكين، النهائي خمس سلف+reset6/6، ثمSQL/تزامن2/2 بعد89migrations من الصفر؛ متداخلة. وحدة12/12 ومعمارية1/1؛ Web32/32 وFlutter8/8 وanalyze؛ typecheck/lint/build وEF بلا pending model. E2E أولًا4/5 (محددlabel)، ثم1/1، ثم النهائي5/5 في38.5s على `academy_v3_advances_final_20261015` الجديدة. مرجع3000: سلفة750→تخصيص500→صرف1000→تخصيص250؛ المسدد1750، المتبقي1250، الخصومات0، وخروج المال1750 لا2500. مرجعشهرين6000→1750→4250، وتكرار/تزامن لم ينفقا الرصيد مرتين. CSVcutoff قبلالتخصيص يحتفظبالسلفةغيرالمخصصة750 والمسدد0. [390](evidence/c2c3b/payroll-advances-390.png)/[1440](evidence/c2c3b/payroll-advances-1440.png) Web فعليتان مراجعتان؛ لا اختبارجهازFlutter أوFullRegression/F10 موحد مدعى.
