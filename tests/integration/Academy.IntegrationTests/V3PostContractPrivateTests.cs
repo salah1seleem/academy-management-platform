@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Academy.Infrastructure.Identity;
+using Academy.Infrastructure.Tenancy;
 
 namespace Academy.IntegrationTests;
 public sealed partial class V2StaffScopeTests
@@ -64,6 +65,10 @@ public sealed partial class V2StaffScopeTests
         Assert.Equal(HttpStatusCode.Forbidden,(await StatementCommand(coach,payPath,new PayrollOpeningPayment(1,50,0),null)).StatusCode);using var foreign=await Staff(DemoSeed.FutureOwnerEmail);Assert.Equal(HttpStatusCode.NotFound,(await StatementCommand(foreign,payPath,new PayrollOpeningPayment(1,50,0),null)).StatusCode);
         var stale=await FinalQuote(owner,path);await PrivatePayment(owner,f.Document,f.Enrollment,f.Plan,f.Actor,1000);Assert.Equal(HttpStatusCode.Conflict,(await FinalPost(owner,path,stale)).StatusCode);(await PrivatePost(owner,path,await PrivatePreview(owner,path))).EnsureSuccessStatusCode();(await FinalPost(owner,path,await FinalQuote(owner,path))).EnsureSuccessStatusCode();
         Assert.Equal(2,await db.PayrollStatements.CountAsync(s=>s.EmployeeId==f.Employee&&s.Kind=="PrivateFinal"));account=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/payroll/{f.Employee}/account");Assert.Equal(3100,account.GetProperty("totalDue").GetDecimal());Assert.Equal(3050,account.GetProperty("totalPaid").GetDecimal());Assert.Equal(50,account.GetProperty("remaining").GetDecimal());Assert.Equal(50,account.GetProperty("finalRemaining").GetDecimal());Assert.Single(account.GetProperty("items").EnumerateArray());Assert.False(await db.PayrollAdjustments.AnyAsync(a=>a.EmployeeId==f.Employee));
+        var userId=await db.AcademyMemberships.Where(m=>m.Id==f.Coach).Select(m=>m.UserId).SingleAsync();var selfMember=Guid.NewGuid();db.AcademyMemberships.Add(new(){Id=selfMember,AcademyId=DemoSeed.NogoomAcademyId,UserId=userId,Role=AcademyRole.AcademyAdmin,AllSports=true,UseActionGrants=true});await db.SaveChangesAsync();
+        (await Write(owner,$"/api/v1/manage/staff/{selfMember}/access",Access(f.Branch,true,true) with{SensitivePermissions=[AcademyPermissions.PayrollPay]})).EnsureSuccessStatusCode();using var self=await Staff(f.Email);var second=await db.PayrollStatements.SingleAsync(s=>s.EmployeeId==f.Employee&&s.Kind=="PrivateFinal"&&s.Id!=statement.Id);
+        Assert.Equal(HttpStatusCode.Forbidden,(await StatementCommand(self,$"/api/v1/manage/payroll/{f.Employee}/final-settlements/{second.Id}/disbursements",new PayrollOpeningPayment(1,0,50),null)).StatusCode);var selfAccount=await self.GetFromJsonAsync<JsonElement>($"/api/v1/manage/payroll/{f.Employee}/account");Assert.All(selfAccount.GetProperty("finalSettlements").EnumerateArray(),s=>Assert.False(s.GetProperty("canPay").GetBoolean()));
+        var originalPayment=await db.PayrollDisbursements.Where(p=>p.StatementId==statement.Id).Select(p=>p.Id).FirstAsync();Assert.Equal("23514",(await Assert.ThrowsAsync<Npgsql.PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"PayrollDisbursements\" SELECT (jsonb_populate_record(NULL::\"PayrollDisbursements\",to_jsonb(p)||jsonb_build_object('Id',{Guid.NewGuid()},'StatementId',{second.Id},'Sequence',1,'Amount',1,'PaidBefore',0,'RemainingAfter',49,'ActorMembershipId',{selfMember},'ActorUserId',{userId},'RequestKey',{Guid.NewGuid().ToString()}))).* FROM \"PayrollDisbursements\" p WHERE p.\"Id\"={originalPayment}"))).SqlState);
     }
     [Fact]
     public async Task V3_post_contract_private_requires_ended_contract_owner_fresh_sources_and_csrf()
