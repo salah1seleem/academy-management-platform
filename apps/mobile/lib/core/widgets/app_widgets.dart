@@ -57,14 +57,27 @@ class AppScaffold extends StatelessWidget {
   final String title;
   final Widget child;
   final List<Widget>? actions;
+  final Widget? bottomBar;
   const AppScaffold({
     super.key,
     required this.title,
     required this.child,
     this.actions,
+    this.bottomBar,
   });
   @override
   Widget build(BuildContext context) => Scaffold(
+    bottomNavigationBar: bottomBar == null
+        ? null
+        : SafeArea(
+            child: Center(
+              heightFactor: 1,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 650),
+                child: bottomBar,
+              ),
+            ),
+          ),
     appBar: AppBar(
       title: Row(
         mainAxisSize: MainAxisSize.min,

@@ -5,6 +5,7 @@ using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Tenancy;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice5;
@@ -81,17 +82,18 @@ public static class Slice5Endpoints
         return Results.Ok(new { entity.Version });
     }
 
-    private static async Task<IResult> Options(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider time)
+    private static async Task<IResult> Options(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider time, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
         var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var enrollments = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) && a.AcademyMembership.UserId == user && a.IsActive));
-        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة" }).ToListAsync();
+        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, photoReference = x.Player.PhotoReference, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة" }).ToListAsync();
         var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
         var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
-        return Results.Ok(new { enrollments = rows, sports });
+        var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
+        return Results.Ok(new { enrollments = rows, sports, canEvaluate });
     }
 
     private static async Task<IResult> ListEvaluations(string? search, Guid? playerId, Guid? sportId, Guid? groupId, string? status, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)

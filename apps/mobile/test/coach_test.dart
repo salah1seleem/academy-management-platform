@@ -87,9 +87,16 @@ void main() {
           shell(CoachAttendance(auth: auth, sessionId: 's')),
         );
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('حاضر'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('حاضر'));
         await tester.tap(find.text('حفظ الحضور'));
         await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('بانتظار المزامنة'),
+          -250,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.text('بانتظار المزامنة'), findsOneWidget);
         expect(writes, 1);
         final retry = find.text('مراجعة وإعادة المزامنة');
@@ -146,6 +153,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('حفظ الحضور'), findsNothing);
+      await tester.ensureVisible(find.text('تقييم اللاعب'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('تقييم اللاعب'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('بدء تقييم جديد'));
@@ -279,10 +288,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('حاضر'), findsOneWidget);
       expect(find.text('غائب'), findsOneWidget);
+      await tester.ensureVisible(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
       expect(find.text('متأخر'), findsOneWidget);
       expect(find.text('معتذر'), findsOneWidget);
       expect(find.text('لم يُسجل'), findsOneWidget);
-      await tester.tap(find.text('متأخر'));
+      await tester.tap(find.byWidgetPredicate((w) => w is CheckedPopupMenuItem<String> && w.value == 'Late'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('حفظ الحضور'));
       await tester.pumpAndSettle();
       expect(sent.toString(), contains('Late'));

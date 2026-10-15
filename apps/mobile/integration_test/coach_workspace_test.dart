@@ -74,6 +74,31 @@ void main() {
       expect(find.byType(ChoiceChip), findsNothing);
       expect(find.text('تقييم اللاعب'), findsWidgets);
       await capture('session-readonly');
+      await tester.scrollUntilVisible(
+        find.byType(TextField),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.enterText(
+        find.byType(TextField),
+        (players.first as Map)['playerCode'] as String,
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('1 من ${players.length} لاعب'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('عرض الملف'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.text('عرض الملف'));
+      await tester.tap(find.text('عرض الملف'));
+      await waitFor(find.text('ملف اللاعب'));
+      await waitFor(find.text((players.first as Map)['arabicName'] as String));
+      expect(find.text('حفظ الحضور'), findsNothing);
+      await capture('player-session');
+      await tester.tap(find.byType(BackButton).last);
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(BackButton).last);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
@@ -83,8 +108,30 @@ void main() {
       );
       await tester.tap(find.byIcon(Icons.chevron_left).first);
       await waitFor(find.text('فتح الحصة الأقرب'));
-      expect(find.text('رفع صور وفيديوهات للحصة'), findsOneWidget);
       await capture('group');
+      await tester.scrollUntilVisible(
+        find.byType(TextField),
+        180,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.enterText(
+        find.byType(TextField),
+        (players.first as Map)['playerCode'] as String,
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('عرض الملف'),
+        180,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await capture('group-search');
+      await tester.scrollUntilVisible(
+        find.text('رفع صور وفيديوهات للحصة'),
+        180,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('رفع صور وفيديوهات للحصة'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await auth.logout();
       await tester.pumpWidget(const SizedBox());

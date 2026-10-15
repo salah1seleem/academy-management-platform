@@ -19,7 +19,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class V3CoachWorkspaceTests
+public sealed partial class V3CoachWorkspaceTests
 {
     private sealed class DemoClock : TimeProvider
     {

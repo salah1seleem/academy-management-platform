@@ -50,7 +50,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('حفظ الحضور'), findsNothing);
-      await tester.ensureVisible(find.text('طلب تصحيح يوم سابق'));
+      await tester.scrollUntilVisible(
+        find.text('طلب تصحيح يوم سابق'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('طلب تصحيح يوم سابق'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
@@ -78,6 +82,11 @@ void main() {
       );
       await tester.tap(find.text('إرسال الطلب للمالك'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.textContaining('لم يتغير الحضور بعد'),
+        -250,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.textContaining('لم يتغير الحضور بعد'), findsOneWidget);
       expect(sent, {
         'kind': 'Players',

@@ -7,6 +7,7 @@ import '../../core/theme/appearance.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import 'coach_evaluation.dart';
+import 'coach_player.dart';
 import '../shared/past_attendance.dart';
 import '../shared/attendance_draft.dart';
 
@@ -40,10 +41,9 @@ class _CoachAttendanceState extends State<CoachAttendance> {
   bool blocked = false;
   AttendanceDraft? draft;
   final conflicts = <String, Json?>{};
+  final search = TextEditingController();
   String? identity;
-  String? get currentIdentity => widget.auth.session?.selected == null
-      ? null
-      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}';
+  String? get currentIdentity => coachContext(widget.auth);
 
   @override
   void initState() {
@@ -61,6 +61,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
       conflicts.clear();
       statuses.clear();
       data = null;
+      search.clear();
       blocked = true;
       error = 'تغير حساب الدخول؛ أعد فتح كشف الحضور.';
     });
@@ -71,6 +72,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
     widget.auth.removeListener(authChanged);
     draft = null;
     conflicts.clear();
+    search.dispose();
     super.dispose();
   }
 
@@ -87,9 +89,8 @@ class _CoachAttendanceState extends State<CoachAttendance> {
       if (!mounted || blocked) return false;
       statuses.clear();
       for (final player in rows(next['players'])) {
-        statuses[textOf(player['sportEnrollmentId'])] = textOf(
-          player['attendanceStatus'],
-        );
+        statuses[textOf(player['sportEnrollmentId'])] =
+            player['attendanceStatus'] as String? ?? 'NotRecorded';
       }
       if (mounted) {
         setState(() {
@@ -206,200 +207,471 @@ class _CoachAttendanceState extends State<CoachAttendance> {
   }
 
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: widget.title ?? 'تسجيل الحضور',
-    child: data == null
-        ? Center(
-            child: error == null
-                ? const CircularProgressIndicator()
-                : ErrorNotice(error!),
-          )
-        : ListView(
-            padding: const EdgeInsets.all(18),
-            children: [
-              AppCard(
-                child: UiText(
-                  '${obj(data!['session'])['group']} · ${day(obj(data!['session'])['sessionDate'])} · ${textOf(obj(data!['session'])['startTime']).split(':').take(2).join(':')}',
+  Widget build(BuildContext context) {
+    final players = data == null ? <Json>[] : rows(data!['players']);
+    final filtered = players
+        .where((p) => playerMatches(p, search.text))
+        .toList();
+    final session = data == null ? <String, dynamic>{} : obj(data!['session']);
+    final pending = players
+        .where(
+          (p) =>
+              statuses[textOf(p['sportEnrollmentId'])] !=
+              (p['attendanceStatus'] ?? 'NotRecorded'),
+        )
+        .length;
+    return AppScaffold(
+      title: widget.title ?? 'تسجيل الحضور',
+      bottomBar: data?['canManageAttendance'] != true
+          ? null
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: FilledButton.icon(
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.cloud_done_outlined),
+                onPressed: busy || conflicts.isNotEmpty ? null : save,
+                label: UiText(
+                  busy
+                      ? 'جارٍ الحفظ…'
+                      : draft != null
+                      ? 'مراجعة وإعادة المزامنة'
+                      : 'حفظ الحضور',
                 ),
               ),
-              if (data!['lastSynchronizedAtUtc'] != null)
-                UiText(
-                  '${localized(context, 'آخر مزامنة مؤكدة', 'Last confirmed synchronization')}: ${synchronizedTime(data!['lastSynchronizedAtUtc'])}',
-                ),
-              if (message != null)
-                UiText(message!, style: const TextStyle(color: Colors.green)),
-              if (error != null) ErrorNotice(error!),
-              if (draft != null)
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const UiText(
-                        'بانتظار المزامنة',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const UiText(
-                        'المسودة في هذه الصفحة فقط لمدة 15 دقيقة؛ لا تغادر قبل المراجعة.',
-                      ),
-                      TextButton(
-                        onPressed: busy
-                            ? null
-                            : () async {
-                                setState(() {
-                                  draft = null;
-                                  conflicts.clear();
-                                });
-                                await load();
-                              },
-                        child: const UiText('تجاهل المسودة وفتح كشف محدث'),
-                      ),
-                    ],
-                  ),
-                ),
-              for (final entry in conflicts.entries)
+            ),
+      child: data == null
+          ? Center(
+              child: error == null
+                  ? const CircularProgressIndicator()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ErrorNotice(error!),
+                        if (!blocked)
+                          OutlinedButton.icon(
+                            onPressed: load,
+                            icon: const Icon(Icons.refresh),
+                            label: const UiText('إعادة المحاولة'),
+                          ),
+                      ],
+                    ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(18),
+              children: [
                 AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       UiText(
-                        'تعارض حضور ${entry.value?['arabicName'] ?? 'عضو لم يعد في الكشف'}',
+                        textOf(session['group']),
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
+                      const SizedBox(height: 8),
+                      UiText(day(session['sessionDate'])),
                       UiText(
-                        'اختيارك: ${label(draft!.changes[entry.key]?['status'])} · الخادم: ${entry.value == null ? 'لم يعد ضمن الحصة' : label(entry.value!['attendanceStatus'])}',
+                        '${textOf(session['startTime']).split(':').take(2).join(':')} — ${textOf(session['endTime'] ?? '—').split(':').take(2).join(':')}',
+                        textDirection: TextDirection.ltr,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      TextButton(
-                        onPressed: () => setState(() {
-                          draft!.resolve(entry.key, entry.value, false);
-                          conflicts.remove(entry.key);
-                        }),
-                        child: const UiText('اعتماد حالة الخادم'),
-                      ),
-                      if (entry.value != null)
-                        TextButton(
-                          onPressed: () => setState(() {
-                            draft!.resolve(entry.key, entry.value, true);
-                            conflicts.remove(entry.key);
-                          }),
-                          child: const UiText('الاحتفاظ باختياري بعد المراجعة'),
+                      if (session['branch'] != null || session['sport'] != null)
+                        UiText(
+                          [
+                            session['branch'],
+                            session['sport'],
+                          ].whereType<String>().join(' · '),
+                        ),
+                      if (session['status'] != null)
+                        UiText(
+                          session['status'] == 'Held'
+                              ? localized(
+                                  context,
+                                  'نُفذت الحصة',
+                                  'Session held',
+                                )
+                              : label(session['status']),
                         ),
                     ],
                   ),
                 ),
-              if (data!['canManageAttendance'] != true)
-                const UiText(
-                  'الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.',
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final state in const [
+                      'Present',
+                      'Absent',
+                      'NotRecorded',
+                      'Late',
+                      'Excused',
+                    ])
+                      Chip(
+                        key: ValueKey('attendance-count-$state'),
+                        avatar: Icon(attendanceIcon(state), size: 18),
+                        label: UiText(
+                          '${label(state)} · ${players.where((p) => statuses[textOf(p['sportEnrollmentId'])] == state).length}',
+                        ),
+                      ),
+                  ],
                 ),
-              for (final player in rows(data!['players']))
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
+                Semantics(
+                  liveRegion: true,
+                  child: UiText(
+                    localized(
+                      context,
+                      pending == 0
+                          ? 'الحالات المعروضة مؤكدة من الخادم'
+                          : '$pending تغييرات لم تُحفظ بعد',
+                      pending == 0
+                          ? 'Displayed states are confirmed by the server'
+                          : '$pending unsaved changes',
+                    ),
+                  ),
+                ),
+                if (data!['lastSynchronizedAtUtc'] != null)
+                  UiText(
+                    '${localized(context, 'آخر مزامنة مؤكدة', 'Last confirmed synchronization')}: ${synchronizedTime(data!['lastSynchronizedAtUtc'])}',
+                  ),
+                if (message != null)
+                  UiText(message!, style: const TextStyle(color: Colors.green)),
+                if (error != null) ErrorNotice(error!),
+                if (draft != null)
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const UiText(
+                          'بانتظار المزامنة',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const UiText(
+                          'المسودة في هذه الصفحة فقط لمدة 15 دقيقة؛ لا تغادر قبل المراجعة.',
+                        ),
+                        TextButton(
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    draft = null;
+                                    conflicts.clear();
+                                  });
+                                  await load();
+                                },
+                          child: const UiText('تجاهل المسودة وفتح كشف محدث'),
+                        ),
+                      ],
+                    ),
+                  ),
+                for (final entry in conflicts.entries)
+                  AppCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         UiText(
-                          textOf(player['arabicName']),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          'تعارض حضور ${entry.value?['arabicName'] ?? 'عضو لم يعد في الكشف'}',
                         ),
-                        UiText(textOf(player['playerCode'])),
-                        if (data!['canEvaluate'] == true)
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.assessment_outlined),
-                            label: const UiText('تقييم اللاعب'),
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => CoachEvaluation(
-                                  auth: widget.auth,
-                                  enrollment: {
-                                    'id': player['sportEnrollmentId'],
-                                    'player': player['arabicName'],
-                                    'group': obj(data!['session'])['group'],
-                                    'sessionId': widget.sessionId,
-                                    'evaluationDate': obj(
-                                      data!['session'],
-                                    )['sessionDate'],
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (data!['canManageAttendance'] != true)
-                          Chip(label: UiText(label(player['attendanceStatus'])))
-                        else
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              for (final state in const {
-                                'Present': 'حاضر',
-                                'Late': 'متأخر',
-                                'Absent': 'غائب',
-                                'Excused': 'معتذر',
-                                'NotRecorded': 'لم يُسجل',
-                              }.entries)
-                                ChoiceChip(
-                                  label: UiText(state.value),
-                                  selected:
-                                      statuses[textOf(
-                                        player['sportEnrollmentId'],
-                                      )] ==
-                                      state.key,
-                                  onSelected: busy || draft != null
-                                      ? null
-                                      : (_) => setState(
-                                          () =>
-                                              statuses[textOf(
-                                                    player['sportEnrollmentId'],
-                                                  )] =
-                                                  state.key,
-                                        ),
-                                ),
-                            ],
-                          ),
-                        if (player['warning'] != null)
-                          UiText(
-                            textOf(player['warning']),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                        UiText(
+                          'اختيارك: ${label(draft!.changes[entry.key]?['status'])} · الخادم: ${entry.value == null ? 'لم يعد ضمن الحصة' : label(entry.value!['attendanceStatus'])}',
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            draft!.resolve(entry.key, entry.value, false);
+                            conflicts.remove(entry.key);
+                          }),
+                          child: const UiText('اعتماد حالة الخادم'),
+                        ),
+                        if (entry.value != null)
+                          TextButton(
+                            onPressed: () => setState(() {
+                              draft!.resolve(entry.key, entry.value, true);
+                              conflicts.remove(entry.key);
+                            }),
+                            child: const UiText(
+                              'الاحتفاظ باختياري بعد المراجعة',
                             ),
                           ),
                       ],
                     ),
                   ),
-                ),
-              if (data!['canManageAttendance'] == true)
-                FilledButton(
-                  onPressed: busy || conflicts.isNotEmpty ? null : save,
-                  child: UiText(
-                    busy
-                        ? 'جارٍ الحفظ…'
-                        : draft != null
-                        ? 'مراجعة وإعادة المزامنة'
-                        : 'حفظ الحضور',
+                if (data!['canManageAttendance'] != true)
+                  const UiText(
+                    'الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.',
+                  ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: localized(
+                      context,
+                      'بحث بالاسم أو كود اللاعب',
+                      'Search name or player code',
+                    ),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: localized(
+                              context,
+                              'مسح البحث',
+                              'Clear search',
+                            ),
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(search.clear),
+                          ),
                   ),
                 ),
-              if (data!['canRequestCorrection'] == true)
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.history_rounded),
-                  label: const UiText('طلب تصحيح يوم سابق'),
-                  onPressed: () async {
-                    final sent = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(
-                        builder: (_) => PastAttendanceRequestPage(
-                          auth: widget.auth,
-                          sessionId: widget.sessionId,
-                          players: rows(data!['players']),
-                        ),
-                      ),
-                    );
-                    if (mounted) await load();
-                    if (sent == true && mounted) {
-                      setState(
-                        () => message = 'أُرسل طلب التصحيح لاعتماد المالك؛ لم يتغير الحضور بعد.',
-                      );
-                    }
-                  },
+                const SizedBox(height: 8),
+                UiText(
+                  localized(
+                    context,
+                    '${filtered.length} من ${players.length} لاعب',
+                    '${filtered.length} of ${players.length} players',
+                  ),
                 ),
-            ],
-          ),
-  );
+                if (filtered.isEmpty)
+                  UiText(
+                    localized(
+                      context,
+                      players.isEmpty
+                          ? 'لا يوجد لاعبون في هذه الحصة.'
+                          : 'لا توجد نتائج لهذا البحث.',
+                      players.isEmpty
+                          ? 'No players in this session.'
+                          : 'No matching players.',
+                    ),
+                  ),
+                for (final player in filtered)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CoachPlayerAvatar(
+                                auth: widget.auth,
+                                reference: player['photoReference'],
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    UiText(
+                                      textOf(player['arabicName']),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    UiText(
+                                      textOf(player['playerCode']),
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.person_outline),
+                            label: const UiText('عرض الملف'),
+                            onPressed: busy || draft != null
+                                ? null
+                                : () => openPage(
+                                    context,
+                                    CoachPlayerPage(
+                                      auth: widget.auth,
+                                      enrollmentId: textOf(
+                                        player['sportEnrollmentId'],
+                                      ),
+                                      sessionId: widget.sessionId,
+                                    ),
+                                  ),
+                          ),
+                          if (data!['canEvaluate'] == true)
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.assessment_outlined),
+                              label: const UiText('تقييم اللاعب'),
+                              onPressed: busy || draft != null
+                                  ? null
+                                  : () => Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => CoachEvaluation(
+                                          auth: widget.auth,
+                                          enrollment: {
+                                            'id': player['sportEnrollmentId'],
+                                            'player': player['arabicName'],
+                                            'group': obj(
+                                              data!['session'],
+                                            )['group'],
+                                            'sessionId': widget.sessionId,
+                                            'evaluationDate': obj(
+                                              data!['session'],
+                                            )['sessionDate'],
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          if (data!['canManageAttendance'] != true)
+                            Chip(
+                              avatar: Icon(
+                                attendanceIcon(player['attendanceStatus']),
+                                size: 18,
+                              ),
+                              label: UiText(
+                                label(
+                                  player['attendanceStatus'] ?? 'NotRecorded',
+                                ),
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                for (final state in const {
+                                  'Present': 'حاضر',
+                                  'Absent': 'غائب',
+                                }.entries)
+                                  FilterChip(
+                                    avatar: Icon(
+                                      attendanceIcon(state.key),
+                                      size: 18,
+                                    ),
+                                    label: UiText(state.value),
+                                    selected:
+                                        statuses[textOf(
+                                          player['sportEnrollmentId'],
+                                        )] ==
+                                        state.key,
+                                    onSelected: busy || draft != null
+                                        ? null
+                                        : (_) => setState(
+                                            () =>
+                                                statuses[textOf(
+                                                  player['sportEnrollmentId'],
+                                                )] = state
+                                                    .key,
+                                          ),
+                                  ),
+                                PopupMenuButton<String>(
+                                  enabled: !busy && draft == null,
+                                  tooltip: localized(
+                                    context,
+                                    'حالات أخرى',
+                                    'More states',
+                                  ),
+                                  onSelected: (state) => setState(
+                                    () =>
+                                        statuses[textOf(
+                                              player['sportEnrollmentId'],
+                                            )] =
+                                            state,
+                                  ),
+                                  itemBuilder: (_) => [
+                                    for (final state in const [
+                                      'Late',
+                                      'Excused',
+                                      'NotRecorded',
+                                    ])
+                                      CheckedPopupMenuItem(
+                                        value: state,
+                                        checked:
+                                            statuses[textOf(
+                                              player['sportEnrollmentId'],
+                                            )] ==
+                                            state,
+                                        child: UiText(label(state)),
+                                      ),
+                                  ],
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: UiText(
+                                      localized(
+                                        context,
+                                        [
+                                              'Late',
+                                              'Excused',
+                                              'NotRecorded',
+                                            ].contains(
+                                              statuses[textOf(
+                                                player['sportEnrollmentId'],
+                                              )],
+                                            )
+                                            ? '${label(statuses[textOf(player['sportEnrollmentId'])])} ▾'
+                                            : 'حالات أخرى ▾',
+                                        [
+                                              'Late',
+                                              'Excused',
+                                              'NotRecorded',
+                                            ].contains(
+                                              statuses[textOf(
+                                                player['sportEnrollmentId'],
+                                              )],
+                                            )
+                                            ? '${ui(context, label(statuses[textOf(player['sportEnrollmentId'])]))} ▾'
+                                            : 'More states ▾',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (player['warning'] != null)
+                            UiText(
+                              textOf(player['warning']),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (data!['canRequestCorrection'] == true)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.history_rounded),
+                    label: const UiText('طلب تصحيح يوم سابق'),
+                    onPressed: () async {
+                      final sent = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => PastAttendanceRequestPage(
+                            auth: widget.auth,
+                            sessionId: widget.sessionId,
+                            players: rows(data!['players']),
+                          ),
+                        ),
+                      );
+                      if (mounted) await load();
+                      if (sent == true && mounted) {
+                        setState(
+                          () => message = 'أُرسل طلب التصحيح لاعتماد المالك؛ لم يتغير الحضور بعد.',
+                        );
+                      }
+                    },
+                  ),
+              ],
+            ),
+    );
+  }
 }
+
+IconData attendanceIcon(Object? state) => switch (state) {
+  'Present' => Icons.check_circle_outline,
+  'Absent' => Icons.cancel_outlined,
+  'Late' => Icons.schedule,
+  'Excused' => Icons.event_busy_outlined,
+  _ => Icons.radio_button_unchecked,
+};

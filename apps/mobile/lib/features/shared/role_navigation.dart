@@ -9,7 +9,7 @@ import '../guardian/guardian_profile.dart';
 import '../guardian/guardian_report.dart';
 import '../guardian/family_renewal_request.dart';
 import '../coach/coach_home.dart';
-import '../coach/coach_evaluation.dart';
+import '../coach/coach_player.dart';
 import '../admin/admin_home.dart';
 import '../owner/owner_reports.dart';
 import 'academy_news.dart';
@@ -174,7 +174,11 @@ class NativeMore extends StatelessWidget {
         ),
       if (role == 'Coach')
         GLink(
-          localized(context, 'اتفاقات أجر الخاص', 'Private coaching agreements'),
+          localized(
+            context,
+            'اتفاقات أجر الخاص',
+            'Private coaching agreements',
+          ),
           Icons.receipt_long_outlined,
           () => openPage(context, CoachAgreementsPage(auth: auth)),
         ),
@@ -208,8 +212,14 @@ class CoachPlayers extends StatelessWidget {
             GLink(
               '${p['player']} · ${p['group'] ?? p['sport'] ?? ""}',
               Icons.person_outline,
-              () =>
-                  openPage(context, CoachEvaluation(auth: auth, enrollment: p)),
+              () => openPage(
+                context,
+                CoachPlayerPage(
+                  auth: auth,
+                  enrollmentId: textOf(p['id']),
+                  groupId: textOf(p['groupId']),
+                ),
+              ),
             ),
           if (players.isEmpty) const EmptyMessage(),
         ]);
@@ -341,37 +351,19 @@ class CoachGroupsPage extends StatelessWidget {
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'مجموعاتي', 'My groups'),
     child: FutureBuilder<List<Object?>>(
-      future: Future.wait([
-        auth.request('GET', '/api/v1/coach/groups'),
-        auth.request('GET', '/api/v1/attendance/sessions'),
-        auth.request('GET', '/api/v1/evaluations/options'),
-      ]),
+      future: Future.wait([auth.request('GET', '/api/v1/coach/groups')]),
       builder: (context, data) {
         if (data.hasError) return const EmptyMessage('تعذر تحميل المجموعات.');
         if (!data.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final groups = rows(data.data![0]),
-            sessions = rows(data.data![1]),
-            players = rows(obj(data.data![2])['enrollments']);
+        final groups = rows(data.data![0]);
         return gList([
           for (final g in groups)
             GLink(
               textOf(g['arabicName']),
               Icons.groups_outlined,
-              () => openPage(
-                context,
-                CoachGroup(
-                  auth: auth,
-                  group: g,
-                  sessions: sessions
-                      .where((s) => s['trainingGroupId'] == g['id'])
-                      .toList(),
-                  enrollments: players
-                      .where((p) => p['groupId'] == g['id'])
-                      .toList(),
-                ),
-              ),
+              () => openPage(context, CoachGroup(auth: auth, group: g)),
             ),
           if (groups.isEmpty) const EmptyMessage(),
         ]);

@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'auth_controller_test.dart';
 
+import 'package:academy_mobile/features/guardian/guardian_home.dart';
+
 void main() {
   testWidgets(
     'Arabic phone OTP form verifies and routes to the server selected role',
@@ -33,10 +35,12 @@ void main() {
       await tester.enterText(find.byType(TextFormField).last, '246810');
       await tester.tap(find.text('تأكيد الدخول'));
       await tester.pumpAndSettle();
-      expect(find.text('الأكاديمية'), findsOneWidget);
+      expect(find.byType(GuardianHome), findsOneWidget);
+      expect(find.text('أكاديمية العرض'), findsOneWidget);
+      expect(find.text('الرئيسية'), findsWidgets);
       expect(find.text('أهلًا، حساب تجريبي'), findsOneWidget);
       expect(
-        Directionality.of(tester.element(find.text('الأكاديمية'))),
+        Directionality.of(tester.element(find.byType(GuardianHome))),
         TextDirection.rtl,
       );
       await tester.tap(find.byTooltip('الحساب'));

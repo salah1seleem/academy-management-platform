@@ -10,6 +10,7 @@ import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import 'coach_attendance.dart';
 import 'coach_evaluation.dart';
+import 'coach_player.dart';
 import '../shared/private_media.dart';
 import '../shared/academy_news.dart';
 import '../shared/staff_amounts.dart';
@@ -285,16 +286,7 @@ class _CoachHomeState extends State<CoachHome> {
                     trailing: const Icon(Icons.chevron_left),
                     onTap: () => openPage(
                       context,
-                      CoachGroup(
-                        auth: widget.auth,
-                        group: group,
-                        sessions: sessions
-                            .where((s) => s['trainingGroupId'] == group['id'])
-                            .toList(),
-                        enrollments: enrollments
-                            .where((e) => e['groupId'] == group['id'])
-                            .toList(),
-                      ),
+                      CoachGroup(auth: widget.auth, group: group),
                     ),
                   ),
                 ),
@@ -346,11 +338,13 @@ class CoachSessionCard extends StatelessWidget {
   final Json session;
   final bool featured;
   final VoidCallback onOpen;
+  final String? openLabel;
   const CoachSessionCard({
     super.key,
     required this.session,
     required this.onOpen,
     this.featured = false,
+    this.openLabel,
   });
   static String time(Object? v) {
     final value = textOf(v);
@@ -486,7 +480,8 @@ class CoachSessionCard extends StatelessWidget {
               onPressed: onOpen,
               icon: const Icon(Icons.chevron_left),
               label: UiText(
-                localized(context, 'تفاصيل الحصة', 'Session details'),
+                openLabel ??
+                    localized(context, 'تفاصيل الحصة', 'Session details'),
               ),
             ),
         ],
@@ -495,87 +490,287 @@ class CoachSessionCard extends StatelessWidget {
   }
 }
 
-class CoachGroup extends StatelessWidget {
+class CoachGroup extends StatefulWidget {
   final AuthController auth;
   final Json group;
-  final List<Json> sessions, enrollments;
-  const CoachGroup({
-    super.key,
-    required this.auth,
-    required this.group,
-    required this.sessions,
-    required this.enrollments,
-  });
+  const CoachGroup({super.key, required this.auth, required this.group});
+  @override
+  State<CoachGroup> createState() => _CoachGroupState();
+}
+
+class _CoachGroupState extends State<CoachGroup> {
+  final search = TextEditingController();
+  late final identity = coachContext(widget.auth);
+  late Future<List<Object?>> request = load();
+  Future<List<Object?>> load() => Future.wait([
+    widget.auth.request('GET', '/api/v1/coach/groups'),
+    widget.auth.request('GET', '/api/v1/evaluations/options'),
+    widget.auth.request('GET', '/api/v1/attendance/sessions?upcomingOnly=true'),
+  ]);
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: textOf(group['arabicName']),
-    child: ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        if (sessions.isNotEmpty)
-          AppCard(
-            child: Column(
-              children: [
-                UiText(
-                  '${sessions.first['branch']} · ${sessions.first['sport']}',
+    title: textOf(widget.group['arabicName']),
+    child: ListenableBuilder(
+      listenable: widget.auth,
+      builder: (context, _) {
+        if (identity == null || identity != coachContext(widget.auth)) {
+          return const SizedBox.shrink();
+        }
+        return FutureBuilder<List<Object?>>(
+          future: request,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ErrorNotice(
+                      snapshot.error is ApiFailure
+                          ? (snapshot.error as ApiFailure).message
+                          : localized(
+                              context,
+                              'تعذر تحميل المجموعة. أعد فتحها.',
+                              'Unable to load the group. Reopen it.',
+                            ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() {
+                        request = load();
+                      }),
+                      icon: const Icon(Icons.refresh),
+                      label: const UiText('إعادة المحاولة'),
+                    ),
+                  ],
                 ),
-                UiText('${sessions.first['sessionDate']}'),
-                UiText(
-                  '${CoachSessionCard.time(sessions.first['startTime'])} — ${CoachSessionCard.time(sessions.first['endTime'])}',
-                  textDirection: TextDirection.ltr,
-                ),
-              ],
-            ),
-          ),
-        UiText(
-          'اللاعبون (${enrollments.length})',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        for (final player in enrollments)
-          ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-            title: UiText(textOf(player['player'])),
-            subtitle: UiText(textOf(player['playerCode'])),
-            trailing: IconButton(
-              tooltip: ui(context, 'تقييم اللاعب'),
-              icon: const Icon(Icons.assessment_outlined),
-              onPressed: () => openPage(
-                context,
-                CoachEvaluation(auth: auth, enrollment: player),
-              ),
-            ),
-          ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () => openPage(
-            context,
-            UploadSessionMedia(auth: auth, groupId: textOf(group['id'])),
-          ),
-          icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: const UiText('رفع صور وفيديوهات للحصة'),
-        ),
-        if (sessions.isNotEmpty)
-          FilledButton.icon(
-            onPressed: sessions.isEmpty
-                ? null
-                : () => openPage(
+              );
+            }
+            final active = rows(snapshot.data![0])
+                .where((g) => g['id'] == widget.group['id']);
+            if (active.isEmpty) {
+              return Center(
+                child: UiText(
+                  localized(
                     context,
-                    CoachAttendance(
-                      auth: auth,
-                      sessionId: textOf(sessions.first['id']),
-                      title: localized(
-                        context,
-                        'تفاصيل الحصة',
-                        'Session details',
+                    'لم تعد هذه المجموعة مسندة إليك.',
+                    'This group is no longer assigned to you.',
+                  ),
+                ),
+              );
+            }
+            final options = obj(snapshot.data![1]);
+            final players = rows(options['enrollments'])
+                .where((p) => p['groupId'] == widget.group['id'])
+                .toList();
+            final filtered = players
+                .where((p) => playerMatches(p, search.text))
+                .toList();
+            final sessions =
+                rows(snapshot.data![2])
+                    .where(
+                      (s) =>
+                          s['trainingGroupId'] == widget.group['id'] &&
+                          s['status'] != 'Cancelled' &&
+                          s['status'] != 'Held',
+                    )
+                    .toList()
+                  ..sort(
+                    (a, b) => '${a['sessionDate']} ${a['startTime']}'.compareTo(
+                      '${b['sessionDate']} ${b['startTime']}',
+                    ),
+                  );
+            return ListView(
+              padding: const EdgeInsets.all(18),
+              children: [
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.groups_2_outlined, size: 32),
+                      const SizedBox(height: 10),
+                      UiText(
+                        textOf(active.first['arabicName']),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      UiText(
+                        localized(
+                          context,
+                          '${players.length} لاعب في المجموعة',
+                          '${players.length} players in the group',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (sessions.isNotEmpty) ...[
+                  UiText(
+                    localized(context, 'الموعد القادم', 'Next session'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  CoachSessionCard(
+                    session: sessions.first,
+                    openLabel: localized(
+                      context,
+                      'فتح الحصة الأقرب',
+                      'Open nearest session',
+                    ),
+                    onOpen: () => openPage(
+                      context,
+                      CoachAttendance(
+                        auth: widget.auth,
+                        sessionId: textOf(sessions.first['id']),
+                        title: localized(
+                          context,
+                          'تفاصيل الحصة',
+                          'Session details',
+                        ),
                       ),
                     ),
                   ),
-            icon: const Icon(Icons.fact_check_outlined),
-            label: UiText(
-              localized(context, 'فتح الحصة الأقرب', 'Open nearest session'),
-            ),
-          ),
-      ],
+                ] else
+                  UiText(
+                    localized(
+                      context,
+                      'لا توجد حصة قادمة خلال 14 يومًا',
+                      'No upcoming session within 14 days',
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: localized(
+                      context,
+                      'بحث بالاسم أو كود اللاعب',
+                      'Search name or player code',
+                    ),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: localized(
+                              context,
+                              'مسح البحث',
+                              'Clear search',
+                            ),
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(search.clear),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                UiText(
+                  localized(
+                    context,
+                    '${filtered.length} من ${players.length} لاعب',
+                    '${filtered.length} of ${players.length} players',
+                  ),
+                ),
+                if (filtered.isEmpty)
+                  UiText(
+                    localized(
+                      context,
+                      players.isEmpty
+                          ? 'لا يوجد لاعبون في هذه المجموعة.'
+                          : 'لا توجد نتائج لهذا البحث.',
+                      players.isEmpty
+                          ? 'No players in this group.'
+                          : 'No matching players.',
+                    ),
+                  ),
+                for (final player in filtered)
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CoachPlayerAvatar(
+                              auth: widget.auth,
+                              reference: player['photoReference'],
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  UiText(
+                                    textOf(player['player']),
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  UiText(
+                                    textOf(player['playerCode']),
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                  if (player['sport'] != null)
+                                    UiText(textOf(player['sport'])),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton.icon(
+                              icon: const Icon(Icons.person_outline),
+                              label: const UiText('عرض الملف'),
+                              onPressed: () => openPage(
+                                context,
+                                CoachPlayerPage(
+                                  auth: widget.auth,
+                                  enrollmentId: textOf(player['id']),
+                                  groupId: textOf(widget.group['id']),
+                                ),
+                              ),
+                            ),
+                            if (options['canEvaluate'] == true)
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.assessment_outlined),
+                                label: const UiText('تقييم اللاعب'),
+                                onPressed: () => openPage(
+                                  context,
+                                  CoachEvaluation(
+                                    auth: widget.auth,
+                                    enrollment: player,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => openPage(
+                    context,
+                    UploadSessionMedia(
+                      auth: widget.auth,
+                      groupId: textOf(widget.group['id']),
+                    ),
+                  ),
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: const UiText('رفع صور وفيديوهات للحصة'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     ),
   );
 }
