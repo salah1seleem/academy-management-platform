@@ -1,4 +1,5 @@
 import { expect,test } from "@playwright/test";
+import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Dated base salary keeps current month unchanged across Owner UI, payroll and Coach own API",async({page},info)=>{
   await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
@@ -18,6 +19,6 @@ test("Dated base salary keeps current month unchanged across Owner UI, payroll a
   await page.getByRole("button",{name:"إغلاق رسالة النجاح"}).click();
   for(const width of [390,1440]){await page.setViewportSize({width,height:1000});await page.evaluate(()=>window.scrollTo(0,0));await expect(page.getByRole("heading",{name:"سجل الراتب وتغييراته",exact:true})).toBeInViewport();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);expect(await page.locator(".salary-history-summary").evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(" ").length)).toBe(width<600?1:2);await page.screenshot({path:info.outputPath(`salary-history-${width}.png`),animations:"disabled"});}
   await page.goto(`/dashboard/staff/employees/${employee}`);await expect(page.getByLabel("الراتب الشهري")).toHaveAttribute("readonly","");await expect(page.getByRole("link",{name:"تغيير الراتب من السجل المؤرخ"})).toHaveAttribute("href",`/dashboard/staff/employees/${employee}/salary`);
-  const otp=await page.request.post("/api/v1/mobile/auth/otp/request",{data:{phoneNumber:"+201099900020"}});expect(otp.status()).toBe(202);const verified=await page.request.post("/api/v1/mobile/auth/otp/verify",{data:{phoneNumber:"+201099900020",challengeId:(await otp.json()).challengeId,code:"246810",deviceName:"تاريخ الراتب — اختبار اصطناعي"}});expect(verified.status()).toBe(200);
-  const own=await page.request.get("/api/v1/staff/payroll/salary-versions",{headers:{Authorization:`Bearer ${(await verified.json()).accessToken}`}});expect(own.status()).toBe(200);const mine=await own.json();expect(mine.id).toBe(employee);expect(mine.canChange).toBe(false);expect(mine.currentSalary).toBe(before.currentSalary);expect(mine.items[0].monthlySalary).toBe(before.currentSalary+500);for(const v of mine.items){expect(v.note).toBeNull();expect(v.approvedBy).toBeNull();}
+  const mobileToken = await mobileDemoToken(page.request, "+201099900020", "رحلة عرض اصطناعية");
+  const own=await page.request.get("/api/v1/staff/payroll/salary-versions",{headers:{Authorization:`Bearer ${mobileToken}`}});expect(own.status()).toBe(200);const mine=await own.json();expect(mine.id).toBe(employee);expect(mine.canChange).toBe(false);expect(mine.currentSalary).toBe(before.currentSalary);expect(mine.items[0].monthlySalary).toBe(before.currentSalary+500);for(const v of mine.items){expect(v.note).toBeNull();expect(v.approvedBy).toBeNull();}
 });

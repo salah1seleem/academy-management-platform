@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { mobileDemoToken } from "../support/mobile-demo-session";
 
 // Football config enables only reserved synthetic sources in an explicit test DB.
 test("Owner reviews actual private delivery against one existing invoice; coach reads compensation without family billing data", async ({ page }, info) => {
@@ -32,7 +33,6 @@ test("Owner reviews actual private delivery against one existing invoice; coach 
   await expect(section.getByText("التقييم المستوفي الحالي")).toBeVisible(); const after = await (await page.request.get(root)).json(); expect(after.items.find((r: { documentId: string }) => r.documentId === documentId)).toMatchObject({ earned: 0, contingent: 100, variableValue: 40, postedAmount: 0, postingCount: 0 });
   await page.getByRole("button", { name: "إغلاق رسالة النجاح" }).click();
   for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 1000 }); await section.evaluate(el => el.scrollIntoView({ block: "start" })); await page.evaluate(() => scrollBy(0, -80)); await expect(section.getByRole("heading", { name: "تنفيذ الخاص وعمولاته", exact: true })).toBeInViewport(); await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); await section.screenshot({ path: info.outputPath(`private-services-${width}.png`), animations: "disabled" }); }
-  const requested = await page.request.post("/api/v1/mobile/auth/otp/request", { data: { phoneNumber: "+201099900020" } }); expect(requested.status()).toBe(202);
-  const verified = await page.request.post("/api/v1/mobile/auth/otp/verify", { data: { phoneNumber: "+201099900020", challengeId: (await requested.json()).challengeId, code: "246810", deviceName: "اختبار الخاص" } }); expect(verified.status()).toBe(200); const credential = await verified.json();
-  const own = await page.request.get("/api/v1/staff/payroll/private-services", { headers: { Authorization: `Bearer ${credential.accessToken}` } }); expect(own.status()).toBe(200); const ownData = await own.json(); expect(ownData.items.length).toBe(after.items.length); expect(ownData.items.every((r: object) => !("player" in r) && !("documentId" in r) && !("serviceNet" in r))).toBe(true);
+  const mobileToken = await mobileDemoToken(page.request, "+201099900020", "رحلة عرض اصطناعية");
+  const own = await page.request.get("/api/v1/staff/payroll/private-services", { headers: { Authorization: `Bearer ${mobileToken}` } }); expect(own.status()).toBe(200); const ownData = await own.json(); expect(ownData.items.length).toBe(after.items.length); expect(ownData.items.every((r: object) => !("player" in r) && !("documentId" in r) && !("serviceNet" in r))).toBe(true);
 });
