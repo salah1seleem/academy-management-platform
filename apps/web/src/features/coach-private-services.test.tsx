@@ -6,6 +6,9 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const response = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 const row = { id: "delivery", documentId: "document", player: "طفل اصطناعي", branch: "الرحاب", sport: "كرة القدم", serviceDate: "2026-10-01", ordinal: 1, sessionCount: 8, variableMethod: "Percent", variableValue: 40, earned: 50, contingent: 50, currency: "EGP" };
 const options = { packages: [{ id: "package", documentId: "document", player: "طفل اصطناعي", plan: "8 حصص", sessionCount: 8, delivered: 1 }], documents: [{ id: "document", player: "طفل جديد", plan: "8 حصص", sessionCount: 8 }], sessions: [{ id: "session", group: "خاص", sessionDate: "2026-10-01", startTime: "10:00:00" }] };
+it("retains owner financial review for a stopped employee without loading or exposing new-service forms",async()=>{
+  global.fetch=vi.fn(()=>response({canReview:true,canRecord:false,items:[row]})) as typeof fetch;render(<CoachPrivateServices coachId="ended"/>);expect(await screen.findByRole("button",{name:"مراجعة الاستحقاق"})).toBeVisible();expect(screen.queryByRole("form")).not.toBeInTheDocument();expect(screen.queryByText("مراجعة تنفيذ حصة خاصة")).not.toBeInTheDocument();expect(vi.mocked(fetch).mock.calls.some(([u])=>String(u).endsWith("/options"))).toBe(false);expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
 it("shows earned and contingent separately without claiming payroll posting and links the existing source", async () => {
   global.fetch = vi.fn(() => response({ canReview: false, items: [row] })) as typeof fetch;
   render(<CoachPrivateServices coachId="coach" />); await screen.findByText(/طفل اصطناعي/);

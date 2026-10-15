@@ -4507,6 +4507,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("PrivateReviewId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RequestHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -4545,15 +4548,19 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("\"Kind\"='Opening'");
 
+                    b.HasIndex("AcademyId", "PrivateReviewId")
+                        .IsUnique();
+
                     b.HasIndex("AcademyId", "ApprovedByMembershipId", "RequestKey")
                         .IsUnique();
 
                     b.HasIndex("AcademyId", "EmployeeId", "Month")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Kind\"<>'PrivateFinal'");
 
                     b.ToTable("PayrollStatements", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PayrollStatement_Amounts", "EXTRACT(DAY FROM \"Month\")=1 AND ((\"Kind\"='MonthlySalary' AND \"OpeningAsOf\" IS NULL AND \"OpeningReference\" IS NULL AND \"ContractDays\" BETWEEN 1 AND 31 AND \"MonthlySalary\">=0 AND \"BaseDue\">=0 AND \"Deductions\">=0 AND \"Additions\">=0 AND \"NetDue\">0 AND \"NetDue\"=\"BaseDue\"-\"Deductions\"+\"Additions\") OR (\"Kind\"='Opening' AND \"OpeningAsOf\" IS NOT NULL AND EXTRACT(DAY FROM \"OpeningAsOf\")=1 AND \"Month\"=(\"OpeningAsOf\"-INTERVAL '1 month')::date AND length(trim(\"OpeningReference\")) BETWEEN 3 AND 120 AND \"OpeningReference\" IS NOT NULL AND \"ContractDays\"=0 AND \"MonthlySalary\"=0 AND \"BaseDue\"=0 AND \"Deductions\"=0 AND \"Additions\"=0 AND \"PrivateCompensation\"=0 AND \"NetDue\">=0))");
+                            t.HasCheckConstraint("CK_PayrollStatement_Amounts", "EXTRACT(DAY FROM \"Month\")=1 AND (((\"Kind\"='PrivateFinal' AND \"PrivateReviewId\" IS NOT NULL AND \"OpeningAsOf\" IS NULL AND \"OpeningReference\" IS NULL AND \"ContractDays\"=0 AND \"MonthlySalary\"=0 AND \"BaseDue\"=0 AND \"Deductions\"=0 AND \"Additions\"=0 AND \"PrivateCompensation\"=\"NetDue\" AND \"NetDue\">0)) OR (\"PrivateReviewId\" IS NULL AND ((\"Kind\"='MonthlySalary' AND \"OpeningAsOf\" IS NULL AND \"OpeningReference\" IS NULL AND \"ContractDays\" BETWEEN 1 AND 31 AND \"MonthlySalary\">=0 AND \"BaseDue\">=0 AND \"Deductions\">=0 AND \"Additions\">=0 AND \"NetDue\">0 AND \"NetDue\"=\"BaseDue\"-\"Deductions\"+\"Additions\") OR (\"Kind\"='Opening' AND \"OpeningAsOf\" IS NOT NULL AND EXTRACT(DAY FROM \"OpeningAsOf\")=1 AND \"Month\"=(\"OpeningAsOf\"-INTERVAL '1 month')::date AND length(trim(\"OpeningReference\")) BETWEEN 3 AND 120 AND \"OpeningReference\" IS NOT NULL AND \"ContractDays\"=0 AND \"MonthlySalary\"=0 AND \"BaseDue\"=0 AND \"Deductions\"=0 AND \"Additions\"=0 AND \"PrivateCompensation\"=0 AND \"NetDue\">=0))))");
                         });
                 });
 
@@ -4767,6 +4774,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<Guid?>("FinalStatementId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -4825,6 +4835,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AcademyId", "FinalStatementId")
+                        .IsUnique();
+
                     b.HasIndex("AcademyId", "PayrollAdjustmentId")
                         .IsUnique();
 
@@ -4839,9 +4852,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "DeliveryId", "EmployeeId", "BranchId", "SportId");
 
+                    b.HasIndex("AcademyId", "FinalStatementId", "EmployeeId", "BranchId", "Currency");
+
                     b.ToTable("PrivateCompensationEntries", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PrivateEntry_Amounts", "\"Component\"='PrivateVariable' AND \"Revision\">0 AND \"PostedBefore\">=0 AND (\"TargetAmount\" IS NULL OR \"TargetAmount\">=0) AND ((\"Kind\"='Review' AND \"Delta\"=0 AND \"PayrollAdjustmentId\" IS NULL AND \"ReviewEntryId\" IS NULL) OR (\"Kind\"='Accrual' AND \"Delta\">0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NULL) OR (((\"Kind\"='Reversal' AND \"Delta\"<0) OR (\"Kind\"='Correction' AND \"Delta\"<>0)) AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NOT NULL))");
+                            t.HasCheckConstraint("CK_PrivateEntry_Amounts", "\"Component\"='PrivateVariable' AND \"Revision\">0 AND \"PostedBefore\">=0 AND (\"TargetAmount\" IS NULL OR \"TargetAmount\">=0) AND ((\"Kind\"='PrivateFinal' AND \"FinalStatementId\" IS NOT NULL AND \"Delta\">0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NULL AND \"ReviewEntryId\" IS NOT NULL) OR (\"FinalStatementId\" IS NULL AND ((\"Kind\"='Review' AND \"Delta\"=0 AND \"PayrollAdjustmentId\" IS NULL AND \"ReviewEntryId\" IS NULL) OR (\"Kind\"='Accrual' AND \"Delta\">0 AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NULL) OR (((\"Kind\"='Reversal' AND \"Delta\"<0) OR (\"Kind\"='Correction' AND \"Delta\"<>0)) AND \"TargetAmount\" IS NOT NULL AND \"Delta\"=\"TargetAmount\"-\"PostedBefore\" AND \"PayrollAdjustmentId\" IS NOT NULL AND \"ReviewEntryId\" IS NOT NULL))))");
                         });
                 });
 
@@ -12106,6 +12121,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.PlatformBrandOperator", b =>
@@ -12217,6 +12233,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id", "EmployeeId", "BranchId", "SportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.PayrollStatement", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "FinalStatementId", "EmployeeId", "BranchId", "Currency")
+                        .HasPrincipalKey("AcademyId", "Id", "EmployeeId", "BranchId", "Currency")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateServiceDelivery", b =>

@@ -7,7 +7,7 @@ import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 import { PrivatePostingAction } from "./private-posting-action";
 
 type Delivery = { id: string; player: string; serviceDate: string; ordinal: number; sessionCount: number; documentId: string; serviceNet: number; earned: number | null; contingent: number | null; postedAmount: number; pendingDelta: number | null; requiresReview?: boolean; currency: string; variableMethod: string; variableValue: number; branch: string; sport: string };
-type Data = { canReview: boolean; currency?: string; items: Delivery[] };
+type Data = { canReview: boolean; canRecord?: boolean; currency?: string; items: Delivery[] };
 type Options = { packages: { id: string; documentId: string; player: string; plan: string; sessionCount: number; delivered: number }[]; documents: { id: string; player: string; plan: string; amount: string; currency: string; sessionCount: number }[]; sessions: { id: string; sessionDate: string; startTime: string; group: string }[] };
 export function CoachPrivateServices({ coachId }: { coachId: string }) {
   const path = `/api/v1/manage/payroll/coaches/${coachId}/private-services`;
@@ -16,7 +16,7 @@ export function CoachPrivateServices({ coachId }: { coachId: string }) {
   const load = useCallback(async (signal?: AbortSignal) => {
     const r = await fetch(path, { cache: "no-store", signal }); if (r.status === 403 || r.status === 404) { setHidden(true); return; }
     if (!r.ok) throw new Error("تعذر تحميل حصص الخاص المعتمدة."); const value: Data = await r.json(); setData(value); setHidden(false);
-    if (value.canReview) { const o = await fetch(`${path}/options`, { cache: "no-store", signal }); if (!o.ok) throw new Error("تعذر تحميل مصادر الخدمة."); setOptions(await o.json()); }
+    if (value.canReview&&value.canRecord!==false) { const o = await fetch(`${path}/options`, { cache: "no-store", signal }); if (!o.ok) throw new Error("تعذر تحميل مصادر الخدمة."); setOptions(await o.json()); } else setOptions(null);
   }, [path]);
   useEffect(() => { const c = new AbortController(); void Promise.resolve().then(() => load(c.signal)).catch(e => { if (!c.signal.aborted) setError(e.message); }); return () => c.abort(); }, [load]);
   async function save() {

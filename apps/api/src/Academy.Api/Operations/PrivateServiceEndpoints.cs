@@ -31,13 +31,13 @@ public static class PrivateServiceEndpoints
         return t.Role == AcademyRole.AcademyOwner && await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.Role == AcademyRole.AcademyOwner && m.IsActive && m.User.IsActive && m.Academy.IsActive)
             && (await http.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(http.User, AcademyPermissions.PayrollManage)).Succeeded;
     }
-    private static Task<Employee?> Employee(FoundationDbContext db, Guid coach) => db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.MembershipId == coach && e.IsActive && db.AcademyMemberships.Any(m => m.Id == coach && m.Role == AcademyRole.Coach && m.IsActive && m.User.IsActive));
+    private static Task<Employee?> Employee(FoundationDbContext db, Guid coach,bool active=true) => db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.MembershipId == coach && (!active||e.IsActive) && db.AcademyMemberships.Any(m => m.Id == coach && m.Role == AcademyRole.Coach && (!active||m.IsActive&&m.User.IsActive)));
     private static async Task<IResult> Read(Guid coachId, CurrentTenant current, FoundationDbContext db, TimeProvider time, HttpResponse response)
     {
-        var t = (await current.ResolveAsync())!; var employee = await Employee(db, coachId); if (employee is null) return Results.NotFound();
+        var t = (await current.ResolveAsync())!; var employee = await Employee(db, coachId,false); if (employee is null) return Results.NotFound();
         response.Headers.CacheControl = "no-store";
         var rows = await Assessments(db, coachId);
-        return Results.Ok(new { canReview = t.Role == AcademyRole.AcademyOwner, currency = employee.Currency, asOf = time.GetUtcNow(), postedToPayroll = rows.Any(r => r.PostingCount > 0), items = rows });
+        return Results.Ok(new { canReview = t.Role == AcademyRole.AcademyOwner, canRecord=await Employee(db,coachId) is not null, currency = employee.Currency, asOf = time.GetUtcNow(), postedToPayroll = rows.Any(r => r.PostingCount > 0), items = rows });
     }
     private static async Task<IResult> Own(CurrentTenant current, FoundationDbContext db, Academy.Api.Configuration.AcademyConfigurationService config, HttpResponse response)
     {

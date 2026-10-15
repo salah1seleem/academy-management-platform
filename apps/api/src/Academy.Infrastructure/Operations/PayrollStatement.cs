@@ -4,6 +4,8 @@ namespace Academy.Infrastructure.Operations;
 // Approved compensation is not a payment and does not duplicate the payroll engine.
 public sealed class PayrollStatement : TenantEntity
 {
+    // A reviewed, positive private-service residual after employment has ended.
+    public Guid? PrivateReviewId { get; set; }
     public string Kind { get; set; } = "MonthlySalary";
     // Opening covers only unrecorded obligations BEFORE this first-of-month boundary.
     // Month reserves the preceding period; it is never presented as earned salary.

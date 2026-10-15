@@ -150,7 +150,11 @@ public static partial class ReportingEndpoints
                 var staff = await db.Employees.AsNoTracking().Where(x => x.AcademyId == academyId && x.IsActive && (!branchId.HasValue || x.BranchId == branchId)).ToArrayAsync();
                 var contracts=await db.ContractVersions.AsNoTracking().Where(v=>v.AcademyId==academyId&&v.EffectiveFrom<=SalaryHistory.Month(realToday)).ToArrayAsync();
                 var terms=staff.Select(e=>ContractHistory.Bounds(e,contracts,realToday)).Where(c=>c.ContractStart<=realToday&&(!c.ContractEnd.HasValue||c.ContractEnd>=realToday)).ToArray();
-                payroll = new { month = payrollMonth, employeeCount = terms.Length, expiringContracts = terms.Count(c => c.ContractEnd.HasValue && c.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Sum(x=>x.RemainingAmount) };
+                // Current actionable payable backlog, not salary earned in the chart month.
+                var financialCutoff=realClock.GetUtcNow();
+                var finalDues=await db.PayrollStatements.AsNoTracking().Where(s=>s.AcademyId==academyId&&s.Kind=="PrivateFinal"&&s.CreatedAtUtc<=financialCutoff&&(!branchId.HasValue||s.BranchId==branchId)).Select(s=>new{s.EmployeeId,s.EmployeeName,s.Currency,remaining=s.NetDue-db.PayrollDisbursements.Where(p=>p.StatementId==s.Id&&p.CreatedAtUtc<=financialCutoff).Sum(p=>p.Amount)}).Where(s=>s.remaining>0).ToArrayAsync();
+                payroll = new { month = payrollMonth, employeeCount = terms.Length, expiringContracts = terms.Count(c => c.ContractEnd.HasValue && c.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Sum(x=>x.RemainingAmount),
+                    postContract=finalDues.GroupBy(s=>s.Currency).Select(g=>new{currency=g.Key,remaining=g.Sum(s=>s.remaining),count=g.Count()}),postContractEmployees=finalDues.GroupBy(s=>new{s.EmployeeId,s.EmployeeName,s.Currency}).Select(g=>new{employeeId=g.Key.EmployeeId,name=g.Key.EmployeeName,currency=g.Key.Currency,remaining=g.Sum(s=>s.remaining)}).OrderByDescending(s=>s.remaining).Take(20),postContractAsOf=financialCutoff };
             }
         }
         var coachMembers = await db.AcademyMemberships.Where(x => x.AcademyId == academyId && x.Role == AcademyRole.Coach && x.IsActive)

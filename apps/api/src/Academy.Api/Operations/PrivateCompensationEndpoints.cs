@@ -20,13 +20,17 @@ public static partial class PrivateCompensationEndpoints
         api.MapPost("/entries", Post).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/correction-preview", CorrectionPreview);
         api.MapPost("/corrections", Correct).AddEndpointFilter<CsrfFilter>();
+        api.MapGet("/final-preview", FinalPreview);
+        api.MapPost("/final-settlement", FinalizePrivate).AddEndpointFilter<CsrfFilter>();
     }
     private static DateOnly Month(DateOnly date) => new(date.Year,date.Month,1);
     private sealed record Prepared(PrivateServiceDelivery Delivery, PrivateAssessment Assessment, DateOnly DueDate, string FactsHash, string Snapshot, string QuoteHash, string Action, string Message, int Revision, Guid? ReviewId);
     private static async Task<Prepared?> Prepare(Guid coach, Guid delivery, TenantMembership t, FoundationDbContext db, TimeProvider time)
     {
         var d = await db.PrivateServiceDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.Id == delivery && d.CoachMembershipId == coach);
-        if (d is null || !await db.Employees.AnyAsync(e => e.Id == d.EmployeeId && e.IsActive)) return null;
+        if (d is null) return null;
+        var employee = await db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.Id == d.EmployeeId);
+        if (employee is null) return null;
         var a = (await PrivateServiceEndpoints.Assessments(db,coach,delivery)).Single();
         var entries = await db.PrivateCompensationEntries.AsNoTracking().Where(e => e.DeliveryId == delivery).OrderBy(e => e.Revision).ToArrayAsync();
         var movements = await db.ReceivableMovements.AsNoTracking().Where(m => m.DocumentId == a.DocumentId).OrderBy(m => m.Id).Select(m => new { m.Id,m.Kind,m.Amount,m.Currency,m.CollectionId,m.CreatedAtUtc }).ToArrayAsync();
@@ -37,8 +41,10 @@ public static partial class PrivateCompensationEndpoints
         var review = entries.LastOrDefault(e => e.Kind == "Review" && e.FactsHash == factsHash && e.PostedBefore == a.PostedAmount && !entries.Any(r => r.ReviewEntryId == e.Id));
         var paid = await PayrollEndpoints.Finalized(db,t.AcademyId,d.EmployeeId,today);
         var delta = a.PendingDelta;
+        var terms = await ContractHistory.Bounds(db,employee,today);
+        var outsideEmployment = !employee.IsActive || terms.ContractEnd < today;
         var canReverse = delta < 0 && review is not null && !paid && entries.Where(e => e.PayrollAdjustmentId.HasValue).All(e => Month(e.DueDate) == Month(today));
-        var action = a.RequiresReview || delta < 0 || delta > 0 && paid ? review is null ? "Review" : canReverse ? "Reversal" : "ReviewPending" : delta > 0 ? "Accrual" : "None";
+        var action = a.RequiresReview || delta < 0 || delta > 0 && (paid || outsideEmployment) ? review is null ? "Review" : canReverse && !outsideEmployment ? "Reversal" : "ReviewPending" : delta > 0 ? "Accrual" : "None";
         var message = action switch {
             "Accrual" => "ترحيل فرق العمولة إلى كشف الشهر الحالي فقط؛ لا سداد أو قبض أو مصروف مكرر.",
             "Review" => "حفظ استثناء للمراجعة دون تغيير الرواتب؛ فرق بعد الاعتماد أو تعارض مصدر لا يعدل الكشف تلقائيًا.",
@@ -46,7 +52,7 @@ public static partial class PrivateCompensationEndpoints
             "ReviewPending" => "الاستثناء محفوظ بلا أثر مالي. إذا كان الفرق محسوبًا، يراجع المالك تصحيح عمولة موجبًا أو سالبًا في شهر راتب غير معتمد؛ لا إعادة كتابة كشف سابق أو مقاصة دين خارجي.",
             "Blocked" => "كشف الشهر الحالي معتمد أو مسدد؛ لا نعيد كتابته أو ننقل الفرق لشهر مستقبلي صامتًا.",
             _ => "لا فرق جديد لترحيله؛ المصدر السابق محفوظ دون تكرار." };
-        var hash = StatementComparisonRules.Hash(new { t.AcademyId,t.MembershipId,delivery,factsHash,revision,a.PostedAmount,dueDate = today,action, reviewId = review?.Id });
+        var hash = StatementComparisonRules.Hash(new { t.AcademyId,t.MembershipId,delivery,factsHash,revision,a.PostedAmount,dueDate = today,action, reviewId = review?.Id, employee.IsActive, terms.ContractStart, terms.ContractEnd, terms.VersionId });
         return new(d,a,today,factsHash,snapshot,hash,action,message,revision,review?.Id);
     }
     private static object View(Prepared p, DateTimeOffset asOf) => new { quoteHash = p.QuoteHash, action = p.Action, message = p.Message, dueDate = p.DueDate, asOf, currency = p.Assessment.Currency, currentPosted = p.Assessment.PostedAmount, targetAmount = p.Assessment.Earned, difference = p.Assessment.PendingDelta, p.Assessment.RequiresReview, revision = p.Revision };

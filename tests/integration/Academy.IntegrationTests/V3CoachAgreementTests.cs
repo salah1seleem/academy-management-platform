@@ -16,7 +16,7 @@ namespace Academy.IntegrationTests;
 
 public sealed partial class V2StaffScopeTests
 {
-    private async Task<(HttpClient Owner, Guid Coach, string Email, Guid Employee, Guid Branch, Guid OtherBranch, Guid Sport, DateOnly Today)> AgreementFixture()
+    private async Task<(HttpClient Owner, Guid Coach, string Email, Guid Employee, Guid Branch, Guid OtherBranch, Guid Sport, DateOnly Today)> AgreementFixture(DateOnly? contractEnd=null)
     {
         var owner = await Staff(DemoSeed.OwnerEmail); var stamp = Guid.NewGuid().ToString("N"); var email = $"agreement.{stamp}@example.test";
         var coachResponse = await Write(owner, "/api/v1/manage/staff", new StaffWrite("مدرب اتفاق اصطناعي " + stamp[..8], email, "010" + Random.Shared.Next(10000000,99999999), "Demo-Only-123!", AcademyRole.Coach, "مدرب عرض"), false); coachResponse.EnsureSuccessStatusCode();
@@ -24,7 +24,7 @@ public sealed partial class V2StaffScopeTests
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var branches = await db.Branches.Where(b => b.AcademyId == DemoSeed.NogoomAcademyId && b.IsActive).OrderBy(b => b.Id).Take(2).Select(b => b.Id).ToArrayAsync();
         var sport = await db.Sports.Where(s => s.AcademyId == DemoSeed.NogoomAcademyId && s.IsActive).Select(s => s.Id).FirstAsync();
-        var employeeResponse = await Write(owner, "/api/v1/manage/employees", new EmployeeWrite("موظف الاتفاق " + stamp[..8], "010" + Random.Shared.Next(10000000,99999999), "مدرب", branches[0], 3000, new(2000,1,1), null, coach, null), false); employeeResponse.EnsureSuccessStatusCode();
+        var employeeResponse = await Write(owner, "/api/v1/manage/employees", new EmployeeWrite("موظف الاتفاق " + stamp[..8], "010" + Random.Shared.Next(10000000,99999999), "مدرب", branches[0], 3000, new(2000,1,1), contractEnd, coach, null), false); employeeResponse.EnsureSuccessStatusCode();
         var employee = (await employeeResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var data = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/payroll/coaches/{coach}/agreements");
         return (owner, coach, email, employee, branches[0], branches[1], sport, DateOnly.Parse(data.GetProperty("today").GetString()!));

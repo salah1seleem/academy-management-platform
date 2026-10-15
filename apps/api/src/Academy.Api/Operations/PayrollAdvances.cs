@@ -23,7 +23,7 @@ public static class PayrollAdvances
         var e=await db.Employees.AsNoTracking().SingleOrDefaultAsync(e=>e.Id==id);if(e is null)return Results.NotFound();
         var advances=await db.PayrollAdvances.AsNoTracking().Where(a=>a.EmployeeId==id).OrderByDescending(a=>a.CreatedAtUtc).ToArrayAsync();
         var payments=await db.PayrollDisbursements.AsNoTracking().Where(p=>p.EmployeeId==id).ToArrayAsync();
-        var statements=await db.PayrollStatements.AsNoTracking().Where(s=>s.EmployeeId==id).OrderByDescending(s=>s.Month).ToArrayAsync();
+        var statements=await db.PayrollStatements.AsNoTracking().Where(s=>s.EmployeeId==id&&s.Kind!="PrivateFinal").OrderByDescending(s=>s.Month).ToArrayAsync();
         var canManage=await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollAdvanceManage)&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId));
         return Results.Ok(new {employeeName=e.Name,e.Currency,canManage,canRecord=canManage&&e.IsActive,
             advances=advances.Select(a=>new{a.Id,a.Amount,a.Reference,a.CreatedAtUtc,applied=payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),remaining=a.Amount-payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount)}),

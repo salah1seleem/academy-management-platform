@@ -17,6 +17,7 @@ class StaffPayrollStatements extends StatelessWidget {
       builder: (context, value) {
         final data = obj(value);
         final items = rows(data['items']);
+        final finals = rows(data['finalSettlements'] ?? const []);
         final opening = data['opening'] is Map ? obj(data['opening']) : null;
         if (data['configured'] == false) {
           return EmptyMessage(
@@ -39,7 +40,7 @@ class StaffPayrollStatements extends StatelessWidget {
                   : 'Reviewed opening before ${opening['asOf']}. Included in totals, not monthly salary. Unimported advances and unapproved months are not assumed zero.',
             ),
           ),
-          if (items.isNotEmpty || opening != null)
+          if (items.isNotEmpty || opening != null || finals.isNotEmpty)
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,12 +135,40 @@ class StaffPayrollStatements extends StatelessWidget {
                 ],
               ),
             ),
-          if (items.isEmpty && opening == null)
+          if (items.isEmpty && opening == null && finals.isEmpty)
             EmptyMessage(
               localized(
                 context,
                 'لا كشف معتمد بعد؛ هذا لا يعني أن مستحقاتك صفر.',
                 'No approved statement yet; this does not mean your dues are zero.',
+              ),
+            ),
+          for (final s in finals)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(
+                    localized(
+                      context,
+                      'عمولة بعد نهاية العقد — ليست راتب شهر',
+                      'Post-contract commission — not monthly salary',
+                    ),
+                  ),
+                  UiText(
+                    '${localized(context, 'المستحق', 'Due')}: ${s['amount']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'المسدد', 'Settled')}: ${s['paid']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'المتبقي', 'Remaining')}: ${s['remaining']} ${data['currency']}',
+                  ),
+                  for (final p in rows(s['payments']))
+                    UiText(
+                      '${localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${data['currency']}',
+                    ),
+                ],
               ),
             ),
           for (final s in items)

@@ -1,0 +1,11 @@
+"use client";
+import {FormEvent,useRef,useState} from "react";
+import {ConfirmationDialog} from "../components/dashboard-shell";
+import {csrfRequest,DashboardRequestError} from "./dashboard-api";
+import {formatMoneyAr} from "../lib/formatters";
+export function PayrollFinalPayment({employeeId,sourceId,paid,remaining,currency,onChanged}:{employeeId:string;sourceId:string;paid:number;remaining:number;currency:string;onChanged:()=>void}){
+  const [pending,setPending]=useState<{amount:number;reference:string}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");const keys=useRef(new Map<string,string>());
+  function review(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);setError("");setPending({amount:Number(f.get("amount")),reference:String(f.get("reference")??"")});}
+  async function confirm(){if(!pending||busy)return;setBusy(true);const body={...pending,expectedPaid:paid,expectedRemaining:remaining},signature=JSON.stringify(body);if(!keys.current.has(signature))keys.current.set(signature,crypto.randomUUID());try{await csrfRequest(`/api/v1/manage/payroll/${employeeId}/final-settlements/${sourceId}/disbursements`,"POST",body,{"Idempotency-Key":keys.current.get(signature)!});setPending(null);onChanged();}catch(e){setPending(null);setError(e instanceof DashboardRequestError?e.message:"تعذر تأكيد الصرف. حدّث الحساب قبل إعادة المحاولة.");}finally{setBusy(false);}}
+  return <><form className="form-shell payroll-opening-form" aria-label="صرف عمولة نهاية العقد" onSubmit={review}><label>مبلغ الصرف<input name="amount" type="number" min="0.01" max={remaining} step="0.01" required/></label><label>مرجع الصرف — اختياري<input name="reference" maxLength={120}/></label><div className="form-actions"><button className="primary-button" disabled={busy}>مراجعة صرف العمولة</button></div></form>{error&&<p role="alert">{error}</p>}<ConfirmationDialog open={pending!==null} title="صرف مستحق نهاية العقد" message={`تسجيل صرف فعلي ${formatMoneyAr(pending?.amount??0,currency)} من العمولة المعتمدة. لا ينفذ تحويلًا بنكيًا أو يسجل مصروفًا ثانيًا. راجع السلف غير المخصصة أولًا؛ لا تخصم تلقائيًا.`} confirmLabel="تأكيد تسجيل الصرف" busy={busy} onConfirm={()=>void confirm()} onCancel={()=>setPending(null)}/></>;
+}

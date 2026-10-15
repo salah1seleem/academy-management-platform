@@ -8,6 +8,7 @@ using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,9 +19,10 @@ namespace Academy.IntegrationTests;
 
 public sealed partial class V2StaffScopeTests
 {
-    private async Task<(HttpClient Owner, Guid Coach, string Email, Guid Employee, Guid Document, Guid Enrollment, Guid Plan, Guid[] Sessions, Guid Actor, Guid Branch, Guid Sport, DateOnly Today)> PrivateFixture(bool isolatedBranch = false)
+    private async Task<(HttpClient Owner, Guid Coach, string Email, Guid Employee, Guid Document, Guid Enrollment, Guid Plan, Guid[] Sessions, Guid Actor, Guid Branch, Guid Sport, DateOnly Today)> PrivateFixture(bool isolatedBranch = false,DateOnly? historicalService=null,DateOnly? contractEnd=null)
     {
-        var f = await AgreementFixture();
+        var f = await AgreementFixture(contractEnd);
+        if(historicalService.HasValue)f.Today=historicalService.Value;
         if (isolatedBranch)
         {
             // Summary verification must not depend on unrelated tests' historical collection fixtures.
@@ -28,8 +30,19 @@ public sealed partial class V2StaffScopeTests
             f.Branch = Guid.NewGuid(); isolatedDb.Branches.Add(new() { Id=f.Branch,AcademyId=DemoSeed.NogoomAcademyId,ArabicName="فرع مطابقة خاص اصطناعي "+f.Branch });
             (await isolatedDb.Employees.SingleAsync(e=>e.Id==f.Employee)).BranchId=f.Branch; await isolatedDb.SaveChangesAsync();
         }
-        var agreement = await AgreementId(f.Owner, f.Coach, new(f.Branch, f.Sport, f.Today, null, "Percent", 40, "DeliveredCollected", "GroupOnly"));
-        (await Write(f.Owner, $"/api/v1/manage/payroll/coaches/{f.Coach}/agreements/{agreement}/approve", new CoachAgreementApprovalWrite(null), false)).EnsureSuccessStatusCode();
+        if(historicalService.HasValue)
+        {
+            // Isolated historic source fixture, not permission to backdate agreements through the public API.
+            await using var historyScope=factory.Services.CreateAsyncScope();var historyDb=historyScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var ownerMember=await historyDb.AcademyMemberships.Where(m=>m.AcademyId==DemoSeed.NogoomAcademyId&&m.Role==AcademyRole.AcademyOwner&&m.User.Email==DemoSeed.OwnerEmail).Select(m=>m.Id).SingleAsync();var historyNow=DateTimeOffset.UtcNow;
+            var agreement=new Academy.Infrastructure.Operations.CoachCompensationAgreement{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,EmployeeId=f.Employee,CoachMembershipId=f.Coach,BranchId=f.Branch,SportId=f.Sport,EffectiveFrom=f.Today,EffectiveTo=contractEnd,BaseSalarySnapshot=3000,Currency="EGP",VariableMethod="Percent",VariableValue=40,Eligibility="DeliveredCollected",BaseCoverage="GroupOnly",CreatedByMembershipId=ownerMember,IdempotencyKey=Guid.NewGuid().ToString(),CreatedAtUtc=historyNow,UpdatedAtUtc=historyNow};historyDb.CoachCompensationAgreements.Add(agreement);await historyDb.SaveChangesAsync();
+            historyDb.CoachCompensationApprovals.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,AgreementId=agreement.Id,EmployeeId=f.Employee,BranchId=f.Branch,SportId=f.Sport,Revision=1,ApprovedByMembershipId=ownerMember,ApprovedAtUtc=historyNow,CreatedAtUtc=historyNow,UpdatedAtUtc=historyNow});await historyDb.SaveChangesAsync();
+        }
+        else
+        {
+            var agreement = await AgreementId(f.Owner, f.Coach, new(f.Branch, f.Sport, f.Today, null, "Percent", 40, "DeliveredCollected", "GroupOnly"));
+            (await Write(f.Owner, $"/api/v1/manage/payroll/coaches/{f.Coach}/agreements/{agreement}/approve", new CoachAgreementApprovalWrite(null), false)).EnsureSuccessStatusCode();
+        }
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var a = DemoSeed.NogoomAcademyId; var now = DateTimeOffset.UtcNow;
         var actor = await db.Users.Where(u => u.Email == DemoSeed.OwnerEmail).Select(u => u.Id).SingleAsync(); var age = await db.AgeCategories.Where(c => c.AcademyId == a && c.IsActive).Select(c => c.Id).FirstAsync();
         var group = Guid.NewGuid(); var player = Guid.NewGuid(); var enrollment = Guid.NewGuid(); var plan = Guid.NewGuid(); var doc = Guid.NewGuid();

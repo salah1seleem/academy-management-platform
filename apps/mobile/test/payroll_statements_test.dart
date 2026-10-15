@@ -6,6 +6,48 @@ import 'coach_test.dart' show coach, shell;
 
 void main() {
   testWidgets(
+    'Post-contract compensation is a separate own payable, not salary or a coach payment action',
+    (tester) async {
+      final calls = <String>[];
+      final auth = await coach((m, p, b, t) async {
+        calls.add('$m $p');
+        return {
+          'configured': true,
+          'asOf': '2026-10-15',
+          'currency': 'EGP',
+          'items': [],
+          'totalDue': 50,
+          'totalPaid': 20,
+          'remaining': 30,
+          'finalSettlements': [
+            {
+              'id': 'final',
+              'amount': 50,
+              'paid': 20,
+              'remaining': 30,
+              'payments': [
+                {'amount': 20},
+              ],
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('عمولة بعد نهاية العقد — ليست راتب شهر'),
+        findsOneWidget,
+      );
+      expect(find.text('المتبقي المعروف: 30 EGP'), findsOneWidget);
+      expect(find.text('المستحق: 50 EGP'), findsOneWidget);
+      expect(find.text('صرف مسجل: 20 EGP'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(calls, ['GET /api/v1/staff/payroll/account']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Reviewed opening zero is visible and is not a fabricated monthly salary',
     (tester) async {
       final calls = <String>[];

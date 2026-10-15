@@ -6,6 +6,10 @@ import { DateFilterDefaults } from "../components/date-filter-defaults";
 afterEach(cleanup);
 const response = (v: unknown) => Promise.resolve(new Response(JSON.stringify(v), { headers: { "Content-Type": "application/json" } }));
 const summary = { from: "2026-09-01", to: "2026-09-28", currency: "EGP", collections: { today: 1800, month: 5600 }, subscriptions: { total: 30, active: 20, expiring: 5, expired: 7 }, payments: { pending: 4 }, paymentRequests: { total: 4, newEnrollments: 1, renewals: 1, products: 1, tournaments: 1 }, attendance: { present: 10, absent: 2, notRecorded: 1 }, byBranch: [{ id: "b1", name: "فرع تجريبي", amount: 1800 }], activePlayers: 20, coaches: 3, newSubscriptions: 2 };
+it("drills down from a real post-contract payable without presenting it as monthly base salary",async()=>{
+  const data={...summary,payroll:{month:"2026-10-01",employeeCount:3,expiringContracts:0,baseDue:9000,deductions:0,additions:0,netDue:9000,unpaid:0,postContract:[{currency:"EGP",remaining:30,count:1}],postContractEmployees:[{employeeId:"ended",name:"مدرب عقد منتهٍ",currency:"EGP",remaining:30}]}};global.fetch=vi.fn(url=>String(url).endsWith("/me")?response({role:"AcademyOwner"}):String(url).includes("options")?response({branches:[]}):response(data)) as typeof fetch;
+  render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-15"}}><PremiumOwnerDashboard/></DateFilterDefaults>);const link=await screen.findByRole("link",{name:/مدرب عقد منتهٍ/});expect(link).toHaveAttribute("href","/dashboard/payroll/ended/account");expect(link).toHaveTextContent("30 جنيه");expect(screen.getByText(/مستقل عن شهر الرسم/)).toBeVisible();
+});
 it("has no welcome/latest blocks and every total/category retains matching drill-down", async () => {
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [{ id: "b1", arabicName: "فرع تجريبي" }] }) : response(summary)) as typeof fetch;
   render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
