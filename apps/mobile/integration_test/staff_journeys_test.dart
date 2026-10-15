@@ -56,9 +56,9 @@ void main() {
     tester,
   ) async {
     final session = await launch(tester, 'coach-integration');
-    await login(tester, '01099900020', 'حصص اليوم والقادمة');
+    await login(tester, '01099900020', 'حصتك الأقرب');
     await capture('coach-home');
-    // Six session cards precede the group section; ListView builds it lazily.
+    // Groups are a distinct section; the list can build its rows lazily.
     await tester.scrollUntilVisible(
       find.text('المجموعات المسندة'),
       320,
@@ -67,8 +67,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.chevron_left).first);
     await tester.pumpAndSettle();
-    await waitFor(tester, find.text('تسجيل الحضور'));
-    await tester.tap(find.text('تسجيل الحضور'));
+    await waitFor(tester, find.text('فتح الحصة الأقرب'));
+    await tester.tap(find.text('فتح الحصة الأقرب'));
     await tester.pumpAndSettle();
     await waitFor(tester, find.text('حفظ الحضور'));
     await capture('coach-attendance');

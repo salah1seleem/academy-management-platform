@@ -33,14 +33,24 @@ public static class Slice4Endpoints
         api.MapGet("/guardian/children/{playerId:guid}/attendance", GuardianAttendance).RequireAuthorization(AcademyPermissions.GuardianAttendanceRead);
     }
 
-    private static async Task<IResult> ListSessions(DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId, Guid? sportId, Guid? groupId, string? status, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> ListSessions(DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId, Guid? sportId, Guid? groupId, string? status, bool? upcomingOnly, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         var unfiltered = allDates == true && from is null && to is null;
         var start = from ?? today; var end = to ?? today;
         if (!unfiltered && (end < start || end.DayNumber - start.DayNumber > 366)) return Validation("range", "نطاق التاريخ يجب ألا يتجاوز سنة.");
         var query = db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
-        if (!unfiltered) query = query.Where(x => x.SessionDate >= start && x.SessionDate <= end);
+        if (upcomingOnly == true)
+        {
+            if (from.HasValue || to.HasValue || allDates == true)
+                return Validation("range", "الحصص القادمة لها نطاق مستقل؛ لا تجمعها مع فلتر تاريخ آخر.");
+            var zoneId = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
+            var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(zoneId));
+            var now = TimeOnly.FromDateTime(local.DateTime);
+            var horizon = today.AddDays(14);
+            query = query.Where(x => x.Status == TrainingSessionStatus.Scheduled && x.SessionDate >= today && x.SessionDate <= horizon && (x.SessionDate > today || x.EndTime > now));
+        }
+        else if (!unfiltered) query = query.Where(x => x.SessionDate >= start && x.SessionDate <= end);
         if (t.Role == AcademyRole.Coach) query = ForCoach(query,t,db);
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId); if (sportId.HasValue) query = query.Where(x => x.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<TrainingSessionStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);

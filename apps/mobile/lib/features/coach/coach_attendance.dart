@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/theme/appearance.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
 import 'coach_evaluation.dart';
@@ -12,16 +13,26 @@ import '../shared/attendance_draft.dart';
 class CoachAttendance extends StatefulWidget {
   final AuthController auth;
   final String sessionId;
+  final String? title;
   const CoachAttendance({
     super.key,
     required this.auth,
     required this.sessionId,
+    this.title,
   });
   @override
   State<CoachAttendance> createState() => _CoachAttendanceState();
 }
 
 class _CoachAttendanceState extends State<CoachAttendance> {
+  String synchronizedTime(Object? value) {
+    final date = DateTime.tryParse(textOf(value))?.toLocal();
+    if (date == null) return '—';
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '${date.day}/${date.month}/${date.year} · $hour:$minute (${localized(context, 'بتوقيت الجهاز', 'device time')})';
+  }
+
   Json? data;
   final statuses = <String, String>{};
   String? error, message;
@@ -196,7 +207,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
 
   @override
   Widget build(BuildContext context) => AppScaffold(
-    title: 'تسجيل الحضور',
+    title: widget.title ?? 'تسجيل الحضور',
     child: data == null
         ? Center(
             child: error == null
@@ -208,11 +219,13 @@ class _CoachAttendanceState extends State<CoachAttendance> {
             children: [
               AppCard(
                 child: UiText(
-                  '${obj(data!['session'])['group']} · ${day(obj(data!['session'])['sessionDate'])} · ${obj(data!['session'])['startTime']}',
+                  '${obj(data!['session'])['group']} · ${day(obj(data!['session'])['sessionDate'])} · ${textOf(obj(data!['session'])['startTime']).split(':').take(2).join(':')}',
                 ),
               ),
               if (data!['lastSynchronizedAtUtc'] != null)
-                UiText('آخر مزامنة مؤكدة: ${data!['lastSynchronizedAtUtc']}'),
+                UiText(
+                  '${localized(context, 'آخر مزامنة مؤكدة', 'Last confirmed synchronization')}: ${synchronizedTime(data!['lastSynchronizedAtUtc'])}',
+                ),
               if (message != null)
                 UiText(message!, style: const TextStyle(color: Colors.green)),
               if (error != null) ErrorNotice(error!),

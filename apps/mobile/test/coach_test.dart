@@ -200,7 +200,7 @@ void main() {
           {'id': 'g1', 'arabicName': 'براعم 2018'},
         ];
       }
-      if (p == '/api/v1/attendance/sessions') {
+      if (p == '/api/v1/attendance/sessions?upcomingOnly=true') {
         return [
           {
             'id': 's1',

@@ -59,7 +59,7 @@ void main() {
       await auth.logout();
       await tester.pumpAndSettle();
       await login('01099900020');
-      await waitFor(find.text('حصص اليوم والقادمة'));
+      await waitFor(find.text('المجموعات المسندة'));
       expect(find.byType(AcademyCrest), findsWidgets);
       await capture('coach-home');
       await auth.logout();
