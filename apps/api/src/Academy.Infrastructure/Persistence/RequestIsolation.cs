@@ -147,6 +147,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<PayrollSettlement>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<CoachCompensationAgreement>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<CoachCompensationApproval>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
+        BranchFilter<PrivateServicePackage>(b, x => RequestBranchIds.Contains(x.BranchId) && ReceivableDocuments.Any(d => d.Id == x.DocumentId));
+        BranchFilter<PrivateServiceDelivery>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId) && PrivateServicePackages.Any(p => p.Id == x.PackageId));
         BranchFilter<AcademyMembership>(b, x => x.Id == RequestMembershipId || MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.IsActive && RequestBranchIds.Contains(a.BranchId)) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.Id) || Employees.Any(e => e.MembershipId == x.Id));
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
@@ -177,7 +179,9 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
-        if (ChangeTracker.Entries<CoachCompensationAgreement>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+        if (ChangeTracker.Entries<PrivateServicePackage>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<PrivateServiceDelivery>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<CoachCompensationAgreement>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<CoachCompensationApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("شروط اتفاق المدرب واعتمادها ثابتة؛ أنشئ نسخة جديدة بدل تعديل التاريخ.");
         GuardCashFamilyPurpose();

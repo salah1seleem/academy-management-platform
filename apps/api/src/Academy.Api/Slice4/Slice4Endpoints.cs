@@ -175,6 +175,7 @@ public static class Slice4Endpoints
         await resources.LockCalendar(t.AcademyId, [group.Value], "Edit"); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"attendance:{t.AcademyId:N}:{id:N}:{Guid.Empty:N}"}, 0))");
         var session = await db.TrainingSessions.SingleAsync(x => x.Id == id);
         if (!Enum.TryParse<TrainingSessionStatus>(request.Status, true, out var next) || !Enum.IsDefined(next)) return Validation("status", "حالة الحصة غير صالحة.");
+        if (next == TrainingSessionStatus.Cancelled && await db.PrivateServiceDeliveries.AnyAsync(d => d.TrainingSessionId == id)) return Results.Conflict(new { message = "الحصة لها تنفيذ خاص معتمد؛ يلزم تصحيح مالي موثق، لا إلغاء مصدر الخدمة." });
         if (next == TrainingSessionStatus.Cancelled && (await db.PlayerAttendances.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingSessionId == id && x.Status != AttendanceStatus.NotRecorded) || await db.StaffAttendances.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingSessionId == id && x.Status != AttendanceStatus.NotRecorded))) return Results.Conflict(new { message = "لا يمكن إلغاء حصة بعد تسجيل حضور فعلي. صحح الحضور أولًا." });
         if (next == TrainingSessionStatus.Cancelled) await resources.CancelBookings(session, UserId(principal));
         var previous = session.Status; session.Status = next; session.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync();

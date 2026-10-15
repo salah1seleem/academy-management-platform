@@ -23,6 +23,15 @@ class CoachAgreementsPage extends StatelessWidget {
       builder: (context, value) {
         final items = rows(obj(value)['items']);
         return gList([
+          GLink(
+            localized(
+              context,
+              'تنفيذ الخاص وعمولاته',
+              'Private delivery and compensation',
+            ),
+            Icons.fact_check_outlined,
+            () => openPage(context, CoachPrivateServicesPage(auth: auth)),
+          ),
           UiText(
             localized(
               context,
@@ -88,6 +97,74 @@ class CoachAgreementsPage extends StatelessWidget {
                   ),
                   UiText(
                     '${localized(context, 'نسخة معتمدة', 'Approved version')} ${a['version']}',
+                  ),
+                ],
+              ),
+            ),
+        ]);
+      },
+    ),
+  );
+}
+
+class CoachPrivateServicesPage extends StatelessWidget {
+  final AuthController auth;
+  const CoachPrivateServicesPage({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(
+      context,
+      'تنفيذ الخاص وعمولاته',
+      'Private delivery and compensation',
+    ),
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/staff/payroll/private-services',
+      builder: (context, value) {
+        final items = rows(obj(value)['items']);
+        return gList([
+          UiText(
+            localized(
+              context,
+              'تقييم للخدمات المعتمدة، غير مرحّل إلى الراتب ولم يُصرف. المعلق على التحصيل ليس مبلغًا مستحقًا.',
+              'Assessment of approved services, not posted to salary or paid. Contingent compensation is not yet due.',
+            ),
+          ),
+          if (items.isEmpty)
+            EmptyMessage(
+              localized(
+                context,
+                'لا تنفيذ خاص معتمد بعد.',
+                'No approved private delivery yet.',
+              ),
+            ),
+          for (final row in items)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText('${row['branch']} · ${row['sport']}'),
+                  UiText('${row['serviceDate']}'),
+                  if (row['requiresReview'] == true)
+                    UiText(
+                      localized(
+                        context,
+                        'تعارض يتطلب مراجعة — العمولة غير محسوبة',
+                        'Needs review — compensation not calculated',
+                      ),
+                    )
+                  else ...[
+                    UiText(
+                      '${localized(context, 'مستوفية للشروط', 'Eligible compensation')}: ${row['earned']} ${row['currency']}',
+                    ),
+                    UiText(
+                      '${localized(context, 'معلقة على التحصيل', 'Contingent on collection')}: ${row['contingent']} ${row['currency']}',
+                    ),
+                  ],
+                  UiText(
+                    row['variableMethod'] == 'Percent'
+                        ? '${row['variableValue']}%'
+                        : '${row['variableValue']} ${row['currency']} ${localized(context, 'للحصة', 'per session')}',
                   ),
                 ],
               ),

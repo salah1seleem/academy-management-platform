@@ -1,5 +1,20 @@
 # أدلة قبول V2 + V3
 
+## C2A — تنفيذ خاص معتمد وتقييم عمولة مرتبط بالمصدر — 2026-10-15
+
+**إعادة النسخة النهائية:** Backend3/3 للمتأثر بعد حراسة تعارض الحضور اللاحق (null+requiresReview، لا صفر)، Web28/28، Flutter19/19 وanalyze/typecheck/lint/build. Football E2E **4/4 في19.7s** بعد مرجع المطالبة القصير وحراسة التعارض، وصور390/1440 فعلية مراجعة بلا overflow.115/115 أدناه مجموعة المستهلكين قبل الحراسة، لا ادعاء إعادتها كاملة بعد آخر تعديل. التفاصيل والمحاولات والاستئناف فيPROGRESS.
+
+- `PrivateCompensationCalculatorTests`: **6/6**؛ minor units والتناسب و0 وPerSession وDelivered. expected مستقلة:8/2000/2/1000/40%=100+100، ثم200 وفرق100.
+- `dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~V3_private_|FullyQualifiedName~V3_agreement_|FullyQualifiedName~PayrollIntegrationTests|FullyQualifiedName~V2ReceivablesTests'`: **115/115 في7m43s** على academy_v3_fixture_20261014، دون skipped. ليست Full Regression. تشمل التكرار/العزل/الغياب/المستقبل/CSRF/المدرب غير المسند/Owner-only،40→30 وcredit400 وثبات SQL/EF؛ راتب3000 وبلا سداد/PayrollAdjustment محفوظان. إعادة توافق seed وحدود reset المحروس مع Football القديم: **3/3 في27s**، دون تخفيف counts30/6 القديمة؛ قاعدة اختبار فقط.
+- Web coach-private-services/coach-agreements/structure-record/payroll/staff-access: **27/27**؛ typecheck/lint وproduction build ناجحة. next-env يعاد إلى مسارات dev الأصلية بعد البناء.
+- Flutter coach_agreements/staff_amounts/v2_role_workspaces: **18/18** وanalyze بلا ملاحظات. API ذاتي يزيل الطفل/المطالبة/صافي الأسرة؛ لا إدخال نسبة أو اعتماد في الموبايل. لا اختبار Simulator/جهاز فعلي لهذه الإضافة.
+- Football E2E:4/4 في18.4s قبل إضافة مرجع المطالبة القصير للفصل بين باقتين لنفس الطفل. إعادة النسخة النهائية وصورها تسجل فيPROGRESS. الاختبار يثبت ربط مطالبة → تأكيد → اعتماد حصة → replay بنفسId → قراءة مدرب عبرBearerOTP Demo دون بيانات الأسرة؛ يحتوي إنشاء المدرب390/1440 والمتابعة القديمة.
+- Migration `20261015001813_V3PrivateServiceEvidence` على قواعد اختبار فقط؛ EF بلا pending changes. السجلات `/tmp/academy-v3-c2a-{consumers,seed-compatibility,web,flutter,analyze,build,e2e-final,typecheck-restored,lint}.log`.
+
+المحاولات:1/3 تكامل ثم إصلاح طول PlayerCode وxmin ومفتاح طلب تخصيص fixture، ثم3/3 و115/115. E2E3/4 كشف مصدر seed بتوقيت لاحق لساعة الديمو؛ صار مصدر اليوم السابق، وقاعدة اختبار جديدة بدل تعديل الصف الثابت.3/4 أخرى مهلة قراءة body بعد نجاح الحفظ؛ صار التحقق من HTTP201 والحالة المحفوظة وreplayAPI بنفسId.1/1 ثم3/4 لاختيار أول صف بدل fixture مع زيادة الصفوف عند إعادة التشغيل؛ المحدد صار تاريخ/رقم المصدر، مع إبقاء assertions50/50/250، ثم4/4. لا خفض assertion أو ادعاء عطل شبكة.
+
+**الحد:** AC13–16/F03 ما زالت partial. تقييم الاستحقاق ومصدره محفوظان، لكن فرق100 لم يرحل إلى Payroll/دفتر ولم يُصرف. ربط الاشتراك المحصل مباشرة والحجز المالي المسبق/العكس والتفويض المستقل وبقية V2/V3 باقية كماPROGRESS.
+
 ## B3b2 — السياق الإداري المستقل
 
 Code SHA `9fdb815af29d70b9b10ccf17cbabfee891eabd7b` مرفوع. [CI38637100984](https://github.com/salah1seleem/academy-management-platform/actions/runs/38637100984) بدأ وهوin_progress عند checkpoint؛ نتائج التشغيل البعيد مستقلة عن الاختبارات المحلية أدناه. مراجعة Git/check/المتطلبات: لا تعديلات خارج الشريحة، لا تغيير baseline، وmain المحلي/البعيد محفوظ.

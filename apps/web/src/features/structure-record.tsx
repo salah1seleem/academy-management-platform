@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ConfirmationDialog, ErrorState, LoadingState, PageHeader, RowActions } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
 import { GroupWorkspace } from "./group-workspace";
-import { CoachAgreements } from "./coach-agreements";
+import { CoachAgreementsWithServices as CoachAgreements } from "./coach-agreements";
 
 export type StructureKind = "branches" | "sports" | "categories" | "groups" | "coaches";
 type RecordData = { id: string; arabicName: string; englishName?: string; description?: string; isActive: boolean; minimumBirthYear?: number; maximumBirthYear?: number; branchId?: string; sportId?: string; ageCategoryId?: string; capacity?: number; branchName?: string; sportName?: string; categoryName?: string; assignments?: Assignment[] };

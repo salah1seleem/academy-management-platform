@@ -5,6 +5,11 @@ import { ConfirmationDialog, ErrorState, LoadingState } from "../components/dash
 import { csrfRequest } from "./dashboard-api";
 import { usePayrollPermission } from "./payroll-access";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
+import { CoachPrivateServices } from "./coach-private-services";
+
+export function CoachAgreementsWithServices({ coachId }: { coachId: string }) {
+  return <><CoachAgreements coachId={coachId} /><CoachPrivateServices coachId={coachId} /></>;
+}
 
 type Agreement = { id: string; branchId: string; sportId: string; branch: string; sport: string; effectiveFrom: string; effectiveTo?: string; variableMethod: string; variableValue: number; eligibility: string; baseCoverage: string; currency: string; baseSalarySnapshot: number; note?: string; version?: number; approvedAtUtc?: string; approvedBy?: string };
 type Data = { configured: boolean; latestApproved?: { branchId: string; sportId: string; agreementId: string; version: number }[]; employeeId?: string; monthlyBase: number; currency: string; contractEnd?: string; today: string; timeZone?: string; items: Agreement[]; branches: { id: string; name: string }[]; sports: { id: string; name: string }[] };

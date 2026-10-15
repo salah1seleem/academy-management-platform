@@ -8,6 +8,7 @@ it("shows stored coach performance and keeps the owner period on drill-down", as
   const calls: string[] = [];
   global.fetch = vi.fn((input) => {
     const url = String(input); calls.push(url);
+    if (url.includes("private-services")) return Promise.resolve(new Response("{}", { status: 403 }));
     const body = url.includes("coach-performance")
       ? { from: "2026-10-01", to: "2026-10-14", groups: [{ id: "group-1", name: "منتخب 2013", branch: "الرحاب", sessions: 4 }], sessionCount: 4, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }
       : { id: "coach-1", arabicName: "مدرب تجريبي", isActive: true, assignments: [{ id: "assignment-1", groupName: "منتخب 2013", isActive: true }] };

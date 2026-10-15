@@ -139,6 +139,12 @@
 .payroll-sensitive-grants label:has(input:checked) { background: var(--primary-soft); border-color: var(--primary); }
 .payroll-sensitive-grants label:has(input:disabled) { opacity: .6; cursor: not-allowed; }
 .coach-agreements .section-heading > button { flex-shrink: 0; white-space: nowrap; }
+.coach-private-services .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-block: 1rem; }
+.coach-private-services .summary-grid > div { display: flex; flex-direction: column; gap: .5rem; padding: 1rem; border: 1px solid var(--border, #e1e7ea); border-radius: 1rem; background: var(--surface-soft, #f7f9fa); }
+.coach-private-services .summary-grid strong { font-size: 1.5rem; color: var(--accent, #b81832); }
+.coach-private-services .section-heading > button { flex-shrink: 0; white-space: nowrap; }
+.coach-private-services a { color: var(--accent, #b81832); font-weight: 600; }
+@media (max-width: 640px) { .coach-private-services .section-heading { flex-direction: column; align-items: stretch; gap: .75rem; } .coach-private-services .summary-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .coach-agreements .section-heading { flex-direction: column; align-items: stretch; gap: .75rem; } .coach-agreements .section-heading > button { align-self: start; } }
 .platform-academy { flex-direction: column; align-items: start !important; padding: 1.15rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 1rem; text-align: start; }
 .platform-academy[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }

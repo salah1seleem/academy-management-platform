@@ -395,6 +395,7 @@ app.MapStaffDeviceCheckIn();
 app.MapGuardianFeedback();
 app.MapPayroll();
 app.MapCoachAgreements();
+app.MapPrivateServices();
 app.MapVersionedConfiguration();
 app.MapSportSettings();
 app.MapReceivables();
@@ -430,6 +431,8 @@ if (app.Environment.IsEnvironment("Demo"))
         await AcademyConfigurationService.SeedDemo(db, ids);
         if (app.Configuration.GetValue<bool>("Demo:CoachAgreementSeedEnabled"))
             await CoachAgreementDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+        if (app.Configuration.GetValue<bool>("Demo:PrivateServiceSeedEnabled"))
+            await PrivateServiceDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
             if (app.Configuration.GetValue<bool>("Demo:SportScopeSeedEnabled")) await SportScopeDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);

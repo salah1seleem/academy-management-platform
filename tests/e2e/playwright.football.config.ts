@@ -7,7 +7,7 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:3190", ...devices["Pixel 7"], trace: "retain-on-failure" },
   webServer: [
     {
-      command: "ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=http://127.0.0.1:5190 dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile --no-build",
+      command: "ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__PrivateServiceSeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=http://127.0.0.1:5190 dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile --no-build",
       url: "http://127.0.0.1:5190/health/ready", reuseExistingServer: false, timeout: 120_000,
     },
     {
