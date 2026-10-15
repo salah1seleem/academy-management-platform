@@ -84,11 +84,12 @@ public static class PayrollEndpoints
         var adjustments = await db.PayrollAdjustments.Where(x => x.AcademyId == academy && x.DueDate >= first && x.DueDate <= last).ToListAsync();
         var daily = await db.StaffDailyAttendances.Where(x => x.AcademyId == academy && x.WorkDate >= first && x.WorkDate <= last).ToListAsync();
         var paid = await db.PayrollSettlements.Where(x => x.AcademyId == academy && x.Month == first).ToListAsync();
+        var privateEntries = await db.PrivateCompensationEntries.Where(x => x.AcademyId == academy && x.DueDate >= first && x.DueDate <= last && x.PayrollAdjustmentId.HasValue).Select(x => new { x.EmployeeId,x.Delta }).ToListAsync();
         return employees.Select(e => {
             var snapshot = paid.SingleOrDefault(p => p.EmployeeId == e.Id); var basic = PayrollCalculator.BaseDue(e.MonthlySalary, e.ContractStart, e.ContractEnd, first);
             var deduct = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Deduction").Sum(x => x.Amount) + daily.Where(x => x.MembershipId == e.MembershipId).Sum(x => x.ApprovedDeduction);
             var add = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Addition").Sum(x => x.Amount);
-            return new PayrollRow(e.Id, e.Name, e.JobTitle, e.BranchId, snapshot?.MonthlySalary ?? e.MonthlySalary, snapshot?.ContractDays ?? basic.Days, snapshot?.BaseDue ?? basic.Due, snapshot?.Deductions ?? deduct, snapshot?.Additions ?? add, snapshot?.NetDue ?? basic.Due - deduct + add, e.Currency, snapshot is not null, snapshot?.PaidAtUtc);
+            return new PayrollRow(e.Id, e.Name, e.JobTitle, e.BranchId, snapshot?.MonthlySalary ?? e.MonthlySalary, snapshot?.ContractDays ?? basic.Days, snapshot?.BaseDue ?? basic.Due, snapshot?.Deductions ?? deduct, snapshot?.Additions ?? add, snapshot?.NetDue ?? basic.Due - deduct + add, e.Currency, snapshot is not null, snapshot?.PaidAtUtc) { PrivateCompensation = privateEntries.Where(x => x.EmployeeId == e.Id).Sum(x => x.Delta), CoachMembershipId = e.MembershipId };
         }).ToList();
     }
     private static async Task<IResult> Report(DateOnly? month, Guid? branchId, string? search, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
@@ -205,5 +206,10 @@ public sealed record AdditionWrite(Guid ReasonId, string? OtherReason = null, de
 public sealed record AdditionReview(bool Accept, DateOnly? DueDate, string? Note, decimal? Amount = null);
 public sealed record SalaryPay(DateOnly Month, decimal? ExpectedNetDue = null);
 public sealed record ReasonWrite(string Name);
-public sealed record PayrollRow(Guid EmployeeId, string Name, string JobTitle, Guid BranchId, decimal MonthlySalary, int ContractDays, decimal BaseDue, decimal Deductions, decimal Additions, decimal NetDue, string Currency, bool IsPaid, DateTimeOffset? PaidAtUtc);
+public sealed record PayrollRow(Guid EmployeeId, string Name, string JobTitle, Guid BranchId, decimal MonthlySalary, int ContractDays, decimal BaseDue, decimal Deductions, decimal Additions, decimal NetDue, string Currency, bool IsPaid, DateTimeOffset? PaidAtUtc)
+{
+    // Informational subtotal already included in Additions minus Deductions, never added again.
+    public decimal PrivateCompensation { get; init; }
+    public Guid? CoachMembershipId { get; init; }
+}
 public sealed record AdjustmentRow(Guid Id, Guid EmployeeId, string Name, string Kind, decimal Amount, string Currency, DateOnly DueDate, string? Reason, string Source);

@@ -149,6 +149,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<CoachCompensationApproval>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PrivateServicePackage>(b, x => RequestBranchIds.Contains(x.BranchId) && ReceivableDocuments.Any(d => d.Id == x.DocumentId));
         BranchFilter<PrivateServiceDelivery>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId) && PrivateServicePackages.Any(p => p.Id == x.PackageId));
+        BranchFilter<PrivateCompensationEntry>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId) && PrivateServiceDeliveries.Any(d => d.Id == x.DeliveryId));
         BranchFilter<AcademyMembership>(b, x => x.Id == RequestMembershipId || MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.IsActive && RequestBranchIds.Contains(a.BranchId)) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.Id) || Employees.Any(e => e.MembershipId == x.Id));
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
@@ -179,11 +180,14 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
-        if (ChangeTracker.Entries<PrivateServicePackage>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+        if (ChangeTracker.Entries<PrivateCompensationEntry>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<PrivateServicePackage>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PrivateServiceDelivery>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<CoachCompensationAgreement>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<CoachCompensationApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("شروط اتفاق المدرب واعتمادها ثابتة؛ أنشئ نسخة جديدة بدل تعديل التاريخ.");
+        var privateAdjustmentIds = ChangeTracker.Entries<PayrollAdjustment>().Where(e => e.State is EntityState.Modified or EntityState.Deleted).Select(e => e.Entity.Id).ToArray();
+        if (privateAdjustmentIds.Length > 0 && await PrivateCompensationEntries.AnyAsync(e => e.PayrollAdjustmentId.HasValue && privateAdjustmentIds.Contains(e.PayrollAdjustmentId.Value), token)) throw new InvalidOperationException("قيد عمولة الخاص ثابت؛ التصحيح بحركة معتمدة مستقلة.");
         GuardCashFamilyPurpose();
         if (ChangeTracker.Entries<StaffRoleTemplateAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل قوالب الصلاحيات ثابت ولا يعدل أو يحذف.");
         if (ChangeTracker.Entries<SportSettingsAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل إعدادات الرياضة ثابت ولا يعدل أو يحذف.");

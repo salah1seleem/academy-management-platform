@@ -9,7 +9,7 @@ import { csrfRequest } from "./dashboard-api";
 import { usePayrollManage, usePayrollPermission } from "./payroll-access";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 
-type Salary = { employeeId: string; name: string; monthlySalary: number; contractDays: number; baseDue: number; deductions: number; additions: number; netDue: number; currency: string; isPaid: boolean };
+type Salary = { employeeId: string; name: string; monthlySalary: number; contractDays: number; baseDue: number; deductions: number; additions: number; privateCompensation?: number; coachMembershipId?: string; netDue: number; currency: string; isPaid: boolean };
 type Report = { currency: string; totalBase: number; totalDeductions: number; totalAdditions: number; totalNet: number; unpaid: number; items: Salary[] };
 type Claim = { id: string; employeeId: string; name: string; amount: number | null; currency: string; reasonName: string; status: string; dueDate?: string; reviewNote?: string };
 const states: Record<string, string> = { Pending: "بانتظار المراجعة", Approved: "مقبول", Rejected: "مرفوض" };
@@ -59,6 +59,7 @@ export function PayrollWorkspace() {
       { key: "base", header: "الأساسي المستحق", render: x => formatMoneyAr(x.baseDue, x.currency) },
       { key: "deduct", header: "الخصومات", render: x => <Link href={`/dashboard/payroll/deductions?employeeId=${x.employeeId}`}>{formatMoneyAr(x.deductions, x.currency)}</Link> },
       { key: "add", header: "الإضافات", render: x => formatMoneyAr(x.additions, x.currency) },
+      { key: "private", header: "منها صافي عمولة الخاص", render: x => x.privateCompensation && x.coachMembershipId ? <Link href={`/dashboard/academy/coaches/${x.coachMembershipId}`}>{formatMoneyAr(x.privateCompensation,x.currency)}<small>محتسبة بالصافي بالفعل · مراجعة المصدر</small></Link> : "—" },
       { key: "net", header: "الصافي", render: x => formatMoneyAr(x.netDue, x.currency) },
       { key: "paid", header: "السداد", render: x => x.isPaid ? "تم الدفع" : canManage ? <button className="primary-action" disabled={Boolean(busy) || x.netDue < 0 || !x.contractDays} onClick={() => void pay(x)}>{busy === x.employeeId ? "جارٍ الحفظ…" : "تأكيد الدفع"}</button> : "لم يُدفع" },
     ]} />}</section></>}</>;

@@ -24,18 +24,20 @@ public static class PrivateServiceEndpoints
     }
     // Financial service review is Owner-only until a distinct delegated permission is added.
     // Contract editing/attendance/CRUD alone MUST NOT silently grant this action.
-    private static async Task<bool> Authority(HttpContext http, CurrentTenant current, FoundationDbContext db)
+    internal static async Task<bool> Authority(HttpContext http, CurrentTenant current, FoundationDbContext db)
     {
         var t = (await current.ResolveAsync())!;
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
-        return t.Role == AcademyRole.AcademyOwner && (await http.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(http.User, AcademyPermissions.PayrollManage)).Succeeded;
+        return t.Role == AcademyRole.AcademyOwner && await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.Role == AcademyRole.AcademyOwner && m.IsActive && m.User.IsActive && m.Academy.IsActive)
+            && (await http.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(http.User, AcademyPermissions.PayrollManage)).Succeeded;
     }
     private static Task<Employee?> Employee(FoundationDbContext db, Guid coach) => db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.MembershipId == coach && e.IsActive && db.AcademyMemberships.Any(m => m.Id == coach && m.Role == AcademyRole.Coach && m.IsActive && m.User.IsActive));
     private static async Task<IResult> Read(Guid coachId, CurrentTenant current, FoundationDbContext db, TimeProvider time, HttpResponse response)
     {
         var t = (await current.ResolveAsync())!; var employee = await Employee(db, coachId); if (employee is null) return Results.NotFound();
         response.Headers.CacheControl = "no-store";
-        return Results.Ok(new { canReview = t.Role == AcademyRole.AcademyOwner, currency = employee.Currency, asOf = time.GetUtcNow(), postedToPayroll = false, items = await Assessments(db, coachId) });
+        var rows = await Assessments(db, coachId);
+        return Results.Ok(new { canReview = t.Role == AcademyRole.AcademyOwner, currency = employee.Currency, asOf = time.GetUtcNow(), postedToPayroll = rows.Any(r => r.PostingCount > 0), items = rows });
     }
     private static async Task<IResult> Own(CurrentTenant current, FoundationDbContext db, Academy.Api.Configuration.AcademyConfigurationService config, HttpResponse response)
     {
@@ -43,7 +45,7 @@ public static class PrivateServiceEndpoints
         response.Headers.CacheControl = "no-store";
         // Only the coach's delivery/rate/compensation, no children, family balances or invoice total.
         var rows = await Assessments(db, t.MembershipId);
-        return Results.Ok(new { postedToPayroll = false, items = rows.Select(r => new { r.Id, r.ServiceDate, r.Branch, r.Sport, r.Eligible, r.Earned, r.Contingent, r.RequiresReview, r.Currency, r.AgreementId, r.VariableValue, r.VariableMethod }) });
+        return Results.Ok(new { postedToPayroll = rows.Any(r => r.PostingCount > 0), items = rows.Select(r => new { r.Id, r.ServiceDate, r.Branch, r.Sport, r.Eligible, r.Earned, r.Contingent, r.RequiresReview, r.PostedAmount, r.PendingDelta, r.PostingCount, r.Currency, r.AgreementId, r.VariableValue, r.VariableMethod }) });
     }
     private static async Task<IResult> Options(Guid coachId, CurrentTenant current, FoundationDbContext db, TimeProvider time)
     {
@@ -103,7 +105,7 @@ public static class PrivateServiceEndpoints
         var row = new PrivateServiceDelivery { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PackageId = packageId, TrainingSessionId = session.Id, SportEnrollmentId = package.SportEnrollmentId, EmployeeId = employee.Id, CoachMembershipId = coachId, AgreementId = agreement.Id, BranchId = package.BranchId, SportId = package.SportId, Ordinal = body.Ordinal, ServiceDate = session.SessionDate, StartTime = session.StartTime, EndTime = session.EndTime, ApprovedByMembershipId = t.MembershipId, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };
         db.PrivateServiceDeliveries.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Created(http.Request.Path, new { row.Id });
     }
-    internal static async Task<PrivateAssessment[]> Assessments(FoundationDbContext db, Guid coach)
+    internal static async Task<PrivateAssessment[]> Assessments(FoundationDbContext db, Guid coach, Guid? deliveryId = null)
     {
         // One statement/snapshot for sources and allocations; an unrelated payment to the
         // same guardian/enrollment is deliberately NOT considered collected for this invoice.
@@ -111,21 +113,28 @@ public static class PrivateServiceEndpoints
             join p in db.PrivateServicePackages on d.PackageId equals p.Id
             join doc in db.ReceivableDocuments on p.DocumentId equals doc.Id
             join a in db.CoachCompensationAgreements on d.AgreementId equals a.Id
-            where d.CoachMembershipId == coach
+            where d.CoachMembershipId == coach && (!deliveryId.HasValue || d.Id == deliveryId)
             orderby d.ServiceDate descending, d.Ordinal
             select new { Delivery = d, p.SessionCount, doc.Amount, doc.PlayerNameSnapshot, doc.Id, p.Currency, a.VariableMethod, a.VariableValue, a.Eligibility,
                 branch = db.Branches.Where(b => b.Id == d.BranchId).Select(b => b.ArabicName).First(), sport = db.Sports.Where(s => s.Id == d.SportId).Select(s => s.ArabicName).First(),
                 requiresReview = db.PlayerAttendances.Any(x => x.TrainingSessionId == d.TrainingSessionId && x.SportEnrollmentId == d.SportEnrollmentId && (x.Status == AttendanceStatus.Absent || x.Status == AttendanceStatus.Excused))
                     || db.CompensationBookings.Any(x => x.TrainingSessionId == d.TrainingSessionId && x.SportEnrollmentId == d.SportEnrollmentId && x.State == CompensationBookingState.Reserved),
+                posted = db.PrivateCompensationEntries.Where(e => e.DeliveryId == d.Id).Sum(e => (decimal?)e.Delta) ?? 0,
+                postingCount = db.PrivateCompensationEntries.Count(e => e.DeliveryId == d.Id && e.PayrollAdjustmentId.HasValue),
                 credits = db.ReceivableMovements.Where(m => m.DocumentId == doc.Id && m.Kind == ReceivableMovementKind.CreditNote).Sum(m => (decimal?)m.Amount) ?? 0,
                 paid = db.ReceivableMovements.Where(m => m.DocumentId == doc.Id && m.Kind == ReceivableMovementKind.PaymentAllocation).Sum(m => (decimal?)m.Amount) ?? 0,
                 used = db.ReceivableCreditApplications.Where(c => c.SourceDocumentId == doc.Id).Sum(c => (decimal?)c.Amount) ?? 0,
                 received = db.ReceivableCreditApplications.Where(c => c.TargetDocumentId == doc.Id).Sum(c => (decimal?)c.Amount) ?? 0 }).ToArrayAsync();
         return sources.Select(s => { var net = Math.Max(0, s.Amount - s.credits); var paid = Math.Clamp(s.paid + s.received - s.used, 0, net);
             var portion = PrivateCompensationCalculator.Portion(net, s.SessionCount, s.Delivery.Ordinal); var c = PrivateCompensationCalculator.Assess(portion, net, paid, s.VariableMethod, s.VariableValue, s.Eligibility);
-            return new PrivateAssessment(s.Delivery.Id, s.Delivery.PackageId, s.Id, s.Delivery.TrainingSessionId, s.PlayerNameSnapshot, s.branch!, s.sport!, s.Delivery.ServiceDate, s.Delivery.Ordinal, s.SessionCount, portion, s.requiresReview ? null : c.Eligible, s.requiresReview ? null : c.Earned, s.requiresReview ? null : c.Contingent, s.Currency, s.Delivery.AgreementId, s.VariableMethod, s.VariableValue, s.requiresReview); }).ToArray();
+            return new PrivateAssessment(s.Delivery.Id, s.Delivery.PackageId, s.Id, s.Delivery.TrainingSessionId, s.PlayerNameSnapshot, s.branch!, s.sport!, s.Delivery.ServiceDate, s.Delivery.Ordinal, s.SessionCount, portion, s.requiresReview ? null : c.Eligible, s.requiresReview ? null : c.Earned, s.requiresReview ? null : c.Contingent, s.Currency, s.Delivery.AgreementId, s.VariableMethod, s.VariableValue, s.requiresReview) { PostedAmount = s.posted, PendingDelta = s.requiresReview ? null : c.Earned - s.posted, PostingCount = s.postingCount }; }).ToArray();
     }
 }
 public sealed record PrivatePackageWrite(Guid DocumentId, int SessionCount);
 public sealed record PrivateDeliveryWrite(Guid TrainingSessionId, int Ordinal);
-public sealed record PrivateAssessment(Guid Id, Guid PackageId, Guid DocumentId, Guid TrainingSessionId, string Player, string Branch, string Sport, DateOnly ServiceDate, int Ordinal, int SessionCount, decimal ServiceNet, decimal? Eligible, decimal? Earned, decimal? Contingent, string Currency, Guid AgreementId, string VariableMethod, decimal VariableValue, bool RequiresReview);
+public sealed record PrivateAssessment(Guid Id, Guid PackageId, Guid DocumentId, Guid TrainingSessionId, string Player, string Branch, string Sport, DateOnly ServiceDate, int Ordinal, int SessionCount, decimal ServiceNet, decimal? Eligible, decimal? Earned, decimal? Contingent, string Currency, Guid AgreementId, string VariableMethod, decimal VariableValue, bool RequiresReview)
+{
+    public decimal PostedAmount { get; init; }
+    public decimal? PendingDelta { get; init; }
+    public int PostingCount { get; init; }
+}

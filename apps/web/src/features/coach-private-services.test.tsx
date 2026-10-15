@@ -9,7 +9,7 @@ const options = { packages: [{ id: "package", documentId: "document", player: "�
 it("shows earned and contingent separately without claiming payroll posting and links the existing source", async () => {
   global.fetch = vi.fn(() => response({ canReview: false, items: [row] })) as typeof fetch;
   render(<CoachPrivateServices coachId="coach" />); await screen.findByText(/طفل اصطناعي/);
-  expect(screen.getByText("عمولة مستوفية للشروط — غير مرحّلة")).toBeVisible(); expect(screen.getByText("معلقة على التحصيل — ليست مستحقًا")).toBeVisible();
+  expect(screen.getByText("التقييم المستوفي الحالي")).toBeVisible(); expect(screen.getByText("مرحّل إلى كشف الرواتب — ليس سدادًا")).toBeVisible(); expect(screen.getByText("معلقة على التحصيل — ليست مستحقًا")).toBeVisible();
   expect(screen.getByRole("link", { name: "مصدر التحصيل" })).toHaveAttribute("href", "/dashboard/finance/receivables/document");
   expect(screen.queryByRole("button", { name: "مراجعة واعتماد التنفيذ" })).not.toBeInTheDocument();
 });

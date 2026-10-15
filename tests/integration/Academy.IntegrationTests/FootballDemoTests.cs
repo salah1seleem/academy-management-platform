@@ -51,6 +51,22 @@ public sealed class FootballDemoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Explicit_marked_demo_reset_clears_private_payroll_sources_without_touching_other_tenants()
+    {
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        await PrivateServiceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value);
+        var other=await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId!=AcademyId);
+        using var owner=await Login("owner"); var delivery=await db.PrivateServiceDeliveries.Where(d=>d.AcademyId==AcademyId).Select(d=>new {d.Id,d.CoachMembershipId}).FirstAsync();
+        var root=$"/api/v1/manage/payroll/coaches/{delivery.CoachMembershipId}/private-services/{delivery.Id}";
+        var quote=await owner.GetFromJsonAsync<JsonElement>(root+"/posting-preview"); Assert.Equal("Accrual",quote.GetProperty("action").GetString());
+        var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var request=new HttpRequestMessage(HttpMethod.Post,root+"/entries") { Content=JsonContent.Create(new {action="Accrual",quoteHash=quote.GetProperty("quoteHash").GetString()}) }; request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString()); request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());
+        var saved=await owner.SendAsync(request); Assert.True(saved.IsSuccessStatusCode,await saved.Content.ReadAsStringAsync()); Assert.Equal(1,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider,false); Assert.Equal(1,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);
+        Assert.False(await db.PrivateCompensationEntries.AnyAsync(e=>e.AcademyId==AcademyId)); Assert.Equal(other,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId!=AcademyId)); Assert.Equal(30,await db.Players.CountAsync(p=>p.AcademyId==AcademyId)); Assert.Equal(6,await db.TrainingGroups.CountAsync(g=>g.AcademyId==AcademyId));
+    }
+
+    [Fact]
     public async Task Football_dataset_has_exact_counts_and_unique_linked_identities()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

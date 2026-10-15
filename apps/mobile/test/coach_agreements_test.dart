@@ -42,13 +42,15 @@ void main() {
       final auth = await coach((m, p, b, t) async {
         calls.add('$m $p');
         return {
-          'postedToPayroll': false,
+          'postedToPayroll': true,
           'items': [
             {
               'branch': 'الرحاب',
               'sport': 'كرة القدم',
               'serviceDate': '2026-10-01',
               'earned': 50,
+              'postedAmount': 25,
+              'pendingDelta': 25,
               'contingent': 50,
               'currency': 'EGP',
               'variableMethod': 'Percent',
@@ -61,6 +63,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('مستوفية للشروط: 50 EGP'), findsOneWidget);
       expect(find.text('معلقة على التحصيل: 50 EGP'), findsOneWidget);
+      expect(
+        find.text('المرحّل إلى الرواتب — ليس سدادًا: 25 EGP'),
+        findsOneWidget,
+      );
+      expect(find.text('فرق التقييم: 25 EGP'), findsOneWidget);
       expect(find.byType(TextFormField), findsNothing);
       expect(find.byType(FilledButton), findsNothing);
       expect(calls, ['GET /api/v1/staff/payroll/private-services']);

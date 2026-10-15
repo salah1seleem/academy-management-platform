@@ -18,9 +18,17 @@ namespace Academy.IntegrationTests;
 
 public sealed partial class V2StaffScopeTests
 {
-    private async Task<(HttpClient Owner, Guid Coach, string Email, Guid Employee, Guid Document, Guid Enrollment, Guid Plan, Guid[] Sessions, Guid Actor, Guid Branch, Guid Sport, DateOnly Today)> PrivateFixture()
+    private async Task<(HttpClient Owner, Guid Coach, string Email, Guid Employee, Guid Document, Guid Enrollment, Guid Plan, Guid[] Sessions, Guid Actor, Guid Branch, Guid Sport, DateOnly Today)> PrivateFixture(bool isolatedBranch = false)
     {
-        var f = await AgreementFixture(); var agreement = await AgreementId(f.Owner, f.Coach, new(f.Branch, f.Sport, f.Today, null, "Percent", 40, "DeliveredCollected", "GroupOnly"));
+        var f = await AgreementFixture();
+        if (isolatedBranch)
+        {
+            // Summary verification must not depend on unrelated tests' historical collection fixtures.
+            await using var isolatedScope = factory.Services.CreateAsyncScope(); var isolatedDb = isolatedScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            f.Branch = Guid.NewGuid(); isolatedDb.Branches.Add(new() { Id=f.Branch,AcademyId=DemoSeed.NogoomAcademyId,ArabicName="فرع مطابقة خاص اصطناعي "+f.Branch });
+            (await isolatedDb.Employees.SingleAsync(e=>e.Id==f.Employee)).BranchId=f.Branch; await isolatedDb.SaveChangesAsync();
+        }
+        var agreement = await AgreementId(f.Owner, f.Coach, new(f.Branch, f.Sport, f.Today, null, "Percent", 40, "DeliveredCollected", "GroupOnly"));
         (await Write(f.Owner, $"/api/v1/manage/payroll/coaches/{f.Coach}/agreements/{agreement}/approve", new CoachAgreementApprovalWrite(null), false)).EnsureSuccessStatusCode();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var a = DemoSeed.NogoomAcademyId; var now = DateTimeOffset.UtcNow;
         var actor = await db.Users.Where(u => u.Email == DemoSeed.OwnerEmail).Select(u => u.Id).SingleAsync(); var age = await db.AgeCategories.Where(c => c.AcademyId == a && c.IsActive).Select(c => c.Id).FirstAsync();
@@ -41,6 +49,7 @@ public sealed partial class V2StaffScopeTests
         var r = new RenewalRequest { Id = Guid.NewGuid(), AcademyId = a, SportEnrollmentId = enrollment, SportId = e.SportId, SubscriptionPlanId = plan, RequestedByUserId = actor, RequestedAtUtc = now, OriginalAmount = amount, FinalAmount = amount, AmountExpected = amount, Currency = "EGP", Status = RenewalRequestStatus.Paid, IdempotencyKey = key };
         var p = new PaymentRequest { Id = Guid.NewGuid(), AcademyId = a, RenewalRequestId = r.Id, Amount = amount, Currency = "EGP", Status = PaymentRequestStatus.Confirmed, Provider = "InternalTest", ProviderEnvironment = "Demo", ProviderReference = key, CheckoutReference = key, ConfirmedAtUtc = now };
         db.RenewalRequests.Add(r); db.PaymentRequests.Add(p); db.Collections.Add(new() { Id = id, AcademyId = a, SportEnrollmentId = enrollment, RenewalRequestId = r.Id, PaymentRequestId = p.Id, Amount = amount, Currency = "EGP", PaymentMethod = "InternalTest", Provider = "InternalTest", ProviderReference = key, ConfirmedAtUtc = now, ConfirmedBy = "synthetic-test" }); await db.SaveChangesAsync();
+        db.Receipts.Add(new() { Id=Guid.NewGuid(),AcademyId=a,CollectionId=id,ReceiptNumber="PR-"+id.ToString("N")[..12],PlayerId=e.PlayerId,SportEnrollmentId=enrollment,SubscriptionPlanId=plan,PlayerNameSnapshot="طفل مصادر خاص اصطناعي",SportNameSnapshot="رياضة اصطناعية",PlanNameSnapshot="باقة8 خاصة اصطناعية",OriginalAmount=amount,FinalAmount=amount,Amount=amount,Currency="EGP",PaidAtUtc=now,PaymentMethod="InternalTest",ProviderReference=key,CreatedAtUtc=now,UpdatedAtUtc=now }); await db.SaveChangesAsync();
         var allocated = await PrivateFinancialWrite(owner, $"/api/v1/finance/receivables/{document}/movements", new { kind = "PaymentAllocation", amount, collectionId = id, reason = "تخصيص اصطناعي" });
         Assert.True(allocated.IsSuccessStatusCode, await allocated.Content.ReadAsStringAsync()); return id;
     }

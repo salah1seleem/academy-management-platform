@@ -126,8 +126,8 @@ class CoachPrivateServicesPage extends StatelessWidget {
           UiText(
             localized(
               context,
-              'تقييم للخدمات المعتمدة، غير مرحّل إلى الراتب ولم يُصرف. المعلق على التحصيل ليس مبلغًا مستحقًا.',
-              'Assessment of approved services, not posted to salary or paid. Contingent compensation is not yet due.',
+              'تقييم الخدمات منفصل عن المرحّل إلى كشف الرواتب. الترحيل ليس صرفًا، والمعلق على التحصيل ليس مبلغًا مستحقًا.',
+              'Service assessments are separate from posted payroll. Posting is not payment; contingent compensation is not yet due.',
             ),
           ),
           if (items.isEmpty)
@@ -145,6 +145,12 @@ class CoachPrivateServicesPage extends StatelessWidget {
                 children: [
                   UiText('${row['branch']} · ${row['sport']}'),
                   UiText('${row['serviceDate']}'),
+                  UiText(
+                    '${localized(context, 'المرحّل إلى الرواتب — ليس سدادًا', 'Posted to payroll — not paid')}: ${row['postedAmount'] ?? 0} ${row['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'فرق التقييم', 'Assessment difference')}: ${row['pendingDelta'] ?? localized(context, 'يتطلب مراجعة', 'Needs review')} ${row['pendingDelta'] == null ? '' : row['currency']}',
+                  ),
                   if (row['requiresReview'] == true)
                     UiText(
                       localized(

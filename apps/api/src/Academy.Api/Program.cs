@@ -396,6 +396,7 @@ app.MapGuardianFeedback();
 app.MapPayroll();
 app.MapCoachAgreements();
 app.MapPrivateServices();
+app.MapPrivateCompensation();
 app.MapVersionedConfiguration();
 app.MapSportSettings();
 app.MapReceivables();

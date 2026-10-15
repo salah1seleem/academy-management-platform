@@ -13,6 +13,15 @@ const response = (data: unknown, status = 200) => Promise.resolve(new Response(J
 const renderPage = (page: React.ReactNode) => render(<DateFilterDefaults range={range}>{page}</DateFilterDefaults>);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); push.mockReset(); params.forEach((_, key) => params.delete(key)); });
 
+it("private commission is an included subtotal linked to its source, never added to net salary twice", async () => {
+  const salary = { employeeId: "worker", name: employee.name, contractDays: 31, baseDue: 3100, deductions: 20, additions: 100, privateCompensation: 80, coachMembershipId: "coach", netDue: 3180, currency: "EGP", isPaid: false };
+  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response([]) : response({ currency: "EGP",items:[salary] })) as typeof fetch;
+  renderPage(<PayrollWorkspace />); const source=await screen.findByRole("link",{name:/محتسبة بالصافي بالفعل/});
+  expect(source).toHaveAttribute("href","/dashboard/academy/coaches/coach"); expect(screen.getByText("منها صافي عمولة الخاص")).toBeVisible();
+  expect(screen.getByText("إجمالي المستحق").closest("article")).toHaveTextContent(/3,180/);
+  expect(screen.queryByText(/3,260/)).not.toBeInTheDocument();
+});
+
 it("module management alone exposes neither salary payment nor addition review", async () => {
   global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage"]) : String(input).includes("requests") ? response([{ id: "claim", name: "موظف تجريبي", reasonName: "مباراة", status: "Pending" }]) : String(input).includes("reasons") ? response([]) : response({ currency: "EGP", items: [{ employeeId: "worker", name: employee.name, contractDays: 31, baseDue: 3100, netDue: 3100, deductions: 0, additions: 0, currency: "EGP", isPaid: false }] })) as typeof fetch;
   const view = renderPage(<PayrollWorkspace />); await screen.findByText("لم يُدفع");
