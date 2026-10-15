@@ -38,12 +38,12 @@ public static partial class PrivateCompensationEndpoints
         var paid = await PayrollEndpoints.Finalized(db,t.AcademyId,d.EmployeeId,today);
         var delta = a.PendingDelta;
         var canReverse = delta < 0 && review is not null && !paid && entries.Where(e => e.PayrollAdjustmentId.HasValue).All(e => Month(e.DueDate) == Month(today));
-        var action = a.RequiresReview || delta < 0 ? review is null ? "Review" : canReverse ? "Reversal" : "ReviewPending" : delta > 0 ? paid ? "Blocked" : "Accrual" : "None";
+        var action = a.RequiresReview || delta < 0 || delta > 0 && paid ? review is null ? "Review" : canReverse ? "Reversal" : "ReviewPending" : delta > 0 ? "Accrual" : "None";
         var message = action switch {
             "Accrual" => "ترحيل فرق العمولة إلى كشف الشهر الحالي فقط؛ لا سداد أو قبض أو مصروف مكرر.",
-            "Review" => "حفظ استثناء للمراجعة دون تغيير الرواتب؛ انخفاض الاستحقاق أو تعارض التنفيذ لا يخصم تلقائيًا.",
+            "Review" => "حفظ استثناء للمراجعة دون تغيير الرواتب؛ فرق بعد الاعتماد أو تعارض مصدر لا يعدل الكشف تلقائيًا.",
             "Reversal" => "عكس صريح لجزء من عمولة هذا الشهر غير المسددة فقط؛ تبقى الحركات الأصلية، ولا تمس الأساسي أو شهرًا مسددًا.",
-            "ReviewPending" => "الاستثناء محفوظ بلا خصم. إذا كان الفرق محسوبًا، يمكن للمالك مراجعة تصحيح عمولة مستقل في شهر راتب غير معتمد؛ لا إعادة كتابة كشف سابق أو مقاصة دين خارجي.",
+            "ReviewPending" => "الاستثناء محفوظ بلا أثر مالي. إذا كان الفرق محسوبًا، يراجع المالك تصحيح عمولة موجبًا أو سالبًا في شهر راتب غير معتمد؛ لا إعادة كتابة كشف سابق أو مقاصة دين خارجي.",
             "Blocked" => "كشف الشهر الحالي معتمد أو مسدد؛ لا نعيد كتابته أو ننقل الفرق لشهر مستقبلي صامتًا.",
             _ => "لا فرق جديد لترحيله؛ المصدر السابق محفوظ دون تكرار." };
         var hash = StatementComparisonRules.Hash(new { t.AcademyId,t.MembershipId,delivery,factsHash,revision,a.PostedAmount,dueDate = today,action, reviewId = review?.Id });

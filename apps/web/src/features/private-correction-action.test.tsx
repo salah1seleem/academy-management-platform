@@ -32,6 +32,10 @@ it("invalidates the quote when month changes and never confirms a closed month",
   expect(screen.queryByRole("button", { name: "تأكيد تصحيح العمولة للشهر المختار" })).not.toBeInTheDocument();
   expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("?month=2026-12-01");
 });
+it("shows a positive source delta without letting the reviewer invent an amount",async()=>{
+  global.fetch=vi.fn((url,init)=>String(url).endsWith("csrf")?response({token:"csrf"}):init?.method==="POST"?response({id:"positive"},201):response({...quote,difference:50})) as typeof fetch;
+  const changed=vi.fn(async()=>{});render(<PrivateCorrectionAction path="/source" onChanged={changed}/>);fireEvent.click(screen.getByRole("button",{name:"معاينة شهر التصحيح"}));expect(await screen.findByText(/فرق العمولة: 50/)).toBeVisible();expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();fireEvent.click(screen.getByRole("button",{name:"تأكيد تصحيح العمولة للشهر المختار"}));await waitFor(()=>expect(changed).toHaveBeenCalledOnce());const call=vi.mocked(fetch).mock.calls.find(([,o])=>o?.method==="POST");expect(JSON.parse(String(call?.[1]?.body))).toEqual({month:quote.month,quoteHash:quote.quoteHash,note:null});
+});
 it("keeps stale denial visible, does not claim success and reuses the key on unchanged retry", async () => {
   mock(true, 409); const changed = vi.fn(async () => {});
   render(<PrivateCorrectionAction path="/source" onChanged={changed} />);

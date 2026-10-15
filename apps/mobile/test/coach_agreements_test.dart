@@ -6,6 +6,44 @@ import 'coach_test.dart' show coach, shell;
 
 void main() {
   testWidgets(
+    'Positive reviewed commission is read only and never labeled as a deduction or payment',
+    (tester) async {
+      final calls = <String>[];
+      final auth = await coach((m, p, b, t) async {
+        calls.add('$m $p');
+        return {
+          'items': [
+            {
+              'branch': 'الرحاب',
+              'sport': 'كرة القدم',
+              'serviceDate': '2026-10-15',
+              'earned': 100,
+              'postedAmount': 100,
+              'pendingDelta': 0,
+              'contingent': 0,
+              'currency': 'EGP',
+              'variableMethod': 'Percent',
+              'variableValue': 40,
+              'corrections': [
+                {'dueDate': '2026-11-01', 'delta': 50},
+              ],
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(shell(CoachPrivateServicesPage(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('تصحيح عمولة — ليس صرفًا: 50 EGP · 2026-11-01'),
+        findsOneWidget,
+      );
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(calls, ['GET /api/v1/staff/payroll/private-services']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Reviewed correction shows its target month without salary mutation controls',
     (tester) async {
       final auth = await coach(

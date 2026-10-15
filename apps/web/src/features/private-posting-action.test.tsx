@@ -27,6 +27,9 @@ it("preserves null assessment as review and never invents a zero-valued payroll 
   await screen.findByText("غير محسوب"); expect(screen.getByText("يتطلب مراجعة")).toBeVisible(); expect(screen.queryByRole("button",{name:"ترحيل فرق العمولة"})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"حفظ استثناء للمراجعة"})); expect(await screen.findByRole("status")).toHaveTextContent("دون خصم أو سداد");
 });
+it("offers the same explicit correction review for a positive preserved exception, not automatic accrual",async()=>{
+  mockPreview("ReviewPending",100);render(<PrivatePostingAction coachId="coach" deliveryId="delivery" onChanged={async()=>{}}/>);fireEvent.click(screen.getByRole("button",{name:"مراجعة الاستحقاق"}));await screen.findByRole("heading",{name:"تصحيح عمولة بعد الاعتماد"});expect(screen.getByRole("button",{name:"معاينة شهر التصحيح"})).toBeVisible();expect(screen.queryByRole("button",{name:"ترحيل فرق العمولة"})).not.toBeInTheDocument();expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();expect(vi.mocked(fetch).mock.calls.every(([,o])=>o?.method!=="POST")).toBe(true);
+});
 it.each(["Blocked","ReviewPending","None"])("does not offer a write action for %s",async(action)=>{
   mockPreview(action); render(<PrivatePostingAction coachId="coach" deliveryId="delivery" onChanged={async()=>{}}/>); fireEvent.click(screen.getByRole("button",{name:"مراجعة الاستحقاق"}));
   await screen.findByText("سجل المصدر"); expect(screen.queryByRole("button",{name:"ترحيل فرق العمولة"})).not.toBeInTheDocument(); expect(screen.queryByRole("button",{name:"تأكيد عكس العمولة غير المسددة"})).not.toBeInTheDocument();

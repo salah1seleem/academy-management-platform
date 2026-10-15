@@ -28,11 +28,11 @@ public static partial class PrivateCompensationEndpoints
         var finalized = validDate && await PayrollEndpoints.Finalized(db, t.AcademyId, employee.Id, month);
         var terms = await ContractHistory.Bounds(db,employee,month);
         var contract = validDate && terms.ContractStart < month.AddMonths(1) && (!terms.ContractEnd.HasValue || terms.ContractEnd >= month);
-        var can = p.Action == "ReviewPending" && p.ReviewId.HasValue && !p.Assessment.RequiresReview && p.Assessment.PendingDelta < 0 && validDate && !finalized && contract;
+        var can = p.Action == "ReviewPending" && p.ReviewId.HasValue && !p.Assessment.RequiresReview && p.Assessment.PendingDelta.HasValue && p.Assessment.PendingDelta != 0 && validDate && !finalized && contract;
         var message = !validDate ? "اختر أول يوم من شهر الراتب الحالي أو أحد الأشهر الاثني عشر التالية."
             : finalized ? "كشف الشهر المختار معتمد أو مسدد؛ اختر شهرًا غير معتمد، دون تعديل الكشف الأصلي."
-            : !contract ? "العقد لا يغطي الشهر المختار؛ يلزم مسار تسوية نهاية الخدمة، ولا نخصم من راتب غير مستحق."
-            : !can ? "يلزم استثناء محفوظ وفرق عمولة سالب محسوب بلا تعارض مصادر؛ أعد مراجعة الاستحقاق."
+            : !contract ? "العقد لا يغطي الشهر المختار؛ يلزم مسار تسوية نهاية الخدمة، ولا ننشئ راتبًا خارج مدة العمل."
+            : !can ? "يلزم استثناء محفوظ وفرق عمولة محسوب غير صفري بلا تعارض مصادر؛ أعد مراجعة الاستحقاق."
             : "تصحيح صريح لعمولة الخاص فقط في الشهر المختار. يحفظ المراجعة والمصدر، ولا يغير الأساسي أو الكشف المعتمد أو يسجل دفعة أو يقاص دينًا خارجيًا.";
         var hash = StatementComparisonRules.Hash(new { t.AcademyId, t.MembershipId, sourceQuote = p.QuoteHash, month, can });
         return new(p, month, hash, can, message);
@@ -76,7 +76,7 @@ public static partial class PrivateCompensationEndpoints
         var now = clock.GetUtcNow();
         var id = Guid.NewGuid();
         var actor = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var adjustment = new PayrollAdjustment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = d.EmployeeId, Kind = "Deduction", Amount = -delta, Currency = p.Assessment.Currency, DueDate = plan.Month, Reason = "تصحيح عمولة خاص بعد مراجعة المصدر", PerformedByUserId = actor, IdempotencyKey = "private-" + id.ToString("N"), CreatedAtUtc = now, UpdatedAtUtc = now };
+        var adjustment = new PayrollAdjustment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = d.EmployeeId, Kind = delta > 0 ? "Addition" : "Deduction", Amount = Math.Abs(delta), Currency = p.Assessment.Currency, DueDate = plan.Month, Reason = "تصحيح عمولة خاص بعد مراجعة المصدر", PerformedByUserId = actor, IdempotencyKey = "private-" + id.ToString("N"), CreatedAtUtc = now, UpdatedAtUtc = now };
         // Preserve original fact keys for verification; the correction is a separate source revision.
         var snapshot = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(p.Snapshot)!;
         snapshot["correction"] = JsonSerializer.SerializeToElement(new { reviewEntryId = p.ReviewId, month = plan.Month, note = body.Note?.Trim(), approvedAtUtc = now });
