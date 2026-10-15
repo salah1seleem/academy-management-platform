@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { endedFootballSession } from "../support/ended-football-session";
 
 test("Positive private correction preserves paid statement and adds only the reviewed delta to the selected month", async ({ page }, info) => {
   test.setTimeout(120_000);
@@ -23,8 +24,9 @@ test("Positive private correction preserves paid statement and adds only the rev
   const group = options.groups.find((g: { name: string }) => g.name === "خاص — مصادر أجر اصطناعية").id;
   await post(`/api/v1/manage/groups/${group}/coaches`, { membershipId: coach });
   const document = (await post("/api/v1/finance/receivables/", { sportEnrollmentId: enrollment, planId: plan, amount: "2000.00", dueDate: "2026-10-01", source: "ManualCharge", description: "مصدر تصحيح عمولة اصطناعي بعد الصرف" })).id;
-  const seconds = Math.floor(Date.now() / 1000) % 3500, time = (s: number) => `00:${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  const session = (await post("/api/v1/attendance/sessions", { trainingGroupId: group, sessionDate: serviceDate, startTime: time(seconds), endTime: time(seconds + 1) })).id;
+  const slot = await endedFootballSession();
+  expect(slot.sessionDate >= serviceDate).toBe(true);
+  const session = (await post("/api/v1/attendance/sessions", { trainingGroupId: group, ...slot })).id;
   const root = `/api/v1/manage/payroll/coaches/${coach}/private-services`;
   const pack = (await post(`${root}/packages`, { documentId: document, sessionCount: 8 })).id;
   await post(`${root}/${pack}/deliveries`, { trainingSessionId: session, ordinal: 1 });
