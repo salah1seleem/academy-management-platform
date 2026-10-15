@@ -98,4 +98,3 @@ public sealed class V3GuardianHomeWorkspaceTests
         Assert.Equal(before, (await db.Collections.CountAsync(), await db.SubscriptionPeriods.CountAsync(), await db.PaymentRequests.CountAsync()));
     }
 }
-
