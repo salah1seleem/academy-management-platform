@@ -2,6 +2,8 @@
 
 ## C2C3C — تصحيح عمولة بعد اعتماد/صرف الراتب — 2026-10-15
 
+Code `a52623c6835d7bbd142017b607ac94b386a9601e` مرفوع على `origin/codex/15-native-mobile-app`؛ [CI38712738840](https://github.com/salah1seleem/academy-management-platform/actions/runs/38712738840) **in_progress**. main المحلي/البعيد محفوظ عند `abda1ed273030e69812321e5c14d260bbc2e2275`؛ استئنافCI ثمC2C3D، لا إعادة المنجز أو ادعاء اكتمال الخطة.
+
 مراجعة سالبة ثابتة ثم تصحيحOwner صريح إلى شهر راتب غير معتمد يغطيه العقد؛ نفس journal/PayrollAdjustment لا نظام آخر أو تغيير للراتب الأساسي/الكشف/الصرف القديم. Web مراجعة شهر وحفظ فعلي؛ Flutter يعرض القيمة والشهر ذاتيًا بلا إجراءات/ملاحظات داخلية. إبطالquote/replay/تزامن وSQL/tenant/CSRF، وحظر خصم خارج العقد. الجديد `20261015085300_V3ReviewedPrivateCorrections` على اختبار فقط، بلا تغييرmigrationقديمة/.env/متطلبات/main أو بيانات وخدمات المراجعة.
 
 تحقق17/17 مستهلكين ثم4/4 نهائي متداخل؛ Web24/24، Flutter8/8 وanalyze، وحدة12/12 ومعمارية1/1، typecheck/lint/build وEF بلا pending model. E2E النهائي6/6 في43.2s على قاعدة جديدة بعد90migration، وصور390/1440 راجعت وأصلحت تداخل حقولها؛ [المحاولات والأدلة وSHA/CI](../academy-v3/PROGRESS.md). ليست Full Regression/F10/جهاز فعلي أوProduction. الخطة غير مكتملة؛ التالية عقد مؤرخ ثم افتتاح/نهاية خدمة وتصحيح موجب وF07/F10 وبقية الخريطة؛ لا ادعاء متابعة خارج الجلسة.
