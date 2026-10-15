@@ -54,11 +54,14 @@ public static class PayrollAccount
         var cutoff = requestedCutoff?.ToUniversalTime() ?? latest;
         if (cutoff > latest || cutoff < DayBoundary(asOf, zone)) return Results.Problem(statusCode: 422, title: "توقيت الكشف خارج التاريخ المختار أو في المستقبل.");
         var month = SalaryHistory.Month(asOf);
-        var statements = await db.PayrollStatements.AsNoTracking().Where(s => s.AcademyId == t.AcademyId && s.EmployeeId == id && s.Month <= month && s.CreatedAtUtc < cutoff).OrderByDescending(s => s.Month).ToArrayAsync();
+        var statements = await db.PayrollStatements.AsNoTracking().Where(s => s.AcademyId == t.AcademyId && s.EmployeeId == id && s.Month <= month && s.CreatedAtUtc < cutoff && (s.Kind=="MonthlySalary"||s.OpeningAsOf<=asOf)).OrderByDescending(s => s.Month).ToArrayAsync();
         if (statements.Any(s => s.Currency != e.Currency)) return Results.Problem(statusCode: 409, title: "تحتاج عملات الكشف إلى مراجعة؛ لم نجمع عملتين.");
         var ids = statements.Select(s => s.Id).ToArray();
         var payments = await db.PayrollDisbursements.AsNoTracking().Where(p => p.AcademyId == t.AcademyId && ids.Contains(p.StatementId) && p.CreatedAtUtc < cutoff).OrderByDescending(p => p.CreatedAtUtc).ThenByDescending(p => p.Sequence).ToArrayAsync();
-        var items = statements.Select(s =>
+        PayrollAccountPayment[] PaymentItems(Guid source)=>payments.Where(p=>p.StatementId==source).Select(p=>new PayrollAccountPayment(p.Id,p.Amount,p.CreatedAtUtc,p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout")).ToArray();
+        var openingSource=statements.SingleOrDefault(s=>s.Kind=="Opening");
+        var opening=openingSource is null?null:new PayrollAccountOpening(openingSource.Id,openingSource.OpeningAsOf!.Value,openingSource.NetDue,payments.Where(p=>p.StatementId==openingSource.Id).Sum(p=>p.Amount),openingSource.CreatedAtUtc,PaymentItems(openingSource.Id));
+        var items = statements.Where(s=>s.Kind=="MonthlySalary").Select(s =>
         {
             var paid = payments.Where(p => p.StatementId == s.Id).Sum(p => p.Amount);
             return new PayrollAccountItem(s.Id, s.Month, s.CreatedAtUtc, s.NetDue, paid, s.NetDue - paid, s.BaseDue, s.Deductions, s.Additions,
@@ -70,8 +73,8 @@ public static class PayrollAccount
         var advances=await db.PayrollAdvances.AsNoTracking().Where(a=>a.AcademyId==t.AcademyId&&a.EmployeeId==id&&a.CreatedAtUtc<cutoff).OrderByDescending(a=>a.CreatedAtUtc).ToArrayAsync();
         if(advances.Any(a=>a.Currency!=e.Currency))return Results.Problem(statusCode:409,title:"عملات السلف تحتاج مراجعة؛ لم نجمع عملتين.");
         var advanceItems=advances.Select(a=>new PayrollAccountAdvance(a.Id,a.Amount,payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),a.Amount-payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),a.CreatedAtUtc)).ToArray();
-        var result = new PayrollAccountView(true, e.Name, e.Currency, asOf, cutoff, zoneId, items.Sum(s => s.NetDue), items.Sum(s => s.Paid), items.Sum(s => s.Remaining),
-            prior.Sum(s => s.Remaining), current.Sum(s => s.Remaining), current.Length > 0, legacyCount, items) {Advances=advanceItems,AdvanceApplied=payments.Where(p=>p.AdvanceId.HasValue).Sum(p=>p.Amount),DirectPaid=payments.Where(p=>!p.AdvanceId.HasValue).Sum(p=>p.Amount)};
+        var result = new PayrollAccountView(true, e.Name, e.Currency, asOf, cutoff, zoneId, items.Sum(s => s.NetDue)+(opening?.Amount??0), items.Sum(s => s.Paid)+(opening?.Paid??0), items.Sum(s => s.Remaining)+(opening?.Remaining??0),
+            prior.Sum(s => s.Remaining)+(opening?.Remaining??0), current.Sum(s => s.Remaining), current.Length > 0, legacyCount, items) {Opening=opening,Advances=advanceItems,AdvanceApplied=payments.Where(p=>p.AdvanceId.HasValue).Sum(p=>p.Amount),DirectPaid=payments.Where(p=>!p.AdvanceId.HasValue).Sum(p=>p.Amount)};
         return export ? Export(result) : Results.Ok(result);
     }
 
@@ -91,7 +94,8 @@ public static class PayrollAccount
         static string Cell(string value) => ReportingEndpoints.CsvCell(value.TrimStart() is { Length: > 0 } v && "=+-@".Contains(v[0]) || value.StartsWith('\t') || value.StartsWith('\r') ? "'" + value : value);
         void Row(params string[] cells) => b.AppendLine(string.Join(",", cells.Select(Cell)));
         Row("كشف المصادر المعتمدة فقط", v.EmployeeName, v.Currency, v.AsOf.ToString("yyyy-MM-dd"), v.CutoffUtc.ToString("O"), v.TimeZone);
-        Row("الافتتاح والسلف التاريخية غير المستوردة غير موثقة؛ المسدد القديم غير معاد ترحيله");
+        Row(v.OpeningBalanceVerified?"افتتاح موثق قبل حد البداية فقط؛ ليس راتب شهر أو دليل اكتمال كل السلف التاريخية":"الافتتاح والسلف التاريخية غير المستوردة غير موثقة؛ المسدد القديم غير معاد ترحيله");
+        if(v.Opening is {} o)Row("الافتتاح قبل",o.AsOf.ToString("yyyy-MM-dd"),N(o.Amount),N(o.Paid),N(o.Remaining));
         Row("شهر الخدمة", "الاستحقاق المعتمد", "المسدد حتى التاريخ", "المتبقي", "وقت الاعتماد");
         foreach (var s in v.Items) Row(s.Month.ToString("yyyy-MM-dd"), N(s.NetDue), N(s.Paid), N(s.Remaining), s.ApprovedAtUtc.ToString("O"));
         Row("الإجمالي المعروف", N(v.TotalDue), N(v.TotalPaid), N(v.Remaining));
@@ -105,6 +109,7 @@ public static class PayrollAccount
         Row("الدفعات — تفصيل للإجمالي أعلاه وليس استحقاقًا إضافيًا");
         Row("شهر الخدمة", "المبلغ", "وقت التسجيل","نوع التسوية");
         foreach (var s in v.Items) foreach (var p in s.Payments) Row(s.Month.ToString("yyyy-MM-dd"), N(p.Amount), p.CreatedAtUtc.ToString("O"),p.Kind=="AdvanceApplication"?"تخصيص سلفة سابقة":"صرف مباشر");
+        if(v.Opening is {} opening)foreach(var p in opening.Payments)Row("تسوية افتتاح",N(p.Amount),p.CreatedAtUtc.ToString("O"),p.Kind=="AdvanceApplication"?"تخصيص سلفة سابقة — ليس صرفًا جديدًا":"صرف مباشر");
         Row("السلف — خروج مال سبق التخصيص وليس استحقاق راتب");
         Row("المبلغ","المخصص","غير المخصص","وقت التسجيل");
         foreach(var a in v.Advances)Row(N(a.Amount),N(a.Applied),N(a.Remaining),a.CreatedAtUtc.ToString("O"));
@@ -113,12 +118,14 @@ public static class PayrollAccount
 }
 
 public sealed record PayrollAccountPayment(Guid Id, decimal Amount, DateTimeOffset CreatedAtUtc,string Kind);
+public sealed record PayrollAccountOpening(Guid Id,DateOnly AsOf,decimal Amount,decimal Paid,DateTimeOffset ApprovedAtUtc,PayrollAccountPayment[] Payments){public decimal Remaining=>Amount-Paid;}
 public sealed record PayrollAccountAdvance(Guid Id,decimal Amount,decimal Applied,decimal Remaining,DateTimeOffset CreatedAtUtc);
 public sealed record PayrollAccountItem(Guid Id, DateOnly Month, DateTimeOffset ApprovedAtUtc, decimal NetDue, decimal Paid, decimal Remaining, decimal BaseDue, decimal Deductions, decimal Additions, PayrollAccountPayment[] Payments);
 public sealed record PayrollAccountView(bool Configured, string EmployeeName, string Currency, DateOnly AsOf, DateTimeOffset CutoffUtc, string TimeZone, decimal TotalDue, decimal TotalPaid, decimal Remaining, decimal PriorRemaining, decimal CurrentRemaining, bool CurrentMonthApproved, int LegacyPaidMonthsExcluded, PayrollAccountItem[] Items)
 {
     public string BalanceScope => "ApprovedSourcesAsOfOnly";
-    public bool OpeningBalanceVerified => false;
+    public bool OpeningBalanceVerified => Opening is not null;
+    public PayrollAccountOpening? Opening {get;init;}
     public bool AdvancesVerified => false;
     public string AdvanceScope=>"RecordedSourcesOnly";
     public PayrollAccountAdvance[] Advances {get;init;}=[];

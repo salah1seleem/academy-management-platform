@@ -17,6 +17,7 @@ class StaffPayrollStatements extends StatelessWidget {
       builder: (context, value) {
         final data = obj(value);
         final items = rows(data['items']);
+        final opening = data['opening'] is Map ? obj(data['opening']) : null;
         if (data['configured'] == false) {
           return EmptyMessage(
             localized(
@@ -30,11 +31,15 @@ class StaffPayrollStatements extends StatelessWidget {
           UiText(
             localized(
               context,
-              'كل المصادر المعتمدة حتى ${data['asOf'] ?? ''}. الأرصدة الافتتاحية والسلف التاريخية غير المستوردة والأشهر غير المعتمدة غير موثقة هنا، وليست صفرًا.',
-              'All approved sources as of ${data['asOf'] ?? ''}. Opening balances, unimported historic advances and unapproved months are not verified here, not zero.',
+              opening == null
+                  ? 'كل المصادر المعتمدة حتى ${data['asOf'] ?? ''}. الأرصدة الافتتاحية والسلف التاريخية غير المستوردة والأشهر غير المعتمدة غير موثقة هنا، وليست صفرًا.'
+                  : 'افتتاح موثق قبل ${opening['asOf']}. داخل الإجمالي وليس راتب شهر. السلف التاريخية غير المستوردة والأشهر غير المعتمدة ليست صفرًا.',
+              opening == null
+                  ? 'All approved sources as of ${data['asOf'] ?? ''}. Opening balances, unimported historic advances and unapproved months are not verified here, not zero.'
+                  : 'Reviewed opening before ${opening['asOf']}. Included in totals, not monthly salary. Unimported advances and unapproved months are not assumed zero.',
             ),
           ),
-          if (items.isNotEmpty)
+          if (items.isNotEmpty || opening != null)
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +112,29 @@ class StaffPayrollStatements extends StatelessWidget {
                 'Previously settled legacy months are not reposted into this account.',
               ),
             ),
-          if (items.isEmpty)
+          if (opening != null)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(localized(context, 'افتتاح موثق', 'Reviewed opening')),
+                  UiText(
+                    '${localized(context, 'الرصيد القديم', 'Prior balance')}: ${opening['amount']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'المسدد', 'Settled')}: ${opening['paid']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'المتبقي', 'Remaining')}: ${opening['remaining']} ${data['currency']}',
+                  ),
+                  for (final p in rows(opening['payments']))
+                    UiText(
+                      '${p['kind'] == 'AdvanceApplication' ? localized(context, 'تخصيص سلفة سابقة — ليس صرفًا جديدًا', 'Prior advance allocation — not new cash') : localized(context, 'صرف افتتاح', 'Opening payout')}: ${p['amount']} ${data['currency']}',
+                    ),
+                ],
+              ),
+            ),
+          if (items.isEmpty && opening == null)
             EmptyMessage(
               localized(
                 context,

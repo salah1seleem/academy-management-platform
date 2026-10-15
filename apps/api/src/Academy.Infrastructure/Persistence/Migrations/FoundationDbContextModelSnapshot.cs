@@ -4474,6 +4474,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("MonthlySalary");
+
                     b.Property<DateOnly>("Month")
                         .HasColumnType("date");
 
@@ -4488,6 +4495,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly?>("OpeningAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<string>("OpeningReference")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
 
                     b.Property<decimal>("PrivateCompensation")
                         .HasPrecision(18, 2)
@@ -4527,6 +4541,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "BranchId");
 
+                    b.HasIndex("AcademyId", "EmployeeId")
+                        .IsUnique()
+                        .HasFilter("\"Kind\"='Opening'");
+
                     b.HasIndex("AcademyId", "ApprovedByMembershipId", "RequestKey")
                         .IsUnique();
 
@@ -4535,7 +4553,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("PayrollStatements", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PayrollStatement_Amounts", "EXTRACT(DAY FROM \"Month\")=1 AND \"ContractDays\" BETWEEN 1 AND 31 AND \"MonthlySalary\">=0 AND \"BaseDue\">=0 AND \"Deductions\">=0 AND \"Additions\">=0 AND \"NetDue\">0 AND \"NetDue\"=\"BaseDue\"-\"Deductions\"+\"Additions\"");
+                            t.HasCheckConstraint("CK_PayrollStatement_Amounts", "EXTRACT(DAY FROM \"Month\")=1 AND ((\"Kind\"='MonthlySalary' AND \"OpeningAsOf\" IS NULL AND \"OpeningReference\" IS NULL AND \"ContractDays\" BETWEEN 1 AND 31 AND \"MonthlySalary\">=0 AND \"BaseDue\">=0 AND \"Deductions\">=0 AND \"Additions\">=0 AND \"NetDue\">0 AND \"NetDue\"=\"BaseDue\"-\"Deductions\"+\"Additions\") OR (\"Kind\"='Opening' AND \"OpeningAsOf\" IS NOT NULL AND EXTRACT(DAY FROM \"OpeningAsOf\")=1 AND \"Month\"=(\"OpeningAsOf\"-INTERVAL '1 month')::date AND length(trim(\"OpeningReference\")) BETWEEN 3 AND 120 AND \"OpeningReference\" IS NOT NULL AND \"ContractDays\"=0 AND \"MonthlySalary\"=0 AND \"BaseDue\"=0 AND \"Deductions\"=0 AND \"Additions\"=0 AND \"PrivateCompensation\"=0 AND \"NetDue\">=0))");
                         });
                 });
 

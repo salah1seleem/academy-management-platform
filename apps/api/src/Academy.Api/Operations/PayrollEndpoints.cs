@@ -104,8 +104,10 @@ public static class PayrollEndpoints
         var adjustments = await db.PayrollAdjustments.Where(x => x.AcademyId == academy && x.DueDate >= first && x.DueDate <= last).ToListAsync();
         var daily = await db.StaffDailyAttendances.Where(x => x.AcademyId == academy && x.WorkDate >= first && x.WorkDate <= last).ToListAsync();
         var paid = await db.PayrollSettlements.Where(x => x.AcademyId == academy && x.Month == first).ToListAsync();
-        var statements=await db.PayrollStatements.AsNoTracking().Where(s=>s.AcademyId==academy&&s.Month==first).ToArrayAsync();
-        var disbursements=await db.PayrollDisbursements.AsNoTracking().Where(p=>p.AcademyId==academy&&db.PayrollStatements.Any(s=>s.Id==p.StatementId&&s.Month==first)).ToArrayAsync();
+        var openingPeriods=await db.PayrollStatements.Where(s=>s.AcademyId==academy&&s.Kind=="Opening"&&s.OpeningAsOf>first).Select(s=>s.EmployeeId).ToArrayAsync();
+        employees=employees.Where(e=>!openingPeriods.Contains(e.Id)).ToList();
+        var statements=await db.PayrollStatements.AsNoTracking().Where(s=>s.AcademyId==academy&&s.Month==first&&s.Kind=="MonthlySalary").ToArrayAsync();
+        var disbursements=await db.PayrollDisbursements.AsNoTracking().Where(p=>p.AcademyId==academy&&db.PayrollStatements.Any(s=>s.Id==p.StatementId&&s.Month==first&&s.Kind=="MonthlySalary")).ToArrayAsync();
         var privateEntries = await db.PrivateCompensationEntries.Where(x => x.AcademyId == academy && x.DueDate >= first && x.DueDate <= last && x.PayrollAdjustmentId.HasValue).Select(x => new { x.EmployeeId,x.Delta }).ToListAsync();
         var salaryVersions=await db.SalaryVersions.AsNoTracking().Where(v=>v.AcademyId==academy&&v.EffectiveFrom<=first).ToArrayAsync();
         var contracts=await db.ContractVersions.AsNoTracking().Where(v=>v.AcademyId==academy&&v.EffectiveFrom<=first).ToArrayAsync();
@@ -218,6 +220,7 @@ public static class PayrollEndpoints
         var reusedKey = await db.PayrollSettlements.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.PaidByUserId == actor && x.IdempotencyKey == key);
         if (reusedKey is not null && (reusedKey.EmployeeId != id || reusedKey.Month != month || reusedKey.NetDue != body.ExpectedNetDue)) return Results.Conflict(new { message = "مفتاح السداد مستخدم لموظف أو شهر أو مبلغ آخر." });
         await Lock(db, t.AcademyId, id, month);
+        if(await PayrollOpening.BeforeBoundary(db,id,month))return Results.Problem(statusCode:409,title:"الشهر سابق للافتتاح الموثق؛ لا تسجّل راتبًا قد يكرر الرصيد.");
         if(await db.PayrollStatements.AnyAsync(s=>s.EmployeeId==id&&s.Month==month))return Results.Problem(statusCode:409,title:"هذا الشهر له كشف معتمد؛ سجّل الصرف من تفاصيل الكشف لمنع ازدواج السداد.");
         var existing = await db.PayrollSettlements.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.EmployeeId == id && x.Month == month);
         if (existing is not null) return existing.NetDue == body.ExpectedNetDue ? Results.Ok(new { existing.Id, replay = true }) : Results.Conflict(new { message = "هذا الراتب سُدد بمبلغ مختلف. حدّث القائمة لمراجعة السداد." });

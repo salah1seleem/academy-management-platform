@@ -6,6 +6,47 @@ import 'coach_test.dart' show coach, shell;
 
 void main() {
   testWidgets(
+    'Reviewed opening zero is visible and is not a fabricated monthly salary',
+    (tester) async {
+      final calls = <String>[];
+      final auth = await coach((m, p, b, t) async {
+        calls.add('$m $p');
+        return {
+          'configured': true,
+          'asOf': '2026-10-15',
+          'currency': 'EGP',
+          'items': [],
+          'totalDue': 0,
+          'totalPaid': 0,
+          'remaining': 0,
+          'priorRemaining': 0,
+          'currentRemaining': 0,
+          'openingBalanceVerified': true,
+          'opening': {
+            'asOf': '2026-10-01',
+            'amount': 0,
+            'paid': 0,
+            'remaining': 0,
+            'payments': [],
+          },
+        };
+      });
+      await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(find.text('افتتاح موثق'), findsOneWidget);
+      expect(
+        find.textContaining('داخل الإجمالي وليس راتب شهر'),
+        findsOneWidget,
+      );
+      expect(find.text('الرصيد القديم: 0 EGP'), findsOneWidget);
+      expect(find.textContaining('لا كشف معتمد بعد'), findsNothing);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(calls, ['GET /api/v1/staff/payroll/account']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Own advance before any approved earnings is visible without a false salary or payout',
     (tester) async {
       final auth = await coach(

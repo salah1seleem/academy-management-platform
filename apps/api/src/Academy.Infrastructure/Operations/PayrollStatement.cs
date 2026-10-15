@@ -4,6 +4,11 @@ namespace Academy.Infrastructure.Operations;
 // Approved compensation is not a payment and does not duplicate the payroll engine.
 public sealed class PayrollStatement : TenantEntity
 {
+    public string Kind { get; set; } = "MonthlySalary";
+    // Opening covers only unrecorded obligations BEFORE this first-of-month boundary.
+    // Month reserves the preceding period; it is never presented as earned salary.
+    public DateOnly? OpeningAsOf { get; set; }
+    public string? OpeningReference { get; set; }
     public Guid EmployeeId { get; set; }
     public Guid BranchId { get; set; }
     public DateOnly Month { get; set; }

@@ -400,6 +400,7 @@ app.MapPrivateCompensation();
 app.MapSalaryHistory();
 app.MapContractHistory();
 app.MapPayrollStatements();
+app.MapPayrollOpening();
 app.MapPayrollAccount();
 app.MapPayrollAdvances();
 app.MapVersionedConfiguration();
@@ -449,6 +450,8 @@ if (app.Environment.IsEnvironment("Demo"))
             await PayrollAccountDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:PayrollAdvanceSeedEnabled"))
             await PayrollAdvanceDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
+        if(app.Configuration.GetValue<bool>("Demo:PayrollOpeningSeedEnabled"))
+            await PayrollOpeningDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
             if (app.Configuration.GetValue<bool>("Demo:SportScopeSeedEnabled")) await SportScopeDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);

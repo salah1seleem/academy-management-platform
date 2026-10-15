@@ -27,9 +27,9 @@ public static class PayrollAdvances
         var canManage=await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollAdvanceManage)&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId));
         return Results.Ok(new {employeeName=e.Name,e.Currency,canManage,canRecord=canManage&&e.IsActive,
             advances=advances.Select(a=>new{a.Id,a.Amount,a.Reference,a.CreatedAtUtc,applied=payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),remaining=a.Amount-payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount)}),
-            statements=statements.Select(s=>new{s.Month,s.NetDue,remaining=s.NetDue-payments.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount)}),
-            applications=payments.Where(p=>p.AdvanceId.HasValue).Select(p=>new{p.Id,p.AdvanceId,p.Amount,p.CreatedAtUtc,month=statements.Single(s=>s.Id==p.StatementId).Month}),
-            balanceScope="RecordedAdvancesOnly",openingBalanceVerified=false});
+            statements=statements.Select(s=>new{s.Month,s.Kind,s.OpeningAsOf,s.NetDue,remaining=s.NetDue-payments.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount)}),
+            applications=payments.Where(p=>p.AdvanceId.HasValue).Select(p=>new{p.Id,p.AdvanceId,p.Amount,p.CreatedAtUtc,month=statements.Single(s=>s.Id==p.StatementId).Month,kind=statements.Single(s=>s.Id==p.StatementId).Kind}),
+            balanceScope="RecordedAdvancesOnly",openingBalanceVerified=await db.PayrollStatements.AnyAsync(s=>s.EmployeeId==id&&s.Kind=="Opening")});
     }
     private static bool Amount(decimal v)=>v>0&&v<=100000000&&decimal.Round(v,2)==v;
     private static string Key(HttpContext c)=>c.Request.Headers["Idempotency-Key"].ToString();
@@ -49,8 +49,10 @@ public static class PayrollAdvances
         var key=Key(http);if(key.Length is <8 or >100||!Amount(body.Amount)||body.Month.Day!=1||body.Month.Year is <2000 or >9998)return Results.Problem(statusCode:422,title:"اختر كشفًا معتمدًا ومبلغ تخصيص صحيحًا.");
         var t=(await current.ResolveAsync())!;await using var tx=await db.Database.BeginTransactionAsync();if(!await Authority(http,current,db))return Results.Forbid();await PayrollEndpoints.Lock(db,t.AcademyId,id,body.Month);
         var e=await db.Employees.SingleOrDefaultAsync(e=>e.Id==id);if(e is null)return Results.NotFound();if(!await PayrollSensitiveAccess.BranchAllowed(db,t,e.BranchId)||t.Role!=AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId))return Results.Forbid();
-        var hash=StatementComparisonRules.Hash(new{id,advanceId,body});var replay=await db.PayrollDisbursements.SingleOrDefaultAsync(p=>p.ActorMembershipId==t.MembershipId&&p.RequestKey==key);if(replay is not null)return replay.RequestHash==hash?Results.Ok(new{replay.Id,replay=true}):Results.Conflict();
-        var a=await db.PayrollAdvances.SingleOrDefaultAsync(a=>a.Id==advanceId&&a.EmployeeId==id);var s=await db.PayrollStatements.SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Month==body.Month);if(a is null||s is null)return Results.NotFound();
+        // Preserve hashes of existing monthly commands when extending the contract.
+        var hash=body.Opening?StatementComparisonRules.Hash(new{id,advanceId,body}):StatementComparisonRules.Hash(new{id,advanceId,body=new{body.Month,body.Amount,body.ExpectedAdvanceRemaining,body.ExpectedStatementRemaining}});var replay=await db.PayrollDisbursements.SingleOrDefaultAsync(p=>p.ActorMembershipId==t.MembershipId&&p.RequestKey==key);if(replay is not null)return replay.RequestHash==hash?Results.Ok(new{replay.Id,replay=true}):Results.Conflict();
+        var kind=body.Opening?"Opening":"MonthlySalary";
+        var a=await db.PayrollAdvances.SingleOrDefaultAsync(a=>a.Id==advanceId&&a.EmployeeId==id);var s=await db.PayrollStatements.SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Month==body.Month&&s.Kind==kind);if(a is null||s is null)return Results.NotFound();
         if(a.BranchId!=s.BranchId||a.Currency!=s.Currency||await PayrollEndpoints.Locked(db,t.AcademyId,id,body.Month))return Results.Conflict();
         var applied=await db.PayrollDisbursements.Where(p=>p.AdvanceId==a.Id).SumAsync(p=>p.Amount);var payouts=await db.PayrollDisbursements.Where(p=>p.StatementId==s.Id).ToArrayAsync();var paid=payouts.Sum(p=>p.Amount);var available=a.Amount-applied;var remaining=s.NetDue-paid;
         if(available!=body.ExpectedAdvanceRemaining||remaining!=body.ExpectedStatementRemaining||body.Amount>available||body.Amount>remaining)return Results.Problem(statusCode:409,title:"تغير رصيد السلفة أو الكشف؛ حدّث المراجعة قبل التخصيص.");
@@ -59,4 +61,4 @@ public static class PayrollAdvances
     }
 }
 public sealed record PayrollAdvanceWrite(decimal Amount,string? Reference=null);
-public sealed record PayrollAdvanceApply(DateOnly Month,decimal Amount,decimal ExpectedAdvanceRemaining,decimal ExpectedStatementRemaining);
+public sealed record PayrollAdvanceApply(DateOnly Month,decimal Amount,decimal ExpectedAdvanceRemaining,decimal ExpectedStatementRemaining,bool Opening=false);
