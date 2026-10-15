@@ -262,9 +262,10 @@ void main() {
       );
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
       await tester.pumpAndSettle();
-      await Scrollable.ensureVisible(
-        tester.element(find.text('تجديد الاشتراك')),
-        alignment: .3,
+      await tester.scrollUntilVisible(
+        find.text('تجديد الاشتراك'),
+        220,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('تجديد الاشتراك'));

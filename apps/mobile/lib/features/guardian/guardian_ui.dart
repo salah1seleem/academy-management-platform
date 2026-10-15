@@ -230,7 +230,8 @@ class EmptyMessage extends StatelessWidget {
 
 class StatusPill extends StatelessWidget {
   final Object? status;
-  const StatusPill(this.status, {super.key});
+  final double fontSize;
+  const StatusPill(this.status, {super.key, this.fontSize = 12});
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -242,7 +243,7 @@ class StatusPill extends StatelessWidget {
       label(status),
       style: TextStyle(
         color: Theme.of(context).colorScheme.primary,
-        fontSize: 12,
+        fontSize: fontSize,
       ),
     ),
   );

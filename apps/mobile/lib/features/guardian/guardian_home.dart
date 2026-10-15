@@ -16,7 +16,7 @@ import 'guardian_day_pass.dart';
 import '../shared/matches.dart';
 import '../shared/receivable_balances.dart';
 
-class GuardianHome extends StatelessWidget {
+class GuardianHome extends StatefulWidget {
   final AuthController auth;
   final String environment;
   final Widget accountPage;
@@ -27,234 +27,546 @@ class GuardianHome extends StatelessWidget {
     required this.accountPage,
   });
   @override
+  State<GuardianHome> createState() => _GuardianHomeState();
+}
+
+class _GuardianHomeState extends State<GuardianHome> {
+  String? selectedPlayer, identity;
+  String? get currentIdentity => widget.auth.session?.selected == null
+      ? null
+      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  @override
+  void initState() {
+    super.initState();
+    identity = currentIdentity;
+    widget.auth.addListener(contextChanged);
+  }
+
+  void contextChanged() {
+    if (!mounted || identity == currentIdentity) return;
+    setState(() {
+      identity = currentIdentity;
+      selectedPlayer = null;
+    });
+  }
+
+  @override
+  void didUpdateWidget(GuardianHome old) {
+    super.didUpdateWidget(old);
+    if (old.auth != widget.auth) {
+      old.auth.removeListener(contextChanged);
+      widget.auth.addListener(contextChanged);
+      identity = currentIdentity;
+      selectedPlayer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.auth.removeListener(contextChanged);
+    super.dispose();
+  }
+
+  void open(Widget page) => openPage(context, page);
+  @override
   Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'الأكاديمية', 'Academy'),
+    title: localized(context, 'الرئيسية', 'Home'),
     actions: [
       IconButton(
         tooltip: localized(context, 'الحساب', 'Account'),
-        onPressed: () => openPage(context, accountPage),
-        icon: Icon(
-          Icons.person_outline,
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        onPressed: () => open(widget.accountPage),
+        icon: const Icon(Icons.person_outline),
       ),
     ],
-    child: RemoteBody(
-      auth: auth,
-      path: '/api/v1/guardian/home',
-      builder: (context, value) {
-        final home = obj(value), children = rows(home['children']);
-        return gList([
-          Row(
-            children: [
-              const AcademyCrest(size: 44),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    child: currentIdentity == null
+        ? const SizedBox.shrink()
+        : RemoteBody(
+            key: ValueKey(identity),
+            auth: widget.auth,
+            path: '/api/v1/guardian/home',
+            builder: (context, value) {
+              final home = obj(value), allChildren = rows(home['children']);
+              final selected = allChildren.any((c) => c['id'] == selectedPlayer)
+                  ? selectedPlayer
+                  : null;
+              final children = allChildren
+                  .where((c) => selected == null || c['id'] == selected)
+                  .toList();
+              final nutritionToday = textOf(
+                home['trainingToday'] ?? home['today'],
+              );
+              return gList([
+                Row(
                   children: [
-                    UiText(
-                      localized(
-                        context,
-                        'أهلًا، ${home['guardianName']}',
-                        'Welcome, ${home['guardianName']}',
+                    const AcademyCrest(size: 44),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          UiText(
+                            textOf(home['academyName']),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          UiText(
+                            localized(
+                              context,
+                              'أهلًا، ${home['guardianName']}',
+                              'Welcome, ${home['guardianName']}',
+                            ),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
                       ),
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    UiText(
-                      textOf(home['academyName']),
-                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          NewsStrip(auth: auth),
-          Heading(localized(context, 'أبنائي', 'My children')),
-          if (children.isEmpty)
-            const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
-          for (final child in children) ...[
-            PremiumChildCard(
-              auth: auth,
-              childData: child,
-              today: textOf(home['today']),
-              onTap: () => openPage(
-                context,
-                ChildProfile(
-                  auth: auth,
-                  environment: environment,
-                  playerId: child['id'],
-                  today: home['today'],
-                ),
-              ),
-            ),
-            DailyNutritionCard(
-              auth: auth,
-              playerId: child['id'],
-              playerName: child['arabicName'],
-              today: home['today'],
-            ),
-          ],
-          NextMatchStrip(auth: auth),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              homeAction(
-                context,
-                'اشتراك جديد',
-                'New enrollment',
-                Icons.person_add_alt,
-                () => openPage(
-                  context,
-                  EnrollmentForm(auth: auth, environment: environment),
-                ),
-              ),
-              homeAction(
-                context,
-                'تجديد الاشتراك',
-                'Renew',
-                Icons.autorenew,
-                () => openPage(
-                  context,
-                  RenewalPicker(auth: auth, environment: environment),
-                ),
-              ),
-              homeAction(
-                context,
-                'تجديد اشتراك لغيره',
-                'Renew for someone',
-                Icons.card_giftcard,
-                () => openPage(
-                  context,
-                  ExternalRenewal(auth: auth, environment: environment),
-                ),
-              ),
-              homeAction(
-                context,
-                'الباقات',
-                'Plans',
-                Icons.layers_outlined,
-                () => openPage(
-                  context,
-                  RenewalPicker(auth: auth, environment: environment),
-                ),
-              ),
-              homeAction(
-                context,
-                'المتجر',
-                'Store',
-                Icons.shopping_bag_outlined,
-                () => openPage(
-                  context,
-                  GuardianPage(
-                    title: localized(
-                      context,
-                      'المنتجات الرياضية',
-                      'Sports store',
+                Heading(localized(context, 'أبنائي', 'My children')),
+                if (allChildren.length > 1) ...[
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'guardian-child-selector-${selected ?? 'all'}',
                     ),
-                    child: gList([CatalogSections(auth: auth)]),
+                    initialValue: selected ?? '',
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: localized(
+                        context,
+                        'متابعة طفل',
+                        'Focus on a child',
+                      ),
+                      prefixIcon: const Icon(Icons.family_restroom_outlined),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: '',
+                        child: UiText(
+                          localized(context, 'كل الأبناء', 'All children'),
+                        ),
+                      ),
+                      for (final c in allChildren)
+                        DropdownMenuItem(
+                          value: textOf(c['id']),
+                          child: UiText(
+                            textOf(c['arabicName']),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() {
+                      selectedPlayer = v == '' ? null : v;
+                    }),
                   ),
-                ),
-              ),
-              homeAction(
-                context,
-                'البطولات',
-                'Tournaments',
-                Icons.emoji_events_outlined,
-                () => openPage(context, TournamentFees(auth: auth)),
-              ),
-              homeAction(
-                context,
-                'زيارة يومية',
-                'Day pass',
-                Icons.confirmation_number_outlined,
-                () => openPage(context, GuardianDayPassPage(auth: auth)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          for (final child in children) ...[
-            for (final sport in rows(child['sports']))
-              if (sport['nextSession'] is Map)
-                NextSessionCard(
-                  childName: textOf(child['arabicName']),
-                  sport: sport,
-                  onTap: () => openPage(
-                    context,
-                    ProfileRecords(
-                      auth: auth,
-                      playerId: child['id'],
-                      section: 'schedule',
+                  const SizedBox(height: 16),
+                ],
+                if (children.isEmpty)
+                  const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
+                for (final child in children) ...[
+                  PremiumChildCard(
+                    auth: widget.auth,
+                    childData: child,
+                    today: textOf(home['today']),
+                    showSubscription: false,
+                    onTap: () => open(
+                      ChildProfile(
+                        auth: widget.auth,
+                        environment: widget.environment,
+                        playerId: child['id'],
+                        today: home['today'],
+                      ),
                     ),
                   ),
+                  for (final sport in rows(child['sports']))
+                    if (sport['nextSession'] is Map)
+                      NextSessionCard(
+                        childName: textOf(child['arabicName']),
+                        sport: sport,
+                        onTap: () => open(
+                          ProfileRecords(
+                            auth: widget.auth,
+                            playerId: child['id'],
+                            section: 'schedule',
+                          ),
+                        ),
+                      ),
+                  if (!rows(child['sports'])
+                      .any((s) => s['nextSession'] is Map))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: UiText(
+                        localized(
+                          context,
+                          'لا يوجد موعد تدريب قادم منشور لهذا الطفل.',
+                          'No upcoming training session published for this child.',
+                        ),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  GuardianSubscriptionSummary(
+                    auth: widget.auth,
+                    environment: widget.environment,
+                    childData: child,
+                  ),
+                  GuardianLatestProgress(auth: widget.auth, childData: child),
+                  DailyNutritionCard(
+                    key: ValueKey('home-nutrition-${child['id']}'),
+                    auth: widget.auth,
+                    playerId: child['id'],
+                    playerName: child['arabicName'],
+                    today: nutritionToday,
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                Heading(localized(context, 'خدمات الأسرة', 'Family services')),
+                LayoutBuilder(
+                  builder: (context, bounds) => Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      homeAction(
+                        context,
+                        bounds,
+                        'اشتراك جديد',
+                        'New enrollment',
+                        Icons.person_add_alt,
+                        () => open(
+                          EnrollmentForm(
+                            auth: widget.auth,
+                            environment: widget.environment,
+                          ),
+                        ),
+                      ),
+                      homeAction(
+                        context,
+                        bounds,
+                        'تجديد الاشتراك',
+                        'Renew',
+                        Icons.autorenew,
+                        () => open(
+                          RenewalPicker(
+                            auth: widget.auth,
+                            environment: widget.environment,
+                          ),
+                        ),
+                      ),
+                      homeAction(
+                        context,
+                        bounds,
+                        'تجديد اشتراك لغيره',
+                        'Renew for someone',
+                        Icons.card_giftcard,
+                        () => open(
+                          ExternalRenewal(
+                            auth: widget.auth,
+                            environment: widget.environment,
+                          ),
+                        ),
+                      ),
+                      homeAction(
+                        context,
+                        bounds,
+                        'الباقات',
+                        'Plans',
+                        Icons.layers_outlined,
+                        () => open(
+                          RenewalPicker(
+                            auth: widget.auth,
+                            environment: widget.environment,
+                          ),
+                        ),
+                      ),
+                      homeAction(
+                        context,
+                        bounds,
+                        'المتجر',
+                        'Store',
+                        Icons.shopping_bag_outlined,
+                        () => open(
+                          GuardianPage(
+                            title: localized(
+                              context,
+                              'المنتجات الرياضية',
+                              'Sports store',
+                            ),
+                            child: gList([CatalogSections(auth: widget.auth)]),
+                          ),
+                        ),
+                      ),
+                      homeAction(
+                        context,
+                        bounds,
+                        'البطولات',
+                        'Tournaments',
+                        Icons.emoji_events_outlined,
+                        () => open(TournamentFees(auth: widget.auth)),
+                      ),
+                      homeAction(
+                        context,
+                        bounds,
+                        'زيارة يومية',
+                        'Day pass',
+                        Icons.confirmation_number_outlined,
+                        () => open(GuardianDayPassPage(auth: widget.auth)),
+                      ),
+                    ],
+                  ),
                 ),
-          ],
-          Heading(localized(context, 'منتجات الرياضة', 'Sports products')),
-          CatalogSections(auth: auth),
-          GLink(
-            localized(context, 'طلبات الاشتراك', 'Enrollment requests'),
-            Icons.inbox_outlined,
-            () => openPage(
-              context,
-              EnrollmentRequests(auth: auth, environment: environment),
-            ),
+                const SizedBox(height: 18),
+                NextMatchStrip(auth: widget.auth),
+                NewsStrip(auth: widget.auth),
+                Heading(
+                  localized(context, 'منتجات الرياضة', 'Sports products'),
+                ),
+                CatalogSections(auth: widget.auth),
+                GLink(
+                  localized(context, 'طلبات الاشتراك', 'Enrollment requests'),
+                  Icons.inbox_outlined,
+                  () => open(
+                    EnrollmentRequests(
+                      auth: widget.auth,
+                      environment: widget.environment,
+                    ),
+                  ),
+                ),
+                GLink(
+                  localized(context, 'إيصالاتي', 'My receipts'),
+                  Icons.receipt_long_outlined,
+                  () => open(ReceiptsPage(auth: widget.auth)),
+                ),
+                GLink(
+                  localized(context, 'أرصدة الأسرة', 'Family balances'),
+                  Icons.account_balance_wallet_outlined,
+                  () => open(ReceivableBalancesPage(auth: widget.auth)),
+                ),
+              ]);
+            },
           ),
-          GLink(
-            localized(context, 'إيصالاتي', 'My receipts'),
-            Icons.receipt_long_outlined,
-            () => openPage(context, ReceiptsPage(auth: auth)),
-          ),
-          GLink(
-            localized(context, 'أرصدة الأسرة', 'Family balances'),
-            Icons.account_balance_wallet_outlined,
-            () => openPage(context, ReceivableBalancesPage(auth: auth)),
-          ),
-        ]);
-      },
-    ),
   );
   Widget homeAction(
     BuildContext context,
+    BoxConstraints bounds,
     String ar,
     String en,
     IconData icon,
     VoidCallback action,
   ) => SizedBox(
-    width: 100,
-    child: InkWell(
-      key: ValueKey('guardian-action-$ar'),
-      onTap: action,
+    width: (bounds.maxWidth - 10) / 2,
+    child: Material(
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: .16),
+      child: InkWell(
+        key: ValueKey('guardian-action-$ar'),
+        onTap: action,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: Theme.of(context).colorScheme.primary,
+                size: 26,
+              ),
+              const SizedBox(height: 8),
+              UiText(
+                localized(context, ar, en),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 25),
-            const SizedBox(height: 7),
-            UiText(
-              localized(context, ar, en),
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-          ],
         ),
       ),
     ),
   );
 }
 
+class GuardianSubscriptionSummary extends StatelessWidget {
+  final AuthController auth;
+  final String environment;
+  final Json childData;
+  const GuardianSubscriptionSummary({
+    super.key,
+    required this.auth,
+    required this.environment,
+    required this.childData,
+  });
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final sport in rows(childData['sports']))
+        GCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(
+                localized(
+                  context,
+                  'الاشتراك · ${sport['sport']}',
+                  'Subscription · ${sport['sport']}',
+                ),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (sport['period'] is Map) ...[
+                StatusPill(sport['period']['status'], fontSize: 14),
+                const SizedBox(height: 6),
+                if (sport['period']['plan'] != null)
+                  UiText(
+                    textOf(sport['period']['plan']),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                UiText(
+                  '${day(sport['period']['startDate'])} — ${day(sport['period']['endDate'])}',
+                  style: const TextStyle(fontSize: 14),
+                  textDirection: TextDirection.ltr,
+                ),
+              ] else
+                UiText(
+                  localized(
+                    context,
+                    'لا يوجد اشتراك فعال',
+                    'No active subscription',
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              if (sport['id'] != null &&
+                  (sport['period'] == null ||
+                      [
+                        'Expired',
+                        'Expiring',
+                      ].contains(sport['period']['status']))) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  key: ValueKey('home-renew-${sport['id']}'),
+                  onPressed: () => openPage(
+                    context,
+                    PlanPicker(
+                      auth: auth,
+                      environment: environment,
+                      enrollmentId: textOf(sport['id']),
+                      childName: textOf(childData['arabicName']),
+                    ),
+                  ),
+                  icon: const Icon(Icons.autorenew),
+                  label: UiText(
+                    localized(
+                      context,
+                      'تجديد · ${childData['arabicName']}',
+                      'Renew · ${childData['arabicName']}',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+    ],
+  );
+}
+
+class GuardianLatestProgress extends StatelessWidget {
+  final AuthController auth;
+  final Json childData;
+  const GuardianLatestProgress({
+    super.key,
+    required this.auth,
+    required this.childData,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final power = childData['power'];
+    final latest =
+        childData['latestEvaluation'] ??
+        (power is Map && power['evaluationId'] != null
+            ? {
+                'id': power['evaluationId'],
+                'overallScore': power['overallScore'],
+              }
+            : null);
+    return GCard(
+      onTap: latest is Map
+          ? () => openPage(
+              context,
+              PlayerReport(auth: auth, id: textOf(latest['id'])),
+            )
+          : () => openPage(
+              context,
+              ReportHistory(auth: auth, playerId: textOf(childData['id'])),
+            ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.insights_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                UiText(
+                  localized(
+                    context,
+                    'تطور ${childData['arabicName']}',
+                    '${childData['arabicName']}’s progress',
+                  ),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                UiText(
+                  latest is Map
+                      ? latest['evaluationDate'] == null
+                            ? localized(
+                                context,
+                                'عرض آخر تقييم منشور',
+                                'Open latest published report',
+                              )
+                            : '${latest['sport']} · ${day(latest['evaluationDate'])}'
+                      : localized(
+                          context,
+                          'لا يوجد تقييم منشور بعد',
+                          'No published report yet',
+                        ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+          if (latest is Map && latest['overallScore'] is num)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: UiText(
+                '${(latest['overallScore'] as num).round()}',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          const Icon(Icons.chevron_left),
+        ],
+      ),
+    );
+  }
+}
+
 class PremiumChildCard extends StatelessWidget {
+  final bool showSubscription;
   final AuthController auth;
   final Json childData;
   final String today;
@@ -265,6 +577,7 @@ class PremiumChildCard extends StatelessWidget {
     required this.childData,
     required this.today,
     required this.onTap,
+    this.showSubscription = true,
   });
   @override
   Widget build(BuildContext context) {
@@ -275,9 +588,13 @@ class PremiumChildCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
-          colors: Theme.of(context).brightness == Brightness.dark
-              ? const [Color(0xFF242432), Color(0xFF181A2A)]
-              : const [Color(0xFFFFFFFF), Color(0xFFF0E9D8)],
+          colors: [
+            Color.alphaBlend(
+              Theme.of(context).colorScheme.primary.withValues(alpha: .08),
+              Theme.of(context).colorScheme.surface,
+            ),
+            Theme.of(context).colorScheme.surface,
+          ],
         ),
         border: Border.all(
           color: Theme.of(context).colorScheme.primary.withValues(alpha: .22),
@@ -287,7 +604,7 @@ class PremiumChildCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -308,7 +625,7 @@ class PremiumChildCard extends StatelessWidget {
                         UiText(
                           textOf(c['arabicName']),
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 16,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -318,7 +635,7 @@ class PremiumChildCard extends StatelessWidget {
                             '${ageOn(c['dateOfBirth'], today) ?? '—'} سنوات',
                             '${ageOn(c['dateOfBirth'], today) ?? '—'} years',
                           ),
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: const TextStyle(fontSize: 14),
                         ),
                         if (c['power'] is Map)
                           UiText(
@@ -339,7 +656,7 @@ class PremiumChildCard extends StatelessWidget {
                               'آخر تقييم منشور',
                               'Latest published report',
                             ),
-                            style: Theme.of(context).textTheme.labelSmall,
+                            style: const TextStyle(fontSize: 14),
                           ),
                       ],
                     ),
@@ -363,10 +680,12 @@ class PremiumChildCard extends StatelessWidget {
               for (final s in rows(c['sports']))
                 UiText(
                   '${s['sport']} · ${s['branch'] ?? ''}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: const TextStyle(fontSize: 14),
                 ),
               const SizedBox(height: 8),
-              for (final sport in rows(c['sports']))
+              for (final sport in rows(
+                c['sports'],
+              ).where((_) => showSubscription))
                 Wrap(
                   spacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -392,7 +711,7 @@ class PremiumChildCard extends StatelessWidget {
                 localized(context, 'عرض الملف', 'View profile'),
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.primary,
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
               ),
             ],
@@ -422,7 +741,7 @@ class NextSessionCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 54,
+            width: 70,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.primary
@@ -457,7 +776,7 @@ class NextSessionCard extends StatelessWidget {
                             'Sat',
                           ][date.weekday % 7],
                         ),
-                  style: TextStyle(fontSize: 10),
+                  style: TextStyle(fontSize: 14),
                 ),
                 UiText(
                   date?.day.toString() ?? '—',
@@ -484,16 +803,21 @@ class NextSessionCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 UiText(
-                  '${textOf(session['startTime']).substring(0, 5)} — ${textOf(session['endTime']).substring(0, 5)}',
+                  '${textOf(session['startTime']).split(':').take(2).join(':')} — ${textOf(session['endTime']).split(':').take(2).join(':')}',
+                  textDirection: TextDirection.ltr,
+                ),
+                UiText(
+                  day(session['sessionDate']),
+                  style: const TextStyle(fontSize: 14),
                 ),
                 UiText(
                   '${session['group'] ?? sport['group']} · ${sport['branch']}',
-                  style: Theme.of(context).textTheme.labelSmall,
+                  style: const TextStyle(fontSize: 14),
                 ),
                 if (session['resource'] != null)
                   UiText(
                     textOf(session['resource']),
-                    style: Theme.of(context).textTheme.labelSmall,
+                    style: const TextStyle(fontSize: 14),
                   ),
               ],
             ),

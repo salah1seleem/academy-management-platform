@@ -94,7 +94,9 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                 ),
                 onPressed: unavailable
                     ? library
-                    : () => setState(() => future = load()),
+                    : () => setState(() {
+                        future = load();
+                      }),
                 icon: Icon(unavailable ? Icons.chevron_left : Icons.refresh),
               ),
             ],
@@ -116,7 +118,9 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
               ),
               IconButton(
                 tooltip: localized(context, 'حاول مجددًا', 'Retry'),
-                onPressed: () => setState(() => future = load()),
+                onPressed: () => setState(() {
+                  future = load();
+                }),
                 icon: const Icon(Icons.refresh),
               ),
             ],
@@ -180,7 +184,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                         'Your child’s daily nutrition',
                       ),
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
