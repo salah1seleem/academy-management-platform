@@ -26,7 +26,8 @@ public static partial class PrivateCompensationEndpoints
         var employee = await db.Employees.AsNoTracking().SingleAsync(e => e.Id == p.Delivery.EmployeeId);
         var validDate = month.Day == 1 && month >= currentMonth && month <= currentMonth.AddMonths(12);
         var finalized = validDate && await PayrollEndpoints.Finalized(db, t.AcademyId, employee.Id, month);
-        var contract = validDate && employee.ContractStart < month.AddMonths(1) && (!employee.ContractEnd.HasValue || employee.ContractEnd >= month);
+        var terms = await ContractHistory.Bounds(db,employee,month);
+        var contract = validDate && terms.ContractStart < month.AddMonths(1) && (!terms.ContractEnd.HasValue || terms.ContractEnd >= month);
         var can = p.Action == "ReviewPending" && p.ReviewId.HasValue && !p.Assessment.RequiresReview && p.Assessment.PendingDelta < 0 && validDate && !finalized && contract;
         var message = !validDate ? "اختر أول يوم من شهر الراتب الحالي أو أحد الأشهر الاثني عشر التالية."
             : finalized ? "كشف الشهر المختار معتمد أو مسدد؛ اختر شهرًا غير معتمد، دون تعديل الكشف الأصلي."

@@ -398,6 +398,7 @@ app.MapCoachAgreements();
 app.MapPrivateServices();
 app.MapPrivateCompensation();
 app.MapSalaryHistory();
+app.MapContractHistory();
 app.MapPayrollStatements();
 app.MapPayrollAccount();
 app.MapPayrollAdvances();
@@ -440,6 +441,8 @@ if (app.Environment.IsEnvironment("Demo"))
             await PrivateServiceDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if (app.Configuration.GetValue<bool>("Demo:SalaryHistorySeedEnabled"))
             await SalaryHistoryDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
+        if(app.Configuration.GetValue<bool>("Demo:ContractHistorySeedEnabled"))
+            await ContractHistoryDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:PayrollStatementSeedEnabled"))
             await PayrollStatementDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:PayrollAccountSeedEnabled"))

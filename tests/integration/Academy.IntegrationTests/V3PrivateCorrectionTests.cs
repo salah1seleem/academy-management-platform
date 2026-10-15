@@ -70,7 +70,8 @@ public sealed partial class V2StaffScopeTests
     {
         var f = await PrivateFixture(); using var owner = f.Owner;
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var employee = await db.Employees.SingleAsync(e => e.Id == f.Employee); employee.ContractEnd = f.Today; await db.SaveChangesAsync();
+        var employee = await db.Employees.SingleAsync(e => e.Id == f.Employee);
+        (await StatementCommand(owner,$"/api/v1/manage/employees/{f.Employee}/contract-versions",new ContractChange(new(f.Today.Year,f.Today.Month,1),employee.ContractStart,f.Today,1),null)).EnsureSuccessStatusCode();
         var path = (await PrivateBindUnits(owner, f.Coach, f.Document, f.Sessions[0])).Single();
         await PrivatePayment(owner, f.Document, f.Enrollment, f.Plan, f.Actor, 2000);
         (await PrivatePost(owner, path, await PrivatePreview(owner, path))).EnsureSuccessStatusCode();

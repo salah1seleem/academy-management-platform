@@ -4,6 +4,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import 'contract_history.dart';
 
 class StaffSalaryHistory extends StatelessWidget {
   final AuthController auth;
@@ -26,6 +27,13 @@ class StaffSalaryHistory extends StatelessWidget {
           );
         }
         return gList([
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: UiText(
+              localized(context, 'عقدي وتغييراته', 'My employment contract'),
+            ),
+            onTap: () => openPage(context, StaffContractHistory(auth: auth)),
+          ),
           GCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

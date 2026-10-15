@@ -57,7 +57,10 @@ public static class CoachAgreementEndpoints
             join p in db.CoachCompensationApprovals.AsNoTracking() on a.Id equals p.AgreementId
             where a.AcademyId == academy && a.CoachMembershipId == coach && a.BranchId == branch && a.SportId == sport && a.EffectiveFrom <= serviceDate && p.ApprovedAtUtc <= commitment
             orderby a.EffectiveFrom descending, p.Revision descending select a).FirstOrDefaultAsync();
-        return row is not null && (!row.EffectiveTo.HasValue || serviceDate <= row.EffectiveTo) ? row : null;
+        if(row is null||row.EffectiveTo.HasValue&&serviceDate>row.EffectiveTo)return null;
+        var employee=await db.Employees.AsNoTracking().SingleOrDefaultAsync(e=>e.AcademyId==academy&&e.Id==row.EmployeeId);if(employee is null)return null;
+        var contract=await ContractHistory.Bounds(db,employee,serviceDate);
+        return serviceDate>=contract.ContractStart&&(!contract.ContractEnd.HasValue||serviceDate<=contract.ContractEnd)?row:null;
     }
     private static async Task<IResult> Active(Guid coachId, Guid branchId, Guid sportId, DateOnly on, CurrentTenant current, FoundationDbContext db, TimeProvider clock)
     {
@@ -77,8 +80,11 @@ public static class CoachAgreementEndpoints
         => e.IsActive && await db.AcademyMemberships.AnyAsync(m => m.Id == e.MembershipId && m.Role == AcademyRole.Coach && m.IsActive && m.User.IsActive)
             && await PayrollSensitiveAccess.BranchAllowed(db, t, e.BranchId) && await PayrollSensitiveAccess.BranchAllowed(db, t, branch)
             && await db.Branches.AnyAsync(b => b.Id == branch && b.IsActive) && await db.Sports.AnyAsync(s => s.Id == sport && s.IsActive);
-    private static bool FitsContract(Employee e, DateOnly from, DateOnly? to)
-        => from >= e.ContractStart && (!e.ContractEnd.HasValue || from <= e.ContractEnd && to.HasValue && to <= e.ContractEnd);
+    private static async Task<bool> FitsContract(FoundationDbContext db,Employee e, DateOnly from, DateOnly? to)
+    {
+        var c=await ContractHistory.Bounds(db,e,from);
+        return from>=c.ContractStart&&(!c.ContractEnd.HasValue||from<=c.ContractEnd&&to.HasValue&&to<=c.ContractEnd);
+    }
     private static async Task<IResult> Create(Guid coachId, CoachAgreementWrite body, HttpContext context, CurrentTenant current, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await current.ResolveAsync())!; var error = Validate(body); if (error is not null) return Results.Problem(statusCode: 422, title: error);
@@ -88,7 +94,7 @@ public static class CoachAgreementEndpoints
         var employee = await Employee(db, t, coachId); if (employee is null) return Results.NotFound();
         await PayrollEndpoints.Lock(db, t.AcademyId, employee.Id, body.EffectiveFrom);
         employee = await Employee(db, t, coachId); if (employee is null || !await ValidScope(db, t, employee, body.BranchId, body.SportId)) return Results.Forbid();
-        if (!FitsContract(employee, body.EffectiveFrom, body.EffectiveTo)) return Results.Problem(statusCode: 422, title: "حدد فترة اتفاق داخل مدة عقد الموظف، مع نهاية للاتفاق إذا كان العقد محدد المدة.");
+        if (!await FitsContract(db,employee, body.EffectiveFrom, body.EffectiveTo)) return Results.Problem(statusCode: 422, title: "حدد فترة اتفاق داخل مدة عقد الموظف، مع نهاية للاتفاق إذا كان العقد محدد المدة.");
         if (t.Role != AcademyRole.AcademyOwner && await db.AcademyMemberships.AnyAsync(m => m.Id == coachId && m.UserId.ToString() == context.User.FindFirstValue(ClaimTypes.NameIdentifier))) return Results.Forbid();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"coach-agreement-key:{t.AcademyId}:{t.MembershipId}:{key}"},0))");
         var existing = await db.CoachCompensationAgreements.SingleOrDefaultAsync(a => a.CreatedByMembershipId == t.MembershipId && a.IdempotencyKey == key);
@@ -105,7 +111,7 @@ public static class CoachAgreementEndpoints
         var row = await db.CoachCompensationAgreements.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id && a.CoachMembershipId == coachId); if (row is null) return Results.NotFound();
         await PayrollEndpoints.Lock(db, t.AcademyId, row.EmployeeId, row.EffectiveFrom);
         var employee = await Employee(db, t, coachId); if (employee is null || employee.Id != row.EmployeeId || !await ValidScope(db, t, employee, row.BranchId, row.SportId)) return Results.Forbid();
-        if (!FitsContract(employee, row.EffectiveFrom, row.EffectiveTo)) return Results.Problem(statusCode: 409, title: "تغيرت مدة عقد الموظف؛ راجع نسخة الاتفاق قبل اعتمادها.");
+        if (!await FitsContract(db,employee, row.EffectiveFrom, row.EffectiveTo)) return Results.Problem(statusCode: 409, title: "تغيرت مدة عقد الموظف؛ راجع نسخة الاتفاق قبل اعتمادها.");
         if (t.Role != AcademyRole.AcademyOwner && await db.AcademyMemberships.AnyAsync(m => m.Id == coachId && m.UserId.ToString() == context.User.FindFirstValue(ClaimTypes.NameIdentifier))) return Results.Forbid();
         var replay = await db.CoachCompensationApprovals.SingleOrDefaultAsync(p => p.AgreementId == id); if (replay is not null) return Results.Ok(new { row.Id, version = replay.Revision, replay = true });
         var latest = await db.CoachCompensationApprovals.Where(p => p.EmployeeId == row.EmployeeId && p.BranchId == row.BranchId && p.SportId == row.SportId).OrderByDescending(p => p.Revision).FirstOrDefaultAsync();

@@ -147,8 +147,10 @@ public static partial class ReportingEndpoints
             {
                 var payrollMonth = new DateOnly(payrollDate.Year, payrollDate.Month, 1);
                 var salaries = await PayrollEndpoints.Rows(academyId, payrollMonth, branchId, db);
-                var staff = db.Employees.Where(x => x.AcademyId == academyId && x.IsActive && x.ContractStart <= realToday && (x.ContractEnd == null || x.ContractEnd >= realToday) && (!branchId.HasValue || x.BranchId == branchId));
-                payroll = new { month = payrollMonth, employeeCount = await staff.CountAsync(), expiringContracts = await staff.CountAsync(x => x.ContractEnd != null && x.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Sum(x=>x.RemainingAmount) };
+                var staff = await db.Employees.AsNoTracking().Where(x => x.AcademyId == academyId && x.IsActive && (!branchId.HasValue || x.BranchId == branchId)).ToArrayAsync();
+                var contracts=await db.ContractVersions.AsNoTracking().Where(v=>v.AcademyId==academyId&&v.EffectiveFrom<=SalaryHistory.Month(realToday)).ToArrayAsync();
+                var terms=staff.Select(e=>ContractHistory.Bounds(e,contracts,realToday)).Where(c=>c.ContractStart<=realToday&&(!c.ContractEnd.HasValue||c.ContractEnd>=realToday)).ToArray();
+                payroll = new { month = payrollMonth, employeeCount = terms.Length, expiringContracts = terms.Count(c => c.ContractEnd.HasValue && c.ContractEnd <= realToday.AddDays(30)), baseDue = salaries.Sum(x => x.BaseDue), deductions = salaries.Sum(x => x.Deductions), additions = salaries.Sum(x => x.Additions), netDue = salaries.Sum(x => x.NetDue), unpaid = salaries.Sum(x=>x.RemainingAmount) };
             }
         }
         var coachMembers = await db.AcademyMemberships.Where(x => x.AcademyId == academyId && x.Role == AcademyRole.Coach && x.IsActive)
