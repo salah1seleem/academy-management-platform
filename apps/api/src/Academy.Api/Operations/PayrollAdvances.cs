@@ -24,10 +24,11 @@ public static class PayrollAdvances
         var advances=await db.PayrollAdvances.AsNoTracking().Where(a=>a.EmployeeId==id).OrderByDescending(a=>a.CreatedAtUtc).ToArrayAsync();
         var payments=await db.PayrollDisbursements.AsNoTracking().Where(p=>p.EmployeeId==id).ToArrayAsync();
         var statements=await db.PayrollStatements.AsNoTracking().Where(s=>s.EmployeeId==id&&s.Kind!="PrivateFinal").OrderByDescending(s=>s.Month).ToArrayAsync();
+        var corrections=await db.PayrollPayableCorrections.AsNoTracking().Where(c=>c.EmployeeId==id).ToArrayAsync();
         var canManage=await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollAdvanceManage)&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId));
         return Results.Ok(new {employeeName=e.Name,e.Currency,canManage,canRecord=canManage&&e.IsActive,
             advances=advances.Select(a=>new{a.Id,a.Amount,a.Reference,a.CreatedAtUtc,applied=payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),remaining=a.Amount-payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount)}),
-            statements=statements.Select(s=>new{s.Month,s.Kind,s.OpeningAsOf,s.NetDue,remaining=s.NetDue-payments.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount)}),
+            statements=statements.Select(s=>new{s.Month,s.Kind,s.OpeningAsOf,netDue=s.NetDue+corrections.Where(c=>c.StatementId==s.Id).Sum(c=>c.Delta),remaining=s.NetDue+corrections.Where(c=>c.StatementId==s.Id).Sum(c=>c.Delta)-payments.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount)}),
             applications=payments.Where(p=>p.AdvanceId.HasValue).Select(p=>new{p.Id,p.AdvanceId,p.Amount,p.CreatedAtUtc,month=statements.Single(s=>s.Id==p.StatementId).Month,kind=statements.Single(s=>s.Id==p.StatementId).Kind}),
             balanceScope="RecordedAdvancesOnly",openingBalanceVerified=await db.PayrollStatements.AnyAsync(s=>s.EmployeeId==id&&s.Kind=="Opening")});
     }
@@ -54,7 +55,7 @@ public static class PayrollAdvances
         var kind=body.Opening?"Opening":"MonthlySalary";
         var a=await db.PayrollAdvances.SingleOrDefaultAsync(a=>a.Id==advanceId&&a.EmployeeId==id);var s=await db.PayrollStatements.SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Month==body.Month&&s.Kind==kind);if(a is null||s is null)return Results.NotFound();
         if(a.BranchId!=s.BranchId||a.Currency!=s.Currency||await PayrollEndpoints.Locked(db,t.AcademyId,id,body.Month))return Results.Conflict();
-        var applied=await db.PayrollDisbursements.Where(p=>p.AdvanceId==a.Id).SumAsync(p=>p.Amount);var payouts=await db.PayrollDisbursements.Where(p=>p.StatementId==s.Id).ToArrayAsync();var paid=payouts.Sum(p=>p.Amount);var available=a.Amount-applied;var remaining=s.NetDue-paid;
+        var applied=await db.PayrollDisbursements.Where(p=>p.AdvanceId==a.Id).SumAsync(p=>p.Amount);var payouts=await db.PayrollDisbursements.Where(p=>p.StatementId==s.Id).ToArrayAsync();var paid=payouts.Sum(p=>p.Amount);var available=a.Amount-applied;var remaining=await PayrollPayableCorrections.Due(db,s)-paid;
         if(available!=body.ExpectedAdvanceRemaining||remaining!=body.ExpectedStatementRemaining||body.Amount>available||body.Amount>remaining)return Results.Problem(statusCode:409,title:"تغير رصيد السلفة أو الكشف؛ حدّث المراجعة قبل التخصيص.");
         var now=clock.GetUtcNow();var p=new PayrollDisbursement {Id=Guid.NewGuid(),AcademyId=t.AcademyId,StatementId=s.Id,EmployeeId=id,BranchId=s.BranchId,Currency=s.Currency,Sequence=payouts.Length+1,Amount=body.Amount,PaidBefore=paid,RemainingAfter=remaining-body.Amount,AdvanceId=a.Id,AdvanceAppliedBefore=applied,AdvanceRemainingAfter=available-body.Amount,ActorMembershipId=t.MembershipId,ActorUserId=Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!),RequestKey=key,RequestHash=hash,CreatedAtUtc=now,UpdatedAtUtc=now};
         db.PayrollDisbursements.Add(p);await db.SaveChangesAsync();await tx.CommitAsync();return Results.Created(http.Request.Path,new{p.Id,p.RemainingAfter,p.AdvanceRemainingAfter});

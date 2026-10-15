@@ -6,6 +6,51 @@ import 'coach_test.dart' show coach, shell;
 
 void main() {
   testWidgets(
+    'Opening signed corrections are included once and are read-only',
+    (tester) async {
+      final calls = <String>[];
+      final auth = await coach((m, p, b, t) async {
+        calls.add('$m $p');
+        return {
+          'configured': true,
+          'currency': 'EGP',
+          'items': [],
+          'totalDue': 1300,
+          'totalPaid': 500,
+          'remaining': 800,
+          'opening': {
+            'asOf': '2026-10-01',
+            'originalAmount': 1200,
+            'amount': 1300,
+            'paid': 500,
+            'remaining': 800,
+            'payments': [
+              {'amount': 300, 'kind': 'DirectPayout'},
+              {'amount': 200, 'kind': 'AdvanceApplication'},
+            ],
+            'corrections': [
+              {'delta': -200, 'targetAmount': 1000},
+              {'delta': 300, 'targetAmount': 1300},
+            ],
+          },
+        };
+      });
+      await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(find.text('أصل الافتتاح: 1200 EGP'), findsOneWidget);
+      expect(find.text('الرصيد القديم: 1300 EGP'), findsOneWidget);
+      expect(
+        find.textContaining('تصحيح موثق — داخل الإجمالي وليس صرفًا'),
+        findsNWidgets(2),
+      );
+      expect(find.text('المتبقي المعروف: 800 EGP'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(calls, ['GET /api/v1/staff/payroll/account']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Post-contract compensation is a separate own payable, not salary or a coach payment action',
     (tester) async {
       final calls = <String>[];

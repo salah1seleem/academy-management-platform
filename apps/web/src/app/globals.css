@@ -150,6 +150,8 @@
 .statement-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;margin-block:1rem; }
 .statement-metrics > div { display:flex;flex-direction:column;gap:.5rem;padding:1rem;border:1px solid #dde6e8;border-radius:1rem;background:#fff; }
 .statement-metrics strong { color:var(--accent,#9e1730);font-size:clamp(1rem,2vw,1.5rem);overflow-wrap:anywhere; }
+.statement-metrics.payroll-opening-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media (min-width:960px) { .statement-metrics.payroll-opening-metrics { grid-template-columns:repeat(4,minmax(0,1fr)); } }
 .statement-lines,.statement-payment { display:flex;flex-wrap:wrap;gap:1rem;padding-block:1rem;border-bottom:1px solid #dde6e8; }
 .statement-details a { color:var(--accent,#9e1730);font-weight:600; }
 @media(max-width:640px) { .salary-history-summary { grid-template-columns: 1fr; gap: .5rem; } }

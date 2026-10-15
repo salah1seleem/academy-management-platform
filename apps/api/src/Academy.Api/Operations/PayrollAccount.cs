@@ -60,7 +60,8 @@ public static class PayrollAccount
         var payments = await db.PayrollDisbursements.AsNoTracking().Where(p => p.AcademyId == t.AcademyId && ids.Contains(p.StatementId) && p.CreatedAtUtc < cutoff).OrderByDescending(p => p.CreatedAtUtc).ThenByDescending(p => p.Sequence).ToArrayAsync();
         PayrollAccountPayment[] PaymentItems(Guid source)=>payments.Where(p=>p.StatementId==source).Select(p=>new PayrollAccountPayment(p.Id,p.Amount,p.CreatedAtUtc,p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout")).ToArray();
         var openingSource=statements.SingleOrDefault(s=>s.Kind=="Opening");
-        var opening=openingSource is null?null:new PayrollAccountOpening(openingSource.Id,openingSource.OpeningAsOf!.Value,openingSource.NetDue,payments.Where(p=>p.StatementId==openingSource.Id).Sum(p=>p.Amount),openingSource.CreatedAtUtc,PaymentItems(openingSource.Id));
+        var corrections=openingSource is null?[]:await db.PayrollPayableCorrections.AsNoTracking().Where(c=>c.StatementId==openingSource.Id&&c.CreatedAtUtc<cutoff).OrderBy(c=>c.Revision).Select(c=>new PayrollAccountCorrection(c.Id,c.Delta,c.TargetAmount,c.CreatedAtUtc)).ToArrayAsync();
+        var opening=openingSource is null?null:new PayrollAccountOpening(openingSource.Id,openingSource.OpeningAsOf!.Value,openingSource.NetDue+corrections.Sum(c=>c.Delta),payments.Where(p=>p.StatementId==openingSource.Id).Sum(p=>p.Amount),openingSource.CreatedAtUtc,PaymentItems(openingSource.Id)){OriginalAmount=openingSource.NetDue,Corrections=corrections};
         var items = statements.Where(s=>s.Kind=="MonthlySalary").Select(s =>
         {
             var paid = payments.Where(p => p.StatementId == s.Id).Sum(p => p.Amount);
@@ -98,6 +99,7 @@ public static class PayrollAccount
         Row("كشف المصادر المعتمدة فقط", v.EmployeeName, v.Currency, v.AsOf.ToString("yyyy-MM-dd"), v.CutoffUtc.ToString("O"), v.TimeZone);
         Row(v.OpeningBalanceVerified?"افتتاح موثق قبل حد البداية فقط؛ ليس راتب شهر أو دليل اكتمال كل السلف التاريخية":"الافتتاح والسلف التاريخية غير المستوردة غير موثقة؛ المسدد القديم غير معاد ترحيله");
         if(v.Opening is {} o)Row("الافتتاح قبل",o.AsOf.ToString("yyyy-MM-dd"),N(o.Amount),N(o.Paid),N(o.Remaining));
+        if(v.Opening is {} corrected){Row("أصل الافتتاح — قبل التصحيحات",N(corrected.OriginalAmount));foreach(var c in corrected.Corrections)Row("تصحيح افتتاح — ليس صرفًا أو استحقاقًا إضافيًا",N(c.Delta),N(c.TargetAmount),c.CreatedAtUtc.ToString("O"));}
         Row("شهر الخدمة", "الاستحقاق المعتمد", "المسدد حتى التاريخ", "المتبقي", "وقت الاعتماد");
         foreach (var s in v.Items) Row(s.Month.ToString("yyyy-MM-dd"), N(s.NetDue), N(s.Paid), N(s.Remaining), s.ApprovedAtUtc.ToString("O"));
         foreach(var f in v.FinalSettlements)Row("استحقاق عمولة بعد نهاية العقد",f.ApprovedAtUtc.ToString("O"),N(f.Amount),N(f.Paid),N(f.Remaining));
@@ -122,7 +124,8 @@ public static class PayrollAccount
 }
 
 public sealed record PayrollAccountPayment(Guid Id, decimal Amount, DateTimeOffset CreatedAtUtc,string Kind);
-public sealed record PayrollAccountOpening(Guid Id,DateOnly AsOf,decimal Amount,decimal Paid,DateTimeOffset ApprovedAtUtc,PayrollAccountPayment[] Payments){public decimal Remaining=>Amount-Paid;}
+public sealed record PayrollAccountCorrection(Guid Id,decimal Delta,decimal TargetAmount,DateTimeOffset CreatedAtUtc);
+public sealed record PayrollAccountOpening(Guid Id,DateOnly AsOf,decimal Amount,decimal Paid,DateTimeOffset ApprovedAtUtc,PayrollAccountPayment[] Payments){public decimal Remaining=>Amount-Paid;public decimal OriginalAmount{get;init;}public PayrollAccountCorrection[] Corrections{get;init;}=[];}
 public sealed record PayrollAccountFinal(Guid Id,DateTimeOffset ApprovedAtUtc,decimal Amount,decimal Paid,PayrollAccountPayment[] Payments,bool CanPay){public decimal Remaining=>Amount-Paid;}
 public sealed record PayrollAccountAdvance(Guid Id,decimal Amount,decimal Applied,decimal Remaining,DateTimeOffset CreatedAtUtc);
 public sealed record PayrollAccountItem(Guid Id, DateOnly Month, DateTimeOffset ApprovedAtUtc, decimal NetDue, decimal Paid, decimal Remaining, decimal BaseDue, decimal Deductions, decimal Additions, PayrollAccountPayment[] Payments);

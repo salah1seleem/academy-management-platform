@@ -119,6 +119,14 @@ class StaffPayrollStatements extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   UiText(localized(context, 'افتتاح موثق', 'Reviewed opening')),
+                  if (opening['originalAmount'] != null)
+                    UiText(
+                      '${localized(context, 'أصل الافتتاح', 'Original opening')}: ${opening['originalAmount']} ${data['currency']}',
+                    ),
+                  for (final c in rows(opening['corrections'] ?? const []))
+                    UiText(
+                      '${localized(context, 'تصحيح موثق — داخل الإجمالي وليس صرفًا', 'Reviewed correction — included, not cash')}: ${c['delta']} ${data['currency']}',
+                    ),
                   UiText(
                     '${localized(context, 'الرصيد القديم', 'Prior balance')}: ${opening['amount']} ${data['currency']}',
                   ),

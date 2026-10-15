@@ -9,9 +9,18 @@ public sealed partial class FoundationDbContext
     public DbSet<PayrollStatement> PayrollStatements=>Set<PayrollStatement>();
     public DbSet<PayrollDisbursement> PayrollDisbursements=>Set<PayrollDisbursement>();
     public DbSet<PayrollAdvance> PayrollAdvances=>Set<PayrollAdvance>();
+    public DbSet<PayrollPayableCorrection> PayrollPayableCorrections=>Set<PayrollPayableCorrection>();
     private static void ConfigurePayrollStatements(ModelBuilder b)
     {
         Tenant<PayrollStatement>(b);Tenant<PayrollDisbursement>(b);Tenant<PayrollAdvance>(b);
+        Tenant<PayrollPayableCorrection>(b);
+        var c=b.Entity<PayrollPayableCorrection>();
+        c.HasOne<PayrollStatement>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.StatementId,x.EmployeeId,x.BranchId,x.Currency}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.EmployeeId,x.BranchId,x.Currency}).OnDelete(DeleteBehavior.Restrict);
+        c.HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ActorMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        c.HasIndex(x=>new{x.AcademyId,x.StatementId,x.Revision}).IsUnique();c.HasIndex(x=>new{x.AcademyId,x.ActorMembershipId,x.RequestKey}).IsUnique();
+        foreach(var name in new[]{nameof(PayrollPayableCorrection.PreviousAmount),nameof(PayrollPayableCorrection.TargetAmount),nameof(PayrollPayableCorrection.Delta),nameof(PayrollPayableCorrection.PaidAtApproval)})c.Property<decimal>(name).HasPrecision(18,2);
+        c.Property(x=>x.Currency).HasMaxLength(3);c.Property(x=>x.Reference).HasMaxLength(120);c.Property(x=>x.Note).HasMaxLength(500);c.Property(x=>x.QuoteHash).HasMaxLength(64);c.Property(x=>x.RequestHash).HasMaxLength(64);c.Property(x=>x.RequestKey).HasMaxLength(100);
+        c.ToTable(t=>t.HasCheckConstraint("CK_PayrollCorrection_Amounts","\"Revision\">0 AND \"PreviousAmount\" BETWEEN 0 AND 100000000 AND \"TargetAmount\" BETWEEN 0 AND 100000000 AND \"Delta\"<>0 AND \"Delta\"=\"TargetAmount\"-\"PreviousAmount\" AND \"PaidAtApproval\">=0 AND \"TargetAmount\">=\"PaidAtApproval\" AND length(trim(\"Reference\")) BETWEEN 3 AND 120 AND length(\"QuoteHash\")=64 AND length(\"RequestHash\")=64 AND length(\"RequestKey\") BETWEEN 8 AND 100"));
         var a=b.Entity<PayrollAdvance>();
         a.HasAlternateKey(x=>new{x.AcademyId,x.Id,x.EmployeeId,x.BranchId,x.Currency});
         a.HasOne<Employee>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.EmployeeId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);

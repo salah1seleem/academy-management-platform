@@ -19,6 +19,7 @@ public static class PayrollOpening
         var api=app.MapGroup("/api/v1/manage/payroll/{id:guid}/opening").RequireAuthorization(AcademyPermissions.PayrollRead);
         api.MapGet("",Read);
         api.MapPost("",Approve).RequireAuthorization(AcademyPermissions.PayrollManage,AcademyPermissions.PayrollStatementApprove).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/corrections",PayrollPayableCorrections.Correct).RequireAuthorization(AcademyPermissions.PayrollManage,AcademyPermissions.PayrollStatementApprove).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/disbursements",Pay).RequireAuthorization(AcademyPermissions.PayrollManage,AcademyPermissions.PayrollPay).AddEndpointFilter<CsrfFilter>();
     }
     internal static Task<bool> BeforeBoundary(FoundationDbContext db,Guid id,DateOnly month)
@@ -41,12 +42,18 @@ public static class PayrollOpening
         var e=await db.Employees.AsNoTracking().SingleOrDefaultAsync(e=>e.Id==id);if(e is null)return Results.NotFound();
         var facts=await Facts(e,await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock),db);
         var s=await db.PayrollStatements.AsNoTracking().SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Kind=="Opening");
-        var payments=s is null?[]:await db.PayrollDisbursements.AsNoTracking().Where(p=>p.StatementId==s.Id).OrderByDescending(p=>p.Sequence).Select(p=>new{p.Id,p.Amount,p.Reference,p.CreatedAtUtc,kind=p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout"}).ToArrayAsync();
+        var payouts=s is null?[]:await db.PayrollDisbursements.AsNoTracking().Where(p=>p.StatementId==s.Id).OrderByDescending(p=>p.Sequence).ToArrayAsync();
+        var payments=payouts.Select(p=>new{p.Id,p.Amount,p.Reference,p.CreatedAtUtc,kind=p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout"}).ToArray();
+        var corrections=s is null?[]:await db.PayrollPayableCorrections.AsNoTracking().Where(c=>c.StatementId==s.Id).OrderBy(c=>c.Revision).ToArrayAsync();
+        var amount=(s?.NetDue??0)+corrections.Sum(c=>c.Delta);
         var paid=payments.Sum(p=>p.Amount);var unallocated=await db.PayrollAdvances.Where(a=>a.EmployeeId==id).SumAsync(a=>a.Amount)-await db.PayrollDisbursements.Where(p=>p.EmployeeId==id&&p.AdvanceId.HasValue).SumAsync(p=>p.Amount);
         return Results.Ok(new{employeeName=e.Name,e.Currency,latestBoundary=facts.Latest,quoteHash=facts.Hash,
+            correctionQuoteHash=s is null?null:PayrollPayableCorrections.Quote(s,corrections,payouts),
+            canCorrect=s is not null&&t.Role==AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollStatementApprove),
+            corrections=corrections.Select(c=>new{c.Id,c.Revision,c.PreviousAmount,c.TargetAmount,c.Delta,c.PaidAtApproval,c.Reference,c.Note,c.CreatedAtUtc}),
             canApprove=s is null&&e.IsActive&&t.Role==AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollStatementApprove),
-            canPay=s is not null&&s.NetDue>paid&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId)),
-            opening=s is null?null:new{s.Id,asOf=s.OpeningAsOf,amount=s.NetDue,s.OpeningReference,s.Note,s.CreatedAtUtc,paid,remaining=s.NetDue-paid},payments,unallocatedAdvances=unallocated});
+            canPay=s is not null&&amount>paid&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId)),
+            opening=s is null?null:new{s.Id,asOf=s.OpeningAsOf,amount,originalAmount=s.NetDue,s.OpeningReference,s.Note,s.CreatedAtUtc,paid,remaining=amount-paid},payments,unallocatedAdvances=unallocated});
     }
     private static async Task<IResult> Approve(Guid id,PayrollOpeningApproval body,HttpContext http,CurrentTenant current,FoundationDbContext db,TimeProvider clock)
     {
