@@ -62,13 +62,16 @@ public static class PayrollAccount
         {
             var paid = payments.Where(p => p.StatementId == s.Id).Sum(p => p.Amount);
             return new PayrollAccountItem(s.Id, s.Month, s.CreatedAtUtc, s.NetDue, paid, s.NetDue - paid, s.BaseDue, s.Deductions, s.Additions,
-                payments.Where(p => p.StatementId == s.Id).Select(p => new PayrollAccountPayment(p.Id, p.Amount, p.CreatedAtUtc)).ToArray());
+                payments.Where(p => p.StatementId == s.Id).Select(p => new PayrollAccountPayment(p.Id, p.Amount, p.CreatedAtUtc,p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout")).ToArray());
         }).ToArray();
         var prior = items.Where(s => s.Month < month).ToArray();
         var current = items.Where(s => s.Month == month).ToArray();
         var legacyCount = await db.PayrollSettlements.CountAsync(s => s.AcademyId == t.AcademyId && s.EmployeeId == id && s.Month <= month && s.CreatedAtUtc < cutoff);
+        var advances=await db.PayrollAdvances.AsNoTracking().Where(a=>a.AcademyId==t.AcademyId&&a.EmployeeId==id&&a.CreatedAtUtc<cutoff).OrderByDescending(a=>a.CreatedAtUtc).ToArrayAsync();
+        if(advances.Any(a=>a.Currency!=e.Currency))return Results.Problem(statusCode:409,title:"عملات السلف تحتاج مراجعة؛ لم نجمع عملتين.");
+        var advanceItems=advances.Select(a=>new PayrollAccountAdvance(a.Id,a.Amount,payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),a.Amount-payments.Where(p=>p.AdvanceId==a.Id).Sum(p=>p.Amount),a.CreatedAtUtc)).ToArray();
         var result = new PayrollAccountView(true, e.Name, e.Currency, asOf, cutoff, zoneId, items.Sum(s => s.NetDue), items.Sum(s => s.Paid), items.Sum(s => s.Remaining),
-            prior.Sum(s => s.Remaining), current.Sum(s => s.Remaining), current.Length > 0, legacyCount, items);
+            prior.Sum(s => s.Remaining), current.Sum(s => s.Remaining), current.Length > 0, legacyCount, items) {Advances=advanceItems,AdvanceApplied=payments.Where(p=>p.AdvanceId.HasValue).Sum(p=>p.Amount),DirectPaid=payments.Where(p=>!p.AdvanceId.HasValue).Sum(p=>p.Amount)};
         return export ? Export(result) : Results.Ok(result);
     }
 
@@ -88,24 +91,40 @@ public static class PayrollAccount
         static string Cell(string value) => ReportingEndpoints.CsvCell(value.TrimStart() is { Length: > 0 } v && "=+-@".Contains(v[0]) || value.StartsWith('\t') || value.StartsWith('\r') ? "'" + value : value);
         void Row(params string[] cells) => b.AppendLine(string.Join(",", cells.Select(Cell)));
         Row("كشف المصادر المعتمدة فقط", v.EmployeeName, v.Currency, v.AsOf.ToString("yyyy-MM-dd"), v.CutoffUtc.ToString("O"), v.TimeZone);
-        Row("الرصيد الافتتاحي والسلف غير موثقين؛ المسدد بالمسار السابق غير معاد ترحيله");
-        Row("شهر الخدمة", "الاستحقاق المعتمد", "المدفوع حتى التاريخ", "المتبقي", "وقت الاعتماد");
+        Row("الافتتاح والسلف التاريخية غير المستوردة غير موثقة؛ المسدد القديم غير معاد ترحيله");
+        Row("شهر الخدمة", "الاستحقاق المعتمد", "المسدد حتى التاريخ", "المتبقي", "وقت الاعتماد");
         foreach (var s in v.Items) Row(s.Month.ToString("yyyy-MM-dd"), N(s.NetDue), N(s.Paid), N(s.Remaining), s.ApprovedAtUtc.ToString("O"));
         Row("الإجمالي المعروف", N(v.TotalDue), N(v.TotalPaid), N(v.Remaining));
         Row("متبقي الأشهر السابقة", N(v.PriorRemaining));
         Row("متبقي الشهر المختار", N(v.CurrentRemaining));
+        Row("من السداد: صرف مباشر",N(v.DirectPaid));
+        Row("من السداد: تخصيص سلفة وليس صرفًا جديدًا",N(v.AdvanceApplied));
+        Row("السلف المصروفة المسجلة",N(v.RecordedAdvanceTotal));
+        Row("السلف غير المخصصة — لا تخصم تلقائيًا",N(v.UnallocatedAdvances));
+        Row("خروج المال المسجل: صرف مباشر + سلف، دون تكرار التخصيص",N(v.CashOutRecorded));
         Row("الدفعات — تفصيل للإجمالي أعلاه وليس استحقاقًا إضافيًا");
-        Row("شهر الخدمة", "المبلغ", "وقت الصرف");
-        foreach (var s in v.Items) foreach (var p in s.Payments) Row(s.Month.ToString("yyyy-MM-dd"), N(p.Amount), p.CreatedAtUtc.ToString("O"));
+        Row("شهر الخدمة", "المبلغ", "وقت التسجيل","نوع التسوية");
+        foreach (var s in v.Items) foreach (var p in s.Payments) Row(s.Month.ToString("yyyy-MM-dd"), N(p.Amount), p.CreatedAtUtc.ToString("O"),p.Kind=="AdvanceApplication"?"تخصيص سلفة سابقة":"صرف مباشر");
+        Row("السلف — خروج مال سبق التخصيص وليس استحقاق راتب");
+        Row("المبلغ","المخصص","غير المخصص","وقت التسجيل");
+        foreach(var a in v.Advances)Row(N(a.Amount),N(a.Applied),N(a.Remaining),a.CreatedAtUtc.ToString("O"));
         return Results.File(Encoding.UTF8.GetBytes(b.ToString()), "text/csv; charset=utf-8", $"payroll-account-{v.AsOf:yyyy-MM-dd}.csv");
     }
 }
 
-public sealed record PayrollAccountPayment(Guid Id, decimal Amount, DateTimeOffset CreatedAtUtc);
+public sealed record PayrollAccountPayment(Guid Id, decimal Amount, DateTimeOffset CreatedAtUtc,string Kind);
+public sealed record PayrollAccountAdvance(Guid Id,decimal Amount,decimal Applied,decimal Remaining,DateTimeOffset CreatedAtUtc);
 public sealed record PayrollAccountItem(Guid Id, DateOnly Month, DateTimeOffset ApprovedAtUtc, decimal NetDue, decimal Paid, decimal Remaining, decimal BaseDue, decimal Deductions, decimal Additions, PayrollAccountPayment[] Payments);
 public sealed record PayrollAccountView(bool Configured, string EmployeeName, string Currency, DateOnly AsOf, DateTimeOffset CutoffUtc, string TimeZone, decimal TotalDue, decimal TotalPaid, decimal Remaining, decimal PriorRemaining, decimal CurrentRemaining, bool CurrentMonthApproved, int LegacyPaidMonthsExcluded, PayrollAccountItem[] Items)
 {
     public string BalanceScope => "ApprovedSourcesAsOfOnly";
     public bool OpeningBalanceVerified => false;
     public bool AdvancesVerified => false;
+    public string AdvanceScope=>"RecordedSourcesOnly";
+    public PayrollAccountAdvance[] Advances {get;init;}=[];
+    public decimal AdvanceApplied {get;init;}
+    public decimal DirectPaid {get;init;}
+    public decimal RecordedAdvanceTotal=>Advances.Sum(a=>a.Amount);
+    public decimal UnallocatedAdvances=>Advances.Sum(a=>a.Remaining);
+    public decimal CashOutRecorded=>DirectPaid+RecordedAdvanceTotal;
 }

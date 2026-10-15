@@ -148,6 +148,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<SalaryVersion>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollStatement>(b, x=>RequestBranchIds.Contains(x.BranchId)&&Employees.Any(e=>e.Id==x.EmployeeId));
         BranchFilter<PayrollDisbursement>(b, x=>PayrollStatements.Any(s=>s.Id==x.StatementId));
+        BranchFilter<PayrollAdvance>(b, x=>RequestBranchIds.Contains(x.BranchId)&&Employees.Any(e=>e.Id==x.EmployeeId));
         BranchFilter<CoachCompensationAgreement>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<CoachCompensationApproval>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PrivateServicePackage>(b, x => RequestBranchIds.Contains(x.BranchId) && ReceivableDocuments.Any(d => d.Id == x.DocumentId));
@@ -184,6 +185,7 @@ public sealed partial class FoundationDbContext
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
         if (ChangeTracker.Entries<PayrollStatement>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<PayrollAdvance>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PayrollDisbursement>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<SalaryVersion>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PrivateCompensationEntry>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)

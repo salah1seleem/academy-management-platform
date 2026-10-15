@@ -8,7 +8,7 @@ namespace Academy.Api.Auth;
 // Reuse StaffGrants. CRUD and starting templates never imply sensitive grants.
 public static class PayrollSensitiveAccess
 {
-    public static readonly string[] Permissions = [AcademyPermissions.PayrollAdditionReview, AcademyPermissions.PayrollPay, AcademyPermissions.CoachAgreementManage,AcademyPermissions.SalaryManage,AcademyPermissions.PayrollStatementApprove];
+    public static readonly string[] Permissions = [AcademyPermissions.PayrollAdditionReview, AcademyPermissions.PayrollPay, AcademyPermissions.CoachAgreementManage,AcademyPermissions.SalaryManage,AcademyPermissions.PayrollStatementApprove,AcademyPermissions.PayrollAdvanceManage];
     public static bool Contains(string permission) => Permissions.Contains(permission);
 
     public static async Task<bool> Allowed(FoundationDbContext db, TenantMembership tenant, string permission)
@@ -22,7 +22,7 @@ public static class PayrollSensitiveAccess
         // Review also needs Edit; recording payment also needs Add. Legacy
         // accounts require payroll.manage as well as the explicit new grant.
         return member.UseActionGrants
-            ? await db.StaffActionGrants.AnyAsync(g => g.MembershipId == member.Id && g.IsActive && g.Module == "payroll" && g.Read && (permission == AcademyPermissions.PayrollPay ? g.Add : permission == AcademyPermissions.CoachAgreementManage || permission == AcademyPermissions.SalaryManage ? g.Add && g.Edit : g.Edit))
+            ? await db.StaffActionGrants.AnyAsync(g => g.MembershipId == member.Id && g.IsActive && g.Module == "payroll" && g.Read && (permission == AcademyPermissions.PayrollPay ? g.Add : permission == AcademyPermissions.CoachAgreementManage || permission == AcademyPermissions.SalaryManage || permission == AcademyPermissions.PayrollAdvanceManage ? g.Add && g.Edit : g.Edit))
             : await db.StaffGrants.CountAsync(g => g.MembershipId == member.Id && (g.Permission == AcademyPermissions.PayrollManage || g.Permission == AcademyPermissions.PayrollRead) && g.IsActive && g.Allowed) == 2;
     }
 

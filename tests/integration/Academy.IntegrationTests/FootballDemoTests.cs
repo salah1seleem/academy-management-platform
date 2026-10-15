@@ -58,6 +58,8 @@ public sealed class FootballDemoTests : IAsyncLifetime
         await SalaryHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
         await PayrollStatementDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
         await PayrollAccountDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await PayrollAdvanceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        var otherAdvances=await db.PayrollAdvances.CountAsync(a=>a.AcademyId!=AcademyId);Assert.Single(await db.PayrollAdvances.Where(a=>a.Id==PayrollAdvanceDemoSeed.AdvanceId).ToArrayAsync());Assert.Single(await db.PayrollDisbursements.Where(p=>p.AdvanceId==PayrollAdvanceDemoSeed.AdvanceId).ToArrayAsync());
         var otherStatements=await db.PayrollStatements.CountAsync(s=>s.AcademyId!=AcademyId);Assert.Single(await db.PayrollStatements.Where(s=>s.EmployeeId==PayrollStatementDemoSeed.EmployeeId).ToArrayAsync());Assert.Equal(2,await db.PayrollStatements.CountAsync(s=>s.EmployeeId==PayrollAccountDemoSeed.EmployeeId));
         var otherSalaries=await db.SalaryVersions.CountAsync(v=>v.AcademyId!=AcademyId);Assert.Equal(2,await db.SalaryVersions.CountAsync(v=>v.AcademyId==AcademyId));
         var salaries=await db.SalaryVersions.Where(v=>v.AcademyId==AcademyId).OrderBy(v=>v.Revision).ToArrayAsync();Assert.Equal(500,salaries[1].MonthlySalary-salaries[0].MonthlySalary);Assert.Equal(salaries[0].EffectiveFrom.AddMonths(1),salaries[1].EffectiveFrom);
@@ -71,6 +73,7 @@ public sealed class FootballDemoTests : IAsyncLifetime
         await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);
         Assert.False(await db.SalaryVersions.AnyAsync(v=>v.AcademyId==AcademyId));Assert.Equal(otherSalaries,await db.SalaryVersions.CountAsync(v=>v.AcademyId!=AcademyId));
         Assert.False(await db.PayrollStatements.AnyAsync(s=>s.AcademyId==AcademyId));Assert.Equal(otherStatements,await db.PayrollStatements.CountAsync(s=>s.AcademyId!=AcademyId));
+        Assert.False(await db.PayrollAdvances.AnyAsync(a=>a.AcademyId==AcademyId));Assert.Equal(otherAdvances,await db.PayrollAdvances.CountAsync(a=>a.AcademyId!=AcademyId));
         Assert.False(await db.PrivateCompensationEntries.AnyAsync(e=>e.AcademyId==AcademyId)); Assert.Equal(other,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId!=AcademyId)); Assert.Equal(30,await db.Players.CountAsync(p=>p.AcademyId==AcademyId)); Assert.Equal(6,await db.TrainingGroups.CountAsync(g=>g.AcademyId==AcademyId));
     }
 

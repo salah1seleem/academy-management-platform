@@ -30,8 +30,8 @@ class StaffPayrollStatements extends StatelessWidget {
           UiText(
             localized(
               context,
-              'كل المصادر المعتمدة حتى ${data['asOf'] ?? ''}. الأرصدة الافتتاحية والسلف والأشهر غير المعتمدة غير موثقة هنا، وليست صفرًا.',
-              'All approved sources as of ${data['asOf'] ?? ''}. Opening balances, advances and unapproved months are not verified here, not zero.',
+              'كل المصادر المعتمدة حتى ${data['asOf'] ?? ''}. الأرصدة الافتتاحية والسلف التاريخية غير المستوردة والأشهر غير المعتمدة غير موثقة هنا، وليست صفرًا.',
+              'All approved sources as of ${data['asOf'] ?? ''}. Opening balances, unimported historic advances and unapproved months are not verified here, not zero.',
             ),
           ),
           if (items.isNotEmpty)
@@ -50,7 +50,7 @@ class StaffPayrollStatements extends StatelessWidget {
                     '${localized(context, 'إجمالي المعتمد', 'Total approved')}: ${data['totalDue']} ${data['currency']}',
                   ),
                   UiText(
-                    '${localized(context, 'إجمالي المدفوع', 'Total paid')}: ${data['totalPaid']} ${data['currency']}',
+                    '${localized(context, 'إجمالي المسدد', 'Total settled')}: ${data['totalPaid']} ${data['currency']}',
                   ),
                   UiText(
                     '${localized(context, 'المتبقي المعروف', 'Known remaining')}: ${data['remaining']} ${data['currency']}',
@@ -70,6 +70,33 @@ class StaffPayrollStatements extends StatelessWidget {
                 context,
                 'لا كشف معتمد لهذا الشهر حتى التاريخ المختار.',
                 'No approved statement for this month as of the selected date.',
+              ),
+            ),
+          if (data['recordedAdvanceTotal'] != null)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(
+                    localized(context, 'السلف المسجلة', 'Recorded advances'),
+                  ),
+                  UiText(
+                    '${localized(context, 'سبق صرفها', 'Already paid')}: ${data['recordedAdvanceTotal']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'غير المخصص', 'Unallocated')}: ${data['unallocatedAdvances']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'تخصيص من سلف سابقة', 'Applied from prior advances')}: ${data['advanceApplied']} ${data['currency']}',
+                  ),
+                  UiText(
+                    localized(
+                      context,
+                      'التخصيص يسدد المستحق وليس صرفًا جديدًا. غير المخصص لا يخصم تلقائيًا من راتبك.',
+                      'Allocation settles dues, not a new payout. Unallocated advances are not automatically deducted.',
+                    ),
+                  ),
+                ],
               ),
             ),
           if ((data['legacyPaidMonthsExcluded'] as num? ?? 0) > 0)
@@ -100,7 +127,7 @@ class StaffPayrollStatements extends StatelessWidget {
                     '${localized(context, 'المستحق', 'Due')}: ${s['netDue']} ${data['currency']}',
                   ),
                   UiText(
-                    '${localized(context, 'المدفوع', 'Paid')}: ${s['paid']} ${data['currency']}',
+                    '${localized(context, 'المسدد', 'Settled')}: ${s['paid']} ${data['currency']}',
                   ),
                   UiText(
                     '${localized(context, 'المتبقي', 'Remaining')}: ${s['remaining']} ${data['currency']}',
@@ -112,7 +139,7 @@ class StaffPayrollStatements extends StatelessWidget {
                     ListTile(
                       leading: const Icon(Icons.receipt_long_outlined),
                       title: UiText(
-                        '${localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${data['currency']}',
+                        '${p['kind'] == 'AdvanceApplication' ? localized(context, 'تخصيص سلفة سابقة — ليس صرفًا جديدًا', 'Prior advance allocation — not a new payout') : localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${data['currency']}',
                       ),
                     ),
                 ],

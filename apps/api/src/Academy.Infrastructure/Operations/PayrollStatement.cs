@@ -25,9 +25,15 @@ public sealed class PayrollStatement : TenantEntity
     public required string RequestHash { get; set; }
 }
 
-// One payout against an approved statement; never also creates a legacy settlement.
+// One settlement against an approved statement: direct payout or allocation of
+// prior advance cash. Neither also creates a legacy settlement.
 public sealed class PayrollDisbursement : TenantEntity
 {
+    // Null = direct cash payout. Otherwise settlement from an already-paid advance,
+    // not a second cash movement. Existing immutable rows remain direct payouts.
+    public Guid? AdvanceId { get; set; }
+    public decimal? AdvanceAppliedBefore { get; set; }
+    public decimal? AdvanceRemainingAfter { get; set; }
     public Guid StatementId { get; set; }
     public Guid EmployeeId { get; set; }
     public Guid BranchId { get; set; }

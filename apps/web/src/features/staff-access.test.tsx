@@ -5,17 +5,19 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it("sensitive payroll actions start denied, require CRUD, and are explicitly reviewed rather than inherited from a template", async () => {
   const payroll = { module: "payroll", read: true, add: true, edit: true, delete: false };
-  const fixture = { ...value, modules: ["payroll"], actions: [payroll], sensitivePermissions: ["payroll.pay", "payroll.addition.review", "payroll.salary.manage", "payroll.statement.approve"], selectedSensitivePermissions: [], templates: [{ key: "finance", name: "متابعة رواتب", actions: [payroll] }] };
+  const fixture = { ...value, modules: ["payroll"], actions: [payroll], sensitivePermissions: ["payroll.pay", "payroll.addition.review", "payroll.salary.manage", "payroll.statement.approve", "payroll.advance.manage"], selectedSensitivePermissions: [], templates: [{ key: "finance", name: "متابعة رواتب", actions: [payroll] }] };
   const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, status: 200, json: async () => url.endsWith("/csrf") ? { token: "csrf" } : fixture }));
   global.fetch = fetcher; const close = vi.fn(); render(<StaffAccessEditor id="admin" name="إداري رواتب" onClose={close} />);
   const pay = await screen.findByRole("switch", { name: "تسجيل صرف الرواتب" });
   expect(pay).not.toBeChecked(); fireEvent.change(screen.getByRole("combobox", { name: "قالب الصلاحيات" }), { target: { value: "finance" } });
   const salary=screen.getByRole("switch",{name:"اعتماد الراتب وتغييراته المؤرخة"});expect(salary).not.toBeChecked();fireEvent.click(salary);expect(salary).toBeChecked();
   const statement=screen.getByRole("switch",{name:"اعتماد كشف المستحقات الشهري"});expect(statement).not.toBeChecked();fireEvent.click(statement);expect(statement).toBeChecked();
+  const advance=screen.getByRole("switch",{name:"إدارة السلف وتخصيصها (مع تفويض الصرف)"});expect(advance).not.toBeChecked();fireEvent.click(advance);expect(advance).toBeChecked();
   expect(pay).not.toBeChecked(); fireEvent.click(screen.getByRole("radio", { name: "كل فروع الأكاديمية" }));
   fireEvent.click(pay); expect(pay).toBeChecked();
   fireEvent.click(screen.getByRole("switch", { name: "إضافة الموظفون والرواتب" })); expect(pay).not.toBeChecked(); expect(pay).toBeDisabled();
   expect(salary).not.toBeChecked();expect(salary).toBeDisabled();
+  expect(advance).not.toBeChecked();expect(advance).toBeDisabled();
   expect(statement).toBeChecked();fireEvent.click(screen.getByRole("switch",{name:"تعديل الموظفون والرواتب"}));expect(statement).not.toBeChecked();expect(statement).toBeDisabled();fireEvent.click(screen.getByRole("switch",{name:"تعديل الموظفون والرواتب"}));expect(statement).not.toBeChecked();
   fireEvent.click(screen.getByRole("switch", { name: "اعتماد أو رفض المبالغ الإضافية" }));
   fireEvent.click(screen.getByRole("button", { name: "اعتماد الصلاحيات" }));

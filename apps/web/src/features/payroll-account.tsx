@@ -4,8 +4,8 @@ import Link from "next/link";
 import {AdminDataTable,ErrorState,LoadingState,PageHeader} from "../components/dashboard-shell";
 import {formatDateAr,formatMoneyAr} from "../lib/formatters";
 
-type Item={id:string;month:string;approvedAtUtc:string;netDue:number;paid:number;remaining:number;payments:{id:string;amount:number;createdAtUtc:string}[]};
-type Account={employeeName:string;currency:string;asOf:string;cutoffUtc:string;timeZone:string;totalDue:number;totalPaid:number;remaining:number;priorRemaining:number;currentRemaining:number;currentMonthApproved:boolean;legacyPaidMonthsExcluded:number;items:Item[]};
+type Item={id:string;month:string;approvedAtUtc:string;netDue:number;paid:number;remaining:number;payments:{id:string;amount:number;createdAtUtc:string;kind?:string}[]};
+type Account={employeeName:string;currency:string;asOf:string;cutoffUtc:string;timeZone:string;totalDue:number;totalPaid:number;remaining:number;priorRemaining:number;currentRemaining:number;currentMonthApproved:boolean;legacyPaidMonthsExcluded:number;items:Item[];directPaid?:number;advanceApplied?:number;recordedAdvanceTotal?:number;unallocatedAdvances?:number;cashOutRecorded?:number};
 export function PayrollAccount({id}:{id:string}){
   const [date,setDate]=useState<string|null>(null),[query,setQuery]=useState(""),[data,setData]=useState<Account|null>(null),[error,setError]=useState("");
   const [revision,setRevision]=useState(0);
@@ -18,21 +18,22 @@ export function PayrollAccount({id}:{id:string}){
     <form className="report-filters" aria-label="تاريخ كشف الحساب" onSubmit={filter}><label>حتى تاريخ<input type="date" value={date??data?.asOf??""} onChange={e=>setDate(e.target.value)}/></label><button className="primary-button">عرض</button><button className="secondary-button" type="button" onClick={()=>{setDate(null);setQuery("");setRevision(v=>v+1);}}>حتى اليوم</button></form>
     {error?<ErrorState message={error}/>:!data?<LoadingState/>:<>
       <p>المصادر المسجلة حتى {formatDateAr(data.asOf)} · توقيت {data.timeZone}</p>
-      <section className="statement-metrics" aria-label="مجاميع الحساب">{[["المستحق المعتمد",data.totalDue],["المدفوع المسجل",data.totalPaid],["المتبقي المعروف",data.remaining]].map(([label,value])=><div key={String(label)}><small>{label}</small><strong>{formatMoneyAr(Number(value),data.currency)}</strong></div>)}</section>
+      <section className="statement-metrics" aria-label="مجاميع الحساب">{[["المستحق المعتمد",data.totalDue],["المسدد من المستحق",data.totalPaid],["المتبقي المعروف",data.remaining]].map(([label,value])=><div key={String(label)}><small>{label}</small><strong>{formatMoneyAr(Number(value),data.currency)}</strong></div>)}</section>
+      <section className="detail-card statement-details"><h2>السلف وخروج المال المسجل</h2>{data.recordedAdvanceTotal==null?<p>تفاصيل السلف المسجلة غير متاحة في هذا الكشف؛ لا نفترض أنها صفر.</p>:<><p>سلف سبق صرفها · {formatMoneyAr(data.recordedAdvanceTotal,data.currency)}</p><p>غير المخصص · {formatMoneyAr(data.unallocatedAdvances??0,data.currency)} — لا يخصم تلقائيًا من المتبقي</p><p>من السداد تخصيص سلف · {formatMoneyAr(data.advanceApplied??0,data.currency)}، وصرف مباشر · {formatMoneyAr(data.directPaid??data.totalPaid,data.currency)}</p><p>خروج المال المسجل · {formatMoneyAr(data.cashOutRecorded??data.totalPaid,data.currency)} — صرف مباشر وسلف، دون تكرار التخصيص</p></>}<Link href={`/dashboard/payroll/${id}/advances`}>تفاصيل السلف وتخصيصها</Link></section>
       <section className="detail-card statement-details"><h2>من أين جاء المتبقي؟</h2><p>الأشهر السابقة · {formatMoneyAr(data.priorRemaining,data.currency)}</p><p>الشهر المختار · {formatMoneyAr(data.currentRemaining,data.currency)}</p>
         {!data.currentMonthApproved&&<p>لا كشف معتمد لهذا الشهر حتى التاريخ المختار؛ غيابه لا يعني عدم وجود راتب مستحق.</p>}
-        <p className="muted">هذه مصادر معتمدة معروفة، وليست رصيدًا افتتاحيًا موثقًا. السلف والأشهر غير المعتمدة والالتزامات القديمة غير موثقة هنا، وليست صفرًا. لا ننسخ المتبقي إلى راتب شهر آخر ولا نخصم دين التعامل الخارجي.</p>
+        <p className="muted">هذه مصادر معتمدة معروفة، وليست رصيدًا افتتاحيًا موثقًا. السلف التاريخية غير المستوردة والأشهر غير المعتمدة والالتزامات القديمة غير موثقة هنا، وليست صفرًا. لا ننسخ المتبقي إلى راتب شهر آخر ولا نخصم دين التعامل الخارجي.</p>
         {data.legacyPaidMonthsExcluded>0&&<p>{data.legacyPaidMonthsExcluded} شهر مسدد بالمسار السابق مستبعد من التجميع؛ لم نُعِد ترحيله.</p>}
         <a href={`${path}/export?asOf=${data.asOf}&cutoffUtc=${encodeURIComponent(data.cutoffUtc)}`}>تنزيل نفس الكشف CSV</a>
       </section>
       <section className="list-card statement-details"><h2>الأشهر المعتمدة</h2>{!data.items.length?<p>لا مصادر معتمدة حتى هذا التاريخ؛ لا يعني ذلك أن المستحقات صفر.</p>:<AdminDataTable label="أشهر حساب الموظف" rows={data.items} rowKey={s=>s.id} columns={[
         {key:"month",header:"شهر الخدمة",primary:true,render:s=>formatDateAr(s.month)},
         {key:"due",header:"المستحق",render:s=>formatMoneyAr(s.netDue,data.currency)},
-        {key:"paid",header:"المدفوع",render:s=>formatMoneyAr(s.paid,data.currency)},
+        {key:"paid",header:"المسدد",render:s=>formatMoneyAr(s.paid,data.currency)},
         {key:"remaining",header:"المتبقي",render:s=>formatMoneyAr(s.remaining,data.currency)},
         {key:"action",header:"المصدر والإجراء",render:s=><Link href={`/dashboard/payroll/${id}/statement?month=${s.month}`}>كشف الشهر والصرف</Link>},
       ]}/>}</section>
-      <section className="list-card"><h2>حركات الصرف المسجلة</h2>{data.items.every(s=>!s.payments.length)?<p>لا دفعات مسجلة على هذه المصادر حتى التاريخ المختار.</p>:data.items.flatMap(s=>s.payments.map(p=><article className="statement-payment" key={p.id}><strong>{formatMoneyAr(p.amount,data.currency)}</strong><span>عن {formatDateAr(s.month)} · {formatDateAr(p.createdAtUtc)}</span></article>))}</section>
+      <section className="list-card"><h2>تسويات الكشوف المسجلة</h2>{data.items.every(s=>!s.payments.length)?<p>لا دفعات مسجلة على هذه المصادر حتى التاريخ المختار.</p>:data.items.flatMap(s=>s.payments.map(p=><article className="statement-payment" key={p.id}><strong>{formatMoneyAr(p.amount,data.currency)}</strong><span>{p.kind==="AdvanceApplication"?"تخصيص سلفة سابقة — ليس صرفًا جديدًا":"صرف مباشر"} · عن {formatDateAr(s.month)} · {formatDateAr(p.createdAtUtc)}</span></article>))}</section>
     </>}
   </>;
 }

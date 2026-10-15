@@ -6,6 +6,29 @@ import 'coach_test.dart' show coach, shell;
 
 void main() {
   testWidgets(
+    'Own advance before any approved earnings is visible without a false salary or payout',
+    (tester) async {
+      final auth = await coach(
+        (m, p, b, t) async => {
+          'configured': true,
+          'asOf': '2026-10-15',
+          'currency': 'EGP',
+          'items': [],
+          'recordedAdvanceTotal': 750,
+          'unallocatedAdvances': 750,
+          'advanceApplied': 0,
+        },
+      );
+      await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
+      await tester.pumpAndSettle();
+      expect(find.text('سبق صرفها: 750 EGP'), findsOneWidget);
+      expect(find.text('غير المخصص: 750 EGP'), findsOneWidget);
+      expect(find.textContaining('ليس صرفًا جديدًا'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Own approved monthly dues show 3600 earned, 2500 paid, 1100 remaining with no mutation',
     (tester) async {
       final calls = <String>[];
@@ -51,7 +74,7 @@ void main() {
       await tester.pumpWidget(shell(StaffPayrollStatements(auth: auth)));
       await tester.pumpAndSettle();
       expect(find.text('المستحق: 3600 EGP'), findsOneWidget);
-      expect(find.text('المدفوع: 2500 EGP'), findsOneWidget);
+      expect(find.text('المسدد: 2500 EGP'), findsOneWidget);
       expect(find.text('المتبقي: 1100 EGP'), findsOneWidget);
       expect(find.text('المتبقي المعروف: 3100 EGP'), findsOneWidget);
       expect(find.text('من أشهر سابقة: 2000 EGP'), findsOneWidget);

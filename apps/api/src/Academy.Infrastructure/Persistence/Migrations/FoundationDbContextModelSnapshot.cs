@@ -4030,6 +4030,82 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("PayrollAdjustments", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PayrollAdvance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "EmployeeId");
+
+                    b.HasIndex("AcademyId", "ActorMembershipId", "RequestKey")
+                        .IsUnique();
+
+                    b.ToTable("PayrollAdvances", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PayrollAdvance_Amount", "\"Amount\">0");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.PayrollDisbursement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4044,6 +4120,17 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("ActorUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AdvanceAppliedBefore")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("AdvanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AdvanceRemainingAfter")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
@@ -4113,10 +4200,14 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "StatementId", "Sequence")
                         .IsUnique();
 
+                    b.HasIndex("AcademyId", "AdvanceId", "EmployeeId", "BranchId", "Currency");
+
                     b.HasIndex("AcademyId", "StatementId", "EmployeeId", "BranchId", "Currency");
 
                     b.ToTable("PayrollDisbursements", null, t =>
                         {
+                            t.HasCheckConstraint("CK_PayrollDisbursement_Advance", "(\"AdvanceId\" IS NULL AND \"AdvanceAppliedBefore\" IS NULL AND \"AdvanceRemainingAfter\" IS NULL) OR (\"AdvanceId\" IS NOT NULL AND \"AdvanceAppliedBefore\" IS NOT NULL AND \"AdvanceRemainingAfter\" IS NOT NULL AND \"AdvanceAppliedBefore\">=0 AND \"AdvanceRemainingAfter\">=0)");
+
                             t.HasCheckConstraint("CK_PayrollDisbursement_Amounts", "\"Amount\">0 AND \"PaidBefore\">=0 AND \"RemainingAfter\">=0 AND \"Sequence\">0");
                         });
                 });
@@ -11753,6 +11844,36 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PayrollAdvance", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ActorMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "EmployeeId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.PayrollDisbursement", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -11767,6 +11888,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.PayrollAdvance", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AdvanceId", "EmployeeId", "BranchId", "Currency")
+                        .HasPrincipalKey("AcademyId", "Id", "EmployeeId", "BranchId", "Currency")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Operations.PayrollStatement", null)
                         .WithMany()

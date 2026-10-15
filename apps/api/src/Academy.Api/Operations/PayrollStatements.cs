@@ -42,12 +42,13 @@ public static class PayrollStatements
         await using var tx=await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         var prepared=await Prepare(id,month,t,db);if(prepared is null)return Results.NotFound();
         var statement=await db.PayrollStatements.AsNoTracking().SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Month==month);
-        var payments=statement is null?[]:await db.PayrollDisbursements.AsNoTracking().Where(p=>p.StatementId==statement.Id).OrderByDescending(p=>p.Sequence).Select(p=>new {p.Id,p.Sequence,p.Amount,p.RemainingAfter,p.Reference,p.CreatedAtUtc}).ToArrayAsync();
+        var payments=statement is null?[]:await db.PayrollDisbursements.AsNoTracking().Where(p=>p.StatementId==statement.Id).OrderByDescending(p=>p.Sequence).Select(p=>new {p.Id,p.Sequence,p.Amount,p.RemainingAfter,p.Reference,p.CreatedAtUtc,p.AdvanceId,kind=p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout"}).ToArrayAsync();
         var employeeMember=await db.Employees.Where(e=>e.Id==id).Select(e=>e.MembershipId).SingleAsync();var today=await AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
+        var unallocatedAdvances=await db.PayrollAdvances.Where(a=>a.EmployeeId==id).SumAsync(a=>a.Amount)-await db.PayrollDisbursements.Where(p=>p.EmployeeId==id&&p.AdvanceId.HasValue).SumAsync(p=>p.Amount);
         var canApprove=statement is null&&!prepared.Value.Row.IsPaid&&prepared.Value.Row.NetDue>0&&prepared.Value.Row.ContractDays>0&&month<=SalaryHistory.Month(today)&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollStatementApprove)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,employeeMember));
         return Results.Ok(new {month,row=prepared.Value.Row,statement=statement is null?null:new {statement.Id,statement.CreatedAtUtc,statement.Note,statement.SourceHash},quoteHash=statement?.SourceHash??prepared.Value.Hash,
             sources=JsonSerializer.Deserialize<JsonElement>(statement?.SourceSnapshot??prepared.Value.Snapshot),canApprove,canPay=statement is not null&&prepared.Value.Row.RemainingAmount>0&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay),payments,
-            balanceScope="SelectedMonthOnly",openingBalanceVerified=false});
+            balanceScope="SelectedMonthOnly",openingBalanceVerified=false,unallocatedAdvances});
     }
     private static async Task<IResult> Approve(Guid id,StatementApproval body,HttpContext http,CurrentTenant current,FoundationDbContext db,TimeProvider time)
     {
@@ -78,7 +79,7 @@ public static class PayrollStatements
         var t=(await current.ResolveAsync())!;if(t.Role is not (AcademyRole.Coach or AcademyRole.AcademyAdmin)||!await config.Enabled(t.AcademyId,"payroll"))return Results.Forbid();response.Headers.CacheControl="no-store";
         var e=await db.Employees.AsNoTracking().SingleOrDefaultAsync(e=>e.MembershipId==t.MembershipId&&e.IsActive);if(e is null)return Results.Ok(new {configured=false});
         var statements=await db.PayrollStatements.AsNoTracking().Where(s=>s.EmployeeId==e.Id).OrderByDescending(s=>s.Month).Take(24).ToArrayAsync();var ids=statements.Select(s=>s.Id).ToArray();var paid=await db.PayrollDisbursements.AsNoTracking().Where(p=>ids.Contains(p.StatementId)).OrderByDescending(p=>p.Sequence).ToArrayAsync();
-        return Results.Ok(new {configured=true,items=statements.Select(s=>new {s.Id,s.Month,s.Currency,s.BaseDue,s.Deductions,s.Additions,s.PrivateCompensation,s.NetDue,paid=paid.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount),remaining=s.NetDue-paid.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount),payments=paid.Where(p=>p.StatementId==s.Id).Select(p=>new {p.Amount,p.CreatedAtUtc})}),balanceScope="ApprovedMonthsOnly",openingBalanceVerified=false});
+        return Results.Ok(new {configured=true,items=statements.Select(s=>new {s.Id,s.Month,s.Currency,s.BaseDue,s.Deductions,s.Additions,s.PrivateCompensation,s.NetDue,paid=paid.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount),remaining=s.NetDue-paid.Where(p=>p.StatementId==s.Id).Sum(p=>p.Amount),payments=paid.Where(p=>p.StatementId==s.Id).Select(p=>new {p.Amount,p.CreatedAtUtc,kind=p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout"})}),balanceScope="ApprovedMonthsOnly",openingBalanceVerified=false});
     }
 }
 public sealed record StatementApproval(DateOnly Month,string QuoteHash,string? Note=null);
