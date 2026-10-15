@@ -186,6 +186,8 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
+        foreach(var e in ChangeTracker.Entries<AcademyMatch>().Where(e=>e.State==EntityState.Modified))
+            if(new[]{nameof(AcademyMatch.CopiedFromMatchId),nameof(AcademyMatch.CopiedByMembershipId),nameof(AcademyMatch.CopyRequestKey),nameof(AcademyMatch.CopyRequestHash)}.Any(p=>e.Property(p).IsModified))throw new InvalidOperationException("مصدر نسخ المباراة ثابت؛ عدّل الموعد والمحتوى دون تغيير أصل النسخة.");
         if (ChangeTracker.Entries<PayrollStatement>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PayrollPayableCorrection>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PayrollAdvance>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)

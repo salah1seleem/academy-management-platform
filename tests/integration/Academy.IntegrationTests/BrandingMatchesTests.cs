@@ -17,7 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class BrandingMatchesTests : IAsyncLifetime
+public sealed partial class BrandingMatchesTests : IAsyncLifetime
 {
     private Factory factory = null!;
     public Task InitializeAsync() { factory = new Factory(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Separate test database required")); _ = factory.CreateClient(); return Task.CompletedTask; }

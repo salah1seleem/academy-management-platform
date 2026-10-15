@@ -33,6 +33,12 @@ public sealed class FootballDemoTests : IAsyncLifetime
         await db.MobileOtpChallenges.Where(x => phones.Contains(x.PhoneNumberNormalized)).ExecuteDeleteAsync();
         await FootballDemoSeed.RunAsync(scope.ServiceProvider, true);
     }
+    [Fact]
+    public async Task V3_copied_matches_survive_reseed_and_reserved_reset_handles_self_reference_without_touching_other_tenants()
+    {
+        using var owner=await Login("owner");var source=FootballDemoSeed.Id("matches/next");var path=$"/api/v1/manage/matches/{source}";var q=await owner.GetFromJsonAsync<JsonElement>(path+"/copy-preview");var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var request=new HttpRequestMessage(HttpMethod.Post,path+"/copy"){Content=JsonContent.Create(new{matchDate="2026-10-21",startTime="18:00:00",quoteHash=q.GetProperty("quoteHash").GetString()})};request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var copied=await owner.SendAsync(request);Assert.True(copied.IsSuccessStatusCode,await copied.Content.ReadAsStringAsync());
+        var id=(await copied.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var other=await db.AcademyMatches.CountAsync(x=>x.AcademyId!=AcademyId);await FootballDemoSeed.RunAsync(scope.ServiceProvider,false);Assert.True(await db.AcademyMatches.AnyAsync(x=>x.Id==id));await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);Assert.False(await db.AcademyMatches.AnyAsync(x=>x.Id==id));Assert.Equal(other,await db.AcademyMatches.CountAsync(x=>x.AcademyId!=AcademyId));Assert.True(await db.AcademyMatches.AnyAsync(x=>x.Id==source));
+    }
 
     [Fact]
     public async Task Payroll_demo_is_synthetic_linked_repeatable_and_keeps_manual_salary_edits()

@@ -2715,6 +2715,20 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AcademyId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CopiedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CopiedFromMatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CopyRequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CopyRequestKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2767,11 +2781,20 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AcademyId", "CopiedFromMatchId");
+
                     b.HasIndex("AcademyId", "TeamId");
 
                     b.HasIndex("AcademyId", "TournamentId");
 
-                    b.ToTable("AcademyMatchs", (string)null);
+                    b.HasIndex("AcademyId", "CopiedByMembershipId", "CopyRequestKey")
+                        .IsUnique()
+                        .HasFilter("\"CopiedFromMatchId\" IS NOT NULL");
+
+                    b.ToTable("AcademyMatchs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Match_Copy", "(\"CopiedFromMatchId\" IS NULL AND \"CopiedByMembershipId\" IS NULL AND \"CopyRequestKey\" IS NULL AND \"CopyRequestHash\" IS NULL) OR (\"CopiedFromMatchId\" IS NOT NULL AND \"CopiedFromMatchId\"<>\"Id\" AND \"CopiedByMembershipId\" IS NOT NULL AND \"CopyRequestKey\" IS NOT NULL AND length(\"CopyRequestKey\") BETWEEN 8 AND 100 AND \"CopyRequestHash\" IS NOT NULL AND length(\"CopyRequestHash\")=64)");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.AcademyNews", b =>
@@ -11582,6 +11605,18 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CopiedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.AcademyMatch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CopiedFromMatchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Operations.MatchTeam", null)
                         .WithMany()

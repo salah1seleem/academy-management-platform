@@ -24,6 +24,10 @@ public sealed class MatchTeamPlayer : TenantEntity
 }
 public sealed class AcademyMatch : TenantEntity
 {
+    public Guid? CopiedFromMatchId { get; set; }
+    public Guid? CopiedByMembershipId { get; set; }
+    public string? CopyRequestKey { get; set; }
+    public string? CopyRequestHash { get; set; }
     public Guid TournamentId { get; set; }
     public Guid TeamId { get; set; }
     public required string Opponent { get; set; }
