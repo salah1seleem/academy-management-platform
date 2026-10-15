@@ -2,6 +2,8 @@
 
 ## C2C1 — راتب أساسي مؤرخ، لا إعادة كتابة شهر مسدد — 2026-10-15
 
+Code مرفوع `26b98c3fe13070c41b295dfbca79cb1384c08e03`؛ [CI38681653081](https://github.com/salah1seleem/academy-management-platform/actions/runs/38681653081) in_progress عند التوثيق. الفرع مطابق origin وشجرة الكود نظيفة، وmain المحلي/البعيد محفوظ عندabda1ed. C2C2 أول استئناف بعد فحصCI، لا إعادةC2C1 أو ادعاء اكتمال الخطة.
+
 من604fabb على `codex/15-native-mobile-app`: مصدر راتب ثابت بنفس Employee/Payroll، صلاحية اعتماد مستقلة ومراجعة مؤكدة، القراءة بالشهر في الرواتب والخاص، Web سجل/رابط صحيح وFlutter ذاتي read-only. الموظف القديم لا يحصل على تاريخ مختلق؛ seed Football اختياري محفوظ اليدوي. إنشاء الراتب الأول ذري مع الموظف؛ لا صرف/مصروف أو راتب مكرر، ولا اعتماد ذاتي للإداري عبر دور مدرب آخر.
 
 Migration `20261015033834_V3DatedSalaryHistory` واختبارات معزولة فقط. تكامل27/27، وحدة12/12، Web28/28، Flutter9/9، typecheck/lint/build/analyze وEF بلا pending model؛ E2E2/2 ثم1/1 لصورة390/1440. المحاولات المصححة والحدود والصور والسجلات في [PROGRESS](../academy-v3/PROGRESS.md). CI للأساس: Web/Flutter/E2E success وBackend جاري؛ SHA/CI الجديدان بعد الرفع. main والمتطلبات و.env وقاعدة العرض وخدماتها وProduction لم تتغير.

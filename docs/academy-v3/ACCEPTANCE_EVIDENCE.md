@@ -2,6 +2,8 @@
 
 ## C2C1 — أساسي مؤرخ وصلاحية اعتماد مستقلة — 2026-10-15
 
+Code SHA `26b98c3fe13070c41b295dfbca79cb1384c08e03` مرفوع على الفرع نفسه؛ [CI38681653081](https://github.com/salah1seleem/academy-management-platform/actions/runs/38681653081) بدأ **in_progress**، وليس passed. main محفوظ وخريطة18/48 مكتملة معرفيًا فقط، لا اكتمال تنفيذ أو قبول موحد.
+
 V3-AC09/14/22 وF04 **جزئية**: مصدر SalaryVersion ثابت وموعد شهر وموافق/نسخة/hash، PaidSnapshot محفوظ، LegacyBaseline من شهر المراجعة فقط؛ لا مصروف أو صرف من الاعتماد. قائم على Payroll لا موديول مالي مكرر. الراتب الحالي وقائمة الموظفين والكشف واتفاق الخاص يقرأون المصدر الساري؛ Web تعديل الملف read-only ومسار اعتماد مستقل؛ Flutter قراءة ذاتية دون actor/note. سياق Admin+Coach لنفس الشخص لا يعتمد أجره، ولا تكفي CRUD أو صلاحية صرف/خاص.
 
 تكامل **27/27 في1m49s** (`V3SalaryHistoryTests` + Payroll + C1/C2 + التفويض والسحب وreset المحدد)، وحدة **12/12**، Web أربعة ملفات **28/28**، Flutter ثلاثة ملفات **9/9**؛ typecheck/lint/build/analyze وEF بلا pending model. E2E **2/2 في24.2s** ثم رحلة الصورة **1/1 في15.7s**: زيادة مستقبلية500 مع بقاء الحالي وقراءة شهرها وMobile API ذاتي، وإعادة ترحيل الخاص المتأثر. [390](evidence/c2c1/salary-history-390.png) و[1440](evidence/c2c1/salary-history-1440.png) Web فعلية، عنوان داخل viewport وشبكة1/2 دون overflow. لا Flutter Simulator/device integration أو Full Regression في هذه الشريحة.
