@@ -13,7 +13,7 @@ class StaffPayrollStatements extends StatelessWidget {
     title: localized(context, 'مستحقاتي والصرف', 'My approved dues'),
     child: RemoteBody(
       auth: auth,
-      path: '/api/v1/staff/payroll/statements',
+      path: '/api/v1/staff/payroll/account',
       builder: (context, value) {
         final data = obj(value);
         final items = rows(data['items']);
@@ -30,10 +30,56 @@ class StaffPayrollStatements extends StatelessWidget {
           UiText(
             localized(
               context,
-              'الكشوف المعتمدة فقط، لآخر 24 شهرًا معتمدًا. الرصيد السابق والسلف غير موثقين هنا.',
-              'Approved statements only, latest 24 approved months. Opening balances and advances are not verified here.',
+              'كل المصادر المعتمدة حتى ${data['asOf'] ?? ''}. الأرصدة الافتتاحية والسلف والأشهر غير المعتمدة غير موثقة هنا، وليست صفرًا.',
+              'All approved sources as of ${data['asOf'] ?? ''}. Opening balances, advances and unapproved months are not verified here, not zero.',
             ),
           ),
+          if (items.isNotEmpty)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(
+                    localized(
+                      context,
+                      'حساب مستحقاتك',
+                      'Your approved account',
+                    ),
+                  ),
+                  UiText(
+                    '${localized(context, 'إجمالي المعتمد', 'Total approved')}: ${data['totalDue']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'إجمالي المدفوع', 'Total paid')}: ${data['totalPaid']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'المتبقي المعروف', 'Known remaining')}: ${data['remaining']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'من أشهر سابقة', 'Prior months')}: ${data['priorRemaining']} ${data['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'من الشهر المختار', 'Selected month')}: ${data['currentRemaining']} ${data['currency']}',
+                  ),
+                ],
+              ),
+            ),
+          if (data['currentMonthApproved'] == false)
+            UiText(
+              localized(
+                context,
+                'لا كشف معتمد لهذا الشهر حتى التاريخ المختار.',
+                'No approved statement for this month as of the selected date.',
+              ),
+            ),
+          if ((data['legacyPaidMonthsExcluded'] as num? ?? 0) > 0)
+            UiText(
+              localized(
+                context,
+                'الأشهر المسددة بالمسار السابق لم تُعَد ترحيلها إلى هذا الحساب.',
+                'Previously settled legacy months are not reposted into this account.',
+              ),
+            ),
           if (items.isEmpty)
             EmptyMessage(
               localized(
@@ -51,13 +97,13 @@ class StaffPayrollStatements extends StatelessWidget {
                     '${localized(context, 'كشف', 'Statement')} ${s['month']}',
                   ),
                   UiText(
-                    '${localized(context, 'المستحق', 'Due')}: ${s['netDue']} ${s['currency']}',
+                    '${localized(context, 'المستحق', 'Due')}: ${s['netDue']} ${data['currency']}',
                   ),
                   UiText(
-                    '${localized(context, 'المدفوع', 'Paid')}: ${s['paid']} ${s['currency']}',
+                    '${localized(context, 'المدفوع', 'Paid')}: ${s['paid']} ${data['currency']}',
                   ),
                   UiText(
-                    '${localized(context, 'المتبقي', 'Remaining')}: ${s['remaining']} ${s['currency']}',
+                    '${localized(context, 'المتبقي', 'Remaining')}: ${s['remaining']} ${data['currency']}',
                   ),
                   UiText(
                     '${localized(context, 'أساسي / خصومات / إضافات', 'Base / deductions / additions')}: ${s['baseDue']} / ${s['deductions']} / ${s['additions']}',
@@ -66,7 +112,7 @@ class StaffPayrollStatements extends StatelessWidget {
                     ListTile(
                       leading: const Icon(Icons.receipt_long_outlined),
                       title: UiText(
-                        '${localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${s['currency']}',
+                        '${localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${data['currency']}',
                       ),
                     ),
                 ],

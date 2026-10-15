@@ -1,0 +1,38 @@
+"use client";
+import {FormEvent,useEffect,useState} from "react";
+import Link from "next/link";
+import {AdminDataTable,ErrorState,LoadingState,PageHeader} from "../components/dashboard-shell";
+import {formatDateAr,formatMoneyAr} from "../lib/formatters";
+
+type Item={id:string;month:string;approvedAtUtc:string;netDue:number;paid:number;remaining:number;payments:{id:string;amount:number;createdAtUtc:string}[]};
+type Account={employeeName:string;currency:string;asOf:string;cutoffUtc:string;timeZone:string;totalDue:number;totalPaid:number;remaining:number;priorRemaining:number;currentRemaining:number;currentMonthApproved:boolean;legacyPaidMonthsExcluded:number;items:Item[]};
+export function PayrollAccount({id}:{id:string}){
+  const [date,setDate]=useState<string|null>(null),[query,setQuery]=useState(""),[data,setData]=useState<Account|null>(null),[error,setError]=useState("");
+  const [revision,setRevision]=useState(0);
+  const path=`/api/v1/manage/payroll/${id}/account`,suffix=query?`?asOf=${encodeURIComponent(query)}`:"";
+  useEffect(()=>{const c=new AbortController();void Promise.resolve().then(async()=>{
+    setData(null);setError("");const r=await fetch(path+suffix,{cache:"no-store",signal:c.signal});if(!r.ok)throw new Error();const value:Account=await r.json();if(!c.signal.aborted)setData(value);
+  }).catch(()=>{if(!c.signal.aborted)setError("تعذر تحميل كشف الحساب أو التاريخ غير متاح أو لا توجد صلاحية.");});return()=>c.abort();},[path,suffix,revision]);
+  function filter(e:FormEvent){e.preventDefault();setQuery(date??data?.asOf??"");setRevision(v=>v+1);}
+  return <><PageHeader title="حساب مستحقات الموظف" context={data?.employeeName??"الرواتب"} secondaryActions={[{label:"عودة للرواتب",href:`/dashboard/payroll?employeeId=${id}`}]}/>
+    <form className="report-filters" aria-label="تاريخ كشف الحساب" onSubmit={filter}><label>حتى تاريخ<input type="date" value={date??data?.asOf??""} onChange={e=>setDate(e.target.value)}/></label><button className="primary-button">عرض</button><button className="secondary-button" type="button" onClick={()=>{setDate(null);setQuery("");setRevision(v=>v+1);}}>حتى اليوم</button></form>
+    {error?<ErrorState message={error}/>:!data?<LoadingState/>:<>
+      <p>المصادر المسجلة حتى {formatDateAr(data.asOf)} · توقيت {data.timeZone}</p>
+      <section className="statement-metrics" aria-label="مجاميع الحساب">{[["المستحق المعتمد",data.totalDue],["المدفوع المسجل",data.totalPaid],["المتبقي المعروف",data.remaining]].map(([label,value])=><div key={String(label)}><small>{label}</small><strong>{formatMoneyAr(Number(value),data.currency)}</strong></div>)}</section>
+      <section className="detail-card statement-details"><h2>من أين جاء المتبقي؟</h2><p>الأشهر السابقة · {formatMoneyAr(data.priorRemaining,data.currency)}</p><p>الشهر المختار · {formatMoneyAr(data.currentRemaining,data.currency)}</p>
+        {!data.currentMonthApproved&&<p>لا كشف معتمد لهذا الشهر حتى التاريخ المختار؛ غيابه لا يعني عدم وجود راتب مستحق.</p>}
+        <p className="muted">هذه مصادر معتمدة معروفة، وليست رصيدًا افتتاحيًا موثقًا. السلف والأشهر غير المعتمدة والالتزامات القديمة غير موثقة هنا، وليست صفرًا. لا ننسخ المتبقي إلى راتب شهر آخر ولا نخصم دين التعامل الخارجي.</p>
+        {data.legacyPaidMonthsExcluded>0&&<p>{data.legacyPaidMonthsExcluded} شهر مسدد بالمسار السابق مستبعد من التجميع؛ لم نُعِد ترحيله.</p>}
+        <a href={`${path}/export?asOf=${data.asOf}&cutoffUtc=${encodeURIComponent(data.cutoffUtc)}`}>تنزيل نفس الكشف CSV</a>
+      </section>
+      <section className="list-card statement-details"><h2>الأشهر المعتمدة</h2>{!data.items.length?<p>لا مصادر معتمدة حتى هذا التاريخ؛ لا يعني ذلك أن المستحقات صفر.</p>:<AdminDataTable label="أشهر حساب الموظف" rows={data.items} rowKey={s=>s.id} columns={[
+        {key:"month",header:"شهر الخدمة",primary:true,render:s=>formatDateAr(s.month)},
+        {key:"due",header:"المستحق",render:s=>formatMoneyAr(s.netDue,data.currency)},
+        {key:"paid",header:"المدفوع",render:s=>formatMoneyAr(s.paid,data.currency)},
+        {key:"remaining",header:"المتبقي",render:s=>formatMoneyAr(s.remaining,data.currency)},
+        {key:"action",header:"المصدر والإجراء",render:s=><Link href={`/dashboard/payroll/${id}/statement?month=${s.month}`}>كشف الشهر والصرف</Link>},
+      ]}/>}</section>
+      <section className="list-card"><h2>حركات الصرف المسجلة</h2>{data.items.every(s=>!s.payments.length)?<p>لا دفعات مسجلة على هذه المصادر حتى التاريخ المختار.</p>:data.items.flatMap(s=>s.payments.map(p=><article className="statement-payment" key={p.id}><strong>{formatMoneyAr(p.amount,data.currency)}</strong><span>عن {formatDateAr(s.month)} · {formatDateAr(p.createdAtUtc)}</span></article>))}</section>
+    </>}
+  </>;
+}

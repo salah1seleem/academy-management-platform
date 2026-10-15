@@ -13,6 +13,14 @@ void main() {
         calls.add('$m $p');
         return {
           'configured': true,
+          'asOf': '2026-10-15',
+          'currency': 'EGP',
+          'totalDue': 6600,
+          'totalPaid': 3500,
+          'remaining': 3100,
+          'priorRemaining': 2000,
+          'currentRemaining': 1100,
+          'currentMonthApproved': true,
           'items': [
             {
               'month': '2026-10-01',
@@ -27,6 +35,16 @@ void main() {
                 {'amount': 2500},
               ],
             },
+            {
+              'month': '2026-09-01',
+              'netDue': 3000,
+              'paid': 1000,
+              'remaining': 2000,
+              'baseDue': 3000,
+              'deductions': 0,
+              'additions': 0,
+              'payments': [],
+            },
           ],
         };
       });
@@ -35,9 +53,11 @@ void main() {
       expect(find.text('المستحق: 3600 EGP'), findsOneWidget);
       expect(find.text('المدفوع: 2500 EGP'), findsOneWidget);
       expect(find.text('المتبقي: 1100 EGP'), findsOneWidget);
+      expect(find.text('المتبقي المعروف: 3100 EGP'), findsOneWidget);
+      expect(find.text('من أشهر سابقة: 2000 EGP'), findsOneWidget);
       expect(find.byType(TextFormField), findsNothing);
       expect(find.byType(FilledButton), findsNothing);
-      expect(calls, ['GET /api/v1/staff/payroll/statements']);
+      expect(calls, ['GET /api/v1/staff/payroll/account']);
       expect(tester.takeException(), isNull);
     },
   );
@@ -53,7 +73,7 @@ void main() {
         find.textContaining('هذا لا يعني أن مستحقاتك صفر'),
         findsOneWidget,
       );
-      expect(find.textContaining('السلف غير موثقين'), findsOneWidget);
+      expect(find.textContaining('الأرصدة الافتتاحية والسلف'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

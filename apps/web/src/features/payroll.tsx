@@ -63,6 +63,7 @@ export function PayrollWorkspace() {
       { key: "net", header: "الصافي", render: x => formatMoneyAr(x.netDue, x.currency) },
       { key: "paid", header: "السداد", render: x => x.statementId ? <><span>{x.isPaid?"تم الدفع":x.paidAmount?"صرف جزئي":"لم يُدفع"}</span><small>المدفوع {formatMoneyAr(x.paidAmount??0,x.currency)} · المتبقي {formatMoneyAr(x.remainingAmount??x.netDue,x.currency)}</small></> : x.isPaid ? "تم الدفع" : canManage ? <button className="primary-action" disabled={Boolean(busy) || x.netDue < 0 || !x.contractDays} onClick={() => void pay(x)}>{busy === x.employeeId ? "جارٍ الحفظ…" : "تأكيد الدفع"}</button> : "لم يُدفع" },
       { key:"statement",header:"الكشف",render:x=><Link href={`/dashboard/payroll/${x.employeeId}/statement?month=${month}-01`}>الكشف والتفاصيل</Link> },
+      { key:"account",header:"حساب الموظف",render:x=><Link href={`/dashboard/payroll/${x.employeeId}/account`}>الأشهر السابقة والصرف</Link> },
     ]} />}</section></>}</>;
 }
 
