@@ -25,11 +25,13 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
     public async Task DisposeAsync()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        // Retain synthetic employees linked to approved immutable sources, rather than disabling guards.
+        var retained=await db.SalaryVersions.Where(v=>employees.Contains(v.EmployeeId)).Select(v=>v.EmployeeId).ToArrayAsync();employees.RemoveAll(retained.Contains);
         await db.PayrollAdjustments.Where(x => employees.Contains(x.EmployeeId)).ExecuteDeleteAsync();
         await db.PayrollSettlements.Where(x => employees.Contains(x.EmployeeId)).ExecuteDeleteAsync();
         await db.PayrollAdditionRequests.Where(x => employees.Contains(x.EmployeeId)).ExecuteDeleteAsync();
         await db.Employees.Where(x => employees.Contains(x.Id)).ExecuteDeleteAsync();
-        await db.PayrollReasons.Where(x => reasons.Contains(x.Id)).ExecuteDeleteAsync();
+        await db.PayrollReasons.Where(x => reasons.Contains(x.Id)&&!db.PayrollAdditionRequests.Any(r=>r.ReasonId==x.Id)).ExecuteDeleteAsync();
         await db.StaffGrants.Where(x => grants.Contains(x.Id)).ExecuteDeleteAsync();
         await factory.DisposeAsync();
     }
@@ -40,15 +42,18 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
         var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(body) };
         request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) request.Headers.Add("Idempotency-Key", key); return await c.SendAsync(request);
     }
-    private async Task<(Guid Id, EmployeeWrite Body)> Employee(HttpClient owner, AcademyRole? role = null, bool partial = false)
+    private async Task<(Guid Id, EmployeeWrite Body, string? Email)> Employee(HttpClient owner, AcademyRole? role = null, bool partial = false)
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var branch = await db.Branches.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.IsActive).Select(x => x.Id).FirstAsync();
-        var accountEmail = role == AcademyRole.Coach ? DemoSeed.CoachEmail : DemoSeed.AdminEmail;
-        var member = role.HasValue ? await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == role && x.PrimaryMembershipId == null && x.IsActive && x.User.Email == accountEmail).Select(x => (Guid?)x.Id).SingleAsync() : null;
+        // Immutable salary history retains this employee. Each fixture owns its account;
+        // do not reuse a shared Demo membership or detach a financial source during cleanup.
+        var accountEmail=role.HasValue?$"payroll.{Guid.NewGuid():N}@example.test":null;Guid? member=null;
+        if(role.HasValue){var account=await Send(owner,"/api/v1/manage/staff",new StaffWrite("حساب موظف اختبار",accountEmail!,"010"+Random.Shared.Next(10000000,99999999),"Demo-Only-123!",role.Value,"وظيفة اختبار"));account.EnsureSuccessStatusCode();member=(await account.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();}
+        if(role==AcademyRole.AcademyAdmin)await db.AcademyMemberships.Where(m=>m.Id==member).ExecuteUpdateAsync(s=>s.SetProperty(m=>m.UseActionGrants,false).SetProperty(m=>m.AllBranches,true)); // Isolated legacy-delegation fixture, not an automatic product grant.
         var random = Random.Shared.Next(1_000_000, 9_999_999);
         var body = new EmployeeWrite("موظف اختبار " + random, "0102" + random, role == AcademyRole.Coach ? "مدرب تجريبي" : "موظف تجريبي", branch, 3100, partial ? new(2026, 10, 10) : new(2026, 10, 1), partial ? new(2026, 10, 20) : null, member, null);
-        var response = await Send(owner, "/api/v1/manage/employees/", body); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); employees.Add(id); return (id, body);
+        var response = await Send(owner, "/api/v1/manage/employees/", body); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); employees.Add(id); return (id, body,accountEmail);
     }
     private async Task<Guid> Reason(HttpClient owner)
     { var response = await Send(owner, "/api/v1/manage/payroll/reasons", new { name = "ساعة إضافية اختبار " + Guid.NewGuid() }); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); reasons.Add(id); return id; }
@@ -71,8 +76,8 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Pending_rejected_and_approved_claims_daily_deduction_and_notice_have_correct_effects()
     {
-        using var owner = await Staff(); using var coach = factory.CreateClient(); await MobileCoachTestSession.SignInAsync(coach, factory.Services);
-        var e = await Employee(owner, AcademyRole.Coach); var reason = await Reason(owner);
+        using var owner = await Staff(); using var coach = factory.CreateClient();
+        var e = await Employee(owner, AcademyRole.Coach);await MobileCoachTestSession.SignInAsync(coach,factory.Services,e.Email!); var reason = await Reason(owner);
         var request = new AdditionWrite(reason); var key = Guid.NewGuid().ToString();
         var pending = await Send(coach, "/api/v1/staff/payroll/requests", request, key); pending.EnsureSuccessStatusCode(); var id = (await pending.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         Assert.Equal(0, (await Row(owner, e.Id)).GetProperty("additions").GetDecimal());
@@ -108,7 +113,10 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
         var payKey = Guid.NewGuid().ToString(); var pay = new SalaryPay(new(2026, 10, 1), 3000);
         Assert.All(await Task.WhenAll(Send(owner, $"/api/v1/manage/payroll/{e.Id}/pay", pay, payKey), Send(owner, $"/api/v1/manage/payroll/{e.Id}/pay", pay, payKey)), r => Assert.True(r.IsSuccessStatusCode));
         Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, "/api/v1/manage/payroll/adjustments", body, Guid.NewGuid().ToString())).StatusCode);
-        (await Send(owner, $"/api/v1/manage/employees/{e.Id}", e.Body with { MonthlySalary = 5000 }, put: true)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict,(await Send(owner, $"/api/v1/manage/employees/{e.Id}", e.Body with { MonthlySalary = 5000 }, put: true)).StatusCode);
+        var terms=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/employees/{e.Id}/salary-versions/");
+        var next=DateOnly.Parse(terms.GetProperty("currentMonth").GetString()!).AddMonths(1);
+        (await Send(owner,$"/api/v1/manage/employees/{e.Id}/salary-versions/",new SalaryChange(next,5000,terms.GetProperty("revision").GetInt32(),terms.GetProperty("currentSalary").GetDecimal()),Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
         var row = await Row(owner, e.Id); Assert.True(row.GetProperty("isPaid").GetBoolean()); Assert.Equal(3100, row.GetProperty("monthlySalary").GetDecimal()); Assert.Equal(3000, row.GetProperty("netDue").GetDecimal());
         var another = await Employee(owner); Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/manage/payroll/{another.Id}/pay", pay, payKey)).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, $"/api/v1/manage/payroll/{another.Id}/pay", new SalaryPay(new(2026, 11, 1), 3100), Guid.NewGuid().ToString())).StatusCode);
@@ -145,7 +153,7 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Delegated_reviewer_cannot_approve_own_claim_and_default_date_is_invalid()
     {
-        using var owner = await Staff(); using var admin = await Staff(DemoSeed.AdminEmail); var e = await Employee(owner, AcademyRole.AcademyAdmin); var reason = await Reason(owner);
+        using var owner = await Staff();var e = await Employee(owner, AcademyRole.AcademyAdmin);using var admin = await Staff(e.Email!); var reason = await Reason(owner);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
 foreach (var permission in new[] { AcademyPermissions.PayrollRead, AcademyPermissions.PayrollManage, AcademyPermissions.PayrollAdditionReview }) { var grant = new StaffGrant { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, MembershipId = e.Body.MembershipId!.Value, Permission = permission, Allowed = true }; db.StaffGrants.Add(grant); grants.Add(grant.Id); } await db.SaveChangesAsync();
         var response = await Send(admin, "/api/v1/staff/payroll/requests", new AdditionWrite(reason), Guid.NewGuid().ToString()); response.EnsureSuccessStatusCode(); var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();

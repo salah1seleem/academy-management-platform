@@ -56,7 +56,8 @@ public static class StaffAccessEndpoints
             || !body.Actions.Any(a => a.Module == "payroll" && a.Read
                 && (!body.SensitivePermissions.Contains(AcademyPermissions.PayrollPay) || a.Add)
                 && (!body.SensitivePermissions.Contains(AcademyPermissions.PayrollAdditionReview) || a.Edit)
-                && (!body.SensitivePermissions.Contains(AcademyPermissions.CoachAgreementManage) || a.Add && a.Edit))))
+                && (!body.SensitivePermissions.Contains(AcademyPermissions.CoachAgreementManage) || a.Add && a.Edit)
+                && (!body.SensitivePermissions.Contains(AcademyPermissions.SalaryManage) || a.Add && a.Edit))))
             return Results.Problem(statusCode: 422, title: "تفويض الرواتب يحتاج نطاق كل الرياضات وقراءة الوحدة، مع الإضافة للصرف والتعديل للمراجعة؛ لا يمنح لسياق تشغيل إضافي");
         if (m.PrimaryMembershipId is Guid primary)
         {

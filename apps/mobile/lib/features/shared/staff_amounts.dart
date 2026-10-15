@@ -5,6 +5,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import 'salary_history.dart';
 
 class StaffAmounts extends StatefulWidget {
   final AuthController auth;
@@ -37,7 +38,10 @@ class _StaffAmountsState extends State<StaffAmounts> {
       await widget.auth.request(
         'POST',
         '/api/v1/staff/payroll/requests',
-        body: {'reasonId': reason, if (isOther) 'otherReason': otherReason.text.trim()},
+        body: {
+          'reasonId': reason,
+          if (isOther) 'otherReason': otherReason.text.trim(),
+        },
         idempotencyKey: operationKey,
       );
       if (mounted) {
@@ -87,6 +91,11 @@ class _StaffAmountsState extends State<StaffAmounts> {
         }
         final reasons = rows(data['reasons']);
         return gList([
+          GLink(
+            localized(context, 'راتبي وتغييراته', 'My salary history'),
+            Icons.history_outlined,
+            () => openPage(context, StaffSalaryHistory(auth: widget.auth)),
+          ),
           if (message.isNotEmpty) UiText(message),
           GCard(
             child: Form(
@@ -116,7 +125,11 @@ class _StaffAmountsState extends State<StaffAmounts> {
                         ? null
                         : (v) => setState(() {
                             reason = v;
-                            isOther = reasons.any((r) => textOf(r['id']) == v && textOf(r['name']) == 'سبب آخر');
+                            isOther = reasons.any(
+                              (r) =>
+                                  textOf(r['id']) == v &&
+                                  textOf(r['name']) == 'سبب آخر',
+                            );
                             operationKey = commandKey();
                           }),
                     validator: (v) => v == null
@@ -133,11 +146,21 @@ class _StaffAmountsState extends State<StaffAmounts> {
                       controller: otherReason,
                       enabled: !busy,
                       maxLength: 80,
-                      decoration: InputDecoration(labelText: localized(context, 'تفاصيل السبب', 'Reason details')),
+                      decoration: InputDecoration(
+                        labelText: localized(
+                          context,
+                          'تفاصيل السبب',
+                          'Reason details',
+                        ),
+                      ),
                       onChanged: (_) => operationKey = commandKey(),
                       validator: (v) => v != null && v.trim().isNotEmpty
                           ? null
-                          : localized(context, 'اكتب تفاصيل السبب.', 'Enter reason details.'),
+                          : localized(
+                              context,
+                              'اكتب تفاصيل السبب.',
+                              'Enter reason details.',
+                            ),
                     ),
                   ],
                   const SizedBox(height: 16),

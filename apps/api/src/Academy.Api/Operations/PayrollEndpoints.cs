@@ -21,7 +21,7 @@ public static class PayrollEndpoints
     {
         var employees = app.MapGroup("/api/v1/manage/employees").RequireAuthorization(AcademyPermissions.PayrollRead);
         employees.MapGet("/", Employees); employees.MapGet("/{id:guid}", EmployeeDetail);
-        employees.MapPost("/", CreateEmployee).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>(); employees.MapPut("/{id:guid}", EditEmployee).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
+        employees.MapPost("/", CreateEmployee).RequireAuthorization(AcademyPermissions.PayrollManage,AcademyPermissions.SalaryManage).AddEndpointFilter<CsrfFilter>(); employees.MapPut("/{id:guid}", EditEmployee).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
         var payroll = app.MapGroup("/api/v1/manage/payroll").RequireAuthorization(AcademyPermissions.PayrollRead);
         payroll.MapGet("/", Report); payroll.MapGet("/adjustments", Adjustments); payroll.MapGet("/requests", Requests);
         payroll.MapPost("/adjustments", AddAdjustment).RequireAuthorization(AcademyPermissions.PayrollManage).AddEndpointFilter<CsrfFilter>();
@@ -32,19 +32,21 @@ public static class PayrollEndpoints
         self.MapGet("/", Own); self.MapPost("/requests", RequestAddition).AddEndpointFilter<CsrfFilter>();
     }
 
-    private static async Task<IResult> Employees(CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> Employees(CurrentTenant tenant, FoundationDbContext db,TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!;
+        var month=SalaryHistory.Month(await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock));
+        var employees=await db.Employees.AsNoTracking().Where(x=>x.AcademyId==t.AcademyId).OrderBy(x=>x.Name).ToArrayAsync();var versions=await db.SalaryVersions.AsNoTracking().Where(v=>v.AcademyId==t.AcademyId&&v.EffectiveFrom<=month).ToArrayAsync();
         return Results.Ok(new {
-            items = await db.Employees.Where(x => x.AcademyId == t.AcademyId).OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.Phone, x.JobTitle, x.BranchId, x.MonthlySalary, x.Currency, x.ContractStart, x.ContractEnd, x.MembershipId, x.IsActive, photoUrl = x.PhotoAssetId == null ? null : "/api/v1/assets/" + x.PhotoAssetId }).ToListAsync(),
+            items = employees.Select(x => new { x.Id, x.Name, x.Phone, x.JobTitle, x.BranchId, monthlySalary=SalaryHistory.At(versions,x.Id,month)?.MonthlySalary??x.MonthlySalary, x.Currency, x.ContractStart, x.ContractEnd, x.MembershipId, x.IsActive, photoUrl = x.PhotoAssetId == null ? null : "/api/v1/assets/" + x.PhotoAssetId }),
             branches = await db.Branches.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync(),
             accounts = await db.AcademyMemberships.Where(x => x.AcademyId == t.AcademyId && x.PrimaryMembershipId == null && (x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyAdmin) && x.IsActive && !db.Employees.Any(e => e.AcademyId == t.AcademyId && e.MembershipId == x.Id)).Select(x => new { x.Id, name = x.User.DisplayName, phone = x.User.PhoneNumber }).ToListAsync()
         });
     }
-    private static async Task<IResult> EmployeeDetail(Guid id, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> EmployeeDetail(Guid id, CurrentTenant tenant, FoundationDbContext db,TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; var x = await db.Employees.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
-        return x is null ? Results.NotFound() : Results.Ok(x);
+        return x is null ? Results.NotFound() : Results.Ok(new {x.Id,x.Name,x.Phone,x.JobTitle,x.BranchId,monthlySalary=await SalaryHistory.Rate(db,x,await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock)),x.Currency,x.ContractStart,x.ContractEnd,x.MembershipId,x.PhotoAssetId,x.IsActive});
     }
     private static async Task<string?> ValidateEmployee(EmployeeWrite body, Guid academy, FoundationDbContext db, Guid? id = null)
     {
@@ -56,25 +58,34 @@ public static class PayrollEndpoints
         if (body.PhotoAssetId.HasValue && !await db.PrivateAssets.AnyAsync(x => x.AcademyId == academy && x.Id == body.PhotoAssetId && x.Purpose == "StaffPhoto" && x.IsActive)) return "اختر صورة موظف مرفوعة في هذه الأكاديمية.";
         return null;
     }
-    private static void Apply(Employee x, EmployeeWrite body)
-    { x.Name = body.Name.Trim(); x.Phone = EgyptPhoneNormalizer.Normalize(body.Phone)!; x.JobTitle = body.JobTitle.Trim(); x.BranchId = body.BranchId; x.MonthlySalary = body.MonthlySalary; x.ContractStart = body.ContractStart; x.ContractEnd = body.ContractEnd; x.MembershipId = body.MembershipId; x.PhotoAssetId = body.PhotoAssetId; x.IsActive = body.IsActive; }
-    private static async Task<IResult> CreateEmployee(EmployeeWrite body, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
+    private static void Apply(Employee x, EmployeeWrite body,bool salary=true)
+    { x.Name = body.Name.Trim(); x.Phone = EgyptPhoneNormalizer.Normalize(body.Phone)!; x.JobTitle = body.JobTitle.Trim(); x.BranchId = body.BranchId; if(salary)x.MonthlySalary = body.MonthlySalary; x.ContractStart = body.ContractStart; x.ContractEnd = body.ContractEnd; x.MembershipId = body.MembershipId; x.PhotoAssetId = body.PhotoAssetId; x.IsActive = body.IsActive; }
+    private static async Task<IResult> CreateEmployee(EmployeeWrite body, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock,HttpContext context)
     {
         var t = (await tenant.ResolveAsync())!; await using var tx = await db.Database.BeginTransactionAsync();
+        if(!await PayrollSensitiveAccess.LockAndAuthorize(context,tenant,db,AcademyPermissions.SalaryManage))return Results.Forbid();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"employee-create:{t.AcademyId}"}, 0))");
         var error = await ValidateEmployee(body, t.AcademyId, db); if (error is not null) return Results.UnprocessableEntity(new { message = error });
+        if(!await PayrollSensitiveAccess.BranchAllowed(db,t,body.BranchId)||t.Role!=AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.IsSelf(db,t,body.MembershipId))return Results.Forbid();
         var x = new Employee { Id = Guid.NewGuid(), AcademyId = t.AcademyId, Name = "", Phone = "", JobTitle = "", Currency = await db.Academies.Where(x => x.Id == t.AcademyId).Select(x => x.DefaultCurrency).SingleAsync(), CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() };
-        Apply(x, body); db.Employees.Add(x); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Created($"/api/v1/manage/employees/{x.Id}", new { x.Id });
+        Apply(x, body); db.Employees.Add(x); await db.SaveChangesAsync();
+        // Set only by the server in this employee-creation transaction, never from a request field.
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('academy.salary_initial_employee',{x.Id.ToString()},true)");
+        db.SalaryVersions.Add(SalaryHistory.New(x,t,Actor(context.User),"Initial",SalaryHistory.Month(body.ContractStart),body.MonthlySalary,1,null,"initial-"+x.Id.ToString("N"),Academy.Api.Finance.StatementComparisonRules.Hash(body),clock.GetUtcNow()));await db.SaveChangesAsync();
+        await tx.CommitAsync(); return Results.Created($"/api/v1/manage/employees/{x.Id}", new { x.Id });
     }
-    private static async Task<IResult> EditEmployee(Guid id, EmployeeWrite body, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> EditEmployee(Guid id, EmployeeWrite body, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock,HttpContext context)
     {
         var t = (await tenant.ResolveAsync())!; await using var tx = await db.Database.BeginTransactionAsync();
+        if(!await PayrollSensitiveAccess.LockAndAuthorize(context,tenant,db,AcademyPermissions.PayrollManage))return Results.Forbid();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"employee-create:{t.AcademyId}"}, 0))");
         await Lock(db, t.AcademyId, id, body.ContractStart);
         var x = await db.Employees.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (x is null) return Results.NotFound();
         var error = await ValidateEmployee(body, t.AcademyId, db, id); if (error is not null) return Results.UnprocessableEntity(new { message = error });
+        if(body.MonthlySalary!=await SalaryHistory.Rate(db,x,await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock)))return Results.Conflict(new {message="لتعديل الراتب استخدم سجل تغييرات الراتب المؤرخة؛ لا تعدّل مرجع الماضي."});
+        if((body.ContractStart!=x.ContractStart||body.ContractEnd!=x.ContractEnd)&&(!await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.SalaryManage)||t.Role!=AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.IsSelf(db,t,x.MembershipId)))return Results.Forbid();
         if (body.MembershipId != x.MembershipId && (await db.PayrollSettlements.AnyAsync(s => s.AcademyId == t.AcademyId && s.EmployeeId == id) || await db.CoachCompensationAgreements.AnyAsync(a => a.EmployeeId == id))) return Results.Conflict(new { message = "لا يمكن تغيير ربط الحساب بعد سداد راتب أو إنشاء اتفاق مدرب. أنشئ ربطًا جديدًا موثقًا." });
-        Apply(x, body); x.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
+        Apply(x, body,false); x.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 
     internal static async Task<List<PayrollRow>> Rows(Guid academy, DateOnly month, Guid? branchId, FoundationDbContext db)
@@ -85,11 +96,12 @@ public static class PayrollEndpoints
         var daily = await db.StaffDailyAttendances.Where(x => x.AcademyId == academy && x.WorkDate >= first && x.WorkDate <= last).ToListAsync();
         var paid = await db.PayrollSettlements.Where(x => x.AcademyId == academy && x.Month == first).ToListAsync();
         var privateEntries = await db.PrivateCompensationEntries.Where(x => x.AcademyId == academy && x.DueDate >= first && x.DueDate <= last && x.PayrollAdjustmentId.HasValue).Select(x => new { x.EmployeeId,x.Delta }).ToListAsync();
+        var salaryVersions=await db.SalaryVersions.AsNoTracking().Where(v=>v.AcademyId==academy&&v.EffectiveFrom<=first).ToArrayAsync();
         return employees.Select(e => {
-            var snapshot = paid.SingleOrDefault(p => p.EmployeeId == e.Id); var basic = PayrollCalculator.BaseDue(e.MonthlySalary, e.ContractStart, e.ContractEnd, first);
+            var snapshot = paid.SingleOrDefault(p => p.EmployeeId == e.Id);var version=SalaryHistory.At(salaryVersions,e.Id,first);var rate=version?.MonthlySalary??e.MonthlySalary; var basic = PayrollCalculator.BaseDue(rate, e.ContractStart, e.ContractEnd, first);
             var deduct = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Deduction").Sum(x => x.Amount) + daily.Where(x => x.MembershipId == e.MembershipId).Sum(x => x.ApprovedDeduction);
             var add = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Addition").Sum(x => x.Amount);
-            return new PayrollRow(e.Id, e.Name, e.JobTitle, e.BranchId, snapshot?.MonthlySalary ?? e.MonthlySalary, snapshot?.ContractDays ?? basic.Days, snapshot?.BaseDue ?? basic.Due, snapshot?.Deductions ?? deduct, snapshot?.Additions ?? add, snapshot?.NetDue ?? basic.Due - deduct + add, e.Currency, snapshot is not null, snapshot?.PaidAtUtc) { PrivateCompensation = privateEntries.Where(x => x.EmployeeId == e.Id).Sum(x => x.Delta), CoachMembershipId = e.MembershipId };
+            return new PayrollRow(e.Id, e.Name, e.JobTitle, e.BranchId, snapshot?.MonthlySalary ?? rate, snapshot?.ContractDays ?? basic.Days, snapshot?.BaseDue ?? basic.Due, snapshot?.Deductions ?? deduct, snapshot?.Additions ?? add, snapshot?.NetDue ?? basic.Due - deduct + add, e.Currency, snapshot is not null, snapshot?.PaidAtUtc) { PrivateCompensation = privateEntries.Where(x => x.EmployeeId == e.Id).Sum(x => x.Delta), CoachMembershipId = e.MembershipId,SalaryBasis=snapshot is not null?"PaidSnapshot":version is null?"LegacyUnverified":"ApprovedVersion",SalaryEffectiveFrom=version?.EffectiveFrom };
         }).ToList();
     }
     private static async Task<IResult> Report(DateOnly? month, Guid? branchId, string? search, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
@@ -211,5 +223,7 @@ public sealed record PayrollRow(Guid EmployeeId, string Name, string JobTitle, G
     // Informational subtotal already included in Additions minus Deductions, never added again.
     public decimal PrivateCompensation { get; init; }
     public Guid? CoachMembershipId { get; init; }
+    public string SalaryBasis { get; init; }="LegacyUnverified";
+    public DateOnly? SalaryEffectiveFrom { get; init; }
 }
 public sealed record AdjustmentRow(Guid Id, Guid EmployeeId, string Name, string Kind, decimal Amount, string Currency, DateOnly DueDate, string? Reason, string Source);

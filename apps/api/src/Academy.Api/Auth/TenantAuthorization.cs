@@ -52,6 +52,7 @@ public static class AcademyPermissions
     public const string PayrollAdditionReview = "payroll.addition.review";
     public const string PayrollPay = "payroll.pay";
     public const string CoachAgreementManage = "payroll.agreement.manage";
+    public const string SalaryManage = "payroll.salary.manage";
 }
 
 public sealed record TenantPermissionRequirement(string Permission) : IAuthorizationRequirement;

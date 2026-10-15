@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, PageHeader, RowActions } from "../components/dashboard-shell";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { csrfRequest, uploadAsset } from "./dashboard-api";
-import { usePayrollManage } from "./payroll-access";
+import { usePayrollManage, usePayrollPermission } from "./payroll-access";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 
 type Employee = { id: string; name: string; phone: string; jobTitle: string; branchId: string; monthlySalary: number; currency: string; contractStart: string; contractEnd?: string; membershipId?: string; photoAssetId?: string; photoUrl?: string; isActive: boolean };
@@ -14,15 +14,16 @@ type Options = { items: Employee[]; branches: { id: string; name: string }[]; ac
 
 export function EmployeeList() {
   const canManage = usePayrollManage();
+  const canSalary = usePayrollPermission("payroll.salary.manage");
   const [data, setData] = useState<Options | null>(null), [error, setError] = useState(""), [search, setSearch] = useState("");
   useEffect(() => { fetch("/api/v1/manage/employees/").then(async r => { if (!r.ok) throw new Error(); setData(await r.json()); }).catch(() => setError("تعذر تحميل الموظفين أو لا توجد صلاحية.")); }, []);
   const rows = data?.items.filter(x => `${x.name} ${x.phone} ${x.jobTitle}`.includes(search)) ?? [];
-  return <><PageHeader title="الموظفون" context="فريق الأكاديمية" action={canManage ? { label: "إضافة موظف", href: "/dashboard/staff/employees/new" } : undefined} secondaryActions={[{ label: "الحسابات والصلاحيات", href: "/dashboard/staff" }, { label: "الرواتب", href: "/dashboard/payroll" }]} />
+  return <><PageHeader title="الموظفون" context="فريق الأكاديمية" action={canManage && canSalary ? { label: "إضافة موظف", href: "/dashboard/staff/employees/new" } : undefined} secondaryActions={[{ label: "الحسابات والصلاحيات", href: "/dashboard/staff" }, { label: "الرواتب", href: "/dashboard/payroll" }]} />
     {error && <ErrorState message={error} />}{!data && !error ? <LoadingState /> : <section className="list-card"><ListSearch label="البحث بالاسم أو الهاتف" value={search} onChange={setSearch} />
       {!rows.length ? <EmptyState message="لا يوجد موظفون مطابقون." /> : <AdminDataTable label="الموظفون" rows={rows} rowKey={x => x.id} columns={[
         { key: "name", header: "الموظف", primary: true, render: x => <><b>{x.name}</b><small dir="ltr">{x.phone}</small></> },
         { key: "job", header: "الوظيفة / الفرع", render: x => <>{x.jobTitle}<small>{data?.branches.find(b => b.id === x.branchId)?.name}</small></> },
-        { key: "salary", header: "الراتب الشهري", render: x => formatMoneyAr(x.monthlySalary, x.currency) },
+        { key: "salary", header: "الراتب الشهري", render: x => <Link href={`/dashboard/staff/employees/${x.id}/salary`}>{formatMoneyAr(x.monthlySalary, x.currency)}<small>السجل والتغييرات</small></Link> },
         { key: "contract", header: "العقد", render: x => x.contractEnd ? `${formatDateAr(x.contractStart)} — ${formatDateAr(x.contractEnd)}` : "دائم" },
         { key: "account", header: "الحساب", render: x => x.membershipId ? "مرتبط بحساب مستقل" : "بدون حساب دخول" },
         { key: "actions", header: "الإجراء", render: x => <RowActions actions={[...(canManage ? [{ label: "تعديل", href: `/dashboard/staff/employees/${x.id}` }] : []), { label: "المستحقات", href: `/dashboard/payroll?employeeId=${x.id}` }]} /> },
@@ -48,7 +49,7 @@ export function EmployeeForm({ id }: { id?: string }) {
       <label>رقم الهاتف<input name="phone" type="tel" required dir="ltr" maxLength={32} defaultValue={employee?.phone} /></label>
       <label>الوظيفة<input name="job" required maxLength={100} defaultValue={employee?.jobTitle} placeholder="مدرب، إداري، عامل…" /></label>
       <label>الفرع<select name="branch" required defaultValue={employee?.branchId ?? ""}><option value="">اختر الفرع</option>{options.branches.map(b => <option value={b.id} key={b.id}>{b.name}</option>)}</select></label>
-      <label>الراتب الشهري<input name="salary" type="number" required min="0" max="100000000" step="0.01" defaultValue={employee?.monthlySalary ?? 0} /></label>
+      <label>الراتب الشهري<input aria-label="الراتب الشهري" name="salary" type="number" required readOnly={Boolean(id)} min="0" max="100000000" step="0.01" defaultValue={employee?.monthlySalary ?? 0} />{id&&<Link href={`/dashboard/staff/employees/${id}/salary`}>تغيير الراتب من السجل المؤرخ</Link>}</label>
       <label>الصورة (اختياري)<input type="file" name="photo" accept="image/png,image/jpeg,image/webp" /></label>
       <fieldset className="contract-choice"><legend>نوع العقد</legend><label><input type="radio" name="contract" checked={!fixed} onChange={() => setFixed(false)} />دائم</label><label><input type="radio" name="contract" checked={fixed} onChange={() => setFixed(true)} />محدد المدة</label></fieldset>
       <label>تاريخ الانضمام<input name="start" type="date" required defaultValue={employee?.contractStart ?? defaults.to} /></label>

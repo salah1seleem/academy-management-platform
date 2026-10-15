@@ -59,6 +59,14 @@ it("shows employees without accounts and opens an editable fixed contract", asyn
   renderPage(<EmployeeList />); expect(await screen.findByText("بدون حساب دخول")).toBeVisible();
   expect(screen.getByRole("link", { name: "تعديل" })).toHaveAttribute("href", "/dashboard/staff/employees/worker");
   expect(screen.getByRole("link", { name: "المستحقات" })).toHaveAttribute("href", "/dashboard/payroll?employeeId=worker");
+  expect(screen.queryByRole("link", { name: "إضافة موظف" })).not.toBeInTheDocument();
+});
+
+it("employee edits cannot overwrite salary and link to the separately authorized dated source",async()=>{
+  global.fetch=vi.fn(input=>String(input).endsWith("/worker")?response(employee):response(options)) as typeof fetch;
+  renderPage(<EmployeeForm id="worker"/>);await screen.findByLabelText("الاسم");
+  expect(screen.getByLabelText("الراتب الشهري")).toHaveAttribute("readonly");expect(screen.getByLabelText("الراتب الشهري")).toHaveValue(3100);
+  expect(screen.getByRole("link",{name:"تغيير الراتب من السجل المؤرخ"})).toHaveAttribute("href","/dashboard/staff/employees/worker/salary");
 });
 
 it("creates a fixed contract without credentials or photo and returns only after success", async () => {

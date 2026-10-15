@@ -103,7 +103,8 @@ public sealed partial class V2StaffScopeTests
         (await Write(owner, $"{url}/{first}/approve", new CoachAgreementApprovalWrite(null), false)).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, $"{url}/{second}/approve", new CoachAgreementApprovalWrite(null), false)).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var employee = await db.Employees.SingleAsync(e => e.Id == f.Employee); employee.MonthlySalary = 3200; await db.SaveChangesAsync();
+        var month=new DateOnly(f.Today.Year,f.Today.Month,1);
+        (await SalaryPost(owner,f.Employee,SalaryBody(await SalaryTerms(owner,f.Employee),month,3200))).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, $"{url}/{second}/approve", new CoachAgreementApprovalWrite(first), false)).StatusCode);
         var tracked = await db.CoachCompensationAgreements.SingleAsync(a => a.Id == first); tracked.VariableValue = 999;
         await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync()); db.ChangeTracker.Clear();
@@ -124,9 +125,12 @@ public sealed partial class V2StaffScopeTests
         await CoachAgreementDemoSeed.Seed(db, env, options); Assert.Equal(count, await db.CoachCompensationAgreements.CountAsync(a => a.AcademyId == FootballDemoSeed.AcademyId));
         Assert.Single(await db.CoachCompensationApprovals.Where(a => a.Id == CoachAgreementDemoSeed.ApprovalId).ToArrayAsync());
         Assert.False(await db.CoachCompensationApprovals.AnyAsync(a => a.AgreementId == CoachAgreementDemoSeed.DraftId));
-        var row = await db.CoachCompensationAgreements.AsNoTracking().SingleAsync(a => a.Id == CoachAgreementDemoSeed.AgreementId); var employee = await db.Employees.SingleAsync(e => e.Id == row.EmployeeId); var original = employee.MonthlySalary;
-        try { employee.MonthlySalary += 1; await db.SaveChangesAsync(); await CoachAgreementDemoSeed.Seed(db, env, options); Assert.Equal(row.BaseSalarySnapshot, await db.CoachCompensationAgreements.Where(a => a.Id == row.Id).Select(a => a.BaseSalarySnapshot).SingleAsync()); }
-        finally { employee.MonthlySalary = original; await db.SaveChangesAsync(); }
+        var row = await db.CoachCompensationAgreements.AsNoTracking().SingleAsync(a => a.Id == CoachAgreementDemoSeed.AgreementId);
+        (await Write(client,"/api/v1/auth/login",new {email="owner.football@example.test",password="Demo-Only-123!"},false)).EnsureSuccessStatusCode();
+        var terms=await SalaryTerms(client,row.EmployeeId);var from=DateOnly.Parse(terms.GetProperty("currentMonth").GetString()!).AddMonths(1);
+        if(terms.GetProperty("items").GetArrayLength()>0){var latest=DateOnly.Parse(terms.GetProperty("items")[0].GetProperty("effectiveFrom").GetString()!);if(latest>from)from=latest;}
+        (await SalaryPost(client,row.EmployeeId,SalaryBody(terms,from,terms.GetProperty("currentSalary").GetDecimal()+1))).EnsureSuccessStatusCode();
+        await CoachAgreementDemoSeed.Seed(db,env,options);Assert.Equal(row.BaseSalarySnapshot,await db.CoachCompensationAgreements.Where(a=>a.Id==row.Id).Select(a=>a.BaseSalarySnapshot).SingleAsync());
         var environment = env.EnvironmentName;
         try { env.EnvironmentName = "Production"; await Assert.ThrowsAsync<InvalidOperationException>(() => CoachAgreementDemoSeed.Seed(db, env, options)); }
         finally { env.EnvironmentName = environment; }

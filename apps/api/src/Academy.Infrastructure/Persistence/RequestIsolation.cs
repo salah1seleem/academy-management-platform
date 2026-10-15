@@ -145,6 +145,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PayrollAdditionRequest>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollAdjustment>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollSettlement>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
+        BranchFilter<SalaryVersion>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<CoachCompensationAgreement>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<CoachCompensationApproval>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PrivateServicePackage>(b, x => RequestBranchIds.Contains(x.BranchId) && ReceivableDocuments.Any(d => d.Id == x.DocumentId));
@@ -180,13 +181,16 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
-        if (ChangeTracker.Entries<PrivateCompensationEntry>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+        if (ChangeTracker.Entries<SalaryVersion>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<PrivateCompensationEntry>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PrivateServicePackage>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PrivateServiceDelivery>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<CoachCompensationAgreement>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<CoachCompensationApproval>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("شروط اتفاق المدرب واعتمادها ثابتة؛ أنشئ نسخة جديدة بدل تعديل التاريخ.");
         var privateAdjustmentIds = ChangeTracker.Entries<PayrollAdjustment>().Where(e => e.State is EntityState.Modified or EntityState.Deleted).Select(e => e.Entity.Id).ToArray();
+        var changedSalaries=ChangeTracker.Entries<Employee>().Where(e=>e.State==EntityState.Modified&&e.Property(x=>x.MonthlySalary).IsModified).Select(e=>e.Entity.Id).ToArray();
+        if(changedSalaries.Length>0&&await SalaryVersions.AnyAsync(v=>changedSalaries.Contains(v.EmployeeId),token))throw new InvalidOperationException("الراتب المؤرخ ثابت؛ استخدم نسخة راتب جديدة.");
         if (privateAdjustmentIds.Length > 0 && await PrivateCompensationEntries.AnyAsync(e => e.PayrollAdjustmentId.HasValue && privateAdjustmentIds.Contains(e.PayrollAdjustmentId.Value), token)) throw new InvalidOperationException("قيد عمولة الخاص ثابت؛ التصحيح بحركة معتمدة مستقلة.");
         GuardCashFamilyPurpose();
         if (ChangeTracker.Entries<StaffRoleTemplateAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("سجل قوالب الصلاحيات ثابت ولا يعدل أو يحذف.");

@@ -1,5 +1,15 @@
 # أدلة قبول V2 + V3
 
+## C2C1 — أساسي مؤرخ وصلاحية اعتماد مستقلة — 2026-10-15
+
+V3-AC09/14/22 وF04 **جزئية**: مصدر SalaryVersion ثابت وموعد شهر وموافق/نسخة/hash، PaidSnapshot محفوظ، LegacyBaseline من شهر المراجعة فقط؛ لا مصروف أو صرف من الاعتماد. قائم على Payroll لا موديول مالي مكرر. الراتب الحالي وقائمة الموظفين والكشف واتفاق الخاص يقرأون المصدر الساري؛ Web تعديل الملف read-only ومسار اعتماد مستقل؛ Flutter قراءة ذاتية دون actor/note. سياق Admin+Coach لنفس الشخص لا يعتمد أجره، ولا تكفي CRUD أو صلاحية صرف/خاص.
+
+تكامل **27/27 في1m49s** (`V3SalaryHistoryTests` + Payroll + C1/C2 + التفويض والسحب وreset المحدد)، وحدة **12/12**، Web أربعة ملفات **28/28**، Flutter ثلاثة ملفات **9/9**؛ typecheck/lint/build/analyze وEF بلا pending model. E2E **2/2 في24.2s** ثم رحلة الصورة **1/1 في15.7s**: زيادة مستقبلية500 مع بقاء الحالي وقراءة شهرها وMobile API ذاتي، وإعادة ترحيل الخاص المتأثر. [390](evidence/c2c1/salary-history-390.png) و[1440](evidence/c2c1/salary-history-1440.png) Web فعلية، عنوان داخل viewport وشبكة1/2 دون overflow. لا Flutter Simulator/device integration أو Full Regression في هذه الشريحة.
+
+Migration `20261015033834_V3DatedSalaryHistory` على قواعد اختبار معلومة؛ all migrations من الصفر في قاعدةE2E جديدة، ولا reset للمراجعة/العميل. حارس Initial صار مصدر إنشاء خادميًا داخل المعاملة بعد فشل ربط ساعة الاختبار/SQL وتجربةxmin/savepoints؛ أصلح projection تحميل actor وredirect308، وفصل fixture الحسابات وحفظ seed اليدوي. المجموعة قبل إصلاح استقلالseed26/27 ثم الفاشل/السحب/reset3/3 ثم27/27 النهائي؛ لا تخفيف assertions أو حذف مصادر. التفاصيل والسجلات الفعلية في [PROGRESS](PROGRESS.md).
+
+المتبقي: كشف شهري معتمد/دفعات جزئية/رصيد وسلفة وتصحيح ما بعد الصرف وتأريخ عقد، F07/F10، باقي18V2/48V3 والقبول الموحد. SHA وCI يسجلان بعد الرفع؛ لا green مفترض أو release-ready.
+
 ## C2B — فرق عمولة الخاص إلى Payroll القائم — 2026-10-15
 
 **متابعة CI الأساس:** checkpointC2A2610c6a انتهى **820/822 Backend**، وWeb/Flutter/E2E success. أصلح تكامل fixture الإيصال الناقص، ولقطة الرياضة/اللاعب/الباقة من المصدر بدل نص كرة القدم الثابت. لا تغيير مالي/تقرير أو تخفيف assertions. إعادة الفاشلين ومستهلكي الإصلاح **4/4 في23s** على `academy_v3_c2b_regression_20261015` الجديدة بعد migrations كاملة، ويختبر الخاص receipt/reportلاعبين اصطناعيين لا يخلط الرياضة، ومطابقة Owner/Payroll. سجلci-fixture-regression؛ CI C2B38672602556 بدأ ولم يكتمل عند هذه الكتابة.
