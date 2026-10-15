@@ -2,6 +2,8 @@
 
 ## C2B — فرق عمولة الخاص إلى Payroll القائم — 2026-10-15
 
+**متابعة CI الأساس:** checkpointC2A2610c6a انتهى **820/822 Backend**، وWeb/Flutter/E2E success. أصلح تكامل fixture الإيصال الناقص، ولقطة الرياضة/اللاعب/الباقة من المصدر بدل نص كرة القدم الثابت. لا تغيير مالي/تقرير أو تخفيف assertions. إعادة الفاشلين ومستهلكي الإصلاح **4/4 في23s** على `academy_v3_c2b_regression_20261015` الجديدة بعد migrations كاملة، ويختبر الخاص receipt/reportلاعبين اصطناعيين لا يخلط الرياضة، ومطابقة Owner/Payroll. سجلci-fixture-regression؛ CI C2B38672602556 بدأ ولم يكتمل عند هذه الكتابة.
+
 **النسخة النهائية:** E2E **5/5 في29.5s** بعد تنسيق المراجعة، جميع migrations من الصفر على قاعدةC2B الجديدة. مراجعة [390](evidence/c2b/private-posting-390.png)/[1440](evidence/c2b/private-posting-1440.png)، computedgrid/flex وعدمoverflow مثبتة. Web27/27، Flutter11/11، typecheck بعدnext-env وlint/build/analyze وEF بلاpendingmodel. سجل `/tmp/academy-v3-c2b-e2e-fresh-final.log`؛ لا تخفيف OTP أو إعادة Full Regression. الآتي سجل المحاولات لا نتيجة معلقة جديدة.
 
 مطابقة Payroll/Owner summary لنفس الفرع والشهر: **1/1 في9s** بعد عزل فرع اصطناعي وإكمال Receipt لكل Collection جديد في fixture، دون حذف سجلات سابقة أو تعديل تقرير لتجاوز بيانات اختبار ناقصة؛ الأولى500 محفوظة في سجلowner-match والنهائيowner-match-final. المثال الخاص بقي100 ثم200 وصافي3200، وإضافات وصافي لوحة المالك يساويان تقرير الرواتب.

@@ -26,7 +26,7 @@ public sealed partial class V2ReceivablesTests : IAsyncLifetime
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         // Repair only this fixture's pre-existing synthetic collections from its earlier test run.
         // Every confirmed collection must also have a receipt, as required by the shared reports.
-        var rows = await db.Collections.Include(x => x.SportEnrollment).Include(x => x.RenewalRequest)
+        var rows = await db.Collections.Include(x => x.SportEnrollment).ThenInclude(e=>e.Sport).Include(x=>x.SportEnrollment).ThenInclude(e=>e.Player).Include(x => x.RenewalRequest).ThenInclude(r=>r.SubscriptionPlan)
             .Where(x => x.ConfirmedBy == "synthetic-test" && !db.Receipts.Any(r => r.CollectionId == x.Id)).ToListAsync();
         foreach (var row in rows) db.Receipts.Add(TestReceipt(row));
         await db.SaveChangesAsync();
@@ -200,13 +200,14 @@ public sealed partial class V2ReceivablesTests : IAsyncLifetime
     private Task<HttpResponseMessage> Move(HttpClient client, Guid doc, string kind, decimal amount, Guid? collection = null) => Post(client, $"/api/v1/finance/receivables/{doc}/movements", new { kind, amount, collectionId = collection, reason = "حركة اختبار موثقة" });
     private async Task<Guid> Collection(Guid enrollment, Guid owner, decimal amount)
     {
-        await using var s = factory.Services.CreateAsyncScope(); var db = s.ServiceProvider.GetRequiredService<FoundationDbContext>(); var e = await db.SportEnrollments.SingleAsync(x => x.Id == enrollment); var id = Guid.NewGuid(); var key = id.ToString(); var now = new DateTimeOffset(2026, 9, 28, 6, 0, 0, TimeSpan.Zero);
+        await using var s = factory.Services.CreateAsyncScope(); var db = s.ServiceProvider.GetRequiredService<FoundationDbContext>(); var e = await db.SportEnrollments.Include(e=>e.Player).Include(e=>e.Sport).SingleAsync(x => x.Id == enrollment); var id = Guid.NewGuid(); var key = id.ToString(); var now = new DateTimeOffset(2026, 9, 28, 6, 0, 0, TimeSpan.Zero);
         var renewal = new RenewalRequest { Id = Guid.NewGuid(), AcademyId = e.AcademyId, SportEnrollmentId = e.Id, SportId = e.SportId, SubscriptionPlanId = Slice3DemoSeed.FootballMonthlyId, RequestedByUserId = owner, RequestedAtUtc = now, OriginalAmount = amount, FinalAmount = amount, AmountExpected = amount, Currency = "EGP", Status = RenewalRequestStatus.Paid, IdempotencyKey = key };
+        renewal.SubscriptionPlan=await db.SubscriptionPlans.SingleAsync(p=>p.Id==renewal.SubscriptionPlanId);
         var payment = new PaymentRequest { Id = Guid.NewGuid(), AcademyId = e.AcademyId, RenewalRequestId = renewal.Id, Amount = amount, Currency = "EGP", Status = PaymentRequestStatus.Confirmed, Provider = "InternalTest", ProviderEnvironment = "Demo", ProviderReference = key, CheckoutReference = key, ConfirmedAtUtc = now };
         var collection = new PaymentCollection { Id = id, AcademyId = e.AcademyId, SportEnrollmentId = e.Id, SportEnrollment = e, RenewalRequestId = renewal.Id, RenewalRequest = renewal, PaymentRequestId = payment.Id, Amount = amount, Currency = "EGP", PaymentMethod = "InternalTest", Provider = "InternalTest", ProviderReference = key, ConfirmedAtUtc = now, ConfirmedBy = "synthetic-test" };
         db.RenewalRequests.Add(renewal); db.PaymentRequests.Add(payment); db.Collections.Add(collection); db.Receipts.Add(TestReceipt(collection)); await db.SaveChangesAsync(); return id;
     }
-    private static Receipt TestReceipt(PaymentCollection c) => new() { Id = Guid.NewGuid(), AcademyId = c.AcademyId, CollectionId = c.Id, ReceiptNumber = "TEST-" + c.Id.ToString("N"), PlayerId = c.SportEnrollment.PlayerId, SportEnrollmentId = c.SportEnrollmentId, SubscriptionPlanId = c.RenewalRequest.SubscriptionPlanId, PlayerNameSnapshot = "لاعب أرصدة اصطناعي", SportNameSnapshot = "كرة القدم", PlanNameSnapshot = "باقة اختبار أرصدة", OriginalAmount = c.Amount, FinalAmount = c.Amount, Amount = c.Amount, Currency = c.Currency, PaidAtUtc = c.ConfirmedAtUtc, PaymentMethod = "InternalTest", ProviderReference = c.ProviderReference };
+    private static Receipt TestReceipt(PaymentCollection c) => new() { Id = Guid.NewGuid(), AcademyId = c.AcademyId, CollectionId = c.Id, ReceiptNumber = "TEST-" + c.Id.ToString("N"), PlayerId = c.SportEnrollment.PlayerId, SportEnrollmentId = c.SportEnrollmentId, SubscriptionPlanId = c.RenewalRequest.SubscriptionPlanId, PlayerNameSnapshot = c.SportEnrollment.Player.ArabicName, SportNameSnapshot = c.SportEnrollment.Sport.ArabicName, PlanNameSnapshot = c.RenewalRequest.SubscriptionPlan.ArabicName, OriginalAmount = c.Amount, FinalAmount = c.Amount, Amount = c.Amount, Currency = c.Currency, PaidAtUtc = c.ConfirmedAtUtc, PaymentMethod = "InternalTest", ProviderReference = c.ProviderReference };
     private async Task<HttpClient> Staff(string email) { var c = factory.CreateClient(); (await Post(c, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); return c; }
     private async Task<HttpClient> Guardian(string? phone = null)
     {

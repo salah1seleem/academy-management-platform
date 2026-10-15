@@ -60,6 +60,9 @@ public sealed partial class V2StaffScopeTests
         var summary=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/owner-summary?allDates=true&branchId={f.Branch}");
         Assert.Equal(report.GetProperty("totalNet").GetDecimal(),summary.GetProperty("payroll").GetProperty("netDue").GetDecimal());
         Assert.Equal(report.GetProperty("totalAdditions").GetDecimal(),summary.GetProperty("payroll").GetProperty("additions").GetDecimal());
+        var sportName=await db.Sports.Where(s=>s.Id==f.Sport).Select(s=>s.ArabicName).SingleAsync();
+        var financial=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?allDates=true&branchId={f.Branch}&sportId={f.Sport}");
+        var financialRows=financial.GetProperty("items").EnumerateArray().ToArray(); Assert.Equal(2,financialRows.Length); Assert.All(financialRows,r=>Assert.Equal(sportName,r.GetProperty("sport").GetString())); Assert.Equal(2000,financialRows.Sum(r=>r.GetProperty("amount").GetDecimal()));
         Assert.Equal(3000,await db.Employees.Where(e=>e.Id==f.Employee).Select(e=>e.MonthlySalary).SingleAsync()); Assert.False(await db.PayrollSettlements.AnyAsync(s=>s.EmployeeId==f.Employee));
         var entries=await db.PrivateCompensationEntries.Where(e=>e.EmployeeId==f.Employee).ToArrayAsync(); Assert.Equal(4,entries.Length);
         Assert.All(entries,e=> { var snapshot=JsonDocument.Parse(e.SourceSnapshot).RootElement; Assert.Equal(f.Document,snapshot.GetProperty("DocumentId").GetGuid()); Assert.Equal(40,snapshot.GetProperty("VariableValue").GetDecimal()); Assert.NotEqual(default,e.CutoffAtUtc); Assert.NotNull(e.PayrollAdjustmentId); });
