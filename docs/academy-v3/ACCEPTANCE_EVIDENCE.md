@@ -2,6 +2,8 @@
 
 ## C2C3D — مدة عقد العمل مصدر مؤرخ — 2026-10-15
 
+Code `e52d2249053f96c478269a8a4fd02c837ef133b2` مرفوع؛ [CI38730397964](https://github.com/salah1seleem/academy-management-platform/actions/runs/38730397964) in_progress، لا قبول شامل مفترض. CI السابق38712944419 ناجح كاملًا؛ main محفوظ والخريطة18/48 بلا حذف أو تكرار.
+
 المعتمد الحالي3000 محفوظ، وعقد الشهر التالي المنتهي يوم15 يحسب3000×15/أيام الشهر؛1500 فينوفمبر. المسودة وتنبيه انتهاء العقد لدى المالك وEmployeeDetail وquote ينعكسون من العقد الساري؛ المصدر الخام والكشف والصرف لا يكتبون ثانية. Initial مع إنشاء الموظف، LegacyBaseline من المراجعة، Change متسلسل، مع noPast/finalized وexpectedRevision/replay/CSRF/tenant/livegrant/self، وحراسة SQL/EF وثبات reset المعروف. Web سجل ومراجعة وحفظ، وFlutter «عقدي وتغييراته» ذاتي read-only دون ملاحظات داخلية. المصدر نفسه لاتفاق/تنفيذ الخاص وCorrection.
 
 التكامل19/19 ثم6/6 ثم12/12 متداخل، وحفظ بيانات الملف1/1؛ Web25/25 وFlutter10/10 وanalyze، وحدة12/12 ومعمارية1/1؛ typecheck/lint/build وEF بلا pending model. E2E6/7 (محدد status ملتبس) ثم1/1 ثم7/7 في39.9s على قاعدة جديدة بعد91migration، ثم1/1 بعد تنسيق الزر؛ صور390/1440 والمحاولات/SHA/CI في [PROGRESS](PROGRESS.md). الجديدة `20261015104526_V3DatedEmploymentContracts` فقط على اختبار؛ Demo اختياري يحفظ الموجود ويرفضProduction، بلا تغيير.env أوmain أو بيانات عرض أو إرسال/دفع حقيقي. ليست الجولة الموحدة/F10 أو جهازFlutter/PG17Production؛ الافتتاح ونهاية الخدمة والدفتر والخارجي وبقية الخريطة باقية. F04/AC14/22 جزئية.

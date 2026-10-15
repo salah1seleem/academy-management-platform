@@ -2,7 +2,9 @@
 
 ## أحدث شريحة — C2C3D: عقد موظف مؤرخ لا يعيد كتابة كشف، 2026-10-15
 
-استئناف من `efb05f998ba4d240ef264b4d41050f4aee1d8bc3` على `codex/15-native-mobile-app`، شجرة نظيفة وremote Academy الصحيح. [CI38712944419](https://github.com/salah1seleem/academy-management-platform/actions/runs/38712944419) للـcheckpoint السابق صار **success لكل Backend/Web/E2E/Flutter**؛ لا عائق اتصال. لم تُعد السلف/التصحيح أوPhaseUI ولم تُغير إعدادات/موديل أو تستخدمsubagents. SHA/CI هذه الدفعة يسجلان بعدpush.
+**checkpoint مرفوع:** Code `e52d2249053f96c478269a8a4fd02c837ef133b2` على `origin/codex/15-native-mobile-app`، شجرة نظيفة ومطابقة بعدpush. [CI38730397964](https://github.com/salah1seleem/academy-management-platform/actions/runs/38730397964) **in_progress**؛ لا green مفترض. main المحلي/البعيد مؤكدان عند `abda1ed273030e69812321e5c14d260bbc2e2275`، وخريطة18V2/48V3 بلا missing/duplicate. ابدأ بفحصCI ثمC2C3E، دون إعادة العقد أو الرجوع إلى086a52f. توثيق checkpoint لا يغير دليل الكود، والخطة غير مكتملة.
+
+استئناف من `efb05f998ba4d240ef264b4d41050f4aee1d8bc3` على `codex/15-native-mobile-app`، شجرة نظيفة وremote Academy الصحيح. [CI38712944419](https://github.com/salah1seleem/academy-management-platform/actions/runs/38712944419) للـcheckpoint السابق صار **success لكل Backend/Web/E2E/Flutter**؛ لا عائق اتصال. لم تُعد السلف/التصحيح أوPhaseUI ولم تُغير إعدادات/موديل أو تستخدمsubagents.
 
 **المنفذ:** ContractVersion مصدر مدة عمل مؤرخ فوقEmployee/Payroll القائمين، لا عقد شريك أو حساب/رواتب موازية. إنشاء الموظف يحفظ عقده الأول مع الأساسي في نفس المعاملة، بمرجعinitial خادمي transaction-local. القديم دون نسخ يبقى مرجعًا غير موثق؛ أول مراجعة تحفظ LegacyBaseline من الشهر الحالي فقط، لا تاريخًا مصطنعًا. نسخةChange شهرية للحالي أو حتى12شهرًا تالية بترتيب السريان/Revision، ومنع الرجوع خلف نسخة مستقبلية أو مس كشف معتمد/مسدد من تاريخ التغيير فصاعدًا. بداية/نهاية العقد الفعليتان تحسبان الأيام الجزئية داخل الشهر بأيامه الفعلية، كما اختار صلاح؛ الراتب الشهري ونسبة الخاص مصدران منفصلان لا يتغيران من العقد.
 
