@@ -2,6 +2,7 @@
 import {MatchCopyDialog,MatchEditor,MatchEditValue} from "./match-editor";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
 type Option = { id: string; arabicName: string; sportId?: string; branchId?: string; ageCategoryId?: string; minimumBirthYear?: number; maximumBirthYear?: number };
@@ -12,6 +13,7 @@ type Match = MatchEditValue & { tournament:string;team:string };
 type Options = { canCopy?:boolean;tournaments: Tournament[]; teams: Team[]; players: Player[]; coaches: { id: string; name: string }[] };
 const initialTeam: Team = { id: "", name: "", sportId: "", branchId: "", ageCategoryId: "", coachMembershipId: "", enrollmentIds: [], isActive: true };
 export function MatchesWorkspace() {
+  const matchId = useSearchParams().get("matchId");
   const defaults = useDateFilterDefaults();
   const [options, setOptions] = useState<Options | null>(null); const [structure, setStructure] = useState<{ sports: Option[]; branches: Option[]; ageCategories?: Option[]; categories?: Option[]; groups: Option[] }>({ sports: [], branches: [], categories: [], groups: [] });
   const [items, setItems] = useState<Match[]>([]); const [team, setTeam] = useState<Team>(initialTeam); const [tournament, setTournament] = useState<Tournament | null>(null); const [match, setMatch] = useState<Match | null>(null); const [filters, setFilters] = useState({ tournamentId: "", teamId: "", ...defaults }); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
@@ -20,6 +22,16 @@ export function MatchesWorkspace() {
   const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
   const load = useCallback(() => Promise.all([fetch("/api/v1/manage/matches/options").then(r => r.ok ? r.json() : Promise.reject()), fetch(`/api/v1/manage/matches/?${query}`).then(r => r.ok ? r.json() : Promise.reject())]).then(([o, m]) => { setOptions(o); setItems(m); }).catch(() => setMessage("تعذر تحميل المباريات والبطولات.")), [query]);
   useEffect(() => { void load(); fetch("/api/v1/manage/structure/options").then(r => r.ok ? r.json() : Promise.reject()).then(setStructure).catch(() => undefined); }, [load]);
+  useEffect(() => {
+    if (!matchId) return;
+    const abort = new AbortController();
+    fetch(`/api/v1/manage/matches/${encodeURIComponent(matchId)}`, { cache: "no-store", signal: abort.signal }).then(async r => {
+      if (!r.ok) throw new Error();
+      const value = await r.json() as Match;
+      if (!abort.signal.aborted) { setMatch(value); setTemplate(null); setEditorRevision(v => v + 1); requestAnimationFrame(() => document.getElementById("match-editor")?.scrollIntoView()); }
+    }).catch(() => { if (!abort.signal.aborted) setMessage("تعذر فتح المباراة أو أنها خارج صلاحياتك."); });
+    return () => abort.abort();
+  }, [matchId]);
   async function write(path: string, body: unknown, edit: boolean) { setBusy(true); try { await csrfRequest(path, edit ? "PUT" : "POST", body); setMessage("تم الحفظ بنجاح."); await load(); return true; } catch(e) { setMessage(e instanceof Error ? e.message : "تعذر الحفظ."); return false; } finally { setBusy(false); } }
   async function saveTournament(e: FormEvent<HTMLFormElement>) { e.preventDefault(); if (busy) return; const f = new FormData(e.currentTarget); const saved = await write(`/api/v1/manage/matches/tournaments${tournament ? `/${tournament.id}` : ""}`, { name: f.get("name"), sportId: f.get("sport"), fee: Number(f.get("fee")), currency: "EGP", isActive: f.get("active") === "on" }, !!tournament); if (saved) setTournament(null); }
   async function saveTeam(e: FormEvent) { e.preventDefault(); if (busy) return; if (await write(`/api/v1/manage/matches/teams${team.id ? `/${team.id}` : ""}`, team, !!team.id)) setTeam(initialTeam); }

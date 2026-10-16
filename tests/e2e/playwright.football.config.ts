@@ -9,7 +9,8 @@ const webPort = process.env.ACADEMY_E2E_WEB_PORT ?? "3190";
 const webUrl = `http://127.0.0.1:${webPort}`;
 // Next rewrites are baked at build time. Runtime API_INTERNAL_URL alone cannot
 // prevent a stale production build from reaching the developer's manual Demo.
-const manifest = JSON.parse(readFileSync(resolve(__dirname, "../../apps/web/.next/routes-manifest.json"), "utf8"));
+const distDir = process.env.ACADEMY_WEB_DIST_DIR ?? ".next";
+const manifest = JSON.parse(readFileSync(resolve(__dirname, `../../apps/web/${distDir}/routes-manifest.json`), "utf8"));
 const apiRules = [...manifest.rewrites.beforeFiles, ...manifest.rewrites.afterFiles, ...manifest.rewrites.fallback]
   .filter((r: { source: string }) => r.source === "/api/:path*");
 if (apiRules.length !== 1 || apiRules[0].destination !== `${apiUrl}/api/:path*`)
@@ -23,7 +24,7 @@ export default defineConfig({
       url: `${apiUrl}/health/ready`, reuseExistingServer: false, timeout: 120_000,
     },
     {
-      command: `API_INTERNAL_URL=${apiUrl} npm run start --prefix ../../apps/web -- --hostname 127.0.0.1 --port ${webPort}`,
+      command: `ACADEMY_WEB_DIST_DIR=${distDir} API_INTERNAL_URL=${apiUrl} npm run start --prefix ../../apps/web -- --hostname 127.0.0.1 --port ${webPort}`,
       url: `${webUrl}/login`, reuseExistingServer: false, timeout: 120_000,
     },
   ],

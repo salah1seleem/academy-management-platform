@@ -93,37 +93,71 @@ class NextMatchStrip extends StatelessWidget {
   );
 }
 
-class MatchSchedule extends StatelessWidget {
+class MatchSchedule extends StatefulWidget {
   final AuthController auth;
-  const MatchSchedule({super.key, required this.auth});
+  final String? playerId;
+  const MatchSchedule({super.key, required this.auth, this.playerId});
+  @override
+  State<MatchSchedule> createState() => _MatchScheduleState();
+}
+
+class _MatchScheduleState extends State<MatchSchedule> {
+  String? contextKey() => widget.auth.session?.selected == null
+      ? null
+      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  late final identity = contextKey();
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'المباريات', 'Matches'),
-    child: RemoteBody(
-      auth: auth,
-      path: '/api/v1/my-matches',
-      builder: (context, v) => gList([
-        if (rows(v).isEmpty)
-          const EmptyMessage('لا توجد مباريات منشورة تخصك حاليًا.'),
-        for (final m in rows(v))
-          GCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Heading('${m['team']} × ${m['opponent']}'),
-                UiText(
-                  '${m['tournament']} · ${day(m['matchDate'])} · ${m['startTime']}',
-                ),
-                UiText(textOf(m['venue'])),
-                if (m['notes'] != null) UiText(textOf(m['notes'])),
-                if (m['ourScore'] != null)
-                  UiText(
-                    '${localized(context, 'النتيجة', 'Result')}: ${m['ourScore']} — ${m['opponentScore']}',
+    child: ListenableBuilder(
+      listenable: widget.auth,
+      builder: (context, _) => identity == null || identity != contextKey()
+          ? const SizedBox.shrink()
+          : RemoteBody(
+              auth: widget.auth,
+              path:
+                  '/api/v1/my-matches${widget.playerId == null ? '' : '?playerId=${Uri.encodeQueryComponent(widget.playerId!)}'}',
+              builder: (context, v) => gList([
+                if (rows(v).isEmpty)
+                  const EmptyMessage('لا توجد مباريات منشورة تخصك حاليًا.'),
+                for (final m in rows(v))
+                  GCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Heading('${m['team']} × ${m['opponent']}'),
+                        if (m['status'] != null)
+                          UiText(
+                            m['status'] == 'Cancelled'
+                                ? 'ملغاة'
+                                : m['status'] == 'Completed'
+                                ? 'منتهية بنتيجة'
+                                : 'منشورة',
+                          ),
+                        if (m['participation'] != null)
+                          UiText(
+                            m['participation'] == 'Bench'
+                                ? 'المشاركة: بديل'
+                                : 'المشاركة: لاعب',
+                          ),
+                        if (m['coachAssignmentSource'] == 'CurrentTeam')
+                          const UiText(
+                            'الإسناد من الفريق الحالي؛ ليس سجلًا تاريخيًا للمدرب.',
+                          ),
+                        UiText(
+                          '${m['tournament']} · ${day(m['matchDate'])} · ${m['startTime']}',
+                        ),
+                        UiText(textOf(m['venue'])),
+                        if (m['notes'] != null) UiText(textOf(m['notes'])),
+                        if (m['ourScore'] != null)
+                          UiText(
+                            '${localized(context, 'النتيجة', 'Result')}: ${m['ourScore']} — ${m['opponentScore']}',
+                          ),
+                      ],
+                    ),
                   ),
-              ],
+              ]),
             ),
-          ),
-      ]),
     ),
   );
 }

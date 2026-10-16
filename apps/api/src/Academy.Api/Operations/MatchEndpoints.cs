@@ -44,22 +44,31 @@ public static class MatchEndpoints
         });
     }
     private static IQueryable<AcademyMatch> Query(Guid academy, FoundationDbContext db) => db.AcademyMatches.AsNoTracking().Where(x => x.AcademyId == academy);
-    private static async Task<IResult> List(Guid? tournamentId, Guid? teamId, DateOnly? from, DateOnly? to, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> List(Guid? tournamentId, Guid? teamId, Guid? playerId, Guid? coachMembershipId, DateOnly? from, DateOnly? to, CurrentTenant tenant, FoundationDbContext db, HttpResponse response)
     {
+        response.Headers.CacheControl="no-store";
         var t = (await tenant.ResolveAsync())!; var q = Query(t.AcademyId, db);
+        if(playerId.HasValue&&!await db.Players.AnyAsync(p=>p.Id==playerId&&p.AcademyId==t.AcademyId))return Results.NotFound();
+        if(coachMembershipId.HasValue&&!await db.AcademyMemberships.AnyAsync(m=>m.Id==coachMembershipId&&m.AcademyId==t.AcademyId&&m.Role==AcademyRole.Coach))return Results.NotFound();
+        if(playerId.HasValue)q=q.Where(x=>db.MatchParticipants.Any(p=>p.MatchId==x.Id&&p.PlayerId==playerId&&p.IsActive));
+        if(coachMembershipId.HasValue)q=q.Where(x=>db.MatchTeams.Any(team=>team.Id==x.TeamId&&team.CoachMembershipId==coachMembershipId));
         if (from.HasValue && to.HasValue && from > to) return Results.UnprocessableEntity();
         q = q.Where(x => (!tournamentId.HasValue || x.TournamentId == tournamentId) && (!teamId.HasValue || x.TeamId == teamId) && (!from.HasValue || x.MatchDate >= from) && (!to.HasValue || x.MatchDate <= to));
         return Results.Ok(await Rows(q.OrderByDescending(x => x.MatchDate).Take(200), db, t.AcademyId).ToListAsync());
     }
     private static IQueryable<object> Rows(IQueryable<AcademyMatch> q, FoundationDbContext db, Guid a) => q.Select(x => (object)new {
         x.Id, x.TournamentId, x.TeamId, x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore, x.PublishedAtUtc, x.IsActive,x.CopiedFromMatchId,
+        status=!x.IsActive?"Cancelled":x.PublishedAtUtc==null?"Draft":x.OurScore!=null?"Completed":"Published",
+        coachAssignmentSource="CurrentTeam",
         tournament = db.AcademyTournaments.Where(t => t.AcademyId == a && t.Id == x.TournamentId).Select(t => t.Name).Single(),
         team = db.MatchTeams.Where(t => t.AcademyId == a && t.Id == x.TeamId).Select(t => t.Name).Single(),
         players = db.MatchParticipants.Where(p => p.AcademyId == a && p.MatchId == x.Id && p.IsActive).Select(p => new { p.PlayerId, p.IsBench }).ToList()
     });
-    private static async Task<IResult> Mine(Guid? playerId, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> Mine(Guid? playerId, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock, HttpResponse response)
     {
-        var t = (await tenant.ResolveAsync())!; var u = Actor(user); var q = Query(t.AcademyId, db).Where(x => x.PublishedAtUtc != null && x.IsActive);
+        response.Headers.CacheControl="no-store";
+        var t = (await tenant.ResolveAsync())!; var u = Actor(user); var q = Query(t.AcademyId, db).Where(x => x.PublishedAtUtc != null);
+        if(playerId.HasValue)q=q.Where(x=>db.MatchParticipants.Any(p=>p.MatchId==x.Id&&p.PlayerId==playerId&&p.IsActive));
         if (t.Role == AcademyRole.Guardian)
             q = q.Where(x => db.MatchParticipants.Any(p => p.AcademyId == t.AcademyId && p.MatchId == x.Id && p.IsActive && (!playerId.HasValue || p.PlayerId == playerId) && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == p.PlayerId && l.Guardian.UserId == u && l.IsActive && l.Guardian.IsActive && l.Player.IsActive)));
         else if (t.Role == AcademyRole.Coach)
@@ -70,7 +79,10 @@ public static class MatchEndpoints
             x.Id, x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore,
             team = db.MatchTeams.Where(team => team.AcademyId == t.AcademyId && team.Id == x.TeamId).Select(team => team.Name).Single(),
             tournament = db.AcademyTournaments.Where(c => c.AcademyId == t.AcademyId && c.Id == x.TournamentId).Select(c => c.Name).Single(),
-            isUpcoming = x.MatchDate >= clock.Today && x.OurScore == null,
+            status=!x.IsActive?"Cancelled":x.OurScore!=null?"Completed":"Published",
+            participation=playerId.HasValue?db.MatchParticipants.Where(p=>p.MatchId==x.Id&&p.PlayerId==playerId&&p.IsActive).Select(p=>p.IsBench?"Bench":"Player").FirstOrDefault():null,
+            coachAssignmentSource=t.Role==AcademyRole.Coach?"CurrentTeam":null,
+            isUpcoming = x.IsActive && x.MatchDate >= clock.Today && x.OurScore == null,
             children = db.MatchParticipants.Where(p => p.AcademyId == t.AcademyId && p.MatchId == x.Id && p.IsActive && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == p.PlayerId && l.Guardian.UserId == u && l.IsActive && l.Guardian.IsActive && l.Player.IsActive)).Select(p => p.PlayerId).ToList()
         }).ToListAsync());
     }

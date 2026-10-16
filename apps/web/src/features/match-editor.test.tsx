@@ -2,13 +2,15 @@ import {cleanup,fireEvent,render,screen,waitFor,within} from "@testing-library/r
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {MatchCopyDialog,MatchEditor,MatchEditValue} from "./match-editor";
 import {MatchesWorkspace} from "./matches";
+let matchQuery="";
+vi.mock("next/navigation",()=>({useSearchParams:()=>new URLSearchParams(matchQuery)}));
 const preview={teamName:"منتخب عرض",opponent:"منافس اصطناعي",venue:"ملعب",quoteHash:"preview-hash",roster:[{enrollmentId:"enrollment",playerId:"player",name:"لاعب اصطناعي"}]};
 const roster={items:preview.roster,quoteHash:"roster-hash"};
 const options={tournaments:[{id:"tournament",name:"بطولة عرض",isActive:true}],teams:[{id:"team",name:"منتخب عرض",isActive:true}],players:[{playerId:"player",name:"لاعب اصطناعي"}],coaches:[]};
 const match:MatchEditValue={id:"match",tournamentId:"tournament",teamId:"team",opponent:"منافس",matchDate:"2026-10-20",startTime:"17:00:00",venue:"ملعب",isActive:true,players:[],copiedFromMatchId:"source"};
 const reply=(v:unknown,status=200)=>Promise.resolve(new Response(JSON.stringify(v),{status}));
 beforeEach(()=>{Object.defineProperty(HTMLDialogElement.prototype,"showModal",{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute("open","");}});Object.defineProperty(HTMLDialogElement.prototype,"close",{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute("open");}});});
-afterEach(()=>{cleanup();vi.restoreAllMocks();});
+afterEach(()=>{cleanup();vi.restoreAllMocks();matchQuery="";});
 it("read-only matches users see no copy action",async()=>{
   global.fetch=vi.fn(url=>String(url).includes("/structure/")?reply({sports:[],branches:[],categories:[],groups:[]}):String(url).includes("/options")?reply({...options,canCopy:false}):reply([{...match,team:"منتخب عرض",tournament:"بطولة عرض"}])) as typeof fetch;render(<MatchesWorkspace/>);await screen.findByText("منتخب عرض × منافس");expect(screen.queryByRole("button",{name:"نسخ مباراة"})).not.toBeInTheDocument();
 });

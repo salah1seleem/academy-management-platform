@@ -13,6 +13,7 @@ import 'compensation_card.dart';
 import 'player_card.dart';
 import 'guardian_visits.dart';
 import 'coach_feedback.dart';
+import '../shared/matches.dart';
 
 class ChildProfile extends StatelessWidget {
   final AuthController auth;
@@ -77,6 +78,14 @@ class ChildProfile extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           GLink(
+            'المباريات',
+            Icons.emoji_events_outlined,
+            () => openPage(
+              context,
+              MatchSchedule(auth: auth, playerId: playerId),
+            ),
+          ),
+          GLink(
             localized(context, 'الدخول والخروج', 'Entry and exit'),
             Icons.door_front_door_outlined,
             () => openPage(
@@ -107,7 +116,10 @@ class ChildProfile extends StatelessWidget {
           GLink(
             'تقييم المدرب أو إرسال ملاحظة',
             Icons.rate_review_outlined,
-            () => openPage(context, CoachFeedbackPage(auth: auth, playerId: playerId)),
+            () => openPage(
+              context,
+              CoachFeedbackPage(auth: auth, playerId: playerId),
+            ),
           ),
           GLink(
             'التدريب والمواعيد',

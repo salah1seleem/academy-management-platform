@@ -4,6 +4,8 @@ import { StructureDetails } from "./structure-record";
 
 afterEach(cleanup);
 
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("tab=performance"), usePathname: () => "/dashboard/academy/coaches/coach-1", useRouter: () => ({ replace: vi.fn() }) }));
+
 it("shows stored coach performance and keeps the owner period on drill-down", async () => {
   const calls: string[] = [];
   global.fetch = vi.fn((input) => {
