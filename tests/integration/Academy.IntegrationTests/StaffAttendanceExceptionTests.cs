@@ -40,7 +40,8 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
     private async Task<(HttpClient Client,Guid Member,Guid Employee,Guid Branch,Guid User)> Staff(AcademyRole role=AcademyRole.Coach,Guid? branch=null)
     {
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var home=branch??await db.Branches.Where(b=>b.AcademyId==DemoSeed.NogoomAcademyId&&b.IsActive).Select(b=>b.Id).FirstAsync();
+        // A policy-specific synthetic branch from another journey is not this fixture's default.
+        var home=branch??Academy.Api.Slice2.Slice2DemoSeed.CityBranchId;
         var user=new ApplicationUser{Id=Guid.NewGuid(),DisplayName="موظف استثناء اصطناعي",Email=$"exception.{Guid.NewGuid():N}@example.test",SecurityStamp=Guid.NewGuid().ToString(),UserName=Guid.NewGuid().ToString()};user.NormalizedEmail=user.Email.ToUpperInvariant();
         var member=new AcademyMembership{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,UserId=user.Id,Role=role};
         var employee=new Employee{Id=Guid.NewGuid(),AcademyId=member.AcademyId,MembershipId=member.Id,BranchId=home,Name=user.DisplayName,Phone="015"+Random.Shared.Next(10_000_000,100_000_000),JobTitle="وظيفة عرض",MonthlySalary=1000,Currency="EGP",ContractStart=new(2026,1,1)};
@@ -67,6 +68,24 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
     {
         var csrf=await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var r=new HttpRequestMessage(period.HasValue?HttpMethod.Put:HttpMethod.Post,$"/api/v1/manage/staff-attendance/{member}/periods{(period.HasValue?$"/{period}":"")}"){Content=JsonContent.Create(body)};
         r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",key??Guid.NewGuid().ToString());return await c.SendAsync(r);
+    }
+    [Fact]
+    public async Task Branch_nominated_reviewer_is_live_enforced_without_new_permissions_or_self_review_and_owner_keeps_fallback()
+    {
+        using var owner=await Owner();
+        Guid branch;await using(var scope=factory.Services.CreateAsyncScope()){var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var b=new Academy.Infrastructure.Structure.Branch{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,ArabicName=$"فرع مسؤول الاستثناءات {Guid.NewGuid():N}"};db.Branches.Add(b);await db.SaveChangesAsync();branch=b.Id;}
+        var subject=await Staff(branch:branch);using var coach=subject.Client;var one=await Staff(AcademyRole.AcademyAdmin,branch);using var a=one.Client;var two=await Staff(AcademyRole.AcademyAdmin,branch);using var bclient=two.Client;
+        async Task SetReviewer(Guid member)
+        {
+            var path=$"/api/v1/manage/branches/{branch}/check-in-site";var data=await owner.GetFromJsonAsync<JsonElement>(path);var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var req=new HttpRequestMessage(HttpMethod.Put,path){Content=JsonContent.Create(new CheckInSiteWrite(null,null,new(false,50,30,30,120,true,true,false,member),data.GetProperty("version").GetUInt32()))};req.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());var response=await owner.SendAsync(req);Assert.True(response.IsSuccessStatusCode,await response.Content.ReadAsStringAsync());
+        }
+        await SetReviewer(one.Member);var first=await Request(coach,Claim(branch));var path=$"{StaffAttendanceExceptions.ManagePath}/{first.GetProperty("id").GetGuid()}";
+        Assert.True((await a.GetFromJsonAsync<JsonElement>(path)).GetProperty("canReview").GetBoolean());Assert.False((await bclient.GetFromJsonAsync<JsonElement>(path)).GetProperty("canReview").GetBoolean());Assert.Equal(HttpStatusCode.Forbidden,(await Review(bclient,first)).StatusCode);
+        // A detail read never reserves review rights: changing the policy is rechecked at decision time.
+        await SetReviewer(two.Member);Assert.Equal(HttpStatusCode.Forbidden,(await Review(a,first)).StatusCode);(await Review(bclient,first)).EnsureSuccessStatusCode();
+        var own=await Request(bclient,Claim(branch));Assert.Equal(HttpStatusCode.Forbidden,(await Review(bclient,own)).StatusCode);(await Review(owner,own)).EnsureSuccessStatusCode();
+        var rejected=await Request(a,Claim(branch));(await Review(owner,rejected,false,"رفض اصطناعي للتأكد من البديل")).EnsureSuccessStatusCode();
+        await using var verify=factory.Services.CreateAsyncScope();var check=verify.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Equal(2,await check.StaffDailyAttendances.CountAsync(d=>d.MembershipId==subject.Member||d.MembershipId==two.Member));Assert.False(await check.StaffDailyAttendances.AnyAsync(d=>d.MembershipId==one.Member));
     }
     [Fact]
     public async Task Second_shift_claim_preserves_original_and_checkout_binds_exact_child_with_one_daily_deduction()
@@ -280,7 +299,7 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
     [Fact]
     public async Task Scoped_readonly_reviewer_cannot_see_another_branch_or_review_without_edit()
     {
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var branches=await db.Branches.Where(b=>b.AcademyId==DemoSeed.NogoomAcademyId&&b.IsActive).Select(b=>b.Id).Take(2).ToArrayAsync();
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var branches=new[]{Academy.Api.Slice2.Slice2DemoSeed.CityBranchId,Academy.Api.Slice2.Slice2DemoSeed.FifthBranchId};
         var s=await Staff(branch:branches[0]);var outside=await Staff(branch:branches[1]);using var c=s.Client;using var oc=outside.Client;var a=await Staff(AcademyRole.AcademyAdmin,branches[0]);using var admin=a.Client;
         var m=await db.AcademyMemberships.SingleAsync(m=>m.Id==a.Member);m.AllBranches=false;m.UseActionGrants=true;db.MembershipBranchAccesses.Add(new(){Id=Guid.NewGuid(),AcademyId=m.AcademyId,MembershipId=m.Id,BranchId=branches[0]});var grant=new StaffActionGrant{Id=Guid.NewGuid(),AcademyId=m.AcademyId,MembershipId=m.Id,Module="staff",Read=true,Edit=false};db.StaffActionGrants.Add(grant);await db.SaveChangesAsync();
         var r=await Request(c,Claim(s.Branch));var hidden=await Request(oc,Claim(outside.Branch));var inbox=await admin.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.ManagePath+"/");Assert.Contains(inbox.GetProperty("items").EnumerateArray(),x=>x.GetProperty("id").GetGuid()==r.GetProperty("id").GetGuid());Assert.DoesNotContain(inbox.GetProperty("items").EnumerateArray(),x=>x.GetProperty("id").GetGuid()==hidden.GetProperty("id").GetGuid());
@@ -299,7 +318,7 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
     [Fact]
     public async Task A_review_key_from_a_now_hidden_branch_cannot_leave_partial_attendance()
     {
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var branches=await db.Branches.Where(b=>b.AcademyId==DemoSeed.NogoomAcademyId&&b.IsActive).Select(b=>b.Id).Take(2).ToArrayAsync();var a=await Staff(AcademyRole.AcademyAdmin,branches[0]);using var admin=a.Client;var first=await Staff(branch:branches[0]);var second=await Staff(branch:branches[1]);using var fc=first.Client;using var sc=second.Client;
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var branches=new[]{Academy.Api.Slice2.Slice2DemoSeed.CityBranchId,Academy.Api.Slice2.Slice2DemoSeed.FifthBranchId};var a=await Staff(AcademyRole.AcademyAdmin,branches[0]);using var admin=a.Client;var first=await Staff(branch:branches[0]);var second=await Staff(branch:branches[1]);using var fc=first.Client;using var sc=second.Client;
         var member=await db.AcademyMemberships.SingleAsync(m=>m.Id==a.Member);member.AllBranches=false;member.UseActionGrants=true;var access=new MembershipBranchAccess{Id=Guid.NewGuid(),AcademyId=member.AcademyId,MembershipId=member.Id,BranchId=branches[0]};db.MembershipBranchAccesses.Add(access);db.StaffActionGrants.Add(new(){Id=Guid.NewGuid(),AcademyId=member.AcademyId,MembershipId=member.Id,Module="staff",Read=true,Edit=true});await db.SaveChangesAsync();
         var original=await Request(fc,Claim(first.Branch));var outside=await Request(sc,Claim(second.Branch));var key=Guid.NewGuid().ToString();(await Review(admin,original,key:key)).EnsureSuccessStatusCode();access.BranchId=branches[1];await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.Conflict,(await Review(admin,outside,key:key)).StatusCode);Assert.False(await db.StaffDailyAttendances.AnyAsync(r=>r.MembershipId==second.Member));var stillPending=await db.StaffAttendanceExceptions.AsNoTracking().SingleAsync(r=>r.Id==outside.GetProperty("id").GetGuid());Assert.Equal("Pending",stillPending.Status);Assert.Null(stillPending.AttendanceId);
     }

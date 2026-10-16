@@ -63,6 +63,8 @@ public sealed partial class FoundationDbContext
         Tenant<StaffGrant>(b); Tenant<StaffWorkSchedule>(b); Tenant<StaffDailyAttendance>(b); Tenant<BranchCheckInSiteAudit>(b); Tenant<GuardianFeedback>(b);
         b.Entity<BranchCheckInSiteAudit>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<BranchCheckInSiteAudit>().HasOne<Identity.ApplicationUser>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<BranchCheckInSiteAudit>().Property(x => x.BeforePolicy).HasColumnType("jsonb");
+        b.Entity<BranchCheckInSiteAudit>().Property(x => x.AfterPolicy).HasColumnType("jsonb");
         b.Entity<GuardianFeedback>().HasOne<Player>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<GuardianFeedback>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CoachMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

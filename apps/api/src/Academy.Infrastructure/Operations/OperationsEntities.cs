@@ -158,6 +158,9 @@ public sealed class BranchCheckInSiteAudit : TenantEntity
     public double? BeforeLongitude { get; set; }
     public double? AfterLatitude { get; set; }
     public double? AfterLongitude { get; set; }
+    // Historical site-only changes retain null, never a fabricated old policy.
+    public string? BeforePolicy { get; set; }
+    public string? AfterPolicy { get; set; }
 }
 
 // Feedback is child-linked and private to academy management; it is never a public coach score.

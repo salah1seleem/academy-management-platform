@@ -3,6 +3,17 @@ import { expect, type APIRequestContext } from "@playwright/test";
 // Worker-memory only: a real Demo login is reused by independent read journeys.
 // Never persist credentials, bypass OTP limits, or share sessions across origins.
 const sessions = new Map<string, { token: string; expires: number }>();
+// The product's shared-IP auth budget is deliberately unchanged. A rejected
+// request has not executed; wait for the real fixed window, never mint a token.
+export async function demoAuthPost(request: APIRequestContext, path: string, data: object,
+  pause: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  let response = await request.post(path, { data });
+  for (let attempt = 0; response.status() === 429 && attempt < 2; attempt++) {
+    await pause(31_000);
+    response = await request.post(path, { data });
+  }
+  return response;
+}
 export async function mobileDemoToken(request: APIRequestContext, phoneNumber: string, deviceName: string): Promise<string> {
   const probe = await request.get("/api/v1/auth/csrf");
   expect(probe.status()).toBe(200);
@@ -19,9 +30,9 @@ export async function mobileDemoToken(request: APIRequestContext, phoneNumber: s
       return cached.token;
     }
   }
-  const requested = await request.post("/api/v1/mobile/auth/otp/request", { data: { phoneNumber } });
+  const requested = await demoAuthPost(request,"/api/v1/mobile/auth/otp/request", { phoneNumber });
   expect(requested.status()).toBe(202);
-  const verified = await request.post("/api/v1/mobile/auth/otp/verify", { data: { phoneNumber, challengeId: (await requested.json()).challengeId, code: "246810", deviceName } });
+  const verified = await demoAuthPost(request,"/api/v1/mobile/auth/otp/verify", { phoneNumber, challengeId: (await requested.json()).challengeId, code: "246810", deviceName });
   expect(verified.status()).toBe(200);
   const credentials = await verified.json();
   expect(typeof credentials.accessToken).toBe("string");

@@ -134,7 +134,7 @@ class _DeviceCheckInState extends State<DeviceCheckIn> {
                   'ميزة عرض تجريبية: تأكيد الجهاز المحلي ليس إثباتًا يتحقق منه الخادم. يمكن طلب مراجعة إدارية بدلًا منه.',
                 ),
                 const UiText(
-                  'اختر فرعك، ثم أكد بصمة الجهاز وموقعك الحالي. الحد الأقصى 50 مترًا من نقطة الفرع.',
+                  'اختر فرعك ثم راجع نطاقه المحفوظ. التأكيد المحلي تجريبي فقط؛ قد يلزم توقيع خادمي أو مراجعة إدارية.',
                 ),
                 if (sites.isEmpty)
                   const UiText(
@@ -151,7 +151,9 @@ class _DeviceCheckInState extends State<DeviceCheckIn> {
                             for (final site in sites)
                               DropdownMenuItem(
                                 value: textOf(site['id']),
-                                child: UiText(textOf(site['name'])),
+                                child: UiText(
+                                  '${textOf(site['name'])} — ${textOf(site['radiusMeters'])} مترًا',
+                                ),
                               ),
                           ],
                           onChanged: busy

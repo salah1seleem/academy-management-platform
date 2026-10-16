@@ -19,6 +19,16 @@ public sealed class Branch : TenantEntity
     public string? Address { get; set; }
     public double? CheckInLatitude { get; set; }
     public double? CheckInLongitude { get; set; }
+    // Enabled alone never suffices: a reviewed point, live scope and signed proof are required.
+    public bool StaffCheckInEnabled { get; set; } = true;
+    public int StaffCheckInRadiusMeters { get; set; } = 50;
+    public int StaffCheckInMaxAccuracyMeters { get; set; } = 30;
+    public int StaffCheckInMaxAgeSeconds { get; set; } = 30;
+    public int StaffCheckInChallengeSeconds { get; set; } = 120;
+    public bool StaffCheckInCoachRequired { get; set; }
+    public bool StaffCheckInAdminRequired { get; set; }
+    public bool StaffCheckInOwnerRequired { get; set; }
+    public Guid? StaffCheckInReviewerMembershipId { get; set; }
 }
 
 public enum SportKind { General, Football, Swimming }

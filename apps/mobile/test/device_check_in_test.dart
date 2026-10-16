@@ -25,7 +25,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('فرع تجريبي').last);
+    await tester.tap(find.text('فرع تجريبي — 50 مترًا').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('تأكيد البصمة والموقع'));
     await tester.pumpAndSettle();

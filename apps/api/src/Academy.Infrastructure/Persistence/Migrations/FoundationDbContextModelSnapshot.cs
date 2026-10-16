@@ -3043,11 +3043,17 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<double?>("AfterLongitude")
                         .HasColumnType("double precision");
 
+                    b.Property<string>("AfterPolicy")
+                        .HasColumnType("jsonb");
+
                     b.Property<double?>("BeforeLatitude")
                         .HasColumnType("double precision");
 
                     b.Property<double?>("BeforeLongitude")
                         .HasColumnType("double precision");
+
+                    b.Property<string>("BeforePolicy")
+                        .HasColumnType("jsonb");
 
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid");
@@ -7358,6 +7364,43 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("StaffCheckInAdminRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("StaffCheckInChallengeSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(120);
+
+                    b.Property<bool>("StaffCheckInCoachRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("StaffCheckInEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("StaffCheckInMaxAccuracyMeters")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
+
+                    b.Property<int>("StaffCheckInMaxAgeSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
+
+                    b.Property<bool>("StaffCheckInOwnerRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("StaffCheckInRadiusMeters")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(50);
+
+                    b.Property<Guid?>("StaffCheckInReviewerMembershipId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -7374,7 +7417,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "IsActive");
 
-                    b.ToTable("Branches", (string)null);
+                    b.HasIndex("AcademyId", "StaffCheckInReviewerMembershipId");
+
+                    b.ToTable("Branches", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Branch_StaffCheckInPolicy", "\"StaffCheckInRadiusMeters\" BETWEEN 10 AND 500 AND \"StaffCheckInMaxAccuracyMeters\" BETWEEN 1 AND 100 AND \"StaffCheckInMaxAccuracyMeters\" <= \"StaffCheckInRadiusMeters\" AND \"StaffCheckInMaxAgeSeconds\" BETWEEN 5 AND 60 AND \"StaffCheckInChallengeSeconds\" BETWEEN 30 AND 120");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Structure.GroupPlacementRevision", b =>
@@ -13823,6 +13871,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "StaffCheckInReviewerMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Structure.GroupPlacementRevision", b =>

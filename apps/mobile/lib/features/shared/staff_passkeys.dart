@@ -126,6 +126,7 @@ class _StaffPasskeyPageState extends State<StaffPasskeyPage> {
                   'يلزم إعداد التحقق الآمن من المسؤول؛ طلب إثبات الحضور للمراجعة ما زال متاحًا.',
                 ),
               if (message.isNotEmpty) UiText(message),
+              StaffAttendanceBranchPolicies(auth: widget.auth),
               TextButton.icon(
                 onPressed: busy
                     ? null
@@ -174,5 +175,52 @@ class _StaffPasskeyPageState extends State<StaffPasskeyPage> {
         );
       },
     ),
+  );
+}
+
+// Read the same authorized branch policy as Web, without granting native signing or attendance CRUD.
+class StaffAttendanceBranchPolicies extends StatelessWidget {
+  final AuthController auth;
+  const StaffAttendanceBranchPolicies({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => RemoteBody(
+    auth: auth,
+    path: '/api/v1/staff/passkeys/attendance',
+    builder: (context, value) {
+      final branches = rows(obj(value)['branches']);
+      if (branches.isEmpty) return const SizedBox.shrink();
+      return GCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Heading('سياسة حضوري حسب الفرع'),
+            for (final branch in branches) ...[
+              UiText(textOf(branch['name'])),
+              if (branch['enabled'] != true)
+                const UiText('التسجيل الذاتي موقوف — المراجعة الإدارية متاحة.')
+              else if (branch['configured'] != true)
+                const UiText('يلزم إعداد موقع الفرع؛ لا نستخدم نقطة تجريبية.')
+              else ...[
+                UiText(
+                  'النطاق ${textOf(branch['radiusMeters'])} مترًا · الدقة حتى ${textOf(branch['maxAccuracyMeters'])} مترًا',
+                ),
+                UiText(
+                  'حداثة الموقع ${textOf(branch['maxAgeSeconds'])} ثانية · مهلة التوقيع ${textOf(branch['challengeSeconds'])} ثانية',
+                ),
+                UiText(
+                  branch['attendanceRequired'] == true
+                      ? 'تسجيل الحضور مطلوب لفئتك في هذا الفرع.'
+                      : 'الإلزام غير مفعل لفئتك؛ لا خصم تلقائي.',
+                ),
+              ],
+              const SizedBox(height: 10),
+            ],
+            const UiText(
+              'هذه قراءة للسياسة المحفوظة، وليست إثبات حضور أو وسيلة توقيع جديدة.',
+            ),
+          ],
+        ),
+      );
+    },
   );
 }

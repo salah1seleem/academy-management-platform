@@ -19,7 +19,6 @@ public static class StaffVerifiedAttendance
 {
     private const string Path=StaffPasskeys.Path+"/attendance";
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
-    private const int MaxAgeSeconds=30,MaxAccuracyMeters=30,RadiusMeters=50;
     private static Guid Actor(HttpContext h)=>Guid.Parse(h.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     // PostgreSQL timestamps preserve microseconds; use the same instant in JSON and source columns.
     private static DateTimeOffset Now(TimeProvider clock){var n=clock.GetUtcNow().ToUniversalTime();return new(n.Ticks-n.Ticks%10,TimeSpan.Zero);}
@@ -46,7 +45,7 @@ public static class StaffVerifiedAttendance
         if(e is null)return Results.Ok(new{configured=false,profileMissing=true});
         var assigned=await db.StaffGroupAssignments.Where(a=>a.AcademyMembershipId==t.MembershipId&&a.IsActive&&a.TrainingGroup.IsActive).Select(a=>a.TrainingGroup.BranchId).ToArrayAsync();
         var candidates=await db.Branches.AsNoTracking().Where(b=>b.IsActive&&(b.Id==e.BranchId||assigned.Contains(b.Id))).ToArrayAsync();var sites=new List<object>();
-        foreach(var b in candidates)if(await Allowed(db,t,e,b.Id))sites.Add(new{id=b.Id,name=b.ArabicName,configured=b.CheckInLatitude.HasValue&&b.CheckInLongitude.HasValue,radiusMeters=RadiusMeters,maxAccuracyMeters=MaxAccuracyMeters,maxAgeSeconds=MaxAgeSeconds});
+        foreach(var b in candidates)if(await Allowed(db,t,e,b.Id))sites.Add(new{id=b.Id,name=b.ArabicName,enabled=b.StaffCheckInEnabled,configured=b.StaffCheckInEnabled&&b.CheckInLatitude.HasValue&&b.CheckInLongitude.HasValue,radiusMeters=b.StaffCheckInRadiusMeters,maxAccuracyMeters=b.StaffCheckInMaxAccuracyMeters,maxAgeSeconds=b.StaffCheckInMaxAgeSeconds,challengeSeconds=b.StaffCheckInChallengeSeconds,attendanceRequired=StaffAttendancePolicy.Read(b).Required(t.Role)});
         var open=await db.StaffDailyAttendances.AsNoTracking().Where(a=>a.MembershipId==t.MembershipId&&a.Status=="Present"&&a.CheckIn!=null&&a.CheckOut==null).Take(2).ToArrayAsync();
         var ids=open.Select(a=>a.Id).ToArray();var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>ids.Contains(p.AttendanceId)&&p.EndTime==null).ToArrayAsync();
         var recent=await db.StaffPasskeyChallenges.AsNoTracking().Where(c=>c.MembershipId==t.MembershipId&&c.ResultJson!=null).OrderByDescending(c=>c.CreatedAtUtc).Take(5).Select(c=>c.ResultJson!).ToArrayAsync();
@@ -55,11 +54,12 @@ public static class StaffVerifiedAttendance
     private static string? LocationError(StaffAttendanceIntent b,Branch site,DateTimeOffset now)
     {
         if(b.Operation is not("CheckIn" or "CheckOut")||!double.IsFinite(b.Latitude)||!double.IsFinite(b.Longitude)||!double.IsFinite(b.AccuracyMeters)||b.Latitude is < -90 or >90||b.Longitude is < -180 or >180||b.AccuracyMeters<0)return "قراءة الموقع أو نوع العملية غير صالح؛ أعد التقاط الموقع.";
+        if(!site.StaffCheckInEnabled)return "التسجيل الذاتي موقوف لهذا الفرع؛ اطلب مراجعة الإدارة، دون إغلاق الفترة تلقائيًا.";
         if(site.CheckInLatitude is null||site.CheckInLongitude is null)return "يلزم إعداد موقع الفرع؛ يمكنك طلب إثبات حضور للمراجعة.";
-        if(b.CapturedAtUtc>now.AddSeconds(2)||now-b.CapturedAtUtc>TimeSpan.FromSeconds(MaxAgeSeconds))return "قراءة الموقع قديمة أو ساعة الجهاز مختلفة؛ أعد التقاط موقع حديث.";
-        if(b.AccuracyMeters>MaxAccuracyMeters)return "دقة الموقع ضعيفة؛ أعد المحاولة أو اطلب مراجعة، دون توسيع نطاق الفرع.";
+        if(b.CapturedAtUtc>now.AddSeconds(2)||now-b.CapturedAtUtc>TimeSpan.FromSeconds(site.StaffCheckInMaxAgeSeconds))return "قراءة الموقع قديمة أو ساعة الجهاز مختلفة؛ أعد التقاط موقع حديث.";
+        if(b.AccuracyMeters>site.StaffCheckInMaxAccuracyMeters)return "دقة الموقع ضعيفة؛ أعد المحاولة أو اطلب مراجعة، دون توسيع نطاق الفرع.";
         var distance=StaffDeviceCheckIn.DistanceMeters(b.Latitude,b.Longitude,site.CheckInLatitude.Value,site.CheckInLongitude.Value);
-        return distance+b.AccuracyMeters<=RadiusMeters?null:distance-b.AccuracyMeters>RadiusMeters?"الموقع خارج نطاق الفرع؛ لم يسجل حضور. يمكنك طلب مراجعة.":"الموقع قريب من حدود النطاق ولا يكفي للقبول؛ أعد المحاولة أو اطلب مراجعة.";
+        return distance+b.AccuracyMeters<=site.StaffCheckInRadiusMeters?null:distance-b.AccuracyMeters>site.StaffCheckInRadiusMeters?"الموقع خارج نطاق الفرع؛ لم يسجل حضور. يمكنك طلب مراجعة.":"الموقع قريب من حدود النطاق ولا يكفي للقبول؛ أعد المحاولة أو اطلب مراجعة.";
     }
     private static async Task<(Employee? Employee,Branch? Site)> Scope(FoundationDbContext db,TenantMembership t,Guid actor,Guid branch)
     {
@@ -107,7 +107,7 @@ public static class StaffVerifiedAttendance
         var p=target.Periods.SingleOrDefault(p=>p.EndTime==null);
         var state=new AttendanceBinding(IntentHash(b),e.Id,site.Id,site.Version,target.Day,target.Zone,target.Row?.Id,target.Row?.Version??0,p?.Id,p?.Version);
         var options=new Fido2(cfg).GetAssertionOptions(new GetAssertionOptionsParams{AllowedCredentials=keys.Select(k=>new PublicKeyCredentialDescriptor(k.CredentialId)).ToArray(),UserVerification=UserVerificationRequirement.Required});
-        var challenge=new StaffPasskeyChallenge{Id=Guid.NewGuid(),AcademyId=t.AcademyId,MembershipId=t.MembershipId,UserId=Actor(h),Purpose=b.Operation,Name="حضور موظف موقع",OptionsJson=options.ToJson(),RpId=cfg.RPID,OriginsJson=JsonSerializer.Serialize(cfg.Origins.Order()),OperationJson=JsonSerializer.Serialize(state,Json),ExpiresAtUtc=now.AddSeconds(120),CreatedAtUtc=now,UpdatedAtUtc=now};
+        var challenge=new StaffPasskeyChallenge{Id=Guid.NewGuid(),AcademyId=t.AcademyId,MembershipId=t.MembershipId,UserId=Actor(h),Purpose=b.Operation,Name="حضور موظف موقع",OptionsJson=options.ToJson(),RpId=cfg.RPID,OriginsJson=JsonSerializer.Serialize(cfg.Origins.Order()),OperationJson=JsonSerializer.Serialize(state,Json),ExpiresAtUtc=now.AddSeconds(site.StaffCheckInChallengeSeconds),CreatedAtUtc=now,UpdatedAtUtc=now};
         db.StaffPasskeyChallenges.Add(challenge);await db.SaveChangesAsync();await tx.CommitAsync();return Results.Ok(new{challengeId=challenge.Id,challenge.ExpiresAtUtc,purpose=b.Operation,workDate=target.Day,targetWorkPeriodId=p?.Id,options=JsonSerializer.Deserialize<JsonElement>(challenge.OptionsJson)});
     }
     private static object PublicResult(AttendanceReceipt r)=>new{r.AttendanceId,r.WorkPeriodId,r.Operation,r.WorkDate,r.ConfirmedAtUtc,r.AfterVersion,attendanceRecorded=true,trustSource="ServerVerified"};

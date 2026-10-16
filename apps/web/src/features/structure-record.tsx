@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ConfirmationDialog, ErrorState, LoadingState, PageHeader, RowActions } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
 import { GroupWorkspace } from "./group-workspace";
+import { BranchCheckInSite } from "./branch-attendance-policy";
 import { CoachAgreementsWithServices as CoachAgreements } from "./coach-agreements";
 
 export type StructureKind = "branches" | "sports" | "categories" | "groups" | "coaches";
@@ -33,23 +34,6 @@ function CoachPerformanceDetails({ id, filters }: { id: string; filters: { from?
   if (!visible) return null;
   if (!data) return <LoadingState />;
   return <section className="detail-card" aria-label="أداء المدرب"><h2>أداء المدرب خلال الفترة</h2><p className="muted">من {data.from} إلى {data.to} · الحصص للمجموعات المسندة، والتقييمات المنشورة لهذا المدرب فقط.</p><dl className="detail-grid"><div><dt>حصص المجموعات</dt><dd>{data.sessionCount}</dd></div><div><dt>تقييمات اللاعبين المنشورة</dt><dd>{data.publishedEvaluations}</dd></div><div><dt>تقييم الأسر</dt><dd>{data.parentRating == null ? "لم تُرسل تقييمات" : `${data.parentRating}/5 من ${data.parentRatingCount} تقييم`}</dd></div><div><dt>شكاوى الأسر</dt><dd>{data.complaintCount}</dd></div></dl><div className="linked-list"><h3>الحصص حسب المجموعة</h3>{data.groups.length ? data.groups.map(g => <article key={g.id}><Link href={`/dashboard/academy/groups/${g.id}`}>{g.name}</Link><span>{g.branch} · {g.sessions} حصة</span></article>) : <p>لا توجد مجموعات مسندة في النطاق المختار.</p>}</div><Link href={`/dashboard/feedback?coachId=${id}`}>ملاحظات الأسر المرتبطة بالمدرب</Link></section>;
-}
-
-function BranchCheckInSite({ id }: { id: string }) {
-  const [site, setSite] = useState<{ checkInLatitude: number | null; checkInLongitude: number | null; history: { createdAtUtc: string; afterLatitude: number | null; afterLongitude: number | null }[] } | null>(null);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { fetch(`/api/v1/manage/branches/${id}/check-in-site`).then(r => r.ok ? r.json() : null).then(setSite).catch(() => setSite(null)); }, [id]);
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (busy) return;
-    const form = event.currentTarget; const values = new FormData(form); const latitude = values.get("latitude")?.toString().trim() ?? ""; const longitude = values.get("longitude")?.toString().trim() ?? "";
-    setBusy(true); setMessage("");
-    try { await csrfRequest(`/api/v1/manage/branches/${id}/check-in-site`, "PUT", { latitude: latitude ? Number(latitude) : null, longitude: longitude ? Number(longitude) : null }); const refreshed = await fetch(`/api/v1/manage/branches/${id}/check-in-site`); if (!refreshed.ok) throw new Error("تم الحفظ، لكن تعذر تحديث سجل الموقع. أعد تحميل الصفحة."); setSite(await refreshed.json()); setMessage("تم تحديث نقطة حضور الفرع."); }
-    catch (caught) { setMessage(caught instanceof Error ? caught.message : "تعذر حفظ موقع الفرع."); }
-    finally { setBusy(false); }
-  }
-  if (!site) return null;
-  return <section className="detail-card"><h2>نقطة حضور المدربين</h2><p>للمالك فقط: أدخل إحداثيات موقع الفرع بعد التحقق منها. نطاق الحضور 50 مترًا، ولن يعمل قبل ضبط الموقع. لا تُحفظ إحداثيات المدرب نفسه. التسجيل الذاتي متاح في Demo فقط حتى اكتمال بوابة الأمان.</p><form className="form-shell" onSubmit={event => void save(event)}><label>خط العرض<input name="latitude" type="number" step="any" min="-90" max="90" defaultValue={site.checkInLatitude ?? ""} /></label><label>خط الطول<input name="longitude" type="number" step="any" min="-180" max="180" defaultValue={site.checkInLongitude ?? ""} /></label><button className="primary-button" disabled={busy}>حفظ نقطة الحضور</button></form>{message && <p role="status">{message}</p>}{site.history?.length > 0 && <div className="linked-list"><h3>آخر تغييرات نقطة الحضور</h3>{site.history.slice(0, 3).map(x => <article key={x.createdAtUtc}><span>{new Date(x.createdAtUtc).toLocaleString("ar-EG-u-nu-latn")}</span><strong>{x.afterLatitude == null ? "إيقاف" : `${x.afterLatitude}, ${x.afterLongitude}`}</strong></article>)}</div>}</section>;
 }
 
 export function StructureEdit({ kind, id }: { kind: Exclude<StructureKind, "coaches">; id: string }) {

@@ -31,6 +31,13 @@ void main() {
       final state =
           await auth.request('GET', '/api/v1/staff/passkeys/attendance') as Map;
       final receipts = state['recent'] as List;
+      final policy = (state['branches'] as List).singleWhere(
+        (b) => (b as Map)['radiusMeters'] == 80,
+      ) as Map;
+      expect(policy['maxAccuracyMeters'], 10);
+      expect(policy['maxAgeSeconds'], 15);
+      expect(policy['challengeSeconds'], 60);
+      expect(policy['attendanceRequired'], isTrue);
       expect(receipts, isNotEmpty);
       final receipt = receipts.first as Map;
       final own = await auth.request(
@@ -61,6 +68,25 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await t.tap(find.text('فترات عملي'));
+      await wait(find.text('اختيار يوم'));
+      // A preserved browser receipt may be from yesterday; use the actual UI date filter.
+      if (own['today'] != receipt['workDate']) {
+        await t.tap(find.text('اختيار يوم'));
+        await t.pumpAndSettle();
+        await t.tap(find.byIcon(Icons.edit_outlined));
+        await t.pumpAndSettle();
+        final locale = MaterialLocalizations.of(
+          t.element(find.byType(DatePickerDialog)),
+        );
+        await t.enterText(
+          find.byType(TextField),
+          locale.formatCompactDate(
+            DateTime.parse(receipt['workDate'] as String),
+          ),
+        );
+        await t.tap(find.text('عرض اليوم'));
+        await t.pumpAndSettle();
+      }
       await wait(
         find.text('بداية بتوقيع متحقق خادميًا — لا يضمن سلامة الموقع'),
       );
@@ -72,6 +98,32 @@ void main() {
           () => Future<void>.delayed(const Duration(milliseconds: 400)),
         );
         await binding.takeScreenshot('phase-signed-native-period');
+      }
+      await t.tap(find.byType(BackButton));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.text('وسائل التحقق الخاصة بي'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.tap(find.text('وسائل التحقق الخاصة بي'));
+      await wait(find.text('سياسة حضوري حسب الفرع'));
+      await t.scrollUntilVisible(
+        find.text('النطاق 80 مترًا · الدقة حتى 10 مترًا'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.text('تسجيل الحضور مطلوب لفئتك في هذا الفرع.'),
+        findsOneWidget,
+      );
+      expect(find.text('تسجيل حضوري'), findsNothing);
+      if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+        await t.pumpAndSettle();
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 400)),
+        );
+        await binding.takeScreenshot('phase-policy-native-own');
       }
       final after = await auth.request(
         'GET',

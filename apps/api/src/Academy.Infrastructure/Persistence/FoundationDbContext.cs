@@ -169,6 +169,13 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.Property(x => x.ArabicName).HasMaxLength(160);
             entity.Property(x => x.EnglishName).HasMaxLength(160);
             entity.Property(x => x.Address).HasMaxLength(300);
+            entity.Property(x => x.StaffCheckInEnabled).HasDefaultValue(true);
+            entity.Property(x => x.StaffCheckInRadiusMeters).HasDefaultValue(50);
+            entity.Property(x => x.StaffCheckInMaxAccuracyMeters).HasDefaultValue(30);
+            entity.Property(x => x.StaffCheckInMaxAgeSeconds).HasDefaultValue(30);
+            entity.Property(x => x.StaffCheckInChallengeSeconds).HasDefaultValue(120);
+            entity.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.StaffCheckInReviewerMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("CK_Branch_StaffCheckInPolicy", "\"StaffCheckInRadiusMeters\" BETWEEN 10 AND 500 AND \"StaffCheckInMaxAccuracyMeters\" BETWEEN 1 AND 100 AND \"StaffCheckInMaxAccuracyMeters\" <= \"StaffCheckInRadiusMeters\" AND \"StaffCheckInMaxAgeSeconds\" BETWEEN 5 AND 60 AND \"StaffCheckInChallengeSeconds\" BETWEEN 30 AND 120"));
             entity.HasIndex(x => new { x.AcademyId, x.ArabicName }).IsUnique();
         });
 

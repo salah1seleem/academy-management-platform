@@ -62,6 +62,34 @@ public sealed class StaffPasskeyTests : IAsyncLifetime
     {var o=await AttendanceOptions(c,body);var command=new StaffAttendanceProof(o.GetProperty("challengeId").GetGuid(),body,JsonSerializer.SerializeToElement(a.Verify(o,counter)));var r=await Post(c,"/attendance/complete",command);Assert.True(r.IsSuccessStatusCode,await r.Content.ReadAsStringAsync());return(await r.Content.ReadFromJsonAsync<JsonElement>(),command);}
 
     [Fact]
+    public async Task Branch_policy_is_owner_saved_versioned_audited_tenant_scoped_and_applied_to_signed_operations()
+    {
+        var s=await Staff();using var c=s.Client;using var a=new Authenticator();var site=await AttendanceSite(s.Member);var reg=await Options(c);await Finish(c,reg,a.Register(reg));
+        using var owner=factory.CreateClient();await MobileCoachTestSession.SignInAsync(owner,factory.Services,DemoSeed.OwnerEmail,AcademyRole.AcademyOwner);
+        var path=$"/api/v1/manage/branches/{site}/check-in-site";var initial=await owner.GetFromJsonAsync<JsonElement>(path);var policy=new StaffAttendancePolicy(true,10,5,5,30,true,false,false,null);
+        Assert.Equal(HttpStatusCode.Forbidden,(await c.PutAsJsonAsync(path,new CheckInSiteWrite(30.05,31.3,policy,initial.GetProperty("version").GetUInt32()))).StatusCode);
+        using var foreign=factory.CreateClient();var csrf=await foreign.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var login=new HttpRequestMessage(HttpMethod.Post,"/api/v1/auth/login"){Content=JsonContent.Create(new{email=DemoSeed.FutureOwnerEmail,password="Demo-Only-123!"})};login.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());(await foreign.SendAsync(login)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync(path)).StatusCode);
+        async Task<HttpResponseMessage> Save(StaffAttendancePolicy p,uint? v=null)=>await owner.PutAsJsonAsync(path,new CheckInSiteWrite(30.05,31.3,p,v??(await owner.GetFromJsonAsync<JsonElement>(path)).GetProperty("version").GetUInt32()));
+        foreach(var invalid in new[]{policy with{RadiusMeters=9},policy with{RadiusMeters=501},policy with{MaxAccuracyMeters=11},policy with{MaxAgeSeconds=61},policy with{ChallengeSeconds=121}})Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Save(invalid)).StatusCode);
+        (await Save(policy)).EnsureSuccessStatusCode();var saved=await owner.GetFromJsonAsync<JsonElement>(path);Assert.NotEqual(initial.GetProperty("version").GetUInt32(),saved.GetProperty("version").GetUInt32());var history=saved.GetProperty("history");Assert.Single(history.EnumerateArray());Assert.Equal(10,JsonSerializer.Deserialize<JsonElement>(history[0].GetProperty("afterPolicy").GetString()!).GetProperty("radiusMeters").GetInt32());
+        (await Save(policy)).EnsureSuccessStatusCode();Assert.Single((await owner.GetFromJsonAsync<JsonElement>(path)).GetProperty("history").EnumerateArray());
+        Assert.Equal(HttpStatusCode.Conflict,(await Save(policy with{RadiusMeters=20},initial.GetProperty("version").GetUInt32())).StatusCode);
+        var read=await c.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path+"/attendance");var b=read.GetProperty("branches")[0];Assert.Equal(10,b.GetProperty("radiusMeters").GetInt32());Assert.True(b.GetProperty("attendanceRequired").GetBoolean());Assert.DoesNotContain("latitude",read.GetRawText(),StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",Intent(site) with{Latitude=30.0501})).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",Intent(site) with{AccuracyMeters=6})).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",Intent(site) with{CapturedAtUtc=clock.Now.AddSeconds(-6)})).StatusCode);
+        var intent=Intent(site);var pending=await AttendanceOptions(c,intent);Assert.Equal(clock.Now.AddSeconds(30),pending.GetProperty("expiresAtUtc").GetDateTimeOffset());
+        (await Save(policy with{RadiusMeters=20})).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/complete",new StaffAttendanceProof(pending.GetProperty("challengeId").GetGuid(),intent,JsonSerializer.SerializeToElement(a.Verify(pending))))).StatusCode);
+        var started=await Attend(c,a,Intent(site) with{Latitude=30.0501},1);(await Save(policy with{RadiusMeters=20,Enabled=false})).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",Intent(site,"CheckOut"))).StatusCode);
+        var disabled=await c.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path+"/attendance");Assert.False(disabled.GetProperty("branches")[0].GetProperty("configured").GetBoolean());Assert.True(disabled.GetProperty("hasOpenAttendance").GetBoolean());
+        Assert.Equal(started.Receipt.GetRawText(),(await (await Post(c,"/attendance/complete",started.Command)).Content.ReadFromJsonAsync<JsonElement>()).GetRawText()); // same receipt survives a later policy change
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Single(await db.StaffWorkPeriods.Where(p=>p.MembershipId==s.Member).ToArrayAsync());Assert.Null(await db.StaffWorkPeriods.Where(p=>p.MembershipId==s.Member).Select(p=>p.EndUtc).SingleAsync());Assert.Equal(0,await db.StaffDailyAttendances.Where(d=>d.MembershipId==s.Member).Select(d=>d.ApprovedDeduction).SingleAsync());
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"Branches\" SET \"StaffCheckInRadiusMeters\"=0 WHERE \"Id\"={site}"))).SqlState);
+        var foreignMember=await db.AcademyMemberships.Where(m=>m.AcademyId!=DemoSeed.NogoomAcademyId).Select(m=>m.Id).FirstAsync();Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Save(policy with{ReviewerMembershipId=foreignMember})).StatusCode);
+        Assert.Equal("23503",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"Branches\" SET \"StaffCheckInReviewerMembershipId\"={foreignMember} WHERE \"Id\"={site}"))).SqlState);
+    }
+
+    [Fact]
     public async Task Signed_attendance_preserves_two_periods_own_history_and_exact_replay_without_money_or_player_attendance()
     {
         var s=await Staff();using var c=s.Client;using var a=new Authenticator();var site=await AttendanceSite(s.Member);var register=await Options(c);await Finish(c,register,a.Register(register));

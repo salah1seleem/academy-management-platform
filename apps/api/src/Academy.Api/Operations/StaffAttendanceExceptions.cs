@@ -116,7 +116,7 @@ public static class StaffAttendanceExceptions
         return Results.Created(SelfPath, View(r));
     }
     private static bool Reviewer(TenantMembership t) => t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin;
-    private static async Task<bool> ManagementAllowed(FoundationDbContext db, TenantMembership t, bool edit)
+    internal static async Task<bool> ManagementAllowed(FoundationDbContext db, TenantMembership t, bool edit)
     {
         if (!Reviewer(t)) return false;
         var m = await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.IsActive && m.User.IsActive);
@@ -138,7 +138,7 @@ public static class StaffAttendanceExceptions
         var r = await db.StaffAttendanceExceptions.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id && r.AcademyId == t.AcademyId); if (r is null) return Results.NotFound();
         var currentAttendance = await db.StaffDailyAttendances.AsNoTracking().Where(a => a.AcademyId == t.AcademyId && a.MembershipId == r.MembershipId && a.WorkDate == r.WorkDate).Select(a => new { a.Status, a.CheckIn, a.CheckOut, a.CheckOutDate, a.UpdatedAtUtc }).SingleOrDefaultAsync();
         var currentPeriod=r.TargetWorkPeriodId.HasValue?await db.StaffWorkPeriods.AsNoTracking().SingleOrDefaultAsync(p=>p.Id==r.TargetWorkPeriodId&&p.AcademyId==t.AcademyId):null;
-        return Results.Ok(new { request = View(r), currentAttendance,currentPeriod=currentPeriod is null?null:StaffWorkPeriods.View(currentPeriod), timeZone = r.RequestTimeZoneId??(await Zone(db, t.AcademyId)).Id, canReview = r.Status == "Pending" && r.RequestedByUserId != Actor(h) && await ManagementAllowed(db, t, true), name = await db.Employees.Where(e => e.Id == r.EmployeeId).Select(e => e.Name).SingleAsync(), branch = await db.Branches.Where(b => b.Id == r.BranchId).Select(b => b.ArabicName).SingleAsync(), r.BeforeSnapshot, r.AfterSnapshot });
+        return Results.Ok(new { request = View(r), currentAttendance,currentPeriod=currentPeriod is null?null:StaffWorkPeriods.View(currentPeriod), timeZone = r.RequestTimeZoneId??(await Zone(db, t.AcademyId)).Id, canReview = r.Status == "Pending" && r.RequestedByUserId != Actor(h) && await ManagementAllowed(db, t, true)&&await StaffAttendancePolicy.CanReview(db,t,r.BranchId), name = await db.Employees.Where(e => e.Id == r.EmployeeId).Select(e => e.Name).SingleAsync(), branch = await db.Branches.Where(b => b.Id == r.BranchId).Select(b => b.ArabicName).SingleAsync(), r.BeforeSnapshot, r.AfterSnapshot });
     }
     private static string Snapshot(StaffDailyAttendance? r) => JsonSerializer.Serialize(r is null ? null : new { r.Id, r.WorkDate, r.Status, r.CheckIn, r.CheckOut, r.CheckOutDate, r.RecordedByUserId, r.UpdatedAtUtc });
     private static async Task<IResult> Review(Guid id, StaffExceptionReview body, HttpContext h, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, IAuthorizationService authorization)
@@ -158,6 +158,8 @@ public static class StaffAttendanceExceptions
         var r = await db.StaffAttendanceExceptions.SingleOrDefaultAsync(r => r.AcademyId == t.AcademyId && r.Id == id); if (r is null) return Results.NotFound();
         if (r.RequestedByUserId == Actor(h)) return Results.Forbid();
         if (r.Status != "Pending") return r.ReviewKey == key && r.ReviewHash == hash && r.ReviewedByUserId == Actor(h) ? Results.Ok(View(r)) : Conflict("اتُخذ قرار لهذا الطلب؛ أعد تحميل التفاصيل.");
+        await Lock(db,$"check-in-site:{t.AcademyId}:{r.BranchId}");
+        if(!await StaffAttendancePolicy.CanReview(db,t,r.BranchId))return Results.Forbid();
         if (r.Version != body.Version) return Conflict("تغير الطلب؛ أعد تحميل التفاصيل قبل المراجعة.");
         var e = await db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.AcademyId == t.AcademyId && e.Id == r.EmployeeId && e.MembershipId == r.MembershipId);
         if (e is null) return Conflict("تغير ربط ملف الموظف؛ راجع الإدارة.");

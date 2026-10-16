@@ -22,6 +22,52 @@ Future<void> reach(WidgetTester t, Finder f) async {
 
 void main() {
   testWidgets(
+    'Branch policy reflects saved bounds, required category and disabled site without a write',
+    (t) async {
+      final calls = <String>[];
+      final auth = await coach((m, p, b, token) async {
+        expect(m, 'GET');
+        calls.add(p);
+        return {
+          'branches': <Map<String, dynamic>>[
+            {
+              'id': 'one',
+              'name': 'فرع سياسة اصطناعي',
+              'enabled': true,
+              'configured': true,
+              'radiusMeters': 80,
+              'maxAccuracyMeters': 10,
+              'maxAgeSeconds': 15,
+              'challengeSeconds': 60,
+              'attendanceRequired': true,
+            },
+            {
+              'id': 'two',
+              'name': 'فرع موقوف',
+              'enabled': false,
+              'configured': false,
+            },
+          ],
+        };
+      });
+      await t.pumpWidget(shell(StaffAttendanceBranchPolicies(auth: auth)));
+      await t.pumpAndSettle();
+      expect(find.text('النطاق 80 مترًا · الدقة حتى 10 مترًا'), findsOneWidget);
+      expect(
+        find.text('تسجيل الحضور مطلوب لفئتك في هذا الفرع.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('التسجيل الذاتي موقوف — المراجعة الإدارية متاحة.'),
+        findsOneWidget,
+      );
+      expect(calls, ['/api/v1/staff/passkeys/attendance']);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
     'Own methods are read only until explicit revocation; cancelling does not write; server stop remains in history',
     (t) async {
       var stopped = false;
