@@ -1,5 +1,11 @@
 # Status
 
+## E2c2a — حضور وانصراف موقعان على المصدر نفسه — 2026-10-16
+
+Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: تحدي عملية مربوط بالهوية/الفرع/الموقع/hash ونسخةاليوم/الفترة، توقيعUV خادمي واستهلاك/كتابة ذريان ووقتسيرفري. ورديتان/منتصفالليل/replay بلاخصم أوحضورطفل، ومصدرMixed لايختلقبدايةموقعة. Web يسجل ويعيدقراءةالإيصال؛ iOS يقرأ الفترة نفسها فقط، **لا native توقيع بعد**. migration103 أمامية علىقاعدتين معزولتين، EF بلاpending؛ Backend44حالةفريدة عبرتشغيلاتمستهدفة، Web19، Flutter11، typecheck/lint/build/analyze ناجحة؛ E2E الجديدة17.2s وnativeقراءة4s وصور مراجعة. [الأدلة والمحاولات والقيود](../academy-v3/PROGRESS.md).
+
+التالي **E2c2b** إعداد سياسة كل فرع منالصلاحيات القائمة ثمnativeprovider/HTTPS/RP/associateddomain وجهازفعلي أوعائقخارجي محدد؛ لااكتمالAC28–32 أوV2/V3. CIالأساس38900957776 frontend/flutter/e2e ناجحة؛ backendUnit196/Architecture1 نجحت، integration بلا نتيجة نهائية قبلrunner shutdown/MSB4166. أضيف logger وhangtimeout10m بلاdump للتشخيص، لااختباراتمعطلة أوCIأخضرمدعى. كل الماليالمتبقي آخرًا ثمH؛ main/.env/العرضاليدوي والأثرالقديم محفوظة، لاProduction.
+
 ## E2c1 — تسجيل وسيلة تحقق وتوقيعها وإيقافها، 2026-10-16
 
 Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: WebAuthn خادمي بـUV مطلوب، تحدٍ قصير أحادي الاستخدام ورفض replay/توقيع خاطئ/هوية أخرى/وسيلة موقوفة؛ Web يسجل ويجرب ويوقف، وFlutter يقرأ ويوقف حسابه فقط. **لا حضور يُسجل ولا native enrollment/assertion بعد**؛ LastVerifiedAt ليس إثبات حضور. migration102 أمامية على قاعدتين معزولتين، EF بلاpending؛ Backend14/Web4/Flutter27 وtypecheck/lint/build/analyze ناجحة؛ browserE2E نهائي13.3s وiOS إدارة فعلية7s وصور مراجعة. [المحاولات والحدود والأدلة](../academy-v3/PROGRESS.md).

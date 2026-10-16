@@ -1,5 +1,9 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-16 — E2c2a: عملية حضور موقعة وربط الموقع والفترة
+
+Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: source/day/period CAS، nonce+payload+branch/location، توقيع خادمي ووقتسيرفر وreceipt/replay ذري؛ لاBoolean/LastVerifiedAt أوحضورطفل/مال ضمني. Web فعلي وFlutterقراءة نفسالفترة ومصدرها، migration103 وEFبلاpending. Backend44حالةفريدة/Web19/Flutter11 وأدواتالجودة وE2E17.2s/Native4s وصور مراجعة؛ [الأدلة والمحاولات](../academy-v3/PROGRESS.md). التاليE2c2b سياسةالفرع ثمnativeprovider وجهازفعلي/الإعدادالآمن، لااكتمالالخطة. CIintegration السابق انتهىrunner shutdown دوننتيجة؛ logging/timeoutتشخيصيان لا إسقاطاختبار. كل الماليالمتبقي آخرًا ثمH، وmain/Production دونتغيير.
+
 ## 2026-10-16 — E2c1: دورة وسيلة التحقق، دون تسجيل حضور
 
 Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: Register/Verify خادميان بتوقيع وUV/nonce/RP/origin وهوية؛ إيقاف نهائي وقراءة ذاتية Web/Flutter. لا attendance/payroll/child permission أو native provider مدعى. migration102 وEF بلاpending، Backend14/Web4/Flutter27، أدوات الجودة وbrowserE2E1 في13.3s وnative إدارة1 في7s وصور فعلية. [الدليل والمحاولات](../academy-v3/PROGRESS.md). التاليE2c2 يربط تحدي الحضور بالفرع/الموقع/الفترة ونسختها، لا يعيد Verify/LastVerifiedAt. ثم بقية D/E/F/G غير المالية، كل المالي المتبقي آخرًا ثمH؛ الخطة غير مكتملة وmain/Production دون تغيير.

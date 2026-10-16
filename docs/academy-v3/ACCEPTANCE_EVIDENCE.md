@@ -1,5 +1,15 @@
 # أدلة قبول V2 + V3
 
+## E2c2a — حضور موقع مع فترة وقرار محفوظين — 2026-10-16
+
+Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: إثباتCheckIn/CheckOut مربوط بالمستخدم/الأكاديمية/فرع/نسخة/موقع/hash/day/period، UV/signature/nonce/time، كتابةذرية فيالمصدرالقائم. nonceالفاشل لايعاد، replayالمطابق يعيد الأصل بلافترة/خصم/مال/حضورطفل مكرر. d+a≤50 ودقة≤30م وعمر≤30ثانية؛ حدود/قديم/ضعيف/فرعغيرمهيأ أوغيرمخول/تغيرفرع/المصدر ترفض. وقتخادم، ورديتان7200ثانية لا10800، منتصفالليل يومواحد، MixedVerifiedEnd يحفظ بدايةإدارية وlegacy بلاUTCمختلق.
+
+Backend **44حالةفريدة** ناجحة عبرالتشغيلاتالمستهدفة (22وسائل/عمليات+Device،21Exception، ثمMixedجديدة واحدة؛ الإعاداتمتداخلة). Web **19/19 في2.41s** وtypecheck/lint/build؛ Flutter **11/11 فينحو2s** وanalyze3.8s. E2E الجديدة **1/1 نهائي17.2s**: فعلBrowserWebAuthn/Geo→حضور→انصراف→replay→نفسالفترة→ثباتتحصيل/طلباتالمالك، ومصادقاصطناعي لاFaceIDمادي. القائمة E2c1 نجحت فيالتشغيلالأول قبلإصلاحsetupالجديدة؛ لاFullRegression جديدمدعى.
+
+Native رحلة **PASS4s** تقرأ المصدرالموقع نفسه منAdminOTP01099900011 فيالتطبيق الحالي علىAPI5205/قاعدةE2E المعزولة والمحاكيAcademity V3 Coach Review/iPhone17Pro/iOS26.2؛ **قراءة فقط، لا native enrollment/assertion**. [Web390](evidence/e2c2a/verified-attendance-web-390.png)، [Web1440](evidence/e2c2a/verified-attendance-web-1440.png)، [iOS](evidence/e2c2a/verified-period-ios.png) صور فعلية مراجعة، مدة0دقيقة لأنالرحلةأقلمن دقيقة. migration103 طبقتمنالصفر بقاعدتينPG16، EFبلاpending، لا.env أوreset/تعديلعرضيدوي؛ resetمعالأدلةالجديدة غيرمختبرهنا.
+
+CIالأساس38900957776 frontend/flutter/e2e ناجحة وUnit196/Architecture1، لكنintegration انتهتrunner shutdown/MSB4166 دوننتيجة نهائية؛ logging/10mhangtimeout بلاdump لتحديدالعالق، لا نجاح مفترض أو إسقاطassertions. [المحاولات والسجلات والحدود](PROGRESS.md). إعدادات سياسةالفرعالكاملة وnativeprovider/جهازمادي/associateddomains والقبولالموحد باقية؛ AC28–32 partial، الماليالمتبقيآخرًا ثمH.
+
 ## E2c1 — تسجيل وتوقيع وإيقاف وسيلة تحقق، 2026-10-16
 
 Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: Fido2 4.3.1 يتحقق خادميًا من signature/UV/challenge/RP/origin/userHandle/counter؛ كل تحدٍ قصير أحادي الاستخدام، وown list منقحة وإيقاف نهائي. Backend14/14 في51s (11جديدة+3مستهلكين)، Web4/4 في1.55s/typecheck/lint/build، Flutter27/27 في4s/analyze. إعادةFlutter5/5 متداخلة، لا تجمع.
