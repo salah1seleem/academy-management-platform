@@ -5395,6 +5395,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("VerificationChallengeId")
+                        .HasColumnType("uuid");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -5413,6 +5416,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "ActorMembershipId");
 
                     b.HasIndex("AcademyId", "AttendanceId");
+
+                    b.HasIndex("AcademyId", "VerificationChallengeId")
+                        .IsUnique()
+                        .HasFilter("\"VerificationChallengeId\" IS NOT NULL");
 
                     b.HasIndex("AcademyId", "ActorUserId", "RequestKey")
                         .IsUnique();
@@ -5823,6 +5830,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<string>("OperationJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("OptionsJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -5835,6 +5845,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("RpId")
                         .IsRequired()
@@ -5864,7 +5877,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("StaffPasskeyChallenges", null, t =>
                         {
-                            t.HasCheckConstraint("CK_StaffPasskeyChallenge_State", "\"IsActive\" AND \"Purpose\" IN ('Register','Verify') AND \"ExpiresAtUtc\">\"CreatedAtUtc\" AND (\"ConsumedAtUtc\" IS NULL OR \"ConsumedAtUtc\">=\"CreatedAtUtc\") AND (\"VerifiedAtUtc\" IS NULL OR (\"ConsumedAtUtc\" IS NOT NULL AND \"VerifiedAtUtc\">=\"ConsumedAtUtc\"))");
+                            t.HasCheckConstraint("CK_StaffPasskeyChallenge_State", "\"IsActive\" AND \"Purpose\" IN ('Register','Verify','CheckIn','CheckOut') AND \"ExpiresAtUtc\">\"CreatedAtUtc\" AND (\"ConsumedAtUtc\" IS NULL OR \"ConsumedAtUtc\">=\"CreatedAtUtc\") AND (\"VerifiedAtUtc\" IS NULL OR (\"ConsumedAtUtc\" IS NOT NULL AND \"VerifiedAtUtc\">=\"ConsumedAtUtc\")) AND ((\"Purpose\" IN ('Register','Verify') AND \"OperationJson\" IS NULL AND \"ResultJson\" IS NULL) OR (\"Purpose\" IN ('CheckIn','CheckOut') AND jsonb_typeof(\"OperationJson\")='object' AND (\"ResultJson\" IS NULL OR (\"VerifiedAtUtc\" IS NOT NULL AND jsonb_typeof(\"ResultJson\")='object'))))");
                         });
                 });
 
@@ -5940,7 +5953,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("StaffWorkPeriods", null, t =>
                         {
-                            t.HasCheckConstraint("CK_StaffWorkPeriod_Bounds", "\"IsActive\" AND ((\"EndDate\" IS NULL AND \"EndTime\" IS NULL) OR (\"EndDate\" IS NOT NULL AND \"EndTime\" IS NOT NULL AND (\"EndDate\"+\"EndTime\") >= (\"StartDate\"+\"StartTime\")))\nAND ((\"TrustSource\"='LegacyLocal' AND \"StartUtc\" IS NULL AND \"EndUtc\" IS NULL AND \"TimeZoneId\" IS NULL)\n  OR (\"TrustSource\"='AdminDeclared' AND \"StartUtc\" IS NOT NULL AND \"TimeZoneId\" IS NOT NULL AND ((\"EndTime\" IS NULL AND \"EndUtc\" IS NULL) OR (\"EndTime\" IS NOT NULL AND \"EndUtc\" IS NOT NULL AND \"EndUtc\" >= \"StartUtc\"))))");
+                            t.HasCheckConstraint("CK_StaffWorkPeriod_Bounds", "\"IsActive\" AND ((\"EndDate\" IS NULL AND \"EndTime\" IS NULL) OR (\"EndDate\" IS NOT NULL AND \"EndTime\" IS NOT NULL AND (\"EndDate\"+\"EndTime\") >= (\"StartDate\"+\"StartTime\")))\nAND ((\"TrustSource\"='LegacyLocal' AND \"StartUtc\" IS NULL AND \"EndUtc\" IS NULL AND \"TimeZoneId\" IS NULL)\n  OR (\"TrustSource\" IN ('AdminDeclared','ServerVerified','MixedVerifiedEnd') AND \"StartUtc\" IS NOT NULL AND \"TimeZoneId\" IS NOT NULL AND ((\"EndTime\" IS NULL AND \"EndUtc\" IS NULL AND \"TrustSource\"<>'MixedVerifiedEnd') OR (\"EndTime\" IS NOT NULL AND \"EndUtc\" IS NOT NULL AND \"EndUtc\" >= \"StartUtc\"))))");
                         });
                 });
 
@@ -13087,6 +13100,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.StaffPasskeyChallenge", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "VerificationChallengeId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.StaffAttendanceException", b =>

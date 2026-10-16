@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
 
@@ -29,7 +30,7 @@ export function StaffPasskeySettings() {
     catch{setError("تعذر تأكيد التحقق. حدّث القائمة قبل محاولة جديدة؛ يمكنك طلب إثبات الحضور للمراجعة بدلًا منه.");}finally{setBusy(false);}}
   async function stop(){if(!revoke||busy)return;setBusy(true);setError("");setMessage("");try{const saved=await(await csrfRequest(`${root}/credentials/${revoke.id}/revoke`,"POST",{},{},{announce:false})).json();if(saved.id!==revoke.id||saved.isActive!==false)throw new Error("لم يتأكد الإيقاف.");await load();setRevoke(null);setMessage("تم إيقاف وسيلة التحقق؛ لا يمكن استخدامها مجددًا.");}catch{setError("تعذر تأكيد الإيقاف؛ حدّث القائمة لمعرفة الحالة المحفوظة.");}finally{setBusy(false);}}
   return <><PageHeader title="وسائل التحقق الخاصة بي" context="أمان الحساب" action={{label:"عودة للرئيسية",href:"/dashboard"}}/>
-    <section className="detail-card staff-passkey-settings"><h2>تحقق آمن، دون مشاركة بصمتك</h2><p>قد تستخدم وسيلة التحقق بصمة أو وجهًا أو رمز الجهاز، وقد تتزامن بين أجهزة. لا نخزن بصمات أو صور وجوه، ولا نضمن أنها هاتف مادي وحيد.</p><p>هذه الصفحة تسجل الوسيلة وتجربها فقط؛ لا تسجل حضورًا ولا تمنح صلاحية حضور اللاعبين أو الرواتب.</p>
+    <section className="detail-card staff-passkey-settings"><h2>تحقق آمن، دون مشاركة بصمتك</h2><p>قد تستخدم وسيلة التحقق بصمة أو وجهًا أو رمز الجهاز، وقد تتزامن بين أجهزة. لا نخزن بصمات أو صور وجوه، ولا نضمن أنها هاتف مادي وحيد.</p><p>هذه الصفحة تسجل الوسيلة وتجربها فقط؛ لا تسجل حضورًا ولا تمنح صلاحية حضور اللاعبين أو الرواتب.</p><Link href="/dashboard/account/attendance">تسجيل حضوري وانصرافي</Link>
       {error&&<ErrorState message={error}/>} {message&&<p role="status">{message}</p>}{!data&&!error&&<LoadingState/>}
       <button type="button" disabled={busy} onClick={()=>{setError("");void load().catch(()=>setError("تعذر عرض الوسائل المحفوظة؛ حاول مجددًا."));}}>تحديث الوسائل</button>
       {data&&!data.configured&&<p>يلزم إعداد عنوان الويب الآمن من المسؤول. طلب إثبات الحضور للمراجعة ما زال متاحًا من تطبيق الموظف.</p>}

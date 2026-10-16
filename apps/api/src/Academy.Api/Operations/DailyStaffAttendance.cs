@@ -59,9 +59,9 @@ public static class DailyStaffAttendance
         if (t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) return Results.Forbid();
         if (!await db.AcademyMemberships.AnyAsync(m => m.Id == id && m.AcademyId == t.AcademyId && m.Role == AcademyRole.Coach && m.IsActive)) return Results.NotFound();
         var q = db.StaffAttendanceChanges.AsNoTracking().Where(c => c.AcademyId == t.AcademyId && c.MembershipId == id && c.WorkDate == date);
-        var rows = await q.OrderByDescending(c => c.CreatedAtUtc).ThenByDescending(c => c.AfterVersion).Take(100).Select(c => new { c.Id, c.CreatedAtUtc, c.BeforeVersion, c.AfterVersion, c.BeforeSnapshot, c.AfterSnapshot, actor = db.Users.Where(u => u.Id == c.ActorUserId).Select(u => u.DisplayName).FirstOrDefault() }).ToArrayAsync();
+        var rows = await q.OrderByDescending(c => c.CreatedAtUtc).ThenByDescending(c => c.AfterVersion).Take(100).Select(c => new { c.Id, c.CreatedAtUtc, c.BeforeVersion, c.AfterVersion, c.BeforeSnapshot, c.AfterSnapshot, c.VerificationChallengeId, actor = db.Users.Where(u => u.Id == c.ActorUserId).Select(u => u.DisplayName).FirstOrDefault() }).ToArrayAsync();
         var zone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
-        return Results.Ok(new { total = await q.CountAsync(), timeZone = zone, items = rows.Select(c => new { c.Id, c.CreatedAtUtc, c.BeforeVersion, c.AfterVersion, c.actor, before = JsonSerializer.Deserialize<JsonElement>(c.BeforeSnapshot), after = JsonSerializer.Deserialize<JsonElement>(c.AfterSnapshot) }) });
+        return Results.Ok(new { total = await q.CountAsync(), timeZone = zone, items = rows.Select(c => new { c.Id, c.CreatedAtUtc, c.BeforeVersion, c.AfterVersion, c.actor, source=c.VerificationChallengeId.HasValue?"ServerVerified":"Administrative", before = JsonSerializer.Deserialize<JsonElement>(c.BeforeSnapshot), after = JsonSerializer.Deserialize<JsonElement>(c.AfterSnapshot) }) });
     }
     private static async Task<IResult> Record(Guid id, DailyWrite body, CurrentTenant tenant, HttpContext http, FoundationDbContext db, TimeProvider clock, IAuthorizationService authorization)
     {

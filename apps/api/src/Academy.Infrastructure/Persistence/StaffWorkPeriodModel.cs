@@ -20,7 +20,7 @@ public sealed partial class FoundationDbContext
         e.ToTable(t=>t.HasCheckConstraint("CK_StaffWorkPeriod_Bounds", """
           "IsActive" AND (("EndDate" IS NULL AND "EndTime" IS NULL) OR ("EndDate" IS NOT NULL AND "EndTime" IS NOT NULL AND ("EndDate"+"EndTime") >= ("StartDate"+"StartTime")))
           AND (("TrustSource"='LegacyLocal' AND "StartUtc" IS NULL AND "EndUtc" IS NULL AND "TimeZoneId" IS NULL)
-            OR ("TrustSource"='AdminDeclared' AND "StartUtc" IS NOT NULL AND "TimeZoneId" IS NOT NULL AND (("EndTime" IS NULL AND "EndUtc" IS NULL) OR ("EndTime" IS NOT NULL AND "EndUtc" IS NOT NULL AND "EndUtc" >= "StartUtc"))))
+            OR ("TrustSource" IN ('AdminDeclared','ServerVerified','MixedVerifiedEnd') AND "StartUtc" IS NOT NULL AND "TimeZoneId" IS NOT NULL AND (("EndTime" IS NULL AND "EndUtc" IS NULL AND "TrustSource"<>'MixedVerifiedEnd') OR ("EndTime" IS NOT NULL AND "EndUtc" IS NOT NULL AND "EndUtc" >= "StartUtc"))))
           """));
     }
 }

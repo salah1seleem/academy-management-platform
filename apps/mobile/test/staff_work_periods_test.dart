@@ -35,6 +35,49 @@ final sample = {
 
 void main() {
   testWidgets(
+    'Verified start and mixed checkout keep different trust labels without offering writes',
+    (t) async {
+      final auth = await coach(
+        (m, p, b, token) async => {
+          ...sample,
+          'items': [
+            <String, dynamic>{
+              ...Map<String, dynamic>.from((sample['items'] as List)[0] as Map),
+              'trustSource': 'ServerVerified',
+            },
+            <String, dynamic>{
+              ...Map<String, dynamic>.from((sample['items'] as List)[1] as Map),
+              'trustSource': 'MixedVerifiedEnd',
+            },
+          ],
+        },
+      );
+      await t.pumpWidget(shell(StaffWorkPeriodsPage(auth: auth)));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.text('بداية بتوقيع متحقق خادميًا — لا يضمن سلامة الموقع'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.text('بداية بتوقيع متحقق خادميًا — لا يضمن سلامة الموقع'),
+        findsOneWidget,
+      );
+      await t.scrollUntilVisible(
+        find.text('بداية إدارية وانصراف بتوقيع متحقق خادميًا'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.text('بداية إدارية وانصراف بتوقيع متحقق خادميًا'),
+        findsOneWidget,
+      );
+      expect(find.text('حفظ'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
     'Own preserved periods show legacy/open uncertainty and never offer employee or salary writes',
     (t) async {
       final calls = <String>[];

@@ -18,6 +18,8 @@ public sealed partial class FoundationDbContext
         e.Property(x => x.RequestHash).HasMaxLength(64);
         e.Property(x => x.BeforeSnapshot).HasColumnType("jsonb");
         e.Property(x => x.AfterSnapshot).HasColumnType("jsonb");
+        e.HasOne<StaffPasskeyChallenge>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.VerificationChallengeId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        e.HasIndex(x=>new{x.AcademyId,x.VerificationChallengeId}).IsUnique().HasFilter("\"VerificationChallengeId\" IS NOT NULL");
         e.HasOne<StaffDailyAttendance>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AttendanceId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.MembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ActorMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

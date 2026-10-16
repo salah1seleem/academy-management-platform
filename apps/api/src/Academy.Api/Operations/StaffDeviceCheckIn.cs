@@ -68,11 +68,12 @@ public static class StaffDeviceCheckIn
             .Select(x => new { id = x.TrainingGroup.BranchId, name = x.TrainingGroup.Branch.ArabicName, radiusMeters = RadiusMeters }).Distinct().OrderBy(x => x.name).ToListAsync());
     }
 
-    private static async Task<IResult> CheckIn(DeviceCheckInWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock, IHostEnvironment environment)
+    private static async Task<IResult> CheckIn(DeviceCheckInWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock, IHostEnvironment environment,IConfiguration configuration)
     {
         var t = (await tenant.ResolveAsync())!;
         if (t.Role != AcademyRole.Coach) return Results.Forbid();
         if (!environment.IsEnvironment("Demo")) return Results.Problem("الحضور الذاتي بالجهاز غير مُفعّل خارج بيئة العرض حتى اكتمال بوابة الأمان.", statusCode: 503);
+        if(configuration.GetValue<bool>("StaffPasskeys:Enabled"))return Results.Conflict(new{message="يلزم توقيع يتحقق منه الخادم؛ التأكيد المحلي وحده غير مقبول. استخدم مسار التحقق الآمن أو اطلب إثبات حضور للمراجعة.",attendanceRecorded=false});
         if (!body.ClientBiometricAcknowledged || !double.IsFinite(body.Latitude) || !double.IsFinite(body.Longitude) || !double.IsFinite(body.AccuracyMeters) ||
             body.Latitude is < -90 or > 90 || body.Longitude is < -180 or > 180 || body.AccuracyMeters is < 0 or > MaxAccuracyMeters)
             return Results.UnprocessableEntity(new { message = "يلزم تأكيد بصمة الجهاز وموقع دقيق قبل تسجيل الحضور." });

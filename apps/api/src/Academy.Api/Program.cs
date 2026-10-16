@@ -396,6 +396,7 @@ app.MapStaffManagement();
 app.MapDailyStaffAttendance();
 app.MapStaffDeviceCheckIn();
 app.MapStaffPasskeys();
+app.MapStaffVerifiedAttendance();
 app.MapStaffAttendanceExceptions();
 app.MapGuardianFeedback();
 app.MapPayroll();

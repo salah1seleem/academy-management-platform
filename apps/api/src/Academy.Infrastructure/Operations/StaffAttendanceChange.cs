@@ -2,7 +2,7 @@ using Academy.Infrastructure.Structure;
 
 namespace Academy.Infrastructure.Operations;
 
-// Append-only evidence for an administrative edit of the existing daily source.
+// Append-only evidence for an administrative edit or a signed own operation of the same daily source.
 // It is neither another attendance period nor a financial movement.
 public sealed class StaffAttendanceChange : TenantEntity
 {
@@ -10,6 +10,7 @@ public sealed class StaffAttendanceChange : TenantEntity
     public Guid MembershipId { get; set; }
     public Guid ActorMembershipId { get; set; }
     public Guid ActorUserId { get; set; }
+    public Guid? VerificationChallengeId { get; set; }
     public DateOnly WorkDate { get; set; }
     public long BeforeVersion { get; set; }
     public long AfterVersion { get; set; }

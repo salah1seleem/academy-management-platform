@@ -18,7 +18,7 @@ public static class StaffPasskeys
     public static bool IsOwnPath(string path)
     {
         var p=path.TrimEnd('/');
-        return p is Path or Path+"/register/options" or Path+"/register/complete" or Path+"/verify/options" or Path+"/verify/complete"
+        return p is Path or Path+"/register/options" or Path+"/register/complete" or Path+"/verify/options" or Path+"/verify/complete" or Path+"/attendance" or Path+"/attendance/options" or Path+"/attendance/complete"
             ||p.Length>Path.Length+20&&p.StartsWith(Path+"/credentials/",StringComparison.Ordinal)&&p.EndsWith("/revoke",StringComparison.Ordinal)&&Guid.TryParse(p[(Path.Length+13)..^7],out _);
     }
     public static void MapStaffPasskeys(this WebApplication app)
@@ -33,12 +33,12 @@ public static class StaffPasskeys
     }
     private static Guid Actor(HttpContext h)=>Guid.Parse(h.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static bool Staff(TenantMembership t)=>t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach;
-    private static Task Lock(FoundationDbContext db,string key)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key},0))");
-    private static Task<bool> Live(FoundationDbContext db,TenantMembership t,Guid actor)=>db.AcademyMemberships.AnyAsync(m=>m.AcademyId==t.AcademyId&&m.Id==t.MembershipId&&m.UserId==actor&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive&&m.Role==t.Role);
+    internal static Task Lock(FoundationDbContext db,string key)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key},0))");
+    internal static Task<bool> Live(FoundationDbContext db,TenantMembership t,Guid actor)=>db.AcademyMemberships.AnyAsync(m=>m.AcademyId==t.AcademyId&&m.Id==t.MembershipId&&m.UserId==actor&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive&&m.Role==t.Role);
     private static IResult Invalid(string message)=>Results.UnprocessableEntity(new{message});
     private static IResult Conflict(string message)=>Results.Conflict(new{message});
     private static object View(StaffPasskey k)=>new{k.Id,k.Name,k.CreatedAtUtc,k.LastVerifiedAtUtc,k.IsActive,k.RevokedAtUtc,mayBeSynced=k.BackupEligible};
-    private static Fido2Configuration? Configuration(IConfiguration cfg,IHostEnvironment env)
+    internal static Fido2Configuration? Configuration(IConfiguration cfg,IHostEnvironment env)
     {
         if(!cfg.GetValue<bool>("StaffPasskeys:Enabled"))return null;
         var rp=cfg["StaffPasskeys:RpId"];var origins=cfg.GetSection("StaffPasskeys:Origins").Get<string[]>()??[];
@@ -51,7 +51,7 @@ public static class StaffPasskeys
         }
         return new(){RPID=rp,RPName="أكاديميتي — تحقق الموظف",Origins=origins.ToHashSet(StringComparer.Ordinal),ChallengeSize=32,Timeout=120000};
     }
-    private static bool SameConfig(StaffPasskeyChallenge c,Fido2Configuration cfg)=>c.RpId==cfg.RPID&&JsonSerializer.Deserialize<string[]>(c.OriginsJson)!.Order().SequenceEqual(cfg.Origins.Order());
+    internal static bool SameConfig(StaffPasskeyChallenge c,Fido2Configuration cfg)=>c.RpId==cfg.RPID&&JsonSerializer.Deserialize<string[]>(c.OriginsJson)!.Order().SequenceEqual(cfg.Origins.Order());
     private static async Task<IResult> List(CurrentTenant tenant,FoundationDbContext db,IConfiguration cfg,IHostEnvironment env)
     {
         var t=(await tenant.ResolveAsync())!;if(!Staff(t))return Results.Forbid();

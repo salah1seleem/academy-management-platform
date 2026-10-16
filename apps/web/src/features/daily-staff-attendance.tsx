@@ -11,7 +11,7 @@ import { formatDateAr, formatMoneyAr, formatTimeAr, formatStaffCheckout } from "
 import { StaffWorkPeriodsPanel, PeriodSummary, WorkPeriod } from "./staff-work-periods";
 
 type Coach = { id: string; name: string; workDate: string; today?: string; version?: number; periodCount?: number; periods?: WorkPeriod[]; changeReason?: string; status: string; checkIn?: string; checkOut?: string; checkOutDate?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
-type AttendanceChange = { id: string; createdAtUtc: string; actor: string; before: Coach | null; after: Coach };
+type AttendanceChange = { id: string; createdAtUtc: string; actor: string; source?: string; before: Coach | null; after: Coach };
 
 export function DailyCoaches() {
   const defaults = useDateFilterDefaults();
@@ -95,9 +95,9 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
       <label>الخصم المعتمد<input name="deduction" type="number" min="0" step="0.01" value={deduction} onChange={e => setDeduction(Number(e.target.value))} /></label>
       <label>سبب الخصم{deduction > 0 ? " (مطلوب)" : " (اختياري)"}<textarea name="reason" required={deduction > 0} maxLength={500} defaultValue={coach.deductionReason} /></label>
       </fieldset><button className="primary-button" disabled={busy || future || stale}>{busy ? "جارٍ الحفظ…" : pending ? "إعادة إرسال نفس الحفظ" : "حفظ الحضور"}</button>
-    </form><StaffWorkPeriodsPanel key={`${id}-${date}-${revision}`} id={id} date={date} onSaved={reload} /><section aria-label="سجل تعديلات الحضور"><h2>سجل تعديلات الحضور الإدارية</h2><p>يعرض الحفظ اليدوي وتطبيق طلبات الفترات المحفوظة لهذا اليوم. أصل الطلب وقرار المراجع في سجل طلبات الإثبات.</p>
+    </form><StaffWorkPeriodsPanel key={`${id}-${date}-${revision}`} id={id} date={date} onSaved={reload} /><section aria-label="سجل تعديلات الحضور"><h2>سجل تغييرات الحضور</h2><p>يعرض الحفظ الإداري والعمليات الموقعة لهذا اليوم، مع تمييز المصدر. أصل طلب الاستثناء وقرار المراجع في سجل طلبات الإثبات.</p>
       {historyError ? <ErrorState message={historyError} /> : !history ? <LoadingState /> : !history.items.length ? <p>لا توجد تعديلات إدارية محفوظة لهذا اليوم.</p> : <><p>آخر {history.items.length} من {history.total} تعديل</p><ol className="staff-daily-history">{history.items.map(change => <li key={change.id}>
-        <strong>{change.actor}</strong><time dateTime={change.createdAtUtc}>{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: history.timeZone }).format(new Date(change.createdAtUtc))} — توقيت الأكاديمية</time>
+        <strong>{change.actor}</strong><small>{change.source==="ServerVerified"?"عملية بتوقيع متحقق خادميًا":"تعديل إداري"}</small><time dateTime={change.createdAtUtc}>{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: history.timeZone }).format(new Date(change.createdAtUtc))} — توقيت الأكاديمية</time>
         <div><span>قبل التعديل</span><AttendanceSnapshot value={change.before} /></div><div><span>بعد التعديل</span><AttendanceSnapshot value={change.after} /></div>
       </li>)}</ol></>}
     </section><CoachWorkSchedule id={id} /></section>}</>;

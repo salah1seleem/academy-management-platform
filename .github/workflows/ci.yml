@@ -50,7 +50,7 @@ jobs:
       - run: dotnet restore AcademyManagementPlatform.slnx
       - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --no-build --configuration Release
-      - run: dotnet test AcademyManagementPlatform.slnx --no-build --configuration Release
+      - run: dotnet test AcademyManagementPlatform.slnx --no-build --configuration Release --logger "console;verbosity=normal" --blame-hang-timeout 10m --blame-hang-dump-type none
 
   frontend:
     runs-on: ubuntu-latest

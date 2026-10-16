@@ -154,6 +154,18 @@ class _StaffWorkPeriodsPageState extends State<StaffWorkPeriodsPage> {
                                 'سجل محلي قديم — مدة غير مؤكدة',
                                 'Legacy local record — duration uncertain',
                               )
+                            : entries[i]['trustSource'] == 'ServerVerified'
+                            ? localized(
+                                context,
+                                'بداية بتوقيع متحقق خادميًا — لا يضمن سلامة الموقع',
+                                'Server-verified start signature, not a GPS integrity guarantee',
+                              )
+                            : entries[i]['trustSource'] == 'MixedVerifiedEnd'
+                            ? localized(
+                                context,
+                                'بداية إدارية وانصراف بتوقيع متحقق خادميًا',
+                                'Administrative start, server-verified checkout signature',
+                              )
                             : localized(
                                 context,
                                 'توقيت معلن إداريًا، وليس إثبات جهاز',

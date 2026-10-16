@@ -21,10 +21,11 @@ public sealed partial class FoundationDbContext
         key.HasOne<ApplicationUser>().WithMany().HasForeignKey(x=>x.UserId).OnDelete(DeleteBehavior.Restrict);
         challenge.Property(x=>x.Purpose).HasMaxLength(16);challenge.Property(x=>x.Name).HasMaxLength(80);challenge.Property(x=>x.RpId).HasMaxLength(253);
         challenge.Property(x=>x.OptionsJson).HasColumnType("jsonb");challenge.Property(x=>x.OriginsJson).HasColumnType("jsonb");
+        challenge.Property(x=>x.OperationJson).HasColumnType("jsonb");challenge.Property(x=>x.ResultJson).HasColumnType("jsonb");
         challenge.HasIndex(x=>new{x.AcademyId,x.MembershipId,x.ExpiresAtUtc});
         challenge.HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
         challenge.HasOne<ApplicationUser>().WithMany().HasForeignKey(x=>x.UserId).OnDelete(DeleteBehavior.Restrict);
         key.ToTable(t=>t.HasCheckConstraint("CK_StaffPasskey_State","\"SignCount\">=0 AND length(\"CredentialHash\")=64 AND octet_length(\"CredentialId\") BETWEEN 1 AND 1024 AND octet_length(\"PublicKey\") BETWEEN 1 AND 4096 AND octet_length(\"UserHandle\")=16 AND ((\"IsActive\" AND \"RevokedAtUtc\" IS NULL) OR (NOT \"IsActive\" AND \"RevokedAtUtc\" IS NOT NULL))"));
-        challenge.ToTable(t=>t.HasCheckConstraint("CK_StaffPasskeyChallenge_State","\"IsActive\" AND \"Purpose\" IN ('Register','Verify') AND \"ExpiresAtUtc\">\"CreatedAtUtc\" AND (\"ConsumedAtUtc\" IS NULL OR \"ConsumedAtUtc\">=\"CreatedAtUtc\") AND (\"VerifiedAtUtc\" IS NULL OR (\"ConsumedAtUtc\" IS NOT NULL AND \"VerifiedAtUtc\">=\"ConsumedAtUtc\"))"));
+        challenge.ToTable(t=>t.HasCheckConstraint("CK_StaffPasskeyChallenge_State","\"IsActive\" AND \"Purpose\" IN ('Register','Verify','CheckIn','CheckOut') AND \"ExpiresAtUtc\">\"CreatedAtUtc\" AND (\"ConsumedAtUtc\" IS NULL OR \"ConsumedAtUtc\">=\"CreatedAtUtc\") AND (\"VerifiedAtUtc\" IS NULL OR (\"ConsumedAtUtc\" IS NOT NULL AND \"VerifiedAtUtc\">=\"ConsumedAtUtc\")) AND ((\"Purpose\" IN ('Register','Verify') AND \"OperationJson\" IS NULL AND \"ResultJson\" IS NULL) OR (\"Purpose\" IN ('CheckIn','CheckOut') AND jsonb_typeof(\"OperationJson\")='object' AND (\"ResultJson\" IS NULL OR (\"VerifiedAtUtc\" IS NOT NULL AND jsonb_typeof(\"ResultJson\")='object'))))"));
     }
 }

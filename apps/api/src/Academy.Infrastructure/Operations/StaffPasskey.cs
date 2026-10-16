@@ -33,4 +33,6 @@ public sealed class StaffPasskeyChallenge : TenantEntity
     public DateTimeOffset ExpiresAtUtc { get; set; }
     public DateTimeOffset? ConsumedAtUtc { get; set; }
     public DateTimeOffset? VerifiedAtUtc { get; set; }
+    public string? OperationJson { get; set; }
+    public string? ResultJson { get; set; }
 }
