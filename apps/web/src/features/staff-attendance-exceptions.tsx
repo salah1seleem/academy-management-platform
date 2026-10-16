@@ -6,7 +6,8 @@ import { csrfRequest } from "./dashboard-api";
 import { formatDateAr, formatStaffCheckout } from "../lib/formatters";
 
 type Row = { id: string; name: string; branch: string; operation: string; status: string; workDate: string; claimedAtUtc: string; receivedAtUtc: string };
-type Detail = { name: string; branch: string; timeZone: string; canReview: boolean; currentAttendance?: { status: string; checkIn?: string; checkOut?: string; checkOutDate?: string } | null; request: Row & { reason: string; reviewNote?: string; reviewedAtUtc?: string; version: number; attendanceId?: string } };
+type Period = { id: string; version: number; startDate: string; startTime: string; endDate?: string; endTime?: string; timeZoneId?: string };
+type Detail = { name: string; branch: string; timeZone: string; canReview: boolean; currentPeriod?: Period | null; currentAttendance?: { status: string; checkIn?: string; checkOut?: string; checkOutDate?: string } | null; request: Row & { reason: string; reviewNote?: string; reviewedAtUtc?: string; version: number; attendanceId?: string; targetPeriod?: Period | null } };
 const state = (v: string) => ({ Pending: "يحتاج مراجعة", Approved: "مقبول إداريًا", Rejected: "مرفوض" }[v] ?? "غير معروف");
 const operation = (v: string) => v === "CheckIn" ? "حضور" : "انصراف";
 
@@ -54,6 +55,7 @@ export function StaffAttendanceExceptionDetail({ id }: { id: string }) {
     {error && <ErrorState message={error} />}{message && <p role="status">{message}</p>}{!data && !error && <LoadingState />}{data && <section className="detail-card">
       <h2>{data.name}</h2><p>{data.branch} · {formatDateAr(data.request.workDate)} · {operation(data.request.operation)}</p><p>{state(data.request.status)}</p>
       {data.request.operation === "CheckOut" && <p>يوم بدء الحضور: {formatDateAr(data.request.workDate)}. الانصراف يرتبط بهذا السجل، حتى إذا كان في اليوم التالي.</p>}
+      {data.request.targetPeriod && <aside className="staff-request-target" aria-label="الفترة المحددة"><h3>الفترة المحددة عند إرسال الطلب</h3><p>{formatDateAr(data.request.targetPeriod.startDate)} · بداية {data.request.targetPeriod.startTime.slice(0,5)} · {data.request.targetPeriod.timeZoneId ?? "توقيت غير مؤكد"}</p><p>القرار يخص هذه الفترة فقط؛ تغيير المصدر يتطلب طلبًا جديدًا.</p>{data.currentPeriod && <p>الفترة الحالية: {data.currentPeriod.startTime.slice(0,5)} / {formatStaffCheckout(data.currentPeriod.endTime, data.currentPeriod.endDate, data.currentPeriod.startDate)}</p>}</aside>}
       <dl><dt>الوقت المدعى — بتوقيت الأكاديمية</dt><dd>{new Date(data.request.claimedAtUtc).toLocaleString("ar-EG-u-nu-latn", { timeZone: data.timeZone })}</dd><dt>استلام الخادم — بتوقيت الأكاديمية</dt><dd>{new Date(data.request.receivedAtUtc).toLocaleString("ar-EG-u-nu-latn", { timeZone: data.timeZone })}</dd><dt>سبب الطلب</dt><dd>{data.request.reason}</dd></dl>
       <p>القبول مراجعة إدارية مستقلة، لا إثبات جهاز. لا يمكن اعتماد طلبك أنت، أو استبدال سجل قائم، أو تعديل شهر معتمد.</p>
       {"currentAttendance" in data && <aside><h3>الحضور المسجل لهذا اليوم</h3>{data.currentAttendance ? <p>{data.currentAttendance.status === "Present" ? "حاضر" : data.currentAttendance.status === "Absent" ? "غائب" : "لم يُسجل"} · حضور {data.currentAttendance.checkIn?.slice(0,5) ?? "—"} · انصراف {formatStaffCheckout(data.currentAttendance.checkOut, data.currentAttendance.checkOutDate, data.request.workDate)}</p> : <p>لا يوجد سجل حضور لهذا اليوم.</p>}</aside>}

@@ -22,13 +22,23 @@ public sealed partial class FoundationDbContext
         e.Property(x => x.RequestKey).HasMaxLength(100); e.Property(x => x.ReviewKey).HasMaxLength(100);
         e.Property(x => x.RequestHash).HasMaxLength(64); e.Property(x => x.ReviewHash).HasMaxLength(64);
         e.Property(x => x.BeforeSnapshot).HasColumnType("jsonb"); e.Property(x => x.AfterSnapshot).HasColumnType("jsonb");
+        e.Property(x => x.TargetPeriodSnapshot).HasColumnType("jsonb");
+        e.Property(x => x.RequestTimeZoneId).HasMaxLength(80);
+        e.HasOne<StaffWorkPeriod>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TargetWorkPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne<StaffWorkPeriod>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AppliedWorkPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<Employee>().WithMany().HasForeignKey(x => new { x.AcademyId, x.EmployeeId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.MembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ReviewedByMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<StaffDailyAttendance>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AttendanceId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<StaffDailyAttendance>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TargetAttendanceId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
-        e.ToTable(t => t.HasCheckConstraint("CK_StaffException_CheckoutTarget", "(\"TargetAttendanceId\" IS NULL AND \"TargetAttendanceVersion\" IS NULL) OR (\"Operation\"='CheckOut' AND \"TargetAttendanceId\" IS NOT NULL AND \"TargetAttendanceVersion\" IS NOT NULL AND \"TargetAttendanceVersion\" > 0)"));
+        e.ToTable(t => t.HasCheckConstraint("CK_StaffException_CheckoutTarget", "(\"TargetAttendanceId\" IS NULL AND \"TargetAttendanceVersion\" IS NULL) OR (\"TargetAttendanceId\" IS NOT NULL AND \"TargetAttendanceVersion\" IS NOT NULL AND \"TargetAttendanceVersion\" > 0)"));
+        e.ToTable(t => t.HasCheckConstraint("CK_StaffException_PeriodTarget", """
+          (("TargetWorkPeriodId" IS NULL AND "TargetWorkPeriodVersion" IS NULL AND "TargetPeriodSnapshot" IS NULL)
+            OR ("Operation"='CheckOut' AND "TargetAttendanceId" IS NOT NULL AND "TargetWorkPeriodId" IS NOT NULL
+              AND "TargetWorkPeriodVersion">0 AND "TargetPeriodSnapshot" IS NOT NULL AND jsonb_typeof("TargetPeriodSnapshot")='object'))
+          AND ("AppliedWorkPeriodId" IS NULL OR ("Status"='Approved' AND "AttendanceId" IS NOT NULL))
+          """));
         e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.RequestedByUserId).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
         e.ToTable(t => t.HasCheckConstraint("CK_StaffException_Decision", """

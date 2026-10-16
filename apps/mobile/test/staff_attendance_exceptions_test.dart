@@ -58,6 +58,8 @@ void main() {
                   'id': 'daily-previous',
                   'workDate': '2026-10-15',
                   'checkIn': '23:30:00',
+                  'targetWorkPeriodId': 'exact-open-period',
+                  'targetWorkPeriodVersion': 11,
                 },
               }
             : <Json>[];
@@ -76,6 +78,8 @@ void main() {
       await t.tap(find.text('إرسال للمراجعة'));
       await t.pumpAndSettle();
       expect(body!['targetAttendanceId'], 'daily-previous');
+      expect(body!['targetWorkPeriodId'], 'exact-open-period');
+      expect(body!['targetWorkPeriodVersion'], 11);
       expect(body!['operation'], 'CheckOut');
       expect(body!.containsKey('membershipId'), isFalse);
       expect(t.takeException(), isNull);

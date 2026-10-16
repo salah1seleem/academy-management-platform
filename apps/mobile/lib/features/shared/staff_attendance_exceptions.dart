@@ -100,6 +100,12 @@ class _StaffAttendanceExceptionPageState
       'operation': operation,
       'reason': text,
       if (operation == 'CheckOut') 'targetAttendanceId': openAttendance['id'],
+      if (operation == 'CheckOut' &&
+          openAttendance['targetWorkPeriodId'] != null)
+        'targetWorkPeriodId': openAttendance['targetWorkPeriodId'],
+      if (operation == 'CheckOut' &&
+          openAttendance['targetWorkPeriodId'] != null)
+        'targetWorkPeriodVersion': openAttendance['targetWorkPeriodVersion'],
       'claimedAtUtc': DateTime(
         selectedDate.year,
         selectedDate.month,
@@ -618,6 +624,28 @@ class _StaffExceptionReviewPageState extends State<StaffExceptionReviewPage> {
                 'استلام الخادم بتوقيت جهازك: ${claimTime(r['receivedAtUtc'])}',
               ),
               UiText(textOf(r['reason'])),
+              if (r['targetPeriod'] is Map)
+                GCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Heading('الفترة المحددة عند إرسال الطلب'),
+                      UiText(
+                        '${obj(r['targetPeriod'])['startDate']} · ${obj(r['targetPeriod'])['startTime']}',
+                      ),
+                      UiText(
+                        'توقيت الفترة: ${obj(r['targetPeriod'])['timeZoneId'] ?? 'غير مؤكد'}',
+                      ),
+                      const UiText(
+                        'القرار يخص هذه الفترة فقط؛ تغيير المصدر يتطلب طلبًا جديدًا.',
+                      ),
+                    ],
+                  ),
+                ),
+              if (d['currentPeriod'] is Map)
+                UiText(
+                  'الفترة الحالية: ${obj(d['currentPeriod'])['startTime']} / ${obj(d['currentPeriod'])['endTime'] ?? 'مفتوحة'}',
+                ),
               if (d.containsKey('currentAttendance')) ...[
                 const Heading('الحضور المسجل — بتوقيت الأكاديمية'),
                 if (attendance == null)

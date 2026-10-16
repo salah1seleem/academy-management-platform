@@ -69,6 +69,48 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
         r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",key??Guid.NewGuid().ToString());return await c.SendAsync(r);
     }
     [Fact]
+    public async Task Second_shift_claim_preserves_original_and_checkout_binds_exact_child_with_one_daily_deduction()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();var date=new DateOnly(2026,10,15);
+        (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),25,"خصم إداري محفوظ"))).EnsureSuccessStatusCode();
+        var first=await Request(c,Claim(s.Branch,time:DateTimeOffset.Parse("2026-10-15T08:00:00Z")));
+        Assert.NotNull(first.GetProperty("targetAttendanceId").GetString());Assert.Equal(HttpStatusCode.Forbidden,(await Review(c,first)).StatusCode);(await Review(owner,first)).EnsureSuccessStatusCode();
+        var day=await PeriodDay(owner,s.Member);Assert.Equal(2,day.GetProperty("items").GetArrayLength());Assert.Equal("08:00:00",day.GetProperty("items")[0].GetProperty("startTime").GetString());
+        var open=(await c.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath+"/options")).GetProperty("openAttendance");
+        var body=Claim(s.Branch,"CheckOut",DateTimeOffset.Parse("2026-10-15T09:00:00Z")) with{TargetAttendanceId=open.GetProperty("id").GetGuid(),TargetWorkPeriodId=open.GetProperty("targetWorkPeriodId").GetGuid(),TargetWorkPeriodVersion=open.GetProperty("targetWorkPeriodVersion").GetUInt32()};
+        Assert.Equal(HttpStatusCode.NotFound,(await Write(c,StaffAttendanceExceptions.SelfPath+"/",body with{TargetWorkPeriodId=Guid.NewGuid()},Guid.NewGuid().ToString())).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Write(c,StaffAttendanceExceptions.SelfPath+"/",body with{TargetWorkPeriodVersion=1},Guid.NewGuid().ToString())).StatusCode);
+        var key=Guid.NewGuid().ToString();var claim=await Request(c,body,key);var id=claim.GetProperty("id").GetGuid();Assert.Equal(body.TargetWorkPeriodId,claim.GetProperty("targetPeriod").GetProperty("id").GetGuid());
+        using(var foreign=await Owner(DemoSeed.FutureOwnerEmail)){Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync($"{StaffAttendanceExceptions.ManagePath}/{id}")).StatusCode);}
+        var reviewKey=Guid.NewGuid().ToString();(await Review(owner,claim,key:reviewKey)).EnsureSuccessStatusCode();(await Review(owner,claim,key:reviewKey)).EnsureSuccessStatusCode();
+        var third=await Request(c,Claim(s.Branch,time:DateTimeOffset.Parse("2026-10-15T11:00:00Z")));(await Review(owner,third)).EnsureSuccessStatusCode();Assert.Equal("Approved",(await Request(c,body,key)).GetProperty("status").GetString());
+        day=await PeriodDay(owner,s.Member);Assert.Equal(3,day.GetProperty("items").GetArrayLength());Assert.Null(day.GetProperty("items")[2].GetProperty("endTime").GetString());Assert.Equal("12:00:00",day.GetProperty("items")[1].GetProperty("endTime").GetString());
+        var report=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/staff-daily?coachId={s.Member}&allDates=true");Assert.Equal(1,report.GetProperty("totalCount").GetInt32());Assert.Equal(25,report.GetProperty("totalDeductions").GetDecimal());Assert.Equal(3600,report.GetProperty("items")[0].GetProperty("workPeriods").GetProperty("knownWorkedSeconds").GetInt64());
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Equal(4,await db.StaffAttendanceChanges.CountAsync(a=>a.MembershipId==s.Member));
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"StaffAttendanceExceptions\" SET \"TargetWorkPeriodVersion\"=1 WHERE \"Id\"={id}"))).SqlState);
+    }
+    [Fact]
+    public async Task Bound_child_change_and_closed_month_reject_review_without_partial_period_or_evidence()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();var date=new DateOnly(2026,10,15);
+        (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),0,null))).EnsureSuccessStatusCode();var first=await Request(c,Claim(s.Branch,time:DateTimeOffset.Parse("2026-10-15T11:00:00Z")));(await Review(owner,first)).EnsureSuccessStatusCode();
+        var day=await PeriodDay(owner,s.Member);var p=day.GetProperty("items")[1];var body=Claim(s.Branch,"CheckOut",DateTimeOffset.Parse("2026-10-16T06:00:00Z")) with{TargetAttendanceId=first.GetProperty("targetAttendanceId").GetGuid(),TargetWorkPeriodId=p.GetProperty("id").GetGuid(),TargetWorkPeriodVersion=p.GetProperty("version").GetUInt32()};
+        var pending=await Request(c,body);(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(15,0),null,null,p.GetProperty("version").GetUInt32(),"تصحيح بداية الوردية الاصطناعية"),p.GetProperty("id").GetGuid())).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,pending)).StatusCode);(await Review(owner,pending,false,"تغيرت الفترة؛ يعاد إرسال الطلب الصحيح")).EnsureSuccessStatusCode();day=await PeriodDay(owner,s.Member);p=day.GetProperty("items")[1];var newer=await Request(c,body with{TargetWorkPeriodVersion=p.GetProperty("version").GetUInt32()});
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();var count=await db.StaffAttendanceChanges.CountAsync(a=>a.MembershipId==s.Member);
+        var academy=await db.Academies.SingleAsync(a=>a.Id==DemoSeed.NogoomAcademyId);var originalZone=academy.TimeZone;academy.TimeZone="UTC";await db.SaveChangesAsync();try{Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,newer)).StatusCode);}finally{academy.TimeZone=originalZone;await db.SaveChangesAsync();}
+        var membership=await db.AcademyMemberships.SingleAsync(m=>m.Id==s.Member);membership.IsActive=false;await db.SaveChangesAsync();try{Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,newer)).StatusCode);}finally{membership.IsActive=true;await db.SaveChangesAsync();}
+        db.PayrollSettlements.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,EmployeeId=s.Employee,Month=new(2026,10,1),Currency="EGP",PaidAtUtc=Now,PaidByUserId=actor,IdempotencyKey=Guid.NewGuid().ToString()});await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,newer)).StatusCode);Assert.Equal(count,await db.StaffAttendanceChanges.CountAsync(a=>a.MembershipId==s.Member));var periodId=p.GetProperty("id").GetGuid();Assert.Null((await db.StaffWorkPeriods.AsNoTracking().SingleAsync(a=>a.Id==periodId)).EndTime);
+    }
+    [Fact]
+    public async Task Two_second_shift_claims_cannot_open_two_periods_and_target_day_changes_are_not_overwritten()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();using var rival=await Owner();var date=new DateOnly(2026,10,15);(await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),0,null))).EnsureSuccessStatusCode();
+        var a=await Request(c,Claim(s.Branch,time:DateTimeOffset.Parse("2026-10-15T11:00:00Z")));var b=await Request(c,Claim(s.Branch,time:DateTimeOffset.Parse("2026-10-15T12:00:00Z")));var results=await Task.WhenAll(Review(owner,a),Review(rival,b));Assert.Single(results,x=>x.IsSuccessStatusCode);Assert.Single(results,x=>x.StatusCode==HttpStatusCode.Conflict);
+        var day=await PeriodDay(owner,s.Member);Assert.Equal(2,day.GetProperty("items").GetArrayLength());Assert.Single(day.GetProperty("items").EnumerateArray(),x=>x.GetProperty("endTime").ValueKind==JsonValueKind.Null);Assert.Equal("08:00:00",day.GetProperty("items")[0].GetProperty("startTime").GetString());
+    }
+    [Fact]
     public async Task Preserved_periods_keep_gaps_legacy_uncertainty_daily_deduction_and_immutable_evidence_consistent()
     {
         var s=await Staff();using var c=s.Client;using var owner=await Owner();using var foreign=await Owner(DemoSeed.FutureOwnerEmail);var date=new DateOnly(2026,10,15);
@@ -115,7 +157,7 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
         (await Manual(owner,s.Member,new(date,"Present",new(8,0),null,0,null))).EnsureSuccessStatusCode();var pending=await Request(c,Claim(s.Branch,"CheckOut",Now.AddHours(-4)));
         (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),0,null))).EnsureSuccessStatusCode();var day=await PeriodDay(owner,s.Member,"2026-10-16");(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(11,0),null,null))).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,pending)).StatusCode);Assert.Equal(HttpStatusCode.Conflict,(await Write(c,StaffAttendanceExceptions.SelfPath+"/",Claim(s.Branch,"CheckOut"),Guid.NewGuid().ToString())).StatusCode);
-        var options=await c.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath+"/options");Assert.True(options.GetProperty("requiresSourceReview").GetBoolean());Assert.Equal(JsonValueKind.Null,options.GetProperty("openAttendance").ValueKind);
+        var options=await c.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath+"/options");Assert.False(options.GetProperty("requiresSourceReview").GetBoolean());Assert.NotEqual(Guid.Empty,options.GetProperty("openAttendance").GetProperty("targetWorkPeriodId").GetGuid());
         day=await PeriodDay(owner,s.Member,"2026-10-16");var openPeriod=day.GetProperty("items")[1];
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(11,0),new(14,0),date,openPeriod.GetProperty("version").GetUInt32(),"محاولة انصراف مستقبلي مرفوضة"),openPeriod.GetProperty("id").GetGuid())).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(14,0),null,null))).StatusCode);

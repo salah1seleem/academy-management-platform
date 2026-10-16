@@ -10,6 +10,23 @@ namespace Academy.Api.Demo;
 public static class StaffWorkPeriodDemoSeed
 {
     public static Guid AttendanceId=>FootballDemoSeed.Id("staff-period-demo/day/1");
+    public static Guid ClaimId=>FootballDemoSeed.Id("staff-period-demo/second-shift-claim/1");
+    public static async Task SeedClaim(FoundationDbContext db,IHostEnvironment env,DemoOptions options,TimeProvider clock)
+    {
+        var academy=FootballDemoSeed.AcademyId;
+        if(!env.IsEnvironment("Demo")||!options.SeedEnabled||options.SeedProfile!="Football"||!await db.Academies.AnyAsync(a=>a.Id==academy&&a.Slug==FootballDemoSeed.Slug&&a.EnglishName==FootballDemoSeed.Marker))throw new InvalidOperationException("طلب الفترة الاصطناعي يتطلب Football Demo معلوم الهوية.");
+        await using var tx=await db.Database.BeginTransactionAsync();
+        var row=await db.StaffDailyAttendances.AsNoTracking().SingleOrDefaultAsync(a=>a.Id==AttendanceId&&a.AcademyId==academy);if(row is null)return;
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-open:{academy}:{row.MembershipId}"},0))");
+        row=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a=>a.Id==AttendanceId);
+        if(row.CheckOut is null||await db.StaffAttendanceExceptions.AnyAsync(r=>r.Id==ClaimId))return;
+        var e=await db.Employees.AsNoTracking().SingleOrDefaultAsync(e=>e.MembershipId==row.MembershipId&&e.AcademyId==academy&&e.IsActive);if(e is null)return;
+        var zoneId=await db.Academies.Where(a=>a.Id==academy).Select(a=>a.TimeZone).SingleAsync();
+        if(!StaffWorkPeriods.TryUtc(row.WorkDate,new(18,0),TimeZoneInfo.FindSystemTimeZoneById(zoneId),out var claimed)||clock.GetUtcNow()<claimed.AddMinutes(5))return;
+        var user=await db.AcademyMemberships.Where(m=>m.Id==row.MembershipId&&m.IsActive).Select(m=>m.UserId).SingleAsync();
+        db.StaffAttendanceExceptions.Add(new(){Id=ClaimId,AcademyId=academy,EmployeeId=e.Id,MembershipId=row.MembershipId,BranchId=e.BranchId,RequestedByUserId=user,Operation="CheckIn",WorkDate=row.WorkDate,ClaimedAtUtc=claimed,Reason="تعذر الاتصال وقت الوردية الإضافية — مثال اصطناعي",RequestKey="demo-second-shift-claim-v1",RequestHash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("demo-second-shift-claim-v1"))),TargetAttendanceId=row.Id,TargetAttendanceVersion=row.Version,RequestTimeZoneId=zoneId,CreatedAtUtc=claimed.AddMinutes(5),UpdatedAtUtc=claimed.AddMinutes(5)});
+        await db.SaveChangesAsync();await tx.CommitAsync();
+    }
     public static async Task Seed(FoundationDbContext db,IHostEnvironment env,DemoOptions options,TimeProvider clock)
     {
         var academy=FootballDemoSeed.AcademyId;

@@ -17,6 +17,8 @@ void main() {
     (tester) async {
       expect(const bool.fromEnvironment('ISOLATED_DEMO'), isTrue);
       const overnight = bool.fromEnvironment('OVERNIGHT');
+      const multiple = bool.fromEnvironment('MULTIPLE_PERIODS');
+      const checkout = overnight || multiple;
       final ownerTransport = HttpApiTransport(
         AppConfig('Demo', const String.fromEnvironment('API_BASE_URL')),
       );
@@ -79,7 +81,7 @@ void main() {
       );
       await login(staff, phone);
       String? originalDay, checkoutDay;
-      if (overnight) {
+      if (checkout) {
         final calendar = await owner.request(
           'GET',
           '/api/v1/manage/staff-attendance/${member['membershipId']}',
@@ -95,19 +97,38 @@ void main() {
           body: {
             'date': originalDay,
             'status': 'Present',
-            'checkIn': '23:30:00',
-            'checkOut': null,
+            'checkIn': multiple ? '08:00:00' : '23:30:00',
+            'checkOut': multiple ? '10:00:00' : null,
             'approvedDeduction': 0,
             'reason': null,
           },
         );
+        if (multiple) {
+          final day = await owner.request(
+            'GET',
+            '/api/v1/manage/staff-attendance/${member['membershipId']}/periods?date=$originalDay',
+          ) as Map;
+          await owner.request(
+            'POST',
+            '/api/v1/manage/staff-attendance/${member['membershipId']}/periods',
+            body: {
+              'date': originalDay,
+              'version': day['version'],
+              'startTime': '14:00:00',
+              'endTime': null,
+              'endDate': null,
+            },
+            idempotencyKey: 'native-period-$stamp',
+          );
+        }
       }
       final ownOptions = await staff.request(
         'GET',
         '/api/v1/staff/attendance-exceptions/options',
       ) as Map;
-      final openSource = overnight ? ownOptions['openAttendance'] as Map : null;
-      if (overnight) expect(openSource!['workDate'], originalDay);
+      final openSource = checkout ? ownOptions['openAttendance'] as Map : null;
+      if (checkout) expect(openSource!['workDate'], originalDay);
+      if (multiple) expect(openSource!['targetWorkPeriodId'], isNotNull);
       final branchName =
           ((ownOptions['branches'] as List).singleWhere(
                 (b) => (b as Map)['id'] == branch['id'],
@@ -135,8 +156,19 @@ void main() {
 
       Future<void> capture(String n) async {
         if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+          await tester.pumpAndSettle();
+          // Native screenshots must wait for the platform compositor, not only
+          // Flutter's test clock, or a route transition can be captured mid-frame.
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 400)),
+          );
+          await tester.pumpAndSettle();
           await binding.takeScreenshot(
-            'phase-staff-${overnight ? 'overnight' : 'exception'}-$n',
+            'phase-staff-${multiple
+                ? 'period-claim'
+                : overnight
+                ? 'overnight'
+                : 'exception'}-$n',
           );
         }
       }
@@ -158,7 +190,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text(branchName).last);
       await tester.pumpAndSettle();
-      if (overnight) {
+      if (checkout) {
         await reach(find.byType(DropdownButtonFormField<String>).at(1));
         await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
         await tester.pumpAndSettle();
@@ -179,9 +211,12 @@ void main() {
       final claim = claims.single as Map;
       expect(claim['status'], 'Pending');
       expect(claim['attendanceId'], isNull);
-      if (overnight) {
+      if (checkout) {
         expect(claim['targetAttendanceId'], openSource!['id']);
         expect(claim['workDate'], originalDay);
+        if (multiple) {
+          expect(claim['targetWorkPeriodId'], openSource['targetWorkPeriodId']);
+        }
       }
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(AcademyApp(auth: owner, environment: 'Demo'));
@@ -212,8 +247,11 @@ void main() {
         '/api/v1/manage/staff-attendance-exceptions/${claim['id']}',
       ) as Map;
       expect((detail['currentAttendance'] as Map)['status'], 'Present');
-      if (overnight) {
-        expect(detail['beforeSnapshot'], contains('23:30'));
+      if (checkout) {
+        expect(
+          detail['beforeSnapshot'],
+          contains(multiple ? '14:00' : '23:30'),
+        );
         expect(
           (detail['currentAttendance'] as Map)['checkOutDate'],
           checkoutDay,
@@ -228,6 +266,24 @@ void main() {
           ((report['items'] as List).single as Map)['workDate'],
           originalDay,
         );
+        if (multiple) {
+          expect(
+            (saved.single as Map)['appliedWorkPeriodId'],
+            openSource['targetWorkPeriodId'],
+          );
+          final periods = await staff.request(
+            'GET',
+            '/api/v1/staff/work-periods?date=$originalDay',
+          ) as Map;
+          expect((periods['items'] as List).length, 2);
+          final end = (periods['items'] as List).last as Map;
+          expect(end['id'], openSource['targetWorkPeriodId']);
+          expect(
+            DateTime.parse(end['endUtc'] as String).toUtc(),
+            DateTime.parse(claim['claimedAtUtc'] as String).toUtc(),
+          );
+          expect(report['totalDeductions'], 0);
+        }
       } else {
         expect(detail['beforeSnapshot'], 'null');
       }

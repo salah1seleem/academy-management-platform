@@ -5437,6 +5437,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("AfterSnapshot")
                         .HasColumnType("jsonb");
 
+                    b.Property<Guid?>("AppliedWorkPeriodId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("AttendanceId")
                         .HasColumnType("uuid");
 
@@ -5481,6 +5484,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("RequestTimeZoneId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<Guid>("RequestedByUserId")
                         .HasColumnType("uuid");
 
@@ -5516,6 +5523,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<long?>("TargetAttendanceVersion")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("TargetPeriodSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("TargetWorkPeriodId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("TargetWorkPeriodVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -5536,6 +5552,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ReviewedByUserId");
 
+                    b.HasIndex("AcademyId", "AppliedWorkPeriodId");
+
                     b.HasIndex("AcademyId", "AttendanceId");
 
                     b.HasIndex("AcademyId", "BranchId");
@@ -5548,6 +5566,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TargetAttendanceId");
 
+                    b.HasIndex("AcademyId", "TargetWorkPeriodId");
+
                     b.HasIndex("AcademyId", "RequestedByUserId", "RequestKey")
                         .IsUnique();
 
@@ -5559,9 +5579,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("StaffAttendanceExceptions", null, t =>
                         {
-                            t.HasCheckConstraint("CK_StaffException_CheckoutTarget", "(\"TargetAttendanceId\" IS NULL AND \"TargetAttendanceVersion\" IS NULL) OR (\"Operation\"='CheckOut' AND \"TargetAttendanceId\" IS NOT NULL AND \"TargetAttendanceVersion\" IS NOT NULL AND \"TargetAttendanceVersion\" > 0)");
+                            t.HasCheckConstraint("CK_StaffException_CheckoutTarget", "(\"TargetAttendanceId\" IS NULL AND \"TargetAttendanceVersion\" IS NULL) OR (\"TargetAttendanceId\" IS NOT NULL AND \"TargetAttendanceVersion\" IS NOT NULL AND \"TargetAttendanceVersion\" > 0)");
 
                             t.HasCheckConstraint("CK_StaffException_Decision", "\"IsActive\" AND \"Operation\" IN ('CheckIn','CheckOut') AND \"Status\" IN ('Pending','Approved','Rejected')\nAND length(trim(\"Reason\")) BETWEEN 5 AND 500 AND \"ClaimedAtUtc\" <= \"CreatedAtUtc\"\nAND ((\"Status\"='Pending' AND \"ReviewedByUserId\" IS NULL AND \"ReviewedByMembershipId\" IS NULL\n  AND \"ReviewedAtUtc\" IS NULL AND \"ReviewKey\" IS NULL AND \"ReviewHash\" IS NULL AND \"ReviewNote\" IS NULL\n  AND \"AttendanceId\" IS NULL AND \"BeforeSnapshot\" IS NULL AND \"AfterSnapshot\" IS NULL)\nOR (\"Status\" <> 'Pending' AND \"ReviewedByUserId\" IS NOT NULL AND \"ReviewedByUserId\" <> \"RequestedByUserId\"\n  AND \"ReviewedByMembershipId\" IS NOT NULL AND \"ReviewedAtUtc\" IS NOT NULL AND \"ReviewedAtUtc\" >= \"CreatedAtUtc\"\n  AND \"ReviewKey\" IS NOT NULL AND \"ReviewHash\" IS NOT NULL\n  AND ((\"Status\"='Approved' AND \"AttendanceId\" IS NOT NULL AND \"BeforeSnapshot\" IS NOT NULL AND \"AfterSnapshot\" IS NOT NULL)\n    OR (\"Status\"='Rejected' AND \"ReviewNote\" IS NOT NULL AND length(trim(\"ReviewNote\")) BETWEEN 5 AND 500\n      AND \"AttendanceId\" IS NULL AND \"BeforeSnapshot\" IS NULL AND \"AfterSnapshot\" IS NULL))))");
+
+                            t.HasCheckConstraint("CK_StaffException_PeriodTarget", "((\"TargetWorkPeriodId\" IS NULL AND \"TargetWorkPeriodVersion\" IS NULL AND \"TargetPeriodSnapshot\" IS NULL)\n  OR (\"Operation\"='CheckOut' AND \"TargetAttendanceId\" IS NOT NULL AND \"TargetWorkPeriodId\" IS NOT NULL\n    AND \"TargetWorkPeriodVersion\">0 AND \"TargetPeriodSnapshot\" IS NOT NULL AND jsonb_typeof(\"TargetPeriodSnapshot\")='object'))\nAND (\"AppliedWorkPeriodId\" IS NULL OR (\"Status\"='Approved' AND \"AttendanceId\" IS NOT NULL))");
                         });
                 });
 
@@ -5738,8 +5760,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
-
-                    b.HasAlternateKey("AcademyId", "Id");
 
                     b.HasIndex("RecordedByUserId");
 
@@ -12919,6 +12939,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ReviewedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Academy.Infrastructure.Operations.StaffWorkPeriod", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AppliedWorkPeriodId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Academy.Infrastructure.Operations.StaffDailyAttendance", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "AttendanceId")
@@ -12955,6 +12981,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Operations.StaffDailyAttendance", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "TargetAttendanceId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.StaffWorkPeriod", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TargetWorkPeriodId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
                 });

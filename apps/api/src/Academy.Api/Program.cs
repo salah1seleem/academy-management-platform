@@ -460,7 +460,10 @@ if (app.Environment.IsEnvironment("Demo"))
         if(app.Configuration.GetValue<bool>("Demo:OvernightStaffAttendanceSeedEnabled"))
             await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:StaffWorkPeriodsSeedEnabled"))
+        {
             await StaffWorkPeriodDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
+            await StaffWorkPeriodDemoSeed.SeedClaim(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
+        }
         if (app.Services.GetRequiredService<IOptions<DemoOptions>>().Value.SeedProfile == "LegacyRegression")
         {
             if (app.Configuration.GetValue<bool>("Demo:SportScopeSeedEnabled")) await SportScopeDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);

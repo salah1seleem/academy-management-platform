@@ -55,7 +55,7 @@ it("shows the selected day's manual before/after evidence and never labels a fai
   expect(await screen.findByText("مسؤول اصطناعي")).toBeVisible(); expect(screen.getByText("لا يوجد سجل سابق")).toBeVisible(); expect(screen.getByText("خصم اصطناعي محفوظ")).toBeVisible();
   expect(fetch).toHaveBeenCalledWith(`/api/v1/manage/staff-attendance/${coach.id}/history?date=${range.to}`,expect.anything());
   cleanup(); global.fetch=vi.fn(input=>String(input).includes("history") ? response({},503) : String(input).includes("schedule") ? response([]) : response(coach)) as typeof fetch;
-  render(<DateFilterDefaults range={range}><DailyCoachRecord id={coach.id} /></DateFilterDefaults>); expect(await screen.findByText("تعذر تحميل سجل التعديلات.")).toBeVisible(); expect(screen.queryByText("لا توجد تعديلات يدوية محفوظة لهذا اليوم.")).not.toBeInTheDocument();
+  render(<DateFilterDefaults range={range}><DailyCoachRecord id={coach.id} /></DateFilterDefaults>); expect(await screen.findByText("تعذر تحميل سجل التعديلات.")).toBeVisible(); expect(screen.queryByText("لا توجد تعديلات إدارية محفوظة لهذا اليوم.")).not.toBeInTheDocument();
 });
 
 it("defaults to today, searches by coach name and opens only the selected record in a separate route", async () => {

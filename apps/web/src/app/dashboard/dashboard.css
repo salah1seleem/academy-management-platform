@@ -294,6 +294,9 @@
 .form-section > p { margin: -3px 0 14px; color: var(--staff-text-muted); font-size: 12px; }
 .form-section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .dashboard-shell .detail-card { max-width: 980px; padding: 24px; }
+.dashboard-shell .staff-request-target { min-width: 0; margin-block: 16px; padding: 16px; border: 1px solid var(--staff-border); border-radius: 12px; background: var(--staff-primary-50); overflow-wrap: anywhere; }
+.dashboard-shell .staff-request-target h3 { margin: 0 0 8px; font-size: 16px; }
+.dashboard-shell .staff-request-target p { margin: 8px 0 0; }
 .dashboard-shell .detail-card > h2 { margin: 0 0 18px; font-size: 20px; font-weight: 700; }
 .dashboard-shell .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-block-start: 1px solid var(--staff-border); }
 .dashboard-shell .detail-grid div { display: grid; grid-template-columns: minmax(100px, .7fr) 1.3fr; gap: 12px; padding: 13px 12px; background: white; border-block-end: 1px solid var(--staff-border); border-radius: 0; }

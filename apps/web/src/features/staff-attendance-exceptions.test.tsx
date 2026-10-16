@@ -6,6 +6,15 @@ const row = { id: "claim", name: "موظف عرض", branch: "فرع العرض",
 const response = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("shows the immutable requested period separately from the current source without switching the decision target", async () => {
+  global.fetch = vi.fn(() => response({name:row.name,branch:row.branch,timeZone:"Africa/Cairo",canReview:false,request:{...row,operation:"CheckOut",targetPeriod:{id:"original",version:3,startDate:"2026-10-15",startTime:"14:00:00",timeZoneId:"Africa/Cairo"}},currentPeriod:{id:"original",version:4,startDate:"2026-10-15",startTime:"14:30:00"}})) as typeof fetch;
+  render(<StaffAttendanceExceptionDetail id="claim" />);
+  expect(await screen.findByRole("complementary",{name:"الفترة المحددة"})).toHaveTextContent("14:00");
+  expect(screen.getByText(/الفترة الحالية: 14:30/)).toBeVisible();
+  expect(screen.getByText(/القرار يخص هذه الفترة فقط/)).toBeVisible();
+  expect(vi.mocked(fetch).mock.calls.every(([,init])=>!init?.method)).toBe(true);
+});
+
 it("lists pending source records, clears to all states and links to a separate detail", async () => {
   global.fetch = vi.fn(() => response({ total: 1, items: [row] })) as typeof fetch;
   render(<StaffAttendanceExceptionInbox />);

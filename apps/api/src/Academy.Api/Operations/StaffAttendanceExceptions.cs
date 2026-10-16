@@ -41,7 +41,7 @@ public static class StaffAttendanceExceptions
         var assigned = await db.StaffGroupAssignments.Where(a => a.AcademyId == t.AcademyId && a.AcademyMembershipId == t.MembershipId && a.IsActive && a.TrainingGroup.IsActive).Select(a => a.TrainingGroup.BranchId).ToArrayAsync();
         return await db.Branches.Where(b => b.AcademyId == t.AcademyId && b.IsActive && (b.Id == employee.BranchId || assigned.Contains(b.Id))).Select(b => b.Id).ToArrayAsync();
     }
-    private static object View(StaffAttendanceException r) => new { r.Id, r.BranchId, r.Operation, r.WorkDate, r.ClaimedAtUtc, receivedAtUtc = r.CreatedAtUtc, r.Reason, r.Status, r.ReviewNote, r.ReviewedAtUtc, r.AttendanceId, r.TargetAttendanceId, r.Version, trustSource = "AdministrativeException" };
+    private static object View(StaffAttendanceException r) => new { r.Id, r.BranchId, r.Operation, r.WorkDate, r.ClaimedAtUtc, receivedAtUtc = r.CreatedAtUtc, r.Reason, r.Status, r.ReviewNote, r.ReviewedAtUtc, r.AttendanceId, r.TargetAttendanceId, r.TargetWorkPeriodId, r.TargetWorkPeriodVersion, targetPeriod = r.TargetPeriodSnapshot is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(r.TargetPeriodSnapshot), r.AppliedWorkPeriodId, r.RequestTimeZoneId, r.Version, trustSource = "AdministrativeException" };
     private static async Task<IResult> Options(CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!;
@@ -49,8 +49,11 @@ public static class StaffAttendanceExceptions
         var e = await Employee(tenant, db, t); if (e is null) return Results.Ok(new { configured = false });
         var ids = await Sites(db, t, e);
         var open = await db.StaffDailyAttendances.AsNoTracking().Where(a => a.AcademyId == t.AcademyId && a.MembershipId == t.MembershipId && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null).OrderBy(a => a.WorkDate).Take(2).Select(a => new { a.Id, a.WorkDate, a.CheckIn }).ToArrayAsync();
-        var openIds=open.Select(a=>a.Id).ToArray();var managed=await db.StaffWorkPeriods.AnyAsync(p=>openIds.Contains(p.AttendanceId));
-        return Results.Ok(new { configured = true, nowUtc = clock.GetUtcNow(), timeZone = (await Zone(db, t.AcademyId)).Id, openAttendance = open.Length == 1&&!managed ? open[0] : null, requiresSourceReview = open.Length > 1||managed, branches = await db.Branches.Where(b => ids.Contains(b.Id)).Select(b => new { b.Id, name = b.ArabicName }).ToArrayAsync() });
+        var openIds=open.Select(a=>a.Id).ToArray();var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>openIds.Contains(p.AttendanceId)).ToArrayAsync();
+        var child=periods.Where(p=>p.EndTime is null).ToArray();
+        var valid=open.Length==1&&(periods.Length==0||child.Length==1&&child[0].StartUtc.HasValue);
+        object? target=valid?new {open[0].Id,open[0].WorkDate,checkIn=child.Length==1?child[0].StartTime:open[0].CheckIn,targetWorkPeriodId=child.Length==1?(Guid?)child[0].Id:null,targetWorkPeriodVersion=child.Length==1?(uint?)child[0].Version:null}:null;
+        return Results.Ok(new { configured = true, nowUtc = clock.GetUtcNow(), timeZone = (await Zone(db, t.AcademyId)).Id, openAttendance = target, requiresSourceReview = open.Length > 0&&!valid, branches = await db.Branches.Where(b => ids.Contains(b.Id)).Select(b => new { b.Id, name = b.ArabicName }).ToArrayAsync() });
     }
     private static async Task<IResult> Own(CurrentTenant tenant, FoundationDbContext db)
     {
@@ -61,11 +64,12 @@ public static class StaffAttendanceExceptions
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role == AcademyRole.Guardian) return Results.Forbid();
         var key = Key(h); var reason = body.Reason?.Trim(); var now = clock.GetUtcNow();
-        if (key is null || body.Operation is not ("CheckIn" or "CheckOut") || body.Operation == "CheckIn" && body.TargetAttendanceId.HasValue || reason?.Length is not (>= 5 and <= 500) || body.ClaimedAtUtc.Year < 2000 || body.ClaimedAtUtc > now) return Invalid("أدخل سببًا واضحًا ووقتًا مدعى غير مستقبلي، ثم أعد إرسال الطلب.");
-        var local = TimeZoneInfo.ConvertTime(body.ClaimedAtUtc, await Zone(db, t.AcademyId));
+        if (key is null || body.Operation is not ("CheckIn" or "CheckOut") || body.Operation == "CheckIn" && (body.TargetAttendanceId.HasValue||body.TargetWorkPeriodId.HasValue) || body.TargetWorkPeriodId.HasValue!=body.TargetWorkPeriodVersion.HasValue || reason?.Length is not (>= 5 and <= 500) || body.ClaimedAtUtc.Year < 2000 || body.ClaimedAtUtc > now) return Invalid("أدخل سببًا واضحًا ووقتًا مدعى غير مستقبلي، ثم أعد إرسال الطلب.");
+        var zone=await Zone(db,t.AcademyId);
+        var local = TimeZoneInfo.ConvertTime(body.ClaimedAtUtc, zone);
         var date = DateOnly.FromDateTime(local.DateTime);
         // Preserve keys from the preceding version when an explicit source was not supplied.
-        var hash = body.TargetAttendanceId.HasValue
+        var hash = body.TargetWorkPeriodId.HasValue ? Hash(new {body.BranchId,body.Operation,claimed=body.ClaimedAtUtc.ToUniversalTime(),reason,body.TargetAttendanceId,body.TargetWorkPeriodId,body.TargetWorkPeriodVersion}) : body.TargetAttendanceId.HasValue
             ? Hash(new { body.BranchId, body.Operation, claimed = body.ClaimedAtUtc.ToUniversalTime(), reason, body.TargetAttendanceId })
             : Hash(new { body.BranchId, body.Operation, claimed = body.ClaimedAtUtc.ToUniversalTime(), reason });
         await using var tx = await db.Database.BeginTransactionAsync();
@@ -78,20 +82,34 @@ public static class StaffAttendanceExceptions
         var old = await db.StaffAttendanceExceptions.SingleOrDefaultAsync(r => r.AcademyId == t.AcademyId && r.RequestedByUserId == Actor(h) && r.RequestKey == key);
         if (old is not null) return old.MembershipId == t.MembershipId && old.RequestHash == hash ? Results.Ok(View(old)) : Conflict("مفتاح الطلب مستخدم لبيانات أو سياق مختلف؛ افتح طلبًا جديدًا.");
         StaffDailyAttendance? target = null;
+        StaffWorkPeriod? targetPeriod=null;
+        await Lock(db, $"staff-open:{t.AcademyId}:{t.MembershipId}");
         if (body.Operation == "CheckOut")
         {
-            await Lock(db, $"staff-open:{t.AcademyId}:{t.MembershipId}");
             var open = await db.StaffDailyAttendances.AsNoTracking().Where(a => a.AcademyId == t.AcademyId && a.MembershipId == t.MembershipId && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null).Take(2).ToArrayAsync();
             if (open.Length != 1) return Conflict("الانصراف يحتاج سجل حضور مفتوحًا واحدًا؛ راجع الإدارة عند غيابه أو تعدده.");
             target = open[0];
             if (body.TargetAttendanceId.HasValue && body.TargetAttendanceId != target.Id) return Results.NotFound();
+            var children=await db.StaffWorkPeriods.AsNoTracking().Where(p=>p.AttendanceId==target.Id).ToArrayAsync();
+            if(children.Length>0)
+            {
+                if(!body.TargetWorkPeriodId.HasValue)return Conflict("أعد قراءة الفترة المفتوحة قبل طلب الانصراف؛ يجب تحديد الفترة نفسها.");
+                targetPeriod=children.SingleOrDefault(p=>p.Id==body.TargetWorkPeriodId);
+                if(targetPeriod is null)return Results.NotFound();
+                if(targetPeriod.Version!=body.TargetWorkPeriodVersion||targetPeriod.EndTime.HasValue||targetPeriod.StartUtc is null||targetPeriod.TimeZoneId!=zone.Id)return Conflict("تغيرت الفترة أو توقيتها؛ أعد قراءة المصدر قبل طلب الانصراف.");
+                if(body.ClaimedAtUtc<=targetPeriod.StartUtc)return Invalid("وقت الانصراف يجب أن يكون بعد بداية الفترة المحددة.");
+            }
+            else if(body.TargetWorkPeriodId.HasValue)return Results.NotFound();
             if (date < target.WorkDate || date == target.WorkDate && TimeOnly.FromDateTime(local.DateTime) < target.CheckIn) return Invalid("وقت الانصراف المدعى يسبق الحضور المسجل.");
             date = target.WorkDate; // An overnight checkout belongs to the original workday.
         }
+        else
+        {
+            target=await db.StaffDailyAttendances.AsNoTracking().SingleOrDefaultAsync(a=>a.AcademyId==t.AcademyId&&a.MembershipId==t.MembershipId&&a.WorkDate==date&&a.Status=="Present"&&a.CheckIn!=null&&a.CheckOut!=null);
+        }
         var terms = await ContractHistory.Bounds(db, e, date);
-        if(await db.StaffWorkPeriods.AnyAsync(p=>p.AcademyId==t.AcademyId&&p.MembershipId==t.MembershipId&&p.StartDate==date))return Conflict("هذا اليوم له فترات عمل محفوظة؛ اطلب من الإدارة مراجعة الفترة المحددة دون استبدال اليوم.");
         if (date < terms.ContractStart || terms.ContractEnd.HasValue && date > terms.ContractEnd) return Invalid("يوم بدء الحضور خارج مدة العمل المسجلة.");
-        var r = new StaffAttendanceException { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = e.Id, MembershipId = t.MembershipId, BranchId = body.BranchId, RequestedByUserId = Actor(h), Operation = body.Operation, WorkDate = date, ClaimedAtUtc = body.ClaimedAtUtc.ToUniversalTime(), Reason = reason!, RequestKey = key, RequestHash = hash, TargetAttendanceId = target?.Id, TargetAttendanceVersion = target?.Version, CreatedAtUtc = now, UpdatedAtUtc = now };
+        var r = new StaffAttendanceException { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = e.Id, MembershipId = t.MembershipId, BranchId = body.BranchId, RequestedByUserId = Actor(h), Operation = body.Operation, WorkDate = date, ClaimedAtUtc = body.ClaimedAtUtc.ToUniversalTime(), Reason = reason!, RequestKey = key, RequestHash = hash, TargetAttendanceId = target?.Id, TargetAttendanceVersion = target?.Version, TargetWorkPeriodId=targetPeriod?.Id,TargetWorkPeriodVersion=targetPeriod?.Version,TargetPeriodSnapshot=targetPeriod is null?null:JsonSerializer.Serialize(StaffWorkPeriods.View(targetPeriod),new JsonSerializerOptions(JsonSerializerDefaults.Web)),RequestTimeZoneId=zone.Id,CreatedAtUtc = now, UpdatedAtUtc = now };
         db.StaffAttendanceExceptions.Add(r);
         try { await db.SaveChangesAsync(); await tx.CommitAsync(); }
         catch (DbUpdateException ex) when (DuplicateCommand(ex)) { return Conflict("مفتاح الطلب مستخدم من قبل؛ راجع طلباتك أو أعد تحميل السياق."); }
@@ -119,7 +137,8 @@ public static class StaffAttendanceExceptions
         var t = (await tenant.ResolveAsync())!; if (!await ManagementAllowed(db, t, false)) return Results.Forbid();
         var r = await db.StaffAttendanceExceptions.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id && r.AcademyId == t.AcademyId); if (r is null) return Results.NotFound();
         var currentAttendance = await db.StaffDailyAttendances.AsNoTracking().Where(a => a.AcademyId == t.AcademyId && a.MembershipId == r.MembershipId && a.WorkDate == r.WorkDate).Select(a => new { a.Status, a.CheckIn, a.CheckOut, a.CheckOutDate, a.UpdatedAtUtc }).SingleOrDefaultAsync();
-        return Results.Ok(new { request = View(r), currentAttendance, timeZone = (await Zone(db, t.AcademyId)).Id, canReview = r.Status == "Pending" && r.RequestedByUserId != Actor(h) && await ManagementAllowed(db, t, true), name = await db.Employees.Where(e => e.Id == r.EmployeeId).Select(e => e.Name).SingleAsync(), branch = await db.Branches.Where(b => b.Id == r.BranchId).Select(b => b.ArabicName).SingleAsync(), r.BeforeSnapshot, r.AfterSnapshot });
+        var currentPeriod=r.TargetWorkPeriodId.HasValue?await db.StaffWorkPeriods.AsNoTracking().SingleOrDefaultAsync(p=>p.Id==r.TargetWorkPeriodId&&p.AcademyId==t.AcademyId):null;
+        return Results.Ok(new { request = View(r), currentAttendance,currentPeriod=currentPeriod is null?null:StaffWorkPeriods.View(currentPeriod), timeZone = r.RequestTimeZoneId??(await Zone(db, t.AcademyId)).Id, canReview = r.Status == "Pending" && r.RequestedByUserId != Actor(h) && await ManagementAllowed(db, t, true), name = await db.Employees.Where(e => e.Id == r.EmployeeId).Select(e => e.Name).SingleAsync(), branch = await db.Branches.Where(b => b.Id == r.BranchId).Select(b => b.ArabicName).SingleAsync(), r.BeforeSnapshot, r.AfterSnapshot });
     }
     private static string Snapshot(StaffDailyAttendance? r) => JsonSerializer.Serialize(r is null ? null : new { r.Id, r.WorkDate, r.Status, r.CheckIn, r.CheckOut, r.CheckOutDate, r.RecordedByUserId, r.UpdatedAtUtc });
     private static async Task<IResult> Review(Guid id, StaffExceptionReview body, HttpContext h, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, IAuthorizationService authorization)
@@ -142,7 +161,7 @@ public static class StaffAttendanceExceptions
         if (r.Version != body.Version) return Conflict("تغير الطلب؛ أعد تحميل التفاصيل قبل المراجعة.");
         var e = await db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.AcademyId == t.AcademyId && e.Id == r.EmployeeId && e.MembershipId == r.MembershipId);
         if (e is null) return Conflict("تغير ربط ملف الموظف؛ راجع الإدارة.");
-        if (body.Approve && (!e.IsActive || !await db.Branches.AnyAsync(b => b.Id == r.BranchId && b.IsActive))) return Conflict("الموظف أو الفرع غير فعال؛ يمكنك رفض الطلب دون إعادة تفعيله.");
+        if (body.Approve && (!e.IsActive || !await db.Branches.AnyAsync(b => b.Id == r.BranchId && b.IsActive)||!await db.AcademyMemberships.AnyAsync(m=>m.Id==r.MembershipId&&m.AcademyId==t.AcademyId&&m.UserId==r.RequestedByUserId&&m.IsActive&&m.User.IsActive))) return Conflict("الموظف أو حسابه أو الفرع غير فعال؛ يمكنك رفض الطلب دون إعادة تفعيله.");
         // Recheck live branch grants under the same lock used to change them.
         if (t.Role == AcademyRole.AcademyAdmin && !await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && (m.AllBranches || db.MembershipBranchAccesses.Any(a => a.MembershipId == m.Id && a.IsActive && a.BranchId == r.BranchId) && db.MembershipBranchAccesses.Any(a => a.MembershipId == m.Id && a.IsActive && a.BranchId == e.BranchId)))) return Results.Forbid();
         var now = clock.GetUtcNow();
@@ -157,8 +176,18 @@ public static class StaffAttendanceExceptions
             var terms = await ContractHistory.Bounds(db, e, r.WorkDate);
             if (r.WorkDate < terms.ContractStart || terms.ContractEnd.HasValue && r.WorkDate > terms.ContractEnd) return Conflict("وقت الطلب غير صالح وفق مدة العمل المعتمدة الحالية.");
             if (await PayrollEndpoints.Finalized(db, t.AcademyId, e.Id, r.WorkDate)) return Conflict("شهر الموظف معتمد أو مسدد؛ لا يعدّل الحضور صامتًا. اطلب مراجعة إدارية مستقلة.");
+            if(r.RequestTimeZoneId is not null&&r.RequestTimeZoneId!=(await Zone(db,t.AcademyId)).Id)return Conflict("تغير توقيت الأكاديمية؛ راجع أصل الطلب بدل إعادة تفسيره.");
             var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == r.MembershipId && a.WorkDate == r.WorkDate);
-            if(row is not null&&await db.StaffWorkPeriods.AnyAsync(p=>p.AttendanceId==row.Id))return Conflict("أضيفت فترات محفوظة إلى هذا اليوم؛ راجع الفترة المحددة من الإدارة بدل إغلاق مصدر مختلف.");
+            if(r.TargetWorkPeriodId.HasValue||r.Operation=="CheckIn"&&r.TargetAttendanceId.HasValue)
+            {
+                if(row is null)return Conflict("لم يعد مصدر الطلب موجودًا؛ راجع الإدارة.");
+                if(r.Operation=="CheckIn"&&await db.StaffDailyAttendances.AnyAsync(a=>a.MembershipId==r.MembershipId&&a.AcademyId==t.AcademyId&&a.Id!=row.Id&&a.CheckIn!=null&&a.CheckOut==null&&a.Status=="Present"))return Conflict("توجد فترة مفتوحة أخرى؛ لا يعتمد حضور جديد فوقها.");
+                var failure=await StaffExceptionPeriods.Apply(r,row,t,Actor(h),db,clock);if(failure is not null)return failure;
+                now=row.UpdatedAtUtc;
+            }
+            else
+            {
+            if(row is not null&&await db.StaffWorkPeriods.AnyAsync(p=>p.AttendanceId==row.Id))return Conflict("أضيفت فترات محفوظة إلى هذا اليوم؛ أعد قراءة الفترة المحددة وأرسل طلبًا جديدًا.");
             if (r.Operation == "CheckIn" && await db.StaffDailyAttendances.AnyAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == r.MembershipId && a.WorkDate != r.WorkDate && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null)) return Conflict("توجد فترة حضور مفتوحة في يوم آخر؛ راجعها أولًا دون اختلاق انصراف.");
             var localClaim = TimeZoneInfo.ConvertTime(r.ClaimedAtUtc, await Zone(db, t.AcademyId));
             var checkoutDate = DateOnly.FromDateTime(localClaim.DateTime);
@@ -178,12 +207,16 @@ public static class StaffAttendanceExceptions
             // can verify its exact applied source; a later failure rolls both writes back.
             await db.SaveChangesAsync();
             r.BeforeSnapshot = before; r.AttendanceId = row.Id; r.AfterSnapshot = Snapshot(row);
+            }
         }
         r.Status = body.Approve ? "Approved" : "Rejected"; r.ReviewNote = note; r.ReviewedByUserId = Actor(h); r.ReviewedByMembershipId = t.MembershipId; r.ReviewedAtUtc = now; r.ReviewKey = key; r.ReviewHash = hash; r.UpdatedAtUtc = now;
         try { await db.SaveChangesAsync(); await tx.CommitAsync(); }
         catch (DbUpdateException ex) when (DuplicateCommand(ex)) { return Conflict("مفتاح المراجعة مستخدم من قبل؛ لم يسجل قرار جديد."); }
+        catch(DbUpdateConcurrencyException){return Conflict("تغير المصدر أثناء القرار؛ أعد قراءة الطلب.");}
+        catch(DbUpdateException ex)when(ex.InnerException is PostgresException{SqlState:"23514" or "23505"}){return Conflict("تعارض في الفترة أو دليل القرار؛ لم يحفظ حضور جديد.");}
+        catch(PostgresException ex)when(ex.SqlState=="23514"){return Conflict("تعارض في الفترة أو دليل القرار؛ لم يحفظ حضور جديد.");}
         return Results.Ok(View(r));
     }
 }
-public sealed record StaffExceptionWrite(Guid BranchId, string Operation, DateTimeOffset ClaimedAtUtc, string? Reason, Guid? TargetAttendanceId = null);
+public sealed record StaffExceptionWrite(Guid BranchId, string Operation, DateTimeOffset ClaimedAtUtc, string? Reason, Guid? TargetAttendanceId = null,Guid? TargetWorkPeriodId=null,uint? TargetWorkPeriodVersion=null);
 public sealed record StaffExceptionReview(bool Approve, string? Note, uint Version);
