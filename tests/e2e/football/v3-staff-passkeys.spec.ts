@@ -1,0 +1,19 @@
+import { expect,test } from "@playwright/test";
+
+test("Browser authenticator registers and signs with UV; server rejects replay and revoked keys without recording attendance",async({page,context},info)=>{
+  test.setTimeout(90_000);
+  const cdp=await context.newCDPSession(page);await cdp.send("WebAuthn.enable");const {authenticatorId}=await cdp.send("WebAuthn.addVirtualAuthenticator",{options:{protocol:"ctap2",transport:"internal",hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  const before=await(await page.request.get("/api/v1/reports/owner-summary")).json(),daily=await(await page.request.get("/api/v1/reports/staff-daily?allDates=true")).json();
+  await page.getByRole("button",{name:"فتح القائمة"}).click();await page.getByRole("link",{name:"وسائل التحقق الخاصة بي"}).click();await page.getByLabel("اسم وسيلة التحقق").fill("وسيلة متصفح اصطناعية");await page.getByRole("button",{name:"إضافة وسيلة تحقق"}).click();await expect(page.getByText("تم تسجيل وسيلة التحقق على الخادم. لم يسجل أي حضور.")).toBeVisible();
+  const proofResponse=page.waitForResponse(r=>r.url().endsWith("/verify/complete")&&r.request().method()==="POST");await page.getByRole("button",{name:"تجربة التحقق الآمن"}).click();const verified=await proofResponse;expect(verified.ok(),await verified.text()).toBe(true);expect((await verified.json()).attendanceRecorded).toBe(false);await expect(page.getByText("تم التحقق من التوقيع وهوية المستخدم على الخادم. لم يسجل أي حضور.")).toBeVisible();
+  const headers={"X-CSRF-TOKEN":(await(await page.request.get("/api/v1/auth/csrf")).json()).token};const replay=await page.request.post("/api/v1/staff/passkeys/verify/complete",{headers,data:verified.request().postDataJSON()});expect(replay.status()).toBe(409);
+  const keys=await(await page.request.get("/api/v1/staff/passkeys/")).json();expect(keys.items.some((k:{lastVerifiedAtUtc?:string})=>!!k.lastVerifiedAtUtc)).toBe(true);expect(JSON.stringify(keys)).not.toContain("publicKey");
+  for(const width of [390,1440]){await page.setViewportSize({width,height:1100});expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);await page.locator(".staff-passkey-settings").screenshot({path:info.outputPath(`passkeys-${width}.png`),animations:"disabled"});}
+  await page.getByRole("button",{name:"إيقاف وسيلة متصفح اصطناعية"}).click();await page.getByRole("button",{name:"تأكيد الإيقاف"}).click();await expect(page.getByText("تم إيقاف وسيلة التحقق؛ لا يمكن استخدامها مجددًا.")).toBeVisible();expect((await page.request.post("/api/v1/staff/passkeys/verify/options",{headers,data:{}})).status()).toBe(409);
+  // A real browser-created second key is left in this isolated DB for the native
+  // management smoke test. No private key or biometric fixture is stored in Git.
+  await page.getByLabel("اسم وسيلة التحقق").fill("وسيلة تحقق للمحاكي");await page.getByRole("button",{name:"إضافة وسيلة تحقق"}).click();await expect(page.getByText("تم تسجيل وسيلة التحقق على الخادم. لم يسجل أي حضور.")).toBeVisible();
+  const after=await(await page.request.get("/api/v1/reports/owner-summary")).json(),dayAfter=await(await page.request.get("/api/v1/reports/staff-daily?allDates=true")).json();expect(after.collections).toEqual(before.collections);expect(after.paymentRequests).toEqual(before.paymentRequests);expect(dayAfter.totalCount).toBe(daily.totalCount);expect(dayAfter.totalDeductions).toBe(daily.totalDeductions);
+  await cdp.send("WebAuthn.removeVirtualAuthenticator",{authenticatorId});
+});

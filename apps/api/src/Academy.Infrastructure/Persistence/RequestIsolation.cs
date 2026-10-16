@@ -161,6 +161,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         BranchFilter<StaffAttendanceChange>(b, x => StaffDailyAttendances.Any(a => a.Id == x.AttendanceId));
         BranchFilter<StaffWorkPeriod>(b, x => StaffDailyAttendances.Any(a => a.Id == x.AttendanceId));
+        b.Entity<StaffPasskey>().HasQueryFilter("own-staff-key",x=>!RequestScopeEnabled||x.MembershipId==RequestMembershipId&&x.UserId==RequestUserId);
+        b.Entity<StaffPasskeyChallenge>().HasQueryFilter("own-staff-challenge",x=>!RequestScopeEnabled||x.MembershipId==RequestMembershipId&&x.UserId==RequestUserId);
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         // Permissions and employee financial administration are not delegated by branch visibility.
         ConfigureSportIsolation(b);
@@ -189,6 +191,10 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
+        foreach(var e in ChangeTracker.Entries<StaffPasskey>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||!e.OriginalValues.GetValue<bool>(nameof(StaffPasskey.IsActive))||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(StaffPasskey.SignCount) or nameof(StaffPasskey.BackedUp) or nameof(StaffPasskey.LastVerifiedAtUtc) or nameof(StaffPasskey.IsActive) or nameof(StaffPasskey.RevokedAtUtc) or nameof(StaffPasskey.UpdatedAtUtc))))throw new InvalidOperationException("هوية وسيلة التحقق ثابتة؛ أوقفها دون حذف الدليل أو تبديل المفتاح.");
+        foreach(var e in ChangeTracker.Entries<StaffPasskeyChallenge>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||e.OriginalValues.GetValue<DateTimeOffset?>(nameof(StaffPasskeyChallenge.ConsumedAtUtc)).HasValue||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(StaffPasskeyChallenge.ConsumedAtUtc) or nameof(StaffPasskeyChallenge.VerifiedAtUtc) or nameof(StaffPasskeyChallenge.UpdatedAtUtc))))throw new InvalidOperationException("محاولة التحقق وأصلها ونتيجتها ثابتة وأحادية الاستخدام.");
         foreach (var e in ChangeTracker.Entries<StaffWorkPeriod>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.State==EntityState.Deleted || new[]{nameof(StaffWorkPeriod.AcademyId),nameof(StaffWorkPeriod.AttendanceId),nameof(StaffWorkPeriod.MembershipId),nameof(StaffWorkPeriod.StartDate),nameof(StaffWorkPeriod.CreatedAtUtc),nameof(StaffWorkPeriod.IsActive)}.Any(p=>e.Property(p).IsModified)) throw new InvalidOperationException("هوية فترة العمل ثابتة؛ صحح التوقيت دون حذف الفترة أو نقلها.");
         if (ChangeTracker.Entries<StaffAttendanceChange>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))

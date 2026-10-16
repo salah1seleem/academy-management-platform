@@ -204,6 +204,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </section></div>;
         })}
       </nav>
+      <Link className="sidebar-security-link" href="/dashboard/account/verification" onClick={closeDrawer}><ShieldCheck size={18}/>وسائل التحقق الخاصة بي</Link>
       <div className="sidebar-account sidebar-account-bottom"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span className="sidebar-account-copy"><b>{identity.name || "حساب الموظف"}</b><small>{roleLabels[identity.role] ?? ""}</small></span><button className="sidebar-logout" aria-label="تسجيل الخروج" title="تسجيل الخروج" onClick={() => void logout()}><LogOut /></button></div>
     </aside>
     <main className="dashboard-content" id="main-content">{saveNotice && <div className="save-notice" role="status"><Check size={18} /><span>{saveNotice}</span><button type="button" aria-label="إغلاق رسالة النجاح" onClick={() => setSaveNotice("")}><X size={16} /></button></div>}{children}</main>

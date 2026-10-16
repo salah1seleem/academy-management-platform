@@ -18,6 +18,7 @@ import 'matches.dart';
 import 'staff_amounts.dart';
 import 'staff_attendance_exceptions.dart';
 import 'staff_work_periods.dart';
+import 'staff_passkeys.dart';
 import 'coach_agreements.dart';
 import 'facility_board.dart';
 
@@ -227,6 +228,16 @@ class NativeMore extends StatelessWidget {
         Icons.settings_outlined,
         () => openPage(context, account),
       ),
+      if (role != 'Guardian')
+        GLink(
+          localized(
+            context,
+            'وسائل التحقق الخاصة بي',
+            'My verification methods',
+          ),
+          Icons.security_outlined,
+          () => openPage(context, StaffPasskeyPage(auth: auth)),
+        ),
     ]),
   );
 }

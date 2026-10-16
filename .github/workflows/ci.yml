@@ -106,3 +106,5 @@ jobs:
           API_INTERNAL_URL: http://127.0.0.1:5190
       - name: Football demo and coach provisioning E2E
         run: npx playwright test --config tests/e2e/playwright.football.config.ts
+      - name: Staff passkey browser verification E2E
+        run: npx playwright test --config tests/e2e/playwright.passkeys.config.ts

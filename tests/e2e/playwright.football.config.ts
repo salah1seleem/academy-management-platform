@@ -15,7 +15,7 @@ const apiRules = [...manifest.rewrites.beforeFiles, ...manifest.rewrites.afterFi
 if (apiRules.length !== 1 || apiRules[0].destination !== `${apiUrl}/api/:path*`)
   throw new Error(`Build Web with API_INTERNAL_URL=${apiUrl} before running isolated Football E2E; refusing a different API destination.`);
 export default defineConfig({
-  testDir: "./football", workers: 1, fullyParallel: false, retries: 0, reporter: "line",
+  testDir: "./football", testIgnore: "**/v3-staff-passkeys.spec.ts", workers: 1, fullyParallel: false, retries: 0, reporter: "line",
   use: { baseURL: webUrl, ...devices["Pixel 7"], trace: "retain-on-failure" },
   webServer: [
     {

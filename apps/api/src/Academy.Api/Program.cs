@@ -82,6 +82,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("device-check-in", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.User.FindFirstValue("academy_id")}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("staff-passkey", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 30, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
     options.AddPolicy("import", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
@@ -392,6 +395,7 @@ app.MapNews();
 app.MapStaffManagement();
 app.MapDailyStaffAttendance();
 app.MapStaffDeviceCheckIn();
+app.MapStaffPasskeys();
 app.MapStaffAttendanceExceptions();
 app.MapGuardianFeedback();
 app.MapPayroll();

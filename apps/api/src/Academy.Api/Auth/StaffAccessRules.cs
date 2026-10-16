@@ -25,6 +25,7 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        if(Academy.Api.Operations.StaffPasskeys.IsOwnPath(path))return null; // Own key management, never staff CRUD.
         if (path.StartsWith("/api/v1/manage/family-renewals", StringComparison.Ordinal)) return "payments";
         if (path.StartsWith("/api/v1/facilities")) return "facilities";
         if (path.StartsWith("/api/v1/manage/training-levels")) return "academy";

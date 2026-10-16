@@ -17,7 +17,7 @@ public static class StaffAttendanceExceptions
     public const string SelfPath = "/api/v1/staff/attendance-exceptions";
     public const string ManagePath = "/api/v1/manage/staff-attendance-exceptions";
     // Only these self routes bypass academy-wide CRUD. The employee is resolved server-side.
-    public static bool IsOwnPath(string path) => path.TrimEnd('/') is SelfPath or SelfPath + "/options" or StaffWorkPeriods.OwnPath;
+    public static bool IsOwnPath(string path) => path.TrimEnd('/') is SelfPath or SelfPath + "/options" or StaffWorkPeriods.OwnPath || StaffPasskeys.IsOwnPath(path);
     public static void MapStaffAttendanceExceptions(this WebApplication app)
     {
         var self = app.MapGroup(SelfPath).RequireAuthorization(AcademyPermissions.TenantAccess);
