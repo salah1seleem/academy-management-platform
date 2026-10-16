@@ -1,5 +1,13 @@
 # أدلة قبول V2 + V3
 
+## D2a — مباريات ملفات اللاعب والمدرب والطفل، 2026-10-17
+
+الحارس اللاحق `8139dc377970f7d259b49e4a8067b50a626428fd` يرفض عرض200منAPIلايؤكدIDالمرشح. API3/3 في22s وWeb15/15 في2.91s وlint/build وE2E14.8s أعيدت ونجحت؛16المستهلكين وFlutter28/Native4s أدناه تحققت قبل هذاالتعديل غيرالمؤثرعلىFlutter. الديمو اليدوي لم يُعد نشرAPIله؛ قد تظهر ضرورة تحديثالخدمة بدل عرضمباريات بلاfilter.
+
+Code `4a1692cecac46530c05c57f2051842bd2099edf7`: نفسMatchParticipants المحفوظة وAPIs، تبويبات مخصصة معفلاترسياقمقيدة وتاريخ/حالةفيURLورجوعصحيح؛ المباراةالملغاةمرئيةولاتصبحقادمة، وBenchواضح. المعرفلايمنحالدور؛ Coachبفرقهالحالية/Guardianبأطفالهمنشورة، ولااستجابةقديمةبعدتغيرالسياق. **CurrentTeamليسإسنادمدربتاريخيًا**؛ D2bباقٍ، AC26partial.
+
+API16/16، Web14/14، Flutter28/28 وanalyze/typecheck/lint/build ناجحة؛ لاmigration/EFpending. E2Eنهائية1/1 في21.6s بإنشاءAPIودرِلداون/رجوعوإلغاءوانعكاسGuardianوثباتمالمالك؛ iOSرحلةواحدةPASS4s منملفالطفلثمlogout. [Player390](evidence/d2a/player-matches-web-390.png)، [Player1440](evidence/d2a/player-matches-web-1440.png)، [Coach390](evidence/d2a/coach-matches-web-390.png)، [iOS](evidence/d2a/child-matches-ios.png) صور فعليةراجعت. النهائيعلىقاعدةPG16جديدة104migration؛ OTP3/15لميمسحأويخفف. [المحاولاتوالحدودوالسجلات](PROGRESS.md). لاAndroid/جهازمادي/قبولموحدأواكتمالخطةمدعى، والماليالمتبقيآخرًا.
+
 ## E2c3a — Flutter/iOS pipeline مع رفض إعداد فعلي، 2026-10-17
 
 Code `1fede83622a0de20abd51be789a3b6c223eb4b18`: إضافة/تجربة الوسيلة وحضور/انصراف الموظف على نفس API والمصدر؛ GPS عند الضغط وtimestamp القراءة، توقيع UV، retry نفسJSON فقط، إتلاف عند تغير السياق، والتحقق من receipt قبل النجاح. RP القديم لا يعد وسيلة حالية، ولا Boolean/LastVerifiedAt أو أطفال/راتب تلقائي. التفعيل off افتراضيًا، Android محجوب؛ لا migration وEF بلاpending،104كماهي.

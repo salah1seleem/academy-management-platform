@@ -1,5 +1,11 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-17 — D2a: ملفات المباريات المقيدة وربط الموبايل
+
+الحارساللاحق `8139dc377970f7d259b49e4a8067b50a626428fd` يمنععرضقائمةغيرمقيدةعنداختلافنسخةAPI، بإقرارIDالمرشح؛ API3/Web15 وlint/build/E2E14.8s ناجحة فيإعادةمستهدفة. لاإعادةنشرAPIالديمواليدوي مدعاة، والأدلةالمعزولةمصدرالتحقق.
+
+Code `4a1692cecac46530c05c57f2051842bd2099edf7`، تبويباللاعب/المدربورابطملفالطفل بنفسrosterالمحفوظ، filterيضيقالدورولايوسعه، الإلغاءمرئيوالرجوعمحفوظ. API16/Web14/Flutter28 وأدوات/E2E21.6s/native4sوصورفعلية؛ لاmigrationوEFpending. قاعدةنهائيةمعزولة104، noreset للعرضوحدOTPمحفوظ. [الدليل](../academy-v3/PROGRESS.md). التاليD2bلإسنادمدربتاريخيمستقللاCurrentTeamالحالي، ثمبقيةغيرالمالي، الماليآخرًا ثمH. V2-11/AC26جزئيان، لااكتمالخطةأوCIشاملمدعى.
+
 ## 2026-10-17 — E2c3a: native iOS pipeline على نفس مصدر الحضور
 
 Code `1fede83622a0de20abd51be789a3b6c223eb4b18`: providerpasskeys2.23.1/default-off، enrollment/Verify لايسجلانحضورًا، وCheckIn/Outتحدمستقل/GPSعندالضغط/receipt/retryنفسJSONوقطععندتغيرالسياق. RPالقديملايعرضكصالححاليًا؛ لاBooleanأوGPSكضمان. API6/Web8/Flutter39 وanalyze/lockناجحة؛ nativeرحلةرفضإعدادفعلي5s وصورمراجعة، **لا nativeنجاحإيجابي/جهازفعلي/Android**. لاmigrationوEFبلاpending، mainوالعرضمحفوظان. [الأدلةوالخريطةوالقيود](../academy-v3/PROGRESS.md).
