@@ -300,7 +300,16 @@ void main() {
       addTearDown(t.view.resetPhysicalSize);
       addTearDown(t.view.resetDevicePixelRatio);
       final auth = await coach(
-        (m, p, b, token) async => p.endsWith('/options') ? options : [claim],
+        (m, p, b, token) async => p.endsWith('/options')
+            ? {
+                ...options,
+                'openAttendance': {
+                  'id': 'overnight-source',
+                  'workDate': '2026-10-15',
+                  'checkIn': '23:30:00',
+                },
+              }
+            : [claim],
       );
       for (final locale in [const Locale('ar'), const Locale('en')]) {
         for (final dark in [true, false]) {
