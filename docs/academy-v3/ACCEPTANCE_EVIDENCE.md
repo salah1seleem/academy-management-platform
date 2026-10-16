@@ -1,5 +1,11 @@
 # أدلة قبول V2 + V3
 
+## E2a — طلب إثبات حضور وقرار مستقل فوق المصدر القائم — 2026-10-16
+
+Code `2d79870054f1ae52fec48140cef370489a564a92`: موظف موثوق يرسلPending بوقت مدعى ووقت استلام خادمي؛ staffRead/Edit مخول آخر يقبل/يرفض بversion/key. لاself حتىبدورثانٍ، ولاCoach/Guardianreview أوتجاوزtenant/branch/CSRF؛ أصل وقرارثابتانEF/SQL، rollbackذري عندمفتاحمنفرعمخفي. قبوليربطDailyStaffAttendanceالقائم وbefore/after، لاoverwrite/فترةمفتوحةأخرى/شهرمعتمد أوحضورطفل/خصم/تحصيل. migration97 أمامية، seedFootballاختياريdeterministic يحفظقرارالمراجع وresetالمحجوزيحفظالأكاديميةالثانية؛ EFبلاpending.
+
+Backend10/10 في52s؛ Flutter30/30 ثم7/7متداخلةبعدإصلاحمسافات/analyze؛ Web19/19/typecheck/lint/build. E2E1/1 في17.1s علىالمصدرالنهائي، Nativeرحلةفريدةواحدةمعادة12s علىiPhone17Pro/iOS26.2 بقاعدةمعزولة، قبولمستقل/إعادةقراءة/سجلوتقريرومجاميعالمالثابتة. صورWeb390/1440 وNative402 فعليةمراجعة فيevidence/e2a؛ [الأوامر والمحاولات والدليل](PROGRESS.md). AC31implemented_pending_verification لا قبولموحد؛ AC28–30/32/33باقية: لاWebAuthn/challenge/serverproof أووردياتمتعددة/منتصفليل أوجهازمادي/Android. التاليE2b ثمE2c وغيرالمالي، وكلالمالياتالمتبقيةآخرًا. main/العرض/.envمحفوظة، أثرالديموالقديممفتوح، لاrelease-ready.
+
 ## E1e — نوع المجموعة الحالي وقرار بديل الحصة — 2026-10-16
 
 Code `585f115ea6fb612d42bc20674a2f402fbcd3baed`: metadata مخولة للقائمة/التفاصيل/الكشف من RegistrationFormat وآخرSequence للبديل؛ restoreالأصلي يلغي الشارة، ولا تخمين أسماء أو تسريب السبب/الأجر/منح حضور. Backend6/6، Flutter31/31/analyze، Web31/31، EF بلاpending model أوmigration. رحلةiOS9s بنوعGroup فعلي وصورتين مراجعتين402px؛ Private/البديل مثبتان بخادم/widget، لا جهاز. [المحاولات والأوامر والحدود](PROGRESS.md). AC34/47 جزئيان؛ الحالي ليسsnapshotخدمة مالية/تاريخية، وبقية البوابة والخطة باقية. التاليE2 استثناء حضور وظيفي للمراجعة، كل المالي المتبقي آخرًا؛ CI الأساسWeb/Flutter/E2E ناجحة وbackend جاري، والجديد مستقل.
