@@ -24,13 +24,13 @@ namespace Academy.IntegrationTests;
 public sealed class StaffPasskeyTests : IAsyncLifetime
 {
     private sealed class Clock:TimeProvider {public DateTimeOffset Now=new(2026,10,16,10,0,0,TimeSpan.Zero);public override DateTimeOffset GetUtcNow()=>Now;}
-    private sealed class Factory(Clock clock,bool enabled=true):WebApplicationFactory<Program>
+    private sealed class Factory(Clock clock,bool enabled=true,string rp="academy.test",string origin="https://academy.test"):WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder b)
         {
             b.UseEnvironment("Demo");b.UseSetting("ConnectionStrings:Default",Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING")??throw new InvalidOperationException("Isolated database required"));
             b.UseSetting("Demo:SeedProfile","LegacyRegression");b.UseSetting("Demo:SeedEnabled","true");b.UseSetting("Demo:StaffPassword","Demo-Only-123!");b.UseSetting("Demo:ReferenceDate","2026-09-28");
-            b.UseSetting("StaffPasskeys:Enabled",enabled.ToString());b.UseSetting("StaffPasskeys:RpId","academy.test");b.UseSetting("StaffPasskeys:Origins:0","https://academy.test");
+            b.UseSetting("StaffPasskeys:Enabled",enabled.ToString());b.UseSetting("StaffPasskeys:RpId",rp);b.UseSetting("StaffPasskeys:Origins:0",origin);
             b.ConfigureServices(s=>{s.RemoveAll<TimeProvider>();s.AddSingleton<TimeProvider>(clock);});
         }
     }
@@ -60,6 +60,24 @@ public sealed class StaffPasskeyTests : IAsyncLifetime
     {var r=await Post(c,"/attendance/options",body);Assert.True(r.IsSuccessStatusCode,$"{r.StatusCode}: {await r.Content.ReadAsStringAsync()}");return await r.Content.ReadFromJsonAsync<JsonElement>();}
     private static async Task<(JsonElement Receipt,StaffAttendanceProof Command)> Attend(HttpClient c,Authenticator a,StaffAttendanceIntent body,uint counter)
     {var o=await AttendanceOptions(c,body);var command=new StaffAttendanceProof(o.GetProperty("challengeId").GetGuid(),body,JsonSerializer.SerializeToElement(a.Verify(o,counter)));var r=await Post(c,"/attendance/complete",command);Assert.True(r.IsSuccessStatusCode,await r.Content.ReadAsStringAsync());return(await r.Content.ReadFromJsonAsync<JsonElement>(),command);}
+
+    [Theory]
+    [InlineData("academy.test","https://academy.test",true)]
+    [InlineData("localhost","http://localhost:3190",false)]
+    [InlineData("academy.test","https://other.academy.test",false)]
+    public async Task Native_iOS_origin_hint_requires_exact_HTTPS_RP_and_never_records_attendance(string rp,string origin,bool expected)
+    {
+        var s=await Staff();using var f=new Factory(clock,rp:rp,origin:origin);using var c=f.CreateClient();
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var email=await db.AcademyMemberships.Where(m=>m.Id==s.Member).Select(m=>m.User.Email).SingleAsync();await MobileCoachTestSession.SignInAsync(c,f.Services,email!);
+        var data=await c.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path+"/");Assert.True(data.GetProperty("configured").GetBoolean());Assert.Equal(rp,data.GetProperty("rpId").GetString());Assert.Equal(expected,data.GetProperty("nativeIosOriginConfigured").GetBoolean());Assert.Empty(data.GetProperty("items").EnumerateArray());Assert.False(await db.StaffDailyAttendances.AnyAsync(a=>a.MembershipId==s.Member));
+    }
+    [Fact]
+    public async Task Changing_RP_keeps_old_keys_without_offering_them_as_current_attendance_credentials()
+    {
+        var s=await Staff();using var c=s.Client;var site=await AttendanceSite(s.Member);using var a=new Authenticator();var reg=await Options(c);await Finish(c,reg,a.Register(reg));Assert.True((await c.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path+"/attendance")).GetProperty("hasCredential").GetBoolean());
+        using var changed=new Factory(clock,rp:"other.test",origin:"https://other.test");using var other=changed.CreateClient();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var email=await db.AcademyMemberships.Where(m=>m.Id==s.Member).Select(m=>m.User.Email).SingleAsync();await MobileCoachTestSession.SignInAsync(other,changed.Services,email!);
+        var state=await other.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path+"/attendance");Assert.False(state.GetProperty("hasCredential").GetBoolean());Assert.Equal("other.test",state.GetProperty("rpId").GetString());Assert.Equal(HttpStatusCode.Conflict,(await Post(other,"/attendance/options",Intent(site))).StatusCode);Assert.Single(await db.StaffPasskeys.Where(k=>k.MembershipId==s.Member&&k.IsActive).ToArrayAsync());Assert.False(await db.StaffDailyAttendances.AnyAsync(d=>d.MembershipId==s.Member));
+    }
 
     [Fact]
     public async Task Branch_policy_is_owner_saved_versioned_audited_tenant_scoped_and_applied_to_signed_operations()

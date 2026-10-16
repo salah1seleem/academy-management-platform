@@ -89,7 +89,7 @@ void main() {
       await t.pumpAndSettle();
       expect(writes, isEmpty);
       expect(
-        find.textContaining('تكامل الجهاز الأصلي لم يكتمل'),
+        find.textContaining('إعداد التوقيع الأصلي لم يكتمل'),
         findsOneWidget,
       );
       expect(find.text('إضافة وسيلة تحقق'), findsNothing);

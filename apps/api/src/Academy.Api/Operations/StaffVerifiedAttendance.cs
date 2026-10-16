@@ -49,7 +49,8 @@ public static class StaffVerifiedAttendance
         var open=await db.StaffDailyAttendances.AsNoTracking().Where(a=>a.MembershipId==t.MembershipId&&a.Status=="Present"&&a.CheckIn!=null&&a.CheckOut==null).Take(2).ToArrayAsync();
         var ids=open.Select(a=>a.Id).ToArray();var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>ids.Contains(p.AttendanceId)&&p.EndTime==null).ToArrayAsync();
         var recent=await db.StaffPasskeyChallenges.AsNoTracking().Where(c=>c.MembershipId==t.MembershipId&&c.ResultJson!=null).OrderByDescending(c=>c.CreatedAtUtc).Take(5).Select(c=>c.ResultJson!).ToArrayAsync();
-        return Results.Ok(new{configured=StaffPasskeys.Configuration(configuration,env)!=null,hasCredential=await db.StaffPasskeys.AnyAsync(k=>k.MembershipId==t.MembershipId&&k.IsActive),nowUtc=clock.GetUtcNow(),branches=sites,hasOpenAttendance=open.Length>0,requiresSourceReview=open.Length>1||open.Length==1&&(periods.Length!=1||periods[0].StartUtc==null),recent=recent.Select(s=>PublicResult(JsonSerializer.Deserialize<AttendanceReceipt>(s,Json)!))});
+        var cfg=StaffPasskeys.Configuration(configuration,env);
+        return Results.Ok(new{configured=cfg!=null,rpId=cfg?.RPID,nativeIosOriginConfigured=StaffPasskeys.NativeIosOriginConfigured(cfg),hasCredential=cfg!=null&&await db.StaffPasskeys.AnyAsync(k=>k.MembershipId==t.MembershipId&&k.IsActive&&k.RpId==cfg.RPID),nowUtc=clock.GetUtcNow(),branches=sites,hasOpenAttendance=open.Length>0,requiresSourceReview=open.Length>1||open.Length==1&&(periods.Length!=1||periods[0].StartUtc==null),recent=recent.Select(s=>PublicResult(JsonSerializer.Deserialize<AttendanceReceipt>(s,Json)!))});
     }
     private static string? LocationError(StaffAttendanceIntent b,Branch site,DateTimeOffset now)
     {

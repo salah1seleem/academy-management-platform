@@ -19,6 +19,7 @@ import 'staff_amounts.dart';
 import 'staff_attendance_exceptions.dart';
 import 'staff_work_periods.dart';
 import 'staff_passkeys.dart';
+import 'native_staff_attendance.dart';
 import 'coach_agreements.dart';
 import 'facility_board.dart';
 
@@ -228,6 +229,12 @@ class NativeMore extends StatelessWidget {
         Icons.settings_outlined,
         () => openPage(context, account),
       ),
+      if (role != 'Guardian')
+        GLink(
+          'حضوري وانصرافي',
+          Icons.fingerprint,
+          () => openPage(context, NativeStaffAttendancePage(auth: auth)),
+        ),
       if (role != 'Guardian')
         GLink(
           localized(

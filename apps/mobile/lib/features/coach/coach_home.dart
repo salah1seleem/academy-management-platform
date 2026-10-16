@@ -14,7 +14,7 @@ import 'coach_player.dart';
 import '../shared/private_media.dart';
 import '../shared/academy_news.dart';
 import '../shared/staff_amounts.dart';
-import 'device_check_in.dart';
+import '../shared/native_staff_attendance.dart';
 import 'session_context.dart';
 
 class CoachHome extends StatefulWidget {
@@ -316,10 +316,12 @@ class _CoachHomeState extends State<CoachHome> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               OutlinedButton.icon(
-                onPressed: () =>
-                    openPage(context, DeviceCheckIn(auth: widget.auth)),
+                onPressed: () => openPage(
+                  context,
+                  NativeStaffAttendancePage(auth: widget.auth),
+                ),
                 icon: const Icon(Icons.fingerprint),
-                label: const UiText('تسجيل حضوري بالبصمة والموقع'),
+                label: const UiText('حضوري وانصرافي'),
               ),
               OutlinedButton.icon(
                 onPressed: () =>

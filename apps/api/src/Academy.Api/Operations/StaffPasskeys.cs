@@ -52,10 +52,13 @@ public static class StaffPasskeys
         return new(){RPID=rp,RPName="أكاديميتي — تحقق الموظف",Origins=origins.ToHashSet(StringComparer.Ordinal),ChallengeSize=32,Timeout=120000};
     }
     internal static bool SameConfig(StaffPasskeyChallenge c,Fido2Configuration cfg)=>c.RpId==cfg.RPID&&JsonSerializer.Deserialize<string[]>(c.OriginsJson)!.Order().SequenceEqual(cfg.Origins.Order());
+    // Configuration hint only, not evidence of AASA, a signed app or a biometric.
+    internal static bool NativeIosOriginConfigured(Fido2Configuration? cfg)=>cfg is not null&&cfg.RPID.Contains('.')&&!cfg.RPID.EndsWith(".localhost",StringComparison.OrdinalIgnoreCase)&&cfg.Origins.Contains($"https://{cfg.RPID}");
     private static async Task<IResult> List(CurrentTenant tenant,FoundationDbContext db,IConfiguration cfg,IHostEnvironment env)
     {
         var t=(await tenant.ResolveAsync())!;if(!Staff(t))return Results.Forbid();
-        return Results.Ok(new{configured=Configuration(cfg,env) is not null,items=(await db.StaffPasskeys.AsNoTracking().Where(k=>k.AcademyId==t.AcademyId&&k.MembershipId==t.MembershipId).OrderByDescending(k=>k.CreatedAtUtc).ToArrayAsync()).Select(View)});
+        var config=Configuration(cfg,env);
+        return Results.Ok(new{configured=config is not null,rpId=config?.RPID,nativeIosOriginConfigured=NativeIosOriginConfigured(config),items=(await db.StaffPasskeys.AsNoTracking().Where(k=>k.AcademyId==t.AcademyId&&k.MembershipId==t.MembershipId).OrderByDescending(k=>k.CreatedAtUtc).ToArrayAsync()).Select(View)});
     }
     private static async Task<IResult> Options(string purpose,string? name,HttpContext h,CurrentTenant tenant,FoundationDbContext db,TimeProvider clock,IConfiguration configuration,IHostEnvironment env)
     {

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/auth/staff_passkey_provider.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'staff_attendance_exceptions.dart';
+import 'native_staff_attendance.dart';
 
 class StaffPasskeyPage extends StatefulWidget {
   final AuthController auth;
-  const StaffPasskeyPage({super.key, required this.auth});
+  final StaffPasskeyProvider? provider;
+  const StaffPasskeyPage({super.key, required this.auth, this.provider});
   @override
   State<StaffPasskeyPage> createState() => _StaffPasskeyPageState();
 }
@@ -16,10 +19,80 @@ class StaffPasskeyPage extends StatefulWidget {
 class _StaffPasskeyPageState extends State<StaffPasskeyPage> {
   late final identity = staffContext(widget.auth);
   late Future<Object?> request = load();
+  late final provider = widget.provider ?? IosStaffPasskeyProvider();
+  final name = TextEditingController(text: 'وسيلة هذا الجهاز');
   bool busy = false;
   String message = '';
   Future<Object?> load() =>
       widget.auth.request('GET', '/api/v1/staff/passkeys/');
+  bool get current =>
+      mounted && identity != null && identity == staffContext(widget.auth);
+  Future<void> ceremony(bool register) async {
+    if (busy || !current || !provider.enabled) return;
+    setState(() {
+      busy = true;
+      message = '';
+    });
+    final kind = register ? 'register' : 'verify',
+        purpose = register ? 'Register' : 'Verify';
+    try {
+      final options = obj(
+        await widget.auth.request(
+          'POST',
+          '/api/v1/staff/passkeys/$kind/options',
+          body: register ? {'name': name.text.trim()} : {},
+        ),
+      );
+      if (!current) return;
+      if (options['purpose'] != purpose ||
+          options['challengeId'] is! String ||
+          options['options'] is! Map) {
+        throw const FormatException();
+      }
+      final proof = register
+          ? await provider.register(obj(options['options']))
+          : await provider.assertCredential(obj(options['options']));
+      if (!current) return;
+      final result = obj(
+        await widget.auth.request(
+          'POST',
+          '/api/v1/staff/passkeys/$kind/complete',
+          body: {'challengeId': options['challengeId'], 'credential': proof},
+        ),
+      );
+      if (!current) return;
+      if (result['verified'] != true ||
+          result['purpose'] != purpose ||
+          result['attendanceRecorded'] != false ||
+          obj(result['credential'])['id'] is! String) {
+        throw const FormatException();
+      }
+      setState(() {
+        message = register
+            ? 'تم تسجيل وسيلة التحقق على الخادم؛ لم يسجل حضور.'
+            : 'تم التحقق من الوسيلة؛ هذا التحقق ليس تسجيل حضور.';
+        request = load();
+      });
+    } on StaffPasskeyProblem catch (f) {
+      if (current) setState(() => message = f.message);
+    } catch (_) {
+      if (current) {
+        setState(
+          () => message = 'تعذر تأكيد نتيجة وسيلة التحقق؛ حدّث القائمة قبل إعادة المحاولة. لم نفترض تسجيل حضور.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    provider.cancel();
+    super.dispose();
+  }
+
   Future<void> stop(Json key) async {
     if (busy) return;
     final yes = await showDialog<bool>(
@@ -116,7 +189,7 @@ class _StaffPasskeyPageState extends State<StaffPasskeyPage> {
                       'لا نخزن بصمات أو صور وجوه. قد تستخدم الوسيلة بصمة أو رمز الجهاز، وقد تتزامن بين أجهزة.',
                     ),
                     UiText(
-                      'هذه الصفحة لإدارة الوسائل المحفوظة فقط؛ لا تسجل حضورًا أو تغير صلاحياتك. الإضافة والتجربة من الويب الآمن للحسابات المصرح لها بدخول اللوحة فقط؛ تكامل الجهاز الأصلي لم يكتمل بعد. يمكنك طلب إثبات حضور للمراجعة.',
+                      'تسجيل الوسيلة أو تجربتها لا يسجل حضورًا ولا يغير صلاحياتك. التوقيع الأصلي يحتاج إعداد نطاق مرتبط بالتطبيق؛ لا يمنح المدرب أو ولي الأمر دخول الداشبورد.',
                     ),
                   ],
                 ),
@@ -126,7 +199,49 @@ class _StaffPasskeyPageState extends State<StaffPasskeyPage> {
                   'يلزم إعداد التحقق الآمن من المسؤول؛ طلب إثبات الحضور للمراجعة ما زال متاحًا.',
                 ),
               if (message.isNotEmpty) UiText(message),
+              if (provider.enabled &&
+                  data['nativeIosOriginConfigured'] == true &&
+                  data['rpId'] == provider.rpId)
+                GCard(
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: name,
+                        maxLength: 80,
+                        enabled: !busy,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم وسيلة التحقق',
+                        ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: busy ? null : () => ceremony(true),
+                        icon: const Icon(Icons.add_moderator_outlined),
+                        label: const UiText('إضافة وسيلة تحقق'),
+                      ),
+                      if (keys.any((k) => k['isActive'] == true))
+                        TextButton(
+                          onPressed: busy ? null : () => ceremony(false),
+                          child: const UiText('تجربة وسيلة التحقق'),
+                        ),
+                    ],
+                  ),
+                )
+              else
+                const EmptyMessage(
+                  'إعداد التوقيع الأصلي لم يكتمل في هذا الاتصال. يلزم نطاق HTTPS مرتبط بالتطبيق وإعداد توقيع مخول؛ يمكنك طلب إثبات حضور للمراجعة.',
+                ),
               StaffAttendanceBranchPolicies(auth: widget.auth),
+              GLink(
+                'حضوري وانصرافي',
+                Icons.fingerprint,
+                () => openPage(
+                  context,
+                  NativeStaffAttendancePage(
+                    auth: widget.auth,
+                    provider: widget.provider,
+                  ),
+                ),
+              ),
               TextButton.icon(
                 onPressed: busy
                     ? null
