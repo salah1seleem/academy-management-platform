@@ -15,6 +15,7 @@ import '../shared/private_media.dart';
 import '../shared/academy_news.dart';
 import '../shared/staff_amounts.dart';
 import 'device_check_in.dart';
+import 'session_context.dart';
 
 class CoachHome extends StatefulWidget {
   final AuthController auth;
@@ -29,7 +30,7 @@ class _CoachHomeState extends State<CoachHome> {
   String? identity;
   String? get currentIdentity => widget.auth.session?.selected == null
       ? null
-      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}';
+      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   Future<List<Object?>> load() {
     if (currentIdentity == null) {
       return Future.value([
@@ -388,6 +389,7 @@ class CoachSessionCard extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
+          SessionContextBadges(session: session),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

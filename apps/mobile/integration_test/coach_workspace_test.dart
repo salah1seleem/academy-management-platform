@@ -38,12 +38,23 @@ void main() {
         reason: 'Prepare an upcoming synthetic session in the isolated Demo database.',
       );
       final nearest = rows.first as Map;
+      expect(nearest['trainingFormatSource'], 'CurrentGroup');
+      expect([
+        'Group',
+        'Private',
+        'SemiPrivate',
+      ], contains(nearest['trainingFormat']));
+      expect(nearest['isSubstitute'], isA<bool>());
       final roster = await auth.request(
         'GET',
         '/api/v1/attendance/sessions/${nearest['id']}/players',
       ) as Map;
       expect(roster['canManageAttendance'], isFalse);
       expect(roster['canEvaluate'], isTrue);
+      final context = roster['session'] as Map;
+      expect(context['trainingFormat'], nearest['trainingFormat']);
+      expect(context['trainingFormatSource'], nearest['trainingFormatSource']);
+      expect(context['isSubstitute'], nearest['isSubstitute']);
       final players = roster['players'] as List;
       expect(players, isNotEmpty);
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
@@ -63,6 +74,16 @@ void main() {
 
       await waitFor(find.text('حصتك الأقرب'));
       expect(find.text(nearest['group'] as String), findsWidgets);
+      final formatLabel = {
+        'Group': 'جماعية',
+        'Private': 'برايفت',
+        'SemiPrivate': 'شبه خاصة',
+      }[nearest['trainingFormat']]!;
+      expect(find.text(formatLabel), findsWidgets);
+      expect(
+        find.text('مدرب بديل'),
+        nearest['isSubstitute'] == true ? findsWidgets : findsNothing,
+      );
       await capture('home');
       await tester.tap(find.text('فتح الحصة'));
       await waitFor(find.text('تفاصيل الحصة'));
@@ -71,6 +92,11 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('حفظ الحضور'), findsNothing);
+      expect(find.text(formatLabel), findsOneWidget);
+      expect(
+        find.text('نوع التدريب حسب إعداد المجموعة الحالي'),
+        findsOneWidget,
+      );
       expect(find.byType(ChoiceChip), findsNothing);
       expect(find.text('تقييم اللاعب'), findsWidgets);
       await capture('session-readonly');

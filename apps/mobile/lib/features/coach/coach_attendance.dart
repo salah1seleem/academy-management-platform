@@ -10,6 +10,7 @@ import 'coach_evaluation.dart';
 import 'coach_player.dart';
 import '../shared/past_attendance.dart';
 import '../shared/attendance_draft.dart';
+import 'session_context.dart';
 
 class CoachAttendance extends StatefulWidget {
   final AuthController auth;
@@ -272,6 +273,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
+                      SessionContextBadges(session: session, showSource: true),
                       UiText(day(session['sessionDate'])),
                       UiText(
                         '${textOf(session['startTime']).split(':').take(2).join(':')} — ${textOf(session['endTime'] ?? '—').split(':').take(2).join(':')}',

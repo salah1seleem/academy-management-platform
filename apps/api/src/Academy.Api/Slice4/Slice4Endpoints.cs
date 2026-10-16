@@ -136,10 +136,12 @@ public static class Slice4Endpoints
         var records=await db.PlayerAttendances.AsNoTracking().Where(a=>ids.Contains(a.TrainingSessionId)).GroupBy(a=>a.TrainingSessionId).Select(g=>new{session=g.Key,recorded=g.Count(a=>a.Status!=AttendanceStatus.NotRecorded),present=g.Count(a=>a.Status==AttendanceStatus.Present||a.Status==AttendanceStatus.Late),late=g.Count(a=>a.Status==AttendanceStatus.Late),excused=g.Count(a=>a.Status==AttendanceStatus.Excused),absent=g.Count(a=>a.Status==AttendanceStatus.Absent)}).ToDictionaryAsync(x=>x.session);
         var resources=await(from b in db.ResourceBookings join r in db.FacilityResources on b.ResourceId equals r.Id join s in db.FacilitySpaces on r.FacilitySpaceId equals s.Id where ids.Contains(b.TrainingSessionId??Guid.Empty)&&b.State==Academy.Infrastructure.Facilities.ResourceBookingState.Reserved select new{session=b.TrainingSessionId!.Value,resource=s.Name+" · "+r.Name}).ToArrayAsync();
         var assignedStaff=await SessionStaffReadModel.Read(db,academyId,ids,groups);
+        var presentation=await SessionPresentationReadModel.Read(db,academyId,ids);
         var staffAttendance=await db.StaffAttendances.AsNoTracking().Where(a=>ids.Contains(a.TrainingSessionId)).ToDictionaryAsync(a=>(a.TrainingSessionId,a.AcademyMembershipId));var result=new List<object>();
         foreach(var row in rows){
             var staff=assignedStaff[row.Id];records.TryGetValue(row.Id,out var counts);
-            result.Add(new{row.Id,row.SessionDate,row.StartTime,row.EndTime,row.status,row.source,row.TrainingGroupId,row.group,row.sport,row.branch,resource=resources.FirstOrDefault(r=>r.session==row.Id)?.resource,coaches=staff.Where(m=>m.Role==AcademyRole.Coach).Select(m=>m.Name).ToArray(),playerCount=roster.Sessions.GetValueOrDefault(row.Id),recorded=counts?.recorded??0,present=counts?.present??0,late=counts?.late??0,excused=counts?.excused??0,absent=counts?.absent??0,staff=staff.Select(m=>new{id=m.Id,name=m.Name,attendanceStatus=staffAttendance.GetValueOrDefault((row.Id,m.Id))?.Status.ToString()??"NotRecorded"}).ToArray()});
+            var display=presentation[row.Id];
+            result.Add(new{row.Id,row.SessionDate,row.StartTime,row.EndTime,row.status,row.source,row.TrainingGroupId,row.group,row.sport,row.branch,display.TrainingFormat,display.TrainingFormatSource,display.IsSubstitute,resource=resources.FirstOrDefault(r=>r.session==row.Id)?.resource,coaches=staff.Where(m=>m.Role==AcademyRole.Coach).Select(m=>m.Name).ToArray(),playerCount=roster.Sessions.GetValueOrDefault(row.Id),recorded=counts?.recorded??0,present=counts?.present??0,late=counts?.late??0,excused=counts?.excused??0,absent=counts?.absent??0,staff=staff.Select(m=>new{id=m.Id,name=m.Name,attendanceStatus=staffAttendance.GetValueOrDefault((row.Id,m.Id))?.Status.ToString()??"NotRecorded"}).ToArray()});
         }
         return Results.Ok(result);
     }
@@ -153,7 +155,9 @@ public static class Slice4Endpoints
     private static async Task<IResult> GetSession(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var session = await AccessibleSession(id, tenant, principal, db, true); if (session is null) return Results.NotFound();
-        return Results.Ok(new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), source = session.Source.ToString(), session.Notes, group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName });
+        var t = (await tenant.ResolveAsync())!;
+        var display = (await SessionPresentationReadModel.Read(db, t.AcademyId, [id]))[id];
+        return Results.Ok(new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), source = session.Source.ToString(), session.Notes, group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName, display.TrainingFormat, display.TrainingFormatSource, display.IsSubstitute });
     }
 
     private static async Task<IResult> CreateSession(ManualSessionRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock, ResourceSessionCoordinator resources)
@@ -209,7 +213,8 @@ public static class Slice4Endpoints
         });
         var context = await corrections.Context(id);
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
-        return Results.Ok(new { canManageAttendance=context.CanManageAttendance, canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName }, players = rows });
+        var display = (await SessionPresentationReadModel.Read(db, t.AcademyId, [id]))[id];
+        return Results.Ok(new { canManageAttendance=context.CanManageAttendance, canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName, display.TrainingFormat, display.TrainingFormatSource, display.IsSubstitute }, players = rows });
     }
 
     private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service, AttendanceDraftGuard drafts)
