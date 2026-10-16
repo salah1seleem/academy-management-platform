@@ -1,5 +1,13 @@
 # أدلة قبول V2 + V3
 
+## E2c3a — Flutter/iOS pipeline مع رفض إعداد فعلي، 2026-10-17
+
+Code `1fede83622a0de20abd51be789a3b6c223eb4b18`: إضافة/تجربة الوسيلة وحضور/انصراف الموظف على نفس API والمصدر؛ GPS عند الضغط وtimestamp القراءة، توقيع UV، retry نفسJSON فقط، إتلاف عند تغير السياق، والتحقق من receipt قبل النجاح. RP القديم لا يعد وسيلة حالية، ولا Boolean/LastVerifiedAt أو أطفال/راتب تلقائي. التفعيل off افتراضيًا، Android محجوب؛ لا migration وEF بلاpending،104كماهي.
+
+API **6/6،31s**؛ Web **8/8،1.63s**؛ Flutter **39/39،5s** وanalyze4.7s وlock ناجحة. اختبار200% كشف dropdownoverflow وأصلح دون تخفيف assertions؛ المقاسات360/390/430 وغيابالإعداد وسحبالفرع وretry/cancellation/context/contracts متحققة. native رحلة واحدة PASS5s بمكتبة OS فعلية على iPhone17Pro/iOS26.2/محاكي الاختبار/API5207/قاعدةFootballمعزولة: دعمplugin مثبت، رفضRPغيرمرتبط، لا registerComplete أو وسيلة/فترة جديدة، ثم عرضfallback دون إرساله. [إعداد](evidence/e2c3a/native-passkey-setup-ios.png)، [مراجعة](evidence/e2c3a/native-passkey-review-ios.png) صورتان فعليتان راجعتا.
+
+**ليست رحلة إيجابية لجهاز فعلي أو FaceID أو Android أو قبول موحد.** E2c3b يحتاج HTTPSمملوك/AASA وAppleTeam/profile وAssociatedDomains وجهازًا فعليًا؛ [دليل المدخلات والتشغيل](../architecture/NATIVE_STAFF_PASSKEY_SETUP.md). pipeline الإيجابي فيunit يستعملdouble؛ الخادم مصادقًا اصطناعيًا. AC28–33 partial؛ D2 roster وتبويبات مباريات التالي غير المحجوب، ثم بقيةD/E/F/G فالماليالمتبقيآخرًا ثمH. CIcheckpoint38974397279 frontend/flutter/e2e success وbackendin_progress، لا نجاح شامل مدعى. [المحاولات والسجلات والحفظ](PROGRESS.md).
+
 ## E2c2b — سياسة فرع ومراجع مستقل، 2026-10-16–17
 
 Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: حفظ Owner/CAS/قبل وبعد، قيم تستخدمها عملية التوقيع نفسها وTTL، تعطيل دون إغلاق وردية أو تغيير إيصال. مسؤول حي فوق التفويض القائم وOwner بديل دون self-review، وFK يرفض أكاديمية أخرى. Flutter يقرأ نفس80م/10م/15ث/60ث، لا native signing.

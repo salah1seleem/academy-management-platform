@@ -1,5 +1,11 @@
 # Status
 
+## E2c3a — Flutter إلى توقيع iOS والخادم القائم، 2026-10-17
+
+Code `1fede83622a0de20abd51be789a3b6c223eb4b18`: provider pinned/default-off، تسجيل/Verify ثمحضور/انصراف بتحدٍ مستقل وGPSعندالضغط، retryنفسJSON ورفضتغيرالسياق/ردناقص؛0أثر مالي أوحضورطفل. API6/Web8/Flutter39 وanalyze/lock ناجحة، لاmigration/EFpending. رحلةiOSحقيقية5s تثبت دعمplugin ورفضRPغيرمرتبط وعدمكتابةوسيلة/فترة وعرضالمراجعة، **لا إثبات إيجابي أوجهازفعلي/Android**. صور راجعت، وoverflow200% أصلح باختبار محفوظ. [الدليل والخريطة](../academy-v3/PROGRESS.md)؛ [إعدادE2c3bالخارجي](../architecture/NATIVE_STAFF_PASSKEY_SETUP.md).
+
+التاليغيرالمحجوبD2 rosterالمباراة وتبويبها بملف اللاعب/المدرب، ثمبقيةD/E/F/G؛ الماليالمتبقيآخرًا ثمH. E2c3b يحتاج نطاقHTTPS/AASA وAppleTeam/profileمخولوجهازفعلي، Androidمحجوبحتىإعداده. CI38974397279 frontend/flutter/e2e success وbackendin_progress؛ الجديدبعدpush، لاCIشاملأواكتمالV2/V3مدعى. main/.env محفوظان، API5080live/ready وWeb3000loginHTTP200، PostgreSQLوiOSاليدويمتروكانولايستخدمانللاختبار؛ لمreset/توقفخدمةأوترفعنسخةالاختبارإلىجهازالمراجعة.
+
 ## E2c2b — سياسة الفرع ومراجع الاستثناء، 2026-10-16–17
 
 Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: إعداد Owner محفوظ ومطبق على نفس التوقيع/المصدر؛ CAS/دليلقبلوبعد/تعطيلحافظللفترة، ومسؤول حي معOwnerبديل ومنعself دون منحة جديدة. Flutter يقرأ نفس السياسة فقط. API46حالةفريدة ناجحة عبرالأوامر بعد3إصلاحاتfixture؛ Web15/Flutter7 وأدوات الجودة؛ E2E24.6s/Native8s وFootball22/22 بعدإصلاح pacingOTP429، دونرفعحدالمنتج. migration104/EFبلاpending. [الأدلة والحدود](../academy-v3/PROGRESS.md).

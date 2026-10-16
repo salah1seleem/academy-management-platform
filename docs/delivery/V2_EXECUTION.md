@@ -1,5 +1,11 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-17 — E2c3a: native iOS pipeline على نفس مصدر الحضور
+
+Code `1fede83622a0de20abd51be789a3b6c223eb4b18`: providerpasskeys2.23.1/default-off، enrollment/Verify لايسجلانحضورًا، وCheckIn/Outتحدمستقل/GPSعندالضغط/receipt/retryنفسJSONوقطععندتغيرالسياق. RPالقديملايعرضكصالححاليًا؛ لاBooleanأوGPSكضمان. API6/Web8/Flutter39 وanalyze/lockناجحة؛ nativeرحلةرفضإعدادفعلي5s وصورمراجعة، **لا nativeنجاحإيجابي/جهازفعلي/Android**. لاmigrationوEFبلاpending، mainوالعرضمحفوظان. [الأدلةوالخريطةوالقيود](../academy-v3/PROGRESS.md).
+
+E2c3b محجوببمدخلاتHTTPSمملوك/AASA/AppleTeam/profileوجهازفعلي، لايتوقفغيرالمحجوبعليه. التاليD2 rosterوتبويباتالمبارياتفيملفاللاعبوالمدرب، ثمبقيةD/E/F/GفالماليالمتبقيآخرًاوأخيرًاH. CIcheckpoint38974397279 frontend/flutter/e2eنجحتوbackendin_progress، لااكتمالقبولمدعى.
+
 ## 2026-10-16–17 — E2c2b: سياسة فرع فوق نفس التوقيع والمراجعة
 
 Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: Ownerيحفظالتفعيل/الموقع/الحدود/TTL/الفئات/مسؤولالاستثناء، CAS ودليل، والخادم يستخدمها ويبطل محاولة قديمة؛ الموقوف يحفظ الفترة السابقة. المسؤول يقيد التفويض الحي، والمالك بديل دونself. Flutterقراءةمتطابقة، nativeproviderباقٍ. API46فريدة عبرأوامرنجحت بعدإصلاح3fixtures، Web15/Flutter7، أدواتالجودة، E2E24.6s/Native8s، Football22/22 بعدOTPpacingلاحدمنتجمخفف؛ migration104/EFبلاpending. [المحاولات/الصور/CI/الاستئناف](../academy-v3/PROGRESS.md). التاليE2c3 ثمD/E/F/G، كل الماليالمتبقيآخرًا ثمH، دونmain/Production. تشغيل العرض اللاحق مستقل ومثبتفيSTATUS، بلاreset.
