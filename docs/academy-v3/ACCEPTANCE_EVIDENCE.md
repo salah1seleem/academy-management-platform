@@ -2,6 +2,8 @@
 
 ## E2a — طلب إثبات حضور وقرار مستقل فوق المصدر القائم — 2026-10-16
 
+الإصلاح المرئي النهائي `30a71b0549010197e8e910d2d6b9d4eb89e58567`: عزل نموذج المراجعة عن grid العام ومنع تمدد الزر، مع assertions هندسية390/1440. آخر Web19/19 وtypecheck/lint/build، والرحلة الكاملة1/1 في14.3s؛ صورWeb المرفقة هي الأحدث. نتائج الخادم/الموبايل أدناه لم يتغير مصدرها.
+
 Code `2d79870054f1ae52fec48140cef370489a564a92`: موظف موثوق يرسلPending بوقت مدعى ووقت استلام خادمي؛ staffRead/Edit مخول آخر يقبل/يرفض بversion/key. لاself حتىبدورثانٍ، ولاCoach/Guardianreview أوتجاوزtenant/branch/CSRF؛ أصل وقرارثابتانEF/SQL، rollbackذري عندمفتاحمنفرعمخفي. قبوليربطDailyStaffAttendanceالقائم وbefore/after، لاoverwrite/فترةمفتوحةأخرى/شهرمعتمد أوحضورطفل/خصم/تحصيل. migration97 أمامية، seedFootballاختياريdeterministic يحفظقرارالمراجع وresetالمحجوزيحفظالأكاديميةالثانية؛ EFبلاpending.
 
 Backend10/10 في52s؛ Flutter30/30 ثم7/7متداخلةبعدإصلاحمسافات/analyze؛ Web19/19/typecheck/lint/build. E2E1/1 في17.1s علىالمصدرالنهائي، Nativeرحلةفريدةواحدةمعادة12s علىiPhone17Pro/iOS26.2 بقاعدةمعزولة، قبولمستقل/إعادةقراءة/سجلوتقريرومجاميعالمالثابتة. صورWeb390/1440 وNative402 فعليةمراجعة فيevidence/e2a؛ [الأوامر والمحاولات والدليل](PROGRESS.md). AC31implemented_pending_verification لا قبولموحد؛ AC28–30/32/33باقية: لاWebAuthn/challenge/serverproof أووردياتمتعددة/منتصفليل أوجهازمادي/Android. التاليE2b ثمE2c وغيرالمالي، وكلالمالياتالمتبقيةآخرًا. main/العرض/.envمحفوظة، أثرالديموالقديممفتوح، لاrelease-ready.
