@@ -238,6 +238,10 @@
 /* Forms and details */
 .dashboard-shell .form-shell { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; max-width: 920px; padding: 24px; }
 .dashboard-shell .form-shell.staff-exception-review-form { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.dashboard-shell .staff-daily-edit-fields { border: 0; padding: 0; margin: 0 0 18px; min-width: 0; align-items: start; }
+.dashboard-shell .staff-daily-history { list-style: none; padding: 0; display: grid; gap: 12px; }
+.dashboard-shell .staff-daily-history li { padding: 16px; border: 1px solid var(--staff-border-strong); border-radius: 16px; overflow-wrap: anywhere; }
+.dashboard-shell .staff-daily-history time, .dashboard-shell .staff-daily-history small { display: block; color: var(--staff-text-muted); font-size: 12px; margin-block: 6px; }
 .dashboard-shell .staff-exception-review-form .form-actions { align-items: start; background: transparent; }
 .dashboard-shell .staff-exception-review-form .form-actions > button { width: auto; min-height: 44px; }
 @media (max-width: 680px) {

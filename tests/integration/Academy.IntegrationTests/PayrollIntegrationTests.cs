@@ -100,7 +100,7 @@ public sealed class PayrollIntegrationTests : IAsyncLifetime
             await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.Single(await db.PayrollAdjustments.Where(x => x.AdditionRequestId == id).ToListAsync());
             var user = await db.AcademyMemberships.Where(x => x.Id == e.Body.MembershipId).Select(x => x.UserId).SingleAsync(); Assert.True(await db.AcademyNotices.AnyAsync(x => x.UserId == user && x.Message.Contains("تم اعتماد طلب المبلغ الإضافي")));
         }
-        finally { await using var scope = factory.Services.CreateAsyncScope(); await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().StaffDailyAttendances.Where(x => x.MembershipId == e.Body.MembershipId && x.WorkDate == day).ExecuteDeleteAsync(); }
+        finally { await using var scope = factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); await db.Employees.Where(x=>x.Id==e.Id).ExecuteUpdateAsync(s=>s.SetProperty(x=>x.IsActive,false)); await db.AcademyMemberships.Where(x=>x.Id==e.Body.MembershipId).ExecuteUpdateAsync(s=>s.SetProperty(x=>x.IsActive,false)); /* Keep the daily deduction source and its immutable evidence. */ }
     }
 
     [Fact]

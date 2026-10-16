@@ -54,11 +54,70 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
     private static StaffExceptionWrite Claim(Guid branch,string operation="CheckIn",DateTimeOffset? time=null)=>new(branch,operation,time??Now.AddHours(-1),"تعذر الحصول على موقع دقيق — مثال اصطناعي");
     private static async Task<JsonElement> Request(HttpClient c,StaffExceptionWrite body,string? key=null) {var r=await Write(c,StaffAttendanceExceptions.SelfPath+"/",body,key??Guid.NewGuid().ToString());Assert.True(r.IsSuccessStatusCode,await r.Content.ReadAsStringAsync());return (await r.Content.ReadFromJsonAsync<JsonElement>());}
     private static async Task<HttpResponseMessage> Review(HttpClient owner,JsonElement r,bool approve=true,string? note=null,string? key=null)=>await Write(owner,$"{StaffAttendanceExceptions.ManagePath}/{r.GetProperty("id").GetGuid()}/review",new StaffExceptionReview(approve,note,r.GetProperty("version").GetUInt32()),key??Guid.NewGuid().ToString());
-    private static async Task<HttpResponseMessage> Manual(HttpClient owner, Guid member, DailyWrite body)
+    private static async Task<HttpResponseMessage> Manual(HttpClient owner, Guid member, DailyWrite body, bool readVersion = true, string? key = null)
     {
         var csrf = await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");
-        using var command = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/manage/staff-attendance/{member}") { Content = JsonContent.Create(body) };
-        command.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); return await owner.SendAsync(command);
+        var path = $"/api/v1/manage/staff-attendance/{member}";
+        using var command = new HttpRequestMessage(HttpMethod.Put, path) { Content = JsonContent.Create(readVersion ? await DailyAttendanceTestCommand.WithCurrentVersion(owner, path, body) : body) };
+        command.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) command.Headers.Add("Idempotency-Key", key); return await owner.SendAsync(command);
+    }
+
+    [Fact]
+    public async Task Manual_source_versions_block_lost_updates_and_replays_preserve_original_evidence_and_daily_deduction()
+    {
+        var staff = await Staff(); using var coach = staff.Client; using var owner = await Owner(); using var foreign = await Owner(DemoSeed.FutureOwnerEmail);
+        var day = new DateOnly(2026,10,15); var path = $"/api/v1/manage/staff-attendance/{staff.Member}";
+        var empty = await owner.GetFromJsonAsync<JsonElement>($"{path}?date={day:yyyy-MM-dd}"); Assert.Equal(0u, empty.GetProperty("version").GetUInt32());
+        var original = new DailyWrite(day,"Present",new(8,0),new(10,0),50,"خصم إداري اصطناعي مستقل"); var key = Guid.NewGuid().ToString();
+        var saved = await Manual(owner,staff.Member,original,false,key); saved.EnsureSuccessStatusCode(); var first = await saved.Content.ReadFromJsonAsync<JsonElement>(); var version = first.GetProperty("version").GetUInt32(); Assert.True(version>0);
+        var a = original with { Version = version, Status="Absent", CheckIn=null, CheckOut=null, Reason="غياب اصطناعي معتمد" };
+        var b = original with { Version = version, CheckIn=new(7,0), Reason="تصحيح وقت الحضور اصطناعي" };
+        var concurrent = await Task.WhenAll(Manual(owner,staff.Member,a,false,Guid.NewGuid().ToString()),Manual(owner,staff.Member,b,false,Guid.NewGuid().ToString()));
+        Assert.Single(concurrent,r=>r.IsSuccessStatusCode); Assert.Single(concurrent,r=>r.StatusCode==HttpStatusCode.Conflict);
+        var current = await owner.GetFromJsonAsync<JsonElement>($"{path}?date={day:yyyy-MM-dd}"); Assert.NotEqual(version,current.GetProperty("version").GetUInt32());
+        var replay = await Manual(owner,staff.Member,original,false,key); replay.EnsureSuccessStatusCode(); Assert.Equal(version,(await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("version").GetUInt32());
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,staff.Member,original with { Reason="محتوى آخر" },false,key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,staff.Member,original,false)).StatusCode); // old clients must read before replacing a row
+        var history = await owner.GetFromJsonAsync<JsonElement>($"{path}/history?date={day:yyyy-MM-dd}"); Assert.Equal(2,history.GetProperty("total").GetInt32());
+        var items = history.GetProperty("items").EnumerateArray().ToArray(); Assert.Contains(items,c=>c.GetProperty("before").ValueKind==JsonValueKind.Null); Assert.Contains(items,c=>c.GetProperty("beforeVersion").GetUInt32()==version && c.GetProperty("before").GetProperty("checkIn").GetString()=="08:00:00");
+        Assert.All(items,c=>Assert.Equal(c.GetProperty("afterVersion").GetUInt32(),c.GetProperty("after").GetProperty("version").GetUInt32()));
+        var report = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/staff-daily?coachId={staff.Member}&allDates=true"); Assert.Equal(1,report.GetProperty("totalCount").GetInt32()); Assert.Equal(50,report.GetProperty("totalDeductions").GetDecimal());
+        Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync($"{path}/history?date={day:yyyy-MM-dd}")).StatusCode); Assert.Equal(HttpStatusCode.Forbidden,(await coach.GetAsync($"{path}/history?date={day:yyyy-MM-dd}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync(path,original with {Version=current.GetProperty("version").GetUInt32()})).StatusCode);
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var evidence=await db.StaffAttendanceChanges.FirstAsync(c=>c.MembershipId==staff.Member);
+        var source=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(r=>r.MembershipId==staff.Member);
+        db.PayrollSettlements.Add(new(){Id=Guid.NewGuid(),AcademyId=source.AcademyId,EmployeeId=staff.Employee,Month=new(2026,10,1),Currency="EGP",PaidAtUtc=Now,PaidByUserId=evidence.ActorUserId,IdempotencyKey=Guid.NewGuid().ToString()}); await db.SaveChangesAsync();
+        var noChange=new DailyWrite(day,source.Status,source.CheckIn,source.CheckOut,source.ApprovedDeduction,source.DeductionReason,source.CheckOutDate,source.Version);
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,staff.Member,noChange,false,Guid.NewGuid().ToString())).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,staff.Member,noChange with {Reason="سبب مختلف بعد الاعتماد"},false,Guid.NewGuid().ToString())).StatusCode);
+        (await Manual(owner,staff.Member,original,false,key)).EnsureSuccessStatusCode();
+        var closed=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(r=>r.MembershipId==staff.Member); Assert.Equal(source.Version,closed.Version); Assert.Equal(source.UpdatedAtUtc,closed.UpdatedAtUtc); Assert.Equal(2,await db.StaffAttendanceChanges.CountAsync(r=>r.MembershipId==staff.Member));
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"StaffAttendanceChanges\" SET \"BeforeVersion\"=0 WHERE \"Id\"={evidence.Id}"))).SqlState);
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"StaffAttendanceChanges\" WHERE \"Id\"={evidence.Id}"))).SqlState);
+        evidence.BeforeSnapshot="null"; evidence.RequestHash="changed"; await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Manual_history_and_replay_recheck_branch_and_edit_authority_and_hidden_keys_roll_back_the_source()
+    {
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var branches=await db.Branches.Where(b=>b.AcademyId==DemoSeed.NogoomAcademyId && b.IsActive).Select(b=>b.Id).Take(2).ToArrayAsync();
+        var a=await Staff(branch:branches[0]); var b=await Staff(branch:branches[1]); var manager=await Staff(AcademyRole.AcademyAdmin,branches[0]); using var c=manager.Client; using var ac=a.Client; using var bc=b.Client;
+        var membership=await db.AcademyMemberships.SingleAsync(m=>m.Id==manager.Member); membership.AllBranches=false; membership.UseActionGrants=true;
+        var access=new MembershipBranchAccess{Id=Guid.NewGuid(),AcademyId=membership.AcademyId,MembershipId=membership.Id,BranchId=branches[0]}; db.MembershipBranchAccesses.Add(access);
+        var grant=new StaffActionGrant{Id=Guid.NewGuid(),AcademyId=membership.AcademyId,MembershipId=membership.Id,Module=StaffAccessRules.ForPath("/api/v1/manage/staff-attendance")!,Read=true,Edit=false}; db.StaffActionGrants.Add(grant); await db.SaveChangesAsync();
+        var body=new DailyWrite(new(2026,10,15),"Present",new(8,0),new(10,0),0,null); var key=Guid.NewGuid().ToString(); var path=$"/api/v1/manage/staff-attendance/{a.Member}";
+        Assert.Equal(HttpStatusCode.Forbidden,(await Manual(c,a.Member,body,false,key)).StatusCode); Assert.False(await db.StaffDailyAttendances.AnyAsync(r=>r.MembershipId==a.Member));
+        grant.Edit=true; await db.SaveChangesAsync(); (await Manual(c,a.Member,body,false,key)).EnsureSuccessStatusCode();
+        Assert.Equal(1,(await c.GetFromJsonAsync<JsonElement>($"{path}/history?date=2026-10-15")).GetProperty("total").GetInt32());
+        Assert.Equal(HttpStatusCode.NotFound,(await c.GetAsync($"/api/v1/manage/staff-attendance/{b.Member}/history?date=2026-10-15")).StatusCode);
+        access.IsActive=false; db.MembershipBranchAccesses.Add(new(){Id=Guid.NewGuid(),AcademyId=membership.AcademyId,MembershipId=membership.Id,BranchId=branches[1]}); await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.NotFound,(await c.GetAsync($"{path}/history?date=2026-10-15")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await Manual(c,a.Member,body,false,key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(c,b.Member,body,false,key)).StatusCode); Assert.False(await db.StaffDailyAttendances.AnyAsync(r=>r.MembershipId==b.Member));
+        Assert.Equal(1,await db.StaffAttendanceChanges.CountAsync(r=>r.ActorUserId==manager.User));
+        // A forged evidence payload cannot be inserted even by bypassing EF guards.
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"StaffAttendanceChanges\" (\"Id\",\"AttendanceId\",\"MembershipId\",\"ActorMembershipId\",\"ActorUserId\",\"WorkDate\",\"BeforeVersion\",\"AfterVersion\",\"RequestKey\",\"RequestHash\",\"BeforeSnapshot\",\"AfterSnapshot\",\"AcademyId\",\"IsActive\",\"CreatedAtUtc\",\"UpdatedAtUtc\") SELECT {Guid.NewGuid()},\"AttendanceId\",\"MembershipId\",\"ActorMembershipId\",\"ActorUserId\",\"WorkDate\",\"BeforeVersion\",\"AfterVersion\",{Guid.NewGuid().ToString()},\"RequestHash\",\"BeforeSnapshot\",jsonb_set(\"AfterSnapshot\",'{{status}}','\"Absent\"'),\"AcademyId\",\"IsActive\",\"CreatedAtUtc\",\"UpdatedAtUtc\" FROM \"StaffAttendanceChanges\" WHERE \"ActorUserId\"={manager.User}"))).SqlState);
     }
 
     [Fact]

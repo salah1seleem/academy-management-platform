@@ -6,10 +6,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, PageHeader, RowActions, StatusBadge } from "../components/dashboard-shell";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
-import { csrfRequest } from "./dashboard-api";
+import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { formatDateAr, formatMoneyAr, formatTimeAr, formatStaffCheckout } from "../lib/formatters";
 
-type Coach = { id: string; name: string; workDate: string; today?: string; status: string; checkIn?: string; checkOut?: string; checkOutDate?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
+type Coach = { id: string; name: string; workDate: string; today?: string; version?: number; status: string; checkIn?: string; checkOut?: string; checkOutDate?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
+type AttendanceChange = { id: string; createdAtUtc: string; actor: string; before: Coach | null; after: Coach };
 
 export function DailyCoaches() {
   const defaults = useDateFilterDefaults();
@@ -45,34 +46,62 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
   const defaults = useDateFilterDefaults(), router = useRouter();
   const [date, setDate] = useState(initialDate ?? defaults.to), [coach, setCoach] = useState<Coach | null>(null);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [status, setStatus] = useState("NotRecorded"), [deduction, setDeduction] = useState(0);
+  const [revision, setRevision] = useState(0), [stale, setStale] = useState(false);
+  const [pending, setPending] = useState<{ key: string; body: object } | null>(null);
+  const [history, setHistory] = useState<{ total: number; timeZone: string; items: AttendanceChange[] } | null>(null), [historyError, setHistoryError] = useState("");
   useEffect(() => {
     const abort = new AbortController();
     fetch(`/api/v1/manage/staff-attendance/${id}?date=${date}`, { signal: abort.signal }).then(async r => {
-      if (!r.ok) throw new Error(); const x = await r.json() as Coach; setCoach(x); setStatus(x.status); setDeduction(x.approvedDeduction); setError("");
+      if (!r.ok) throw new Error(); const x = await r.json() as Coach; setCoach(x); setStatus(x.status); setDeduction(x.approvedDeduction); setError(""); setStale(false);
     }).catch(e => { if (e.name !== "AbortError") setError("تعذر تحميل سجل المدرب."); });
     return () => abort.abort();
-  }, [id, date]);
+  }, [id, date, revision]);
+  useEffect(() => {
+    const abort = new AbortController();
+    fetch(`/api/v1/manage/staff-attendance/${id}/history?date=${date}`, { signal: abort.signal }).then(async r => {
+      if (!r.ok) throw new Error(); setHistory(await r.json()); setHistoryError("");
+    }).catch(e => { if (e.name !== "AbortError") setHistoryError("تعذر تحميل سجل التعديلات."); });
+    return () => abort.abort();
+  }, [id, date, revision]);
   const future = date > (coach?.today ?? defaults.to);
   async function save(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault(); if (!coach || busy || future) return;
+    e.preventDefault(); if (!coach || busy || future || stale || coach.workDate !== date) return;
     const f = new FormData(e.currentTarget); setBusy(true); setError("");
+    const command = pending ?? { key: crypto.randomUUID(), body: { date, version: coach.version ?? 0, status, checkIn: status === "Present" && f.get("in") ? `${f.get("in")}:00` : null, checkOut: status === "Present" && f.get("out") ? `${f.get("out")}:00` : null, ...(status === "Present" && f.get("out") ? { checkOutDate: f.get("outDate") || date } : {}), approvedDeduction: deduction, reason: f.get("reason") } };
+    setPending(command);
     try {
-      await csrfRequest(`/api/v1/manage/staff-attendance/${id}`, "PUT", { date, status, checkIn: status === "Present" && f.get("in") ? `${f.get("in")}:00` : null, checkOut: status === "Present" && f.get("out") ? `${f.get("out")}:00` : null, ...(status === "Present" && f.get("out") ? { checkOutDate: f.get("outDate") || date } : {}), approvedDeduction: deduction, reason: f.get("reason") });
+      await csrfRequest(`/api/v1/manage/staff-attendance/${id}`, "PUT", command.body, { "Idempotency-Key": command.key }, { announce: false });
+      setPending(null);
       window.dispatchEvent(new CustomEvent("academy-save-success", { detail: "تم حفظ حضور المدرب بنجاح." }));
       router.push("/dashboard/attendance/staff");
-    } catch (e) { setError(e instanceof Error ? e.message : "تعذر حفظ الحضور."); } finally { setBusy(false); }
+    } catch (e) {
+      if (e instanceof DashboardRequestError) { setPending(null); if (e.status === 409) setStale(true); }
+      setError(e instanceof DashboardRequestError ? e.message : "تعذر تأكيد حفظ الحضور. أعد إرسال نفس الطلب للتحقق دون تكراره.");
+    } finally { setBusy(false); }
   }
   return <><PageHeader title={coach ? `حضور ${coach.name}` : "تسجيل حضور المدرب"} context="الحضور اليومي" action={{ label: "عودة للقائمة", href: "/dashboard/attendance/staff" }} />
     {error && <ErrorState message={error} />}{future && <ErrorState message="لا يمكن تسجيل الحضور بتاريخ مستقبلي." />}
-    {!coach && !error ? <LoadingState /> : coach && <section className="detail-card"><form key={`${id}-${coach.workDate}`} className="form-shell" onSubmit={e => void save(e)}>
-      <label>التاريخ<input type="date" required max={coach.today ?? defaults.to} value={date} onChange={e => { if (e.target.value) setDate(e.target.value); }} /></label>
-      <label>الحالة<select name="status" value={status} onChange={e => setStatus(e.target.value)}><option value="NotRecorded">لم يُسجل</option><option value="Present">حاضر</option><option value="Absent">غائب</option></select></label>
+    {stale && <button type="button" onClick={() => { setCoach(null); setHistory(null); setRevision(x => x + 1); }}>إعادة تحميل السجل</button>}
+    {pending && !busy && <p role="status">تعذر تأكيد نتيجة الحفظ. أعد إرسال نفس الطلب؛ لن تتكرر العملية.</p>}
+    {!coach && !error ? <LoadingState /> : coach && <section className="detail-card"><form onSubmit={e => void save(e)}>
+      <fieldset key={`${id}-${coach.workDate}-${revision}`} className="form-shell staff-daily-edit-fields" disabled={busy || !!pending || stale}>
+      <label>التاريخ<input type="date" required max={coach.today ?? defaults.to} value={date} onChange={e => { if (e.target.value) { setCoach(null); setHistory(null); setDate(e.target.value); } }} /></label>
+      <label>الحالة<select name="status" aria-label="الحالة" value={status} onChange={e => setStatus(e.target.value)}><option value="NotRecorded">لم يُسجل</option><option value="Present">حاضر</option><option value="Absent">غائب</option></select></label>
       {status === "Present" && <><TimeField label="وقت الحضور" name="in" required defaultValue={coach.checkIn} /><TimeField label="وقت الانصراف" name="out" defaultValue={coach.checkOut} /><label>تاريخ الانصراف<input type="date" name="outDate" aria-label="تاريخ الانصراف" min={date} max={coach.today ?? defaults.to} defaultValue={coach.checkOutDate ?? date} /><small>اختر اليوم التالي إذا استمر العمل بعد منتصف الليل. بدون وقت انصراف يبقى الحضور مفتوحًا.</small></label></>}
       <p>خصم التأخير المقترح: {formatMoneyAr(coach.suggestedDeduction, "EGP")}</p>
       <label>الخصم المعتمد<input name="deduction" type="number" min="0" step="0.01" value={deduction} onChange={e => setDeduction(Number(e.target.value))} /></label>
       <label>سبب الخصم{deduction > 0 ? " (مطلوب)" : " (اختياري)"}<textarea name="reason" required={deduction > 0} maxLength={500} defaultValue={coach.deductionReason} /></label>
-      <button className="primary-button" disabled={busy || future}>{busy ? "جارٍ الحفظ…" : "حفظ الحضور"}</button>
-    </form><CoachWorkSchedule id={id} /></section>}</>;
+      </fieldset><button className="primary-button" disabled={busy || future || stale}>{busy ? "جارٍ الحفظ…" : pending ? "إعادة إرسال نفس الحفظ" : "حفظ الحضور"}</button>
+    </form><section aria-label="سجل تعديلات الحضور"><h2>سجل تعديلات الحضور اليدوي</h2><p>يعرض الحفظ اليدوي لهذا اليوم فقط. طلبات إثبات الحضور وقراراتها في سجل مستقل.</p>
+      {historyError ? <ErrorState message={historyError} /> : !history ? <LoadingState /> : !history.items.length ? <p>لا توجد تعديلات يدوية محفوظة لهذا اليوم.</p> : <><p>آخر {history.items.length} من {history.total} تعديل</p><ol className="staff-daily-history">{history.items.map(change => <li key={change.id}>
+        <strong>{change.actor}</strong><time dateTime={change.createdAtUtc}>{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: history.timeZone }).format(new Date(change.createdAtUtc))} — توقيت الأكاديمية</time>
+        <div><span>قبل التعديل</span><AttendanceSnapshot value={change.before} /></div><div><span>بعد التعديل</span><AttendanceSnapshot value={change.after} /></div>
+      </li>)}</ol></>}
+    </section><CoachWorkSchedule id={id} /></section>}</>;
+}
+function AttendanceSnapshot({ value }: { value: Coach | null }) {
+  if (!value) return <p>لا يوجد سجل سابق</p>;
+  return <p>{value.status === "Present" ? "حاضر" : value.status === "Absent" ? "غائب" : "لم يُسجل"} · {value.checkIn ? formatTimeAr(value.checkIn) : "—"} / {formatStaffCheckout(value.checkOut, value.checkOutDate, value.workDate)} · الخصم: {formatMoneyAr(value.approvedDeduction, "EGP")}{value.deductionReason && <small>{value.deductionReason}</small>}</p>;
 }
 function CoachWorkSchedule({ id }: { id: string }) {
   const [message, setMessage] = useState("");

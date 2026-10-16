@@ -43,6 +43,9 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         await db.PrivateAssets.Where(x => assets.Contains(x.Id)).ExecuteDeleteAsync();
         await db.PlayerAttendances.Where(x => enrollments.Contains(x.SportEnrollmentId)).ExecuteDeleteAsync();
         var members = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.User.Email!.StartsWith("owner-review-test-")).Select(x => x.Id).ToArrayAsync();
+        var retained = await db.StaffAttendanceChanges.Where(x => members.Contains(x.MembershipId)).Select(x => x.MembershipId).Distinct().ToArrayAsync();
+        await db.AcademyMemberships.Where(x => retained.Contains(x.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        members = members.Except(retained).ToArray(); // permanent source/evidence and its identities stay linked
         var userIds = await db.AcademyMemberships.Where(x => members.Contains(x.Id)).Select(x => x.UserId).ToArrayAsync();
         await db.StaffDailyAttendances.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
         await db.StaffWorkSchedules.Where(x => members.Contains(x.MembershipId)).ExecuteDeleteAsync();
@@ -82,7 +85,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         await db.SaveChangesAsync();
     }
     private async Task<HttpClient> Owner() { var c = factory.CreateClient(); var r = await Send(c, "/api/v1/auth/login", new { email = DemoSeed.OwnerEmail, password = "Demo-Only-123!" }); Assert.Equal(HttpStatusCode.OK, r.StatusCode); return c; }
-    private static async Task<HttpResponseMessage> Send(HttpClient c, string path, object body, string? key = null, bool put = false) { var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) request.Headers.Add("Idempotency-Key", key); return await c.SendAsync(request); }
+    private static async Task<HttpResponseMessage> Send(HttpClient c, string path, object body, string? key = null, bool put = false) { var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(put ? HttpMethod.Put : HttpMethod.Post, path) { Content = JsonContent.Create(put ? await DailyAttendanceTestCommand.WithCurrentVersion(c, path, body) : body) }; request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) request.Headers.Add("Idempotency-Key", key); return await c.SendAsync(request); }
     private async Task<(Guid Player, Guid Enrollment, Guid Collection)> Register(HttpClient c, Guid? groupId = null)
     {
         var ownGroup = groupId ?? await FreshRegistrationGroup();

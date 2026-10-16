@@ -213,7 +213,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
             var all = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/staff-attendance/?allDates=true"); Assert.Equal(JsonValueKind.Null, all.GetProperty("date").ValueKind); Assert.Contains(all.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == f.Coach && x.GetProperty("workDate").GetString() == date);
             using var other = await Staff(DemoSeed.FutureOwnerEmail); Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/api/v1/manage/staff-attendance/{f.Coach}?date={date}")).StatusCode);
         }
-        finally { await db.StaffDailyAttendances.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.MembershipId == f.Coach && x.WorkDate == new DateOnly(2026, 10, 8)).ExecuteDeleteAsync(); }
+        finally { /* Preserve immutable attendance evidence; Dispose archives this scenario's coach. */ }
     }
 
     [Fact]
@@ -229,7 +229,7 @@ public sealed class TimetableUxTests : IAsyncLifetime
 
     private static async Task<HttpResponseMessage> Put(HttpClient c, string path, object body)
     {
-        var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(HttpMethod.Put, path) { Content = JsonContent.Create(body) };
+        var csrf = await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); var request = new HttpRequestMessage(HttpMethod.Put, path) { Content = JsonContent.Create(await DailyAttendanceTestCommand.WithCurrentVersion(c, path, body)) };
         request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); return await c.SendAsync(request);
     }
 

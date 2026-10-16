@@ -96,6 +96,7 @@ public sealed partial class FoundationDbContext
             || TournamentPayments.Any(p => p.ProofAssetId == x.Id) || DayPassTickets.Any(p => p.ProofAssetId == x.Id)));
         SportFilter<AcademyMembership>(b, x => x.Id == RequestMembershipId || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.Id));
         SportFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
+        SportFilter<StaffAttendanceChange>(b, x => StaffDailyAttendances.Any(a => a.Id == x.AttendanceId));
         SportFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
     }
     private void SportFilter<T>(ModelBuilder b, Expression<Func<T, bool>> predicate) where T : class => AddSportFilter(b, typeof(T), predicate);

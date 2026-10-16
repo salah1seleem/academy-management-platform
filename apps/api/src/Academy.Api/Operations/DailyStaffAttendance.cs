@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
@@ -6,6 +9,8 @@ using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Npgsql;
 
 namespace Academy.Api.Operations;
 
@@ -16,6 +21,7 @@ public static class DailyStaffAttendance
         var manage = app.MapGroup("/api/v1/manage/staff-attendance");
         manage.MapGet("/", Day).RequireAuthorization(AcademyPermissions.AttendanceManage);
         manage.MapGet("/{id:guid}", Detail).RequireAuthorization(AcademyPermissions.AttendanceManage);
+        manage.MapGet("/{id:guid}/history", History).RequireAuthorization(AcademyPermissions.AttendanceManage);
         manage.MapPut("/{id:guid}", Record).RequireAuthorization(AcademyPermissions.AttendanceManage).AddEndpointFilter<CsrfFilter>();
         manage.MapGet("/{id:guid}/schedule", Schedule).RequireAuthorization(AcademyPermissions.StructureManage);
         manage.MapPut("/{id:guid}/schedule", SaveSchedule).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
@@ -41,11 +47,29 @@ public static class DailyStaffAttendance
         if (coach is null) return Results.NotFound();
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock); var day = date ?? today;
         var r = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.WorkDate == day);
-        return Results.Ok(new { coach.Id, coach.name, workDate = day, today, status = r?.Status ?? "NotRecorded", r?.CheckIn, r?.CheckOut, r?.CheckOutDate, lateMinutes = r?.LateMinutes ?? 0, suggestedDeduction = r?.SuggestedDeduction ?? 0, approvedDeduction = r?.ApprovedDeduction ?? 0, r?.DeductionReason });
+        return Results.Ok(new { coach.Id, coach.name, workDate = day, today, version = r?.Version ?? 0, status = r?.Status ?? "NotRecorded", r?.CheckIn, r?.CheckOut, r?.CheckOutDate, lateMinutes = r?.LateMinutes ?? 0, suggestedDeduction = r?.SuggestedDeduction ?? 0, approvedDeduction = r?.ApprovedDeduction ?? 0, r?.DeductionReason });
     }
-    private static async Task<IResult> Record(Guid id, DailyWrite body, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static string Snapshot(StaffDailyAttendance? row) => JsonSerializer.Serialize(row is null ? null : new { row.Id, row.Version, row.WorkDate, row.Status, row.CheckIn, row.CheckOut, row.CheckOutDate, row.LateMinutes, row.SuggestedDeduction, row.ApprovedDeduction, row.DeductionReason, row.RecordedByUserId, row.UpdatedAtUtc }, Json);
+    private static async Task<IResult> History(Guid id, DateOnly date, CurrentTenant tenant, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        if (t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) return Results.Forbid();
+        if (!await db.AcademyMemberships.AnyAsync(m => m.Id == id && m.AcademyId == t.AcademyId && m.Role == AcademyRole.Coach && m.IsActive)) return Results.NotFound();
+        var q = db.StaffAttendanceChanges.AsNoTracking().Where(c => c.AcademyId == t.AcademyId && c.MembershipId == id && c.WorkDate == date);
+        var rows = await q.OrderByDescending(c => c.CreatedAtUtc).ThenByDescending(c => c.AfterVersion).Take(100).Select(c => new { c.Id, c.CreatedAtUtc, c.BeforeVersion, c.AfterVersion, c.BeforeSnapshot, c.AfterSnapshot, actor = db.Users.Where(u => u.Id == c.ActorUserId).Select(u => u.DisplayName).FirstOrDefault() }).ToArrayAsync();
+        var zone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
+        return Results.Ok(new { total = await q.CountAsync(), timeZone = zone, items = rows.Select(c => new { c.Id, c.CreatedAtUtc, c.BeforeVersion, c.AfterVersion, c.actor, before = JsonSerializer.Deserialize<JsonElement>(c.BeforeSnapshot), after = JsonSerializer.Deserialize<JsonElement>(c.AfterSnapshot) }) });
+    }
+    private static async Task<IResult> Record(Guid id, DailyWrite body, CurrentTenant tenant, HttpContext http, FoundationDbContext db, TimeProvider clock, IAuthorizationService authorization)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) return Results.Forbid();
+        var actor = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var key = http.Request.Headers["Idempotency-Key"].ToString();
+        if (key.Length != 0 && key.Length is < 8 or > 100) return Results.UnprocessableEntity(new { message = "مفتاح الحفظ غير صالح؛ افتح السجل مجددًا." });
+        // Legacy create callers remain safe: no key means no replay guarantee, never a blind update.
+        if (key.Length == 0) key = Guid.NewGuid().ToString();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { id, membership = t.MembershipId, body }, Json))));
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         var checkoutDate = body.Status == "Present" && body.CheckOut.HasValue ? body.CheckOutDate ?? body.Date : (DateOnly?)null;
         if (body.Date.Year < 2000 || body.Date > today || checkoutDate < body.Date || checkoutDate > today) return Results.UnprocessableEntity(new { message = "أدخل تاريخ حضور وانصراف صحيحين غير مستقبليين؛ الانصراف لا يسبق يوم الحضور." });
@@ -55,25 +79,45 @@ public static class DailyStaffAttendance
         if (body.Status is not ("Present" or "Absent" or "NotRecorded") || body.Status == "Present" && body.CheckIn is null || checkoutDate == body.Date && body.CheckOut < body.CheckIn || body.ApprovedDeduction < 0 || decimal.Round(body.ApprovedDeduction, 2) != body.ApprovedDeduction || body.ApprovedDeduction > 0 && string.IsNullOrWhiteSpace(body.Reason) || body.Reason?.Length > 500) return Results.UnprocessableEntity(new { message = "أدخل حالة وتوقيتًا صحيحين. سبب الخصم المعتمد مطلوب." });
         if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive && x.Role == AcademyRole.Coach)) return Results.NotFound();
         await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"}, 0))");
+        var live = await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(m => m.AcademyId == t.AcademyId && m.Id == t.MembershipId && m.UserId == actor && m.IsActive && m.User.IsActive && m.Role == t.Role);
+        var module = StaffAccessRules.ForPath(http.Request.Path.Value ?? "");
+        if (live is null || !(await authorization.AuthorizeAsync(http.User, http, AcademyPermissions.AttendanceManage)).Succeeded || live.UseActionGrants && t.Role == AcademyRole.AcademyAdmin && !await db.StaffActionGrants.AnyAsync(g => g.MembershipId == live.Id && g.IsActive && g.Module == module && g.Read && g.Edit)) return Results.Forbid();
+        if (t.Role == AcademyRole.AcademyAdmin && !live.AllBranches && !await db.Employees.AnyAsync(e => e.MembershipId == id && db.MembershipBranchAccesses.Any(a => a.MembershipId == t.MembershipId && a.IsActive && a.BranchId == e.BranchId)) && !await db.StaffGroupAssignments.AnyAsync(s => s.AcademyMembershipId == id && s.IsActive && s.TrainingGroup.IsActive && db.MembershipBranchAccesses.Any(a => a.MembershipId == t.MembershipId && a.IsActive && a.BranchId == s.TrainingGroup.BranchId))) return Results.NotFound();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-manual-key:{t.AcademyId}:{actor}:{key}"}, 0))");
+        var replay = await db.StaffAttendanceChanges.AsNoTracking().SingleOrDefaultAsync(c => c.AcademyId == t.AcademyId && c.ActorUserId == actor && c.RequestKey == key);
+        if (replay is not null) return replay.RequestHash == hash ? Results.Ok(JsonSerializer.Deserialize<JsonElement>(replay.AfterSnapshot)) : Results.Conflict(new { message = "مفتاح الحفظ مستخدم لبيانات مختلفة؛ أعد تحميل السجل." });
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-open:{t.AcademyId}:{id}"}, 0))");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-day:{t.AcademyId}:{id}:{body.Date}"}, 0))");
         if (body.Status == "Present" && await db.StaffDailyAttendances.AnyAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == id && a.WorkDate != body.Date && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null)) return Results.Conflict(new { message = "توجد فترة حضور مفتوحة في يوم آخر؛ راجعها أولًا دون اختلاق انصراف." });
         var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.WorkDate == body.Date);
+        if ((row?.Version ?? 0) != body.Version) return Results.Conflict(new { message = "تغير سجل الحضور منذ فتحه؛ أعد تحميل السجل وراجع التعديل قبل الحفظ." });
+        var before = Snapshot(row); var beforeVersion = row?.Version ?? 0;
         if (body.Status == "Present" && await StaffAttendanceIntervals.Overlaps(db,t.AcademyId,id,row?.Id,body.Date,body.CheckIn!.Value,checkoutDate,body.CheckOut)) return Results.Conflict(new {message="تتداخل الفترة مع سجل حضور آخر؛ راجع السجل الأصلي قبل الحفظ."});
         var employee = await db.Employees.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == id).Select(x => (Guid?)x.Id).SingleOrDefaultAsync();
         if (employee.HasValue)
         {
             await PayrollEndpoints.Lock(db, t.AcademyId, employee.Value, body.Date);
-            var sourceChanged = row is null || body.Status != row.Status || (body.Status == "Present" ? body.CheckIn : null) != row.CheckIn || (body.Status == "Present" ? body.CheckOut : null) != row.CheckOut || checkoutDate != row.CheckOutDate;
-            if ((sourceChanged || body.ApprovedDeduction != (row?.ApprovedDeduction ?? 0)) && await PayrollEndpoints.Finalized(db, t.AcademyId, employee.Value, body.Date)) return Results.Conflict(new { message = "كشف هذا الشهر معتمد أو مسدد؛ لا يمكن تعديل مصدر حضوره أو خصمه صامتًا." });
+            // Even a reason-only/no-op save would replace source metadata/version.
+            // A genuine retry was already answered above without touching this row.
+            if (await PayrollEndpoints.Finalized(db, t.AcademyId, employee.Value, body.Date)) return Results.Conflict(new { message = "كشف هذا الشهر معتمد أو مسدد؛ لا يمكن تعديل مصدر حضوره أو خصمه صامتًا." });
         }
         if (row is null) { row = new StaffDailyAttendance { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, WorkDate = body.Date, Status = body.Status, CreatedAtUtc = clock.GetUtcNow() }; db.StaffDailyAttendances.Add(row); }
         var schedule = await db.StaffWorkSchedules.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.DayOfWeek == body.Date.DayOfWeek && x.IsActive);
         row.Status = body.Status; row.CheckIn = body.Status == "Present" ? body.CheckIn : null; row.CheckOut = body.Status == "Present" ? body.CheckOut : null; row.CheckOutDate = checkoutDate;
         row.LateMinutes = row.CheckIn.HasValue && schedule is not null ? Math.Max(0, (int)(row.CheckIn.Value.ToTimeSpan() - schedule.StartTime.ToTimeSpan()).TotalMinutes) : 0;
         row.SuggestedDeduction = schedule is not null && row.LateMinutes > 0 && row.LateMinutes >= schedule.LateThresholdMinutes ? schedule.LateDeduction : 0;
-        row.ApprovedDeduction = body.ApprovedDeduction; row.DeductionReason = body.Reason?.Trim(); row.RecordedByUserId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!); row.UpdatedAtUtc = clock.GetUtcNow();
-        await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Status, row.LateMinutes, row.SuggestedDeduction, row.ApprovedDeduction });
+        row.ApprovedDeduction = body.ApprovedDeduction; row.DeductionReason = body.Reason?.Trim(); row.RecordedByUserId = actor; row.UpdatedAtUtc = clock.GetUtcNow();
+        try
+        {
+            await db.SaveChangesAsync();
+            var after = Snapshot(row);
+            db.StaffAttendanceChanges.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, AttendanceId = row.Id, MembershipId = id, WorkDate = body.Date, ActorMembershipId = t.MembershipId, ActorUserId = actor, BeforeVersion = beforeVersion, AfterVersion = row.Version, BeforeSnapshot = before, AfterSnapshot = after, RequestKey = key, RequestHash = hash, CreatedAtUtc = row.UpdatedAtUtc, UpdatedAtUtc = row.UpdatedAtUtc });
+            await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(JsonSerializer.Deserialize<JsonElement>(after));
+        }
+        catch (DbUpdateConcurrencyException) { return Results.Conflict(new { message = "تغير مصدر الحضور أثناء الحفظ؛ أعد تحميل السجل." }); }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505", ConstraintName: "IX_StaffAttendanceChanges_AcademyId_ActorUserId_RequestKey" })
+        { return Results.Conflict(new { message = "مفتاح الحفظ مستخدم في سجل آخر؛ لم تسجل تغييرات جديدة." }); }
     }
     private static async Task<IResult> Schedule(Guid id, CurrentTenant tenant, FoundationDbContext db)
     { var t = (await tenant.ResolveAsync())!; if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Role == AcademyRole.Coach)) return Results.NotFound(); return Results.Ok(await db.StaffWorkSchedules.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.IsActive).Select(x => new { x.DayOfWeek, x.StartTime, x.EndTime, x.LateThresholdMinutes, x.LateDeduction }).ToListAsync()); }
@@ -111,5 +155,5 @@ public static class DailyStaffAttendance
         return Academy.Api.Slice8.ReportingEndpoints.Csv(csv, $"coach-daily-{start:yyyy-MM}.csv");
     }
 }
-public sealed record DailyWrite(DateOnly Date, string Status, TimeOnly? CheckIn, TimeOnly? CheckOut, decimal ApprovedDeduction, string? Reason, DateOnly? CheckOutDate = null);
+public sealed record DailyWrite(DateOnly Date, string Status, TimeOnly? CheckIn, TimeOnly? CheckOut, decimal ApprovedDeduction, string? Reason, DateOnly? CheckOutDate = null, uint Version = 0);
 public sealed record WorkScheduleWrite(DayOfWeek[] Days, TimeOnly Start, TimeOnly End, int ThresholdMinutes, decimal Deduction);

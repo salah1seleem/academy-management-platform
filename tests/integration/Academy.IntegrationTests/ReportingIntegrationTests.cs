@@ -67,7 +67,7 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
     [Fact] public async Task Attendance_export_respects_filters() { using var c = await Staff(DemoSeed.OwnerEmail); var csv = await c.GetStringAsync("/api/v1/reports/attendance/export?month=9&year=2026&birthYear=2019"); Assert.Contains("يوسف خالد سمير", csv); Assert.DoesNotContain("NG-0001", csv); }
     [Fact] public async Task Attendance_export_has_tenant_isolation() { using var c = await Staff(DemoSeed.OwnerEmail); var csv = await c.GetStringAsync("/api/v1/reports/attendance/export?month=9&year=2026"); Assert.DoesNotContain("Future", csv, StringComparison.OrdinalIgnoreCase); }
     [Fact] public void Csv_formula_injection_is_escaped() { var method = typeof(ReportingEndpoints).GetMethod("CsvCell", BindingFlags.NonPublic | BindingFlags.Static)!; Assert.Equal("\"'=SUM(1,1)\"", method.Invoke(null, new object?[] { "=SUM(1,1)" })); }
-    [Fact] public async Task Demo_rerun_does_not_duplicate_reporting_sources() { await using var s = Scope(); var db = Db(s); var before = await db.PlayerAttendances.CountAsync(x => x.Id == Slice8DemoSeed.ReportAttendanceId); var owner = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.AcademyOwner).Select(x => x.UserId).SingleAsync(); await Slice8DemoSeed.SeedAsync(db, owner, new DateTimeOffset(2026, 9, 28, 12, 0, 0, TimeSpan.Zero), default); Assert.Equal(before, await db.PlayerAttendances.CountAsync(x => x.Id == Slice8DemoSeed.ReportAttendanceId)); }
+    [Fact] public async Task Demo_rerun_does_not_duplicate_reporting_sources() { await using var s = Scope(); var db = Db(s); var before = await db.PlayerAttendances.CountAsync(x => x.Id == Slice8DemoSeed.ReportAttendanceId); var owner = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.AcademyOwner && x.User.Email == DemoSeed.OwnerEmail).Select(x => x.UserId).SingleAsync(); await Slice8DemoSeed.SeedAsync(db, owner, new DateTimeOffset(2026, 9, 28, 12, 0, 0, TimeSpan.Zero), default); Assert.Equal(before, await db.PlayerAttendances.CountAsync(x => x.Id == Slice8DemoSeed.ReportAttendanceId)); }
     [Fact] public async Task Dashboard_report_and_receipts_are_consistent()
     {
         using var c = await Staff(DemoSeed.OwnerEmail);
@@ -95,7 +95,7 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
         await using var scope = Scope(); var db = Db(scope);
         var enrollment = await db.SportEnrollments.FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId);
         var pendingEnrollment = await db.SportEnrollments.FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SportId == enrollment.SportId && x.Id != enrollment.Id);
-        var actor = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.AcademyOwner).Select(x => x.UserId).SingleAsync();
+        var actor = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Role == AcademyRole.AcademyOwner && x.User.Email == DemoSeed.OwnerEmail).Select(x => x.UserId).SingleAsync();
         var tournamentId = Guid.NewGuid(); var confirmedId = Guid.NewGuid(); var pendingId = Guid.NewGuid();
         var time = new DateTimeOffset(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);
         var receiptCount = await db.Receipts.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId);

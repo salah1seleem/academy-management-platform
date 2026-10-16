@@ -159,6 +159,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PrivateCompensationEntry>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId) && PrivateServiceDeliveries.Any(d => d.Id == x.DeliveryId));
         BranchFilter<AcademyMembership>(b, x => x.Id == RequestMembershipId || MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.IsActive && RequestBranchIds.Contains(a.BranchId)) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.Id) || Employees.Any(e => e.MembershipId == x.Id));
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
+        BranchFilter<StaffAttendanceChange>(b, x => StaffDailyAttendances.Any(a => a.Id == x.AttendanceId));
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         // Permissions and employee financial administration are not delegated by branch visibility.
         ConfigureSportIsolation(b);
@@ -187,6 +188,8 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
+        if (ChangeTracker.Entries<StaffAttendanceChange>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("سجل تعديل الحضور ثابت ولا يعدل أو يحذف.");
         foreach (var e in ChangeTracker.Entries<StaffAttendanceException>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
             if (e.State == EntityState.Deleted || e.OriginalValues.GetValue<string>(nameof(StaffAttendanceException.Status)) != "Pending" || e.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(StaffAttendanceException.Status) or nameof(StaffAttendanceException.ReviewedByUserId) or nameof(StaffAttendanceException.ReviewedByMembershipId) or nameof(StaffAttendanceException.ReviewedAtUtc) or nameof(StaffAttendanceException.ReviewNote) or nameof(StaffAttendanceException.ReviewKey) or nameof(StaffAttendanceException.ReviewHash) or nameof(StaffAttendanceException.AttendanceId) or nameof(StaffAttendanceException.BeforeSnapshot) or nameof(StaffAttendanceException.AfterSnapshot) or nameof(StaffAttendanceException.UpdatedAtUtc))))
                 throw new InvalidOperationException("طلب إثبات الحضور وأصله وقراره النهائي ثابتة ولا تحذف.");
