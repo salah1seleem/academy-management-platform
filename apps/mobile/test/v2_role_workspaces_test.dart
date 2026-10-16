@@ -84,6 +84,11 @@ void main() {
           expect(tester.takeException(), isNull);
           await tester.tap(find.text('المزيد'));
           await tester.pumpAndSettle();
+          await tester.scrollUntilVisible(
+            find.text('الحساب والإعدادات'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
           expect(find.text('الحساب والإعدادات'), findsOneWidget);
           expect(tester.takeException(), isNull);
           auth.dispose();

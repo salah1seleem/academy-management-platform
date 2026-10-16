@@ -5341,6 +5341,136 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.StaffAttendanceException", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AfterSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("AttendanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BeforeSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ClaimedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReviewHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ReviewKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("AcademyId", "AttendanceId");
+
+                    b.HasIndex("AcademyId", "BranchId");
+
+                    b.HasIndex("AcademyId", "EmployeeId");
+
+                    b.HasIndex("AcademyId", "MembershipId");
+
+                    b.HasIndex("AcademyId", "ReviewedByMembershipId");
+
+                    b.HasIndex("AcademyId", "RequestedByUserId", "RequestKey")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ReviewedByUserId", "ReviewKey")
+                        .IsUnique()
+                        .HasFilter("\"ReviewKey\" IS NOT NULL");
+
+                    b.HasIndex("AcademyId", "Status", "BranchId", "WorkDate");
+
+                    b.ToTable("StaffAttendanceExceptions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_StaffException_Decision", "\"IsActive\" AND \"Operation\" IN ('CheckIn','CheckOut') AND \"Status\" IN ('Pending','Approved','Rejected')\nAND length(trim(\"Reason\")) BETWEEN 5 AND 500 AND \"ClaimedAtUtc\" <= \"CreatedAtUtc\"\nAND ((\"Status\"='Pending' AND \"ReviewedByUserId\" IS NULL AND \"ReviewedByMembershipId\" IS NULL\n  AND \"ReviewedAtUtc\" IS NULL AND \"ReviewKey\" IS NULL AND \"ReviewHash\" IS NULL AND \"ReviewNote\" IS NULL\n  AND \"AttendanceId\" IS NULL AND \"BeforeSnapshot\" IS NULL AND \"AfterSnapshot\" IS NULL)\nOR (\"Status\" <> 'Pending' AND \"ReviewedByUserId\" IS NOT NULL AND \"ReviewedByUserId\" <> \"RequestedByUserId\"\n  AND \"ReviewedByMembershipId\" IS NOT NULL AND \"ReviewedAtUtc\" IS NOT NULL AND \"ReviewedAtUtc\" >= \"CreatedAtUtc\"\n  AND \"ReviewKey\" IS NOT NULL AND \"ReviewHash\" IS NOT NULL\n  AND ((\"Status\"='Approved' AND \"AttendanceId\" IS NOT NULL AND \"BeforeSnapshot\" IS NOT NULL AND \"AfterSnapshot\" IS NOT NULL)\n    OR (\"Status\"='Rejected' AND \"ReviewNote\" IS NOT NULL AND length(trim(\"ReviewNote\")) BETWEEN 5 AND 500\n      AND \"AttendanceId\" IS NULL AND \"BeforeSnapshot\" IS NULL AND \"AfterSnapshot\" IS NULL))))");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.StaffDailyAttendance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5399,8 +5529,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
-
-                    b.HasAlternateKey("AcademyId", "Id");
 
                     b.HasIndex("AcademyId", "MembershipId", "WorkDate")
                         .IsUnique();
@@ -12284,7 +12412,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.PlatformBrandOperator", b =>
@@ -12558,6 +12685,59 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Operations.SalaryVersion", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "PreviousVersionId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.StaffAttendanceException", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.StaffDailyAttendance", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AttendanceId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "BranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "EmployeeId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "MembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ReviewedByMembershipId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
                 });

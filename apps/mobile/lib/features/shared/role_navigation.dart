@@ -16,6 +16,7 @@ import '../owner/owner_operations.dart';
 import 'academy_news.dart';
 import 'matches.dart';
 import 'staff_amounts.dart';
+import 'staff_attendance_exceptions.dart';
 import 'coach_agreements.dart';
 import 'facility_board.dart';
 
@@ -166,6 +167,32 @@ class NativeMore extends StatelessWidget {
           localized(context, 'مجموعاتي', 'My groups'),
           Icons.groups_outlined,
           () => openPage(context, CoachGroupsPage(auth: auth)),
+        ),
+      if (role == 'Coach' || role == 'AcademyAdmin')
+        GLink(
+          localized(context, 'طلب إثبات حضوري', 'My attendance claim'),
+          Icons.fact_check_outlined,
+          () => openPage(context, StaffAttendanceExceptionPage(auth: auth)),
+        ),
+      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
+        RemoteBody(
+          auth: auth,
+          path: '/api/v1/my-permissions',
+          builder: (context, value) =>
+              value is List && value.contains('staff.provision')
+              ? GLink(
+                  localized(
+                    context,
+                    'مراجعة إثبات حضور الموظفين',
+                    'Review staff attendance claims',
+                  ),
+                  Icons.rule_outlined,
+                  () => openPage(
+                    context,
+                    StaffAttendanceExceptionPage(auth: auth, review: true),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       if (role == 'Coach' || role == 'AcademyAdmin')
         GLink(

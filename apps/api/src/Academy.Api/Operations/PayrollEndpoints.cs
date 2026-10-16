@@ -93,6 +93,7 @@ public static class PayrollEndpoints
         if(contractChanged&&hasContractHistory)return Results.Problem(statusCode:409,title:"استخدم سجل العقد المؤرخ لتغيير المدة دون إعادة كتابة المصدر.");
         if((contractChanged||body.BranchId!=x.BranchId||body.MembershipId!=x.MembershipId)&&await db.PayrollStatements.AnyAsync(s=>s.EmployeeId==id))return Results.Problem(statusCode:409,title:"يوجد كشف معتمد؛ تغيير العقد أو الفرع أو ربط الحساب يحتاج تسوية مؤرخة، لا تعديل مصدره.");
         if((body.BranchId!=x.BranchId||body.MembershipId!=x.MembershipId)&&await db.PayrollAdvances.AnyAsync(a=>a.EmployeeId==id))return Results.Problem(statusCode:409,title:"توجد سلفة مثبتة؛ تغيير الفرع أو ربط الحساب يحتاج تسوية موثقة.");
+        if(body.MembershipId!=x.MembershipId&&await db.StaffAttendanceExceptions.AnyAsync(r=>r.EmployeeId==id))return Results.Conflict(new {message="ملف الموظف مرتبط بسجل إثبات حضور؛ لا يعاد ربطه بحساب آخر أو يفقد هوية سجله."});
         if (body.MembershipId != x.MembershipId && (await db.PayrollSettlements.AnyAsync(s => s.AcademyId == t.AcademyId && s.EmployeeId == id) || await db.CoachCompensationAgreements.AnyAsync(a => a.EmployeeId == id))) return Results.Conflict(new { message = "لا يمكن تغيير ربط الحساب بعد سداد راتب أو إنشاء اتفاق مدرب. أنشئ ربطًا جديدًا موثقًا." });
         Apply(x, body,false,!hasContractHistory); x.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }

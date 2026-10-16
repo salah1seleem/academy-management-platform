@@ -28,6 +28,7 @@ export function DailyCoaches() {
       <ListSearch label="البحث بالاسم" placeholder="اسم المدرب" value={search} onChange={setSearch} />
       <button onClick={() => { setDate(""); setSearch(""); setError(""); if (date) setRows(null); }}>مسح</button>
       <Link href="/dashboard/reports/attendance?subject=staff">تقارير المدربين والخصومات</Link>
+      <Link href="/dashboard/attendance/staff/exceptions">طلبات إثبات الحضور — للمخولين بإدارة الموظفين</Link>
     </div>{error && <ErrorState message={error} />}{!rows && !error ? <LoadingState /> :
       !visible.length ? <EmptyState message="لا يوجد مدربون مطابقون." /> :
       <section className="list-card"><AdminDataTable label="حضور المدربين اليومي" rows={visible} rowKey={x => `${x.id}-${x.workDate}`} columns={[

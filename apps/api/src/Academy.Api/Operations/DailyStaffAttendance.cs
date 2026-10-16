@@ -49,7 +49,10 @@ public static class DailyStaffAttendance
         if (body.Date.Year < 2000 || body.Date > await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock)) return Results.UnprocessableEntity(new { message = "أدخل تاريخ حضور صحيحًا غير مستقبلي." });
         if (body.Status is not ("Present" or "Absent" or "NotRecorded") || body.Status == "Present" && body.CheckIn is null || body.CheckOut < body.CheckIn || body.ApprovedDeduction < 0 || decimal.Round(body.ApprovedDeduction, 2) != body.ApprovedDeduction || body.ApprovedDeduction > 0 && string.IsNullOrWhiteSpace(body.Reason) || body.Reason?.Length > 500) return Results.UnprocessableEntity(new { message = "أدخل حالة وتوقيتًا صحيحين. سبب الخصم المعتمد مطلوب." });
         if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive && x.Role == AcademyRole.Coach)) return Results.NotFound();
-        await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-day:{t.AcademyId}:{id}:{body.Date}"}, 0))");
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-open:{t.AcademyId}:{id}"}, 0))");
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-day:{t.AcademyId}:{id}:{body.Date}"}, 0))");
+        if (body.Status == "Present" && body.CheckOut is null && await db.StaffDailyAttendances.AnyAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == id && a.WorkDate != body.Date && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null)) return Results.Conflict(new { message = "توجد فترة حضور مفتوحة في يوم آخر؛ راجعها أولًا دون اختلاق انصراف." });
         var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.WorkDate == body.Date);
         var employee = await db.Employees.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == id).Select(x => (Guid?)x.Id).SingleOrDefaultAsync();
         if (employee.HasValue)

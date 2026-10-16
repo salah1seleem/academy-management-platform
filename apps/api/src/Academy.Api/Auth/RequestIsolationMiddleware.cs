@@ -30,7 +30,7 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
                     await context.Response.WriteAsJsonAsync(new { title = t.AdditionalContext ? "هذا السياق التشغيلي لا يفتح الرواتب أو المستخدمين أو العمليات المشتركة؛ استخدم التفويض الأوسع المخول" : "هذه العملية تشمل بيانات مشتركة بين الرياضات وتحتاج تفويضًا أوسع من المالك", status = 403 });
                     return;
                 }
-                if (t.Role == AcademyRole.AcademyAdmin && await db.AcademyMemberships.Where(x => x.Id == t.MembershipId).Select(x => x.UseActionGrants).SingleAsync(context.RequestAborted))
+                if (t.Role == AcademyRole.AcademyAdmin && !Academy.Api.Operations.StaffAttendanceExceptions.IsOwnPath(path) && await db.AcademyMemberships.Where(x => x.Id == t.MembershipId).Select(x => x.UseActionGrants).SingleAsync(context.RequestAborted))
                 {
                     var module = StaffAccessRules.ForPath(path);
                     if (module is not null)

@@ -89,6 +89,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<CompensationBooking>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CompensationMovement>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<Employee>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<StaffAttendanceException>(b, x => RequestBranchIds.Contains(x.BranchId) && Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<MatchTeam>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<ProductSale>(b, x => x.BranchId.HasValue && RequestBranchIds.Contains(x.BranchId.Value));
         BranchFilter<NewEnrollmentRequest>(b, x => RequestBranchIds.Contains(x.PreferredBranchId));
@@ -186,6 +187,9 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
+        foreach (var e in ChangeTracker.Entries<StaffAttendanceException>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
+            if (e.State == EntityState.Deleted || e.OriginalValues.GetValue<string>(nameof(StaffAttendanceException.Status)) != "Pending" || e.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(StaffAttendanceException.Status) or nameof(StaffAttendanceException.ReviewedByUserId) or nameof(StaffAttendanceException.ReviewedByMembershipId) or nameof(StaffAttendanceException.ReviewedAtUtc) or nameof(StaffAttendanceException.ReviewNote) or nameof(StaffAttendanceException.ReviewKey) or nameof(StaffAttendanceException.ReviewHash) or nameof(StaffAttendanceException.AttendanceId) or nameof(StaffAttendanceException.BeforeSnapshot) or nameof(StaffAttendanceException.AfterSnapshot) or nameof(StaffAttendanceException.UpdatedAtUtc))))
+                throw new InvalidOperationException("طلب إثبات الحضور وأصله وقراره النهائي ثابتة ولا تحذف.");
         foreach(var e in ChangeTracker.Entries<AcademyMatch>().Where(e=>e.State==EntityState.Modified))
             if(new[]{nameof(AcademyMatch.CopiedFromMatchId),nameof(AcademyMatch.CopiedByMembershipId),nameof(AcademyMatch.CopyRequestKey),nameof(AcademyMatch.CopyRequestHash)}.Any(p=>e.Property(p).IsModified))throw new InvalidOperationException("مصدر نسخ المباراة ثابت؛ عدّل الموعد والمحتوى دون تغيير أصل النسخة.");
         if (ChangeTracker.Entries<PayrollStatement>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)

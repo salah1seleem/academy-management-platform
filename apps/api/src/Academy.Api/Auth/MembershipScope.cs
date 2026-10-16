@@ -19,6 +19,7 @@ public static class MembershipScope
     {
         if (path is "/api/v1/me" or "/api/v1/my-permissions" or "/api/v1/my-access" or "/api/v1/academy/features" or "/api/v1/academy/branding/logo") return true;
         if (IsAssetRead(path, method)) return true; // Download rechecks purpose-specific permission.
+        if (Academy.Api.Operations.StaffAttendanceExceptions.IsOwnPath(path)) return true; // Own employee only; no staff list, salary or review.
         if (path.StartsWith("/api/v1/manage/staff-attendance", StringComparison.Ordinal) || path.StartsWith("/api/v1/staff/", StringComparison.Ordinal)) return false;
         if (path.StartsWith("/api/v1/people/import", StringComparison.Ordinal)) return false;
         var module = StaffAccessRules.ForPath(path);
