@@ -5677,6 +5677,84 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("StaffGrants", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.StaffWorkPeriod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttendanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly?>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<DateTimeOffset?>("EndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<DateTimeOffset?>("StartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TimeZoneId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("TrustSource")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("RecordedByUserId");
+
+                    b.HasIndex("AcademyId", "MembershipId")
+                        .IsUnique()
+                        .HasFilter("\"EndTime\" IS NULL");
+
+                    b.HasIndex("AcademyId", "AttendanceId", "StartTime");
+
+                    b.ToTable("StaffWorkPeriods", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_StaffWorkPeriod_Bounds", "\"IsActive\" AND ((\"EndDate\" IS NULL AND \"EndTime\" IS NULL) OR (\"EndDate\" IS NOT NULL AND \"EndTime\" IS NOT NULL AND (\"EndDate\"+\"EndTime\") >= (\"StartDate\"+\"StartTime\")))\nAND ((\"TrustSource\"='LegacyLocal' AND \"StartUtc\" IS NULL AND \"EndUtc\" IS NULL AND \"TimeZoneId\" IS NULL)\n  OR (\"TrustSource\"='AdminDeclared' AND \"StartUtc\" IS NOT NULL AND \"TimeZoneId\" IS NOT NULL AND ((\"EndTime\" IS NULL AND \"EndUtc\" IS NULL) OR (\"EndTime\" IS NOT NULL AND \"EndUtc\" IS NOT NULL AND \"EndUtc\" >= \"StartUtc\"))))");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.StaffWorkSchedule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12902,6 +12980,35 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
                         .WithMany()
                         .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "MembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.StaffWorkPeriod", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.StaffDailyAttendance", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AttendanceId")
+                        .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

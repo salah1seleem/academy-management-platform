@@ -17,6 +17,7 @@ import 'academy_news.dart';
 import 'matches.dart';
 import 'staff_amounts.dart';
 import 'staff_attendance_exceptions.dart';
+import 'staff_work_periods.dart';
 import 'coach_agreements.dart';
 import 'facility_board.dart';
 
@@ -167,6 +168,12 @@ class NativeMore extends StatelessWidget {
           localized(context, 'مجموعاتي', 'My groups'),
           Icons.groups_outlined,
           () => openPage(context, CoachGroupsPage(auth: auth)),
+        ),
+      if (role == 'Coach' || role == 'AcademyAdmin')
+        GLink(
+          localized(context, 'فترات عملي', 'My work periods'),
+          Icons.access_time_outlined,
+          () => openPage(context, StaffWorkPeriodsPage(auth: auth)),
         ),
       if (role == 'Coach' || role == 'AcademyAdmin')
         GLink(

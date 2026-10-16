@@ -40,6 +40,7 @@ public sealed partial class FoundationDbContext
         ConfigureAttendanceCorrections(b);
         ConfigureStaffAttendanceExceptions(b);
         ConfigureStaffAttendanceChanges(b);
+        ConfigureStaffWorkPeriods(b);
         ConfigureMatches(b);
         ConfigurePayroll(b);
         Tenant<AcademyExperience>(b);

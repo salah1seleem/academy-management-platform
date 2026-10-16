@@ -18,6 +18,7 @@ public static class DailyStaffAttendance
 {
     public static void MapDailyStaffAttendance(this WebApplication app)
     {
+        app.MapStaffWorkPeriods();
         var manage = app.MapGroup("/api/v1/manage/staff-attendance");
         manage.MapGet("/", Day).RequireAuthorization(AcademyPermissions.AttendanceManage);
         manage.MapGet("/{id:guid}", Detail).RequireAuthorization(AcademyPermissions.AttendanceManage);
@@ -47,7 +48,8 @@ public static class DailyStaffAttendance
         if (coach is null) return Results.NotFound();
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock); var day = date ?? today;
         var r = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.WorkDate == day);
-        return Results.Ok(new { coach.Id, coach.name, workDate = day, today, version = r?.Version ?? 0, status = r?.Status ?? "NotRecorded", r?.CheckIn, r?.CheckOut, r?.CheckOutDate, lateMinutes = r?.LateMinutes ?? 0, suggestedDeduction = r?.SuggestedDeduction ?? 0, approvedDeduction = r?.ApprovedDeduction ?? 0, r?.DeductionReason });
+        var periodCount=r is null?0:await db.StaffWorkPeriods.CountAsync(p=>p.AttendanceId==r.Id);
+        return Results.Ok(new { coach.Id, coach.name, workDate = day, today, periodCount, version = r?.Version ?? 0, status = r?.Status ?? "NotRecorded", r?.CheckIn, r?.CheckOut, r?.CheckOutDate, lateMinutes = r?.LateMinutes ?? 0, suggestedDeduction = r?.SuggestedDeduction ?? 0, approvedDeduction = r?.ApprovedDeduction ?? 0, r?.DeductionReason });
     }
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static string Snapshot(StaffDailyAttendance? row) => JsonSerializer.Serialize(row is null ? null : new { row.Id, row.Version, row.WorkDate, row.Status, row.CheckIn, row.CheckOut, row.CheckOutDate, row.LateMinutes, row.SuggestedDeduction, row.ApprovedDeduction, row.DeductionReason, row.RecordedByUserId, row.UpdatedAtUtc }, Json);
@@ -92,8 +94,10 @@ public static class DailyStaffAttendance
         if (body.Status == "Present" && await db.StaffDailyAttendances.AnyAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == id && a.WorkDate != body.Date && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null)) return Results.Conflict(new { message = "توجد فترة حضور مفتوحة في يوم آخر؛ راجعها أولًا دون اختلاق انصراف." });
         var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == id && x.WorkDate == body.Date);
         if ((row?.Version ?? 0) != body.Version) return Results.Conflict(new { message = "تغير سجل الحضور منذ فتحه؛ أعد تحميل السجل وراجع التعديل قبل الحفظ." });
-        var before = Snapshot(row); var beforeVersion = row?.Version ?? 0;
-        if (body.Status == "Present" && await StaffAttendanceIntervals.Overlaps(db,t.AcademyId,id,row?.Id,body.Date,body.CheckIn!.Value,checkoutDate,body.CheckOut)) return Results.Conflict(new {message="تتداخل الفترة مع سجل حضور آخر؛ راجع السجل الأصلي قبل الحفظ."});
+        var periods=row is null?[]:await db.StaffWorkPeriods.Where(p=>p.AttendanceId==row.Id).ToArrayAsync();
+        if(periods.Length>0&&(body.Status!=row!.Status||body.CheckIn!=row.CheckIn||body.CheckOut!=row.CheckOut||checkoutDate!=row.CheckOutDate))return Results.Conflict(new{message="هذا اليوم يضم فترات عمل محفوظة؛ صحح الفترة المحددة بدل استبدال الحضور اليومي."});
+        var before = periods.Length>0?StaffWorkPeriods.Snapshot(row!,periods):Snapshot(row); var beforeVersion = row?.Version ?? 0;
+        if (periods.Length==0 && body.Status == "Present" && await StaffAttendanceIntervals.Overlaps(db,t.AcademyId,id,row?.Id,body.Date,body.CheckIn!.Value,checkoutDate,body.CheckOut)) return Results.Conflict(new {message="تتداخل الفترة مع سجل حضور آخر؛ راجع السجل الأصلي قبل الحفظ."});
         var employee = await db.Employees.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == id).Select(x => (Guid?)x.Id).SingleOrDefaultAsync();
         if (employee.HasValue)
         {
@@ -111,7 +115,7 @@ public static class DailyStaffAttendance
         try
         {
             await db.SaveChangesAsync();
-            var after = Snapshot(row);
+            var after = periods.Length>0?StaffWorkPeriods.Snapshot(row,periods):Snapshot(row);
             db.StaffAttendanceChanges.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, AttendanceId = row.Id, MembershipId = id, WorkDate = body.Date, ActorMembershipId = t.MembershipId, ActorUserId = actor, BeforeVersion = beforeVersion, AfterVersion = row.Version, BeforeSnapshot = before, AfterSnapshot = after, RequestKey = key, RequestHash = hash, CreatedAtUtc = row.UpdatedAtUtc, UpdatedAtUtc = row.UpdatedAtUtc });
             await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(JsonSerializer.Deserialize<JsonElement>(after));
         }
@@ -139,7 +143,9 @@ public static class DailyStaffAttendance
         var q = db.StaffDailyAttendances.Where(x => x.AcademyId == t.AcademyId && x.WorkDate >= start && x.WorkDate <= end && (!coachId.HasValue || x.MembershipId == coachId) && (string.IsNullOrEmpty(status) || x.Status == status));
         var total = await q.SumAsync(x => (decimal?)x.ApprovedDeduction) ?? 0;
         var currency = await db.Academies.Where(x => x.Id == t.AcademyId).Select(x => x.DefaultCurrency).SingleAsync();
-        return Results.Ok(new { from = start, to = end, totalDeductions = total, totalCount = await q.CountAsync(), currency, items = await q.OrderByDescending(x => x.WorkDate).Take(1000).Select(x => new { x.Id, x.MembershipId, name = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == x.MembershipId).Select(m => m.User.DisplayName).FirstOrDefault(), x.WorkDate, x.Status, x.CheckIn, x.CheckOut, x.CheckOutDate, x.LateMinutes, x.ApprovedDeduction, x.DeductionReason }).ToListAsync() });
+        var items=await q.OrderByDescending(x => x.WorkDate).Take(1000).Select(x => new { x.Id, x.MembershipId, name = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == x.MembershipId).Select(m => m.User.DisplayName).FirstOrDefault(), x.WorkDate, x.Status, x.CheckIn, x.CheckOut, x.CheckOutDate, x.LateMinutes, x.ApprovedDeduction, x.DeductionReason }).ToArrayAsync();
+        var ids=items.Select(x=>x.Id).ToArray();var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>ids.Contains(p.AttendanceId)).ToArrayAsync();
+        return Results.Ok(new { from = start, to = end, totalDeductions = total, totalCount = await q.CountAsync(), currency, items = items.Select(x=>new{x.Id,x.MembershipId,x.name,x.WorkDate,x.Status,x.CheckIn,x.CheckOut,x.CheckOutDate,x.LateMinutes,x.ApprovedDeduction,x.DeductionReason,workPeriods=StaffWorkPeriods.Statistics(periods.Where(p=>p.AttendanceId==x.Id).ToArray())}) });
     }
     private static async Task<IResult> Export(DateOnly? from, DateOnly? to, bool? allDates, Guid? coachId, string? status, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
@@ -149,9 +155,10 @@ public static class DailyStaffAttendance
         if ((!all && (start > end || end.DayNumber - start.DayNumber > 366)) || status is not (null or "" or "Present" or "Absent" or "NotRecorded")) return Results.UnprocessableEntity();
         var q = db.StaffDailyAttendances.Where(x => x.AcademyId == t.AcademyId && x.WorkDate >= start && x.WorkDate <= end && (!coachId.HasValue || x.MembershipId == coachId) && (string.IsNullOrEmpty(status) || x.Status == status));
         if (await q.CountAsync() > 5000) return Results.Problem(statusCode: 413, title: "نطاق التصدير كبير", detail: "اختر فترة أصغر؛ الحد 5000 سجل.");
-        var rows = await q.OrderBy(x => x.WorkDate).Select(x => new { name = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == x.MembershipId).Select(m => m.User.DisplayName).FirstOrDefault(), x.WorkDate, x.Status, x.CheckIn, x.CheckOut, x.CheckOutDate, x.LateMinutes, x.ApprovedDeduction, x.DeductionReason }).ToListAsync();
-        var csv = new List<string[]> { new[] { "المدرب", "يوم بدء الحضور", "الحالة", "الحضور", "الانصراف", "تاريخ الانصراف", "دقائق التأخير", "الخصم المعتمد", "سبب الخصم" } };
-        csv.AddRange(rows.Select(x => new[] { x.name ?? "", x.WorkDate.ToString("yyyy-MM-dd"), x.Status == "Present" ? "حاضر" : x.Status == "Absent" ? "غائب" : "لم يُسجل", x.CheckIn?.ToString("HH:mm") ?? "", x.CheckOut?.ToString("HH:mm") ?? "", (x.CheckOutDate ?? (x.CheckOut.HasValue ? x.WorkDate : (DateOnly?)null))?.ToString("yyyy-MM-dd") ?? "", x.LateMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture), x.ApprovedDeduction.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), x.DeductionReason ?? "" }));
+        var rows = await q.OrderBy(x => x.WorkDate).Select(x => new {x.Id, name = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == x.MembershipId).Select(m => m.User.DisplayName).FirstOrDefault(), x.WorkDate, x.Status, x.CheckIn, x.CheckOut, x.CheckOutDate, x.LateMinutes, x.ApprovedDeduction, x.DeductionReason }).ToListAsync();
+        var ids=rows.Select(r=>r.Id).ToArray();var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>ids.Contains(p.AttendanceId)).ToArrayAsync();
+        var csv = new List<string[]> { new[] { "المدرب", "يوم بدء الحضور", "الحالة", "الحضور", "الانصراف", "تاريخ الانصراف", "دقائق التأخير", "الخصم المعتمد", "سبب الخصم", "عدد الفترات المحفوظة", "دقائق الفترات المعلومة", "إجمالي دقائق العمل (فارغ إن لم تكتمل أو لم تعرف)" } };
+        csv.AddRange(rows.Select(x => {var p=periods.Where(p=>p.AttendanceId==x.Id).ToArray();var known=p.Sum(s=>StaffWorkPeriods.Seconds(s)??0)/60m;return new[] { x.name ?? "", x.WorkDate.ToString("yyyy-MM-dd"), x.Status == "Present" ? "حاضر" : x.Status == "Absent" ? "غائب" : "لم يُسجل", x.CheckIn?.ToString("HH:mm") ?? "", x.CheckOut?.ToString("HH:mm") ?? "", (x.CheckOutDate ?? (x.CheckOut.HasValue ? x.WorkDate : (DateOnly?)null))?.ToString("yyyy-MM-dd") ?? "", x.LateMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture), x.ApprovedDeduction.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), x.DeductionReason ?? "",p.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),p.Length>0?known.ToString("0.##",System.Globalization.CultureInfo.InvariantCulture):"",p.Length>0&&p.All(s=>StaffWorkPeriods.Seconds(s).HasValue)?known.ToString("0.##",System.Globalization.CultureInfo.InvariantCulture):"" };}));
         return Academy.Api.Slice8.ReportingEndpoints.Csv(csv, $"coach-daily-{start:yyyy-MM}.csv");
     }
 }

@@ -160,6 +160,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<AcademyMembership>(b, x => x.Id == RequestMembershipId || MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.IsActive && RequestBranchIds.Contains(a.BranchId)) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.Id) || Employees.Any(e => e.MembershipId == x.Id));
         BranchFilter<StaffDailyAttendance>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         BranchFilter<StaffAttendanceChange>(b, x => StaffDailyAttendances.Any(a => a.Id == x.AttendanceId));
+        BranchFilter<StaffWorkPeriod>(b, x => StaffDailyAttendances.Any(a => a.Id == x.AttendanceId));
         BranchFilter<StaffWorkSchedule>(b, x => x.MembershipId == RequestMembershipId || Employees.Any(e => e.MembershipId == x.MembershipId) || StaffGroupAssignments.Any(a => a.AcademyMembershipId == x.MembershipId));
         // Permissions and employee financial administration are not delegated by branch visibility.
         ConfigureSportIsolation(b);
@@ -188,6 +189,8 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardCashPaymentPurpose();
+        foreach (var e in ChangeTracker.Entries<StaffWorkPeriod>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted || new[]{nameof(StaffWorkPeriod.AcademyId),nameof(StaffWorkPeriod.AttendanceId),nameof(StaffWorkPeriod.MembershipId),nameof(StaffWorkPeriod.StartDate),nameof(StaffWorkPeriod.CreatedAtUtc),nameof(StaffWorkPeriod.IsActive)}.Any(p=>e.Property(p).IsModified)) throw new InvalidOperationException("هوية فترة العمل ثابتة؛ صحح التوقيت دون حذف الفترة أو نقلها.");
         if (ChangeTracker.Entries<StaffAttendanceChange>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("سجل تعديل الحضور ثابت ولا يعدل أو يحذف.");
         foreach (var e in ChangeTracker.Entries<StaffAttendanceException>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))

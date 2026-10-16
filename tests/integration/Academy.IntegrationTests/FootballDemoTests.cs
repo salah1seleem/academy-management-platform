@@ -34,6 +34,14 @@ public sealed class FootballDemoTests : IAsyncLifetime
         await FootballDemoSeed.RunAsync(scope.ServiceProvider, true);
     }
     [Fact]
+    public async Task V3_work_period_demo_is_repeatable_preserves_correction_and_reserved_reset_keeps_foreign_periods()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>();var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value;var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);var source=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a=>a.Id==StaffWorkPeriodDemoSeed.AttendanceId);var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>p.AttendanceId==source.Id).OrderBy(p=>p.StartTime).ToArrayAsync();Assert.Equal(2,periods.Length);Assert.Equal(14400,periods.Sum(p=>(p.EndUtc!.Value-p.StartUtc!.Value).TotalSeconds));Assert.Equal(0,source.ApprovedDeduction);
+        using var owner=await Login("owner");var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var command=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff-attendance/{source.MembershipId}/periods/{periods[1].Id}"){Content=JsonContent.Create(new Academy.Api.Operations.WorkPeriodWrite(source.WorkDate,source.Version,new(14,30),new(16,0),source.WorkDate,periods[1].Version,"تصحيح اصطناعي يحفظ عند تكرار الديمو"))};command.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());command.Headers.Add("Idempotency-Key","demo-period-correction-v1");(await owner.SendAsync(command)).EnsureSuccessStatusCode();await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);Assert.Equal(new TimeOnly(14,30),await db.StaffWorkPeriods.Where(p=>p.Id==periods[1].Id).Select(p=>p.StartTime).SingleAsync());
+        var foreign=await db.StaffWorkPeriods.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync();await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);Assert.False(await db.StaffWorkPeriods.AnyAsync(p=>p.AcademyId==AcademyId));Assert.Equal(foreign,await db.StaffWorkPeriods.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync());
+    }
+    [Fact]
     public async Task V3_overnight_staff_demo_is_repeatable_preserves_acceptance_and_reserved_reset()
     {
         await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

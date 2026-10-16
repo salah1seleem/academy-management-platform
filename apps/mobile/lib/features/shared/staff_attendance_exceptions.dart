@@ -221,7 +221,7 @@ class _StaffAttendanceExceptionPageState
                   ),
                 if (options['requiresSourceReview'] == true)
                   const EmptyMessage(
-                    'يوجد أكثر من سجل مفتوح؛ تحتاج الإدارة مراجعتها قبل طلب الانصراف.',
+                    'تحتاج الإدارة مراجعة فترات الحضور قبل طلب الانصراف؛ لم يغلق أي سجل تلقائيًا.',
                   ),
                 if (widget.review) ...[
                   DropdownButtonFormField<String>(

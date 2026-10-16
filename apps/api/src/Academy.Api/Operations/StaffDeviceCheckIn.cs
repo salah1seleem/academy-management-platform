@@ -89,6 +89,7 @@ public static class StaffDeviceCheckIn
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"staff-day:{t.AcademyId}:{t.MembershipId}:{date}"}, 0))");
         if (await db.StaffDailyAttendances.AnyAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.WorkDate != date && x.Status == "Present" && x.CheckIn != null && x.CheckOut == null)) return Results.Conflict(new { message = "توجد فترة حضور مفتوحة في يوم آخر؛ اطلب مراجعتها من الإدارة أولًا." });
         var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.WorkDate == date);
+        if(row is not null&&await db.StaffWorkPeriods.AnyAsync(p=>p.AttendanceId==row.Id))return Results.Conflict(new{message="اليوم له فترات عمل محفوظة؛ راجع الإدارة لتسجيل الفترة المحددة. لم يسجل حضور جديد."});
         if (row is not null && row.Status == "Present") return Results.Ok(new { row.Id, row.WorkDate, row.CheckIn, replay = true });
         if (row is not null && row.Status != "NotRecorded") return Results.Conflict(new { message = "الحضور مسجل بحالة مختلفة؛ راجع الإدارة." });
         if (await StaffAttendanceIntervals.Overlaps(db,t.AcademyId,t.MembershipId,row?.Id,date,checkIn,null,null)) return Results.Conflict(new {message="تتداخل الفترة مع سجل حضور آخر؛ اطلب مراجعة الإدارة."});

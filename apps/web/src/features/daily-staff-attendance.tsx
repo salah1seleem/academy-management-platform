@@ -8,8 +8,9 @@ import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, PageH
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { formatDateAr, formatMoneyAr, formatTimeAr, formatStaffCheckout } from "../lib/formatters";
+import { StaffWorkPeriodsPanel, PeriodSummary, WorkPeriod } from "./staff-work-periods";
 
-type Coach = { id: string; name: string; workDate: string; today?: string; version?: number; status: string; checkIn?: string; checkOut?: string; checkOutDate?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
+type Coach = { id: string; name: string; workDate: string; today?: string; version?: number; periodCount?: number; periods?: WorkPeriod[]; changeReason?: string; status: string; checkIn?: string; checkOut?: string; checkOutDate?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
 type AttendanceChange = { id: string; createdAtUtc: string; actor: string; before: Coach | null; after: Coach };
 
 export function DailyCoaches() {
@@ -64,10 +65,12 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
     return () => abort.abort();
   }, [id, date, revision]);
   const future = date > (coach?.today ?? defaults.to);
+  const managed = (coach?.periodCount ?? 0) > 0;
+  function reload() { setCoach(null); setHistory(null); setRevision(x => x + 1); }
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); if (!coach || busy || future || stale || coach.workDate !== date) return;
     const f = new FormData(e.currentTarget); setBusy(true); setError("");
-    const command = pending ?? { key: crypto.randomUUID(), body: { date, version: coach.version ?? 0, status, checkIn: status === "Present" && f.get("in") ? `${f.get("in")}:00` : null, checkOut: status === "Present" && f.get("out") ? `${f.get("out")}:00` : null, ...(status === "Present" && f.get("out") ? { checkOutDate: f.get("outDate") || date } : {}), approvedDeduction: deduction, reason: f.get("reason") } };
+    const command = pending ?? { key: crypto.randomUUID(), body: { date, version: coach.version ?? 0, status: managed ? coach.status : status, checkIn: managed ? coach.checkIn : status === "Present" && f.get("in") ? `${f.get("in")}:00` : null, checkOut: managed ? coach.checkOut ?? null : status === "Present" && f.get("out") ? `${f.get("out")}:00` : null, ...(managed ? { checkOutDate: coach.checkOutDate ?? null } : status === "Present" && f.get("out") ? { checkOutDate: f.get("outDate") || date } : {}), approvedDeduction: deduction, reason: f.get("reason") } };
     setPending(command);
     try {
       await csrfRequest(`/api/v1/manage/staff-attendance/${id}`, "PUT", command.body, { "Idempotency-Key": command.key }, { announce: false });
@@ -86,13 +89,13 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
     {!coach && !error ? <LoadingState /> : coach && <section className="detail-card"><form onSubmit={e => void save(e)}>
       <fieldset key={`${id}-${coach.workDate}-${revision}`} className="form-shell staff-daily-edit-fields" disabled={busy || !!pending || stale}>
       <label>التاريخ<input type="date" required max={coach.today ?? defaults.to} value={date} onChange={e => { if (e.target.value) { setCoach(null); setHistory(null); setDate(e.target.value); } }} /></label>
-      <label>الحالة<select name="status" aria-label="الحالة" value={status} onChange={e => setStatus(e.target.value)}><option value="NotRecorded">لم يُسجل</option><option value="Present">حاضر</option><option value="Absent">غائب</option></select></label>
-      {status === "Present" && <><TimeField label="وقت الحضور" name="in" required defaultValue={coach.checkIn} /><TimeField label="وقت الانصراف" name="out" defaultValue={coach.checkOut} /><label>تاريخ الانصراف<input type="date" name="outDate" aria-label="تاريخ الانصراف" min={date} max={coach.today ?? defaults.to} defaultValue={coach.checkOutDate ?? date} /><small>اختر اليوم التالي إذا استمر العمل بعد منتصف الليل. بدون وقت انصراف يبقى الحضور مفتوحًا.</small></label></>}
+      {!managed && <label>الحالة<select name="status" aria-label="الحالة" value={status} onChange={e => setStatus(e.target.value)}><option value="NotRecorded">لم يُسجل</option><option value="Present">حاضر</option><option value="Absent">غائب</option></select></label>}
+      {managed ? <p>نطاق اليوم: {coach.checkIn ? formatTimeAr(coach.checkIn) : "—"} — {formatStaffCheckout(coach.checkOut, coach.checkOutDate, coach.workDate)}. هذا النطاق ليس مدة عمل؛ صحح الفترة المحددة أدناه.</p> : status === "Present" && <><TimeField label="وقت الحضور" name="in" required defaultValue={coach.checkIn} /><TimeField label="وقت الانصراف" name="out" defaultValue={coach.checkOut} /><label>تاريخ الانصراف<input type="date" name="outDate" aria-label="تاريخ الانصراف" min={date} max={coach.today ?? defaults.to} defaultValue={coach.checkOutDate ?? date} /><small>اختر اليوم التالي إذا استمر العمل بعد منتصف الليل. بدون وقت انصراف يبقى الحضور مفتوحًا.</small></label></>}
       <p>خصم التأخير المقترح: {formatMoneyAr(coach.suggestedDeduction, "EGP")}</p>
       <label>الخصم المعتمد<input name="deduction" type="number" min="0" step="0.01" value={deduction} onChange={e => setDeduction(Number(e.target.value))} /></label>
       <label>سبب الخصم{deduction > 0 ? " (مطلوب)" : " (اختياري)"}<textarea name="reason" required={deduction > 0} maxLength={500} defaultValue={coach.deductionReason} /></label>
       </fieldset><button className="primary-button" disabled={busy || future || stale}>{busy ? "جارٍ الحفظ…" : pending ? "إعادة إرسال نفس الحفظ" : "حفظ الحضور"}</button>
-    </form><section aria-label="سجل تعديلات الحضور"><h2>سجل تعديلات الحضور اليدوي</h2><p>يعرض الحفظ اليدوي لهذا اليوم فقط. طلبات إثبات الحضور وقراراتها في سجل مستقل.</p>
+    </form><StaffWorkPeriodsPanel key={`${id}-${date}-${revision}`} id={id} date={date} onSaved={reload} /><section aria-label="سجل تعديلات الحضور"><h2>سجل تعديلات الحضور اليدوي</h2><p>يعرض الحفظ اليدوي لهذا اليوم فقط. طلبات إثبات الحضور وقراراتها في سجل مستقل.</p>
       {historyError ? <ErrorState message={historyError} /> : !history ? <LoadingState /> : !history.items.length ? <p>لا توجد تعديلات يدوية محفوظة لهذا اليوم.</p> : <><p>آخر {history.items.length} من {history.total} تعديل</p><ol className="staff-daily-history">{history.items.map(change => <li key={change.id}>
         <strong>{change.actor}</strong><time dateTime={change.createdAtUtc}>{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: history.timeZone }).format(new Date(change.createdAtUtc))} — توقيت الأكاديمية</time>
         <div><span>قبل التعديل</span><AttendanceSnapshot value={change.before} /></div><div><span>بعد التعديل</span><AttendanceSnapshot value={change.after} /></div>
@@ -101,7 +104,7 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
 }
 function AttendanceSnapshot({ value }: { value: Coach | null }) {
   if (!value) return <p>لا يوجد سجل سابق</p>;
-  return <p>{value.status === "Present" ? "حاضر" : value.status === "Absent" ? "غائب" : "لم يُسجل"} · {value.checkIn ? formatTimeAr(value.checkIn) : "—"} / {formatStaffCheckout(value.checkOut, value.checkOutDate, value.workDate)} · الخصم: {formatMoneyAr(value.approvedDeduction, "EGP")}{value.deductionReason && <small>{value.deductionReason}</small>}</p>;
+  return <><p>{value.status === "Present" ? "حاضر" : value.status === "Absent" ? "غائب" : "لم يُسجل"} · {value.checkIn ? formatTimeAr(value.checkIn) : "—"} / {formatStaffCheckout(value.checkOut, value.checkOutDate, value.workDate)} · الخصم: {formatMoneyAr(value.approvedDeduction, "EGP")}{value.deductionReason && <small>{value.deductionReason}</small>}{value.changeReason && <small>سبب التصحيح: {value.changeReason}</small>}</p>{!!value.periods?.length && <ol>{value.periods.map(p => <li key={p.id}><PeriodSummary value={p} /></li>)}</ol>}</>;
 }
 function CoachWorkSchedule({ id }: { id: string }) {
   const [message, setMessage] = useState("");

@@ -62,6 +62,80 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
         command.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); if (key is not null) command.Headers.Add("Idempotency-Key", key); return await owner.SendAsync(command);
     }
 
+    private static Task<JsonElement> PeriodDay(HttpClient c,Guid member,string date="2026-10-15")=>c.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff-attendance/{member}/periods?date={date}")!;
+    private static async Task<HttpResponseMessage> PeriodWrite(HttpClient c,Guid member,WorkPeriodWrite body,Guid? period=null,string? key=null)
+    {
+        var csrf=await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var r=new HttpRequestMessage(period.HasValue?HttpMethod.Put:HttpMethod.Post,$"/api/v1/manage/staff-attendance/{member}/periods{(period.HasValue?$"/{period}":"")}"){Content=JsonContent.Create(body)};
+        r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",key??Guid.NewGuid().ToString());return await c.SendAsync(r);
+    }
+    [Fact]
+    public async Task Preserved_periods_keep_gaps_legacy_uncertainty_daily_deduction_and_immutable_evidence_consistent()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();using var foreign=await Owner(DemoSeed.FutureOwnerEmail);var date=new DateOnly(2026,10,15);
+        (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),50,"خصم إداري مرة واحدة"))).EnsureSuccessStatusCode();
+        var day=await PeriodDay(owner,s.Member);Assert.Equal("LegacyLocal",day.GetProperty("items")[0].GetProperty("trustSource").GetString());Assert.Equal(JsonValueKind.Null,day.GetProperty("totalWorkedSeconds").ValueKind);
+        var body=new WorkPeriodWrite(date,day.GetProperty("version").GetUInt32(),new(14,0),new(16,0),date);var key=Guid.NewGuid().ToString();var result=await PeriodWrite(owner,s.Member,body,key:key);Assert.True(result.IsSuccessStatusCode,await result.Content.ReadAsStringAsync());
+        day=await PeriodDay(owner,s.Member);Assert.Equal(2,day.GetProperty("items").GetArrayLength());Assert.Equal(7200,day.GetProperty("knownWorkedSeconds").GetInt64());Assert.Equal(JsonValueKind.Null,day.GetProperty("totalWorkedSeconds").ValueKind);
+        var first=day.GetProperty("items")[0];Assert.Equal(JsonValueKind.Null,first.GetProperty("startUtc").ValueKind);Assert.Equal("08:00:00",first.GetProperty("startTime").GetString());Assert.Equal("10:00:00",first.GetProperty("endTime").GetString());
+        var verify=new WorkPeriodWrite(date,day.GetProperty("version").GetUInt32(),new(8,0),new(10,0),date,first.GetProperty("version").GetUInt32(),"أكدت الإدارة وقت الفترة الأصلية الاصطناعية");
+        (await PeriodWrite(owner,s.Member,verify,first.GetProperty("id").GetGuid())).EnsureSuccessStatusCode();day=await PeriodDay(owner,s.Member);Assert.Equal(14400,day.GetProperty("totalWorkedSeconds").GetInt64());Assert.Equal("Africa/Cairo",day.GetProperty("items")[0].GetProperty("timeZoneId").GetString());
+        (await PeriodWrite(owner,s.Member,body,key:key)).EnsureSuccessStatusCode();Assert.Equal(2,(await PeriodDay(owner,s.Member)).GetProperty("items").GetArrayLength());
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,s.Member,new(date,"Absent",null,null,50,"تغيير غير مسموح"))).StatusCode);
+        var report=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/staff-daily?coachId={s.Member}&allDates=true");Assert.Equal(1,report.GetProperty("totalCount").GetInt32());Assert.Equal(50,report.GetProperty("totalDeductions").GetDecimal());var row=report.GetProperty("items")[0];Assert.Equal("08:00:00",row.GetProperty("checkIn").GetString());Assert.Equal("16:00:00",row.GetProperty("checkOut").GetString());Assert.Equal(14400,row.GetProperty("workPeriods").GetProperty("totalWorkedSeconds").GetInt64());
+        var csv=await owner.GetStringAsync($"/api/v1/reports/staff-daily/export?coachId={s.Member}&allDates=true");Assert.Contains("عدد الفترات المحفوظة",csv);Assert.Contains("240",csv);
+        var own=await c.GetFromJsonAsync<JsonElement>("/api/v1/staff/work-periods?date=2026-10-15");Assert.Equal(2,own.GetProperty("items").GetArrayLength());Assert.False(own.GetProperty("canEdit").GetBoolean());Assert.DoesNotContain("deduction",own.GetRawText(),StringComparison.OrdinalIgnoreCase);Assert.DoesNotContain("salary",own.GetRawText(),StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync($"/api/v1/manage/staff-attendance/{s.Member}/periods?date=2026-10-15")).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await PeriodWrite(foreign,s.Member,body)).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await PeriodWrite(c,s.Member,body)).StatusCode);
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var period=await db.StaffWorkPeriods.SingleAsync(p=>p.MembershipId==s.Member&&p.StartTime==new TimeOnly(14,0));var oldVersion=period.Version;
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"StaffWorkPeriods\" WHERE \"Id\"={period.Id}"))).SqlState);
+        Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"StaffWorkPeriods\" SET \"StartTime\"='14:30',\"StartUtc\"=\"StartUtc\"+interval '30 minutes' WHERE \"Id\"={period.Id}"))).SqlState);
+        Assert.Equal(oldVersion,await db.StaffWorkPeriods.AsNoTracking().Where(p=>p.Id==period.Id).Select(p=>p.Version).SingleAsync());
+        var history=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff-attendance/{s.Member}/history?date=2026-10-15");Assert.Equal(3,history.GetProperty("total").GetInt32());Assert.Equal(2,history.GetProperty("items")[0].GetProperty("after").GetProperty("periods").GetArrayLength());Assert.Contains("أكدت الإدارة",history.GetProperty("items")[0].GetProperty("after").GetProperty("changeReason").GetString());
+        (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(16,0),75,"تعديل خصم اليوم فقط",date))).EnsureSuccessStatusCode();Assert.Equal(2,(await PeriodDay(owner,s.Member)).GetProperty("items").GetArrayLength());
+    }
+    [Fact]
+    public async Task Preserved_periods_reject_overlap_future_stale_or_closed_sources_and_keep_overnight_open_until_explicit_close()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();var date=new DateOnly(2026,10,15);(await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),0,null))).EnsureSuccessStatusCode();
+        var day=await PeriodDay(owner,s.Member);var v=day.GetProperty("version").GetUInt32();var body=new WorkPeriodWrite(date,v,new(18,0),null,null);var key=Guid.NewGuid().ToString();
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,body with{Date=new(2026,10,17)})).StatusCode);Assert.Equal(HttpStatusCode.Conflict,(await PeriodWrite(owner,s.Member,body with{StartTime=new(9,0),EndTime=new(11,0),EndDate=date})).StatusCode);
+        var parallel=await Task.WhenAll(PeriodWrite(owner,s.Member,body,key:key),PeriodWrite(owner,s.Member,body,key:key));Assert.All(parallel,r=>Assert.True(r.IsSuccessStatusCode));day=await PeriodDay(owner,s.Member);Assert.Equal(2,day.GetProperty("items").GetArrayLength());Assert.Null(day.GetProperty("totalWorkedSeconds").Deserialize<long?>());
+        Assert.Equal(HttpStatusCode.Conflict,(await PeriodWrite(owner,s.Member,body,key:Guid.NewGuid().ToString())).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await PeriodWrite(owner,s.Member,body with{Version=day.GetProperty("version").GetUInt32(),StartTime=new(19,0)})).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,s.Member,new(new(2026,10,16),"Present",new(12,0),null,0,null))).StatusCode);
+        var p=day.GetProperty("items")[1];var close=body with{Version=day.GetProperty("version").GetUInt32(),PeriodVersion=p.GetProperty("version").GetUInt32(),EndDate=new(2026,10,16),EndTime=new(10,0),Reason="انصراف ليلي إداري اصطناعي"};
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,close with{Reason=null},p.GetProperty("id").GetGuid())).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await PeriodWrite(owner,s.Member,close,Guid.NewGuid())).StatusCode);
+        (await PeriodWrite(owner,s.Member,close,p.GetProperty("id").GetGuid())).EnsureSuccessStatusCode();day=await PeriodDay(owner,s.Member);Assert.Equal("2026-10-16",day.GetProperty("items")[1].GetProperty("endDate").GetString());Assert.Equal(57600,day.GetProperty("knownWorkedSeconds").GetInt64());
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();db.PayrollSettlements.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,EmployeeId=s.Employee,Month=new(2026,10,1),Currency="EGP",PaidAtUtc=Now,PaidByUserId=actor,IdempotencyKey=Guid.NewGuid().ToString()});await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.Conflict,(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(12,0),new(14,0),date))).StatusCode);(await PeriodWrite(owner,s.Member,body,key:key)).EnsureSuccessStatusCode();
+    }
+    [Fact]
+    public async Task Managed_day_cannot_be_closed_by_an_old_exception_or_client_biometric_boolean()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();var date=new DateOnly(2026,10,16);
+        (await Manual(owner,s.Member,new(date,"Present",new(8,0),null,0,null))).EnsureSuccessStatusCode();var pending=await Request(c,Claim(s.Branch,"CheckOut",Now.AddHours(-4)));
+        (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),0,null))).EnsureSuccessStatusCode();var day=await PeriodDay(owner,s.Member,"2026-10-16");(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(11,0),null,null))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,pending)).StatusCode);Assert.Equal(HttpStatusCode.Conflict,(await Write(c,StaffAttendanceExceptions.SelfPath+"/",Claim(s.Branch,"CheckOut"),Guid.NewGuid().ToString())).StatusCode);
+        var options=await c.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath+"/options");Assert.True(options.GetProperty("requiresSourceReview").GetBoolean());Assert.Equal(JsonValueKind.Null,options.GetProperty("openAttendance").ValueKind);
+        day=await PeriodDay(owner,s.Member,"2026-10-16");var openPeriod=day.GetProperty("items")[1];
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(11,0),new(14,0),date,openPeriod.GetProperty("version").GetUInt32(),"محاولة انصراف مستقبلي مرفوضة"),openPeriod.GetProperty("id").GetGuid())).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,new(date,day.GetProperty("version").GetUInt32(),new(14,0),null,null))).StatusCode);
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var branch=await db.Branches.SingleAsync(b=>b.Id==s.Branch);var lat=branch.CheckInLatitude;var lon=branch.CheckInLongitude;branch.CheckInLatitude=30;branch.CheckInLongitude=31;var group=await db.TrainingGroups.Where(g=>g.BranchId==s.Branch&&g.IsActive).Select(g=>g.Id).FirstAsync();var assignment=new Academy.Infrastructure.Structure.StaffGroupAssignment{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,AcademyMembershipId=s.Member,TrainingGroupId=group};db.StaffGroupAssignments.Add(assignment);await db.SaveChangesAsync();
+        try{Assert.Equal(HttpStatusCode.Conflict,(await Write(c,"/api/v1/staff/check-in/",new DeviceCheckInWrite(s.Branch,30,31,0,true))).StatusCode);Assert.Null((await PeriodDay(owner,s.Member,"2026-10-16")).GetProperty("items")[1].GetProperty("endTime").GetString());}
+        finally{branch.CheckInLatitude=lat;branch.CheckInLongitude=lon;await db.SaveChangesAsync();await db.StaffGroupAssignments.Where(a=>a.Id==assignment.Id).ExecuteDeleteAsync();}
+    }
+
+    [Fact]
+    public async Task Period_permissions_timezone_and_csrf_are_rechecked_without_widening_own_history()
+    {
+        var s=await Staff();using var c=s.Client;using var owner=await Owner();var a=await Staff(AcademyRole.AcademyAdmin,s.Branch);using var admin=a.Client;var g=await Staff(AcademyRole.Guardian);using var guardian=g.Client;
+        var date=new DateOnly(2026,10,15);(await Manual(owner,s.Member,new(date,"Present",new(8,0),new(10,0),0,null))).EnsureSuccessStatusCode();var day=await PeriodDay(owner,s.Member);var body=new WorkPeriodWrite(date,day.GetProperty("version").GetUInt32(),new(14,0),new(16,0),date);(await PeriodWrite(owner,s.Member,body)).EnsureSuccessStatusCode();day=await PeriodDay(owner,s.Member);body=body with{Version=day.GetProperty("version").GetUInt32(),StartTime=new(17,0),EndTime=new(18,0)};
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var member=await db.AcademyMemberships.SingleAsync(m=>m.Id==a.Member);member.UseActionGrants=true;member.AllBranches=false;db.MembershipBranchAccesses.Add(new(){Id=Guid.NewGuid(),AcademyId=member.AcademyId,MembershipId=member.Id,BranchId=s.Branch});db.StaffActionGrants.Add(new(){Id=Guid.NewGuid(),AcademyId=member.AcademyId,MembershipId=member.Id,Module="staff",Read=true,Edit=false});await db.SaveChangesAsync();
+        Assert.False((await PeriodDay(admin,s.Member)).GetProperty("canEdit").GetBoolean());Assert.Equal(HttpStatusCode.Forbidden,(await PeriodWrite(admin,s.Member,body)).StatusCode);Assert.Equal(HttpStatusCode.BadRequest,(await owner.PostAsJsonAsync($"/api/v1/manage/staff-attendance/{s.Member}/periods",body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await guardian.GetAsync("/api/v1/staff/work-periods?date=2026-10-15")).StatusCode);var own=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/staff/work-periods?date=2026-10-15&membershipId={s.Member}");Assert.Empty(own.GetProperty("items").EnumerateArray());
+        var academy=await db.Academies.SingleAsync(x=>x.Id==DemoSeed.NogoomAcademyId);var previous=academy.TimeZone;academy.TimeZone="America/New_York";await db.SaveChangesAsync();
+        try {Assert.Equal(HttpStatusCode.Conflict,(await PeriodWrite(owner,s.Member,body)).StatusCode);Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,body with{Date=new(2025,11,2),StartTime=new(1,30),EndTime=null,EndDate=null})).StatusCode);Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PeriodWrite(owner,s.Member,body with{Date=new(2026,3,8),StartTime=new(2,30),EndTime=null,EndDate=null})).StatusCode);Assert.Equal("Africa/Cairo",(await PeriodDay(owner,s.Member)).GetProperty("items")[1].GetProperty("timeZoneId").GetString());}
+        finally {academy.TimeZone=previous;await db.SaveChangesAsync();}
+    }
     [Fact]
     public async Task Manual_source_versions_block_lost_updates_and_replays_preserve_original_evidence_and_daily_deduction()
     {

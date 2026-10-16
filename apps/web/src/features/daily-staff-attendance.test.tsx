@@ -5,6 +5,7 @@ import { DateFilterDefaults } from "../components/date-filter-defaults";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("./staff-work-periods", async importOriginal => ({ ...await importOriginal<typeof import("./staff-work-periods")>(), StaffWorkPeriodsPanel: () => null }));
 const range = { from: "2026-10-01", to: "2026-10-08" };
 const coach = { id: "coach-1", name: "مدرب تجريبي", today: range.to, workDate: range.to, version: 0, status: "NotRecorded", lateMinutes: 0, approvedDeduction: 0, suggestedDeduction: 0 };
 const response = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));

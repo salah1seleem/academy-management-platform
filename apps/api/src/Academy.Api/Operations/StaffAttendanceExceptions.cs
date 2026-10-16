@@ -17,7 +17,7 @@ public static class StaffAttendanceExceptions
     public const string SelfPath = "/api/v1/staff/attendance-exceptions";
     public const string ManagePath = "/api/v1/manage/staff-attendance-exceptions";
     // Only these self routes bypass academy-wide CRUD. The employee is resolved server-side.
-    public static bool IsOwnPath(string path) => path.TrimEnd('/') is SelfPath or SelfPath + "/options";
+    public static bool IsOwnPath(string path) => path.TrimEnd('/') is SelfPath or SelfPath + "/options" or StaffWorkPeriods.OwnPath;
     public static void MapStaffAttendanceExceptions(this WebApplication app)
     {
         var self = app.MapGroup(SelfPath).RequireAuthorization(AcademyPermissions.TenantAccess);
@@ -49,7 +49,8 @@ public static class StaffAttendanceExceptions
         var e = await Employee(tenant, db, t); if (e is null) return Results.Ok(new { configured = false });
         var ids = await Sites(db, t, e);
         var open = await db.StaffDailyAttendances.AsNoTracking().Where(a => a.AcademyId == t.AcademyId && a.MembershipId == t.MembershipId && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null).OrderBy(a => a.WorkDate).Take(2).Select(a => new { a.Id, a.WorkDate, a.CheckIn }).ToArrayAsync();
-        return Results.Ok(new { configured = true, nowUtc = clock.GetUtcNow(), timeZone = (await Zone(db, t.AcademyId)).Id, openAttendance = open.Length == 1 ? open[0] : null, requiresSourceReview = open.Length > 1, branches = await db.Branches.Where(b => ids.Contains(b.Id)).Select(b => new { b.Id, name = b.ArabicName }).ToArrayAsync() });
+        var openIds=open.Select(a=>a.Id).ToArray();var managed=await db.StaffWorkPeriods.AnyAsync(p=>openIds.Contains(p.AttendanceId));
+        return Results.Ok(new { configured = true, nowUtc = clock.GetUtcNow(), timeZone = (await Zone(db, t.AcademyId)).Id, openAttendance = open.Length == 1&&!managed ? open[0] : null, requiresSourceReview = open.Length > 1||managed, branches = await db.Branches.Where(b => ids.Contains(b.Id)).Select(b => new { b.Id, name = b.ArabicName }).ToArrayAsync() });
     }
     private static async Task<IResult> Own(CurrentTenant tenant, FoundationDbContext db)
     {
@@ -88,6 +89,7 @@ public static class StaffAttendanceExceptions
             date = target.WorkDate; // An overnight checkout belongs to the original workday.
         }
         var terms = await ContractHistory.Bounds(db, e, date);
+        if(await db.StaffWorkPeriods.AnyAsync(p=>p.AcademyId==t.AcademyId&&p.MembershipId==t.MembershipId&&p.StartDate==date))return Conflict("هذا اليوم له فترات عمل محفوظة؛ اطلب من الإدارة مراجعة الفترة المحددة دون استبدال اليوم.");
         if (date < terms.ContractStart || terms.ContractEnd.HasValue && date > terms.ContractEnd) return Invalid("يوم بدء الحضور خارج مدة العمل المسجلة.");
         var r = new StaffAttendanceException { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EmployeeId = e.Id, MembershipId = t.MembershipId, BranchId = body.BranchId, RequestedByUserId = Actor(h), Operation = body.Operation, WorkDate = date, ClaimedAtUtc = body.ClaimedAtUtc.ToUniversalTime(), Reason = reason!, RequestKey = key, RequestHash = hash, TargetAttendanceId = target?.Id, TargetAttendanceVersion = target?.Version, CreatedAtUtc = now, UpdatedAtUtc = now };
         db.StaffAttendanceExceptions.Add(r);
@@ -156,6 +158,7 @@ public static class StaffAttendanceExceptions
             if (r.WorkDate < terms.ContractStart || terms.ContractEnd.HasValue && r.WorkDate > terms.ContractEnd) return Conflict("وقت الطلب غير صالح وفق مدة العمل المعتمدة الحالية.");
             if (await PayrollEndpoints.Finalized(db, t.AcademyId, e.Id, r.WorkDate)) return Conflict("شهر الموظف معتمد أو مسدد؛ لا يعدّل الحضور صامتًا. اطلب مراجعة إدارية مستقلة.");
             var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == r.MembershipId && a.WorkDate == r.WorkDate);
+            if(row is not null&&await db.StaffWorkPeriods.AnyAsync(p=>p.AttendanceId==row.Id))return Conflict("أضيفت فترات محفوظة إلى هذا اليوم؛ راجع الفترة المحددة من الإدارة بدل إغلاق مصدر مختلف.");
             if (r.Operation == "CheckIn" && await db.StaffDailyAttendances.AnyAsync(a => a.AcademyId == t.AcademyId && a.MembershipId == r.MembershipId && a.WorkDate != r.WorkDate && a.Status == "Present" && a.CheckIn != null && a.CheckOut == null)) return Conflict("توجد فترة حضور مفتوحة في يوم آخر؛ راجعها أولًا دون اختلاق انصراف.");
             var localClaim = TimeZoneInfo.ConvertTime(r.ClaimedAtUtc, await Zone(db, t.AcademyId));
             var checkoutDate = DateOnly.FromDateTime(localClaim.DateTime);
