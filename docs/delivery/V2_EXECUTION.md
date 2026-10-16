@@ -1,5 +1,9 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-16 — E2c1: دورة وسيلة التحقق، دون تسجيل حضور
+
+Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: Register/Verify خادميان بتوقيع وUV/nonce/RP/origin وهوية؛ إيقاف نهائي وقراءة ذاتية Web/Flutter. لا attendance/payroll/child permission أو native provider مدعى. migration102 وEF بلاpending، Backend14/Web4/Flutter27، أدوات الجودة وbrowserE2E1 في13.3s وnative إدارة1 في7s وصور فعلية. [الدليل والمحاولات](../academy-v3/PROGRESS.md). التاليE2c2 يربط تحدي الحضور بالفرع/الموقع/الفترة ونسختها، لا يعيد Verify/LastVerifiedAt. ثم بقية D/E/F/G غير المالية، كل المالي المتبقي آخرًا ثمH؛ الخطة غير مكتملة وmain/Production دون تغيير.
+
 ## 2026-10-16 — E2b2c: استثناءات الفترات مترابطة
 
 Code `35cbf5b267998b088eedc5d7c9c543c2fed14f29`: CheckInإضافي يحفظالأصل وCheckOutيرتبطبالطفلونسخته وسجلطلبثابت؛ القبولالمستقل ذري، replayلايغلقفترةأحدث، حظرالمصدرالمتغير/الحسابالمتوقف/التوقيتالمتغير/الشهرالمعتمد. التقريروالخصممرةواحدة، لا ماليةجديدة. migration101/EFبلاpending؛ Backend25فريدة/Web17/Flutter15/E2E3/Native18s وأدواتالجودةوصورراجعت. [الدليل والمحاولات](../academy-v3/PROGRESS.md). التاليE2cإثباتالجهازوعملياته؛ DemoBoolean القديم لايفتحعلىالفترات. كلغيرالماليقبلالمتبقيالمالي ثمH؛ لااكتمالالخطةأوmain/Production.

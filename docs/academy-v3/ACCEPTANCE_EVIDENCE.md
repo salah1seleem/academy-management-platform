@@ -1,5 +1,13 @@
 # أدلة قبول V2 + V3
 
+## E2c1 — تسجيل وتوقيع وإيقاف وسيلة تحقق، 2026-10-16
+
+Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: Fido2 4.3.1 يتحقق خادميًا من signature/UV/challenge/RP/origin/userHandle/counter؛ كل تحدٍ قصير أحادي الاستخدام، وown list منقحة وإيقاف نهائي. Backend14/14 في51s (11جديدة+3مستهلكين)، Web4/4 في1.55s/typecheck/lint/build، Flutter27/27 في4s/analyze. إعادةFlutter5/5 متداخلة، لا تجمع.
+
+Chromium virtual authenticator فعلية بالبروتوكول: UIRegister→Verify→replay409→revoke→verifyoptions409، لاattendance/collection/paymentRequest تغير؛ **1/1 نهائي13.3s**. iOS الحالي يقرأ المفتاح الذي أنشأه المتصفح ويوقفه مع حفظ الأصل/ثبات اليوم والمجاميع، رحلة واحدة **7s** على API5204/قاعدةpasskeysE2E المعزولة وجهازAcademity V3 Coach Review/iPhone17Pro/iOS26.2. لا native enrollment/assertion/FaceID مادي أوAndroid مثبتة. [Web390](evidence/e2c1/passkeys-web-390.png)، [Web1440](evidence/e2c1/passkeys-web-1440.png)، [iOSقبل](evidence/e2c1/passkeys-ios-own.png)، [iOSبعد](evidence/e2c1/passkeys-ios-revoked.png) صور فعلية مراجعة.
+
+migration102 أمامية طبقت منالصفر على قاعدتين، EF بلاpending؛ لاreset أوتعديل.env/العرض اليدوي. لاseed لمفتاحموثوق مختلق؛ إعادةseed تحفظالسجل، reset مع مفاتيح مملوءة غيرمختبر هنا. NuGetaudit لم يجدknownvulnerable بالمصادرالحالية؛ لاFullRegression/npm audit جديد. [المحاولات والسجلات والإعداد والقيود](PROGRESS.md). AC28/30partial فقط: **E2c2** يحتاج تحديعمليةالحضور/فرع/موقع/وقت/child+version واستهلاكذري، ثم nativeprovider/إعداداتآمنة وجهازفعلي أوعائقخارجي محدد؛ LastVerifiedAt أوVerify ليسدليلحضور. كل المالي المتبقي آخرًا ثمH. CI الأساس38885036464 frontend/flutter/e2e ناجحة وbackendin_progress عندالقراءة، لاCIجديدأخضر أو اكتمالV2/V3 مدعى.
+
 ## E2b2c — استثناءات متعددة الفترات مرتبطة بالمصدر — 2026-10-16
 
 Code `35cbf5b267998b088eedc5d7c9c543c2fed14f29`: طلب وردية لاحقة يحفظ الأولى، وطلب انصراف يحمل child+version/snapshot لا يغلق غيره. مراجعة مستقلة، CAS/replay/حظر تغيير المنطقة والحساب المتوقف والشهر المعتمد، مصدر/طفل/دليل ذري، خصم وتقرير يومي مرة واحدة؛ لا جهاز مثبت أو مالية جديدة. migration101 أمامية، EFبلاpending، قاعدةنهائية معزولة جديدة وحفظ أدلةالأكاديمية الثانية فيresetالمحجوز. seedPendingاختياري يحفظ القرار عندالتكرار.

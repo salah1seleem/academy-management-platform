@@ -1,5 +1,11 @@
 # Status
 
+## E2c1 — تسجيل وسيلة تحقق وتوقيعها وإيقافها، 2026-10-16
+
+Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: WebAuthn خادمي بـUV مطلوب، تحدٍ قصير أحادي الاستخدام ورفض replay/توقيع خاطئ/هوية أخرى/وسيلة موقوفة؛ Web يسجل ويجرب ويوقف، وFlutter يقرأ ويوقف حسابه فقط. **لا حضور يُسجل ولا native enrollment/assertion بعد**؛ LastVerifiedAt ليس إثبات حضور. migration102 أمامية على قاعدتين معزولتين، EF بلاpending؛ Backend14/Web4/Flutter27 وtypecheck/lint/build/analyze ناجحة؛ browserE2E نهائي13.3s وiOS إدارة فعلية7s وصور مراجعة. [المحاولات والحدود والأدلة](../academy-v3/PROGRESS.md).
+
+التالي **E2c2** تحدي حضور مرتبط بالفرع/الموقع/الفترة ونسختها واستهلاك ذري، ثم native provider والتحقق الفعلي من الجهاز والإعداد الآمن؛ لاBoolean/GPS وحدهما أو ادعاء FaceID مادي. بقية غير المالي قبل المتبقي المالي البسيط ثمH. AC28–32 والخطة جزئية؛ CI الأساس38885036464 frontend/flutter/e2e ناجحة وbackendin_progress عند القراءة، والجديد يتحقق بعدpush. main/.env والعرض اليدوي/الأثر القديم محفوظة، لاProduction/دفعات/رسائل حقيقية.
+
 ## E2b2c — طلب وردية ثانية وانصراف يستهدف الفترة نفسها — 2026-10-16
 
 Code `35cbf5b267998b088eedc5d7c9c543c2fed14f29`: استثناء الموظف يعمل علىالفترات المحفوظة بchild+version/snapshot وقرارمستقل ودليل ذري، دوناستبدالاليوم أوخصممكرر. Web/Flutterيعرضانالفترةعندالطلبمقابلالحالية، والتقريروالمال ثابتان. migration101أمامية علىقاعدةنهائيةمعزولة، EFبلاpending؛ Backend25حالةفريدة/Web17/Flutter15/E2E3 وNativeرحلةنهائية18s، typecheck/lint/build/analyze وصور فعلية. [الدليل والمحاولات](../academy-v3/PROGRESS.md).
