@@ -237,6 +237,12 @@
 
 /* Forms and details */
 .dashboard-shell .form-shell { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; max-width: 920px; padding: 24px; }
+.dashboard-shell .form-shell.staff-exception-review-form { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.dashboard-shell .staff-exception-review-form .form-actions { align-items: start; background: transparent; }
+.dashboard-shell .staff-exception-review-form .form-actions > button { width: auto; min-height: 44px; }
+@media (max-width: 680px) {
+  .dashboard-shell .staff-exception-review-form .form-actions > button { width: 100%; }
+}
 .dashboard-shell .operating-expenses-page { display: grid; min-width: 0; gap: 16px; }
 .dashboard-shell .operating-expenses-page > * { min-width: 0; max-width: none; margin: 0; }
 .dashboard-shell .operating-expense-form { display: block; max-width: none; }

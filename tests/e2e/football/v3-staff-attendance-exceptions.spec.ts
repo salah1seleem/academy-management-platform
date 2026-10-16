@@ -19,8 +19,16 @@ test("Staff claim is pending until independent Web review, rereads in mobile/rep
   const replay = await page.request.post("/api/v1/staff/attendance-exceptions/", { headers: { ...mobileHeaders, "Idempotency-Key": requestKey }, data: body }); expect((await replay.json()).id).toBe(r.id);
   expect((await page.request.post(`/api/v1/manage/staff-attendance-exceptions/${r.id}/review`, { headers: mobileHeaders, data: { approve: true, note: null, version: r.version } })).status()).toBe(403);
   await page.goto(`/dashboard/attendance/staff/exceptions/${r.id}`); await expect(page.getByRole("heading", { name })).toBeVisible(); await expect(page.getByText("لا يوجد سجل حضور لهذا اليوم.")).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 960 }); await page.screenshot({ path: info.outputPath("staff-claim-pending-390.png"), fullPage: true, animations: "disabled" });
-  await page.setViewportSize({ width: 1440, height: 1000 }); await page.screenshot({ path: info.outputPath("staff-claim-pending-1440.png"), fullPage: true, animations: "disabled" });
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const button = await page.getByRole("button", { name: "قبول وتسجيل إداري" }).boundingBox();
+    const note = await page.getByLabel("ملاحظة القرار — مطلوبة عند الرفض").boundingBox();
+    expect(button).not.toBeNull(); expect(note).not.toBeNull();
+    expect(button!.height).toBeGreaterThanOrEqual(44); expect(button!.height).toBeLessThan(80);
+    expect(button!.y).toBeGreaterThanOrEqual(note!.y + note!.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: info.outputPath(`staff-claim-pending-${width}.png`), fullPage: true, animations: "disabled" });
+  }
   const save = page.waitForResponse(x => x.request().method() === "POST" && x.url().endsWith(`/staff-attendance-exceptions/${r.id}/review`)); await page.getByRole("button", { name: "قبول وتسجيل إداري" }).click(); const saved = await save; expect(saved.status(), await saved.text()).toBe(200);
   await expect(page.getByText("مقبول إداريًا", { exact: true })).toBeVisible(); await expect(page.getByText(/حاضر · حضور/)).toBeVisible();
   const own = await (await page.request.get("/api/v1/staff/attendance-exceptions/", { headers: mobileHeaders })).json(); const approved = own.find((x: { id: string }) => x.id === r.id); expect(approved.status).toBe("Approved"); expect(approved.trustSource).toBe("AdministrativeException"); expect(approved.attendanceId).toBeTruthy();
