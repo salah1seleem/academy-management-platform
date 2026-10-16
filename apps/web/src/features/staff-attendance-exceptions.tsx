@@ -3,10 +3,10 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AdminDataTable, EmptyState, ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
-import { formatDateAr } from "../lib/formatters";
+import { formatDateAr, formatStaffCheckout } from "../lib/formatters";
 
 type Row = { id: string; name: string; branch: string; operation: string; status: string; workDate: string; claimedAtUtc: string; receivedAtUtc: string };
-type Detail = { name: string; branch: string; timeZone: string; canReview: boolean; currentAttendance?: { status: string; checkIn?: string; checkOut?: string } | null; request: Row & { reason: string; reviewNote?: string; reviewedAtUtc?: string; version: number; attendanceId?: string } };
+type Detail = { name: string; branch: string; timeZone: string; canReview: boolean; currentAttendance?: { status: string; checkIn?: string; checkOut?: string; checkOutDate?: string } | null; request: Row & { reason: string; reviewNote?: string; reviewedAtUtc?: string; version: number; attendanceId?: string } };
 const state = (v: string) => ({ Pending: "يحتاج مراجعة", Approved: "مقبول إداريًا", Rejected: "مرفوض" }[v] ?? "غير معروف");
 const operation = (v: string) => v === "CheckIn" ? "حضور" : "انصراف";
 
@@ -53,9 +53,10 @@ export function StaffAttendanceExceptionDetail({ id }: { id: string }) {
   return <><PageHeader title="مراجعة إثبات الحضور" context="الحضور الوظيفي" action={{ label: "عودة للطلبات", href: "/dashboard/attendance/staff/exceptions" }} />
     {error && <ErrorState message={error} />}{message && <p role="status">{message}</p>}{!data && !error && <LoadingState />}{data && <section className="detail-card">
       <h2>{data.name}</h2><p>{data.branch} · {formatDateAr(data.request.workDate)} · {operation(data.request.operation)}</p><p>{state(data.request.status)}</p>
+      {data.request.operation === "CheckOut" && <p>يوم بدء الحضور: {formatDateAr(data.request.workDate)}. الانصراف يرتبط بهذا السجل، حتى إذا كان في اليوم التالي.</p>}
       <dl><dt>الوقت المدعى — بتوقيت الأكاديمية</dt><dd>{new Date(data.request.claimedAtUtc).toLocaleString("ar-EG-u-nu-latn", { timeZone: data.timeZone })}</dd><dt>استلام الخادم — بتوقيت الأكاديمية</dt><dd>{new Date(data.request.receivedAtUtc).toLocaleString("ar-EG-u-nu-latn", { timeZone: data.timeZone })}</dd><dt>سبب الطلب</dt><dd>{data.request.reason}</dd></dl>
       <p>القبول مراجعة إدارية مستقلة، لا إثبات جهاز. لا يمكن اعتماد طلبك أنت، أو استبدال سجل قائم، أو تعديل شهر معتمد.</p>
-      {"currentAttendance" in data && <aside><h3>الحضور المسجل لهذا اليوم</h3>{data.currentAttendance ? <p>{data.currentAttendance.status === "Present" ? "حاضر" : data.currentAttendance.status === "Absent" ? "غائب" : "لم يُسجل"} · حضور {data.currentAttendance.checkIn?.slice(0,5) ?? "—"} · انصراف {data.currentAttendance.checkOut?.slice(0,5) ?? "—"}</p> : <p>لا يوجد سجل حضور لهذا اليوم.</p>}</aside>}
+      {"currentAttendance" in data && <aside><h3>الحضور المسجل لهذا اليوم</h3>{data.currentAttendance ? <p>{data.currentAttendance.status === "Present" ? "حاضر" : data.currentAttendance.status === "Absent" ? "غائب" : "لم يُسجل"} · حضور {data.currentAttendance.checkIn?.slice(0,5) ?? "—"} · انصراف {formatStaffCheckout(data.currentAttendance.checkOut, data.currentAttendance.checkOutDate, data.request.workDate)}</p> : <p>لا يوجد سجل حضور لهذا اليوم.</p>}</aside>}
       {data.request.reviewNote && <p>ملاحظة القرار: {data.request.reviewNote}</p>}
       {data.canReview ? <form className="form-shell staff-exception-review-form" onSubmit={e => void decide(e)}><label>ملاحظة القرار — مطلوبة عند الرفض<textarea maxLength={500} value={note} disabled={busy || pending !== null} onChange={e => setNote(e.target.value)} /></label>
         {pending && <p>يوجد قرار لم يُؤكد بعد؛ إعادة الإرسال تستخدم القرار والمفتاح نفسيهما.</p>}

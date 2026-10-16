@@ -80,6 +80,11 @@ export function formatTimeAr(value: string) {
   return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? "مساءً" : "صباحًا"}`;
 }
 
+export function formatStaffCheckout(time?: string | null, date?: string | null, workDate?: string) {
+  if (!time) return "—";
+  return `${formatTimeAr(time)}${date && date !== workDate ? ` · ${formatDateAr(date)}` : ""}`;
+}
+
 export function formatDateTimeAr(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);

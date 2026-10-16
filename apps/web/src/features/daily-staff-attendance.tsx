@@ -7,9 +7,9 @@ import { useRouter } from "next/navigation";
 import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, PageHeader, RowActions, StatusBadge } from "../components/dashboard-shell";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { csrfRequest } from "./dashboard-api";
-import { formatDateAr, formatMoneyAr, formatTimeAr } from "../lib/formatters";
+import { formatDateAr, formatMoneyAr, formatTimeAr, formatStaffCheckout } from "../lib/formatters";
 
-type Coach = { id: string; name: string; workDate: string; today?: string; status: string; checkIn?: string; checkOut?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
+type Coach = { id: string; name: string; workDate: string; today?: string; status: string; checkIn?: string; checkOut?: string; checkOutDate?: string; lateMinutes: number; suggestedDeduction: number; approvedDeduction: number; deductionReason?: string };
 
 export function DailyCoaches() {
   const defaults = useDateFilterDefaults();
@@ -34,7 +34,7 @@ export function DailyCoaches() {
       <section className="list-card"><AdminDataTable label="حضور المدربين اليومي" rows={visible} rowKey={x => `${x.id}-${x.workDate}`} columns={[
         { key: "coach", header: "المدرب", primary: true, render: x => x.name },
         { key: "date", header: "التاريخ", render: x => formatDateAr(x.workDate) },
-        { key: "time", header: "حضور / انصراف", render: x => `${x.checkIn ? formatTimeAr(x.checkIn) : "—"} / ${x.checkOut ? formatTimeAr(x.checkOut) : "—"}` },
+        { key: "time", header: "حضور / انصراف", render: x => `${x.checkIn ? formatTimeAr(x.checkIn) : "—"} / ${formatStaffCheckout(x.checkOut, x.checkOutDate, x.workDate)}` },
         { key: "state", header: "الحالة", render: x => <StatusBadge status={x.status} /> },
         { key: "late", header: "التأخير / الخصم", render: x => <>{x.lateMinutes} دقيقة<small>{formatMoneyAr(x.approvedDeduction, "EGP")}</small></> },
         { key: "actions", header: "الإجراء", render: x => <RowActions actions={[{ label: "تسجيل / تعديل", href: `/dashboard/attendance/staff/${x.id}?date=${x.workDate}` }]} /> },
@@ -57,7 +57,7 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
     e.preventDefault(); if (!coach || busy || future) return;
     const f = new FormData(e.currentTarget); setBusy(true); setError("");
     try {
-      await csrfRequest(`/api/v1/manage/staff-attendance/${id}`, "PUT", { date, status, checkIn: status === "Present" && f.get("in") ? `${f.get("in")}:00` : null, checkOut: status === "Present" && f.get("out") ? `${f.get("out")}:00` : null, approvedDeduction: deduction, reason: f.get("reason") });
+      await csrfRequest(`/api/v1/manage/staff-attendance/${id}`, "PUT", { date, status, checkIn: status === "Present" && f.get("in") ? `${f.get("in")}:00` : null, checkOut: status === "Present" && f.get("out") ? `${f.get("out")}:00` : null, ...(status === "Present" && f.get("out") ? { checkOutDate: f.get("outDate") || date } : {}), approvedDeduction: deduction, reason: f.get("reason") });
       window.dispatchEvent(new CustomEvent("academy-save-success", { detail: "تم حفظ حضور المدرب بنجاح." }));
       router.push("/dashboard/attendance/staff");
     } catch (e) { setError(e instanceof Error ? e.message : "تعذر حفظ الحضور."); } finally { setBusy(false); }
@@ -67,7 +67,7 @@ export function DailyCoachRecord({ id, initialDate }: { id: string; initialDate?
     {!coach && !error ? <LoadingState /> : coach && <section className="detail-card"><form key={`${id}-${coach.workDate}`} className="form-shell" onSubmit={e => void save(e)}>
       <label>التاريخ<input type="date" required max={coach.today ?? defaults.to} value={date} onChange={e => { if (e.target.value) setDate(e.target.value); }} /></label>
       <label>الحالة<select name="status" value={status} onChange={e => setStatus(e.target.value)}><option value="NotRecorded">لم يُسجل</option><option value="Present">حاضر</option><option value="Absent">غائب</option></select></label>
-      {status === "Present" && <><TimeField label="وقت الحضور" name="in" required defaultValue={coach.checkIn} /><TimeField label="وقت الانصراف" name="out" defaultValue={coach.checkOut} /></>}
+      {status === "Present" && <><TimeField label="وقت الحضور" name="in" required defaultValue={coach.checkIn} /><TimeField label="وقت الانصراف" name="out" defaultValue={coach.checkOut} /><label>تاريخ الانصراف<input type="date" name="outDate" aria-label="تاريخ الانصراف" min={date} max={coach.today ?? defaults.to} defaultValue={coach.checkOutDate ?? date} /><small>اختر اليوم التالي إذا استمر العمل بعد منتصف الليل. بدون وقت انصراف يبقى الحضور مفتوحًا.</small></label></>}
       <p>خصم التأخير المقترح: {formatMoneyAr(coach.suggestedDeduction, "EGP")}</p>
       <label>الخصم المعتمد<input name="deduction" type="number" min="0" step="0.01" value={deduction} onChange={e => setDeduction(Number(e.target.value))} /></label>
       <label>سبب الخصم{deduction > 0 ? " (مطلوب)" : " (اختياري)"}<textarea name="reason" required={deduction > 0} maxLength={500} defaultValue={coach.deductionReason} /></label>

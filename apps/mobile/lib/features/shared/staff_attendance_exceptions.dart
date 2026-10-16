@@ -77,7 +77,7 @@ class _StaffAttendanceExceptionPageState
     }
   }
 
-  Future<void> save(DateTime now) async {
+  Future<void> save(DateTime now, Json openAttendance) async {
     if (busy || branch == null) return;
     final selectedDate = date ?? now,
         selectedTime = time ?? TimeOfDay.fromDateTime(now);
@@ -86,10 +86,20 @@ class _StaffAttendanceExceptionPageState
       setState(() => message = 'اكتب سبب الطلب من خمسة أحرف على الأقل.');
       return;
     }
+    if (command == null &&
+        operation == 'CheckOut' &&
+        openAttendance['id'] == null) {
+      setState(
+        () => message =
+            'الانصراف يحتاج حضورًا مفتوحًا؛ أعد تحميل السجل أو راجع الإدارة.',
+      );
+      return;
+    }
     command ??= {
       'branchId': branch,
       'operation': operation,
       'reason': text,
+      if (operation == 'CheckOut') 'targetAttendanceId': openAttendance['id'],
       'claimedAtUtc': DateTime(
         selectedDate.year,
         selectedDate.month,
@@ -180,6 +190,9 @@ class _StaffAttendanceExceptionPageState
                 DateTime.tryParse(textOf(options['nowUtc']))?.toLocal() ??
                 DateTime.now();
             final sites = rows(options['branches'] ?? <Json>[]);
+            final openAttendance = options['openAttendance'] is Map
+                ? obj(options['openAttendance'])
+                : <String, dynamic>{};
             return RefreshIndicator(
               onRefresh: refresh,
               child: gList([
@@ -191,6 +204,25 @@ class _StaffAttendanceExceptionPageState
                   ),
                 ),
                 if (message.isNotEmpty) UiText(message),
+                if (!widget.review && openAttendance['id'] != null)
+                  GCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Heading('حضور مفتوح — يحتاج انصرافًا'),
+                        UiText(
+                          'يوم بدء الحضور بتوقيت الأكاديمية: ${openAttendance['workDate']} · ${openAttendance['checkIn']}',
+                        ),
+                        const UiText(
+                          'طلب الانصراف يرتبط بهذا السجل حتى بعد منتصف الليل. لا يُغلق تلقائيًا.',
+                        ),
+                      ],
+                    ),
+                  ),
+                if (options['requiresSourceReview'] == true)
+                  const EmptyMessage(
+                    'يوجد أكثر من سجل مفتوح؛ تحتاج الإدارة مراجعتها قبل طلب الانصراف.',
+                  ),
                 if (widget.review) ...[
                   DropdownButtonFormField<String>(
                     isExpanded: true,
@@ -356,9 +388,14 @@ class _StaffAttendanceExceptionPageState
                         ],
                         const SizedBox(height: 12),
                         FilledButton.icon(
-                          onPressed: busy || branch == null
+                          onPressed:
+                              busy ||
+                                  branch == null ||
+                                  command == null &&
+                                      operation == 'CheckOut' &&
+                                      openAttendance['id'] == null
                               ? null
-                              : () => save(now),
+                              : () => save(now, openAttendance),
                           icon: const Icon(Icons.fact_check_outlined),
                           label: UiText(
                             busy
@@ -418,6 +455,8 @@ class _StaffAttendanceExceptionPageState
                         ),
                         UiText(exceptionStatus(context, r['status'])),
                         if (!widget.review) UiText(textOf(r['reason'])),
+                        if (r['operation'] == 'CheckOut')
+                          UiText('مرتبط بيوم بدء الحضور: ${r['workDate']}'),
                         if (r['reviewNote'] != null)
                           UiText('ملاحظة القرار: ${r['reviewNote']}'),
                         if (widget.review) const UiText('عرض ومراجعة الطلب'),
@@ -567,6 +606,10 @@ class _StaffExceptionReviewPageState extends State<StaffExceptionReviewPage> {
               Heading(textOf(d['name'])),
               UiText(textOf(d['branch'])),
               UiText('يوم العمل بتوقيت الأكاديمية: ${r['workDate']}'),
+              if (r['operation'] == 'CheckOut')
+                const UiText(
+                  'الانصراف مرتبط بيوم بدء الحضور، حتى إذا كان بعد منتصف الليل.',
+                ),
               UiText(exceptionStatus(context, r['status'])),
               UiText(
                 'الوقت المدعى بتوقيت جهازك: ${claimTime(r['claimedAtUtc'])}',
@@ -586,6 +629,10 @@ class _StaffExceptionReviewPageState extends State<StaffExceptionReviewPage> {
                         : attendance['status'] == 'Absent'
                         ? 'غائب'
                         : 'لم يُسجل'} · ${attendance['checkIn'] ?? '—'} / ${attendance['checkOut'] ?? '—'}',
+                  ),
+                if (attendance?['checkOutDate'] != null)
+                  UiText(
+                    'تاريخ الانصراف بتوقيت الأكاديمية: ${attendance!['checkOutDate']}',
                   ),
               ],
               const UiText(

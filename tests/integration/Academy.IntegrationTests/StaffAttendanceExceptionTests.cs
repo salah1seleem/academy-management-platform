@@ -54,6 +54,12 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
     private static StaffExceptionWrite Claim(Guid branch,string operation="CheckIn",DateTimeOffset? time=null)=>new(branch,operation,time??Now.AddHours(-1),"تعذر الحصول على موقع دقيق — مثال اصطناعي");
     private static async Task<JsonElement> Request(HttpClient c,StaffExceptionWrite body,string? key=null) {var r=await Write(c,StaffAttendanceExceptions.SelfPath+"/",body,key??Guid.NewGuid().ToString());Assert.True(r.IsSuccessStatusCode,await r.Content.ReadAsStringAsync());return (await r.Content.ReadFromJsonAsync<JsonElement>());}
     private static async Task<HttpResponseMessage> Review(HttpClient owner,JsonElement r,bool approve=true,string? note=null,string? key=null)=>await Write(owner,$"{StaffAttendanceExceptions.ManagePath}/{r.GetProperty("id").GetGuid()}/review",new StaffExceptionReview(approve,note,r.GetProperty("version").GetUInt32()),key??Guid.NewGuid().ToString());
+    private static async Task<HttpResponseMessage> Manual(HttpClient owner, Guid member, DailyWrite body)
+    {
+        var csrf = await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");
+        using var command = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/manage/staff-attendance/{member}") { Content = JsonContent.Create(body) };
+        command.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); return await owner.SendAsync(command);
+    }
 
     [Fact]
     public async Task Pending_claim_review_and_checkout_use_existing_attendance_with_no_automatic_financial_or_player_effect()
@@ -128,6 +134,82 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
         var s=await Staff();using var c=s.Client;using var owner=await Owner();var previous=await Request(c,Claim(s.Branch,time:Now.AddDays(-1)));(await Review(owner,previous)).EnsureSuccessStatusCode();var next=await Request(c,Claim(s.Branch));Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,next)).StatusCode);
         var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var manual=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff-attendance/{s.Member}"){Content=JsonContent.Create(new DailyWrite(new(2026,10,16),"Present",new(12,0),null,0,null))};manual.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());Assert.Equal(HttpStatusCode.Conflict,(await owner.SendAsync(manual)).StatusCode);
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var rows=await db.StaffDailyAttendances.Where(a=>a.MembershipId==s.Member).ToArrayAsync();Assert.Single(rows);Assert.Null(rows[0].CheckOut);Assert.Equal(new DateOnly(2026,10,15),rows[0].WorkDate);
+    }
+    [Fact]
+    public async Task Overnight_checkout_binds_original_day_and_replays_after_close_without_a_second_daily_record()
+    {
+        var s = await Staff(); using var c = s.Client; using var owner = await Owner();
+        var first = await Request(c, Claim(s.Branch, time: Now.AddHours(-15))); (await Review(owner, first)).EnsureSuccessStatusCode();
+        var options = await c.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath + "/options");
+        var source = options.GetProperty("openAttendance"); Assert.Equal("2026-10-15", source.GetProperty("workDate").GetString());
+        var key = Guid.NewGuid().ToString(); var body = Claim(s.Branch, "CheckOut", Now.AddHours(-10)) with { TargetAttendanceId = source.GetProperty("id").GetGuid() };
+        var claim = await Request(c, body, key); Assert.Equal("2026-10-15", claim.GetProperty("workDate").GetString());
+        Assert.Equal(source.GetProperty("id").GetGuid(), claim.GetProperty("targetAttendanceId").GetGuid());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var money = (await db.Collections.CountAsync(), await db.PayrollAdjustments.CountAsync(), await db.PlayerAttendances.CountAsync());
+        Assert.Null((await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a => a.MembershipId == s.Member)).CheckOut);
+        (await Review(owner, claim)).EnsureSuccessStatusCode();
+        var row = await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a => a.MembershipId == s.Member);
+        Assert.Equal(source.GetProperty("id").GetGuid(), row.Id); Assert.Equal(new DateOnly(2026,10,15), row.WorkDate); Assert.Equal(new DateOnly(2026,10,16), row.CheckOutDate);
+        Assert.Equal(new TimeOnly(22,0), row.CheckIn); Assert.Equal(new TimeOnly(3,0), row.CheckOut); Assert.Equal(0, row.ApprovedDeduction);
+        Assert.Equal("Approved", (await Request(c, body, key)).GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, (await c.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath + "/options")).GetProperty("openAttendance").ValueKind);
+        Assert.Equal(HttpStatusCode.Conflict, (await Write(c, StaffAttendanceExceptions.SelfPath + "/", body, Guid.NewGuid().ToString())).StatusCode);
+        var report = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/staff-daily?coachId={s.Member}&allDates=true");
+        Assert.Equal(1, report.GetProperty("totalCount").GetInt32()); Assert.Equal("2026-10-16", report.GetProperty("items")[0].GetProperty("checkOutDate").GetString());
+        var csv = await owner.GetStringAsync($"/api/v1/reports/staff-daily/export?coachId={s.Member}&allDates=true"); Assert.Contains("تاريخ الانصراف", csv); Assert.Contains("2026-10-15", csv); Assert.Contains("2026-10-16", csv);
+        Assert.Equal(HttpStatusCode.Conflict,(await Manual(owner,s.Member,new(new(2026,10,16),"Present",new(2,0),new(4,0),0,null))).StatusCode);
+        var overlap = await Request(c,Claim(s.Branch,time:DateTimeOffset.Parse("2026-10-15T23:30:00Z"))); Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,overlap)).StatusCode);
+        Assert.Equal(money, (await db.Collections.CountAsync(), await db.PayrollAdjustments.CountAsync(), await db.PlayerAttendances.CountAsync()));
+    }
+    [Fact]
+    public async Task Checkout_cannot_target_foreign_or_changed_source_and_stale_pending_can_be_rejected()
+    {
+        var s = await Staff(); using var c = s.Client; using var owner = await Owner();
+        var first = await Request(c, Claim(s.Branch, time: Now.AddHours(-15))); (await Review(owner, first)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await Write(c, StaffAttendanceExceptions.SelfPath + "/", Claim(s.Branch, "CheckOut") with { TargetAttendanceId = Guid.NewGuid() }, Guid.NewGuid().ToString())).StatusCode);
+        var other = await Staff(); using var otherClient = other.Client; var otherClaim = await Request(otherClient,Claim(other.Branch,time:Now.AddHours(-15))); (await Review(owner,otherClaim)).EnsureSuccessStatusCode();
+        var otherOpen=(await otherClient.GetFromJsonAsync<JsonElement>(StaffAttendanceExceptions.SelfPath+"/options")).GetProperty("openAttendance").GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NotFound,(await Write(c,StaffAttendanceExceptions.SelfPath+"/",Claim(s.Branch,"CheckOut") with {TargetAttendanceId=otherOpen},Guid.NewGuid().ToString())).StatusCode);
+        var pending = await Request(c, Claim(s.Branch, "CheckOut"));
+        (await Manual(owner, s.Member, new(new(2026,10,15), "Present", new(21,0), null, 0, null))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Review(owner, pending)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Null((await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a => a.MembershipId == s.Member)).CheckOut);
+        (await Review(owner, pending, false, "تغير أصل الحضور؛ راجع الوقت الصحيح قبل إنشاء طلب آخر")).EnsureSuccessStatusCode();
+        var newer = await Request(c, Claim(s.Branch, "CheckOut")); (await Review(owner, newer)).EnsureSuccessStatusCode();
+        var sourceId = newer.GetProperty("targetAttendanceId").GetGuid();
+        Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"StaffAttendanceExceptions\" SET \"TargetAttendanceVersion\"=1 WHERE \"Id\"={newer.GetProperty("id").GetGuid()}"))).SqlState);
+        Assert.Equal(sourceId, (await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a => a.MembershipId == s.Member)).Id);
+    }
+    [Fact]
+    public async Task Manual_overnight_has_explicit_checkout_date_and_rejects_future_times_and_invalid_dates()
+    {
+        var s = await Staff(); using var c = s.Client; using var owner = await Owner();
+        var body = new DailyWrite(new(2026,10,15), "Present", new(23,30), new(4,0), 50, "خصم إداري اصطناعي مستقل", new(2026,10,16));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Manual(owner, s.Member, body with { CheckOutDate = new(2026,10,14) })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Manual(owner, s.Member, body with { CheckOutDate = new(2026,10,17) })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Manual(owner, s.Member, body with { CheckOut = new(14,0) })).StatusCode);
+        (await Manual(owner, s.Member, body)).EnsureSuccessStatusCode();
+        var detail = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff-attendance/{s.Member}?date=2026-10-15"); Assert.Equal("2026-10-16", detail.GetProperty("checkOutDate").GetString());
+        var report = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/staff-daily?coachId={s.Member}&allDates=true"); Assert.Equal(50, report.GetProperty("totalDeductions").GetDecimal()); Assert.Equal(1, report.GetProperty("totalCount").GetInt32());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"StaffDailyAttendances\" SET \"CheckOutDate\"=\"WorkDate\" WHERE \"MembershipId\"={s.Member}"))).SqlState);
+        (await Manual(owner, s.Member, body with { Status = "Absent", CheckIn = null, CheckOut = null, CheckOutDate = null })).EnsureSuccessStatusCode();
+        Assert.Null((await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a => a.MembershipId == s.Member)).CheckOutDate);
+    }
+    [Fact]
+    public async Task Month_boundary_checkout_does_not_reopen_a_closed_source_month()
+    {
+        var s = await Staff(); using var c = s.Client; using var owner = await Owner();
+        var first = await Request(c, Claim(s.Branch, time: DateTimeOffset.Parse("2026-09-30T20:00:00Z"))); (await Review(owner, first)).EnsureSuccessStatusCode();
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var ownerId = await db.AcademyMemberships.Where(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.AcademyOwner).Select(m => m.UserId).FirstAsync();
+        db.PayrollSettlements.Add(new() { Id=Guid.NewGuid(), AcademyId=DemoSeed.NogoomAcademyId, EmployeeId=s.Employee, Month=new(2026,9,1), Currency="EGP", PaidAtUtc=Now, PaidByUserId=ownerId, IdempotencyKey=Guid.NewGuid().ToString() }); await db.SaveChangesAsync();
+        var pending = await Request(c, Claim(s.Branch, "CheckOut", DateTimeOffset.Parse("2026-09-30T22:00:00Z"))); Assert.Equal("2026-09-30", pending.GetProperty("workDate").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, (await Review(owner, pending)).StatusCode);
+        var source = await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a => a.MembershipId == s.Member); Assert.Null(source.CheckOut); Assert.Equal(new DateOnly(2026,9,30), source.WorkDate);
+        (await Review(owner, pending, false, "مصدر شهر معتمد؛ يحتاج مراجعة مستقلة لا تغييرًا صامتًا")).EnsureSuccessStatusCode();
     }
     [Fact]
     public async Task Closed_payroll_month_and_existing_daily_record_are_not_silently_changed()

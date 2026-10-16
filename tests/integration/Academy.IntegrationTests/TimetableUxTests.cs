@@ -204,8 +204,9 @@ public sealed class TimetableUxTests : IAsyncLifetime
         try
         {
             Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date = "2026-10-09", status = "Present", checkIn = "17:30:00", approvedDeduction = 0 })).StatusCode);
-            Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date, status = "Present", checkIn = "17:30:00", approvedDeduction = 100 })).StatusCode);
-            (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date, status = "Present", checkIn = "17:30:00", checkOut = "22:00:00", approvedDeduction = 100, reason = "اختبار خصم تأخير" })).EnsureSuccessStatusCode();
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date, status = "Present", checkIn = "17:30:00", approvedDeduction = 0 })).StatusCode);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date, status = "Present", checkIn = "00:30:00", approvedDeduction = 100 })).StatusCode);
+            (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date, status = "Present", checkIn = "00:30:00", checkOut = "00:50:00", approvedDeduction = 100, reason = "اختبار خصم حضور" })).EnsureSuccessStatusCode();
             (await Put(owner, $"/api/v1/manage/staff-attendance/{f.Coach}", new { date, status = "Absent", approvedDeduction = 100, reason = "اختبار غياب" })).EnsureSuccessStatusCode();
             var report = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/staff-daily?coachId={f.Coach}&allDates=true");
             var saved = Assert.Single(report.GetProperty("items").EnumerateArray(), x => x.GetProperty("workDate").GetString() == date); Assert.Equal("Absent", saved.GetProperty("status").GetString()); Assert.Equal(100, saved.GetProperty("approvedDeduction").GetDecimal());

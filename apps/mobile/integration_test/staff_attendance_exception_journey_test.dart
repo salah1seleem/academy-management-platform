@@ -16,6 +16,7 @@ void main() {
     'Staff native claim to independent Owner review and persisted staff history',
     (tester) async {
       expect(const bool.fromEnvironment('ISOLATED_DEMO'), isTrue);
+      const overnight = bool.fromEnvironment('OVERNIGHT');
       final ownerTransport = HttpApiTransport(
         AppConfig('Demo', const String.fromEnvironment('API_BASE_URL')),
       );
@@ -77,10 +78,36 @@ void main() {
         },
       );
       await login(staff, phone);
+      String? originalDay, checkoutDay;
+      if (overnight) {
+        final calendar = await owner.request(
+          'GET',
+          '/api/v1/manage/staff-attendance/${member['membershipId']}',
+        ) as Map;
+        checkoutDay = calendar['today'] as String;
+        originalDay = DateTime.parse(checkoutDay)
+            .subtract(const Duration(days: 1))
+            .toIso8601String()
+            .substring(0, 10);
+        await owner.request(
+          'PUT',
+          '/api/v1/manage/staff-attendance/${member['membershipId']}',
+          body: {
+            'date': originalDay,
+            'status': 'Present',
+            'checkIn': '23:30:00',
+            'checkOut': null,
+            'approvedDeduction': 0,
+            'reason': null,
+          },
+        );
+      }
       final ownOptions = await staff.request(
         'GET',
         '/api/v1/staff/attendance-exceptions/options',
       ) as Map;
+      final openSource = overnight ? ownOptions['openAttendance'] as Map : null;
+      if (overnight) expect(openSource!['workDate'], originalDay);
       final branchName =
           ((ownOptions['branches'] as List).singleWhere(
                 (b) => (b as Map)['id'] == branch['id'],
@@ -108,7 +135,9 @@ void main() {
 
       Future<void> capture(String n) async {
         if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
-          await binding.takeScreenshot('phase-staff-exception-$n');
+          await binding.takeScreenshot(
+            'phase-staff-${overnight ? 'overnight' : 'exception'}-$n',
+          );
         }
       }
 
@@ -124,10 +153,18 @@ void main() {
       }
 
       await ownScreen();
+      await reach(find.byType(DropdownButtonFormField<String>).first);
       await tester.tap(find.byType(DropdownButtonFormField<String>).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text(branchName).last);
       await tester.pumpAndSettle();
+      if (overnight) {
+        await reach(find.byType(DropdownButtonFormField<String>).at(1));
+        await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('انصراف').last);
+        await tester.pumpAndSettle();
+      }
       await reach(find.text('إرسال للمراجعة'));
       await capture('claim-form');
       await tester.tap(find.text('إرسال للمراجعة'));
@@ -142,6 +179,10 @@ void main() {
       final claim = claims.single as Map;
       expect(claim['status'], 'Pending');
       expect(claim['attendanceId'], isNull);
+      if (overnight) {
+        expect(claim['targetAttendanceId'], openSource!['id']);
+        expect(claim['workDate'], originalDay);
+      }
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(AcademyApp(auth: owner, environment: 'Demo'));
       await waitFor(find.text('المزيد'));
@@ -171,7 +212,25 @@ void main() {
         '/api/v1/manage/staff-attendance-exceptions/${claim['id']}',
       ) as Map;
       expect((detail['currentAttendance'] as Map)['status'], 'Present');
-      expect(detail['beforeSnapshot'], 'null');
+      if (overnight) {
+        expect(detail['beforeSnapshot'], contains('23:30'));
+        expect(
+          (detail['currentAttendance'] as Map)['checkOutDate'],
+          checkoutDay,
+        );
+        expect((saved.single as Map)['attendanceId'], openSource!['id']);
+        final report = await owner.request(
+          'GET',
+          '/api/v1/reports/staff-daily?coachId=${member['membershipId']}&allDates=true',
+        ) as Map;
+        expect(report['totalCount'], 1);
+        expect(
+          ((report['items'] as List).single as Map)['workDate'],
+          originalDay,
+        );
+      } else {
+        expect(detail['beforeSnapshot'], 'null');
+      }
       expect(detail['afterSnapshot'], isNotNull);
       await ownScreen();
       await reach(find.text('مقبول إداريًا'));

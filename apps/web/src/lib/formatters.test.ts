@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatDateAr, formatMoneyAr, planTypeLabel, statusLabel } from "./formatters";
+import { formatDateAr, formatMoneyAr, formatStaffCheckout, planTypeLabel, statusLabel } from "./formatters";
 
 describe("Arabic display formatters", () => {
+  it("shows the actual overnight checkout date without inventing a date for an open record", () => {
+    expect(formatStaffCheckout("04:00:00","2026-10-16","2026-10-15")).toContain(formatDateAr("2026-10-16"));
+    expect(formatStaffCheckout("04:00:00","2026-10-16","2026-10-16")).toBe("4:00 صباحًا");
+    expect(formatStaffCheckout(null,"2026-10-16","2026-10-15")).toBe("—");
+  });
   it("renders EGP as a clean Arabic جنيه amount", () => {
     expect(formatMoneyAr(900, "EGP")).toContain("جنيه");
     expect(formatMoneyAr(900, "EGP")).not.toContain("EGP");

@@ -43,6 +43,101 @@ Future<void> selectBranch(WidgetTester t) async {
 
 void main() {
   testWidgets(
+    'Checkout binds the displayed open workday, including yesterday, without choosing another employee',
+    (t) async {
+      Json? body;
+      final auth = await coach((m, p, b, token) async {
+        if (m == 'POST') {
+          body = b as Json;
+          return {...claim, 'operation': 'CheckOut', 'workDate': '2026-10-15'};
+        }
+        return p.endsWith('/options')
+            ? {
+                ...options,
+                'openAttendance': {
+                  'id': 'daily-previous',
+                  'workDate': '2026-10-15',
+                  'checkIn': '23:30:00',
+                },
+              }
+            : <Json>[];
+      });
+      await t.pumpWidget(shell(StaffAttendanceExceptionPage(auth: auth)));
+      await t.pumpAndSettle();
+      expect(find.text('حضور مفتوح — يحتاج انصرافًا'), findsOneWidget);
+      await reach(t, find.byType(DropdownButtonFormField<String>).first);
+      await selectBranch(t);
+      await reach(t, find.byType(DropdownButtonFormField<String>).at(1));
+      await t.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await t.pumpAndSettle();
+      await t.tap(find.text('انصراف').last);
+      await t.pumpAndSettle();
+      await reach(t, find.text('إرسال للمراجعة'));
+      await t.tap(find.text('إرسال للمراجعة'));
+      await t.pumpAndSettle();
+      expect(body!['targetAttendanceId'], 'daily-previous');
+      expect(body!['operation'], 'CheckOut');
+      expect(body!.containsKey('membershipId'), isFalse);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'Checkout without an open source is disabled; reviewer displays the saved overnight date',
+    (t) async {
+      final auth = await coach((m, p, b, token) async {
+        expect(m, 'GET');
+        return p.endsWith('/options') ? options : <Json>[];
+      });
+      await t.pumpWidget(shell(StaffAttendanceExceptionPage(auth: auth)));
+      await t.pumpAndSettle();
+      await selectBranch(t);
+      await t.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await t.pumpAndSettle();
+      await t.tap(find.text('انصراف').last);
+      await t.pumpAndSettle();
+      await reach(t, find.text('إرسال للمراجعة'));
+      expect(
+        t
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'إرسال للمراجعة'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+      final reviewer = await owner(
+        (m, p, b, token) async => {
+          'name': 'موظف وردية ليلية',
+          'branch': 'فرع العرض',
+          'canReview': false,
+          'request': {
+            ...claim,
+            'operation': 'CheckOut',
+            'workDate': '2026-10-15',
+            'status': 'Approved',
+          },
+          'currentAttendance': {
+            'status': 'Present',
+            'checkIn': '23:30:00',
+            'checkOut': '04:00:00',
+            'checkOutDate': '2026-10-16',
+          },
+        },
+      );
+      await t.pumpWidget(
+        shell(StaffExceptionReviewPage(auth: reviewer, id: 'r1')),
+      );
+      await t.pumpAndSettle();
+      await reach(t, find.text('تاريخ الانصراف بتوقيت الأكاديمية: 2026-10-16'));
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      reviewer.dispose();
+    },
+  );
+  testWidgets(
     'Own claim is pending, server-scoped, double-tap safe and hides on logout',
     (t) async {
       final gate = Completer<Object?>();

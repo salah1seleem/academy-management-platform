@@ -34,6 +34,22 @@ public sealed class FootballDemoTests : IAsyncLifetime
         await FootballDemoSeed.RunAsync(scope.ServiceProvider, true);
     }
     [Fact]
+    public async Task V3_overnight_staff_demo_is_repeatable_preserves_acceptance_and_reserved_reset()
+    {
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>(); var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value; var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock); await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock);
+        var row=await db.StaffAttendanceExceptions.SingleAsync(r=>r.Id==StaffAttendanceExceptionDemoSeed.OvernightRequestId); Assert.Equal("Pending",row.Status); Assert.Equal(new DateOnly(2026,10,14),row.WorkDate);
+        Assert.Null((await db.StaffDailyAttendances.SingleAsync(a=>a.Id==row.TargetAttendanceId)).CheckOut);
+        var before=(await db.Collections.CountAsync(),await db.StaffDailyAttendances.CountAsync()); using var owner=await Login("owner");
+        var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var request=new HttpRequestMessage(HttpMethod.Post,$"/api/v1/manage/staff-attendance-exceptions/{row.Id}/review"){Content=JsonContent.Create(new {approve=true,note=(string?)null,version=row.Version})}; request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString()); request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());
+        var result=await owner.SendAsync(request); Assert.True(result.IsSuccessStatusCode,await result.Content.ReadAsStringAsync());
+        await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock); await db.Entry(row).ReloadAsync(); Assert.Equal("Approved",row.Status);
+        var source=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a=>a.Id==row.AttendanceId); Assert.Equal(new DateOnly(2026,10,15),source.CheckOutDate); Assert.Equal(new TimeOnly(3,0),source.CheckOut);
+        Assert.Equal(before,(await db.Collections.CountAsync(),await db.StaffDailyAttendances.CountAsync()));
+        var foreign=await db.Players.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync(); await FootballDemoSeed.RunAsync(scope.ServiceProvider,true); Assert.False(await db.StaffAttendanceExceptions.AnyAsync(r=>r.Id==row.Id)); Assert.Equal(foreign,await db.Players.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync());
+    }
+    [Fact]
     public async Task V3_staff_exception_demo_is_repeatable_preserves_review_and_reserved_reset_keeps_other_academies()
     {
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>();var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value;var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();

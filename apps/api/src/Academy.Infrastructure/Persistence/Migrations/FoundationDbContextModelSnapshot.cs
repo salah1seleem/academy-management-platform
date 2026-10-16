@@ -5426,6 +5426,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)");
 
+                    b.Property<Guid?>("TargetAttendanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("TargetAttendanceVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -5456,6 +5462,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "ReviewedByMembershipId");
 
+                    b.HasIndex("AcademyId", "TargetAttendanceId");
+
                     b.HasIndex("AcademyId", "RequestedByUserId", "RequestKey")
                         .IsUnique();
 
@@ -5467,6 +5475,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("StaffAttendanceExceptions", null, t =>
                         {
+                            t.HasCheckConstraint("CK_StaffException_CheckoutTarget", "(\"TargetAttendanceId\" IS NULL AND \"TargetAttendanceVersion\" IS NULL) OR (\"Operation\"='CheckOut' AND \"TargetAttendanceId\" IS NOT NULL AND \"TargetAttendanceVersion\" IS NOT NULL AND \"TargetAttendanceVersion\" > 0)");
+
                             t.HasCheckConstraint("CK_StaffException_Decision", "\"IsActive\" AND \"Operation\" IN ('CheckIn','CheckOut') AND \"Status\" IN ('Pending','Approved','Rejected')\nAND length(trim(\"Reason\")) BETWEEN 5 AND 500 AND \"ClaimedAtUtc\" <= \"CreatedAtUtc\"\nAND ((\"Status\"='Pending' AND \"ReviewedByUserId\" IS NULL AND \"ReviewedByMembershipId\" IS NULL\n  AND \"ReviewedAtUtc\" IS NULL AND \"ReviewKey\" IS NULL AND \"ReviewHash\" IS NULL AND \"ReviewNote\" IS NULL\n  AND \"AttendanceId\" IS NULL AND \"BeforeSnapshot\" IS NULL AND \"AfterSnapshot\" IS NULL)\nOR (\"Status\" <> 'Pending' AND \"ReviewedByUserId\" IS NOT NULL AND \"ReviewedByUserId\" <> \"RequestedByUserId\"\n  AND \"ReviewedByMembershipId\" IS NOT NULL AND \"ReviewedAtUtc\" IS NOT NULL AND \"ReviewedAtUtc\" >= \"CreatedAtUtc\"\n  AND \"ReviewKey\" IS NOT NULL AND \"ReviewHash\" IS NOT NULL\n  AND ((\"Status\"='Approved' AND \"AttendanceId\" IS NOT NULL AND \"BeforeSnapshot\" IS NOT NULL AND \"AfterSnapshot\" IS NOT NULL)\n    OR (\"Status\"='Rejected' AND \"ReviewNote\" IS NOT NULL AND length(trim(\"ReviewNote\")) BETWEEN 5 AND 500\n      AND \"AttendanceId\" IS NULL AND \"BeforeSnapshot\" IS NULL AND \"AfterSnapshot\" IS NULL))))");
                         });
                 });
@@ -5489,6 +5499,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<TimeOnly?>("CheckOut")
                         .HasColumnType("time without time zone");
+
+                    b.Property<DateOnly?>("CheckOutDate")
+                        .HasColumnType("date");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -12738,6 +12751,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "ReviewedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.StaffDailyAttendance", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TargetAttendanceId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
                 });

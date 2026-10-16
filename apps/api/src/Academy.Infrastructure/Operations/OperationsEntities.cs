@@ -142,6 +142,7 @@ public sealed class StaffDailyAttendance : TenantEntity
     public required string Status { get; set; }
     public TimeOnly? CheckIn { get; set; }
     public TimeOnly? CheckOut { get; set; }
+    public DateOnly? CheckOutDate { get; set; }
     public int LateMinutes { get; set; }
     public decimal SuggestedDeduction { get; set; }
     public decimal ApprovedDeduction { get; set; }

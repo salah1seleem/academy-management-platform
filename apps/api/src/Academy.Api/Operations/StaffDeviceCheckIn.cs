@@ -91,6 +91,7 @@ public static class StaffDeviceCheckIn
         var row = await db.StaffDailyAttendances.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.MembershipId == t.MembershipId && x.WorkDate == date);
         if (row is not null && row.Status == "Present") return Results.Ok(new { row.Id, row.WorkDate, row.CheckIn, replay = true });
         if (row is not null && row.Status != "NotRecorded") return Results.Conflict(new { message = "الحضور مسجل بحالة مختلفة؛ راجع الإدارة." });
+        if (await StaffAttendanceIntervals.Overlaps(db,t.AcademyId,t.MembershipId,row?.Id,date,checkIn,null,null)) return Results.Conflict(new {message="تتداخل الفترة مع سجل حضور آخر؛ اطلب مراجعة الإدارة."});
         var actor = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
         if (row is null) { row = new StaffDailyAttendance { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = t.MembershipId, WorkDate = date, Status = "Present", CreatedAtUtc = clock.GetUtcNow() }; db.StaffDailyAttendances.Add(row); }
         row.Status = "Present"; row.CheckIn = checkIn; row.RecordedByUserId = actor; row.UpdatedAtUtc = clock.GetUtcNow();

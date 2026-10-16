@@ -16,6 +16,9 @@ public sealed class StaffAttendanceException : TenantEntity
     public string Status { get; set; } = "Pending";
     public required string RequestKey { get; set; }
     public required string RequestHash { get; set; }
+    // A checkout claim binds to the open source, never to whichever day is open later.
+    public Guid? TargetAttendanceId { get; set; }
+    public long? TargetAttendanceVersion { get; set; }
     public Guid? ReviewedByUserId { get; set; }
     public Guid? ReviewedByMembershipId { get; set; }
     public DateTimeOffset? ReviewedAtUtc { get; set; }
