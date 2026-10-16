@@ -28,11 +28,12 @@ export function ProfileMatches({ playerId, coachMembershipId }: { playerId: stri
     const abort = new AbortController();
     fetch(`/api/v1/manage/matches/?${query}`, { cache: "no-store", signal: abort.signal }).then(async r => {
       if (!r.ok) throw new Error(r.status === 403 ? "لا تملك صلاحية عرض المباريات في هذا النطاق." : "تعذر عرض مباريات هذا الملف؛ أعد المحاولة.");
+      if (playerId && r.headers.get("X-Match-Player-Id")?.toLowerCase() !== playerId.toLowerCase() || coachMembershipId && r.headers.get("X-Match-Coach-Id")?.toLowerCase() !== coachMembershipId.toLowerCase()) throw new Error("الخدمة الحالية لا تؤكد نطاق الملف؛ يلزم تحديثها قبل عرض المباريات.");
       const items = await r.json() as Match[];
       if (!abort.signal.aborted) setResult({ key, items });
     }).catch(e => { if (!abort.signal.aborted) setResult({ key, error: e instanceof Error ? e.message : "تعذر عرض المباريات." }); });
     return () => abort.abort();
-  }, [key, query]);
+  }, [key, query, playerId, coachMembershipId]);
   const items = result?.key === key ? result.items?.filter(m => !filters.status || m.status === filters.status) : undefined;
   return <section className="detail-card" aria-label="مباريات الملف">
     <h2>المباريات والمنافسات</h2>

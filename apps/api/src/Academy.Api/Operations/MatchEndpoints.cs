@@ -54,6 +54,8 @@ public static class MatchEndpoints
         if(coachMembershipId.HasValue)q=q.Where(x=>db.MatchTeams.Any(team=>team.Id==x.TeamId&&team.CoachMembershipId==coachMembershipId));
         if (from.HasValue && to.HasValue && from > to) return Results.UnprocessableEntity();
         q = q.Where(x => (!tournamentId.HasValue || x.TournamentId == tournamentId) && (!teamId.HasValue || x.TeamId == teamId) && (!from.HasValue || x.MatchDate >= from) && (!to.HasValue || x.MatchDate <= to));
+        if(playerId.HasValue)response.Headers["X-Match-Player-Id"]=playerId.Value.ToString();
+        if(coachMembershipId.HasValue)response.Headers["X-Match-Coach-Id"]=coachMembershipId.Value.ToString();
         return Results.Ok(await Rows(q.OrderByDescending(x => x.MatchDate).Take(200), db, t.AcademyId).ToListAsync());
     }
     private static IQueryable<object> Rows(IQueryable<AcademyMatch> q, FoundationDbContext db, Guid a) => q.Select(x => (object)new {
