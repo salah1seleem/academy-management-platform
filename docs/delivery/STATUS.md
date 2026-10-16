@@ -1,5 +1,13 @@
 # Status
 
+## E2c2b — سياسة الفرع ومراجع الاستثناء، 2026-10-16–17
+
+Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: إعداد Owner محفوظ ومطبق على نفس التوقيع/المصدر؛ CAS/دليلقبلوبعد/تعطيلحافظللفترة، ومسؤول حي معOwnerبديل ومنعself دون منحة جديدة. Flutter يقرأ نفس السياسة فقط. API46حالةفريدة ناجحة عبرالأوامر بعد3إصلاحاتfixture؛ Web15/Flutter7 وأدوات الجودة؛ E2E24.6s/Native8s وFootball22/22 بعدإصلاح pacingOTP429، دونرفعحدالمنتج. migration104/EFبلاpending. [الأدلة والحدود](../academy-v3/PROGRESS.md).
+
+التاليE2c3 للتوقيع داخلFlutter الحالي وإعدادHTTPS/RP/associated-domain والجهاز الفعلي. التخصيصالفردي/التأخيرالموقع والقبولالموحد باقيان؛ كل الماليالمتبقيآخرًا ثمH. CIالأساسfrontend/flutter success، e2e429عولجمحليًا، backendfailureسببغيرمؤكد؛ لاCIأخضر أو اكتمالV2/V3 مدعى.
+
+**تشغيل العرض بطلب لاحق، 2026-10-17:** حُفظت قاعدة `academy_management_demo` بنسخةPGdump محلية خاصة خارجGit في `/tmp/academity-demo-before-v3-run.aSEmYY/academy_management_demo.backup`، وقرئ فهرسها، ثم طبقت migrations الموجودة72→104 دونreset. لا استعادة اختبرت. أعيد تشغيلAPI5080/Web3000 وFlutterعلىiPhone17ProMax دون تعديلكود/commit في طلبالتشغيل؛ healthlive/ready/login وOwnerlogin/summary HTTP200، والتطبيق عرضHomeالأسرة فعليًا. الخدمات متروكةشغالة؛ لا تختبرعليها في الشرائح التالية. logs `/tmp/academity-final-demo-{migrations,api}-20261017.log`؛ .env محفوظ.
+
 ## E2c2a — حضور وانصراف موقعان على المصدر نفسه — 2026-10-16
 
 Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: تحدي عملية مربوط بالهوية/الفرع/الموقع/hash ونسخةاليوم/الفترة، توقيعUV خادمي واستهلاك/كتابة ذريان ووقتسيرفري. ورديتان/منتصفالليل/replay بلاخصم أوحضورطفل، ومصدرMixed لايختلقبدايةموقعة. Web يسجل ويعيدقراءةالإيصال؛ iOS يقرأ الفترة نفسها فقط، **لا native توقيع بعد**. migration103 أمامية علىقاعدتين معزولتين، EF بلاpending؛ Backend44حالةفريدة عبرتشغيلاتمستهدفة، Web19، Flutter11، typecheck/lint/build/analyze ناجحة؛ E2E الجديدة17.2s وnativeقراءة4s وصور مراجعة. [الأدلة والمحاولات والقيود](../academy-v3/PROGRESS.md).

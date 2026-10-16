@@ -1,5 +1,9 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-16–17 — E2c2b: سياسة فرع فوق نفس التوقيع والمراجعة
+
+Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: Ownerيحفظالتفعيل/الموقع/الحدود/TTL/الفئات/مسؤولالاستثناء، CAS ودليل، والخادم يستخدمها ويبطل محاولة قديمة؛ الموقوف يحفظ الفترة السابقة. المسؤول يقيد التفويض الحي، والمالك بديل دونself. Flutterقراءةمتطابقة، nativeproviderباقٍ. API46فريدة عبرأوامرنجحت بعدإصلاح3fixtures، Web15/Flutter7، أدواتالجودة، E2E24.6s/Native8s، Football22/22 بعدOTPpacingلاحدمنتجمخفف؛ migration104/EFبلاpending. [المحاولات/الصور/CI/الاستئناف](../academy-v3/PROGRESS.md). التاليE2c3 ثمD/E/F/G، كل الماليالمتبقيآخرًا ثمH، دونmain/Production. تشغيل العرض اللاحق مستقل ومثبتفيSTATUS، بلاreset.
+
 ## 2026-10-16 — E2c2a: عملية حضور موقعة وربط الموقع والفترة
 
 Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: source/day/period CAS، nonce+payload+branch/location، توقيع خادمي ووقتسيرفر وreceipt/replay ذري؛ لاBoolean/LastVerifiedAt أوحضورطفل/مال ضمني. Web فعلي وFlutterقراءة نفسالفترة ومصدرها، migration103 وEFبلاpending. Backend44حالةفريدة/Web19/Flutter11 وأدواتالجودة وE2E17.2s/Native4s وصور مراجعة؛ [الأدلة والمحاولات](../academy-v3/PROGRESS.md). التاليE2c2b سياسةالفرع ثمnativeprovider وجهازفعلي/الإعدادالآمن، لااكتمالالخطة. CIintegration السابق انتهىrunner shutdown دوننتيجة؛ logging/timeoutتشخيصيان لا إسقاطاختبار. كل الماليالمتبقي آخرًا ثمH، وmain/Production دونتغيير.

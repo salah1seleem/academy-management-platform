@@ -1,5 +1,13 @@
 # أدلة قبول V2 + V3
 
+## E2c2b — سياسة فرع ومراجع مستقل، 2026-10-16–17
+
+Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: حفظ Owner/CAS/قبل وبعد، قيم تستخدمها عملية التوقيع نفسها وTTL، تعطيل دون إغلاق وردية أو تغيير إيصال. مسؤول حي فوق التفويض القائم وOwner بديل دون self-review، وFK يرفض أكاديمية أخرى. Flutter يقرأ نفس80م/10م/15ث/60ث، لا native signing.
+
+API5/5؛ المستهلكون43/46 ثم إصلاح3fixtures وإعادة الفاشل مع المسؤول4/4؛ **46حالة فريدة ناجحة عبر الأوامر**. Web15/15 وtypecheck/lint/build؛ Flutter7/7 وanalyze. E2Eالسياسة1/1 في24.6s؛ Native قراءة واحدةPASS8s؛ Football22/22 في2m بعد معالجةOTP429 بالانتظار المحدود دون تغيير حد المنتج. migration104 طبقت بثلاث قواعدPG16 معزولة وEFبلاpending، لاreset للعروض في شريحة التنفيذ. [Web390](evidence/e2c2b/branch-policy-web-390.png)، [Web1440](evidence/e2c2b/branch-policy-web-1440.png)، [iOS](evidence/e2c2b/branch-policy-ios.png) صور فعلية راجعت.
+
+CIالأساس38935734402 frontend/flutter نجحتا، e2e429 عولج محليًا؛ backendfailure سببهغيرمؤكد وجلبسجلهMCPtimeout. AC28–32partial، nativeprovider/جهازفعلي/التخصيصالفردي/التأخيرالموقع والقبولالموحد باقية. [السجلات والمحاولات](PROGRESS.md)، وكل المالي المتبقي آخرًا.
+
 ## E2c2a — حضور موقع مع فترة وقرار محفوظين — 2026-10-16
 
 Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: إثباتCheckIn/CheckOut مربوط بالمستخدم/الأكاديمية/فرع/نسخة/موقع/hash/day/period، UV/signature/nonce/time، كتابةذرية فيالمصدرالقائم. nonceالفاشل لايعاد، replayالمطابق يعيد الأصل بلافترة/خصم/مال/حضورطفل مكرر. d+a≤50 ودقة≤30م وعمر≤30ثانية؛ حدود/قديم/ضعيف/فرعغيرمهيأ أوغيرمخول/تغيرفرع/المصدر ترفض. وقتخادم، ورديتان7200ثانية لا10800، منتصفالليل يومواحد، MixedVerifiedEnd يحفظ بدايةإدارية وlegacy بلاUTCمختلق.
