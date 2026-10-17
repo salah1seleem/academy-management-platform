@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## G1b1 — دليل مكتوب حسب الدور، لا فيديو مختلق، 2026-10-17
+
+المصدر `a233c14b5e06d9f7b3dc947aae0c08db8c7bab87`: فهرس16موضوعًا (15 دليلًا وموضوع AwaitingContent)، بحث عربي/قسم وتفاصيل حقيقية Web/Flutter للأدوار الأربعة؛ ترخيص learning_hub القائم مع صلاحيات حية/رياضة، GET فقط، no-store و404 لدرس غير مسموح، المدرب لا يحصل على حضور الأطفال. لا migration؛ المخطط108 بلاpending. API4/4 +5 مستهلكين، Unit27، Web21، Flutter40؛ الأدوات ناجحة. Browser16.4s وiOS4أدوار13s بOTP/الخادم الفعليين، وتقرير المال مطابق، صور فعلية مراجعة. [التفاصيل والمحاولات وبيئة QA والصور](PROGRESS.md). G1a محفوظ، وG1b2 الفيديو الفعلي/إدارة المنصة/النشر/الجمهور والمساعدة السياقية لم تنفذ؛ V2-11 جزئي، والمالي المتبقي آخرًا ثمH. لا Full Regression أو Android/جهاز مادي/نشر يدوي/اكتمال الخطة مدعى.
+
 ## F1b1 — دليل حصص قادمة غير مغطاة دون اتهام غياب أو أثر مالي، 2026-10-17
 
 `338aa08aac263d23e472bf607d2d7975ac259a73`: نفسالمتابعات، Scheduled/active لمتبدأمنnowإلى+7أيام، نفسeffective-session staff/أحدثبديل ونطاقCoach/User/branch/sport الفعال. FKgroup ودليلsessionIDs/time/windowثابت معgapsحية، current/archive وSource links، Closedلايغيرالإسناد/الحضور/المال. Migration108/Applied107→108ومنالصفر/EFبلاpending؛ seedF1اختياريةGroup/sessionstableدونoverwrite/حضورومال. API17/17، Web7، Flutter11، الأدواتناجحة، Browser16.9s وNative4s وصورمراجعة؛ نفسgroup/reportقبلوبعد. [الدليل والمحاولات والاستئناف](PROGRESS.md). V2-12/AC40جزئيان، باقيالمصادر/التفويضوكلالماليالمتبقيآخرًا ثمH. ليستكلالأزرار/FullRegression/Android/جهازفعلي أوCIشامل/deployيدوي مدعاة.
