@@ -400,6 +400,7 @@ app.MapStaffVerifiedAttendance();
 app.MapStaffAttendanceExceptions();
 app.MapGuardianFeedback();
 app.MapOwnerFollowUps();
+app.MapCommunityAds();
 app.MapPayroll();
 app.MapCoachAgreements();
 app.MapPrivateServices();
@@ -445,6 +446,8 @@ if (app.Environment.IsEnvironment("Demo"))
         await AcademyConfigurationService.SeedDemo(db, ids);
         if(app.Configuration.GetValue<bool>("Demo:OwnerFollowUpSeedEnabled"))
             await OwnerFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
+        if(app.Configuration.GetValue<bool>("Demo:CommunityCampaignSeedEnabled"))
+            await CommunityCampaignDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>(),app.Configuration);
         if (app.Configuration.GetValue<bool>("Demo:CoachAgreementSeedEnabled"))
             await CoachAgreementDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if (app.Configuration.GetValue<bool>("Demo:PrivateServiceSeedEnabled"))

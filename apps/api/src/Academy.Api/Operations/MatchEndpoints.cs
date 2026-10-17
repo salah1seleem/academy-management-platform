@@ -163,6 +163,7 @@ public static class MatchEndpoints
             if(assignmentError!=null)return Results.Conflict(new{message=assignmentError});
         }
         var audience = await db.MatchParticipants.Where(x => x.AcademyId == a && x.MatchId == row.Id && x.IsActive).ToListAsync();
+        var urgentNotice=row.PublishedAtUtc.HasValue&&(row.MatchDate!=body.MatchDate||row.StartTime!=body.StartTime||row.Venue!=body.Venue||row.IsActive&&!body.IsActive);
         if (row.PublishedAtUtc == null)
         {
             var reviewedRoster=await MatchDrafts.Roster(db,team);
@@ -189,7 +190,7 @@ public static class MatchEndpoints
                 var removed=await db.AcademyMemberships.Where(m=>m.Id==previousCoach&&m.IsActive&&m.User.IsActive).Select(m=>(Guid?)m.UserId).SingleOrDefaultAsync();
                 if(removed.HasValue)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=a,UserId=removed.Value,Message="تم تعديل إسناد إحدى مبارياتك؛ راجع مواعيدك الحالية أو إدارة الأكاديمية.",CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
             }
-            foreach (var u in users.Distinct()) db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = a, UserId = u, Message = row.IsActive ? $"مباراة {team.Name} أمام {row.Opponent} يوم {row.MatchDate:yyyy-MM-dd} الساعة {row.StartTime:HH:mm} في {row.Venue}. راجع المواعيد داخل التطبيق." : $"تم إلغاء مباراة {team.Name} أمام {row.Opponent}. راجع إدارة الأكاديمية.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+            foreach (var u in users.Distinct()) db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = a, UserId = u, MatchId=row.Id, UrgentUntilUtc=urgentNotice?time.GetUtcNow().AddDays(7):null, Message = row.IsActive ? $"مباراة {team.Name} أمام {row.Opponent} يوم {row.MatchDate:yyyy-MM-dd} الساعة {row.StartTime:HH:mm} في {row.Venue}. راجع المواعيد داخل التطبيق." : $"تم إلغاء مباراة {team.Name} أمام {row.Opponent}. راجع إدارة الأكاديمية.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         }
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Id });
     }

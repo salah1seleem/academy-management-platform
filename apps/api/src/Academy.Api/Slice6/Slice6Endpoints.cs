@@ -67,7 +67,9 @@ public static class Slice6Endpoints
                 sports = enrollments.Where(e => e.PlayerId == p.Id).ToList() };
         }).ToList();
         var sportContexts = enrollments.GroupBy(x => new { x.SportId, x.sport }).Select(g => new { g.Key.SportId, sport = g.Key.sport, children = g.Select(x => players.Single(p => p.Id == x.PlayerId).ArabicName).Distinct().Order().ToArray(), childCount = g.Select(x => x.PlayerId).Distinct().Count() }).OrderBy(x => x.sport).ToList();
-        return Results.Ok(new { academyName = t.AcademyName, guardianName, today, trainingToday, children, sportContexts });
+        var urgentAlerts=await db.AcademyNotices.Where(n=>n.AcademyId==t.AcademyId&&n.UserId==user&&n.IsActive&&!n.IsRead&&n.UrgentUntilUtc>time.GetUtcNow()&&n.MatchId!=null&&db.MatchParticipants.Any(p=>p.MatchId==n.MatchId&&p.IsActive&&linkedIds.Contains(p.PlayerId)))
+            .OrderByDescending(n=>n.UrgentUntilUtc).Take(3).Select(n=>new{n.Id,n.Message,n.MatchId,n.UrgentUntilUtc}).ToArrayAsync();
+        return Results.Ok(new { academyName = t.AcademyName, guardianName, today, trainingToday, children, sportContexts, urgentAlerts });
     }
 
     private static async Task<IResult> GuardianOptions(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)

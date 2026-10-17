@@ -10,6 +10,7 @@ import 'guardian_report.dart';
 import 'daily_nutrition.dart';
 import 'enrollment_requests.dart';
 import '../shared/academy_news.dart';
+import '../shared/community_ads.dart';
 import 'sport_store.dart';
 import 'tournament_fees.dart';
 import 'guardian_day_pass.dart';
@@ -124,6 +125,11 @@ class _GuardianHomeState extends State<GuardianHome> {
                     ),
                   ],
                 ),
+                GuardianUrgentMatchAlerts(
+                  auth: widget.auth,
+                  alerts: rows(home['urgentAlerts'] ?? <Json>[]),
+                ),
+                GuardianSponsoredCard(auth: widget.auth),
                 Heading(localized(context, 'أبنائي', 'My children')),
                 if (allChildren.length > 1) ...[
                   DropdownButtonFormField<String>(

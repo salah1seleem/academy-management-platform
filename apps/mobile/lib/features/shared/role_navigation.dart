@@ -15,6 +15,7 @@ import '../admin/admin_home.dart';
 import '../owner/owner_reports.dart';
 import '../owner/owner_operations.dart';
 import 'academy_news.dart';
+import 'community_ads.dart';
 import 'matches.dart';
 import 'staff_amounts.dart';
 import 'staff_attendance_exceptions.dart';
@@ -190,6 +191,13 @@ class NativeMore extends StatelessWidget {
       ],
       if (role == 'AcademyOwner' || role == 'AcademyAdmin')
         FacilityBoardLink(auth: auth),
+      if (role == 'Guardian') SponsorPreferenceEntry(auth: auth),
+      if (role == 'AcademyOwner')
+        GLink(
+          'المحتوى برعاية وموافقات الفروع',
+          Icons.campaign_outlined,
+          () => openPage(context, OwnerCommunityCampaigns(auth: auth)),
+        ),
       if (role == 'Coach')
         GLink(
           localized(context, 'مجموعاتي', 'My groups'),

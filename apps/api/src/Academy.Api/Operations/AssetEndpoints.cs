@@ -36,7 +36,8 @@ public static class AssetEndpoints
         Guid? groupId = Guid.TryParse(form["groupId"], out var group) ? group : null;
         if (file is null || file.Length < 12 || file.Length > 50 * 1024 * 1024 || form.Files.Count != 1 || form["caption"].ToString().Length > 300)
             return Results.BadRequest(new { message = "ارفع ملفًا واحدًا لا يتجاوز 50 ميجابايت." });
-        if (purpose is not ("Photo" or "Media" or "Proof" or "News" or "StaffPhoto")) return Results.BadRequest();
+        if (purpose is not ("Photo" or "Media" or "Proof" or "News" or "StaffPhoto" or "Campaign")) return Results.BadRequest();
+        if(purpose=="Campaign"&&(!await CommunityAds.FullOwner(db,t)||!await context.RequestServices.GetRequiredService<AcademyConfigurationService>().Enabled(t.AcademyId,"community_ads")||playerId.HasValue||groupId.HasValue||file.Length>10*1024*1024))return Results.Forbid();
         if (purpose == "Proof")
         {
             if (t.Role != AcademyRole.Guardian || playerId.HasValue || groupId.HasValue) return Results.Forbid();
@@ -44,7 +45,7 @@ public static class AssetEndpoints
         else
         {
             var permission = purpose == "StaffPhoto" ? AcademyPermissions.PayrollManage : purpose == "Photo" ? AcademyPermissions.PeopleManage : AcademyPermissions.PlayerMediaManage;
-            var staffAllowed = (await authorization.AuthorizeAsync(context.User, permission)).Succeeded;
+            var staffAllowed = purpose=="Campaign" || (await authorization.AuthorizeAsync(context.User, permission)).Succeeded;
             if (!staffAllowed && !(purpose == "Media" && t.Role == AcademyRole.Coach && groupId.HasValue && !playerId.HasValue && await Assigned(db, t.AcademyId, actor, groupId.Value))) return Results.Forbid();
             if (purpose == "News" && (playerId.HasValue || groupId.HasValue)) return Results.BadRequest();
             if (purpose == "StaffPhoto" && (playerId.HasValue || groupId.HasValue)) return Results.BadRequest();
@@ -56,7 +57,7 @@ public static class AssetEndpoints
         await using var source = file.OpenReadStream();
         var header = new byte[12]; await source.ReadExactlyAsync(header);
         var detected = DetectType(header);
-        if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto") && !detected.StartsWith("image/")))
+        if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto" or "Campaign") && !detected.StartsWith("image/")))
             return Results.BadRequest(new { message = "الأنواع المدعومة: JPEG وPNG وWebP، وMP4 وMOV." });
         if (detected.StartsWith("image/") && file.Length > 8 * 1024 * 1024) return Results.BadRequest(new { message = "الصورة لا تتجاوز 8 ميجابايت." });
         var now = clock.UtcNow;
@@ -108,6 +109,17 @@ public static class AssetEndpoints
     {
         var t = (await tenant.ResolveAsync())!;
         var asset = await db.PrivateAssets.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
+        if(asset?.Purpose=="Campaign")
+        {
+            var allowed=await CommunityAds.FullOwner(db,t);
+            if(!allowed&&t.Role==AcademyRole.Guardian)
+            {
+                var revisions=await db.CommunityCampaignRevisions.Where(r=>r.ImageAssetId==id).Select(r=>r.Id).ToArrayAsync();
+                foreach(var revision in revisions)if(await CommunityAds.AuthorizedTarget(db,features,t,Actor(context.User),revision,context.RequestServices.GetRequiredService<TimeProvider>(),clock.Today)!=null){allowed=true;break;}
+            }
+            if(!allowed||!asset.IsActive)return Results.NotFound();
+            var campaignPath=Path.Combine(Root(config,env),asset.StorageName);if(!File.Exists(campaignPath))return Results.NotFound();context.Response.Headers.CacheControl="private, no-store";context.Response.Headers["X-Content-Type-Options"]="nosniff";return Results.File(campaignPath,asset.ContentType);
+        }
         if (asset is not null && asset.Purpose is "Media" or "News" && !await features.Enabled(t.AcademyId, asset.Purpose == "News" ? "news" : "media")) return Results.NotFound();
         if (asset is null || !await CanRead(asset, t, context.User, db, authorization, clock)) return Results.NotFound();
         var path = Path.Combine(Root(config, env), asset.StorageName); if (!File.Exists(path)) return Results.NotFound();

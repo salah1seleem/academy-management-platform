@@ -20,7 +20,7 @@ export default defineConfig({
   use: { baseURL: webUrl, ...devices["Pixel 7"], trace: "retain-on-failure" },
   webServer: [
     {
-      command: `ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__PrivateServiceSeedEnabled=true Demo__PostContractPrivateSeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile --no-build`,
+      command: `ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__CommunityCampaignSeedEnabled=true Demo__PrivateServiceSeedEnabled=true Demo__PostContractPrivateSeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile --no-build`,
       url: `${apiUrl}/health/ready`, reuseExistingServer: false, timeout: 120_000,
     },
     {

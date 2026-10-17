@@ -19,12 +19,14 @@ class PrivateImage extends StatefulWidget {
   final AuthController auth;
   final String path;
   final double height;
+  final BoxFit fit;
   final Widget? fallback;
   const PrivateImage({
     super.key,
     required this.auth,
     required this.path,
     this.height = 150,
+    this.fit = BoxFit.cover,
     this.fallback,
   });
   @override
@@ -56,7 +58,7 @@ class _PrivateImageState extends State<PrivateImage> {
       child: data.hasData
           ? Image.memory(
               data.data!,
-              fit: BoxFit.cover,
+              fit: widget.fit,
               gaplessPlayback: false,
               errorBuilder: (_, error, stack) =>
                   widget.fallback ?? const Icon(Icons.broken_image_outlined),

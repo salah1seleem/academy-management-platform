@@ -108,6 +108,8 @@ public sealed class ProductSale : TenantEntity
 }
 public sealed class AcademyNotice : TenantEntity
 {
+    public DateTimeOffset? UrgentUntilUtc { get; set; }
+    public Guid? MatchId { get; set; }
     public Guid UserId { get; set; }
     public required string Message { get; set; }
     public bool IsRead { get; set; }

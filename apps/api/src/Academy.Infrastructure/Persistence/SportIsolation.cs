@@ -93,7 +93,7 @@ public sealed partial class FoundationDbContext
         SportFilter<PlayerMedicalRecord>(b, x => false);
         SportFilter<PlayerMedia>(b, x => false);
         SportFilter<PrivateAssetAudience>(b, x => Players.Any(p => p.Id == x.PlayerId));
-        SportFilter<PrivateAsset>(b, x => x.Purpose == "Photo" && x.PlayerId.HasValue && Players.Any(p => p.Id == x.PlayerId.Value)
+        SportFilter<PrivateAsset>(b, x => x.Purpose == "Campaign" || x.Purpose == "Photo" && x.PlayerId.HasValue && Players.Any(p => p.Id == x.PlayerId.Value)
             || x.Purpose == "Proof" && (PaymentProofs.Any(p => p.AssetId == x.Id) || FamilyRenewalRequests.Any(r => r.ProofAssetId == x.Id)
             || NewEnrollmentRequests.Any(r => r.ProofAssetId == x.Id) || ProductSales.Any(s => s.ProofAssetId == x.Id)
             || TournamentPayments.Any(p => p.ProofAssetId == x.Id) || DayPassTickets.Any(p => p.ProofAssetId == x.Id)));

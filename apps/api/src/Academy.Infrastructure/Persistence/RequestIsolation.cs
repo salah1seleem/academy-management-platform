@@ -134,6 +134,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PaymentProof>(b, x => PaymentRequests.Any(p => p.Id == x.PaymentRequestId));
         BranchFilter<PrivateAssetAudience>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
         BranchFilter<PrivateAsset>(b, x => x.Purpose == "News" || x.UploadedByUserId == RequestUserId
+            || x.Purpose=="Campaign" && CommunityCampaignRevisions.Any(r=>r.ImageAssetId==x.Id&&CommunityCampaignTargets.Any(t=>t.RevisionId==r.Id&&RequestBranchIds.Contains(t.BranchId)))
             || x.PlayerId.HasValue && SportEnrollments.Any(e => e.PlayerId == x.PlayerId.Value)
             || x.TrainingGroupId.HasValue && TrainingGroups.Any(g => g.Id == x.TrainingGroupId.Value)
             || Employees.Any(e => e.PhotoAssetId == x.Id)
@@ -145,6 +146,9 @@ public sealed partial class FoundationDbContext
         BranchFilter<MatchCoachAssignment>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         BranchFilter<OwnerFollowUp>(b, x => TrainingGroups.Any(g => g.Id == x.TrainingGroupId));
         BranchFilter<OwnerFollowUpChange>(b, x => OwnerFollowUps.Any(f => f.Id == x.FollowUpId));
+        BranchFilter<CommunityCampaignTarget>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<CommunityCampaignReview>(b, x => !x.BranchId.HasValue || RequestBranchIds.Contains(x.BranchId.Value));
+        BranchFilter<CommunityAdEvent>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<TournamentPayment>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         BranchFilter<PayrollAdditionRequest>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollAdjustment>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
@@ -193,6 +197,13 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        if(ChangeTracker.Entries<CommunityCampaignReview>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)||ChangeTracker.Entries<CommunityAdEvent>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("دليل الموافقات والتفاعل محفوظ دون تعديل أو حذف.");
+        foreach(var e in ChangeTracker.Entries<CommunityCampaignRevision>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(CommunityCampaignRevision.State) or nameof(CommunityCampaignRevision.UpdatedAtUtc))))throw new InvalidOperationException("لتغيير التصميم أنشئ نسخة جديدة تحتاج اعتمادًا جديدًا.");
+        foreach(var e in ChangeTracker.Entries<CommunityCampaignTarget>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(CommunityCampaignTarget.Decision) or nameof(CommunityCampaignTarget.UpdatedAtUtc))))throw new InvalidOperationException("فروع النسخة ثابتة؛ سجل مراجعة أو نسخة جديدة.");
+        foreach(var e in ChangeTracker.Entries<GuardianSponsorPreference>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(GuardianSponsorPreference.AdultDeclaredAtUtc) or nameof(GuardianSponsorPreference.InAppOptIn) or nameof(GuardianSponsorPreference.UpdatedAtUtc))))throw new InvalidOperationException("هوية صاحب الموافقة ثابتة.");
         if(ChangeTracker.Entries<OwnerFollowUpChange>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("سجل المتابعة محفوظ دون تعديل أو حذف.");
         foreach(var e in ChangeTracker.Entries<OwnerFollowUp>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(OwnerFollowUp.State) or nameof(OwnerFollowUp.AssignedToMembershipId) or nameof(OwnerFollowUp.DueOn) or nameof(OwnerFollowUp.Note) or nameof(OwnerFollowUp.ResolutionReason) or nameof(OwnerFollowUp.UpdatedAtUtc))))throw new InvalidOperationException("مصدر المتابعة ودليل إنشائها ثابتان.");
