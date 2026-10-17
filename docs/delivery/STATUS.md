@@ -1,5 +1,9 @@
 # Status
 
+## G1a — تعريف الأدوار الأربعة وحفظ/إعادة مشاهدة، 2026-10-17
+
+Code `157e701d2dffe4a52a73c84af6834fee848f171c`:3صفحات بعد الدورالموثوق،قالبرياضة/ميزاتمنالخادم،حفظrole/version/themeبالتخزينالقائم،Skip/Replayوحمايةالسياقوالتخزينالفاشل. API3/Flutter62/analyze/EFبلاpending؛ native4أدوارفي19s وصورمراجعة، وGuardianconsumer8s. لاmigrationجديدة أوOSkill/Android أوFullRegressionمدعى. [الدليل](../academy-v3/PROGRESS.md). CI190617b frontend/flutter/e2eنجحتوbackendجاري؛ الجديدبعدpush. التاليF1 متابعةقراراتالمالكالمحفوظة منمصادرالتشغيل، ثمبقيةغيرالمالي، وكلالماليالمتبقيآخرًا ثمH. مكتبةدروسG1b وبقيةخريطةV2/V3باقية، عائقE2c3bمحدد. main/العرض/.envمحفوظة، ولاdeployللـAPIاليدوي مدعى.
+
 ## D2c — تقويم Native موحّد وعودة drill-down المدرب، 2026-10-17
 
 Code `b0748e0` وfollow-up `a91a2f8`: حصص ومباريات بوقت أكاديمية فعلي واختيارطفل وتصفية/تحديث وخطأ مستقل وخروج آمن؛ لا مصدر تقويم مكرر أو مالية/حضور جديد. API6/Flutter28/analyze وnativeرحلة4s وصورمراجعة؛ لا migrationجديدة/105قائمة. أصلحت رحلاتFootballالمتأثرة بالتبويبات ورابطGroupoverview الفعلي وعزلfixture؛ Web25/typecheck/lint/build وE2E9/9في48.6s. [دليل تفصيلي](../academy-v3/PROGRESS.md). CI38987712365 السابقFootballفشل وBackendجاري، الجديدبعدpush، لا أخضرشاملمدعى. التالي onboardingلكلدورV2§10 ثم بقيةغيرالمالي، كل الماليالمتبقيآخرًا ثمH. V2/V3 غيرمكتملتين وmain/العرضمحفوظان؛ APIالديمواليدوي لمينشرهذاالكود.
