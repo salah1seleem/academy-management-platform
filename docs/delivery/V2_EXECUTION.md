@@ -1,5 +1,9 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-17 — F1b1: متابعة نقص إسناد الحصص الحقيقية القادمة
+
+`338aa08aac263d23e472bf607d2d7975ac259a73`: تجمعSessionIDs/timeفيevidenceمجموعةثابتة، مصدرحي7أيام وeffectiveCoach/substitute/grants، إغلاقبسبببلاخصم/حضور/مال/تغييرمدرب. Migration108، API17/Web7/Flutter11 والأدوات، Browser16.9s/iOS4s وصورمراجعة/seedمحروس؛ [الدليل](../academy-v3/PROGRESS.md). V2-12/AC40جزئيان؛ بقيةمصادرF1b/التفويض وG1b ثمبقيةغيرالمالي، وكلالماليالمتبقيآخرًا ثمH. لااكتمالV2/V3مدعى.
+
 ## 2026-10-17 — F2a: حملات برعاية باختيار Guardian واعتماد الفرع
 
 `06d091c50ce8b26364bc9d808961661164f71349`: نفسcommunity_ads/settings/assets/notice، creative immutable وكل فرع مستقل وتعديل يحتاج مراجعة جديدة، موافقة حساب بالغ اختيارية/انسحاب، urgent قبلad، قياسvisibility لاGET وprivacy aggregate، لا تواصل/دفع حقيقي. Migration107؛ API7/Web21/Flutter33 وأدوات الجودة، Browser24.8s/iOS10s وصور وتقرير ثابت وseedمحروس لا يعيد consent. [الدليل والمحاولات](../academy-v3/PROGRESS.md). V2-16/AC35–39 جزئية؛ منصة متعددة الأكاديميات/تفويض/تقدير جمهور/تسعير وNative creative editing باقية. التاليF1b مصادر متابعة إضافية ثم بقية غير المالي؛ كل المالي المتبقي آخرًا ثمH، لا اكتمال خطة أو نشرAPIيدوي مدعى.

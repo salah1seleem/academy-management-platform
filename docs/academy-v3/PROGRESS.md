@@ -1,5 +1,25 @@
 # تقدم أكاديميتي V2 + V3
 
+## أحدث checkpoint — F1b1: متابعة تغطية الحصص القادمة من إسنادها الفعلي، 2026-10-17
+
+**Code `338aa08aac263d23e472bf607d2d7975ac259a73`** من `5c3bb28`، على `codex/15-native-mobile-app`. بطاقة Sol/High لحراسة المصدر وMedium للعرض، توصية لا تغيير موديل أوsubagents. بعد قراءة V3§11.1 وV2§23، أضيفت قاعدة `GroupSessionCoverage` إلى نفس OwnerFollowUp وليس نظام مهام/حضور موازٍ. المالي المتبقي آخرًا.
+
+المجموعة ذات حصة **active/Scheduled لم تبدأ** بين وقت السيرفر الفعلي و+7×24ساعة، بلا Coach/User فعال مسند للحصة ومخول بفرعها ورياضتها، تظهر كمرشح متابعة. الحساب يعيد استعمال `academy_session_staff_assigned` نفسه المستخدم في الحضور وworkspace، ويشمل أحدث بديل للحصة؛ المدرب الأصلي الذي استُبدل ليس تغطية إضافية. يستبعد الماضي/الملغي/Held/غيرالفعال وخارج النافذة، والمجموعة/الفرع/الرياضة المتوقفة أو خارج السياق. الأوقات من Academy timezone، لا تاريخ Demo التجاري المجمد. **هذه واقعة نقص إسناد، لا إثبات غياب أو حكم كفاءة، ولا خصم/أجر/حضور تلقائي.** لا أسعار/ربح أوAI مختلق.
+
+متابعة واحدة مفتوحة لكل مجموعة/حالة تجمع الحصص لا نسخة لكل حصة. دليل الإنشاء يحفظ group FK وقائمةsession IDs/التاريخ/البداية/النهاية وasOf/until ثابتة؛ بجانبه gaps حية. Web يعرض مواعيدها بروابط staff-session الفعلية وجدول المجموعة، وNative يعرض المواعيد وجدول المجموعة. أول3مواعيد في الملخص مع بيان وجود باقي الدليل، والأصل محفوظ كاملًا. يمكن فتح «مواعيد الدليل وقت إنشاء المتابعة» دون خلطها بالحالة الحالية. إسناد Coach فعال يزيل السبب الحي ويبقي evidence والتاريخ، وتعطيله يعيد السبب؛ Closed لا يغير مصدرًا أو يسدد شيئًا. نفسOwner/branch/sport/entitlement وCAS/idempotency/history/سببالإغلاق وعدمgrantللأدوار الأخرى. تفويضموظف وباقي المصادر والاتصال ليست مغلقة.
+
+**Migration108** `20261017061734_V3GroupSessionCoverageFollowUps` توسّع CHECK بقيمة واحدة فقط؛ لا جدول/دفتر جديد أو rewrite للقديم. Down يرفض وجود دليل النوع الجديد؛ لم يُنفذ. Applied على DB108 معزولة منالصفر وعلى107، وEF بلاpending. Seed F1 الاختيارية القائمة `Demo__OwnerFollowUpSeedEnabled=true` تضيف مجموعة/حصة عربية اصطناعيتين بمعرفين ثابتين بعد أمثلة F1a. لا overwrite أو إعادة جدولة لما راجعه المشغل، لا follow-up إضافية مزروعة أو حضور/مال/رسالة؛ نفس عدد2أمثلة F1a وidempotency/Production refusal مختبرة. Football E2E config يفعّلها فقط مع DB QA صريحة؛ اليدوي لا يتغير.
+
+**تحقق مستهدف:** API **17/17 في1.3457min**:2جديدة للنافذة/الاستبعاد/الدليل/الإغلاق/الإسناد والتعطيل/عدمأثرمالي/رفض حالة مختلقة وtenantB والأدوار، و15استهلاكًا قائمًا (دورةF1/نطاقه/seed و11حالةبديل/مستهلكاته). الجولةالأولى5/5تتداخل ولا تجمع مع17. Web **7/7 في2.57s**، منها1جديدة وروابطSource/مصطلحاتعدمغياب؛ Flutter **11/11 في2s** منها1جديدة/اتجاهوقتLTR، ومعهااختباراتF1 وOwnerالقائمة، و360/390/430/200% القائمة. analyze بلا ملاحظات4.8s، journey analyzer نظيف، typecheck/lint/build/EFmodelcheck وdiffcheck ناجحة. ليسFullRegression.
+
+Browser **رحلة واحدة16.9s**، API5220/Web3220/`academy_v3_coverage_20261017`: Owneremail→Home/F1→مرشح حقيقي→رابطSessionID مطابق→create→قراءةالدليلالحاليوالقديم→Closedبسبب→APIمحفوظ/history2/conditionActivetrue→نفسgroupdetails والتقرير قبل/بعد. Native **رحلة واحدة4s** (+2 يشملteardown)، API5227 ونفسDB الاصطناعية بالتتابع لا بالتوازي، محاكيQA `Academity V3 Coach Review`/iPhone17Pro/iOS26.2/`7D6B3C6E-1BBD-4680-B653-EC4D75982034`: OTPDemo/refresh في namespaceخاص→open actual known-ID detail عبرNavigator harness→إغلاقUI→قراءةAPI والدليل/history/source/مال مطابق→logout. الإنشاء setup بأمر حقيقي أو استئنافOpenموجودة، ليس UIcreate Nativeمدعى. ليست رحلةMore كاملة أوAndroid/جهازًا ماديًا. صور فعلية روجعت: [Web390](evidence/f1b1/coverage-evidence-390.png)، [iOS](evidence/f1b1/coverage-source-ios.png).
+
+المحاولات صريحة: fixture Dart أعطتMap<dynamic,dynamic> خلافJSON الفعلي فصارتtyped دون حذف assertions. selectorLabelExact شملoptions؛ صارتcombobox role باسم محدد. تشغيل browser وnative على نفس المجموعة تركOpenفيالأول فتعارض الثاني كما يجب؛ استؤنف نفسOpen ثم جرى المساران بالتتابع **دون حذف دليل أو تساهل uniqueness**. harness صار يدفعdetailفوقrouteصحيحة ليعودبعدالحفظ. الصورة الأولى عرضت17–18 معكوسة فيRTL؛ أضيفDirectionalityLTR واختباره وأعيدiOS كاملًا. لا نجاح للمحاولات الأولى مدعى.
+
+السجلات `/tmp/academy-v3-f1b-{api-final,web-final,mobile-verified,analyze-verified,journey-analyze,types-final,lint-final,build-final,model,demo-migrations,browser-final,native-verified}.log`. المصدر والديمو اليدوي5080/3000 كلاهما200 عندالفحص، PG/.env/محاكيMax/main/origin `abda1ed273030e69812321e5c14d260bbc2e2275` محفوظة؛ API/Flutter المراجع لم يُعاد نشرهما. مازال أثر6موظفين القديم مفتوحًا. CI `5c3bb28`/run39008861373 **in_progress** عندفحصه؛ لا CIشامل أخضر للكود الحالي مدعى.
+
+**أول الاستئناف:** لا تكررF2a أوF1b1. استكملF1b (مصادر طلبات/تقييمات/غياب حقيقي/تفويضمخول) أوG1b مركزالدروس المفقود وفق أعلى قيمة غيرمالية؛ D2التخصيص/التأجيل، F2bالمنصة/التفويض، بقيةالخريطة غيرالمالية باقية. كل المالي المتبقيآخرًا ثمH (القبول الموحد/البياناتالعربية/مطابقةالتقارير/البصري/CIوالتسليم). V2-12 وAC40 **جزئيان**؛ لا «اكتملتالخطة» أو استمرارخارجالجلسةمدعى، وعائقE2c3bالفعليمحددلايشملكلالعمل.
+
 ## أحدث checkpoint — F2a: محتوى برعاية اختياري مع اعتماد كل فرع، 2026-10-17
 
 **Code `06d091c50ce8b26364bc9d808961661164f71349`** من `f7cfeeb` على `codex/15-native-mobile-app`. بطاقة المهمة: Sol/High للصلاحيات/الموافقة/المهاجرة وMedium للواجهات؛ توصية فقط، لا تغيير موديل أو subagents أو تكلفة مدعاة. قراءة V2§25 وV3§10/09.4 وAC35–39. كل المالي المتبقي آخرًا كما طلب صلاح؛ لا فاتورة إعلان أو شراء أو قناة خارجية في هذه الشريحة.
@@ -769,7 +789,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V2-09 | missing | لا عقود/كشوف شركاء متكاملة مثبتة. | الفجوة في V2_EXECUTION | عقود خاص/حارات/خارجي واتجاه أموال مستقل |
 | V2-10 | partial | تقييمات مسودة/منشورة موجودة من النسخة السابقة. | EvaluationIntegrationTests | مهارات/خطط/أهداف/ترقية/رحلة وشهادات |
 | V2-11 | partial | مباريات وأخبار ومتابعة أسر؛ roster وتبويبات وإسناد مدرب تاريخي؛ D2c تقويم Native؛ G1a تعريف3صفحات لكل دور/Skip/Replay وحفظrole/version/theme. | Match tests؛ RoleIntroTests؛ G1a API3/Flutter62/Native19s/Guardian8s وصور | تقويم أوسع/أفراد خارج roster/تأجيل/الفواتير/SLA/مركز دروس فيديو فعلي والقبول الموحد |
-| V2-12 | partial | E1d1 أولويات فعلية؛ F1a متابعة محفوظة لحالتي مجموعة، كاملNew→Closed/reopen، CAS/replay/history/source؛ Web+Native وعزل، لا إغلاق مالي. | OwnerFollowUpEndpoints؛ V3OwnerFollowUpTests/SeedTests؛ owner-followups/owner_followups؛ browser/native journeys | بقيةمصادرالمهام والتفويض؛09.3الهاتفي الكامل/قبول موحد؛ الماليآخرًا |
+| V2-12 | partial | E1d1؛ F1a دورتا مجموعة؛ F1b1 تغطية حصص قادمة بإسنادها الفعلي/بدائلها ودليلsession/time ثابت ومصدرحي؛ CAS/replay/history/Web+Native وعزل، لا إغلاق مالي | OwnerFollowUpEndpoints؛ GroupCoverageFollowUpTests؛17API/7Web/11Flutter/Browser16.9s/iOS4s وصور؛migration108 | بقيةمصادرالمهام والتفويض؛09.3الهاتفي الكامل/قبول موحد؛ الماليآخرًا |
 | V2-13 | missing | لا محاكي متكامل مثبت. | خطة V2 §24 | سيناريوهات مستقلة وحفظ ومقارنة دون أثر تشغيلي |
 | V2-14 | missing | لا CRM منصة/أكاديمية ومركز تواصل متكامل. | خطة V2 §28 | حفظ/نطاق/موافقات/قنوات حقيقية أو fallback صادق |
 | V2-15 | partial | رفع ومعرض وقراءة مقيدة موجودة من v1.9. | Slice7ContentIntegrationTests؛ private_media | جمهور وموافقات زمنية/ذكريات/صوت وAI مقيد |
@@ -819,7 +839,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V3-AC37 | partial | F2a urgent notice typed قبل sponsor؛ بدون مساحة عندoff؛ withdrawal/layout/الخدمات مختبرةWeb/iOS | قوالب كل الأخبار العاجلة/الأجهزة والأدوار والقبول الموحد |
 | V3-AC38 | partial | F2a new Draft يبطل approved القديم؛ live detail/asset/CTA و30s lease/foreground/logout مثبتة | حملة منصة والتفويض/إشعار مراجعة أوسع/قبولH؛ لا push فوري مدعى |
 | V3-AC39 | partial | F2a view50%/1s foreground، GETليسview، dedup/day cap/click/hide، aggregate<5محجوب بلاviewer export | قياس منصة متعدد الأكاديميات/لوحة تسعير مؤجلة/القبول الموحد؛ ليست أعداد أسر أو إثبات رؤية فيزيائية |
-| V3-AC40 | partial | E1d1 أولويات فعلية؛ F1a دورةمتابعةمحفوظة وسجل/مسؤول/سببإغلاق/مصدرحي لحالتي مجموعة، Web/Native/E2E واختباراتعزل/تكرار، دونسدادمختلق | بقيةمصادرالمهام والتفويض وربط الماليالمؤجل و09.3الهاتفي الكامل والقبول الموحد |
+| V3-AC40 | partial | E1d1/F1a؛ F1b1 مهمةgroupتجمعupcoming gaps الحقيقية بعداحتسابالبديل، evidenceثابت/liveمصدر، Closedلايسندمدربًا/يسجلغيابًا/يسدد؛ Web/Native/E2E وعزل ومستهلكوOverrideمثبتون | بقيةمصادرالمهام والتفويض وربط الماليالمؤجل و09.3الهاتفي الكامل والقبول الموحد |
 | V3-AC41 | partial | V2RenewalOpportunityTests | مثال12700 قائم؛ إعادة قبول موحدةV3 |
 | V3-AC42 | partial | V2OperatingExpenseTests؛ ReportingIntegrationTests | نتيجة مكتملة/ناقصة وcutoff ledger |
 | V3-AC43 | partial | TenantAuthenticationTests؛ V3SportScopeTests؛ V3MixedSportFamilyScopeTests؛ V3AccessContextTests | عزل الرياضة والسياق التشغيلي متحقق؛ علاقة مخصصة وأفعال حساسة والمجالات المالية الجديدة والقبول النهائي باقية |

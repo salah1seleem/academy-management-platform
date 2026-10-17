@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## F1b1 — دليل حصص قادمة غير مغطاة دون اتهام غياب أو أثر مالي، 2026-10-17
+
+`338aa08aac263d23e472bf607d2d7975ac259a73`: نفسالمتابعات، Scheduled/active لمتبدأمنnowإلى+7أيام، نفسeffective-session staff/أحدثبديل ونطاقCoach/User/branch/sport الفعال. FKgroup ودليلsessionIDs/time/windowثابت معgapsحية، current/archive وSource links، Closedلايغيرالإسناد/الحضور/المال. Migration108/Applied107→108ومنالصفر/EFبلاpending؛ seedF1اختياريةGroup/sessionstableدونoverwrite/حضورومال. API17/17، Web7، Flutter11، الأدواتناجحة، Browser16.9s وNative4s وصورمراجعة؛ نفسgroup/reportقبلوبعد. [الدليل والمحاولات والاستئناف](PROGRESS.md). V2-12/AC40جزئيان، باقيالمصادر/التفويضوكلالماليالمتبقيآخرًا ثمH. ليستكلالأزرار/FullRegression/Android/جهازفعلي أوCIشامل/deployيدوي مدعاة.
+
 ## F2a — موافقة الفرع والحساب قبل المحتوى برعاية، 2026-10-17
 
 Code `06d091c50ce8b26364bc9d808961661164f71349`، migration107. نسخ ثابتة/اعتماد كل فرع/تعديل يبطل القديم/سجل/CAS/replay/tenant isolation، FullOwner فقط؛ Guardian مرتبط باشتراك مؤهل وبالغ بالإقرار وموافق اختياريًا، انسحاب حتى عندlicense-off، image خاصة غير صور الأطفال، typed urgent قبلplacement. GETليسview؛50%لمدة1s foreground/حد يومي للحساب/dedup، مجاميع<5محجوبة، لا بيانات طفل أو رسائل أو مال. API7/7 في38.744s، Web21/21، Flutter33/33، analyze/typecheck/lint/build/modelcheck؛ Browser1في24.8s وNative1في10s وصور فعلية مراجعة، نفس التقرير المالي قبل/بعد. Seed6حملات/7نسخ وurgent اصطناعي اختبرت restart/withdrawal/Production refusal، دون مشاهدات مزروعة. [التفاصيل والمحاولات والأوامر والقيود](PROGRESS.md). V2-16 وAC35–39 **جزئية**؛ منصة متعددة الأكاديميات والتفويض وNative creative editing والبوابة النهائية ليست منفذة. كل المالي المتبقي آخرًا، ولاAndroid/جهاز فعلي أوCIشامل/deploy يدوي مدعى.
