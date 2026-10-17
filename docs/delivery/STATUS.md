@@ -1,5 +1,9 @@
 # Status
 
+## F1a — متابعات مالك محفوظة للمجموعات، 2026-10-17
+
+Code `a23fbe59c5c836682f362e8e14948bd154143d61`: قواعدفعلية/دليلوثابتومصدرحي، مسؤولOwnerوحالاتوسجلوCAS/replay؛ الإغلاقلايحلالمصدرأويسددمالًا. Migration106/لاpending؛ API4/4 و17استهلاكًا ضمن20/20سابقة، Web7/Flutter23/analyze/أدواتWeb؛ E2E23.1s/native6s وصورمراجعة وseedاختياريمحروسidempotent. [الحدود والمحاولات](../academy-v3/PROGRESS.md). التاليF2الإعلاناتالمعتمدة/الفرع، ثمغيرالمالي، الماليالمتبقيآخرًا ثمH. V2/V3جزئيتان؛ F1bالتفويضوباقيالمصادرباقية؛ CI19ecfrontend/flutter/e2eنجحت/backendجاري، لاشاملأخضرمدعى. main/العرض/.envمحفوظة، API/Flutterالمراجع لمينشراعليهماالكودالجديد.
+
 ## G1a — تعريف الأدوار الأربعة وحفظ/إعادة مشاهدة، 2026-10-17
 
 Code `157e701d2dffe4a52a73c84af6834fee848f171c`:3صفحات بعد الدورالموثوق،قالبرياضة/ميزاتمنالخادم،حفظrole/version/themeبالتخزينالقائم،Skip/Replayوحمايةالسياقوالتخزينالفاشل. API3/Flutter62/analyze/EFبلاpending؛ native4أدوارفي19s وصورمراجعة، وGuardianconsumer8s. لاmigrationجديدة أوOSkill/Android أوFullRegressionمدعى. [الدليل](../academy-v3/PROGRESS.md). CI190617b frontend/flutter/e2eنجحتوbackendجاري؛ الجديدبعدpush. التاليF1 متابعةقراراتالمالكالمحفوظة منمصادرالتشغيل، ثمبقيةغيرالمالي، وكلالماليالمتبقيآخرًا ثمH. مكتبةدروسG1b وبقيةخريطةV2/V3باقية، عائقE2c3bمحدد. main/العرض/.envمحفوظة، ولاdeployللـAPIاليدوي مدعى.

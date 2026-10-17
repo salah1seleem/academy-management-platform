@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## F1a — متابعة المالك مرتبطة بالمصدر ولا تخلط بالإغلاق المالي، 2026-10-17
+
+`a23fbe59c5c836682f362e8e14948bd154143d61`: حالتا مجموعة حقيقيتان ودورةحياة محفوظة وhistory/CAS/replay وOwner/tenant/sport/branch/entitlement حية. Source/capacityunknown صريحان، إغلاقبسببلايحلالمصدرأويغيرالمال. Migration106 منالصفر/لاpending، API4/4 في24.296s؛ جولة20/20 السابقةتتضمن3نفسها+17استهلاكًا. Web7/Flutter23/analyze/typecheck/lint/build؛ browser23.1s وnative6s وصورمراجعة، نفسgroup/reportقبلوبعد. SeedاختياريFootballمحروس/idempotent اختبرمرتينويرفضProduction. [التفاصيل والأوامر والسجلات والمحاولات](PROGRESS.md). ليستكلV2-12/AC40 أوكلاللغات/Android/بوابةH؛ التفويضومصادرأخرىوكلالماليالمتبقيآخرًا باقية. اليدوي5080/.env/بياناتالمراجع لمينشرعليهاالاختبار.
+
 ## G1a — Onboarding للأدوار الأربعة بعد سياق موثوق، 2026-10-17
 
 `157e701d2dffe4a52a73c84af6834fee848f171c`: إعادة استخدام التعريف/الثيم،3صفحات لكل دور،Skip/replay، حفظ role/version/sportTheme محليًا، fallback ميزات مسحوبة/تخزين فاشل ولا role claims قبلlogin. API3/Flutter62/analyze/EFبلاpending، native رحلة4أدوار19s وGuardianconsumer8s وصورiOSفعلية مراجعة. لم تختبر إعادة قتلOS أوAndroid أو كل12رحلةnativeالمعدلة؛ لا مكتبة فيديو مكتملة/قبول47شامل. [الدليل والمحاولات](PROGRESS.md). التاليF1 متابعة قرار تشغيل محفوظة؛ كل المتبقي الماليآخرًا ثمH، V2/V3جزئيتان.

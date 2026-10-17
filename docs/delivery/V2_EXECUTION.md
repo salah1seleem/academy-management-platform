@@ -1,5 +1,9 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-17 — F1a: متابعة تشغيل محفوظة من مركز المالك
+
+`a23fbe59c5c836682f362e8e14948bd154143d61`: مجموعات بلا مدرب/منخفضةإشغال، New/Assigned/InProgress/Snoozed/Closed/Rejected/reopen معowner/history/source وسببإغلاق، لاماليةمنالحفظ. Migration106؛ API4/Web7/Flutter23 وأدواتجودة؛ browser23.1s/native6s وصور، seedاختياريمحروسمرتين؛17استهلاكًا إضافيًا ضمنجولة20المتداخلة. [الدليل](../academy-v3/PROGRESS.md). V2-12/AC40جزئيانلااكتمالخطة، التاليF2الإعلاناتثمغيرالمالي؛ كل الماليالمتبقيآخرًا ثمH. اليدوي/mainمحفوظان.
+
 ## 2026-10-17 — G1a: Onboarding حقيقي لكل دور
 
 `157e701d2dffe4a52a73c84af6834fee848f171c`: إعادة استخدام التعريف الموجود بعدlogin لا قبله،3صفحات لكل دور،حفظSDKحسبrole/version/theme،replayبميزاتحيةمنالمزيد،بدونgrantأومالية. API3/Flutter62/analyze/EFبلاpending؛ nativeرحلة4أدوار19sوصورمراجعة وGuardianconsumer8s، لاOSkill/Android أوكلNativeconsumersمدعاة. [الدليل](../academy-v3/PROGRESS.md). مكتبةدروس/رفعفيديوG1b باقية، لايغلقV2-11. التاليF1 قراراتتشغيلبمتابعةمحفوظة، وكلالماليالمتبقيآخرًا ثمH؛ V2/V3غيرمكتملتين.
