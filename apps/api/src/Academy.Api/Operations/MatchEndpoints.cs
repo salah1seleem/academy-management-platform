@@ -75,7 +75,7 @@ public static class MatchEndpoints
         team = db.MatchTeams.Where(t => t.AcademyId == a && t.Id == x.TeamId).Select(t => t.Name).Single(),
         players = db.MatchParticipants.Where(p => p.AcademyId == a && p.MatchId == x.Id && p.IsActive).Select(p => new { p.PlayerId, p.IsBench }).ToList()
     });
-    private static async Task<IResult> Mine(Guid? playerId, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock, HttpResponse response)
+    private static async Task<IResult> Mine(Guid? playerId, bool? upcomingOnly, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock, HttpResponse response,TimeProvider time)
     {
         response.Headers.CacheControl="no-store";
         var t = (await tenant.ResolveAsync())!; var u = Actor(user); var q = Query(t.AcademyId, db).Where(x => x.PublishedAtUtc != null);
@@ -85,8 +85,15 @@ public static class MatchEndpoints
         else if (t.Role == AcademyRole.Coach)
             q = MatchCoachAssignments.ForCoach(q,db,t.MembershipId,true);
         else if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        var today=clock.Today;
+        if(upcomingOnly==true)
+        {
+            var zone=await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.TimeZone).SingleAsync();
+            var local=TimeZoneInfo.ConvertTime(time.GetUtcNow(),TimeZoneInfo.FindSystemTimeZoneById(zone));today=DateOnly.FromDateTime(local.DateTime);var start=TimeOnly.FromDateTime(local.DateTime);
+            q=q.Where(x=>x.IsActive&&x.OurScore==null&&(x.MatchDate>today||x.MatchDate==today&&x.StartTime>=start));
+        }
         // No roster names/IDs in the role feed: only the caller's linked child IDs.
-        return Results.Ok(await q.OrderBy(x => x.MatchDate >= clock.Today ? 0 : 1).ThenBy(x => x.MatchDate >= clock.Today ? x.MatchDate : DateOnly.MaxValue).ThenByDescending(x => x.MatchDate).ThenBy(x => x.StartTime).Take(100).Select(x => new {
+        return Results.Ok(await q.OrderBy(x => x.MatchDate >= today ? 0 : 1).ThenBy(x => x.MatchDate >= today ? x.MatchDate : DateOnly.MaxValue).ThenByDescending(x => x.MatchDate).ThenBy(x => x.StartTime).Take(100).Select(x => new {
             x.Id, x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore,
             team = db.MatchTeams.Where(team => team.AcademyId == t.AcademyId && team.Id == x.TeamId).Select(team => team.Name).Single(),
             tournament = db.AcademyTournaments.Where(c => c.AcademyId == t.AcademyId && c.Id == x.TournamentId).Select(c => c.Name).Single(),
@@ -94,7 +101,8 @@ public static class MatchEndpoints
             participation=playerId.HasValue?db.MatchParticipants.Where(p=>p.MatchId==x.Id&&p.PlayerId==playerId&&p.IsActive).Select(p=>p.IsBench?"Bench":"Player").FirstOrDefault():null,
             coachAssignmentSource=db.MatchCoachAssignments.Any(a=>a.MatchId==x.Id)?"Confirmed":"LegacyCurrentTeam",
             coachName=db.MatchCoachAssignments.Where(a=>a.MatchId==x.Id).OrderByDescending(a=>a.Sequence).Select(a=>db.AcademyMemberships.Where(m=>m.Id==a.CoachMembershipId).Select(m=>m.User.DisplayName).Single()).FirstOrDefault(),
-            isUpcoming = x.IsActive && x.MatchDate >= clock.Today && x.OurScore == null,
+            scheduleWindow=upcomingOnly==true?"Upcoming":null,
+            isUpcoming = x.IsActive && x.MatchDate >= today && x.OurScore == null,
             children = db.MatchParticipants.Where(p => p.AcademyId == t.AcademyId && p.MatchId == x.Id && p.IsActive && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == p.PlayerId && l.Guardian.UserId == u && l.IsActive && l.Guardian.IsActive && l.Player.IsActive)).Select(p => p.PlayerId).ToList()
         }).ToListAsync());
     }

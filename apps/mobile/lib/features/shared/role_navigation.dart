@@ -22,6 +22,7 @@ import 'staff_passkeys.dart';
 import 'native_staff_attendance.dart';
 import 'coach_agreements.dart';
 import 'facility_board.dart';
+import 'role_agenda.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
@@ -84,11 +85,13 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
             environment: widget.environment,
           )
         : guardian
-        ? GuardianHub(
-            auth: widget.auth,
-            section: selected == 1 ? 'children' : 'schedule',
-            environment: widget.environment,
-          )
+        ? selected == 2
+              ? RoleAgenda(auth: widget.auth, guardian: true)
+              : GuardianHub(
+                  auth: widget.auth,
+                  section: selected == 1 ? 'children' : 'schedule',
+                  environment: widget.environment,
+                )
         : owner
         ? selected == 1
               ? OwnerDecisionsPage(auth: widget.auth)
@@ -98,7 +101,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
               ? NativeSessions(auth: widget.auth)
               : NativePaymentRequests(auth: widget.auth)
         : selected == 1
-        ? NativeSessions(auth: widget.auth)
+        ? RoleAgenda(auth: widget.auth, guardian: false)
         : CoachPlayers(auth: widget.auth);
     return Scaffold(
       body: KeyedSubtree(
