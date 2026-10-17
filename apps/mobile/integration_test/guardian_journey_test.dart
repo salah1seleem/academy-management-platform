@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
@@ -64,6 +66,7 @@ void main() {
       }
 
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+      await skipRoleIntroIfPresent(tester);
       await tester.pumpAndSettle();
       // Dedicated synthetic guardian avoids coupling this journey to auth_smoke's rate window.
       await tester.enterText(find.byType(TextFormField).first, guardianPhone);

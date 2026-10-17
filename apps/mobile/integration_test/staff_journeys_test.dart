@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
@@ -31,6 +33,7 @@ void main() {
     final auth = AuthController(transport, store);
     await auth.restore();
     await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+    await skipRoleIntroIfPresent(tester);
     await tester.pumpAndSettle();
     return (auth, transport);
   }

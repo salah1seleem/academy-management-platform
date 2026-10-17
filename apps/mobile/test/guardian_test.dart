@@ -1,6 +1,7 @@
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
+import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:academy_mobile/features/guardian/guardian_payments.dart';
 import 'package:academy_mobile/features/guardian/guardian_report.dart';
@@ -226,7 +227,11 @@ void main() {
         final auth = await logged(
           (m, p, b, t) async => p.endsWith('/home') ? home() : [],
         );
-        await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+        final prefs = Appearance();
+        await prefs.completeRoleIntro('Guardian', 'general');
+        await tester.pumpWidget(
+          AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
+        );
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
         await tester.scrollUntilVisible(
@@ -260,7 +265,11 @@ void main() {
             ? []
             : [],
       );
-      await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+      final prefs = Appearance();
+      await prefs.completeRoleIntro('Guardian', 'general');
+      await tester.pumpWidget(
+        AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
+      );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('تجديد الاشتراك'),
@@ -291,7 +300,11 @@ void main() {
       }
       return [];
     });
-    await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+    final prefs = Appearance();
+    await prefs.completeRoleIntro('Guardian', 'general');
+    await tester.pumpWidget(
+      AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
+    );
     await tester.pumpAndSettle();
     expect(find.text('لاعب أ'), findsNothing);
     fail = false;

@@ -1,6 +1,7 @@
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
+import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,13 +28,19 @@ void main() {
             : credentials(),
       );
       final auth = AuthController(api, MemoryStore())..restoring = false;
-      await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+      await tester.pumpWidget(
+        AcademyApp(auth: auth, appearance: Appearance(), environment: 'Demo'),
+      );
       expect(find.text('رقم الهاتف'), findsOneWidget);
       await tester.enterText(find.byType(TextFormField).first, '01099900100');
       await tester.tap(find.text('إرسال رمز التحقق'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).last, '246810');
       await tester.tap(find.text('تأكيد الدخول'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AcademyOnboarding), findsOneWidget);
+      expect(find.byType(GuardianHome), findsNothing);
+      await tester.tap(find.text('تخطي'));
       await tester.pumpAndSettle();
       expect(find.byType(GuardianHome), findsOneWidget);
       expect(find.text('أكاديمية العرض'), findsOneWidget);

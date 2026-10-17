@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'dart:convert';
 
 import 'package:academy_mobile/app/app.dart';
@@ -137,6 +139,7 @@ void main() {
       }
 
       await t.pumpWidget(AcademyApp(auth: staff, environment: 'Demo'));
+      await skipRoleIntroIfPresent(t);
       await waitFor(find.text('المزيد'));
       await t.tap(find.text('المزيد'));
       await t.pumpAndSettle();

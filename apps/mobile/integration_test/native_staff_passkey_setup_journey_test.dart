@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
@@ -72,6 +74,7 @@ void main() {
       }
 
       await t.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+      await skipRoleIntroIfPresent(t);
       await wait(find.text('المزيد'));
       await t.tap(find.text('المزيد'));
       await t.pumpAndSettle();

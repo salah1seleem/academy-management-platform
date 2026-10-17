@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
@@ -72,6 +74,7 @@ void main() {
         reason: 'Prepare a group session on the real Cairo day in the isolated Demo.',
       );
       await tester.pumpWidget(AcademyApp(auth: admin, environment: 'Demo'));
+      await skipRoleIntroIfPresent(tester);
       await waitFor(find.text('جدول اليوم · ${sessions.length} حصة'));
       await capture('admin-day');
       final first = await admin.request(
@@ -157,6 +160,7 @@ void main() {
       }
       final note = notes.firstWhere((n) => n['playerId'] == child['id']);
       await tester.pumpWidget(AcademyApp(auth: owner, environment: 'Demo'));
+      await skipRoleIntroIfPresent(tester);
       await waitFor(find.text('لوحة المالك'));
       await waitFor(find.text('أولويات تحتاج قرارك'));
       await reach(find.text('أولويات تحتاج قرارك'));

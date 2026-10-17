@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'dart:convert';
 
 import 'package:academy_mobile/app/app.dart';
@@ -176,6 +178,7 @@ void main() {
       Future<void> ownScreen() async {
         await tester.pumpWidget(const SizedBox());
         await tester.pumpWidget(AcademyApp(auth: staff, environment: 'Demo'));
+        await skipRoleIntroIfPresent(tester);
         await waitFor(find.text('المزيد'));
         await tester.tap(find.text('المزيد'));
         await tester.pumpAndSettle();
@@ -220,6 +223,7 @@ void main() {
       }
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(AcademyApp(auth: owner, environment: 'Demo'));
+      await skipRoleIntroIfPresent(tester);
       await waitFor(find.text('المزيد'));
       await tester.tap(find.text('المزيد'));
       await tester.pumpAndSettle();

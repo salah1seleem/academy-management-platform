@@ -44,7 +44,7 @@ void main() {
     },
   );
   testWidgets(
-    'Onboarding finishes once without making authentication requests',
+    'No role onboarding is shown before an authenticated context even for a fresh installation',
     (tester) async {
       final prefs = Appearance()..onboarded = false;
       final api = FakeApi((a, b, c, d) async => null);
@@ -52,8 +52,8 @@ void main() {
       await tester.pumpWidget(
         AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
       );
-      expect(find.text('كل رحلة تستحق المتابعة'), findsOneWidget);
-      expect(find.text('رقم الهاتف'), findsNothing);
+      expect(find.byType(AcademyOnboarding), findsNothing);
+      expect(find.text('رقم الهاتف'), findsOneWidget);
       await prefs.update(completed: true);
       await tester.pumpAndSettle();
       expect(find.text('رقم الهاتف'), findsOneWidget);

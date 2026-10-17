@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
+import '../../core/theme/academy_brand.dart';
 import '../guardian/guardian_ui.dart';
 import '../guardian/guardian_content.dart';
 import '../guardian/guardian_profile.dart';
@@ -140,6 +141,27 @@ class NativeMore extends StatelessWidget {
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'المزيد', 'More'),
     child: gList([
+      GLink(
+        localized(context, 'ابدأ من هنا', 'Start here'),
+        Icons.help_outline,
+        () async {
+          final brand = BrandScope.maybeOf(context);
+          if (brand?.loading == true) return;
+          await brand?.refresh(force: true);
+          if (!context.mounted) return;
+          openPage(
+            context,
+            AcademyOnboarding(
+              role: role,
+              sportTheme: brand?.sportTheme ?? 'general',
+              features: brand?.features ?? [],
+              onComplete: () async {
+                Navigator.of(context).pop();
+              },
+            ),
+          );
+        },
+      ),
       if (role == 'Guardian') ...[
         GLink(
           localized(context, 'التغذية والوجبات', 'Nutrition & meals'),

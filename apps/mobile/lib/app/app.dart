@@ -17,6 +17,7 @@ import '../features/owner/owner_dashboard.dart';
 import '../features/admin/admin_home.dart';
 import '../features/shared/role_navigation.dart';
 import '../features/shared/academy_news.dart';
+import '../features/shared/role_intro_gate.dart';
 
 class AcademyApp extends StatefulWidget {
   final AuthController auth;
@@ -73,11 +74,6 @@ class _AcademyAppState extends State<AcademyApp> {
           home: ListenableBuilder(
             listenable: auth,
             builder: (context, _) {
-              if (!(appearance ?? fallbackAppearance).onboarded) {
-                return AcademyOnboarding(
-                  appearance: appearance ?? fallbackAppearance,
-                );
-              }
               if (auth.restoring) {
                 return const Scaffold(
                   body: Center(
@@ -152,30 +148,34 @@ class _SessionNavigationState extends State<SessionNavigation> {
         onGenerateRoute: (_) => MaterialPageRoute<void>(
           builder: (_) => role == null
               ? RoleFoundation(auth: widget.auth)
-              : NativeRoleTabs(
+              : RoleIntroGate(
                   auth: widget.auth,
-                  role: role,
-                  environment: widget.environment,
-                  account: RoleFoundation(auth: widget.auth),
-                  home: guardian
-                      ? GuardianHome(
-                          auth: widget.auth,
-                          environment: widget.environment,
-                          accountPage: RoleFoundation(auth: widget.auth),
-                        )
-                      : role == 'Coach'
-                      ? CoachHome(
-                          auth: widget.auth,
-                          accountPage: RoleFoundation(auth: widget.auth),
-                        )
-                      : role == 'AcademyOwner'
-                      ? OwnerDashboard(
-                          auth: widget.auth,
-                          accountPage: RoleFoundation(auth: widget.auth),
-                        )
-                      : role == 'AcademyAdmin'
-                      ? AdminHome(auth: widget.auth)
-                      : RoleFoundation(auth: widget.auth),
+                  appearance: AppearanceScope.of(context) ?? fallbackAppearance,
+                  child: NativeRoleTabs(
+                    auth: widget.auth,
+                    role: role,
+                    environment: widget.environment,
+                    account: RoleFoundation(auth: widget.auth),
+                    home: guardian
+                        ? GuardianHome(
+                            auth: widget.auth,
+                            environment: widget.environment,
+                            accountPage: RoleFoundation(auth: widget.auth),
+                          )
+                        : role == 'Coach'
+                        ? CoachHome(
+                            auth: widget.auth,
+                            accountPage: RoleFoundation(auth: widget.auth),
+                          )
+                        : role == 'AcademyOwner'
+                        ? OwnerDashboard(
+                            auth: widget.auth,
+                            accountPage: RoleFoundation(auth: widget.auth),
+                          )
+                        : role == 'AcademyAdmin'
+                        ? AdminHome(auth: widget.auth)
+                        : RoleFoundation(auth: widget.auth),
+                  ),
                 ),
         ),
       ),

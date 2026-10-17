@@ -1,4 +1,7 @@
 import 'package:academy_mobile/app/app.dart';
+
+import 'support/role_intro.dart';
+
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/storage/refresh_store.dart';
@@ -50,6 +53,7 @@ void main() {
         await tester.tap(find.text('تأكيد الدخول'));
         await tester.pumpAndSettle();
         await waitUntil(() => auth.session?.selected?.role == role);
+        await skipRoleIntroIfPresent(tester);
         expect(auth.session?.selected?.role, role);
         expect(await store.read(), isNotNull);
         final restored = AuthController(transport, store);

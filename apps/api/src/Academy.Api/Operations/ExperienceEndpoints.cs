@@ -25,11 +25,15 @@ public static partial class ExperienceEndpoints
         platform.MapPut("/academies/{id:guid}/branding", Branding).AddEndpointFilter<CsrfFilter>();
         platform.MapPost("/academies/{id:guid}/logo", UploadLogo).AddEndpointFilter<CsrfFilter>();
     }
-    private static async Task<IResult> Get(CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db)
+    private static async Task<IResult> Get(CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db,Academy.Api.Configuration.AcademyConfigurationService config,HttpResponse response)
     {
+        response.Headers.CacheControl="private, no-store";
         var t = (await tenant.ResolveAsync())!;
         var x = await db.AcademyExperiences.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId);
-        return Results.Ok(new { displayName = x?.DisplayName ?? t.AcademyName, primaryColor = x?.PrimaryColor ?? "#D71935", secondaryColor = x?.SecondaryColor ?? "#171923", logoUrl = x?.Logo == null ? null : "/api/v1/academy/branding/logo", coachAttendanceEnabled = x is { CoachAttendancePolicyConfirmed: true, CoachAttendanceEnabled: true }, platformBrandOperator = false });
+        var kinds=await db.Sports.Where(s=>s.AcademyId==t.AcademyId&&s.IsActive).Select(s=>s.Kind).Distinct().ToArrayAsync();
+        var sportTheme=kinds.Length==1&&kinds[0]==Academy.Infrastructure.Structure.SportKind.Football?"football":kinds.Length==1&&kinds[0]==Academy.Infrastructure.Structure.SportKind.Swimming?"swimming":"general";
+        var features=new List<string>();foreach(var feature in Academy.Infrastructure.Tenancy.AcademyFeatures.All)if(await config.Enabled(t.AcademyId,feature))features.Add(feature);
+        return Results.Ok(new { displayName = x?.DisplayName ?? t.AcademyName, primaryColor = x?.PrimaryColor ?? "#D71935", secondaryColor = x?.SecondaryColor ?? "#171923", logoUrl = x?.Logo == null ? null : "/api/v1/academy/branding/logo", coachAttendanceEnabled = x is { CoachAttendancePolicyConfirmed: true, CoachAttendanceEnabled: true }, platformBrandOperator = false, onboarding=new{templateVersion=1,sportTheme,features} });
     }
     private static async Task<IResult> Logo(CurrentTenant tenant, FoundationDbContext db, HttpContext context)
     {

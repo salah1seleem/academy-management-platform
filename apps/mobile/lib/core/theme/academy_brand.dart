@@ -10,6 +10,9 @@ class AcademyBrand extends ChangeNotifier {
   Color primary = const Color(0xFFD71935), secondary = const Color(0xFF171923);
   Uint8List? logo;
   bool signedIn = false, coachAttendance = false;
+  bool loading = false;
+  String sportTheme = 'general';
+  List<String> features = [];
   String? _membership;
   int _epoch = 0;
   AcademyBrand(this.auth) {
@@ -21,9 +24,11 @@ class AcademyBrand extends ChangeNotifier {
     return Color(int.parse('FF${value.toString().substring(1)}', radix: 16));
   }
 
-  Future<void> refresh() async {
-    final membership = auth.session?.membershipId;
-    if (_membership == membership) return;
+  Future<void> refresh({bool force = false}) async {
+    final membership = auth.session?.membershipId == null
+        ? null
+        : '${auth.session!.membershipId}:${auth.session!.selected?.contextRevision ?? 0}';
+    if (!force && _membership == membership) return;
     _membership = membership;
     final epoch = ++_epoch;
     signedIn = membership != null;
@@ -32,6 +37,9 @@ class AcademyBrand extends ChangeNotifier {
     primary = const Color(0xFFD71935);
     secondary = const Color(0xFF171923);
     coachAttendance = false;
+    sportTheme = 'general';
+    features = [];
+    loading = signedIn;
     notifyListeners();
     if (!signedIn) return;
     try {
@@ -49,9 +57,23 @@ class AcademyBrand extends ChangeNotifier {
       secondary = color(data['secondaryColor'], secondary);
       logo = bytes;
       coachAttendance = data['coachAttendanceEnabled'] == true;
+      final intro = data['onboarding'];
+      if (intro is Map) {
+        sportTheme = ['football', 'swimming'].contains(intro['sportTheme'])
+            ? intro['sportTheme'] as String
+            : 'general';
+        features = intro['features'] is List
+            ? (intro['features'] as List).whereType<String>().toList()
+            : [];
+      }
+      loading = false;
       notifyListeners();
     } catch (_) {
       /* Fail closed for attendance; other private screens remain usable. */
+      if (epoch == _epoch) {
+        loading = false;
+        notifyListeners();
+      }
     }
   }
 

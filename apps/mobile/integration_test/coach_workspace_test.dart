@@ -1,3 +1,5 @@
+import 'support/role_intro.dart';
+
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
@@ -58,6 +60,7 @@ void main() {
       final players = roster['players'] as List;
       expect(players, isNotEmpty);
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
+      await skipRoleIntroIfPresent(tester);
       Future<void> waitFor(Finder finder) async {
         for (var i = 0; i < 150 && finder.evaluate().isEmpty; i++) {
           await tester.pump(const Duration(milliseconds: 150));
