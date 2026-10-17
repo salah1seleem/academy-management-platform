@@ -6,7 +6,10 @@ test("Match coach remains independent of team changes, explicit review is audite
   await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
   const headers={"X-CSRF-TOKEN":(await(await page.request.get("/api/v1/auth/csrf")).json()).token};
   const options=await(await page.request.get("/api/v1/manage/matches/options")).json();expect(options.coachHistoryEnabled).toBe(true);
-  const team=options.teams.find((t:{name:string})=>t.name.includes("منتخب 2018"));expect(team).toBeTruthy();
+  const sourceTeam=options.teams.find((t:{name:string})=>t.name.includes("منتخب 2018"));expect(sourceTeam).toBeTruthy();
+  const isolatedName=`فريق إسناد مستقل ${Date.now()}`;
+  const isolatedTeam=await page.request.post("/api/v1/manage/matches/teams",{headers,data:{...sourceTeam,name:isolatedName}});expect(isolatedTeam.status()).toBe(200);
+  const team={...sourceTeam,id:(await isolatedTeam.json()).id,name:isolatedName}; // Preserve the independent team's identity on PUT too.
   const coaches=await(await page.request.get("/api/v1/manage/staff/")).json();
   const original=coaches.members.find((m:{id:string})=>m.id===team.coachMembershipId);const replacement=coaches.members.find((m:{email:string})=>m.email==="coach2.football@example.test");expect(original).toBeTruthy();expect(replacement).toBeTruthy();
   const tournament=options.tournaments.find((t:{sportId:string})=>t.sportId===team.sportId);

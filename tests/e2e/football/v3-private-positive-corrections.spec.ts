@@ -53,6 +53,7 @@ test("Positive private correction preserves paid statement and adds only the rev
     expect(funds).toBeTruthy(); await post(`/api/v1/finance/receivables/${document}/movements`, { kind: "PaymentAllocation", amount: "1000.00", collectionId: funds.id, reason: "تخصيص اختبار داخلي" });
   }
   await page.goto(`/dashboard/academy/coaches/${coach}`);
+  await page.getByRole("tab", {name:"الاتفاقات والمستحقات",exact:true}).click();
   const row = page.getByRole("region", { name: "تنفيذ الخاص وعمولاته" }).locator(".linked-list > article").filter({ hasText: document.slice(0, 8) });
   await row.getByRole("button", { name: "مراجعة الاستحقاق" }).click();
   const review = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith(`${delivery}/entries`));

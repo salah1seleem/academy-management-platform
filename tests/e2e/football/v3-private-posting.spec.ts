@@ -36,6 +36,7 @@ test("Private payroll source: partial allocation, later delta, explicit review/r
   }
   await allocateThousand();
   await page.goto(`/dashboard/academy/coaches/${coach}`);
+  await page.getByRole("tab", {name:"الاتفاقات والمستحقات",exact:true}).click();
   const section=page.getByRole("region",{name:"تنفيذ الخاص وعمولاته"});
   const row=section.locator(".linked-list > article").filter({hasText:document.slice(0,8)}); await expect(row).toHaveCount(1);
   async function confirm(label:string) {
@@ -58,7 +59,7 @@ test("Private payroll source: partial allocation, later delta, explicit review/r
   for(const width of [390,1440]) { await page.setViewportSize({width,height:1000}); await expect(modal).toBeInViewport(); expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true); expect(await modal.locator(".private-posting-metrics").evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(" ").length)).toBe(2); expect(await modal.locator(".private-posting-metrics > div").first().evaluate(el=>getComputedStyle(el).display)).toBe("flex"); await modal.screenshot({path:info.outputPath(`private-posting-${width}.png`),animations:"disabled"}); }
   await confirm("تأكيد عكس العمولة غير المسددة"); expect((await payroll()).netDue).toBe(before.netDue+80);
   const history=await (await page.request.get(`${path}/entries`)).json(); expect(history.map((e:{delta:number})=>e.delta)).toEqual([-20,0,50,50]); expect(history[0].reviewEntryId).toBe(history[1].id); expect(new Set(history.filter((e:{payrollAdjustmentId:string|null})=>e.payrollAdjustmentId).map((e:{payrollAdjustmentId:string})=>e.payrollAdjustmentId)).size).toBe(3);
-  await page.goto(`/dashboard/payroll?employeeId=${employee}`); await expect(page.getByRole("link",{name:/محتسبة بالصافي بالفعل/})).toHaveAttribute("href",`/dashboard/academy/coaches/${coach}`);
+  await page.goto(`/dashboard/payroll?employeeId=${employee}`); await expect(page.getByRole("link",{name:/محتسبة بالصافي بالفعل/})).toHaveAttribute("href",`/dashboard/academy/coaches/${coach}?tab=accounts`);
   const mobileToken = await mobileDemoToken(page.request, "+201099900020", "رحلة عرض اصطناعية");
   const own=await page.request.get("/api/v1/staff/payroll/private-services",{headers:{Authorization:`Bearer ${mobileToken}`}}); expect(own.status()).toBe(200);
   const mine=(await own.json()).items.find((r:{id:string})=>r.id===delivery); expect(mine).toMatchObject({earned:80,postedAmount:80,pendingDelta:0,postingCount:3}); expect(mine).not.toHaveProperty("documentId"); expect(mine).not.toHaveProperty("player");

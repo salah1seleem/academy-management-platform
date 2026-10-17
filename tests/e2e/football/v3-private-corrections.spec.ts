@@ -47,6 +47,7 @@ test("Reviewed private correction preserves paid statement and posts only to the
   const original = await get(`${statementRoot}?month=${month}`);
   await post(`/api/v1/finance/receivables/${document}/movements`, { kind: "CreditNote", amount: "400.00", reason: "مراجعة تخفيض بعد الصرف — لا تغيير الكشف الأصلي" });
   await page.goto(`/dashboard/academy/coaches/${coach}`);
+  await page.getByRole("tab", {name:"الاتفاقات والمستحقات",exact:true}).click();
   const row = page.getByRole("region", { name: "تنفيذ الخاص وعمولاته" }).locator(".linked-list > article").filter({ hasText: document.slice(0, 8) });
   await row.getByRole("button", { name: "مراجعة الاستحقاق" }).click();
   const review = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith(`${delivery}/entries`));

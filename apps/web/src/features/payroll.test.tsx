@@ -17,7 +17,7 @@ it("private commission is an included subtotal linked to its source, never added
   const salary = { employeeId: "worker", name: employee.name, contractDays: 31, baseDue: 3100, deductions: 20, additions: 100, privateCompensation: 80, coachMembershipId: "coach", netDue: 3180, currency: "EGP", isPaid: false };
   global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response([]) : response({ currency: "EGP",items:[salary] })) as typeof fetch;
   renderPage(<PayrollWorkspace />); const source=await screen.findByRole("link",{name:/محتسبة بالصافي بالفعل/});
-  expect(source).toHaveAttribute("href","/dashboard/academy/coaches/coach"); expect(screen.getByText("منها صافي عمولة الخاص")).toBeVisible();
+  expect(source).toHaveAttribute("href","/dashboard/academy/coaches/coach?tab=accounts"); expect(screen.getByText("منها صافي عمولة الخاص")).toBeVisible();
   expect(screen.getByText("إجمالي المستحق").closest("article")).toHaveTextContent(/3,180/);
   expect(screen.queryByText(/3,260/)).not.toBeInTheDocument();
 });

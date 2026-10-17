@@ -2,9 +2,17 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { StructureDetails } from "./structure-record";
 
-afterEach(cleanup);
+const nav = vi.hoisted(() => ({tab:"performance"}));
+afterEach(() => { cleanup(); nav.tab="performance"; });
 
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("tab=performance"), usePathname: () => "/dashboard/academy/coaches/coach-1", useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(`tab=${nav.tab}`), usePathname: () => "/dashboard/academy/coaches/coach-1", useRouter: () => ({ replace: vi.fn() }) }));
+
+it("opens the assigned group directly from coach overview without requiring the performance tab", async () => {
+  nav.tab="overview";
+  global.fetch=vi.fn(async()=>new Response(JSON.stringify({id:"coach-1",arabicName:"مدرب تجريبي",isActive:true,assignments:[{id:"assignment",trainingGroupId:"group-1",groupName:"مجموعة اصطناعية",isActive:true}]}))) as typeof fetch;
+  render(<StructureDetails kind="coaches" id="coach-1"/>);
+  expect(await screen.findByRole("link",{name:"مجموعة اصطناعية"})).toHaveAttribute("href","/dashboard/academy/groups/group-1");
+});
 
 it("shows stored coach performance and keeps the owner period on drill-down", async () => {
   const calls: string[] = [];

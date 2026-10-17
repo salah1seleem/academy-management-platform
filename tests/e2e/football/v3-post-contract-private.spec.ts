@@ -7,6 +7,7 @@ test("Ended coach commission is approved separately, paid partially and synchron
   const coach=employee.membershipId,root=`/api/v1/manage/payroll/coaches/${coach}/private-services`,delivery=(await get(root)).items[0];
   const before=await get(`/api/v1/manage/payroll/${employee.id}/account`);expect(before.items).toEqual([]);expect(before.finalSettlements).toEqual([]);
   await page.goto(`/dashboard/academy/coaches/${coach}`);
+  await page.getByRole("tab", {name:"الاتفاقات والمستحقات",exact:true}).click();
   const reviewRow=page.getByRole("region",{name:"تنفيذ الخاص وعمولاته"}).locator(".linked-list > article").filter({hasText:delivery.documentId.slice(0,8)}).first();
   await reviewRow.getByRole("button",{name:"مراجعة الاستحقاق"}).click();const review=page.waitForResponse(r=>r.request().method()==="POST"&&r.url().endsWith("/entries"));await page.getByRole("button",{name:"حفظ استثناء للمراجعة"}).click();expect((await review).status()).toBe(201);await expect(page.getByRole("dialog")).toHaveCount(0);await page.getByRole("button",{name:"إغلاق رسالة النجاح"}).click();
   await reviewRow.getByRole("button",{name:"مراجعة الاستحقاق"}).click();const dialog=page.getByRole("dialog",{name:"مراجعة عمولة الخاص"});await dialog.getByRole("button",{name:"معاينة مستحق نهاية العقد"}).click();await expect(dialog.getByRole("button",{name:"تأكيد اعتماد العمولة دون صرف"})).toBeVisible();expect(await dialog.getByRole("spinbutton").count()).toBe(0);

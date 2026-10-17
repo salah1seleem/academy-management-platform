@@ -19,7 +19,7 @@ test("Owner reviews actual private delivery against one existing invoice; coach 
   // A historical fixture date covered by the explicitly approved demo agreement.
   const endSeconds = seconds + 1, endM = String(Math.floor(endSeconds / 60) % 60).padStart(2, "0"), endS = String(endSeconds % 60).padStart(2, "0");
   const sessionResponse = await page.request.post("/api/v1/attendance/sessions", { headers, data: { trainingGroupId: group, sessionDate: "2026-10-03", startTime: `${h}:${m}:${s}`, endTime: `${h}:${endM}:${endS}` } }); expect(sessionResponse.status()).toBe(201); const sessionId = (await sessionResponse.json()).id;
-  await page.goto(`/dashboard/academy/coaches/${coach}`); const section = page.getByRole("region", { name: "تنفيذ الخاص وعمولاته" }); await expect(section).toBeVisible(); await section.getByText("مراجعة تنفيذ حصة خاصة", { exact: true }).click();
+  await page.goto(`/dashboard/academy/coaches/${coach}`); await page.getByRole("tab", {name:"الاتفاقات والمستحقات",exact:true}).click(); const section = page.getByRole("region", { name: "تنفيذ الخاص وعمولاته" }); await expect(section).toBeVisible(); await section.getByText("مراجعة تنفيذ حصة خاصة", { exact: true }).click();
   await section.getByLabel("المطالبة الموجودة").selectOption(documentId); await section.getByRole("button", { name: "تثبيت توزيع الحصص" }).click();
   const bound = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith("private-services/packages")); await page.getByRole("button", { name: "تأكيد مراجعة الخدمة" }).click(); expect((await bound).status()).toBe(201);
   await expect(section.getByRole("status")).toBeVisible();
