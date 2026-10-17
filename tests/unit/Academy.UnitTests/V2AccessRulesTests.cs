@@ -11,6 +11,12 @@ public class V2AccessRulesTests
     [InlineData("/api/v1/help/lessons/owner-dashboard", "POST", false)]
     [InlineData("/api/v1/help/lessons/owner-dashboard/publish", "GET", false)]
     [InlineData("/api/v1/help/unrecognized", "GET", false)]
+    [InlineData("/api/v1/help/lessons/family-renewal/media/00000000-0000-0000-0000-000000000001/video", "GET", true)]
+    [InlineData("/api/v1/help/lessons/evaluations/media/00000000-0000-0000-0000-000000000001/thumbnail", "GET", true)]
+    [InlineData("/api/v1/help/lessons/evaluations/media/00000000-0000-0000-0000-000000000001/video", "POST", false)]
+    [InlineData("/api/v1/help/lessons/evaluations/media/../video", "GET", false)]
+    [InlineData("/api/v1/help/lessons/invented/media/00000000-0000-0000-0000-000000000001/video", "GET", false)]
+    [InlineData("/api/v1/help/lessons/evaluations/media/00000000-0000-0000-0000-000000000001/edit", "GET", false)]
     public void Help_shared_paths_are_only_authenticated_reads_not_product_module_aliases(string path,string method,bool allowed)
     {
         Assert.Equal(allowed,Academy.Api.Help.HelpEndpoints.IsReadPath(path,method));

@@ -630,6 +630,81 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Content.HelpVideoRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AlternativeText")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1600)
+                        .HasColumnType("character varying(1600)");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EditVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LessonId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset?>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ThumbnailFile")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("VideoFile")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("LessonId")
+                        .IsUnique()
+                        .HasFilter("\"State\" = 'Published'");
+
+                    b.HasIndex("LessonId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("HelpVideoRevisions", t =>
+                        {
+                            t.HasCheckConstraint("CK_HelpVideo_Lifecycle", " \"Revision\" > 0 AND \"EditVersion\" > 0 AND \"State\" IN ('Draft','Published','Archived') AND (\"State\" <> 'Published' OR (\"VideoFile\" IS NOT NULL AND \"ThumbnailFile\" IS NOT NULL AND \"DurationSeconds\" IS NOT NULL AND \"DurationSeconds\" > 0 AND \"PublishedAtUtc\" IS NOT NULL)) ");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Content.NutritionCategoryLink", b =>
                 {
                     b.Property<Guid>("AcademyId")
@@ -12009,6 +12084,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Navigation("Sport");
 
                     b.Navigation("TrainingGroup");
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Content.HelpVideoRevision", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Content.NutritionCategoryLink", b =>

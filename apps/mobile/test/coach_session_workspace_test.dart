@@ -176,6 +176,9 @@ void main() {
             'scores': [],
           };
         }
+        if (p == '/api/v1/help/lessons/evaluations') {
+          return {'id': 'evaluations'};
+        }
         return roster();
       });
       await tester.pumpWidget(
@@ -188,7 +191,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(paths, ['/api/v1/attendance/sessions/replacement/players']);
+      expect(paths, [
+        '/api/v1/attendance/sessions/replacement/players',
+        '/api/v1/help/lessons/evaluations',
+      ]);
+      expect(find.text('شرح هذه الخطوة'), findsOneWidget);
       expect(find.text('لاعب التجربة 2'), findsNothing);
       await reach(tester, find.text('تقييم اللاعب'));
       await tester.tap(find.text('تقييم اللاعب'));

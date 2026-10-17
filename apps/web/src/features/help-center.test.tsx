@@ -8,7 +8,7 @@ it("uses authorized catalog and a guardian detail route, not a fake watch action
   global.fetch = vi.fn(async () => Response.json({ items: [lesson] })) as typeof fetch;
   render(<HelpCenter guardian />);
   expect(await screen.findByRole("link", { name: /تجديد اشتراك أبنائك/ })).toHaveAttribute("href", "/guardian/help/family-renewal");
-  expect(screen.getByText(/الفيديوهات بانتظار رفع المحتوى/)).toBeVisible();
+  expect(screen.getByText(/فيديوهات معتمدة عند توفرها/)).toBeVisible();
   expect(screen.queryByRole("button", { name: /مشاهدة/ })).not.toBeInTheDocument();
 });
 it("sends search and section to the server, clears both, and shows honest empty results", async () => {
@@ -24,7 +24,8 @@ it("sends search and section to the server, clears both, and shows honest empty 
 it("renders actual written steps and does not invent a published video", async () => {
   global.fetch = vi.fn(async () => Response.json(lesson)) as typeof fetch; render(<HelpCenter guardian id={lesson.id} />);
   expect(await screen.findByRole("list")).toHaveTextContent("راجع الباقة والأبناء.");
-  expect(screen.getByText(/ليس فيديو منشورًا/)).toBeVisible();
+  expect(screen.getByText(/الدليل المكتوب متاح دائمًا/)).toBeVisible();
+  expect(document.querySelector("video")).toBeNull();
   expect(screen.getByRole("link", { name: "كل الأدلة" })).toHaveAttribute("href", "/guardian/help");
 });
 it("conceals withdrawn details and removes stale content on focus refresh", async () => {

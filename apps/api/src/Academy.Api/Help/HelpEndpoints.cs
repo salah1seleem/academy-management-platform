@@ -14,7 +14,8 @@ public static class HelpEndpoints
     public static bool IsReadPath(string path, string method) => method == "GET" &&
         (path is "/api/v1/help/availability" or "/api/v1/help/lessons" ||
         path.StartsWith("/api/v1/help/lessons/", StringComparison.Ordinal) &&
-        path["/api/v1/help/lessons/".Length..] is { Length: > 0 } tail && !tail.Contains('/'));
+        path["/api/v1/help/lessons/".Length..] is { Length: > 0 } tail &&
+        (!tail.Contains('/') || tail.Split('/') is [var lesson, "media", var id, "video" or "thumbnail"] && HelpCatalog.All.Any(x => x.Id == lesson) && Guid.TryParseExact(id, "D", out _)));
     public static void MapHelp(this WebApplication app)
     {
         var g = app.MapGroup("/api/v1/help").RequireAuthorization(AcademyPermissions.TenantAccess);
@@ -30,7 +31,7 @@ public static class HelpEndpoints
         }).RequireAuthorization(AcademyPermissions.AcademySettingsManage);
     }
     private static string Normalize(string value) => new(value.Normalize(NormalizationForm.FormD).Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark && c != 'ـ').Select(c => c switch { 'أ' or 'إ' or 'آ' => 'ا', 'ى' => 'ي', _ => char.ToLowerInvariant(c) }).ToArray());
-    private static async Task<HelpGuide[]> Allowed(CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h)
+    internal static async Task<HelpGuide[]> Allowed(CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h)
     {
         h.Response.Headers.CacheControl = "private, no-store"; var t = (await tenant.ResolveAsync())!;
         if (!await config.Enabled(t.AcademyId, "learning_hub")) return [];
@@ -45,17 +46,20 @@ public static class HelpEndpoints
         }
         return result.ToArray();
     }
-    private static object View(HelpGuide l, bool detail) => new { l.Id, l.Section, l.Title, l.Summary, version = 1, contentKind = l.AwaitingContent ? "AwaitingContent" : "WrittenGuide", videoStatus = "AwaitingUpload", videoUrl = (string?)null, steps = detail ? l.Steps : null };
+    private static object View(HelpGuide l, bool detail, Academy.Infrastructure.Content.HelpVideoRevision? video = null) => new { l.Id, l.Section, l.Title, l.Summary, version = 1, contentKind = l.AwaitingContent ? "AwaitingContent" : "WrittenGuide", videoStatus = video == null ? "AwaitingUpload" : "Published", videoUrl = video == null ? null : $"/api/v1/help/lessons/{l.Id}/media/{video.Id}/video", video = HelpVideoEndpoints.PublicView(video), steps = detail ? l.Steps : null };
     private static async Task<IResult> List(CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h, string? search, string? section)
     {
         h.Response.Headers.CacheControl = "private, no-store"; var t = (await tenant.ResolveAsync())!; if (!await config.Enabled(t.AcademyId, "learning_hub")) return Results.Forbid();
         if (search?.Length > 100 || section?.Length > 40) return Results.UnprocessableEntity(new { message = "اختصر البحث إلى 100 حرف واختر قسمًا صحيحًا." });
         var guides = await Allowed(tenant, db, config, authorization, h); var q = Normalize(search?.Trim() ?? "");
-        return Results.Ok(new { version = 1, role = t.Role.ToString(), items = guides.Where(l => (string.IsNullOrEmpty(section) || l.Section == section) && (q.Length == 0 || Normalize(l.Title.Ar + " " + l.Title.En + " " + l.Summary.Ar + " " + l.Summary.En + " " + string.Join(" ", l.Steps.Select(s => s.Ar + " " + s.En))).Contains(q))).Select(l => View(l, false)), notice = "أدلة مكتوبة للمسارات الحالية؛ الفيديوهات بانتظار رفع المحتوى ومراجعته. قراءة الدليل لا تمنح صلاحية تنفيذ." });
+        var videos = await db.HelpVideoRevisions.AsNoTracking().Where(x => x.State == "Published").ToDictionaryAsync(x => x.LessonId);
+        return Results.Ok(new { version = 1, role = t.Role.ToString(), items = guides.Where(l => (string.IsNullOrEmpty(section) || l.Section == section) && (q.Length == 0 || Normalize(l.Title.Ar + " " + l.Title.En + " " + l.Summary.Ar + " " + l.Summary.En + " " + string.Join(" ", l.Steps.Select(s => s.Ar + " " + s.En))).Contains(q))).Select(l => View(l, false, videos.GetValueOrDefault(l.Id))), notice = "أدلة مكتوبة للمسارات الحالية؛ تظهر الفيديوهات بعد رفعها ومراجعتها ونشرها فقط. قراءة الدليل لا تمنح صلاحية تنفيذ." });
     }
     private static async Task<IResult> Details(string id, CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h)
     {
         var guide = (await Allowed(tenant, db, config, authorization, h)).SingleOrDefault(l => l.Id == id);
-        return guide == null ? Results.NotFound() : Results.Ok(View(guide, true));
+        if (guide == null) return Results.NotFound();
+        var video = await db.HelpVideoRevisions.AsNoTracking().SingleOrDefaultAsync(x => x.LessonId == id && x.State == "Published");
+        return Results.Ok(View(guide, true, video));
     }
 }

@@ -138,6 +138,9 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
   @override
   Future<Uint8List> asset(String path, String token) async {
     if (path != '/api/v1/academy/branding/logo' &&
+        !RegExp(
+          r'^/api/v1/help/lessons/[a-z0-9-]+/media/[a-fA-F0-9-]{36}/(video|thumbnail)$',
+        ).hasMatch(path) &&
         !RegExp(r'^/api/v1/assets/[a-fA-F0-9-]{36}$').hasMatch(path)) {
       throw const ApiFailure(400, 'مرجع الوسائط غير صالح.');
     }

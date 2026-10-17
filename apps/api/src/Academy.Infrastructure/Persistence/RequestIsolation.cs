@@ -197,6 +197,13 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        foreach (var e in ChangeTracker.Entries<Academy.Infrastructure.Content.HelpVideoRevision>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
+        {
+            var original = e.OriginalValues.GetValue<string>(nameof(Academy.Infrastructure.Content.HelpVideoRevision.State));
+            if (e.State == EntityState.Deleted || new[] { "Id", "LessonId", "Revision", "CreatedBy", "CreatedAtUtc" }.Any(p => e.Property(p).IsModified) ||
+                original != "Draft" && (original != "Published" || e.Entity.State != "Archived" || e.Properties.Any(p => p.IsModified && p.Metadata.Name is not ("State" or "EditVersion"))))
+                throw new InvalidOperationException("إصدار الفيديو المنشور ثابت؛ أنشئ مسودة إصدار جديد أو أرشف المنشور.");
+        }
         if(ChangeTracker.Entries<CommunityCampaignReview>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)||ChangeTracker.Entries<CommunityAdEvent>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("دليل الموافقات والتفاعل محفوظ دون تعديل أو حذف.");
         foreach(var e in ChangeTracker.Entries<CommunityCampaignRevision>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(CommunityCampaignRevision.State) or nameof(CommunityCampaignRevision.UpdatedAtUtc))))throw new InvalidOperationException("لتغيير التصميم أنشئ نسخة جديدة تحتاج اعتمادًا جديدًا.");

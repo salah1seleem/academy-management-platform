@@ -100,7 +100,12 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal(new[] { "family-renewal", "family-progress" }, HelpIds(await HelpRead(guardian)));
         foreach (var c in new[] { owner, admin, coach, guardian }) foreach (var id in HelpIds(await HelpRead(c)))
         {
-            var detail = await c.GetFromJsonAsync<JsonElement>("/api/v1/help/lessons/" + id); Assert.Equal("AwaitingUpload", detail.GetProperty("videoStatus").GetString()); Assert.Equal(JsonValueKind.Null, detail.GetProperty("videoUrl").ValueKind); Assert.True(detail.GetProperty("steps").GetArrayLength() > 0); Assert.Equal(1, detail.GetProperty("version").GetInt32());
+            var detail = await c.GetFromJsonAsync<JsonElement>("/api/v1/help/lessons/" + id);
+            var published = await db.HelpVideoRevisions.AsNoTracking().SingleOrDefaultAsync(x => x.LessonId == id && x.State == "Published");
+            Assert.Equal(published == null ? "AwaitingUpload" : "Published", detail.GetProperty("videoStatus").GetString());
+            if (published == null) Assert.Equal(JsonValueKind.Null, detail.GetProperty("videoUrl").ValueKind);
+            else { Assert.Equal(published.Id, detail.GetProperty("video").GetProperty("id").GetGuid()); Assert.Equal($"/api/v1/help/lessons/{id}/media/{published.Id}/video", detail.GetProperty("videoUrl").GetString()); }
+            Assert.True(detail.GetProperty("steps").GetArrayLength() > 0); Assert.Equal(1, detail.GetProperty("version").GetInt32());
         }
         Assert.Equal(before, await Counts()); Assert.Equal(financial, await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28"));
     });

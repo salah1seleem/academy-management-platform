@@ -402,6 +402,7 @@ app.MapStaffAttendanceExceptions();
 app.MapGuardianFeedback();
 app.MapOwnerFollowUps();
 app.MapHelp();
+app.MapHelpVideos();
 app.MapCommunityAds();
 app.MapPayroll();
 app.MapCoachAgreements();
@@ -539,6 +540,8 @@ if (app.Environment.IsEnvironment("Demo"))
             }
         }
         await PlatformIdentity.SeedDemo(app.Services);
+        if (app.Configuration.GetValue<bool>("Demo:HelpVideoSeedEnabled"))
+            await HelpVideoDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value, app.Configuration);
     }
 }
 app.Run();

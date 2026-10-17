@@ -30,6 +30,28 @@ Map<String, dynamic> guide() => {
 };
 void main() {
   testWidgets(
+    'published video has a distinct action without replacing written guidance',
+    (t) async {
+      final auth = await fixture.owner(
+        (m, p, b, k) async => {
+          ...guide(),
+          'videoStatus': 'Published',
+          'video': {
+            'id': '00000000-0000-0000-0000-000000000001',
+            'url': '/api/v1/help/lessons/family-renewal/media/00000000-0000-0000-0000-000000000001/video',
+          },
+        },
+      );
+      await t.pumpWidget(
+        fixture.shell(HelpPage(auth: auth, id: 'family-renewal')),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('شاهد الشرح بالفيديو'), findsOneWidget);
+      expect(find.text('ارفع إثبات الدفع وانتظر المراجعة.'), findsOneWidget);
+      expect(find.textContaining('لا يوجد فيديو منشور بعد'), findsNothing);
+    },
+  );
+  testWidgets(
     'context help rechecks the exact lesson and opens its real reader',
     (t) async {
       final calls = <String>[];

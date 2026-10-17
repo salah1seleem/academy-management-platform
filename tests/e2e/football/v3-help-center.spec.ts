@@ -37,7 +37,7 @@ test("Role-aware written help searches, drills down and revokes without changing
     await expect(page.getByRole("link", { name: /مراجعة حارات السباحة/ })).toHaveCount(0);
     await page.getByLabel("البحث في الأدلة").fill("إِنْشَاء بَاقَة"); await page.getByRole("button", { name: "بحث", exact: true }).click(); await expect(page.locator(".help-card")).toHaveCount(1);
     await page.getByRole("link", { name: /إنشاء باقة/ }).click(); await expect(page.getByRole("list").filter({ hasText: "افتح الباقات" })).toBeVisible();
-    await expect(page.getByText(/ليس فيديو منشورًا/)).toBeVisible(); await page.screenshot({ path: info.outputPath("owner-help-reading-390.png"), fullPage: true, animations: "disabled" });
+    await expect(page.getByText(/الدليل المكتوب متاح دائمًا/)).toBeVisible(); await expect(page.locator("video")).toHaveCount(0); await page.screenshot({ path: info.outputPath("owner-help-reading-390.png"), fullPage: true, animations: "disabled" });
     await page.getByRole("link", { name: "كل الأدلة" }).click(); await page.setViewportSize({ width: 1440, height: 1000 }); await expect(page.locator(".help-card").first()).toBeVisible(); await page.screenshot({ path: info.outputPath("owner-help-catalog-1440.png"), animations: "disabled" });
     await guardianLogin(guardian, "01099900101"); await guardian.getByRole("link", { name: "دليل الاستخدام", exact: true }).click();
     await expect(guardian.locator(".help-card")).toHaveCount(2); await expect(guardian.getByRole("link", { name: /قراءة لوحة المالك/ })).toHaveCount(0);

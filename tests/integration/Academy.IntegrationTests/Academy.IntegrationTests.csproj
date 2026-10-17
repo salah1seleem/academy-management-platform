@@ -11,6 +11,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="../../fixtures/help/*" Link="Fixtures/Help/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../../apps/api/src/Academy.Api/Academy.Api.csproj" />
   </ItemGroup>
 </Project>

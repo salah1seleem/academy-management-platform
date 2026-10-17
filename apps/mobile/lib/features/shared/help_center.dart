@@ -4,6 +4,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import 'help_video.dart';
 
 String _identity(AuthController auth) {
   final m = auth.session?.selected;
@@ -202,8 +203,8 @@ class _HelpReaderState extends State<_HelpReader> with WidgetsBindingObserver {
   Widget notice() => UiText(
     localized(
       context,
-      'أدلة مكتوبة حسب صلاحياتك؛ الفيديوهات بانتظار رفع المحتوى. قراءة الدليل لا تمنح صلاحية تنفيذ.',
-      'Written guides for your permissions; videos await upload. Reading does not grant action permissions.',
+      'أدلة حسب صلاحياتك؛ تظهر الفيديوهات بعد المراجعة والنشر فقط. قراءة الدليل لا تمنح صلاحية تنفيذ.',
+      'Guides for your permissions; videos appear only after review and publication. Reading does not grant action permissions.',
     ),
     style: Theme.of(context).textTheme.bodySmall,
   );
@@ -369,12 +370,33 @@ class _HelpReaderState extends State<_HelpReader> with WidgetsBindingObserver {
                   UiText(
                     localized(
                       context,
-                      'دليل مكتوب · إصدار ${lesson['version']} · لا يوجد فيديو منشور بعد.',
-                      'Written guide · Version ${lesson['version']} · No video published yet.',
+                      'دليل مكتوب · إصدار ${lesson['version']}${lesson['videoStatus'] == 'Published' ? '' : ' · لا يوجد فيديو منشور بعد.'}',
+                      'Written guide · Version ${lesson['version']}${lesson['videoStatus'] == 'Published' ? '' : ' · No video published yet.'}',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
+                if (widget.id != null &&
+                    lesson['videoStatus'] == 'Published' &&
+                    obj(lesson['video']).isNotEmpty)
+                  FilledButton.icon(
+                    onPressed: () => openPage(
+                      context,
+                      HelpVideoPage(
+                        auth: widget.auth,
+                        lesson: widget.id!,
+                        video: obj(lesson['video']),
+                      ),
+                    ),
+                    icon: const Icon(Icons.play_circle_outline),
+                    label: UiText(
+                      localized(
+                        context,
+                        'شاهد الشرح بالفيديو',
+                        'Watch video guide',
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
