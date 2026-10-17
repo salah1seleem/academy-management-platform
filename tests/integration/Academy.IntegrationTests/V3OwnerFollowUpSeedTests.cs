@@ -27,10 +27,12 @@ public sealed class V3OwnerFollowUpSeedTests
             using var c=first.CreateClient();await using var scope=first.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
             ids=await db.OwnerFollowUps.Where(f=>f.AcademyId==FootballDemoSeed.AcademyId).OrderBy(f=>f.Id).Select(f=>f.Id).ToArrayAsync();Assert.Equal(2,ids.Length);Assert.Equal(1,await db.OwnerFollowUps.CountAsync(f=>f.AcademyId==FootballDemoSeed.AcademyId&&f.State=="Closed"));Assert.Equal(2,await db.OwnerFollowUpChanges.CountAsync(f=>f.AcademyId==FootballDemoSeed.AcademyId));collections=await db.Collections.CountAsync();
             await Assert.ThrowsAsync<InvalidOperationException>(()=>OwnerFollowUpDemoSeed.Seed(db,new HostingEnvironment{EnvironmentName="Production"},new DemoOptions{SeedEnabled=true,SeedProfile="Football"},TimeProvider.System));
+            Assert.True(await db.TrainingSessions.AnyAsync(s=>s.Id==FootballDemoSeed.Id("owner-followup-demo/coverage-session")&&s.TrainingGroupId==FootballDemoSeed.Id("owner-followup-demo/coverage-group")));
         }
         await using(var second=new SeedFactory())
         {
             using var c=second.CreateClient();await using var scope=second.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Equal(ids,await db.OwnerFollowUps.Where(f=>f.AcademyId==FootballDemoSeed.AcademyId).OrderBy(f=>f.Id).Select(f=>f.Id).ToArrayAsync());Assert.Equal(2,await db.OwnerFollowUpChanges.CountAsync(f=>f.AcademyId==FootballDemoSeed.AcademyId));Assert.Equal(collections,await db.Collections.CountAsync());
+            Assert.Equal(1,await db.TrainingSessions.CountAsync(s=>s.Id==FootballDemoSeed.Id("owner-followup-demo/coverage-session")));
         }
     }
 }

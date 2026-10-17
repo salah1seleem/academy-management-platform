@@ -6,6 +6,11 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const item = { id: "task", version: 42, state: "Closed", condition: "GroupLowOccupancy", conditionActive: true, assignedToMembershipId: null, dueOn: null, note: "", resolutionReason: "متابعة بشرية فقط", sourceUrl: "/dashboard/academy/groups/group", evidence: { observedAtUtc: "2026-10-17T02:30:00Z" }, source: { groupId: "group", name: "مجموعة اختبار", branch: "فرع اختبار", enrollments: 3, capacity: 20 } };
 const options = { owners: [{ id: "owner", name: "مالك اصطناعي" }], branches: [{id:"branch",name:"فرع اختبار"}], candidates: [{ source: item.source, condition: item.condition, activeFollowUpId: "task" }], rule: "تسجيلات مسندة وليست قيمة ربح" };
+it("coverage evidence identifies the real session and does not call the coach absent or deduct salary",async()=>{
+  const covered={...item,condition:"GroupSessionCoverage",source:{...item.source,coverageGaps:[{id:"real-session",sessionDate:"2026-10-18",startTime:"17:00:00",endTime:"18:00:00"}]}};
+  global.fetch=vi.fn(async()=>Response.json({item:covered,owners:options.owners,history:[]})) as typeof fetch;render(<OwnerFollowUpDetail id="task"/>);
+  expect(await screen.findByRole("link",{name:/مراجعة الحصة/})).toHaveAttribute("href","/dashboard/attendance/sessions/real-session/staff");expect(screen.getByText(/ليست غيابًا مسجلًا أو خصمًا/)).toBeVisible();expect(screen.getByRole("status")).toHaveTextContent("إغلاق المتابعة لا يحلها تلقائيًا");
+});
 it("defaults to month-to-date and clearing removes even the default dates, with exact source and existing task links", async () => {
   global.fetch = vi.fn(async input => Response.json(String(input).endsWith("options") ? options : { items: [item], hasMore: false })) as typeof fetch;
   render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-17"}}><OwnerFollowUps /></DateFilterDefaults>);

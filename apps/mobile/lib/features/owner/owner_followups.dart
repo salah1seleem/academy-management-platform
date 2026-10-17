@@ -19,7 +19,30 @@ const followUpStates = {
 const followUpConditions = {
   'GroupCoachMissing': 'مجموعة بلا مدرب مخول',
   'GroupLowOccupancy': 'إشغال أقل من نصف السعة',
+  'GroupSessionCoverage': 'حصص قادمة بلا مدرب مسند مخول',
 };
+Widget coverageSummary(Json source) {
+  final gaps = rows(source['coverageGaps'] ?? <Json>[]);
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      UiText(
+        '${gaps.length} حصة قادمة بلا إسناد مدرب مخول خلال 7 أيام؛ ليست غيابًا مسجلًا أو خصمًا.',
+      ),
+      for (final s in gaps.take(3))
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: UiText(
+            '${s['sessionDate']} · ${textOf(s['startTime']).substring(0, 5)}–${textOf(s['endTime']).substring(0, 5)}',
+          ),
+        ),
+      const UiText(
+        'راجع جدول المجموعة لإسناد المدرب. الأوقات محلية للأكاديمية.',
+      ),
+    ],
+  );
+}
+
 Widget followUpList(List<Widget> children) => gList([
   for (final child in children)
     Padding(padding: const EdgeInsets.only(bottom: 14), child: child),
@@ -318,6 +341,8 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
                     children: [
                       UiText(textOf(obj(c['source'])['name'])),
                       UiText(followUpConditions[c['condition']] ?? ''),
+                      if (c['condition'] == 'GroupSessionCoverage')
+                        coverageSummary(obj(c['source'])),
                       UiText(
                         '${obj(c['source'])['enrollments']} تسجيلًا مسندًا · السعة ${obj(c['source'])['capacity'] ?? 'غير محددة'}',
                       ),
@@ -443,6 +468,28 @@ class _FollowUpFormState extends State<_FollowUpForm> {
     return followUpList([
       UiText(followUpConditions[item['condition']] ?? 'متابعة'),
       UiText(textOf(source['name'])),
+      if (item['condition'] == 'GroupSessionCoverage') coverageSummary(source),
+      if (item['condition'] == 'GroupSessionCoverage' &&
+          obj(item['evidence'] ?? <String, dynamic>{})['source'] is Map)
+        ExpansionTile(
+          title: const UiText('مواعيد الدليل وقت إنشاء المتابعة'),
+          children: [
+            coverageSummary({
+              'coverageGaps': [
+                for (final gap in rows(
+                  obj(obj(item['evidence'])['source'])['CoverageGaps'] ??
+                      <Json>[],
+                ))
+                  {
+                    'id': gap['Id'],
+                    'sessionDate': gap['SessionDate'],
+                    'startTime': gap['StartTime'],
+                    'endTime': gap['EndTime'],
+                  },
+              ],
+            }),
+          ],
+        ),
       UiText(
         'تسجيلات مسندة حاليًا: ${source['enrollments'] ?? 'غير معروف'}، السعة: ${source['capacity'] ?? 'غير محددة'}',
       ),

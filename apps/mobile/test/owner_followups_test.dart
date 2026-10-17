@@ -33,6 +33,49 @@ Map<String, dynamic> item() => {
   'evidence': {'observedAtUtc': '2026-10-17T02:30:00Z'},
 };
 void main() {
+  testWidgets(
+    'Coverage follow-up shows actual session times without manufacturing absence or pay changes',
+    (t) async {
+      final current = {
+        ...item(),
+        'condition': 'GroupSessionCoverage',
+        'source': {
+          ...Map<String, dynamic>.from(item()['source'] as Map),
+          'coverageGaps': [
+            {
+              'id': 's',
+              'sessionDate': '2026-10-18',
+              'startTime': '17:00:00',
+              'endTime': '18:00:00',
+            },
+          ],
+        },
+      };
+      final auth = await fixture.owner(
+        (m, p, b, token) async => {
+          'item': current,
+          'owners': options()['owners'],
+          'history': <Object>[],
+        },
+      );
+      await t.pumpWidget(
+        fixture.shell(OwnerFollowUpPage(auth: auth, id: 'followup')),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('حصص قادمة بلا مدرب مسند مخول'), findsOneWidget);
+      expect(
+        find.textContaining('ليست غيابًا مسجلًا أو خصمًا'),
+        findsOneWidget,
+      );
+      expect(find.text('2026-10-18 · 17:00–18:00'), findsOneWidget);
+      expect(
+        Directionality.of(t.element(find.text('2026-10-18 · 17:00–18:00'))),
+        TextDirection.ltr,
+      );
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
   for (final width in [360.0, 390.0, 430.0]) {
     testWidgets(
       'Follow-ups are readable at $width with 200% text and clearing really requests all dates',
