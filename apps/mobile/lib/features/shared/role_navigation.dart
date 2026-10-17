@@ -25,6 +25,7 @@ import 'native_staff_attendance.dart';
 import 'coach_agreements.dart';
 import 'facility_board.dart';
 import 'role_agenda.dart';
+import 'help_center.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
@@ -142,6 +143,7 @@ class NativeMore extends StatelessWidget {
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'المزيد', 'More'),
     child: gList([
+      HelpEntry(auth: auth),
       GLink(
         localized(context, 'ابدأ من هنا', 'Start here'),
         Icons.help_outline,

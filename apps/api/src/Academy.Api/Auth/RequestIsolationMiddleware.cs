@@ -45,7 +45,7 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
                             allowed = await db.StaffActionGrants.AnyAsync(x => x.MembershipId == t.MembershipId && x.IsActive && x.Read && (x.Module == "players" || x.Module == "subscriptions" || x.Module == "attendance" || x.Module == "evaluations"), context.RequestAborted);
                         if (!allowed) { await Deny(context); return; }
                     }
-                    else if (path.StartsWith("/api/v1/", StringComparison.Ordinal) && path is not ("/api/v1/me" or "/api/v1/my-permissions" or "/api/v1/my-access" or "/api/v1/academy/features" or "/api/v1/academy/branding/logo")) { await Deny(context); return; }
+                    else if (path.StartsWith("/api/v1/", StringComparison.Ordinal) && !Academy.Api.Help.HelpEndpoints.IsReadPath(path, context.Request.Method) && path is not ("/api/v1/me" or "/api/v1/my-permissions" or "/api/v1/my-access" or "/api/v1/academy/features" or "/api/v1/academy/branding/logo")) { await Deny(context); return; }
                 }
             }
         }

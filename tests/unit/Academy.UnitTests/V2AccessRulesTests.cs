@@ -5,6 +5,19 @@ namespace Academy.UnitTests;
 public class V2AccessRulesTests
 {
     [Theory]
+    [InlineData("/api/v1/help/availability", "GET", true)]
+    [InlineData("/api/v1/help/lessons", "GET", true)]
+    [InlineData("/api/v1/help/lessons/player-attendance", "GET", true)]
+    [InlineData("/api/v1/help/lessons/owner-dashboard", "POST", false)]
+    [InlineData("/api/v1/help/lessons/owner-dashboard/publish", "GET", false)]
+    [InlineData("/api/v1/help/unrecognized", "GET", false)]
+    public void Help_shared_paths_are_only_authenticated_reads_not_product_module_aliases(string path,string method,bool allowed)
+    {
+        Assert.Equal(allowed,Academy.Api.Help.HelpEndpoints.IsReadPath(path,method));
+        Assert.Null(StaffAccessRules.ForPath(path));
+        Assert.Equal(allowed,MembershipScope.AllowsNarrowSportPath(path,method));
+    }
+    [Theory]
     [InlineData("/api/v1/manage/staff/attendance", "attendance")]
     [InlineData("/api/v1/manage/staff/123/access", "staff")]
     [InlineData("/api/v1/reports/financial/export", "finance")]

@@ -10,6 +10,17 @@ beforeEach(() => { currentPath = "/dashboard/players"; replace.mockReset(); glob
 afterEach(cleanup);
 
 describe("dashboard navigation governance", () => {
+  it("highlights the authorized help entry rather than Home and closes the mobile drawer", async () => {
+    currentPath = "/dashboard/help/packages";
+    global.fetch = vi.fn(async input => Response.json(String(input).includes("help/availability") ? { available: true } : String(input).includes("my-permissions") ? [] : { displayName: "مالك اختبار", role: "AcademyOwner" }));
+    render(<DashboardShell><div>دليل الباقة</div></DashboardShell>);
+    const link = await screen.findByRole("link", { name: "دليل الاستخدام" });
+    expect(link).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "الرئيسية" })).not.toHaveAttribute("aria-current");
+    fireEvent.click(screen.getByRole("button", { name: "فتح القائمة" }));
+    link.addEventListener("click", e => e.preventDefault()); fireEvent.click(link);
+    expect(screen.getByRole("button", { name: "فتح القائمة" })).toBeVisible();
+  });
   it("auto-expands the current module, highlights its list route, and supports accordion toggling", async () => {
     render(<DashboardShell><div>المحتوى</div></DashboardShell>);
     const players = await screen.findByRole("button", { name: "خيارات اللاعبين" });

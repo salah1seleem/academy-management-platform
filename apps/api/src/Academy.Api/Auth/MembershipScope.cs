@@ -17,6 +17,7 @@ public static class MembershipScope
     // a module checkbox must never override this resource boundary.
     public static bool AllowsNarrowSportPath(string path, string method)
     {
+        if (Academy.Api.Help.HelpEndpoints.IsReadPath(path, method)) return true;
         if (path is "/api/v1/me" or "/api/v1/my-permissions" or "/api/v1/my-access" or "/api/v1/academy/features" or "/api/v1/academy/branding/logo") return true;
         if (IsAssetRead(path, method)) return true; // Download rechecks purpose-specific permission.
         if (Academy.Api.Operations.StaffAttendanceExceptions.IsOwnPath(path)) return true; // Own employee only; no staff list, salary or review.

@@ -25,6 +25,9 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        // Lesson IDs are not product endpoint names (e.g. player-attendance).
+        // Help reads authorize each lesson against ForPermission instead.
+        if (path.StartsWith("/api/v1/help/", StringComparison.Ordinal)) return null;
         if(Academy.Api.Operations.StaffPasskeys.IsOwnPath(path))return null; // Own key management, never staff CRUD.
         if (path.StartsWith("/api/v1/manage/family-renewals", StringComparison.Ordinal)) return "payments";
         if (path.StartsWith("/api/v1/facilities")) return "facilities";

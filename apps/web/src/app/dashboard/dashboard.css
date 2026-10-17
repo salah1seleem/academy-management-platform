@@ -298,6 +298,7 @@
 .dashboard-shell .staff-request-target h3 { margin: 0 0 8px; font-size: 16px; }
 .dashboard-shell .staff-request-target p { margin: 8px 0 0; }
 .sidebar-security-link { display:flex; align-items:center; gap:8px; padding:10px; color:#d9e0ed; font-size:12px; text-decoration:none; }
+.sidebar-security-link[aria-current="page"] { background:#ffffff18; color:#fff; border-inline-start:3px solid var(--staff-primary-600); border-radius:10px; }
 .staff-passkey-settings { overflow-wrap:anywhere; }
 .staff-passkey-list { list-style:none; padding:0; display:grid; gap:12px; }
 .staff-passkey-list li { display:grid; gap:8px; padding:16px; border:1px solid var(--staff-border); border-radius:12px; }
