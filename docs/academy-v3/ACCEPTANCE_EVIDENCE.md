@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## F2a — موافقة الفرع والحساب قبل المحتوى برعاية، 2026-10-17
+
+Code `06d091c50ce8b26364bc9d808961661164f71349`، migration107. نسخ ثابتة/اعتماد كل فرع/تعديل يبطل القديم/سجل/CAS/replay/tenant isolation، FullOwner فقط؛ Guardian مرتبط باشتراك مؤهل وبالغ بالإقرار وموافق اختياريًا، انسحاب حتى عندlicense-off، image خاصة غير صور الأطفال، typed urgent قبلplacement. GETليسview؛50%لمدة1s foreground/حد يومي للحساب/dedup، مجاميع<5محجوبة، لا بيانات طفل أو رسائل أو مال. API7/7 في38.744s، Web21/21، Flutter33/33، analyze/typecheck/lint/build/modelcheck؛ Browser1في24.8s وNative1في10s وصور فعلية مراجعة، نفس التقرير المالي قبل/بعد. Seed6حملات/7نسخ وurgent اصطناعي اختبرت restart/withdrawal/Production refusal، دون مشاهدات مزروعة. [التفاصيل والمحاولات والأوامر والقيود](PROGRESS.md). V2-16 وAC35–39 **جزئية**؛ منصة متعددة الأكاديميات والتفويض وNative creative editing والبوابة النهائية ليست منفذة. كل المالي المتبقي آخرًا، ولاAndroid/جهاز فعلي أوCIشامل/deploy يدوي مدعى.
+
 ## F1a — متابعة المالك مرتبطة بالمصدر ولا تخلط بالإغلاق المالي، 2026-10-17
 
 `a23fbe59c5c836682f362e8e14948bd154143d61`: حالتا مجموعة حقيقيتان ودورةحياة محفوظة وhistory/CAS/replay وOwner/tenant/sport/branch/entitlement حية. Source/capacityunknown صريحان، إغلاقبسببلايحلالمصدرأويغيرالمال. Migration106 منالصفر/لاpending، API4/4 في24.296s؛ جولة20/20 السابقةتتضمن3نفسها+17استهلاكًا. Web7/Flutter23/analyze/typecheck/lint/build؛ browser23.1s وnative6s وصورمراجعة، نفسgroup/reportقبلوبعد. SeedاختياريFootballمحروس/idempotent اختبرمرتينويرفضProduction. [التفاصيل والأوامر والسجلات والمحاولات](PROGRESS.md). ليستكلV2-12/AC40 أوكلاللغات/Android/بوابةH؛ التفويضومصادرأخرىوكلالماليالمتبقيآخرًا باقية. اليدوي5080/.env/بياناتالمراجع لمينشرعليهاالاختبار.

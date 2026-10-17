@@ -1,5 +1,38 @@
 # تقدم أكاديميتي V2 + V3
 
+## أحدث checkpoint — F2a: محتوى برعاية اختياري مع اعتماد كل فرع، 2026-10-17
+
+**Code `06d091c50ce8b26364bc9d808961661164f71349`** من `f7cfeeb` على `codex/15-native-mobile-app`. بطاقة المهمة: Sol/High للصلاحيات/الموافقة/المهاجرة وMedium للواجهات؛ توصية فقط، لا تغيير موديل أو subagents أو تكلفة مدعاة. قراءة V2§25 وV3§10/09.4 وAC35–39. كل المالي المتبقي آخرًا كما طلب صلاح؛ لا فاتورة إعلان أو شراء أو قناة خارجية في هذه الشريحة.
+
+**المطبق فعليًا:** حملات أكاديمية خاصة، نسخ creative ثابتة، صورة خاصة اختيارية من upload القائم، فروع مستهدفة/فترة/أولوية؛ Draft→PendingApproval→اعتماد مستقل لكل فرع أو رفضه، Pause/Resume/Revoke وسجل append-only وCAS/xmin وrequestId/hash وإعادة محاولة آمنة. تعديل التصميم ينشئ Draft جديدة ويعطل عرض النسخة القديمة فورًا ولا يرث اعتمادها. Scheduled/Active/Ended مشتقة من وقت السيرفر. المالك الأساسي كامل Academy/Branch/Sport فقط ينشئ/يراجع؛ Admin/Coach/Guardian والسياق الإضافي/النطاق المحدود لا يمنحهم هذا المسار. لا موديول صلاحيات أو مخزن وسائط أو إعداد ميزة موازٍ.
+
+**ولي الأمر:** حسابه المرتبط فعلًا بطفل/تسجيل/اشتراك مؤهل وفي فرع معتمد، و`settings ∩ entitlement community_ads` وموافقة الأكاديمية، ثم إقرار حساب بالغ وموافقة اختيارية مستقلة داخل التطبيق؛ الافتراضي off. الإقرار ليس إثبات عمر موثقًا ولا موافقة SMS/WhatsApp. سحب الموافقة متاح حتى بعد إيقاف الأكاديمية/الاستحقاق. لا استهداف بعمر/صحة/تقييم/GPS أو أسماء أطفال. إعلان واحد فوق بطاقات الأطفال **وبعد تنبيه الموعد العاجل**، لا مساحة فارغة إن لم يوجد مؤهل. وجهة تفاصيل داخلية حقيقية فقط؛ external destination مرفوض خادميًا. Web للإنشاء/التعديل والاعتماد؛ Native للمعاينة/مراجعة الفرع والإيقاف/الاستئناف، وGuardian للموافقة/العرض/التفاصيل/الإخفاء/الانسحاب من التطبيق الحالي. إنشاء creative من Native غير مدعى.
+
+**القياس والحماية:** GET أو المعاينة لا يسجل مشاهدة. نصف البطاقة داخل viewport لمدة ثانية متصلة وفي foreground، مرة للحساب في يوم الأكاديمية الفعلي، لا «عدد أسر» أو برهان رؤية فيزيائية خادمي. Click/Hide منفصلان ومكرراتهما يوميًا idempotent؛ المجاميع أقل من خمسة حسابات محجوبة بلا viewer IDs أو هاتف/طفل. كل feed/detail/event/image يعيد تفويض الموافقة/الرابط/الاشتراك/الفرع/النافذة/نسخة الحملة حيًا؛ سقف عرض UI30ثانية ثم إزالة أو إعادة تحقق، وخلفية/خروج يزيلان الكاش. ليس إبطال push لحظيًا. فشل حفظ Hide يوضح أن الإخفاء محلي ولم يحفظ لبقية اليوم. الصورة من PurposeCampaign خاصة؛ صورة طفل أو Proof أو صلاحية media عامة لا تمنح الإعلان. التنبيه يستعمل AcademyNotice الحالي مع MatchId/urgent deadline صريحين لتغيير موعد/مكان/إلغاء مباراة منشورة، غير مقروء ومقيد بالمشارك المرتبط حاليًا؛ لا تحويل رسائل تاريخية إلى «عاجلة» بتخمين النص.
+
+أهلية الاشتراك تستخدم **نفس ISubscriptionClock الذي يعرض حالة Home**، و`subscriptionAsOf` ظاهر في العقد واختبار مطابق. Demo يبقى2026-09-28 دون تغيير بياناته لإنجاح الإعلان؛ campaign window/consent/day cap/urgent TTL من الوقت الفعلي والقاهرة. إذن لا خلط لتاريخ تجاري ثابت مع نافذة إعلان حقيقية.
+
+**المهاجرة107** `20261017031640_V3ApprovedCommunityCampaigns`: ستة جداول tenant-scoped، FKs مركبة لنفس الأكاديمية/الفرع، immutable creative وأدلة append-only بحراسة EF وPostgreSQL، typed notice fields nullable للقديم. Applied على قواعد QA جديدة؛ EF has-pending-model-changes: لا تغييرات. Down يرفض إسقاط دليل قائم؛ **لم ننفذ Down أو Demo reset**. Seed اختيارية `Demo__CommunityCampaignSeedEnabled=true` محروسة Demo+Football+هوية معلومة:6حملات/7نسخ (معتمد/معلق/منتهٍ/موقوف/مرفوض/تعديل يحتاج اعتمادًا)، صورة من الشعار الموجود،29حسابًا اصطناعيًا بإقرار معلّم، وتنبيه موعد اصطناعي typed. لا impression/click أو مال أو رسالة حقيقية مزروعة؛ restart لا يعيد إتاحة استحقاق أوقفه المشغل أو موافقة مسحوبة. اختبار مرتين ورفض Production وعدم تأثير tenantB.
+
+**الأدلة المنفذة — ليست Full Regression:**
+
+| المسار | النتيجة الفعلية |
+| --- | --- |
+| API مستهدف + مستهلك المباراة المنشورة | **7/7،38.744s**؛6جديدة +1مستهلك، lifecycle/CAS/replay/branch+tenant+role/consent/asset/rawSQL/measurement/urgent/seed |
+| Web | **21/21،2.67s** فيملفين؛7جديدة +14مستهلك، off/تعاقب التنبيه/visibility/withdrawal/revoked CTA/detail lease/draft |
+| Flutter | **33/33،4s** في3ملفات؛11جديدة +22مستهلك، viewport/background/logout/detail lease/RTL360/390/430 و200% وخدمات Home |
+| أدوات | analyze بلا ملاحظات6s؛ Web typecheck/lint/build ناجحة؛ git diff --check نظيف |
+| Browser Football | **رحلة واحدة24.8s** علىAPI5220/Web3220/`academy_v3_ads_browser_final_20261017`: email Owner→create/upload→submit/branch approve→OTP Guardian→urgent قبل ad→impression حقيقي→new Draft→old detail404/cached CTA لا يتنقل→financial report مطابق |
+| iOS الحالي | **رحلة واحدة10s**، +2 يشملteardown لا اختبارين؛ API5226/`academy_v3_ads_native_final_20261017`، QA `Academity V3 Coach Review`/iPhone17Pro/iOS26.2/`7D6B3C6E-1BBD-4680-B653-EC4D75982034`: OTP حقيقي/Owner page approve وإعادة قراءة→Guardian preference UI→AcademyApp Home وترتيبurgent/ad→1s view→internal detail→withdrawal UI→نفس التقرير/logout |
+
+الـOwner Native في هذه الرحلة صفحة العمل الفعلية داخل harness ثيمه القائم، لا رحلة نقر More كاملة؛ Guardian استخدم AcademyApp. الصور التقطت فعلًا وروجعت: [Web390 بطاقة الاعتماد](evidence/f2a/owner-community-390.png)، [1440](evidence/f2a/owner-community-1440.png)، [Guardian Web](evidence/f2a/guardian-sponsored-390.png)، [Owner iOS](evidence/f2a/owner-community-ios.png)، [Guardian iOS](evidence/f2a/guardian-sponsored-ios.png). ليست Android أو جهازًا ماديًا أو بوابة الموبايل كاملة.
+
+**المحاولات الفاشلة محفوظة وصريحة:** slash نهائي سبب308؛ حُذف من عميل Web، ثم استُهلك JSON للحفظ وتثبت اختبار المتصفح من GET المحفوظ بدل انتظار CDP body غير المستهلك. إعادة الاختبار على Guardian مقاس اليوم رفضت العرض كما يجب؛ استعملنا DB جديدة، **لم نحذف أحداثًا أو نرفع الحد**. API seed افترض ضمنيًا وجود أكاديميةB حسب ترتيبxUnit؛ صار يبني LegacyRegression المعزول صراحة دون تقليل assert؛ آخر7نجحت. اختبار Native نقر زرًا خارج الشاشة ثم بحث رسالة/عنوان virtualized غير مبني؛ أصلحت scroll+hit-test، وAuthController الجديد احتاج restore lifecycle قبل AcademyApp. محاولة إعادة نهائية تعلقت في اكتشاف VM لمحاكيQA (white paused isolate)، تجربة attach كشفت selector screenshot؛ أعيدت الرحلة بنجاح عبر port52981 صريح/no-dds، لا تعطيل assertion أو صلاحية. خطأ fake timers في detail test أصلح قبل إنشاء lease؛ واسم ملف private_media_test غير موجود صحح إلى مستهلكي guardian الفعليين. جولات33/45 و7API السابقة متداخلة ولا تجمع كاختبارات فريدة.
+
+سجلات `/tmp/academy-v3-f2-{api-verified,web-final3,mobile-final3,analyze-verified,types-final3,lint-final3,web-build-final3,model-final,browser-verified,native-final5}.log`، ومهاجرات `{api-migrations-final,browser-migrations-final,native-migrations-final}`. QA DB owner=omar؛ لا `.env` أو دليل uploads أو dump داخلGit. Football E2E config يفعّل هذه seed **على DB صريحة معزولة فقط**؛ تطبيق الإنتاج/الديمو اليدوي يبقى default-off. CI السابق `f7cfeeb`/run38996982377: frontend/flutter/e2e success وbackend in_progress عند الفحص، **ليس CI أخضر للكود الحالي**.
+
+**المتبقي/أول الاستئناف:** V2-16 وAC35–39 جزئية، لا إغلاق شامل. F2b حملة منصة واحدة متعددة الأكاديميات باعتماد مستقل/تفويض مخول/تقدير جمهور حقيقي/الطلبات والتسعير والوجهات المعتمدة؛ التجاري والمالي منها آخرًا. قائمة المالك محدودة100حملة بلا pagination كاملة، وNative create/edit/English كامل وبوابة كل الأجهزة باقية. التالي **F1b** متابعة المصادر التشغيلية الأخرى وتفويضها أو أعلى متطلب غير مالي في الخريطة، ثم G1b مركز الدروس، D2 التخصيص/التأجيل وبقيةV2/V3، كل المالي المتبقي آخرًا ثمH. E2c3b جهاز/AASA/Apple Team/HTTPS عائق محدد لا تعليق لكل الخطة. API5080ready/Web3000login200، الخدمات اليدوية/PG ومحاكيMax وmain/origin `abda1ed273030e69812321e5c14d260bbc2e2275` محفوظة؛ API/Flutter اليدوي لم يُعاد نشرهما بهذه الإضافة. حادثة الستة موظفين القديمة تبقى مفتوحة. لا اكتمال خطة أو استمرار خارج الجلسة مدعى.
+
 ## أحدث checkpoint — F1a: متابعات تشغيل محفوظة للمالك، 2026-10-17
 
 **Code `a23fbe59c5c836682f362e8e14948bd154143d61`** من `19ec53d` على `codex/15-native-mobile-app`. بطاقة Sol/High لحراسة المصدر/العزل وMedium للواجهات، توصية فقط بلا تغيير موديل أو subagents أو تكلفة مدعاة. قرئت V3§11.1 والمتطلبات/الموافقة والسياسة والسجل؛ Next16 local useRouter doc قبل تصحيح التنقل. كل المالي المتبقي آخرًا، لا نظام تسوية أو محرك صلاحيات موازٍ.
@@ -740,7 +773,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V2-13 | missing | لا محاكي متكامل مثبت. | خطة V2 §24 | سيناريوهات مستقلة وحفظ ومقارنة دون أثر تشغيلي |
 | V2-14 | missing | لا CRM منصة/أكاديمية ومركز تواصل متكامل. | خطة V2 §28 | حفظ/نطاق/موافقات/قنوات حقيقية أو fallback صادق |
 | V2-15 | partial | رفع ومعرض وقراءة مقيدة موجودة من v1.9. | Slice7ContentIntegrationTests؛ private_media | جمهور وموافقات زمنية/ذكريات/صوت وAI مقيد |
-| V2-16 | missing | entitlement community_ads فقط، لا تنفيذ حملات. | AcademyConfiguration | اعتماد كل أكاديمية/فرع وplacement/قياس ومنع |
+| V2-16 | partial | F2a حملات داخل الأكاديمية، نسخ ثابتة واعتماد كل فرع وموافقة Guardian/placement/قياس ووسائط خاصة وWeb/Native/E2E | CommunityAds/CommunityAdEndpoints؛7API/21Web/33Flutter/browser24.8s/iOS10s وصور؛migration107 | F2b حملة منصة متعددة الأكاديميات/تفويض/طلب وتسعير مؤجل/تقدير جمهور حقيقي والقبول الموحد |
 | V2-17 | partial | CI واختبارات قديمة كثيرة؛ ليست قبول V2 النهائي. | .github/workflows/ci.yml | جولة موحدة V2+V3 وmanifest/UAT/استعادة/تقرير |
 
 ## كل حالات قبول V3 — 48 معرفًا فريدًا
@@ -781,11 +814,11 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V3-AC32 | partial | E2c2a نفس الفترة وورديتان/منتصف الليل/replay/Mixed؛ E2c3a CheckOut بنفسpipeline وحالة مراجعة المصدر | قبول الجهاز الفعلي والإعداد الخارجي والقبول الموحد؛ لا أجر ساعات أو تاريخ مختلق |
 | V3-AC33 | partial | E2a لاcollections/payrolladjustment/playerattendance أوتنفيذحصة؛ E2E/native مجاميعثابتة | إعادة قبول V3 عند تكامل الجهاز؛ لا ضمنيخصم/عمولة أوحضورطفل |
 | V3-AC34 | partial | E1a/c/e Home/حصة/مجموعة/ملف؛ النوع الحالي من RegistrationFormat وآخر قرار للبديل، لا تخمين أسماء أو حضور ضمني؛ E1e Backend6/Flutter31/Web31 وNative9s وصور402 | النوع الحالي ليسsnapshotخدمة تاريخية؛ الملف/التطوير الأوسع وبوابة كل المقاسات/الأدوار والقبول الموحد باقية |
-| V3-AC35 | partial | E1b: طفل/موعد/اشتراك/تقييم منشور/غذاء مضغوط وروابط فعلية؛ Flutter45/45، Backend5/5، رحلةiOS وصور402 | إعلان مخول/تنبيه عاجل وبوابة كل الأدوار والقبول الموحد، وأثر6موظفين اصطناعيين في ديمو المراجعة موثق ومفتوح |
-| V3-AC36 | missing | community_ads entitlement | لا حملة/اعتماد/جمهور منفذ |
-| V3-AC37 | missing | guardian_home | تنبيه عاجل ثم placement إعلان |
-| V3-AC38 | missing | لا نسخة حملة | اعتماد كل تعديل وإبطال الكاش |
-| V3-AC39 | missing | لا measurement service | عرض فعلي/dedup ومجاميع بلا بيانات طفل |
+| V3-AC35 | partial | E1b Home الفعلي؛ F2a optional sponsor بعد typed urgent للمشارك، Web/Native/E2E مع بقاء خدمات الأسرة | بوابة كل الأدوار والقبول الموحد؛ أثر6موظفين قديم موثق ومفتوح |
+| V3-AC36 | partial | F2a tenant campaign + كل فرع + اشتراك/رابط فعلي + consent/entitlement حي + upload خاص | حملة منصة متعددة الأكاديميات/تفويض/تقدير الجمهور الحقيقي وبوابةH |
+| V3-AC37 | partial | F2a urgent notice typed قبل sponsor؛ بدون مساحة عندoff؛ withdrawal/layout/الخدمات مختبرةWeb/iOS | قوالب كل الأخبار العاجلة/الأجهزة والأدوار والقبول الموحد |
+| V3-AC38 | partial | F2a new Draft يبطل approved القديم؛ live detail/asset/CTA و30s lease/foreground/logout مثبتة | حملة منصة والتفويض/إشعار مراجعة أوسع/قبولH؛ لا push فوري مدعى |
+| V3-AC39 | partial | F2a view50%/1s foreground، GETليسview، dedup/day cap/click/hide، aggregate<5محجوب بلاviewer export | قياس منصة متعدد الأكاديميات/لوحة تسعير مؤجلة/القبول الموحد؛ ليست أعداد أسر أو إثبات رؤية فيزيائية |
 | V3-AC40 | partial | E1d1 أولويات فعلية؛ F1a دورةمتابعةمحفوظة وسجل/مسؤول/سببإغلاق/مصدرحي لحالتي مجموعة، Web/Native/E2E واختباراتعزل/تكرار، دونسدادمختلق | بقيةمصادرالمهام والتفويض وربط الماليالمؤجل و09.3الهاتفي الكامل والقبول الموحد |
 | V3-AC41 | partial | V2RenewalOpportunityTests | مثال12700 قائم؛ إعادة قبول موحدةV3 |
 | V3-AC42 | partial | V2OperatingExpenseTests؛ ReportingIntegrationTests | نتيجة مكتملة/ناقصة وcutoff ledger |

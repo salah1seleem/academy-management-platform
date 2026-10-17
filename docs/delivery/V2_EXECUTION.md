@@ -1,5 +1,9 @@
 # سجل تنفيذ أكاديميتي V2
 
+## 2026-10-17 — F2a: حملات برعاية باختيار Guardian واعتماد الفرع
+
+`06d091c50ce8b26364bc9d808961661164f71349`: نفسcommunity_ads/settings/assets/notice، creative immutable وكل فرع مستقل وتعديل يحتاج مراجعة جديدة، موافقة حساب بالغ اختيارية/انسحاب، urgent قبلad، قياسvisibility لاGET وprivacy aggregate، لا تواصل/دفع حقيقي. Migration107؛ API7/Web21/Flutter33 وأدوات الجودة، Browser24.8s/iOS10s وصور وتقرير ثابت وseedمحروس لا يعيد consent. [الدليل والمحاولات](../academy-v3/PROGRESS.md). V2-16/AC35–39 جزئية؛ منصة متعددة الأكاديميات/تفويض/تقدير جمهور/تسعير وNative creative editing باقية. التاليF1b مصادر متابعة إضافية ثم بقية غير المالي؛ كل المالي المتبقي آخرًا ثمH، لا اكتمال خطة أو نشرAPIيدوي مدعى.
+
 ## 2026-10-17 — F1a: متابعة تشغيل محفوظة من مركز المالك
 
 `a23fbe59c5c836682f362e8e14948bd154143d61`: مجموعات بلا مدرب/منخفضةإشغال، New/Assigned/InProgress/Snoozed/Closed/Rejected/reopen معowner/history/source وسببإغلاق، لاماليةمنالحفظ. Migration106؛ API4/Web7/Flutter23 وأدواتجودة؛ browser23.1s/native6s وصور، seedاختياريمحروسمرتين؛17استهلاكًا إضافيًا ضمنجولة20المتداخلة. [الدليل](../academy-v3/PROGRESS.md). V2-12/AC40جزئيانلااكتمالخطة، التاليF2الإعلاناتثمغيرالمالي؛ كل الماليالمتبقيآخرًا ثمH. اليدوي/mainمحفوظان.
