@@ -142,6 +142,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<AcademyMatch>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchParticipant>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
+        BranchFilter<MatchCoachAssignment>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         BranchFilter<TournamentPayment>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         BranchFilter<PayrollAdditionRequest>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollAdjustment>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
@@ -190,6 +191,7 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        if(ChangeTracker.Entries<MatchCoachAssignment>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("إسناد مدرب المباراة محفوظ؛ أضف مراجعة جديدة دون تعديل التاريخ أو حذفه.");
         GuardCashPaymentPurpose();
         foreach(var e in ChangeTracker.Entries<StaffPasskey>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.State==EntityState.Deleted||!e.OriginalValues.GetValue<bool>(nameof(StaffPasskey.IsActive))||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(StaffPasskey.SignCount) or nameof(StaffPasskey.BackedUp) or nameof(StaffPasskey.LastVerifiedAtUtc) or nameof(StaffPasskey.IsActive) or nameof(StaffPasskey.RevokedAtUtc) or nameof(StaffPasskey.UpdatedAtUtc))))throw new InvalidOperationException("هوية وسيلة التحقق ثابتة؛ أوقفها دون حذف الدليل أو تبديل المفتاح.");

@@ -26,7 +26,7 @@ test("coach scope is explicit; denial is not an empty success and retry reads ag
   render(<ProfileMatches coachMembershipId="coach-1" />);
   expect(await screen.findByText("لا تملك صلاحية عرض المباريات في هذا النطاق.")).toBeVisible();
   expect(fetcher.mock.calls[0][0]).toContain("coachMembershipId=coach-1");
-  expect(screen.getByText(/ليس سجلًا تاريخيًا/)).toBeVisible();
+  expect(screen.getByText(/الإسناد المحفوظ للمباراة مستقل/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "إعادة المحاولة" }));
   expect(await screen.findByText("منتخب اصطناعي × الفريق الآخر")).toBeVisible();
 });

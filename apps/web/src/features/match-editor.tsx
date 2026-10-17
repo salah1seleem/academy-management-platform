@@ -3,8 +3,9 @@ import {FormEvent,useEffect,useRef,useState} from "react";
 import {TimeField} from "../components/time-field";
 import {ErrorState,LoadingState} from "../components/dashboard-shell";
 import {csrfRequest,DashboardRequestError} from "./dashboard-api";
+import {formatDateTimeAr} from "../lib/formatters";
 
-export type MatchEditValue={id:string;tournamentId:string;teamId:string;opponent:string;matchDate:string;startTime:string;venue:string;notes?:string;ourScore?:number;opponentScore?:number;publishedAtUtc?:string;isActive:boolean;copiedFromMatchId?:string;players:{playerId:string;isBench:boolean}[]};
+export type MatchEditValue={id:string;tournamentId:string;teamId:string;opponent:string;matchDate:string;startTime:string;venue:string;notes?:string;ourScore?:number;opponentScore?:number;publishedAtUtc?:string;isActive:boolean;copiedFromMatchId?:string;assignedCoachMembershipId?:string;coachAssignmentVersion?:number;coachAssignmentSource?:string;coachName?:string;players:{playerId:string;isBench:boolean}[]};
 type Roster={items:{enrollmentId:string;playerId:string;name:string}[];quoteHash:string};
 type Preview={teamName:string;opponent:string;venue:string;roster:Roster["items"];quoteHash:string};
 
@@ -25,14 +26,21 @@ export function MatchCopyDialog({id,onCancel,onCreated}:{id:string;onCancel:()=>
   </dialog>;
 }
 
-export function MatchEditor({match,template,options,busy,onSubmit,onNew}:{match:MatchEditValue|null;template:{tournamentId:string;teamId:string;venue:string}|null;options:{tournaments:{id:string;name:string;isActive:boolean}[];teams:{id:string;name:string;isActive:boolean}[];players:{playerId:string;name:string}[]};busy:boolean;onSubmit:(e:FormEvent<HTMLFormElement>)=>void;onNew:()=>void}){
+export function MatchEditor({match,template,options,busy,onSubmit,onNew}:{match:MatchEditValue|null;template:{tournamentId:string;teamId:string;venue:string}|null;options:{coachHistoryEnabled?:boolean;tournaments:{id:string;name:string;isActive:boolean}[];teams:{id:string;name:string;isActive:boolean;branchId?:string;sportId?:string}[];players:{playerId:string;name:string}[];coaches?:{id:string;name:string;allBranches?:boolean;allSports?:boolean;branchIds?:string[];sportIds?:string[]}[]};busy:boolean;onSubmit:(e:FormEvent<HTMLFormElement>)=>void;onNew:()=>void}){
   const [teamId,setTeamId]=useState(match?.teamId??template?.teamId??""),[roster,setRoster]=useState<Roster|null>(null),[error,setError]=useState(""),[revision,setRevision]=useState(0);
   useEffect(()=>{if(!teamId)return;const c=new AbortController();void fetch(`/api/v1/manage/matches/teams/${teamId}/roster`,{cache:"no-store",signal:c.signal}).then(async r=>{if(!r.ok)throw new Error();const v=await r.json();if(!c.signal.aborted){setRoster(v);setError("");}}).catch(()=>{if(!c.signal.aborted){setRoster(null);setError("تعذر تحميل قائمة الفريق؛ حدّثها قبل النشر.");}});return()=>c.abort();},[teamId,revision]);
   const unpublished=!match?.publishedAtUtc;
+  const team=options.teams.find(t=>t.id===teamId);
+  const coaches=(options.coaches??[]).filter(c=>(c.allBranches!==false||c.branchIds?.includes(team?.branchId??""))&&(c.allSports!==false||c.sportIds?.includes(team?.sportId??"")));
   return <section className="detail-card" id="match-editor"><form className="form-shell match-draft-form" aria-label="محرر المباراة" onSubmit={onSubmit}>
     <h2>{match?"تعديل المباراة / النتيجة":template?"إضافة مباراة أخرى":"إنشاء مباراة"}</h2>{match?.copiedFromMatchId&&<p role="note">{unpublished?"مسودة منسوخة مستقلة. راجع الموعد وقائمة الفريق الحالية؛ لا نتيجة أو جمهور منشور موروث.":"مباراة منسوخة مستقلة؛ تعديلها لا يغير المباراة الأصلية."}</p>}
     <label>البطولة<select name="tournament" required defaultValue={match?.tournamentId??template?.tournamentId??""}>{<option value="">اختر البطولة</option>}{options.tournaments.filter(x=>x.isActive).map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select></label>
     <label>فريق الأكاديمية<select name="team" required value={teamId} onChange={e=>{setTeamId(e.target.value);setRoster(null);setError("");}}><option value="">اختر الفريق</option>{options.teams.filter(x=>x.isActive).map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select></label>
+    <label>مدرب المباراة<select disabled={!options.coachHistoryEnabled||busy} key={teamId} name="coachMembershipId" defaultValue={match?.assignedCoachMembershipId??""}><option value="">{unpublished?"مدرب الفريق عند أول نشر":"غير موثق — اختر بعد المراجعة"}</option>{match?.assignedCoachMembershipId&&!coaches.some(c=>c.id===match.assignedCoachMembershipId)&&<option value={match.assignedCoachMembershipId}>{match.coachName??"المدرب المحفوظ"} — إسناد سابق</option>}{coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+    <input type="hidden" name="coachAssignmentVersion" value={match?.coachAssignmentVersion??0}/>
+    {!options.coachHistoryEnabled&&<p>يلزم تحديث خدمة المباريات قبل تثبيت إسناد مدرب مستقل؛ لن نؤكد حفظ إسناد لا تدعمه الخدمة.</p>}
+    {!unpublished&&!match?.assignedCoachMembershipId&&<p role="note">مدرب المباراة القديمة غير موثق. اختيار مدرب يحفظ مراجعتك الآن، ولا يختلق إسنادًا في تاريخ سابق.</p>}
+    <label>ملاحظة إسناد المدرب (اختياري)<input name="coachAssignmentNote" maxLength={300}/></label>
     <label>الفريق المنافس<input name="opponent" required maxLength={120} defaultValue={match?.opponent??""} autoFocus={!!template}/></label>
     <label>تاريخ المباراة<input name="date" type="date" required defaultValue={match?.matchDate??""}/></label><TimeField name="time" label="التوقيت" required defaultValue={match?.startTime}/>
     <label>الملعب / المكان<input name="venue" required maxLength={200} defaultValue={match?.venue??template?.venue??""}/></label><label>ملاحظات الملعب والتجمع<textarea name="notes" maxLength={500} defaultValue={match?.notes??""}/></label>
@@ -41,5 +49,11 @@ export function MatchEditor({match,template,options,busy,onSubmit,onNew}:{match:
     <div className="form-grid"><label>أهداف الأكاديمية<input name="ourScore" type="number" min="0" max="100" defaultValue={match?.ourScore??""}/></label><label>أهداف المنافس<input name="opponentScore" type="number" min="0" max="100" defaultValue={match?.opponentScore??""}/></label></div>
     <label className="match-review-check"><input name="active" type="checkbox" defaultChecked={match?.isActive??true}/>مباراة قائمة (ألغِ لتسجيل الإلغاء وإبلاغ المعنيين)</label>
     <div className="form-actions"><button name="action" value="draft" disabled={busy}>حفظ{match?.publishedAtUtc?" التعديل":" كمسودة"}</button><button name="action" value="another" disabled={busy}>حفظ وإضافة أخرى</button><button name="action" value="publish" className="primary-button" disabled={busy||(unpublished&&(!roster?.items.length||!!error))}>نشر وإبلاغ أولياء الأمور والمدرب</button>{(match||template)&&<button type="button" onClick={onNew}>مباراة جديدة</button>}</div>
-  </form></section>;
+  </form>{options.coachHistoryEnabled&&match?.publishedAtUtc&&<MatchCoachHistory id={match.id}/>}</section>;
+}
+
+function MatchCoachHistory({id}:{id:string}){
+  const [history,setHistory]=useState<{version:number;coach:string;reviewer:string;source:string;note?:string;createdAtUtc:string}[]|null>(null),[error,setError]=useState(false);
+  useEffect(()=>{const c=new AbortController();fetch(`/api/v1/manage/matches/${id}/coach-history`,{cache:"no-store",signal:c.signal}).then(async r=>{if(!r.ok)throw new Error();const v=await r.json();if(!Array.isArray(v))throw new Error();if(!c.signal.aborted)setHistory(v);}).catch(()=>{if(!c.signal.aborted)setError(true);});return()=>c.abort();},[id]);
+  return <details className="detail-card"><summary>سجل إسناد مدرب المباراة</summary>{error?<p>تعذر عرض سجل الإسناد.</p>:!history?<LoadingState/>:history.length?history.map(h=><article key={h.version}><strong>{h.coach}</strong><p>{h.source==="LegacyReview"?"مراجعة مباراة قديمة":h.source==="Reassignment"?"تغيير إسناد":h.source==="DraftSelection"?"اختيار للمسودة":h.source==="DemoFixture"?"إسناد ديمو اصطناعي":"عند أول نشر"} · نسخة {h.version} · {formatDateTimeAr(h.createdAtUtc)} · {h.reviewer}</p>{h.note&&<p>{h.note}</p>}</article>):<p>لا يوجد إسناد موثق؛ لا نستنتج تاريخًا من مدرب الفريق الحالي.</p>}</details>;
 }

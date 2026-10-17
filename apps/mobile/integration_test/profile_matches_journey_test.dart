@@ -34,6 +34,8 @@ void main() {
       final mine = await auth.request('GET', '/api/v1/my-matches') as List;
       final selected =
           mine.firstWhere((m) => m['status'] == 'Cancelled') as Map;
+      expect(selected['coachAssignmentSource'], 'Confirmed');
+      expect(selected['coachName'], isA<String>());
       final childId = (selected['children'] as List).first as String;
       final child = (home['children'] as List).firstWhere(
         (c) => c['id'] == childId,
@@ -87,6 +89,12 @@ void main() {
         160,
         scrollable: find.byType(Scrollable).first,
       );
+      await t.scrollUntilVisible(
+        find.text('مدرب المباراة: ${selected['coachName']}').last,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('مدرب المباراة: ${selected['coachName']}'), findsWidgets);
       if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
         await t.pumpAndSettle();
         await binding.takeScreenshot('phase-profile-child-matches');

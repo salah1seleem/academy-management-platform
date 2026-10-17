@@ -13,10 +13,18 @@ public sealed partial class FoundationDbContext
     public DbSet<MatchTeamPlayer> MatchTeamPlayers => Set<MatchTeamPlayer>();
     public DbSet<AcademyMatch> AcademyMatches => Set<AcademyMatch>();
     public DbSet<MatchParticipant> MatchParticipants => Set<MatchParticipant>();
+    public DbSet<MatchCoachAssignment> MatchCoachAssignments => Set<MatchCoachAssignment>();
     public DbSet<TournamentPayment> TournamentPayments => Set<TournamentPayment>();
     private static void ConfigureMatches(ModelBuilder b)
     {
         Tenant<AcademyTournament>(b); Tenant<MatchTeam>(b); Tenant<MatchTeamPlayer>(b); Tenant<AcademyMatch>(b); Tenant<MatchParticipant>(b); Tenant<TournamentPayment>(b);
+        Tenant<MatchCoachAssignment>(b);
+        b.Entity<MatchCoachAssignment>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.CoachMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.AssignedByMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasIndex(x=>new{x.AcademyId,x.MatchId,x.Sequence}).IsUnique();
+        b.Entity<MatchCoachAssignment>().Property(x=>x.Source).HasMaxLength(30);b.Entity<MatchCoachAssignment>().Property(x=>x.Note).HasMaxLength(300);
+        b.Entity<MatchCoachAssignment>().ToTable(t=>t.HasCheckConstraint("CK_MatchCoachAssignment_Identity","\"Sequence\">0 AND \"IsActive\" AND \"Source\" IN ('DraftSelection','FirstPublication','Reassignment','LegacyReview','DemoFixture')"));
         b.Entity<AcademyTournament>().Property(x => x.Name).HasMaxLength(120); b.Entity<AcademyTournament>().Property(x => x.Fee).HasPrecision(18, 2);
         b.Entity<AcademyTournament>().HasOne<Sport>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<MatchTeam>().Property(x => x.Name).HasMaxLength(120);

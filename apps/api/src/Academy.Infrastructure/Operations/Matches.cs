@@ -47,6 +47,16 @@ public sealed class MatchParticipant : TenantEntity
     public Guid PlayerId { get; set; }
     public bool IsBench { get; set; }
 }
+// Append-only assignment history, independent of the team's current coach.
+public sealed class MatchCoachAssignment : TenantEntity
+{
+    public Guid MatchId { get; set; }
+    public Guid CoachMembershipId { get; set; }
+    public Guid AssignedByMembershipId { get; set; }
+    public int Sequence { get; set; }
+    public required string Source { get; set; }
+    public string? Note { get; set; }
+}
 public sealed class TournamentPayment : TenantEntity
 {
     public Guid TournamentId { get; set; }

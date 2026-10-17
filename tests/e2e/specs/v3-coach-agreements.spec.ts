@@ -9,7 +9,7 @@ test("Owner versions private coaching terms from the coach profile; mobile coach
   const options = await (await page.request.get("/api/v1/manage/structure/options")).json(); const branch = options.branches[0].id, sport = options.sports[0].id;
   const employeeResponse = await page.request.post("/api/v1/manage/employees", { headers, data: { name: `موظف اتفاق عرض ${stamp}`, phone, jobTitle: "مدرب", branchId: branch, monthlySalary: 3000, contractStart: "2026-01-01", contractEnd: null, membershipId: coach, photoAssetId: null } }); expect(employeeResponse.status()).toBe(201); const employee = (await employeeResponse.json()).id;
   const path = `/api/v1/manage/payroll/coaches/${coach}/agreements`;
-  await page.goto(`/dashboard/academy/coaches/${coach}`); await expect(page.getByRole("heading", { name: "اتفاقات أجر الخاص", exact: true })).toBeVisible();
+  await page.goto(`/dashboard/academy/coaches/${coach}`); await page.getByRole("tab", { name: "الاتفاقات والمستحقات", exact: true }).click(); await expect(page.getByRole("heading", { name: "اتفاقات أجر الخاص", exact: true })).toBeVisible();
   const data = await (await page.request.get(path)).json(); const tomorrow = new Date(`${data.today}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1); const nextDate = tomorrow.toISOString().slice(0, 10);
   async function draft(value: string, from: string) {
     await page.getByRole("button", { name: "نسخة اتفاق جديدة", exact: true }).click(); await page.getByLabel("فرع الاتفاق").selectOption(branch); await page.getByLabel("رياضة الاتفاق").selectOption(sport);

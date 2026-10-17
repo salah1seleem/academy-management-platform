@@ -3798,6 +3798,68 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.MatchCoachAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssignedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CoachMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "AssignedByMembershipId");
+
+                    b.HasIndex("AcademyId", "CoachMembershipId");
+
+                    b.HasIndex("AcademyId", "MatchId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("MatchCoachAssignments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchCoachAssignment_Identity", "\"Sequence\">0 AND \"IsActive\" AND \"Source\" IN ('DraftSelection','FirstPublication','Reassignment','LegacyReview','DemoFixture')");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.MatchParticipant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12534,6 +12596,36 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Structure.TrainingGroup", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "TrainingGroupId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.MatchCoachAssignment", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AssignedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CoachMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.AcademyMatch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "MatchId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

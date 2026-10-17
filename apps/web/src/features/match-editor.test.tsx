@@ -9,6 +9,16 @@ const roster={items:preview.roster,quoteHash:"roster-hash"};
 const options={tournaments:[{id:"tournament",name:"بطولة عرض",isActive:true}],teams:[{id:"team",name:"منتخب عرض",isActive:true}],players:[{playerId:"player",name:"لاعب اصطناعي"}],coaches:[]};
 const match:MatchEditValue={id:"match",tournamentId:"tournament",teamId:"team",opponent:"منافس",matchDate:"2026-10-20",startTime:"17:00:00",venue:"ملعب",isActive:true,players:[],copiedFromMatchId:"source"};
 const reply=(v:unknown,status=200)=>Promise.resolve(new Response(JSON.stringify(v),{status}));
+it("legacy coach review is explicit, versioned and optional-note; only eligible coaches are selectable",async()=>{
+  global.fetch=vi.fn(url=>String(url).endsWith("coach-history")?reply([]):reply(roster)) as typeof fetch;
+  const choices={...options,coachHistoryEnabled:true,teams:[{...options.teams[0],branchId:"branch",sportId:"sport"}],coaches:[{id:"eligible",name:"مدرب مخول",allBranches:false,branchIds:["branch"],allSports:false,sportIds:["sport"]},{id:"other-branch",name:"مدرب فرع آخر",allBranches:false,branchIds:["elsewhere"]},{id:"other-sport",name:"مدرب رياضة أخرى",allSports:false,sportIds:["other"]}]};
+  render(<MatchEditor match={{...match,publishedAtUtc:"2026-09-01",coachAssignmentVersion:0}} template={null} options={choices} busy={false} onSubmit={()=>{}} onNew={()=>{}}/>);
+  expect(screen.getByLabelText("مدرب المباراة")).toHaveValue("");expect(screen.getByText(/لا يختلق إسنادًا في تاريخ سابق/)).toBeVisible();
+  expect(screen.getByRole("option",{name:"مدرب مخول"})).toBeInTheDocument();expect(screen.queryByRole("option",{name:"مدرب فرع آخر"})).not.toBeInTheDocument();expect(screen.queryByRole("option",{name:"مدرب رياضة أخرى"})).not.toBeInTheDocument();
+  expect(screen.getByLabelText("ملاحظة إسناد المدرب (اختياري)")).not.toBeRequired();
+  fireEvent.change(screen.getByLabelText("مدرب المباراة"),{target:{value:"eligible"}});
+  const data=new FormData(screen.getByRole("form",{name:"محرر المباراة"}));expect(data.get("coachMembershipId")).toBe("eligible");expect(data.get("coachAssignmentVersion")).toBe("0");
+});
 beforeEach(()=>{Object.defineProperty(HTMLDialogElement.prototype,"showModal",{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute("open","");}});Object.defineProperty(HTMLDialogElement.prototype,"close",{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute("open");}});});
 afterEach(()=>{cleanup();vi.restoreAllMocks();matchQuery="";});
 it("read-only matches users see no copy action",async()=>{

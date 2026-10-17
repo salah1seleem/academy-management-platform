@@ -27,6 +27,8 @@ void main() {
               'startTime': '17:30:00',
               'venue': 'ملعب العرض',
               'status': 'Cancelled',
+              'coachAssignmentSource': 'Confirmed',
+              'coachName': 'مدرب مباراة اصطناعي',
               'participation': 'Bench',
               'ourScore': null,
               'notes': null,
@@ -48,6 +50,7 @@ void main() {
         expect(calls, ['/api/v1/my-matches?playerId=child-1']);
         expect(find.text('ملغاة'), findsOneWidget);
         expect(find.text('المشاركة: بديل'), findsOneWidget);
+        expect(find.text('مدرب المباراة: مدرب مباراة اصطناعي'), findsOneWidget);
         expect(t.takeException(), isNull);
         await t.pumpWidget(const SizedBox());
         auth.dispose();

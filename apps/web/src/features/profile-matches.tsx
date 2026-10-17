@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { ErrorState, LoadingState, StatusBadge } from "../components/dashboard-shell";
 
-type Match = { id: string; team: string; opponent: string; tournament: string; matchDate: string; startTime: string; venue: string; status: string; ourScore: number | null; opponentScore: number | null };
+type Match = { id: string; team: string; opponent: string; tournament: string; matchDate: string; startTime: string; venue: string; status: string; ourScore: number | null; opponentScore: number | null; coachAssignmentSource?:string;coachName?:string };
 
 /** The record ID cannot be cleared with filters. Permissions remain server-side. */
 export function ProfileMatches({ playerId, coachMembershipId }: { playerId: string; coachMembershipId?: never } | { playerId?: never; coachMembershipId: string }) {
@@ -37,7 +37,7 @@ export function ProfileMatches({ playerId, coachMembershipId }: { playerId: stri
   const items = result?.key === key ? result.items?.filter(m => !filters.status || m.status === filters.status) : undefined;
   return <section className="detail-card" aria-label="مباريات الملف">
     <h2>المباريات والمنافسات</h2>
-    <p className="muted">{playerId ? "مشاركة اللاعب من القائمة المحفوظة عند النشر؛ تغيير مجموعته لا يغير هذه القائمة." : "المباريات المرتبطة بفرق المدرب الحالية؛ هذا ليس سجلًا تاريخيًا لإسناد المدربين."}</p>
+    <p className="muted">{playerId ? "مشاركة اللاعب من القائمة المحفوظة عند النشر؛ تغيير مجموعته لا يغير هذه القائمة." : "الإسناد المحفوظ للمباراة مستقل عن مدرب الفريق. أي مباراة قديمة غير موثقة تظهر بوضوح لحين مراجعتها."}</p>
     <div className="report-filters">
       <label>من تاريخ<input type="date" value={filters.from} onChange={e => setFilters({ ...filters, from: e.target.value })} /></label>
       <label>إلى تاريخ<input type="date" value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })} /></label>
@@ -45,7 +45,7 @@ export function ProfileMatches({ playerId, coachMembershipId }: { playerId: stri
       <button type="button" onClick={() => setFilters({ from: "", to: "", status: "" })}>مسح الفلاتر · كل المواعيد</button>
     </div>
     {result?.key === key && result.error ? <><ErrorState message={result.error} /><button type="button" onClick={() => setRevision(v => v + 1)}>إعادة المحاولة</button></> : !items ? <LoadingState /> : items.length ? items.map(m => <article key={m.id} className="payment-queue-row">
-      <div><strong>{m.team} × {m.opponent}</strong><small>{m.tournament} · {m.matchDate} · {m.startTime.slice(0, 5)}</small><small>{m.venue}</small>{m.ourScore != null && <small>النتيجة {m.ourScore} — {m.opponentScore}</small>}</div>
+      <div><strong>{m.team} × {m.opponent}</strong><small>{m.tournament} · {m.matchDate} · {m.startTime.slice(0, 5)}</small><small>{m.venue}</small>{m.coachAssignmentSource==="Confirmed"?<small>مدرب المباراة: {m.coachName}</small>:<small>إسناد قديم غير موثق — من الفريق الحالي لحين المراجعة</small>}{m.ourScore != null && <small>النتيجة {m.ourScore} — {m.opponentScore}</small>}</div>
       <StatusBadge status={m.status} /><Link href={`/dashboard/matches?matchId=${encodeURIComponent(m.id)}`}>عرض المباراة</Link>
     </article>) : <p>لا توجد مباريات تخص هذا الملف ضمن الفلاتر.</p>}
   </section>;

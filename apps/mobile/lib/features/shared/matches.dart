@@ -140,10 +140,13 @@ class _MatchScheduleState extends State<MatchSchedule> {
                                 ? 'المشاركة: بديل'
                                 : 'المشاركة: لاعب',
                           ),
-                        if (m['coachAssignmentSource'] == 'CurrentTeam')
+                        if (m['coachAssignmentSource'] == 'LegacyCurrentTeam')
                           const UiText(
-                            'الإسناد من الفريق الحالي؛ ليس سجلًا تاريخيًا للمدرب.',
+                            'إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.',
                           ),
+                        if (m['coachAssignmentSource'] == 'Confirmed' &&
+                            m['coachName'] != null)
+                          UiText('مدرب المباراة: ${m['coachName']}'),
                         UiText(
                           '${m['tournament']} · ${day(m['matchDate'])} · ${m['startTime']}',
                         ),

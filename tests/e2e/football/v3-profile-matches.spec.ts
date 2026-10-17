@@ -28,7 +28,7 @@ test("Player and coach file matches retain context, clear all dates, open the se
   await page.goBack(); await expect(page.getByRole("tab", { name: "المباريات", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue(""); await expect(page.locator("article").filter({hasText:opponent})).toHaveCount(1);
   await page.goto(`/dashboard/academy/coaches/${team.coachMembershipId}?tab=matches`);
-  await expect(page.getByText(/ليس سجلًا تاريخيًا لإسناد المدربين/)).toBeVisible();
+  await expect(page.getByText(/الإسناد المحفوظ للمباراة مستقل/)).toBeVisible();
   await page.getByRole("button", { name: /مسح الفلاتر/ }).click(); await expect(page.locator("article").filter({ hasText: opponent })).toHaveCount(1);
   await page.setViewportSize({ width: 390, height: 1000 }); await page.getByRole("heading", { name: "المباريات والمنافسات" }).scrollIntoViewIfNeeded(); await page.screenshot({ path: info.outputPath("profile-coach-matches-390.png"), animations: "disabled" });
   const own = await page.request.get(`/api/v1/my-matches?playerId=${player.playerId}`, { headers }); expect(own.status()).toBe(200); expect((await own.json()).some((m: { id: string }) => m.id === id)).toBe(true);

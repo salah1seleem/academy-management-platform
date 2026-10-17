@@ -20,7 +20,8 @@ for (const width of [360, 390, 430, 768, 1440]) {
     const player = page.getByRole("link", { name: "عرض", exact: true }).first();
     await player.click();
     const tabs = page.getByRole("tablist", { name: "أقسام ملف اللاعب" });
-    await expect(tabs.getByRole("tab")).toHaveCount(5);
+    await expect(tabs.getByRole("tab")).toHaveCount(6);
+    await expect(tabs.getByRole("tab", { name: "المباريات", exact: true })).toBeVisible();
     await tabs.getByRole("tab", { name: "الاشتراكات والمالية" }).click();
     await expect(page).toHaveURL(/tab=subscriptions/);
     await expect(page.getByRole("tabpanel")).toContainText("التسجيلات والاشتراكات");
