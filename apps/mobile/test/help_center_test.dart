@@ -29,6 +29,38 @@ Map<String, dynamic> guide() => {
   ],
 };
 void main() {
+  testWidgets(
+    'context help rechecks the exact lesson and opens its real reader',
+    (t) async {
+      final calls = <String>[];
+      final auth = await fixture.owner((m, p, b, k) async {
+        calls.add(p);
+        return guide();
+      });
+      await t.pumpWidget(
+        fixture.shell(HelpEntry(auth: auth, lesson: 'family-renewal')),
+      );
+      await t.pumpAndSettle();
+      expect(calls, ['/api/v1/help/lessons/family-renewal']);
+      await t.tap(find.text('شرح هذه الخطوة'));
+      await t.pumpAndSettle();
+      expect(find.text('تجديد اشتراك أبنائك'), findsOneWidget);
+      expect(calls.length, 2);
+    },
+  );
+  testWidgets(
+    'withdrawn audience hides contextual help without opening a replacement guide',
+    (t) async {
+      final auth = await fixture.owner(
+        (m, p, b, k) async => throw const ApiFailure(404, 'hidden'),
+      );
+      await t.pumpWidget(
+        fixture.shell(HelpEntry(auth: auth, lesson: 'family-renewal')),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('شرح هذه الخطوة'), findsNothing);
+    },
+  );
   for (final width in [360.0, 390.0, 430.0]) {
     testWidgets('Help guide fits Arabic RTL at $width with 200% text', (
       t,

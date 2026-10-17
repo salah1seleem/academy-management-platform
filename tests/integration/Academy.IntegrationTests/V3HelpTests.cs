@@ -11,6 +11,51 @@ namespace Academy.IntegrationTests;
 
 public sealed partial class BrandingMatchesTests
 {
+    [Fact]
+    public async Task Help_owner_audience_draft_is_not_live_until_activation_then_hides_exact_lesson_and_restores_defaults() => await HelpFixture(async (owner, _) =>
+    {
+        using var guardian = await Mobile(AcademyRole.Guardian); using var coach = await Mobile(AcademyRole.Coach); using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        var config = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/configuration/"); var original = config.GetProperty("versions").EnumerateArray().Single(x => x.GetProperty("state").GetString() == "Active").GetProperty("settings");
+        var policy = System.Text.Json.Nodes.JsonNode.Parse(original.GetRawText())!; policy["helpAudiences"] = System.Text.Json.Nodes.JsonNode.Parse("{\"family-renewal\":[]}");
+        var report = await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28");
+        var draft = await Send(owner, "/api/v1/manage/configuration/drafts", policy); draft.EnsureSuccessStatusCode();
+        Assert.Contains("family-renewal", HelpIds(await HelpRead(guardian)));
+        await HelpActivate(owner, JsonSerializer.SerializeToElement(policy));
+        Assert.Equal(new[] { "family-progress" }, HelpIds(await HelpRead(guardian)));
+        Assert.Equal(HttpStatusCode.NotFound, (await guardian.GetAsync("/api/v1/help/lessons/family-renewal")).StatusCode);
+        Assert.Contains("coach-sessions", HelpIds(await HelpRead(coach)));
+        var otherSettings = await other.GetFromJsonAsync<JsonElement>("/api/v1/manage/configuration/");
+        Assert.Equal(JsonValueKind.Null, otherSettings.GetProperty("versions").EnumerateArray().Single(x => x.GetProperty("state").GetString() == "Active").GetProperty("settings").GetProperty("helpAudiences").ValueKind);
+        policy["helpAudiences"] = new System.Text.Json.Nodes.JsonObject(); await HelpActivate(owner, JsonSerializer.SerializeToElement(policy));
+        Assert.Contains("family-renewal", HelpIds(await HelpRead(guardian)));
+        Assert.Equal(report, await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28"));
+    });
+    [Fact]
+    public async Task Help_audience_rejects_unknown_or_elevated_roles_and_settings_admin_cannot_publish_owner_policy() => await HelpFixture(async (owner, _) =>
+    {
+        using var admin = await Staff(DemoSeed.AdminEmail); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var config = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/configuration/"); var settings = config.GetProperty("versions").EnumerateArray().Single(x => x.GetProperty("state").GetString() == "Active").GetProperty("settings");
+        foreach (var invalid in new[] { "{\"player-attendance\":[\"Coach\"]}", "{\"invented\":[]}", "{\"family-renewal\":[\"Guardian\",\"Guardian\"]}", "{\"family-renewal\":null}" })
+        { var p = System.Text.Json.Nodes.JsonNode.Parse(settings.GetRawText())!; p["helpAudiences"] = System.Text.Json.Nodes.JsonNode.Parse(invalid); Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, "/api/v1/manage/configuration/drafts", p)).StatusCode); }
+        var member = await db.AcademyMemberships.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.User.Email == DemoSeed.AdminEmail); var previousAction = member.UseActionGrants;
+        var existing = await db.StaffGrants.SingleOrDefaultAsync(x => x.MembershipId == member.Id && x.Permission == AcademyPermissions.AcademySettingsManage && x.IsActive); var previousAllowed = existing?.Allowed;
+        var grant = existing ?? new Academy.Infrastructure.Operations.StaffGrant { Id = Guid.NewGuid(), AcademyId = member.AcademyId, MembershipId = member.Id, Permission = AcademyPermissions.AcademySettingsManage, Allowed = true };
+        try
+        {
+            member.UseActionGrants = false; grant.Allowed = true; if (existing == null) db.StaffGrants.Add(grant); await db.SaveChangesAsync();
+            Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/manage/configuration/")).StatusCode);
+            var policy = System.Text.Json.Nodes.JsonNode.Parse(settings.GetRawText())!; policy["helpAudiences"] = System.Text.Json.Nodes.JsonNode.Parse("{\"family-renewal\":[]}");
+            Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, "/api/v1/manage/configuration/drafts", policy)).StatusCode);
+            var draft = await Send(owner, "/api/v1/manage/configuration/drafts", policy); draft.EnsureSuccessStatusCode(); var id = (await draft.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+            foreach (var state in new[] { "Validated", "Staged", "Active" })
+            {
+                var rows = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/configuration/"); var version = rows.GetProperty("versions").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == id).GetProperty("version").GetUInt32();
+                var result = await Send(state == "Active" ? admin : owner, $"/api/v1/manage/configuration/{id}/transition", new { target = state, version });
+                Assert.Equal(state == "Active" ? HttpStatusCode.Forbidden : HttpStatusCode.NoContent, result.StatusCode);
+            }
+        }
+        finally { member.UseActionGrants = previousAction; if (existing == null) db.StaffGrants.Remove(grant); else grant.Allowed = previousAllowed!.Value; await db.SaveChangesAsync(); }
+    });
     private static async Task<JsonElement> HelpRead(HttpClient c, string suffix = "") => await c.GetFromJsonAsync<JsonElement>("/api/v1/help/lessons" + suffix);
     private static string[] HelpIds(JsonElement value) => value.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetString()!).ToArray();
     private static async Task HelpActivate(HttpClient owner, JsonElement settings)

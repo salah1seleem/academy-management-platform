@@ -17,7 +17,7 @@ test("Role-aware written help searches, drills down and revokes without changing
   const features = Object.fromEntries(licenses.map(x => [x.feature, x.enabled]));
   const config = await (await owner.get("/api/v1/manage/configuration/")).json();
   const original = config.versions.find((x: { state: string }) => x.state === "Active").settings;
-  const enabled = { ...original, features: { ...original.features, learning_hub: true } };
+  const enabled = { ...original, helpAudiences: {}, features: { ...original.features, learning_hub: true } };
   async function activate(settings: unknown) {
     const draft = await (await write(owner, "/api/v1/manage/configuration/drafts", settings)).json();
     for (const target of ["Validated", "Staged", "Active"]) {
@@ -49,6 +49,28 @@ test("Role-aware written help searches, drills down and revokes without changing
       await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill("admin.football@example.test"); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "دخول آمن" }).click(); await admin.waitForURL("**/dashboard"); await admin.goto("/dashboard/help");
       await expect(admin.getByRole("link", { name: /حضور اللاعبين/ })).toBeVisible(); await expect(admin.getByRole("link", { name: /قراءة لوحة المالك/ })).toHaveCount(0);
     } finally { await adminContext.close(); }
+    // Owner changes the real audience through the versioned settings UI.
+    await page.goto('/dashboard/settings');
+    await page.getByRole('checkbox',{name:'تجديد اشتراك أبنائك — ولي الأمر',exact:true}).uncheck();
+    async function saveAudienceDraft() {
+      const saved=page.waitForResponse(r=>r.url().endsWith('/api/v1/manage/configuration/drafts')&&r.request().method()==='POST');
+      await page.getByRole('button',{name:'حفظ إصدار مسودة',exact:true}).click();expect((await saved).ok()).toBe(true);
+      const config=await (await owner.get('/api/v1/manage/configuration/')).json();const draft=config.versions.find((v:{state:string})=>v.state==='Draft');expect(draft).toBeTruthy();return draft;
+    }
+    async function approveAudienceDraft(draft:{revision:number}) {
+      const row=page.locator('.linked-list article').filter({hasText:`الإصدار ${draft.revision} ·`});
+      await row.getByRole('button',{name:'التحقق',exact:true}).click();await row.getByRole('button',{name:'تجهيز التفعيل',exact:true}).click();await row.getByRole('button',{name:'تفعيل الآن',exact:true}).click();
+      const dialog=page.getByRole('dialog');await expect(dialog).toContainText('تغيير جمهور دليل الاستخدام');await dialog.getByRole('button',{name:'تأكيد الاعتماد',exact:true}).click();await expect(dialog).not.toBeVisible();
+      await expect(row).toContainText('سارية');
+    }
+    const hidden=await saveAudienceDraft();expect((await guardian.request.get('/api/v1/help/lessons/family-renewal')).status()).toBe(200);await approveAudienceDraft(hidden);
+    await guardian.reload();await expect(guardian.getByRole('alert').filter({hasText:'غير متاح'})).toBeVisible();await guardian.goto('/guardian/help');await expect(guardian.locator('.help-card')).toHaveCount(1);
+    await guardian.screenshot({path:info.outputPath('guardian-help-audience-390.png'),fullPage:true,animations:'disabled'});
+    await guardian.goto('/guardian/renew-family');await expect(guardian.getByRole('heading',{name:'راجع تجديد أبنائك معًا'})).toBeVisible();await expect(guardian.getByRole('link',{name:'شرح هذه الخطوة'})).toHaveCount(0);
+    const familySection=page.getByRole('heading',{name:'تجديد اشتراك أبنائك',exact:true}).locator('..');await familySection.screenshot({path:info.outputPath('owner-help-audience-hidden.png'),animations:'disabled'});
+    await familySection.getByRole('button',{name:'استعادة جمهور المنتج',exact:true}).click();await approveAudienceDraft(await saveAudienceDraft());
+    await guardian.reload();await guardian.getByRole('link',{name:'شرح هذه الخطوة',exact:true}).click();await expect(guardian).toHaveURL(/\/guardian\/help\/family-renewal$/);await expect(guardian.getByRole('heading',{name:'تجديد اشتراك أبنائك',exact:true})).toBeVisible();
+    await page.goto('/dashboard/subscriptions/plans');await page.getByRole('link',{name:'شرح هذه الخطوة',exact:true}).click();await expect(page).toHaveURL(/\/dashboard\/help\/packages$/);
     await activate({ ...original, features: { ...original.features, learning_hub: false } }); await guardian.reload(); await expect(guardian.getByRole("alert").filter({ hasText: "غير متاح" })).toBeVisible(); await expect(guardian.getByRole("list")).toHaveCount(0); expect(await report()).toEqual(before);
   } finally {
     await activate(original);

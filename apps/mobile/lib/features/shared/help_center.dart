@@ -31,19 +31,25 @@ String _section(BuildContext context, String value) => switch (value) {
 
 class HelpEntry extends StatelessWidget {
   final AuthController auth;
-  const HelpEntry({super.key, required this.auth});
+  final String? lesson;
+  const HelpEntry({super.key, required this.auth, this.lesson});
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: auth,
     builder: (context, _) => auth.session?.selected == null
         ? const SizedBox.shrink()
-        : _HelpAvailability(key: ValueKey(_identity(auth)), auth: auth),
+        : _HelpAvailability(
+            key: ValueKey('${_identity(auth)}:$lesson'),
+            auth: auth,
+            lesson: lesson,
+          ),
   );
 }
 
 class _HelpAvailability extends StatefulWidget {
   final AuthController auth;
-  const _HelpAvailability({super.key, required this.auth});
+  final String? lesson;
+  const _HelpAvailability({super.key, required this.auth, this.lesson});
   @override
   State<_HelpAvailability> createState() => _HelpAvailabilityState();
 }
@@ -64,10 +70,19 @@ class _HelpAvailabilityState extends State<_HelpAvailability>
     if (mounted) setState(() => available = false);
     try {
       final data = obj(
-        await widget.auth.request('GET', '/api/v1/help/availability'),
+        await widget.auth.request(
+          'GET',
+          widget.lesson == null
+              ? '/api/v1/help/availability'
+              : '/api/v1/help/lessons/${Uri.encodeComponent(widget.lesson!)}',
+        ),
       );
       if (mounted && request == generation) {
-        setState(() => available = data['available'] == true);
+        setState(
+          () => available = widget.lesson == null
+              ? data['available'] == true
+              : data['id'] == widget.lesson,
+        );
       }
     } catch (_) {
       /* Help must not block normal work. */
@@ -89,9 +104,14 @@ class _HelpAvailabilityState extends State<_HelpAvailability>
   @override
   Widget build(BuildContext context) => available
       ? GLink(
-          localized(context, 'دليل الاستخدام', 'User guides'),
+          localized(
+            context,
+            widget.lesson == null ? 'دليل الاستخدام' : 'شرح هذه الخطوة',
+            widget.lesson == null ? 'User guides' : 'Help with this step',
+          ),
           Icons.menu_book_outlined,
-          () => openPage(context, HelpPage(auth: widget.auth)),
+          () =>
+              openPage(context, HelpPage(auth: widget.auth, id: widget.lesson)),
         )
       : const SizedBox.shrink();
 }

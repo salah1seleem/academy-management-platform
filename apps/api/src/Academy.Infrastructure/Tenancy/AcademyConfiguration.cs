@@ -40,7 +40,8 @@ public static class AcademyFeatures
 
 public sealed record AcademyRuntimeSettings(
     string Currency, string TimeZone, Dictionary<string, bool> Features,
-    bool CashEnabled = false, int ConsecutiveAbsenceAlert = 3, bool TenantMarketingOptIn = false)
+    bool CashEnabled = false, int ConsecutiveAbsenceAlert = 3, bool TenantMarketingOptIn = false,
+    Dictionary<string, string[]>? HelpAudiences = null)
 {
     public static AcademyRuntimeSettings Initial(string currency, string zone, bool preserveExisting = false) =>
         new(currency, zone, AcademyFeatures.All.ToDictionary(f => f, f => preserveExisting && AcademyFeatures.Existing.Contains(f)), preserveExisting);
@@ -58,6 +59,10 @@ public sealed record AcademyRuntimeSettings(
         if (TenantMarketingOptIn && (Features is null || !Features.GetValueOrDefault("community_ads"))) errors.Add("موافقة الإعلانات تتطلب إتاحة ميزة الإعلانات أولًا.");
         return errors.ToArray();
     }
-    public string Serialize() => JsonSerializer.Serialize(this with { Features = Features.OrderBy(f => f.Key, StringComparer.Ordinal).ToDictionary(f => f.Key, f => f.Value) });
+    public string Serialize() => JsonSerializer.Serialize(this with
+    {
+        Features = Features.OrderBy(f => f.Key, StringComparer.Ordinal).ToDictionary(f => f.Key, f => f.Value),
+        HelpAudiences = HelpAudiences?.OrderBy(a => a.Key, StringComparer.Ordinal).ToDictionary(a => a.Key, a => a.Value is null ? null! : a.Value.OrderBy(r => r, StringComparer.Ordinal).ToArray())
+    });
     public static AcademyRuntimeSettings Read(string payload) => JsonSerializer.Deserialize<AcademyRuntimeSettings>(payload) ?? throw new InvalidOperationException("Invalid stored configuration");
 }

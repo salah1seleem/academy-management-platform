@@ -5,6 +5,14 @@ namespace Academy.UnitTests;
 public sealed class V2ConfigurationTests
 {
     [Fact]
+    public void Old_payload_without_help_audience_preserves_defaults_and_new_policy_has_stable_serialization()
+    {
+        var old = AcademyRuntimeSettings.Read("{\"Currency\":\"EGP\",\"TimeZone\":\"Africa/Cairo\",\"Features\":{}}"); Assert.Null(old.HelpAudiences);
+        var first = old with { HelpAudiences = new() { ["evaluations"] = ["Coach", "AcademyOwner"], ["family-renewal"] = [] } };
+        var second = old with { HelpAudiences = new() { ["family-renewal"] = [], ["evaluations"] = ["AcademyOwner", "Coach"] } };
+        Assert.Equal(first.Serialize(), second.Serialize()); Assert.Empty(AcademyRuntimeSettings.Read(first.Serialize()).HelpAudiences!["family-renewal"]);
+    }
+    [Fact]
     public void New_academy_defaults_do_not_grant_features_cash_or_marketing()
     {
         var settings = AcademyRuntimeSettings.Initial("EGP", "Africa/Cairo");

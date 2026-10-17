@@ -38,8 +38,18 @@ public sealed class AcademyConfigurationService(FoundationDbContext db, TimeProv
         var repeated = await db.AcademyConfigurationVersions.Where(x => x.AcademyId == academyId && x.State == ConfigurationState.Draft && x.CreatedByUserId == actor && x.ContentHash == hash).OrderByDescending(x => x.Revision).FirstOrDefaultAsync();
         if (repeated is not null) return repeated;
         var next = (await db.AcademyConfigurationVersions.Where(x => x.AcademyId == academyId).MaxAsync(x => (int?)x.Revision) ?? 0) + 1;
-        var row = new AcademyConfigurationVersion { Id = Guid.NewGuid(), AcademyId = academyId, Revision = next,
-            Payload = payload, ContentHash = hash, CreatedByUserId = actor, State = ConfigurationState.Draft, CreatedAtUtc = now, UpdatedAtUtc = now };
+        var row = new AcademyConfigurationVersion
+        {
+            Id = Guid.NewGuid(),
+            AcademyId = academyId,
+            Revision = next,
+            Payload = payload,
+            ContentHash = hash,
+            CreatedByUserId = actor,
+            State = ConfigurationState.Draft,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
         db.AcademyConfigurationVersions.Add(row); await db.SaveChangesAsync(); return row;
     }
 
@@ -47,14 +57,24 @@ public sealed class AcademyConfigurationService(FoundationDbContext db, TimeProv
     {
         var a = await db.Academies.AsNoTracking().SingleAsync(x => x.Id == row.AcademyId);
         var licenses = await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == row.AcademyId && x.IsActive).ToDictionaryAsync(x => x.Feature, x => x.Enabled);
-        return AcademyRuntimeSettings.Read(row.Payload).Validate(licenses, a.DefaultCurrency, a.TimeZone);
+        var settings = AcademyRuntimeSettings.Read(row.Payload);
+        return [.. settings.Validate(licenses, a.DefaultCurrency, a.TimeZone), .. Academy.Api.Help.HelpAudiencePolicy.Validate(settings.HelpAudiences)];
     }
 
     public async Task Transition(AcademyConfigurationVersion row, ConfigurationState target, Guid actor)
     {
         var now = clock.GetUtcNow();
-        db.ConfigurationTransitions.Add(new ConfigurationTransition { Id = Guid.NewGuid(), AcademyId = row.AcademyId, ConfigurationId = row.Id,
-            ActorUserId = actor, From = row.State, To = target, CreatedAtUtc = now, UpdatedAtUtc = now });
+        db.ConfigurationTransitions.Add(new ConfigurationTransition
+        {
+            Id = Guid.NewGuid(),
+            AcademyId = row.AcademyId,
+            ConfigurationId = row.Id,
+            ActorUserId = actor,
+            From = row.State,
+            To = target,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        });
         row.State = target; row.UpdatedAtUtc = now; await db.SaveChangesAsync();
     }
 
@@ -67,10 +87,28 @@ public sealed class AcademyConfigurationService(FoundationDbContext db, TimeProv
             var academy = await db.Academies.SingleAsync(x => x.Id == id);
             if (await db.AcademyConfigurationVersions.AnyAsync(x => x.AcademyId == id)) continue;
             var settings = AcademyRuntimeSettings.Initial(academy.DefaultCurrency, academy.TimeZone, preserveExisting: true); var payload = settings.Serialize();
-            db.AcademyConfigurationVersions.Add(new() { Id = Guid.NewGuid(), AcademyId = id, Revision = 1, State = ConfigurationState.Active,
-                Payload = payload, ContentHash = Hash(payload), EffectiveAtUtc = now, CreatedAtUtc = now, UpdatedAtUtc = now });
-            foreach (var f in AcademyFeatures.All) db.AcademyFeatureEntitlements.Add(new() { Id = Guid.NewGuid(), AcademyId = id, Feature = f,
-                Enabled = AcademyFeatures.Existing.Contains(f), PlanCode = "LegacyDemo", CreatedAtUtc = now, UpdatedAtUtc = now });
+            db.AcademyConfigurationVersions.Add(new()
+            {
+                Id = Guid.NewGuid(),
+                AcademyId = id,
+                Revision = 1,
+                State = ConfigurationState.Active,
+                Payload = payload,
+                ContentHash = Hash(payload),
+                EffectiveAtUtc = now,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+            foreach (var f in AcademyFeatures.All) db.AcademyFeatureEntitlements.Add(new()
+            {
+                Id = Guid.NewGuid(),
+                AcademyId = id,
+                Feature = f,
+                Enabled = AcademyFeatures.Existing.Contains(f),
+                PlanCode = "LegacyDemo",
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
         }
         await db.SaveChangesAsync();
     }

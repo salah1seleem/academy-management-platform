@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../shared/help_center.dart';
+
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
@@ -73,6 +75,7 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
             final p = matches.first;
             final name = textOf(p['player'] ?? p['arabicName']);
             return gList([
+              HelpEntry(auth: widget.auth, lesson: 'evaluations'),
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

@@ -5,6 +5,7 @@ import '../../core/api/api_client.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../shared/private_media.dart';
+import '../shared/help_center.dart';
 import '../shared/transfer_payment.dart';
 import 'guardian_payments.dart' show ReceiptPage;
 import 'guardian_ui.dart';
@@ -19,6 +20,7 @@ class NativeFamilyRenewalRequests extends StatelessWidget {
       auth: auth,
       path: '/api/v1/guardian/subscriptions/family/requests',
       builder: (context, value) => gList([
+        HelpEntry(auth: auth, lesson: 'family-renewal'),
         if (rows(obj(value)['items']).isEmpty)
           EmptyMessage(
             localized(

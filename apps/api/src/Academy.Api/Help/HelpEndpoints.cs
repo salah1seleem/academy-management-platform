@@ -20,6 +20,14 @@ public static class HelpEndpoints
         var g = app.MapGroup("/api/v1/help").RequireAuthorization(AcademyPermissions.TenantAccess);
         g.MapGet("/availability", async (CurrentTenant tenant, AcademyConfigurationService config, HttpResponse r) => { r.Headers.CacheControl = "private, no-store"; var t = (await tenant.ResolveAsync())!; return Results.Ok(new { available = await config.Enabled(t.AcademyId, "learning_hub") }); });
         g.MapGet("/lessons", List); g.MapGet("/lessons/{id}", Details);
+        app.MapGet("/api/v1/manage/configuration/help-options", (HttpResponse response) =>
+        {
+            response.Headers.CacheControl = "private, no-store"; return Results.Ok(new
+            {
+                lessons = HelpCatalog.All.Select(g => new { g.Id, g.Title, roles = g.Roles.Select(r => r.ToString()), g.Feature }),
+                notice = "اختيار الجمهور يضيّق الإتاحة ولا يمنح صلاحية تنفيذ. التغييرات تسري بعد تفعيل إصدار إعدادات التشغيل."
+            });
+        }).RequireAuthorization(AcademyPermissions.AcademySettingsManage);
     }
     private static string Normalize(string value) => new(value.Normalize(NormalizationForm.FormD).Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark && c != 'ـ').Select(c => c switch { 'أ' or 'إ' or 'آ' => 'ا', 'ى' => 'ي', _ => char.ToLowerInvariant(c) }).ToArray());
     private static async Task<HelpGuide[]> Allowed(CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h)
@@ -29,6 +37,7 @@ public static class HelpEndpoints
         var active = await config.Active(t.AcademyId); var result = new List<HelpGuide>();
         foreach (var guide in HelpCatalog.All.Where(l => l.Roles.Contains(t.Role)))
         {
+            if (!HelpAudiencePolicy.Allows(active?.HelpAudiences, guide.Id, t.Role.ToString())) continue;
             if (guide.Feature != null && !await config.Enabled(t.AcademyId, guide.Feature) || guide.CashOnly && active?.CashEnabled != true) continue;
             if (guide.Sport.HasValue && !await db.Sports.AnyAsync(s => s.IsActive && s.Kind == guide.Sport)) continue;
             var allowed = true; foreach (var permission in guide.Permissions) if (!(await authorization.AuthorizeAsync(h.User, h, permission)).Succeeded) { allowed = false; break; }
