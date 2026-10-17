@@ -1,5 +1,7 @@
 # مراجعة الأولويات بعد ملاحظات صلاح — 2026-10-14
 
+آخر تقدم **D2b،2026-10-17**: `78910cf530298ddafe752d0a2b97faedb19e6c5b` إسناد مدرب مستقل بتاريخ محفوظ وLegacyReview صريحة؛ تغيير الفريق لا يغيره. API19+1/Web16/Flutter17/E2E2/native10s وCI consumers6 وصور فعلية؛ migration105 بلاpending. **التالي D2c التقويم بنفس المصدر** ثم بقية غير المالي، وكل المالي المتبقي آخرًا ثمH. [الدليل](../academy-v3/PROGRESS.md)، لا اكتمال خطة أو CI شامل/deploy يدوي مدعى.
+
 آخر تقدم **D2a،2026-10-17**: `4a1692cecac46530c05c57f2051842bd2099edf7` مبارياتملفاللاعبوالمدربوالطفل بسياق/رجوعمحفوظ، rosterموجودمعادالاستخداموإلغاءمرئيبلامال. API16/Web14/Flutter28/E2E21.6s/iOS4sوصور، لاmigration. **التاليD2bإسنادمدربمستقلوتاريخيومراجعةالقديم**؛ CurrentTeamصريحولااكتمالAC26. بقيةD/E/F/G ثمكلالماليالمتبقيآخرًا وأخيرًاH؛ [الدليل](../academy-v3/PROGRESS.md)، العرضوmainمحفوظان.
 
 آخر تقدم **E2c3a،2026-10-17**: `1fede83622a0de20abd51be789a3b6c223eb4b18` يربط Flutter الحالي بتسجيل/Verify/hضور/انصراف iOS علىالخادمالقائم، default-off وretryنفسJSON ورفضتغيرالسياق. API6/Web8/Flutter39 وanalyze/lock؛ nativeرفضإعدادفعلي5s وعدمكتابةومسارمراجعة وصور، لاFaceIDماديأوAndroid. لاmigrationوEFpending. **E2c3bإيجابي محجوببنطاقHTTPSمملوك/AASA وAppleTeam/profile وجهازفعلي؛ التاليغيرالمحجوبD2 rosterوتبويباتالمباريات** ثمبقيةD/E/F/G، وكلالماليالمتبقيآخرًا ثمH. [الدليل](../academy-v3/PROGRESS.md) و[المدخلات](../architecture/NATIVE_STAFF_PASSKEY_SETUP.md). العرضاليدويمحفوظشغالًا، mainدونتغيير، لااكتمالالخطةمدعى.
