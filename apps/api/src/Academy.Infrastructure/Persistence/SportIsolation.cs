@@ -85,6 +85,8 @@ public sealed partial class FoundationDbContext
         SportFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         SportFilter<MatchParticipant>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         SportFilter<MatchCoachAssignment>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
+        SportFilter<OwnerFollowUp>(b, x => TrainingGroups.Any(g => g.Id == x.TrainingGroupId));
+        SportFilter<OwnerFollowUpChange>(b, x => OwnerFollowUps.Any(f => f.Id == x.FollowUpId));
         SportFilter<TournamentPayment>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         // Child-global medical/media cannot be split reliably by sport. Narrow
         // sport administration does not delegate these shared sensitive records.

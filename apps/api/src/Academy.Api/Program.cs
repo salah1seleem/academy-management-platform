@@ -399,6 +399,7 @@ app.MapStaffPasskeys();
 app.MapStaffVerifiedAttendance();
 app.MapStaffAttendanceExceptions();
 app.MapGuardianFeedback();
+app.MapOwnerFollowUps();
 app.MapPayroll();
 app.MapCoachAgreements();
 app.MapPrivateServices();
@@ -442,6 +443,8 @@ if (app.Environment.IsEnvironment("Demo"))
         var db = configSeed.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var ids = await db.Academies.Where(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId || x.Id == FootballDemoSeed.AcademyId).Select(x => x.Id).ToListAsync();
         await AcademyConfigurationService.SeedDemo(db, ids);
+        if(app.Configuration.GetValue<bool>("Demo:OwnerFollowUpSeedEnabled"))
+            await OwnerFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if (app.Configuration.GetValue<bool>("Demo:CoachAgreementSeedEnabled"))
             await CoachAgreementDemoSeed.Seed(db, app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if (app.Configuration.GetValue<bool>("Demo:PrivateServiceSeedEnabled"))

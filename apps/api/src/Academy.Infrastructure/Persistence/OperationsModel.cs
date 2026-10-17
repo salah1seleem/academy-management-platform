@@ -32,6 +32,7 @@ public sealed partial class FoundationDbContext
 
     private static void ConfigureOperations(ModelBuilder b)
     {
+        ConfigureOwnerFollowUps(b);
         ConfigureVersionedSettings(b);
         ConfigurePlayerCards(b);
         ConfigureObservations(b);

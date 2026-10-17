@@ -7,6 +7,7 @@ import '../coach/coach_attendance.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/role_navigation.dart';
 import 'owner_feedback.dart';
+import 'owner_followups.dart';
 
 /// Hides cached operational records when the selected authorization context ends.
 class OwnerScopedRead extends StatefulWidget {
@@ -89,6 +90,18 @@ class _OwnerDecisionsPageState extends State<OwnerDecisionsPage> {
             auth: widget.auth,
             operations: ops,
             onReturn: refresh,
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => OwnerFollowUpsPage(auth: widget.auth),
+                ),
+              );
+              refresh();
+            },
+            icon: const Icon(Icons.task_alt),
+            label: const UiText('متابعات المالك المحفوظة'),
           ),
           if (ops.isNotEmpty)
             OwnerOperationsPanel(

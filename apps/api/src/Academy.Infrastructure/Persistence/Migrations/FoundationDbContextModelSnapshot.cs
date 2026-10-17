@@ -4001,6 +4001,150 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("MatchTeamPlayers", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssignedToMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Condition")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("CreatedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("DueOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EvidenceJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResolutionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TrainingGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademyId", "AssignedToMembershipId");
+
+                    b.HasIndex("AcademyId", "CreatedByMembershipId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "TrainingGroupId", "Condition")
+                        .IsUnique()
+                        .HasFilter("\"State\" NOT IN ('Closed','Rejected')");
+
+                    b.ToTable("OwnerFollowUps", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OwnerFollowUp_State", "\"IsActive\" AND \"Condition\" IN ('GroupCoachMissing','GroupLowOccupancy') AND \"State\" IN ('New','Assigned','InProgress','Snoozed','Closed','Rejected') AND (\"State\" NOT IN ('Assigned','InProgress') OR \"AssignedToMembershipId\" IS NOT NULL) AND (\"State\" <> 'Snoozed' OR \"DueOn\" IS NOT NULL) AND (\"State\" NOT IN ('Closed','Rejected') OR length(trim(\"ResolutionReason\")) > 0 AND \"ResolutionReason\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUpChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("BeforeJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FollowUpId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "FollowUpId");
+
+                    b.HasIndex("AcademyId", "ActorMembershipId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("OwnerFollowUpChanges", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.PaymentProof", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12709,6 +12853,58 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Operations.MatchTeam", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "TeamId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUp", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AssignedToMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CreatedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingGroup", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingGroupId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUpChange", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ActorMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.OwnerFollowUp", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "FollowUpId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
