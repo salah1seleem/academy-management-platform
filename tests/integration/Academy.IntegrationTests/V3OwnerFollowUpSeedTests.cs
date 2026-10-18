@@ -28,6 +28,8 @@ public sealed class V3OwnerFollowUpSeedTests
             ids=await db.OwnerFollowUps.Where(f=>f.AcademyId==FootballDemoSeed.AcademyId).OrderBy(f=>f.Id).Select(f=>f.Id).ToArrayAsync();Assert.Equal(2,ids.Length);Assert.Equal(1,await db.OwnerFollowUps.CountAsync(f=>f.AcademyId==FootballDemoSeed.AcademyId&&f.State=="Closed"));Assert.Equal(2,await db.OwnerFollowUpChanges.CountAsync(f=>f.AcademyId==FootballDemoSeed.AcademyId));collections=await db.Collections.CountAsync();
             await Assert.ThrowsAsync<InvalidOperationException>(()=>OwnerFollowUpDemoSeed.Seed(db,new HostingEnvironment{EnvironmentName="Production"},new DemoOptions{SeedEnabled=true,SeedProfile="Football"},TimeProvider.System));
             Assert.True(await db.TrainingSessions.AnyAsync(s=>s.Id==FootballDemoSeed.Id("owner-followup-demo/coverage-session")&&s.TrainingGroupId==FootballDemoSeed.Id("owner-followup-demo/coverage-group")));
+            var draft=await db.PlayerEvaluations.Include(e=>e.Scores).SingleAsync(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0"));
+            Assert.Equal(Academy.Infrastructure.Evaluations.EvaluationStatus.Draft,draft.Status);Assert.Single(draft.Scores);draft.IsActive=false;await db.SaveChangesAsync();
             var delegateMember=await db.AcademyMemberships.Include(m=>m.User).SingleAsync(m=>m.Id==AssignedFollowUpDemoSeed.MembershipId);
             Assert.Equal(EgyptPhoneNormalizer.Normalize(AssignedFollowUpDemoSeed.Phone),delegateMember.User.PhoneNumber);
             Assert.False(delegateMember.AllBranches);Assert.False(delegateMember.AllSports);Assert.True(delegateMember.UseActionGrants);
@@ -41,6 +43,9 @@ public sealed class V3OwnerFollowUpSeedTests
         {
             using var c=second.CreateClient();await using var scope=second.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Equal(ids,await db.OwnerFollowUps.Where(f=>f.AcademyId==FootballDemoSeed.AcademyId).OrderBy(f=>f.Id).Select(f=>f.Id).ToArrayAsync());Assert.Equal(2,await db.OwnerFollowUpChanges.CountAsync(f=>f.AcademyId==FootballDemoSeed.AcademyId));Assert.Equal(collections,await db.Collections.CountAsync());
             Assert.Equal(1,await db.TrainingSessions.CountAsync(s=>s.Id==FootballDemoSeed.Id("owner-followup-demo/coverage-session")));
+            Assert.False(await db.PlayerEvaluations.Where(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0")).Select(e=>e.IsActive).SingleAsync());
+            Assert.Equal(2,await db.PlayerEvaluations.CountAsync(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0")||e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/1")));
+            var restoredDraft=await db.PlayerEvaluations.SingleAsync(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0"));restoredDraft.IsActive=true;await db.SaveChangesAsync();
             Assert.False(await db.AcademyMemberships.Where(m=>m.Id==AssignedFollowUpDemoSeed.MembershipId).Select(m=>m.IsActive).SingleAsync());
             Assert.False(await db.StaffActionGrants.Where(g=>g.MembershipId==AssignedFollowUpDemoSeed.MembershipId).Select(g=>g.Edit).SingleAsync());
             // Restore only this synthetic test account so a repeated test run starts from its fixture state.

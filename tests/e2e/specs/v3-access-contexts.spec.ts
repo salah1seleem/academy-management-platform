@@ -11,7 +11,7 @@ test("Owner creates and activates a scoped context; the same admin explicitly sw
   const football = "32000000-0000-0000-0000-000000000001"; const swimming = "32000000-0000-0000-0000-000000000002";
   const branchName = settings.branches.find((b: { id: string }) => b.id === branchB).name;
   const sportName = settings.sports.find((s: { id: string }) => s.id === swimming).name;
-  expect((await page.request.put(`/api/v1/manage/staff/${primary}/access`, { headers: { "X-CSRF-TOKEN": token }, data: { allBranches: false, branches: [branchA], allSports: false, sports: [football], actions: settings.modules.map((module: string) => ({ module, read: true, add: true, edit: true, delete: false })) } })).status()).toBe(204);
+  expect((await page.request.put(`/api/v1/manage/staff/${primary}/access`, { headers: { "X-CSRF-TOKEN": token }, data: { allBranches: false, branches: [branchA], allSports: false, sports: [football], actions: settings.modules.map((module: string) => ({ module, read: true, add: module !== "followups", edit: true, delete: false })) } })).status()).toBe(204);
   await page.goto("/dashboard/staff"); await page.locator("article").filter({ hasText: name }).getByRole("button", { name: "سياقات العمل", exact: true }).click();
   await page.getByLabel("اسم السياق الجديد").fill(contextName); await page.getByRole("button", { name: "إنشاء وتحديد الصلاحيات" }).click();
   await expect(page.getByText("هذا سياق تشغيل إضافي", { exact: false })).toBeVisible();

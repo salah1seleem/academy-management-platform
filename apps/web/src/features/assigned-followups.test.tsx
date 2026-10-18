@@ -4,6 +4,10 @@ import { AssignedFollowUps } from "./assigned-followups";
 import { StaffActionMatrix } from "./staff-access";
 const item = { id: "task", version: 4, state: "Assigned", condition: "GroupLowOccupancy", conditionActive: true, overdue: true, dueOn: "2026-10-18", note: "ملاحظة اصطناعية", resolutionReason: null, sourceUrl: "/dashboard/academy/groups/group", source: { name: "مجموعة العرض", branch: "فرع التجربة", sport: "كرة القدم", enrollments: 3, capacity: 20 } };
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it("an operational delegate sees draft counts without child source links or publishing controls",async()=>{
+  global.fetch=vi.fn(async()=>Response.json({item:{...item,condition:"GroupEvaluationDrafts",source:{...item.source,evaluationDrafts:{draftCount:2,playerCount:1}}},canEdit:true,canOpenSource:false,history:[]})) as typeof fetch;
+  render(<AssignedFollowUps id="task"/>);expect(await screen.findByText(/2 مسودة · 1 لاعب فريد/)).toBeVisible();expect(screen.queryByRole("link",{name:/مراجعة تقييم/})).not.toBeInTheDocument();expect(screen.queryByRole("button",{name:/نشر التقييم/})).not.toBeInTheDocument();
+});
 it("shows only the server inbox with month defaults and clear removes all filters including defaults", async () => {
   const requests: string[] = [];
   global.fetch = vi.fn(async path => { requests.push(String(path)); return Response.json({ from: "2026-10-01", to: "2026-10-17", items: [item], canEdit: true, canOpenSource: false }); }) as typeof fetch;

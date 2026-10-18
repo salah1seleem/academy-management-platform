@@ -6,6 +6,11 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const item = { id: "task", version: 42, state: "Closed", condition: "GroupLowOccupancy", conditionActive: true, assignedToMembershipId: null, dueOn: null, note: "", resolutionReason: "متابعة بشرية فقط", sourceUrl: "/dashboard/academy/groups/group", evidence: { observedAtUtc: "2026-10-17T02:30:00Z" }, source: { groupId: "group", name: "مجموعة اختبار", branch: "فرع اختبار", enrollments: 3, capacity: 20 } };
 const options = { owners: [{ id: "owner", name: "مالك اصطناعي" }], branches: [{id:"branch",name:"فرع اختبار"}], candidates: [{ source: item.source, condition: item.condition, activeFollowUpId: "task" }], rule: "تسجيلات مسندة وليست قيمة ربح" };
+it("draft review separates distinct players from drafts and opens immutable source IDs rather than publishing on close", async()=>{
+  const review={...item,condition:"GroupEvaluationDrafts",source:{...item.source,evaluationDrafts:{draftCount:2,playerCount:1,oldestCreatedAtUtc:"2026-09-20T09:00:00Z",cutoffUtc:"2026-10-11T09:00:00Z"}},evidence:{observedAtUtc:"2026-10-18T09:00:00Z",evaluationIds:["draft-one","draft-two"]}};
+  global.fetch=vi.fn(async()=>Response.json({item:review,owners:options.owners,history:[]})) as typeof fetch;render(<OwnerFollowUpDetail id="task"/>);
+  expect(await screen.findByText(/2 مسودة · 1 لاعب فريد/)).toBeVisible();expect(screen.getByRole("link",{name:"مراجعة تقييم من دليل الإنشاء 1"})).toHaveAttribute("href","/dashboard/evaluations/draft-one/edit");expect(screen.queryByRole("button",{name:"نشر التقييم"})).not.toBeInTheDocument();
+});
 it("coverage evidence identifies the real session and does not call the coach absent or deduct salary",async()=>{
   const covered={...item,condition:"GroupSessionCoverage",source:{...item.source,coverageGaps:[{id:"real-session",sessionDate:"2026-10-18",startTime:"17:00:00",endTime:"18:00:00"}]}};
   global.fetch=vi.fn(async()=>Response.json({item:covered,owners:options.owners,history:[]})) as typeof fetch;render(<OwnerFollowUpDetail id="task"/>);

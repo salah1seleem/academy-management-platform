@@ -25,7 +25,7 @@ public static partial class OwnerFollowUpEndpoints
         var ids = rows.Select(x => x.TrainingGroupId).Distinct().ToArray();
         // Do not compute signals or disclose names for unassigned groups.
         var sources = new Dictionary<Guid, GroupSignal>(); foreach (var id in ids) { var s = (await Signals(db, t.AcademyId, today, id, clock.GetUtcNow())).SingleOrDefault(); if (s != null) sources[id] = s; }
-        return Results.Ok(new { from, to, asOfDate = today, canEdit = await DelegateAllowed(db, t.AcademyId, t.MembershipId, true), canOpenSource = await CanOpenGroup(db, t), limit = 100, hasMore = rows.Length > 100, items = rows.Take(100).Select(f => Row(f, sources.GetValueOrDefault(f.TrainingGroupId), today)) });
+        return Results.Ok(new { from, to, asOfDate = today, canEdit = await DelegateAllowed(db, t.AcademyId, t.MembershipId, true), canOpenSource = await CanOpenGroup(db, t), limit = 100, hasMore = rows.Length > 100, items = rows.Take(100).Select(f => Row(f, sources.GetValueOrDefault(f.TrainingGroupId), today, false)) });
     }
     private static async Task<IResult> MyDetails(Guid id, CurrentTenant tenant, FoundationDbContext db, HttpContext h, TimeProvider clock)
     {
@@ -33,7 +33,7 @@ public static partial class OwnerFollowUpEndpoints
         var f = await db.OwnerFollowUps.AsNoTracking().SingleOrDefaultAsync(f => f.Id == id && f.AssignedToMembershipId == t.MembershipId && db.TrainingGroups.Any(g => g.Id == f.TrainingGroupId)); if (f == null) return Results.NotFound();
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         var history = await db.OwnerFollowUpChanges.Where(c => c.FollowUpId == id).OrderBy(c => c.CreatedAtUtc).ThenBy(c => c.Id).Select(c => new { c.Id, c.CreatedAtUtc, after = c.AfterJson }).ToArrayAsync();
-        return Results.Ok(new { item = Row(f, (await Signals(db, t.AcademyId, today, f.TrainingGroupId, clock.GetUtcNow())).SingleOrDefault(), today), history, canEdit = f.State is not ("Closed" or "Rejected") && await DelegateAllowed(db, t.AcademyId, t.MembershipId, true), canOpenSource = await CanOpenGroup(db, t) });
+        return Results.Ok(new { item = Row(f, (await Signals(db, t.AcademyId, today, f.TrainingGroupId, clock.GetUtcNow())).SingleOrDefault(), today, false), history, canEdit = f.State is not ("Closed" or "Rejected") && await DelegateAllowed(db, t.AcademyId, t.MembershipId, true), canOpenSource = await CanOpenGroup(db, t) });
     }
     private static async Task<IResult> MyChange(Guid id, AssignedFollowUpWrite b, CurrentTenant tenant, FoundationDbContext db, HttpContext h, TimeProvider clock)
     {

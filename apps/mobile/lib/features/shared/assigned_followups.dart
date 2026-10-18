@@ -291,6 +291,8 @@ class _Summary extends StatelessWidget {
         ),
         Heading(textOf(source['name'])),
         UiText(followUpConditions[item['condition']] ?? 'متابعة تشغيلية'),
+        if (item['condition'] == 'GroupEvaluationDrafts')
+          evaluationDraftSummary(source),
         if (item['condition'] == 'GroupLowOccupancy')
           UiText(
             'تسجيلات فعالة مسندة: ${source['enrollments']}، السعة: ${source['capacity'] ?? 'غير محددة'}',

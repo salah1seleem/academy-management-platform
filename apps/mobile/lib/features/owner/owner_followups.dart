@@ -20,7 +20,17 @@ const followUpConditions = {
   'GroupCoachMissing': 'مجموعة بلا مدرب مخول',
   'GroupLowOccupancy': 'إشغال أقل من نصف السعة',
   'GroupSessionCoverage': 'حصص قادمة بلا مدرب مسند مخول',
+  'GroupEvaluationDrafts': 'مسودات تقييم منذ 7 أيام',
 };
+Widget evaluationDraftSummary(Json source) {
+  final d = source['evaluationDrafts'];
+  return UiText(
+    d is! Map
+        ? 'بيانات مراجعة التقييمات غير متاحة حاليًا.'
+        : '${d['draftCount']} مسودة · ${d['playerCount']} لاعب فريد. مسودات غير منشورة منذ 7 أيام على الأقل؛ ليست حكم كفاءة أو موعد استحقاق تعاقدي.',
+  );
+}
+
 Widget coverageSummary(Json source) {
   final gaps = rows(source['coverageGaps'] ?? <Json>[]);
   return Column(
@@ -55,6 +65,94 @@ String followUpRequestId() {
 String? followUpContext(AuthController auth) => auth.session?.selected == null
     ? null
     : '${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}';
+
+class FollowUpEvaluationSource extends StatefulWidget {
+  final AuthController auth;
+  final String id;
+  const FollowUpEvaluationSource({
+    super.key,
+    required this.auth,
+    required this.id,
+  });
+  @override
+  State<FollowUpEvaluationSource> createState() =>
+      _FollowUpEvaluationSourceState();
+}
+
+class _FollowUpEvaluationSourceState extends State<FollowUpEvaluationSource>
+    with WidgetsBindingObserver {
+  late final identity = followUpContext(widget.auth);
+  bool foreground = true;
+  int revision = 0;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Discard child evidence off-screen. Resume must reauthorize against the
+    // actual source instead of redisplaying a previously authorized draft.
+    setState(() {
+      foreground = state == AppLifecycleState.resumed;
+      revision++;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.auth,
+    builder: (context, _) {
+      if (!foreground ||
+          identity == null ||
+          identity != followUpContext(widget.auth)) {
+        return const SizedBox.shrink();
+      }
+      return GuardianPage(
+        title: 'مصدر متابعة التقييم',
+        child: RemoteBody(
+          key: ValueKey('$identity:$revision'),
+          auth: widget.auth,
+          path: '/api/v1/evaluations/${widget.id}',
+          builder: (context, value) {
+            final e = obj(value);
+            return followUpList([
+              Heading(textOf(e['player'])),
+              UiText('${e['group']} · ${e['sport']}'),
+              UiText(
+                e['status'] == 'Draft'
+                    ? 'مسودة غير منشورة'
+                    : e['status'] == 'Published'
+                    ? 'تقييم منشور'
+                    : 'تقييم مستبدل',
+              ),
+              UiText(textOf(e['evaluationDate'])),
+              if (e['generalNotes'] is String &&
+                  (e['generalNotes'] as String).isNotEmpty)
+                UiText(e['generalNotes'] as String),
+              for (final score in rows(e['scores']))
+                GCard(
+                  child: UiText(
+                    '${score['name']}: ${score['score'] ?? 'لم يُقيّم'}',
+                  ),
+                ),
+              const UiText(
+                'قراءة من المصدر الفعلي؛ تحديث أو إغلاق المتابعة لا يعدل هذا التقييم.',
+              ),
+            ]);
+          },
+        ),
+      );
+    },
+  );
+}
 
 class OwnerFollowUpsPage extends StatefulWidget {
   final AuthController auth;
@@ -343,6 +441,8 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
                       UiText(followUpConditions[c['condition']] ?? ''),
                       if (c['condition'] == 'GroupSessionCoverage')
                         coverageSummary(obj(c['source'])),
+                      if (c['condition'] == 'GroupEvaluationDrafts')
+                        evaluationDraftSummary(obj(c['source'])),
                       UiText(
                         '${obj(c['source'])['enrollments']} تسجيلًا مسندًا · السعة ${obj(c['source'])['capacity'] ?? 'غير محددة'}',
                       ),
@@ -468,6 +568,24 @@ class _FollowUpFormState extends State<_FollowUpForm> {
     return followUpList([
       UiText(followUpConditions[item['condition']] ?? 'متابعة'),
       UiText(textOf(source['name'])),
+      if (item['condition'] == 'GroupEvaluationDrafts') ...[
+        evaluationDraftSummary(source),
+        const UiText(
+          'تقييمات دليل الإنشاء؛ لا تُنشر أو تتغير عند إغلاق المتابعة.',
+        ),
+        if (source['evaluationDrafts'] != null)
+          for (final id
+              in (obj(item['evidence'])['evaluationIds'] as List? ?? []).take(
+                3,
+              ))
+            TextButton(
+              onPressed: () => openPage(
+                context,
+                FollowUpEvaluationSource(auth: widget.auth, id: id.toString()),
+              ),
+              child: const UiText('عرض تقييم من دليل الإنشاء'),
+            ),
+      ],
       if (item['condition'] == 'GroupSessionCoverage') coverageSummary(source),
       if (item['condition'] == 'GroupSessionCoverage' &&
           obj(item['evidence'] ?? <String, dynamic>{})['source'] is Map)

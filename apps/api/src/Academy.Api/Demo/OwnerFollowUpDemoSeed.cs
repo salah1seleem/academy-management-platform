@@ -4,6 +4,7 @@ using Academy.Api.Operations;
 using Academy.Api.Slice4;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
@@ -31,6 +32,15 @@ public static class OwnerFollowUpDemoSeed
         if(!await db.TrainingGroups.AnyAsync(g=>g.Id==coverageGroup)){
             db.TrainingGroups.Add(new(){Id=coverageGroup,AcademyId=a,ArabicName="مجموعة تحتاج مراجعة تغطية — عرض اصطناعي",BranchId=FootballDemoSeed.Id("branch/1"),SportId=FootballDemoSeed.Id("sport"),AgeCategoryId=FootballDemoSeed.Id("age/2"),Capacity=16,CreatedAtUtc=now,UpdatedAtUtc=now});
             db.TrainingSessions.Add(new(){Id=FootballDemoSeed.Id("owner-followup-demo/coverage-session"),AcademyId=a,TrainingGroupId=coverageGroup,BranchId=FootballDemoSeed.Id("branch/1"),SportId=FootballDemoSeed.Id("sport"),AgeCategoryId=FootballDemoSeed.Id("age/2"),SessionDate=today.AddDays(1),StartTime=new(17,0),EndTime=new(18,0),Status=TrainingSessionStatus.Scheduled,Source=TrainingSessionSource.Manual,CreatedByUserId=await db.AcademyMemberships.Where(m=>m.Id==owner).Select(m=>m.UserId).SingleAsync(),Notes="حصة اصطناعية لمراجعة إسناد المدرب، لا حضور أو خصم أو إرسال حقيقي.",CreatedAtUtc=now,UpdatedAtUtc=now});
+        }
+        // Stable, deliberately old drafts with synthetic scores; never auto-publish them.
+        var createdAt = DateTimeOffset.Parse("2026-09-20T09:00:00Z");
+        for(var i=0;i<2;i++) {
+            var draftId=FootballDemoSeed.Id($"owner-followup-demo/evaluation/{i}");
+            if(await db.PlayerEvaluations.AnyAsync(e=>e.Id==draftId))continue;
+            var criterion=await db.EvaluationCriteria.Where(c=>c.AcademyId==a&&c.SportId==FootballDemoSeed.Id("sport")).OrderBy(c=>c.DisplayOrder).ThenBy(c=>c.Id).FirstAsync();
+            var draft=new PlayerEvaluation{Id=draftId,AcademyId=a,TrainingGroupId=FootballDemoSeed.Id("group/2"),SportId=FootballDemoSeed.Id("sport"),SportEnrollmentId=FootballDemoSeed.Id("enrollment/10"),EvaluatedByUserId=FootballDemoSeed.Id("user/coach3"),EvaluationDate=new(2026,9,20+i),ReportingPeriod=$"مراجعة تشغيل اصطناعية {i+1}",CreatedAtUtc=createdAt.AddHours(i),UpdatedAtUtc=createdAt.AddHours(i)};
+            draft.Scores.Add(new(){Id=FootballDemoSeed.Id($"owner-followup-demo/evaluation/score/{i}"),AcademyId=a,PlayerEvaluationId=draftId,EvaluationCriterionId=criterion.Id,SportId=draft.SportId,CriterionNameSnapshot=criterion.ArabicName,WeightSnapshot=criterion.Weight,FootballAxisSnapshot=criterion.FootballAxis,Score=70+i,CreatedAtUtc=createdAt,UpdatedAtUtc=createdAt});db.PlayerEvaluations.Add(draft);
         }
         await db.SaveChangesAsync();await tx.CommitAsync();
     }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/owner/owner_followups.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,91 @@ Map<String, dynamic> item() => {
   'evidence': {'observedAtUtc': '2026-10-17T02:30:00Z'},
 };
 void main() {
+  testWidgets(
+    'Draft evidence uses actual source, hides on logout and reauthorizes on resume',
+    (t) async {
+      var allowed = true;
+      final paths = <String>[];
+      final auth = await fixture.owner((method, path, body, token) async {
+        expect(method, 'GET');
+        paths.add(path);
+        if (!allowed) {
+          throw const ApiFailure(403, 'ليس لديك صلاحية قراءة المصدر.');
+        }
+        return {
+          'player': 'لاعب دليل اصطناعي',
+          'group': 'مجموعة اصطناعية',
+          'sport': 'كرة القدم',
+          'status': 'Draft',
+          'evaluationDate': '2026-09-20',
+          'generalNotes': 'ملاحظة خاصة للاختبار',
+          'scores': [
+            {'name': 'التمرير', 'score': 70},
+          ],
+        };
+      });
+      await t.pumpWidget(
+        fixture.shell(FollowUpEvaluationSource(auth: auth, id: 'draft-1')),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('لاعب دليل اصطناعي'), findsOneWidget);
+      expect(find.text('مسودة غير منشورة'), findsOneWidget);
+      expect(find.text('نشر'), findsNothing);
+      // Inactive is the renderable transition before the OS pauses frames.
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await t.pumpAndSettle();
+      expect(find.text('ملاحظة خاصة للاختبار'), findsNothing);
+      allowed = false;
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await t.pumpAndSettle();
+      expect(paths, [
+        '/api/v1/evaluations/draft-1',
+        '/api/v1/evaluations/draft-1',
+      ]);
+      expect(find.text('ملاحظة خاصة للاختبار'), findsNothing);
+      expect(find.text('ليس لديك صلاحية قراءة المصدر.'), findsOneWidget);
+      await auth.logout();
+      await t.pumpAndSettle();
+      expect(find.text('مصدر متابعة التقييم'), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'Draft review distinguishes drafts and unique players and opens saved evidence',
+    (t) async {
+      final auth = await fixture.owner(
+        (m, p, b, token) async => {
+          'item': {
+            ...item(),
+            'condition': 'GroupEvaluationDrafts',
+            'source': {
+              ...Map<String, dynamic>.from(item()['source'] as Map),
+              'evaluationDrafts': {'draftCount': 2, 'playerCount': 1},
+            },
+            'evidence': {
+              'evaluationIds': ['draft-1'],
+            },
+          },
+          'owners': options()['owners'],
+          'history': <Object>[],
+        },
+      );
+      await t.pumpWidget(
+        fixture.shell(OwnerFollowUpPage(auth: auth, id: 'followup')),
+      );
+      await t.pumpAndSettle();
+      expect(find.textContaining('2 مسودة · 1 لاعب فريد'), findsOneWidget);
+      expect(find.textContaining('ليست حكم كفاءة'), findsOneWidget);
+      expect(
+        find.textContaining('عرض تقييم من دليل الإنشاء'),
+        findsOneWidget,
+      );
+      expect(find.text('نشر'), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets(
     'Coverage follow-up shows actual session times without manufacturing absence or pay changes',
     (t) async {
