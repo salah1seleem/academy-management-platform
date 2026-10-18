@@ -187,7 +187,13 @@ void main() {
 
         await t.pumpWidget(shell(AdminMediaGallery(auth: owner)));
         await wait(find.text(caption));
-        final open = find.widgetWithText(OutlinedButton, 'سحب النشر').first;
+        final targetCard = find
+            .ancestor(of: find.text(caption), matching: find.byType(GCard))
+            .first;
+        final open = find.descendant(
+          of: targetCard,
+          matching: find.widgetWithText(OutlinedButton, 'سحب النشر'),
+        );
         await t.scrollUntilVisible(
           open,
           160,

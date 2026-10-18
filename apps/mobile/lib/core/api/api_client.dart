@@ -99,9 +99,7 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode(body));
       }
-      final response = await request.close().timeout(
-        const Duration(seconds: 20),
-      );
+      final response = await request.close().timeout(const Duration(seconds: 20));
       final raw = await utf8.decoder
           .bind(response)
           .join()
@@ -150,9 +148,38 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
           .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      final response = await request.close().timeout(
+      var response = await request.close().timeout(
         const Duration(seconds: 20),
       );
+      if (response.statusCode == 302 &&
+          RegExp(r'^/api/v1/assets/[a-fA-F0-9-]{36}$').hasMatch(path)) {
+        final location = response.headers.value(HttpHeaders.locationHeader);
+        await response.timeout(const Duration(seconds: 20)).drain<void>();
+        final target = location == null ? null : Uri.tryParse(location);
+        final resolved = target == null ? null : config.api.resolveUri(target);
+        final values = resolved?.queryParametersAll['access'];
+        if (resolved == null ||
+            resolved.scheme != config.api.scheme ||
+            resolved.host != config.api.host ||
+            resolved.port != config.api.port ||
+            resolved.userInfo.isNotEmpty ||
+            resolved.path != path ||
+            resolved.fragment.isNotEmpty ||
+            resolved.queryParametersAll.length != 1 ||
+            values == null ||
+            values.length != 1 ||
+            values.single.length > 4096 ||
+            !RegExp(r'^ML1\.[A-Za-z0-9_-]+$').hasMatch(values.single)) {
+          throw const ApiFailure(400, 'رابط الوسائط غير صالح؛ أعد فتح المعرض.');
+        }
+        // One same-origin redirect, same asset only; never an arbitrary credential redirect.
+        final download = await _client
+            .getUrl(resolved)
+            .timeout(const Duration(seconds: 20));
+        download.followRedirects = false;
+        download.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+        response = await download.close().timeout(const Duration(seconds: 20));
+      }
       if (response.statusCode != 200) {
         throw ApiFailure(response.statusCode, 'تعذر عرض الوسائط.');
       }

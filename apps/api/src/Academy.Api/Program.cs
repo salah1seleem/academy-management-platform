@@ -148,6 +148,7 @@ builder.Services.AddScoped<PaymentProcessor>();
 builder.Services.AddScoped<CollectionService>();
 builder.Services.AddScoped<CashRegisterService>();
 builder.Services.AddScoped<CashPaymentReferences>();
+builder.Services.AddScoped<PrivateMediaLinks>();
 builder.Services.AddScoped<CrossBranchCashPayments>();
 builder.Services.AddScoped<SettlementComparisonService>();
 builder.Services.AddScoped<FamilyRenewalQuoteService>();

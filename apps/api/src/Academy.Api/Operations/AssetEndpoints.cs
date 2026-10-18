@@ -123,7 +123,7 @@ public static class AssetEndpoints
         }
         return false;
     }
-    private static async Task<IResult> Download(Guid id, HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, AcademyConfigurationService features)
+    private static async Task<IResult> Download(Guid id,string? access, HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, AcademyConfigurationService features,PrivateMediaLinks links)
     {
         context.Response.Headers.CacheControl="private, no-store";
         var t = (await tenant.ResolveAsync())!;
@@ -142,6 +142,18 @@ public static class AssetEndpoints
         if (asset is not null && asset.Purpose is "Media" or "News" && !await features.Enabled(t.AcademyId, asset.Purpose == "News" ? "news" : "media")) return Results.NotFound();
         if (asset is null || !await CanRead(asset, t, context.User, db, authorization, clock,context.RequestServices.GetRequiredService<TimeProvider>())) return Results.NotFound();
         var path = Path.Combine(Root(config, env), asset.StorageName); if (!File.Exists(path)) return Results.NotFound();
+        if(asset.Purpose=="Media")
+        {
+            // Existing authenticated entry URLs remain usable by Web/native clients. Only the
+            // redirected, short-lived URL serves bytes; it is still useless without live authority.
+            var revision=await db.AcademyMemberships.AsNoTracking().Where(m=>m.Id==t.MembershipId&&m.AcademyId==t.AcademyId&&m.UserId==Actor(context.User)&&m.Role==t.Role&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive).Select(m=>(int?)m.ContextRevision).SingleOrDefaultAsync();
+            if(revision==null)return Results.NotFound();
+            var scope=new MediaLinkContext(t.AcademyId,id,Actor(context.User),t.MembershipId,t.Role.ToString(),revision.Value,context.User.FindFirstValue("mobile_session_id")??"web");
+            context.Response.Headers["Referrer-Policy"]="no-referrer";
+            context.Response.Headers["Cross-Origin-Resource-Policy"]="same-origin";
+            if(access==null)return Results.Redirect($"/api/v1/assets/{id}?access={Uri.EscapeDataString(links.Issue(scope))}");
+            if(!links.Allows(access,scope))return Results.NotFound();
+        }
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(path, asset.ContentType, enableRangeProcessing: true);
     }
