@@ -2,6 +2,8 @@
 
 ## V2-15A3c — احتفاظ وحذف فعلي وحصص، 2026-10-18
 
+Code `c8484024b0c95639c7e6aae8884bbe00595d99a9` مرفوع؛ [CI39148777526](https://github.com/salah1seleem/academy-management-platform/actions/runs/39148777526) بدأ، ليس بوابة بعيدة ناجحة مدعاة.
+
 D3-071/schema126: سياسة FullOwner جديدة فقط، Erasure ثم Purge موثقان، فشل القرص/الملف المشترك لا يحرر الحصة، expiry يحجب الجميع، وتخزين أكاديمية وتنزيل User/UTC ذريان. Web/Native حفظ وقراءة وتأكيد، لا نظام موازٍ أو تغيير مالي. Unit73، API8/65s ثم3/56s متداخلة جزئيًا، Web23 وFlutter23، EF/build/typecheck/lint/analyze ناجحة.
 
 Browser النهائي **3/3 في1.6m** للإعداد/الرفع/الحذف وFamily404 وquota وتقرير مطابق، ثم360/390 مع MOVUI/MP4playback. [حذف OwnerWeb390](evidence/v2-15a3c/owner-erased-media-web-390.png) راجعته. iOS **رحلة واحدة29s+teardown30s** للصورة/السحب/نسخةجديدة/الحذف منOwnerUI، erased+purged و404 للمالك والأسرة وتحريرمساحة وتقريرمطابق؛ [الكارت المحذوف](evidence/v2-15a3c/owner-erased-media-ios.png) راجعته، الأصل المسحوب محفوظ أسفله. الرفع Native عبرAPI وليسFilePicker؛ لاMP4علىiOS/Android/جهازمادي/AppRoot أوH. [المحاولات المصححة والبيئات والأوامر والقيود](PROGRESS.md)، [عقد التشغيل](PRIVATE_MEDIA_OPERATIONS.md).

@@ -2,6 +2,8 @@
 
 ## V2-15A3c — احتفاظ وحذف وحصص الميديا، 2026-10-18
 
+Code `c8484024b0c95639c7e6aae8884bbe00595d99a9` مرفوع وHEAD==origin؛ [CI39148777526](https://github.com/salah1seleem/academy-management-platform/actions/runs/39148777526) بدأ، لا نجاح بعيد مدعى. main/origin/main محفوظان.
+
 D3-071 / migration126: إعداد مالك اختياري للرفع القادم داخل الإصدارات القائمة، حجب عند الانتهاء، حذف نهائي موثق مع إزالة الملف وإعادة آمنة عند التعطل، وحصتا تخزين/تنزيل ذريتان. Web وFlutter: سياسة مطوية وحالات صحيحة وتأكيد حذف؛ لا حصة مالية أو صلاحية حضور جديدة. العامل اختياري default-off، لا مسح legacy/backup أو GC مجهول.
 
 Unit73، API8/65s ثم3/56s (بعضها متداخل)، Web23 وFlutter23 والأدوات/EF ناجحة. Browser3/3 في1.6m بما فيه إعداد/حذف وMOV/MP4 فعلي. iOS رحلة نهائية29s+teardown، حذف OwnerUI و404 للمالك والأسرة وتحرير مساحة وتقرير مالي مطابق؛ [الصورة](../academy-v3/evidence/v2-15a3c/owner-erased-media-ios.png). SHA/CI يسجلان بعدpush. [المحاولات والبيئات والقيود](../academy-v3/PROGRESS.md).
