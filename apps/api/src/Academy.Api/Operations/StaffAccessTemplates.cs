@@ -8,6 +8,7 @@ public sealed record StaffAccessTemplate(string Key, string Name, string Descrip
 public static class StaffAccessTemplates
 {
     public static readonly StaffAccessTemplate[] All = [
+        Create("followup-operator", "مسؤول متابعات التشغيل", "قراءة وتحديث المتابعات المسندة إليه فقط داخل نطاقه؛ لا إنشاء أو إسناد أو مالية أو حضور لاعبين.", ["followups"], ["followups"]),
         Create("branch-operator", "إداري فرع", "اللاعبون والمجموعات والحضور وطلبات الدفع في الفروع التي تحددها؛ تعديل الباقات والخصومات تفويض منفصل.",
             ["academy", "players", "subscriptions", "payments", "attendance", "evaluations", "matches"],
             ["academy", "players", "payments", "attendance"]),
@@ -24,5 +25,5 @@ public static class StaffAccessTemplates
     ];
     private static StaffAccessTemplate Create(string key, string name, string description, string[] read, string[] write) =>
         new(key, name, description, StaffAccessRules.Modules.Select(module =>
-            new StaffActionValue(module, read.Contains(module), write.Contains(module), write.Contains(module), false)).ToArray());
+            new StaffActionValue(module, read.Contains(module), module != "followups" && write.Contains(module), write.Contains(module), false)).ToArray());
 }

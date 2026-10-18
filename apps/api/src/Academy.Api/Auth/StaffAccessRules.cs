@@ -2,8 +2,9 @@ namespace Academy.Api.Auth;
 
 public static class StaffAccessRules
 {
-    public static readonly string[] Modules = ["academy", "players", "subscriptions", "payments", "attendance", "evaluations", "catalog", "nutrition", "medical", "media", "finance", "reports", "payroll", "settings", "staff", "news", "matches", "facilities"];
+    public static readonly string[] Modules = ["academy", "players", "subscriptions", "payments", "attendance", "evaluations", "catalog", "nutrition", "medical", "media", "finance", "reports", "payroll", "settings", "staff", "news", "matches", "facilities", "followups"];
     public static string? ForPermission(string permission) => permission switch {
+        AcademyPermissions.FollowUpRead or AcademyPermissions.FollowUpManage => "followups",
         AcademyPermissions.FacilitiesRead or AcademyPermissions.FacilitiesManage => "facilities",
         AcademyPermissions.StructureManage or AcademyPermissions.CoachGroupsRead => "academy",
         AcademyPermissions.PeopleManage => "players",
@@ -25,6 +26,7 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        if (path == "/api/v1/my-followups" || path.StartsWith("/api/v1/my-followups/", StringComparison.Ordinal)) return "followups";
         // Lesson IDs are not product endpoint names (e.g. player-attendance).
         // Help reads authorize each lesson against ForPermission instead.
         if (path.StartsWith("/api/v1/help/", StringComparison.Ordinal)) return null;

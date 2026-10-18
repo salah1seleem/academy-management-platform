@@ -214,7 +214,7 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
         title: 'متابعات المالك',
         child: followUpList([
           const UiText(
-            'متابعة بشرية مرتبطة بالمصدر، وليست تسوية مالية. المسؤول في هذه الشريحة أحد مالكي الأكاديمية.',
+            'متابعة بشرية مرتبطة بالمصدر، وليست تسوية مالية. يسندها المالك لمسؤول مخول داخل نطاق المجموعة.',
           ),
           Wrap(
             spacing: 8,
@@ -535,7 +535,7 @@ class _FollowUpFormState extends State<_FollowUpForm> {
         key: ValueKey(owner),
         initialValue: owner ?? '',
         isExpanded: true,
-        decoration: const InputDecoration(labelText: 'المالك المسؤول'),
+        decoration: const InputDecoration(labelText: 'المسؤول'),
         items: [
           const DropdownMenuItem(value: '', child: UiText('غير مسند')),
           for (final o in owners)

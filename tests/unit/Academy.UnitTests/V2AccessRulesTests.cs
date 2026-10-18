@@ -33,6 +33,8 @@ public class V2AccessRulesTests
     [InlineData("/api/v1/manage/family-renewals/123", "payments")]
     [InlineData("/api/v1/manage/family-renewals/123/review", "payments")]
     [InlineData("/api/v1/manage/family-renewals/quotes/123/quote", "payments")]
+    [InlineData("/api/v1/my-followups", "followups")]
+    [InlineData("/api/v1/my-followups/00000000-0000-0000-0000-000000000001", "followups")]
     public void Modules_have_deterministic_boundaries(string path, string module) => Assert.Equal(module, StaffAccessRules.ForPath(path));
     [Theory]
     [InlineData("GET", "/api/v1/people/players", "Read")]
@@ -44,6 +46,7 @@ public class V2AccessRulesTests
     [InlineData("POST", "/api/v1/payments/123/approve", "Edit")]
     [InlineData("POST", "/api/v1/attendance/sessions/123/corrections", "Edit")]
     [InlineData("DELETE", "/api/v1/people/players/123", "Delete")]
+    [InlineData("POST", "/api/v1/my-followups/00000000-0000-0000-0000-000000000001", "Edit")]
     public void Writes_do_not_inherit_read_permission(string method, string path, string operation) => Assert.Equal(operation, StaffAccessRules.Operation(method, path));
     [Fact] public void Unknown_modules_fail_closed() => Assert.Null(StaffAccessRules.ForPath("/api/v1/new-feature"));
     [Theory]

@@ -34,7 +34,7 @@ public static class MembershipScope
             || path.Contains("/schedules", StringComparison.Ordinal) || path.Contains("/training-levels", StringComparison.Ordinal);
         // Standalone assets have shared purposes and are not an operational read.
         if (path.Contains("/assets", StringComparison.Ordinal)) return false;
-        return module is "players" or "subscriptions" or "payments" or "attendance" or "evaluations" or "catalog" or "matches" or "facilities";
+        return module is "players" or "subscriptions" or "payments" or "attendance" or "evaluations" or "catalog" or "matches" or "facilities" or "followups";
     }
     public static bool IsAssetRead(string path, string method) => method == "GET" && path.StartsWith("/api/v1/assets/", StringComparison.Ordinal) && Guid.TryParse(path.TrimEnd('/').Split('/').Last(), out _);
 }

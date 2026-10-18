@@ -306,6 +306,12 @@ public sealed partial class FoundationDbContext
                 if (BranchScopeRestricted && entry.Metadata.FindProperty(name) is not null && entry.Property(name).CurrentValue is Guid branch && !RequestBranchIds.Contains(branch)) throw new ResourceScopeException();
             foreach (var fk in entry.Metadata.GetForeignKeys().Where(f => f.PrincipalEntityType.FindProperty("AcademyId") is not null))
             {
+                // The task's immutable historical creator may be outside the delegate's
+                // staff-directory scope. Never widen identity reads; keep the existing
+                // FK unchanged. Other task FKs and the actor/change row stay checked.
+                if (entry.Entity is OwnerFollowUp && entry.State == EntityState.Modified &&
+                    fk.Properties.Any(p => p.Name == nameof(OwnerFollowUp.CreatedByMembershipId)) &&
+                    !entry.Property(nameof(OwnerFollowUp.CreatedByMembershipId)).IsModified) continue;
                 var key = fk.PrincipalKey.Properties.Select((p, i) => (p.Name, Value: entry.Property(fk.Properties[i].Name).CurrentValue)).SingleOrDefault(x => x.Name == "Id");
                 if (key.Value is not Guid id) continue;
                 var type = fk.PrincipalEntityType.ClrType;

@@ -164,7 +164,7 @@ public sealed partial class V2PlanPublicationTests : IAsyncLifetime
         var email = $"pub.{Guid.NewGuid():N}@example.test";
         var created = await Write(owner, "/api/v1/manage/staff", new StaffWrite("إداري نشر اصطناعي", email, "010" + Random.Shared.Next(10000000, 99999999), "Demo-Only-123!", AcademyRole.AcademyAdmin, "اختبار")); created.EnsureSuccessStatusCode();
         var member = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        var access = new StaffAccessWrite(false, [f.B], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, true, true, true, true)).ToArray());
+        var access = new StaffAccessWrite(false, [f.B], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, true, m != "followups", true, m != "followups")).ToArray());
         (await Write(owner, $"/api/v1/manage/staff/{member}/access", access, true)).EnsureSuccessStatusCode(); using var admin = await Staff(email);
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/v1/subscriptions/plans/{plan}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, "/api/v1/subscriptions/plans", Body(f.A, "خارج الفرع"))).StatusCode);

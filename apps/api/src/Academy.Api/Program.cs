@@ -172,7 +172,7 @@ builder.Services.AddScoped<GroupCreationService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceSessionCoordinator>();
 builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
 builder.Services.AddAuthorization(options => {
-    foreach (var p in new[] { AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage }) options.AddPolicy(p, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(p)));
+    foreach (var p in new[] { AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage, AcademyPermissions.FollowUpRead, AcademyPermissions.FollowUpManage }) options.AddPolicy(p, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(p)));
 });
 builder.Services.AddScoped<Academy.Api.Importing.ImportCommitService>();
 if (builder.Configuration.GetValue("Imports:WorkerEnabled", true)) builder.Services.AddHostedService<Academy.Api.Importing.ImportWorker>();
@@ -447,6 +447,7 @@ if (app.Environment.IsEnvironment("Demo"))
         var db = configSeed.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var ids = await db.Academies.Where(x => x.Id == DemoSeed.NogoomAcademyId || x.Id == DemoSeed.FutureAcademyId || x.Id == FootballDemoSeed.AcademyId).Select(x => x.Id).ToListAsync();
         await AcademyConfigurationService.SeedDemo(db, ids);
+        if (app.Configuration.GetValue<bool>("Demo:AssignedFollowUpSeedEnabled")) await AssignedFollowUpDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:OwnerFollowUpSeedEnabled"))
             await OwnerFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:CommunityCampaignSeedEnabled"))

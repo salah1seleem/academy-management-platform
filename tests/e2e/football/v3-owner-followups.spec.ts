@@ -11,7 +11,7 @@ test("Owner persists a source-linked operational follow-up through its full life
   const card=page.locator('article').filter({has:page.getByRole('heading',{name:candidate.source.name,exact:true})}).filter({hasText:'إشغال أقل من نصف السعة'});await card.getByRole('button',{name:'إنشاء متابعة'}).click();await page.waitForURL(/follow-ups\/[a-f0-9-]+$/);const detailUrl=page.url();
   await expect(page.getByRole('link',{name:'فتح المجموعة نفسها'})).toHaveAttribute('href',`/dashboard/academy/groups/${candidate.source.groupId}`);
   for(const state of ['Assigned','InProgress','Snoozed','Closed']){
-    await page.getByLabel('حالة المتابعة').selectOption(state);if(state==='Assigned')await page.getByLabel('المالك المسؤول').selectOption(options.owners[0].id);
+    await page.getByLabel('حالة المتابعة').selectOption(state);if(state==='Assigned')await page.getByRole('combobox',{name:'المسؤول',exact:true}).selectOption(options.owners[0].id);
     if(state==='Snoozed'){const d=new Date(`${options.asOfDate}T12:00:00Z`);d.setUTCDate(d.getUTCDate()+3);await page.getByLabel('موعد المتابعة').fill(d.toISOString().slice(0,10));}
     if(state==='Closed'){await expect(page.getByLabel('سبب إغلاق أو رفض المتابعة')).toHaveAttribute('required','');await page.getByLabel('سبب إغلاق أو رفض المتابعة').fill('أغلقت المتابعة البشرية فقط ولم يتغير مصدر الحالة');}
     await page.getByRole('button',{name:'حفظ المتابعة',exact:true}).click();await page.waitForURL('**/operations/follow-ups');

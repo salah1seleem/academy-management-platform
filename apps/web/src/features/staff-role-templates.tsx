@@ -10,7 +10,7 @@ type Data = { modules: string[]; presets: Template[]; items: Row[] };
 type Applied = { id: string; name: string; revision: number; customized: boolean; isActive: boolean };
 const path = "/api/v1/manage/staff/role-templates";
 const groups = [
-  { name: "التشغيل والتدريب", modules: ["academy", "players", "attendance", "evaluations", "matches", "facilities"] },
+  { name: "التشغيل والتدريب", modules: ["academy", "players", "attendance", "evaluations", "matches", "facilities", "followups"] },
   { name: "الماليات والمنتجات والتقارير", modules: ["subscriptions", "payments", "finance", "reports", "payroll", "catalog"] },
   { name: "المحتوى وإدارة المستخدمين", modules: ["nutrition", "medical", "media", "news", "staff", "settings"] },
 ];

@@ -26,6 +26,7 @@ import 'coach_agreements.dart';
 import 'facility_board.dart';
 import 'role_agenda.dart';
 import 'help_center.dart';
+import 'assigned_followups.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
@@ -211,6 +212,19 @@ class NativeMore extends StatelessWidget {
           localized(context, 'فترات عملي', 'My work periods'),
           Icons.access_time_outlined,
           () => openPage(context, StaffWorkPeriodsPage(auth: auth)),
+        ),
+      if (role == 'AcademyAdmin')
+        RemoteBody(
+          auth: auth,
+          path: '/api/v1/my-permissions',
+          builder: (context, value) =>
+              value is List && value.contains('followups.read')
+              ? GLink(
+                  'متابعاتي المسندة',
+                  Icons.task_alt,
+                  () => openPage(context, AssignedFollowUpsPage(auth: auth)),
+                )
+              : const SizedBox.shrink(),
         ),
       if (role == 'Coach' || role == 'AcademyAdmin')
         GLink(

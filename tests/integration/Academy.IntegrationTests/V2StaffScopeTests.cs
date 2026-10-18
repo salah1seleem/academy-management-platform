@@ -28,7 +28,7 @@ public sealed partial class V2StaffScopeTests : IAsyncLifetime
         result.EnsureSuccessStatusCode(); var id = (await result.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         return (owner, await Staff(email), id);
     }
-    private static StaffAccessWrite Access(Guid branch, bool add = false, bool edit = false) => new(false, [branch], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, true, add, edit, false)).ToArray());
+    private static StaffAccessWrite Access(Guid branch, bool add = false, bool edit = false) => new(false, [branch], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, true, m != "followups" && add, edit, false)).ToArray());
     private async Task<(Guid A, Guid B, Guid GroupA, Guid GroupB, Guid PlayerB)> Data()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
@@ -144,7 +144,13 @@ public sealed partial class V2StaffScopeTests : IAsyncLifetime
         var fixture = await CreateAdmin(); using var owner = fixture.Owner; using var admin = fixture.Admin;
         var data = await Data();
         var page = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff/{fixture.Member}/access");
-        Assert.Equal(5, page.GetProperty("templates").EnumerateArray().Count(t => !t.GetProperty("custom").GetBoolean()));
+        Assert.Equal(6, page.GetProperty("templates").EnumerateArray().Count(t => !t.GetProperty("custom").GetBoolean()));
+        var followupTemplate=page.GetProperty("templates").EnumerateArray().Single(t=>t.GetProperty("key").GetString()=="followup-operator");
+        Assert.All(followupTemplate.GetProperty("actions").EnumerateArray(), a=>{
+            var followup=a.GetProperty("module").GetString()=="followups";
+            Assert.Equal(followup,a.GetProperty("read").GetBoolean());Assert.Equal(followup,a.GetProperty("edit").GetBoolean());
+            Assert.False(a.GetProperty("add").GetBoolean());Assert.False(a.GetProperty("delete").GetBoolean());
+        });
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync($"/api/v1/manage/staff/{fixture.Member}/access")).StatusCode);
         var preset = StaffAccessTemplates.All.Single(x => x.Key == "branch-operator");
         Assert.All(StaffAccessTemplates.All.SelectMany(x => x.Actions), x => Assert.False(x.Delete));

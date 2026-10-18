@@ -25,7 +25,7 @@ it("closing is a documented human action, not a resolved source or a settlement"
   render(<OwnerFollowUpDetail id="task" />);
   expect(await screen.findByLabelText("سبب إغلاق أو رفض المتابعة")).toBeRequired();
   expect(screen.getByRole("status")).toHaveTextContent("إغلاق المتابعة لا يحلها تلقائيًا");
-  fireEvent.change(screen.getByLabelText("حالة المتابعة"),{target:{value:"Assigned"}});expect(screen.getByLabelText("المالك المسؤول")).toBeRequired();
+  fireEvent.change(screen.getByLabelText("حالة المتابعة"),{target:{value:"Assigned"}});expect(screen.getByLabelText("المسؤول",{exact:true})).toBeRequired();
   expect(screen.queryByLabelText("سبب إغلاق أو رفض المتابعة")).not.toBeInTheDocument();
 });
 it("does not manufacture success when the owner endpoint is forbidden", async ()=> {

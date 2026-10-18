@@ -14,11 +14,13 @@ public static class StaffRoleTemplateEndpoints
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     internal static bool Valid(StaffActionValue[]? actions) => actions is not null && actions.Length == StaffAccessRules.Modules.Length
-        && actions.All(a => a is not null && StaffAccessRules.Modules.Contains(a.Module) && (a.Read || !a.Add && !a.Edit && !a.Delete))
+        && actions.All(a => a is not null && StaffAccessRules.Modules.Contains(a.Module) && (a.Read || !a.Add && !a.Edit && !a.Delete) && (a.Module != "followups" || !a.Add && !a.Delete))
         && actions.Select(a => a.Module).Distinct().Count() == actions.Length;
-    internal static bool Same(StaffActionValue[] a, StaffActionValue[] b) => a.OrderBy(x => x.Module).SequenceEqual(b.OrderBy(x => x.Module));
+    internal static bool Same(StaffActionValue[] a, StaffActionValue[] b) => Normalize(a).OrderBy(x => x.Module).SequenceEqual(Normalize(b).OrderBy(x => x.Module));
     internal static StaffAccessTemplate View(StaffRoleTemplate r) => new($"custom:{r.Id}", r.Name, r.Description ?? "قالب مخصص للأكاديمية؛ راجع النطاق قبل الاعتماد.",
-        JsonSerializer.Deserialize<StaffActionValue[]>(r.ActionsJson, Json)!, r.Revision, true);
+        Normalize(JsonSerializer.Deserialize<StaffActionValue[]>(r.ActionsJson, Json)!), r.Revision, true);
+    // An older immutable template has no new module grant; reading it never widens access.
+    private static StaffActionValue[] Normalize(StaffActionValue[] values) => StaffAccessRules.Modules.Select(m => values.FirstOrDefault(v => v.Module == m) ?? new(m, false, false, false, false)).ToArray();
     internal static bool CustomId(string? key, out Guid id)
     {
         id = default; return key?.StartsWith("custom:", StringComparison.Ordinal) == true && Guid.TryParse(key[7..], out id);

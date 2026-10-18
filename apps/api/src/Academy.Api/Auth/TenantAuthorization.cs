@@ -47,6 +47,8 @@ public static class AcademyPermissions
     public const string ReportsAttendanceRead = "reports.attendance.read";
     public const string ReportsExport = "reports.export";
     public const string OwnerDashboardRead = "dashboard.owner.read";
+    public const string FollowUpRead = "followups.read";
+    public const string FollowUpManage = "followups.manage";
     public const string PayrollRead = "payroll.read";
     public const string PayrollManage = "payroll.manage";
     public const string PayrollAdditionReview = "payroll.addition.review";
@@ -66,6 +68,13 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
     {
         var membership = await currentTenant.ResolveAsync();
         if (membership is null) return;
+
+        if (requirement.Permission is AcademyPermissions.FollowUpRead or AcademyPermissions.FollowUpManage)
+        {
+            if (await Academy.Api.Operations.OwnerFollowUpEndpoints.DelegateAllowed(db, membership.AcademyId, membership.MembershipId, requirement.Permission == AcademyPermissions.FollowUpManage)
+                && await configuration.Enabled(membership.AcademyId, "training")) context.Succeed(requirement);
+            return;
+        }
 
         if (PayrollSensitiveAccess.Contains(requirement.Permission))
         {

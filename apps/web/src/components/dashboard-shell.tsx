@@ -61,7 +61,7 @@ const linksOf = (...ids: string[]) => ids.flatMap(id => existingModules.find(m =
 const modules: NavModule[] = [
   existingModules[0],
   { id: "players", title: "الأعضاء والاشتراكات", group: "الإدارة", icon: Users, links: linksOf("players", "plans", "discounts") },
-  { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), { label: "المرافق والحارات", href: "/dashboard/facilities" }, ...linksOf("attendance", "matches"), { label: "طلبات إثبات حضور الموظفين", href: "/dashboard/attendance/staff/exceptions" }] },
+  { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [{ label: "متابعاتي المسندة", href: "/dashboard/my-followups" }, ...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), { label: "المرافق والحارات", href: "/dashboard/facilities" }, ...linksOf("attendance", "matches"), { label: "طلبات إثبات حضور الموظفين", href: "/dashboard/attendance/staff/exceptions" }] },
   { id: "development", title: "الفريق والتطوير", group: "التشغيل", icon: Star, links: [...linksOf("academy").filter(l => l.href.endsWith("/coaches")), ...linksOf("evaluations", "nutrition")] },
   { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "المصروفات التشغيلية", href: "/dashboard/finance/operating-expenses" }, { label: "الصناديق والعهد", href: "/dashboard/finance/cash-registers" }, { label: "متابعة اختلافات الدفع", href: "/dashboard/finance/provider-quarantine" }, { label: "مطابقة كشوف التحصيل", href: "/dashboard/finance/settlement-comparisons" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
   { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
@@ -72,6 +72,7 @@ const modules: NavModule[] = [
 const roleLabels: Record<string, string> = { AcademyOwner: "مالك", AcademyAdmin: "إداري", Coach: "مدرب" };
 
 function linkPermission(href: string) {
+  if (href === "/dashboard/my-followups") return "followups.read";
   if (href.startsWith("/dashboard/attendance/staff/exceptions")) return "staff.provision";
   if (href === "/dashboard") return null; // The basic task home remains available without financial metrics.
   if (href === "/dashboard/import") return "people.manage";
@@ -143,6 +144,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const sidebarRef = useRef<HTMLElement>(null);
   const openModule = navOverride?.path === path ? navOverride.id : activeModule;
   const navigation = useMemo(() => visibleModules(identity.role).map(m => ({ ...m, links: m.links.filter(l => {
+    if (l.href === "/dashboard/my-followups") return identity.role === "AcademyAdmin" && permissions.includes("followups.read");
     if (l.href.startsWith("/dashboard/staff") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/provider-quarantine") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/operating-expenses") && identity.role !== "AcademyOwner") return false;
