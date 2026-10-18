@@ -9,7 +9,8 @@ test('Owner reviews actual saved draft evidence; only source publication removes
   await page.getByRole('button', { name: 'دخول آمن' }).click();
   await page.waitForURL('**/dashboard');
   const options = await (await page.request.get('/api/v1/manage/owner-followups/options')).json();
-  const candidate = options.candidates.find((c: { condition: string }) => c.condition === 'GroupEvaluationDrafts');
+  // FootballDemoSeed.Id("group/2"): other journeys can add valid candidates.
+  const candidate = options.candidates.find((c: { condition: string; source: { groupId: string } }) => c.condition === 'GroupEvaluationDrafts' && c.source.groupId === '428e9073-f93c-14ae-d9d5-c38e50278314');
   expect(candidate).toBeTruthy();
   expect(candidate.source.evaluationDrafts.draftCount).toBe(2);
   expect(candidate.source.evaluationDrafts.playerCount).toBe(1);

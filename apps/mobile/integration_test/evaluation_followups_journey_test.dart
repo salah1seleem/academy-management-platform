@@ -35,8 +35,12 @@ void main() {
       final options = obj(
         await auth.request('GET', '/api/v1/manage/owner-followups/options'),
       );
-      final c = rows(options['candidates'])
-          .firstWhere((c) => c['condition'] == 'GroupEvaluationDrafts');
+      final c = rows(options['candidates']).firstWhere(
+        (c) =>
+            c['condition'] == 'GroupEvaluationDrafts' &&
+            obj(c['source'])['groupId'] ==
+                '428e9073-f93c-14ae-d9d5-c38e50278314',
+      );
       expect(obj(obj(c['source'])['evaluationDrafts'])['draftCount'], 2);
       expect(obj(obj(c['source'])['evaluationDrafts'])['playerCount'], 1);
       final financial = await auth.request(

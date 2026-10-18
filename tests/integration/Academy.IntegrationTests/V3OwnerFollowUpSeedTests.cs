@@ -30,6 +30,8 @@ public sealed class V3OwnerFollowUpSeedTests
             Assert.True(await db.TrainingSessions.AnyAsync(s=>s.Id==FootballDemoSeed.Id("owner-followup-demo/coverage-session")&&s.TrainingGroupId==FootballDemoSeed.Id("owner-followup-demo/coverage-group")));
             var draft=await db.PlayerEvaluations.Include(e=>e.Scores).SingleAsync(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0"));
             Assert.Equal(Academy.Infrastructure.Evaluations.EvaluationStatus.Draft,draft.Status);Assert.Single(draft.Scores);draft.IsActive=false;await db.SaveChangesAsync();
+            var absent=await db.PlayerAttendances.SingleAsync(x=>x.Id==FootballDemoSeed.Id("owner-followup-demo/absence-record/0"));Assert.Equal(Academy.Infrastructure.Attendance.AttendanceStatus.Absent,absent.Status);
+            Assert.Equal(4,await db.PlayerAttendances.CountAsync(x=>x.TrainingGroupId==FootballDemoSeed.Id("owner-followup-demo/absence-group")));absent.Status=Academy.Infrastructure.Attendance.AttendanceStatus.Excused;await db.SaveChangesAsync();
             var delegateMember=await db.AcademyMemberships.Include(m=>m.User).SingleAsync(m=>m.Id==AssignedFollowUpDemoSeed.MembershipId);
             Assert.Equal(EgyptPhoneNormalizer.Normalize(AssignedFollowUpDemoSeed.Phone),delegateMember.User.PhoneNumber);
             Assert.False(delegateMember.AllBranches);Assert.False(delegateMember.AllSports);Assert.True(delegateMember.UseActionGrants);
@@ -46,6 +48,8 @@ public sealed class V3OwnerFollowUpSeedTests
             Assert.False(await db.PlayerEvaluations.Where(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0")).Select(e=>e.IsActive).SingleAsync());
             Assert.Equal(2,await db.PlayerEvaluations.CountAsync(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0")||e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/1")));
             var restoredDraft=await db.PlayerEvaluations.SingleAsync(e=>e.Id==FootballDemoSeed.Id("owner-followup-demo/evaluation/0"));restoredDraft.IsActive=true;await db.SaveChangesAsync();
+            var restoredAbsence=await db.PlayerAttendances.SingleAsync(x=>x.Id==FootballDemoSeed.Id("owner-followup-demo/absence-record/0"));Assert.Equal(Academy.Infrastructure.Attendance.AttendanceStatus.Excused,restoredAbsence.Status);
+            Assert.Equal(4,await db.TrainingSessions.CountAsync(x=>x.TrainingGroupId==FootballDemoSeed.Id("owner-followup-demo/absence-group")));restoredAbsence.Status=Academy.Infrastructure.Attendance.AttendanceStatus.Absent;await db.SaveChangesAsync();
             Assert.False(await db.AcademyMemberships.Where(m=>m.Id==AssignedFollowUpDemoSeed.MembershipId).Select(m=>m.IsActive).SingleAsync());
             Assert.False(await db.StaffActionGrants.Where(g=>g.MembershipId==AssignedFollowUpDemoSeed.MembershipId).Select(g=>g.Edit).SingleAsync());
             // Restore only this synthetic test account so a repeated test run starts from its fixture state.

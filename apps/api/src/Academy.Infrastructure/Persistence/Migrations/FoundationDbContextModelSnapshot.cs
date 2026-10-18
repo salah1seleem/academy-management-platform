@@ -4526,7 +4526,7 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("OwnerFollowUps", null, t =>
                         {
-                            t.HasCheckConstraint("CK_OwnerFollowUp_State", "\"IsActive\" AND \"Condition\" IN ('GroupCoachMissing','GroupLowOccupancy','GroupSessionCoverage','GroupEvaluationDrafts') AND \"State\" IN ('New','Assigned','InProgress','Snoozed','Closed','Rejected') AND (\"State\" NOT IN ('Assigned','InProgress') OR \"AssignedToMembershipId\" IS NOT NULL) AND (\"State\" <> 'Snoozed' OR \"DueOn\" IS NOT NULL) AND (\"State\" NOT IN ('Closed','Rejected') OR length(trim(\"ResolutionReason\")) > 0 AND \"ResolutionReason\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_OwnerFollowUp_State", "\"IsActive\" AND \"Condition\" IN ('GroupCoachMissing','GroupLowOccupancy','GroupSessionCoverage','GroupEvaluationDrafts','GroupRecordedAbsences') AND \"State\" IN ('New','Assigned','InProgress','Snoozed','Closed','Rejected') AND (\"State\" NOT IN ('Assigned','InProgress') OR \"AssignedToMembershipId\" IS NOT NULL) AND (\"State\" <> 'Snoozed' OR \"DueOn\" IS NOT NULL) AND (\"State\" NOT IN ('Closed','Rejected') OR length(trim(\"ResolutionReason\")) > 0 AND \"ResolutionReason\" IS NOT NULL)");
                         });
                 });
 

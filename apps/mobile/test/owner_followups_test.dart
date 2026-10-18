@@ -34,6 +34,67 @@ Map<String, dynamic> item() => {
   'evidence': {'observedAtUtc': '2026-10-17T02:30:00Z'},
 };
 void main() {
+  for (final width in [360.0, 390.0, 430.0]) {
+    testWidgets(
+      'Recorded absence summary at $width and 200% never infers unknown attendance or a penalty',
+      (t) async {
+        t.view.physicalSize = Size(width, 900);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.resetPhysicalSize);
+        addTearDown(t.view.resetDevicePixelRatio);
+        final auth = await fixture.owner(
+          (m, p, b, token) async => {
+            'item': {
+              ...item(),
+              'condition': 'GroupRecordedAbsences',
+              'source': {
+                ...Map<String, dynamic>.from(item()['source'] as Map),
+                'recordedAbsences': {
+                  'playerCount': 1,
+                  'enrollmentCount': 2,
+                  'fromDate': '2026-10-10',
+                  'toDate': '2026-10-12',
+                },
+              },
+              'evidence': {
+                'absenceEvidence': [
+                  {'SessionId': 's1', 'SessionDate': '2026-10-10'},
+                ],
+              },
+            },
+            'owners': options()['owners'],
+            'history': <Object>[],
+          },
+        );
+        await t.pumpWidget(
+          fixture.shell(
+            MediaQuery(
+              data: MediaQueryData(
+                size: Size(width, 900),
+                textScaler: const TextScaler.linear(2),
+              ),
+              child: OwnerFollowUpPage(auth: auth, id: 'followup'),
+            ),
+          ),
+        );
+        await t.pumpAndSettle();
+        expect(find.textContaining('1 لاعب فريد · 2 تسجيل'), findsOneWidget);
+        expect(
+          find.textContaining('دون رسالة أو عقوبة تلقائية'),
+          findsOneWidget,
+        );
+        await t.scrollUntilVisible(
+          find.text('مراجعة كشف 2026-10-10'),
+          240,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await t.pumpAndSettle();
+        expect(find.text('مراجعة كشف 2026-10-10'), findsOneWidget);
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+      },
+    );
+  }
   testWidgets(
     'Draft evidence uses actual source, hides on logout and reauthorizes on resume',
     (t) async {
@@ -110,10 +171,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.textContaining('2 مسودة · 1 لاعب فريد'), findsOneWidget);
       expect(find.textContaining('ليست حكم كفاءة'), findsOneWidget);
-      expect(
-        find.textContaining('عرض تقييم من دليل الإنشاء'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('عرض تقييم من دليل الإنشاء'), findsOneWidget);
       expect(find.text('نشر'), findsNothing);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());

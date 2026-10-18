@@ -35,7 +35,10 @@ public static partial class OwnerFollowUpEndpoints
     {
         // Assigned operational responsibility is not permission to read a child's draft.
         var evidence = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(f.EvidenceJson)!;
-        if (!includeEvaluationIds) evidence.Remove("evaluationIds");
+        if (!includeEvaluationIds) {
+            evidence.Remove("evaluationIds");
+            evidence.Remove("absenceEvidence");
+        }
         return JsonSerializer.SerializeToElement(evidence);
     }
 }

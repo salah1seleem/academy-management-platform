@@ -6,6 +6,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import '../coach/coach_attendance.dart';
 import 'owner_operations.dart';
 
 const followUpStates = {
@@ -21,7 +22,30 @@ const followUpConditions = {
   'GroupLowOccupancy': 'إشغال أقل من نصف السعة',
   'GroupSessionCoverage': 'حصص قادمة بلا مدرب مسند مخول',
   'GroupEvaluationDrafts': 'مسودات تقييم منذ 7 أيام',
+  'GroupRecordedAbsences': 'غياب متكرر مسجل',
 };
+Widget recordedAbsenceSummary(Json source) {
+  final d = source['recordedAbsences'];
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      UiText(
+        d is! Map
+            ? 'بيانات الغياب غير متاحة حاليًا.'
+            : '${d['playerCount']} لاعب فريد · ${d['enrollmentCount']} تسجيل له غياب في آخر 3 حصص مؤهلة مسجلة داخل المجموعة.',
+      ),
+      if (d is Map && d['fromDate'] != null)
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: UiText('${d['fromDate']} — ${d['toDate']}'),
+        ),
+      const UiText(
+        'الملغاة وغير المسجلة والمستقبلية لا تُحسب. مراجعة بشرية دون رسالة أو عقوبة تلقائية.',
+      ),
+    ],
+  );
+}
+
 Widget evaluationDraftSummary(Json source) {
   final d = source['evaluationDrafts'];
   return UiText(
@@ -443,6 +467,8 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
                         coverageSummary(obj(c['source'])),
                       if (c['condition'] == 'GroupEvaluationDrafts')
                         evaluationDraftSummary(obj(c['source'])),
+                      if (c['condition'] == 'GroupRecordedAbsences')
+                        recordedAbsenceSummary(obj(c['source'])),
                       UiText(
                         '${obj(c['source'])['enrollments']} تسجيلًا مسندًا · السعة ${obj(c['source'])['capacity'] ?? 'غير محددة'}',
                       ),
@@ -568,6 +594,27 @@ class _FollowUpFormState extends State<_FollowUpForm> {
     return followUpList([
       UiText(followUpConditions[item['condition']] ?? 'متابعة'),
       UiText(textOf(source['name'])),
+      if (item['condition'] == 'GroupRecordedAbsences') ...[
+        recordedAbsenceSummary(source),
+        const UiText('دليل الإنشاء ثابت؛ إغلاق المتابعة لا يغير حضور أي لاعب.'),
+        for (final record in {
+          for (final r in rows(
+            obj(item['evidence'])['absenceEvidence'] ?? <Json>[],
+          ))
+            r['SessionId']: r,
+        }.values.take(3))
+          TextButton(
+            onPressed: () => openPage(
+              context,
+              CoachAttendance(
+                auth: widget.auth,
+                sessionId: textOf(record['SessionId']),
+                title: 'كشف الحضور من دليل المتابعة',
+              ),
+            ),
+            child: UiText('مراجعة كشف ${record['SessionDate']}'),
+          ),
+      ],
       if (item['condition'] == 'GroupEvaluationDrafts') ...[
         evaluationDraftSummary(source),
         const UiText(

@@ -23,6 +23,38 @@ Map<String, dynamic> item() => {
 };
 void main() {
   testWidgets(
+    'recorded absence delegate sees aggregate, never a child register action',
+    (t) async {
+      final auth = await fixture.owner(
+        (m, p, b, k) async => {
+          'item': {
+            ...item(),
+            'condition': 'GroupRecordedAbsences',
+            'source': {
+              ...Map<String, dynamic>.from(item()['source'] as Map),
+              'recordedAbsences': {
+                'playerCount': 1,
+                'enrollmentCount': 1,
+                'fromDate': '2026-10-10',
+                'toDate': '2026-10-12',
+              },
+            },
+          },
+          'canEdit': false,
+          'history': <Object>[],
+        },
+      );
+      await t.pumpWidget(
+        fixture.shell(AssignedFollowUpsPage(auth: auth, id: 'task')),
+      );
+      await t.pumpAndSettle();
+      expect(find.textContaining('1 لاعب فريد · 1 تسجيل'), findsOneWidget);
+      expect(find.textContaining('مراجعة كشف'), findsNothing);
+      expect(find.text('حفظ الحضور'), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'detail posts delegated state and version without changing assignee; closure becomes read only',
     (t) async {
       var saved = false;
