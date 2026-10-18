@@ -6,6 +6,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../owner/owner_followups.dart';
+import 'feedback_investigations.dart';
 
 class AssignedFollowUpsPage extends StatelessWidget {
   final AuthController auth;
@@ -136,6 +137,13 @@ class _AssignedReaderState extends State<_AssignedReader>
       const UiText(
         'مهامك داخل نطاق فرعك ورياضتك. تحديثها لا يغيّر الحضور أو الإسناد أو أي مبلغ.',
       ),
+      if (widget.id == null)
+        OutlinedButton.icon(
+          onPressed: () =>
+              openPage(context, PrivateInvestigationsPage(auth: widget.auth)),
+          icon: const Icon(Icons.policy_outlined),
+          label: const UiText('التحقيقات الخاصة المسندة'),
+        ),
       if (widget.id == null)
         GCard(
           child: Column(

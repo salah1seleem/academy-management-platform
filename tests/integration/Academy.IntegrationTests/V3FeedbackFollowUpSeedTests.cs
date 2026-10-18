@@ -11,6 +11,21 @@ namespace Academy.IntegrationTests;
 [Collection("Tenant authentication database")]
 public sealed class V3FeedbackFollowUpSeedTests
 {
+    [Fact] public async Task Feedback_investigation_seed_keeps_manual_brief_and_never_regrants_or_notifies()
+    {
+        await using var factory = new Factory(); using var client = factory.CreateClient(); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var env = new HostingEnvironment { EnvironmentName = "Demo" }; var options = new DemoOptions { SeedEnabled = true, SeedProfile = "Football", StaffPassword = "Demo-Only-123!" };
+        await AssignedFollowUpDemoSeed.Seed(db, scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Academy.Infrastructure.Identity.ApplicationUser>>(), env, options);
+        var money = await db.Collections.CountAsync(); var notices = await db.AcademyNotices.CountAsync();
+        await FeedbackFollowUpDemoSeed.SeedInvestigation(db, env, options); var f = await db.GuardianFeedbacks.SingleAsync(f => f.Id == FootballDemoSeed.Id("feedback-investigation-demo/0"));
+        var history = await db.FeedbackChanges.CountAsync(c => c.FeedbackId == f.Id); Assert.True(history > 0);
+        var before = f.InvestigationBrief; f.InvestigationBrief = "موجز عدله المالك يدويًا في بيانات العرض المعزولة"; await db.SaveChangesAsync();
+        try {
+            await FeedbackFollowUpDemoSeed.SeedInvestigation(db, env, options); Assert.Equal(f.InvestigationBrief, (await db.GuardianFeedbacks.AsNoTracking().SingleAsync(x => x.Id == f.Id)).InvestigationBrief);
+            Assert.Equal(history, await db.FeedbackChanges.CountAsync(c => c.FeedbackId == f.Id)); Assert.Equal(money, await db.Collections.CountAsync()); Assert.Equal(notices, await db.AcademyNotices.CountAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FeedbackFollowUpDemoSeed.SeedInvestigation(db, new HostingEnvironment { EnvironmentName = "Production" }, options));
+        } finally { f.InvestigationBrief = before; await db.SaveChangesAsync(); }
+    }
     private sealed class Factory:WebApplicationFactory<Program>{protected override void ConfigureWebHost(IWebHostBuilder b){b.UseEnvironment("Demo");b.UseSetting("ConnectionStrings:Default",Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING")??throw new InvalidOperationException("Explicit QA DB required"));b.UseSetting("Demo:SeedEnabled","true");b.UseSetting("Demo:SeedProfile","Football");b.UseSetting("Demo:FeedbackFollowUpSeedEnabled","true");b.UseSetting("Demo:OwnerFollowUpSeedEnabled","true");b.UseSetting("Demo:StaffPassword","Demo-Only-123!");b.UseSetting("Demo:ReferenceDate","2026-09-28");}}
     [Fact]public async Task Feedback_followup_seed_is_optional_idempotent_keeps_review_and_refuses_production(){
         int collections,notices;var id=FootballDemoSeed.Id("feedback-followup-demo/0");

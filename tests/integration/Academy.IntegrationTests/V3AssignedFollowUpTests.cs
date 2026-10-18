@@ -16,7 +16,7 @@ public sealed partial class BrandingMatchesTests
     private async Task DelegateFixture(Func<HttpClient,HttpClient,FoundationDbContext,TrainingGroup,Guid,Task> action)
     {
         using var owner = await Staff(); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var group = await FollowUpGroup(db);
-        var m = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == group.AcademyId && m.User.Email == DemoSeed.AdminEmail); var before = (m.AllBranches,m.AllSports,m.UseActionGrants);
+        var m = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == group.AcademyId && m.User.Email == DemoSeed.AdminEmail && m.Role == AcademyRole.AcademyAdmin && m.PrimaryMembershipId == null); var before = (m.AllBranches,m.AllSports,m.UseActionGrants);
         var grant = await db.StaffActionGrants.SingleOrDefaultAsync(g => g.MembershipId == m.Id && g.Module == "followups"); var old = grant == null ? null : JsonSerializer.Serialize(grant); var added = grant == null;
         grant ??= new() { Id = Guid.NewGuid(), AcademyId = m.AcademyId, MembershipId = m.Id, Module = "followups" };
         var branches = await db.MembershipBranchAccesses.Where(b => b.MembershipId == m.Id).ToListAsync(); var sports = await db.MembershipSportAccesses.Where(b => b.MembershipId == m.Id).ToListAsync(); var oldBranches = branches.ToDictionary(x=>x.Id,x=>x.IsActive); var oldSports = sports.ToDictionary(x=>x.Id,x=>x.IsActive);

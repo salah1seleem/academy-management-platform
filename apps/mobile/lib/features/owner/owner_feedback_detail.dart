@@ -7,6 +7,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/feedback_state.dart';
+import '../shared/feedback_investigations.dart';
 
 class OwnerFeedbackDetail extends StatefulWidget {
   final AuthController auth;
@@ -133,6 +134,19 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                 'موعد حدده المالك، وليس وعد استجابة تلقائيًا. لا تظهر هوية مقدم الملاحظة للمدرب موضوعها.',
               ),
               if (message.isNotEmpty) UiText(message),
+              if (item['kind'] != 'Rating' &&
+                  item['version'] is int &&
+                  item['status'] != 'Resolved' &&
+                  item['status'] != 'Closed')
+                OwnerInvestigationAssignment(
+                  key: ValueKey('assignment-${item['version']}'),
+                  auth: widget.auth,
+                  item: item,
+                  saved: () => setState(() {
+                    revision++;
+                    message = 'تم حفظ تكليف التحقيق؛ لم يُرسل شيء للأسرة.';
+                  }),
+                ),
               if (item['ownerResponse'] is String)
                 GCard(child: UiText('رد الإدارة: ${item['ownerResponse']}')),
               if (item['status'] == 'Open')
@@ -266,7 +280,11 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       UiText(
-                        c['action'] == 'Due'
+                        c['action'] == 'Assign'
+                            ? 'تكليف تحقيق: ${c['investigatorName'] ?? 'إلغاء الإسناد'}'
+                            : c['action'] == 'Findings'
+                            ? 'نتيجة تحقيق خاصة'
+                            : c['action'] == 'Due'
                             ? 'تحديد موعد متابعة: ${c['afterDueOn']}'
                             : '${feedbackStates[c['fromStatus']] ?? 'غير متاحة'} ← ${feedbackStates[c['toStatus']] ?? 'غير متاحة'}',
                       ),

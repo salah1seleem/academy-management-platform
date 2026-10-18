@@ -5,21 +5,21 @@ import { CommunityCampaigns } from "./community-campaigns";
 import { GuardianHome } from "./guardian-core";
 const push=vi.hoisted(()=>vi.fn());vi.mock("next/navigation",()=>({useRouter:()=>({push,replace:vi.fn()})}));
 const ad={id:"ad",title:"ورشة برمجة افتراضية",body:"تفاصيل واضحة للأسرة",advertiser:"مركز افتراضي",buttonText:"التفاصيل",imageUrl:null,endsAtUtc:"2100-01-01T00:00:00Z",destination:"InternalDetails"};
-let intersect:IntersectionObserverCallback;
+let intersect:IntersectionObserverCallback | undefined;
 it("a detailed creative loses its cached content when the bounded lease is reauthorized and revoked",async()=>{
   let revoked=false;global.fetch=vi.fn(async()=>revoked?Response.json({},{status:404}):Response.json(ad)) as typeof fetch;
   vi.useFakeTimers();await act(async()=>{render(<GuardianSponsorDetail id="ad"/>);});expect(screen.getByRole("heading",{name:ad.title})).toBeVisible();revoked=true;
   await act(()=>vi.advanceTimersByTimeAsync(30_001));expect(screen.queryByRole("heading",{name:ad.title})).not.toBeInTheDocument();expect(screen.getByRole("alert")).toHaveTextContent("سُحبت الموافقة");
 });
 class Observer {constructor(callback:IntersectionObserverCallback){intersect=callback;}observe(){}disconnect(){}unobserve(){}takeRecords(){return [];}}
-afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();push.mockClear();});
+afterEach(()=>{cleanup();intersect=undefined;vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();push.mockClear();});
 it("an absent optional feed adds no placeholder, view or checkout",async()=>{global.fetch=vi.fn(async()=>Response.json({item:null})) as typeof fetch;render(<GuardianSponsoredCard/>);await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));expect(screen.queryByRole("region",{name:"محتوى برعاية"})).not.toBeInTheDocument();});
 it("GET is not an impression and a half-visible uninterrupted second sends one measured event",async()=>{
   vi.stubGlobal("IntersectionObserver",Observer);const posts:unknown[]=[];global.fetch=vi.fn(async(input,init)=>{if(String(input).endsWith("/csrf"))return Response.json({token:"qa"});if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));return new Response(null,{status:204});}return Response.json({item:ad});}) as typeof fetch;
-  render(<GuardianSponsoredCard/>);await screen.findByRole("region",{name:"محتوى برعاية"});expect(posts).toEqual([]);vi.useFakeTimers();
-  act(()=>intersect([{intersectionRatio:.4} as IntersectionObserverEntry],{} as IntersectionObserver));await act(()=>vi.advanceTimersByTimeAsync(1200));expect(posts).toEqual([]);
-  act(()=>intersect([{intersectionRatio:.6} as IntersectionObserverEntry],{} as IntersectionObserver));await act(()=>vi.advanceTimersByTimeAsync(999));expect(posts).toEqual([]);await act(()=>vi.advanceTimersByTimeAsync(2));expect(posts).toEqual([{kind:"Impression"}]);
-  act(()=>intersect([{intersectionRatio:1} as IntersectionObserverEntry],{} as IntersectionObserver));await act(()=>vi.advanceTimersByTimeAsync(1500));expect(posts).toHaveLength(1);
+  render(<GuardianSponsoredCard/>);await screen.findByRole("region",{name:"محتوى برعاية"});await waitFor(()=>expect(intersect).toBeTypeOf("function"));const onIntersection=intersect!;expect(posts).toEqual([]);vi.useFakeTimers();
+  act(()=>onIntersection([{intersectionRatio:.4} as IntersectionObserverEntry],{} as IntersectionObserver));await act(()=>vi.advanceTimersByTimeAsync(1200));expect(posts).toEqual([]);
+  act(()=>onIntersection([{intersectionRatio:.6} as IntersectionObserverEntry],{} as IntersectionObserver));await act(()=>vi.advanceTimersByTimeAsync(999));expect(posts).toEqual([]);await act(()=>vi.advanceTimersByTimeAsync(2));expect(posts).toEqual([{kind:"Impression"}]);
+  act(()=>onIntersection([{intersectionRatio:1} as IntersectionObserverEntry],{} as IntersectionObserver));await act(()=>vi.advanceTimersByTimeAsync(1500));expect(posts).toHaveLength(1);
 });
 it("the urgent schedule notice is before the sponsored placement and essential actions remain",async()=>{
   vi.stubGlobal("IntersectionObserver",Observer);global.fetch=vi.fn(async input=>Response.json(String(input).endsWith("/home")?{academyName:"أكاديمية افتراضية",guardianName:"ولي أمر افتراضي",today:"2026-10-17",children:[],sportContexts:[],urgentAlerts:[{id:"n",message:"تم إلغاء مباراة ابنك"}]}:String(input).endsWith("/feed")?{item:ad}:String(input).endsWith("/preference")?{available:false}:String(input).endsWith("/receivables")?{outstanding:"0.00",overpaymentCredit:"0.00",items:[]}:[])) as typeof fetch;

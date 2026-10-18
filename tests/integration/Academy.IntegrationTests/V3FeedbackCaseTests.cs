@@ -118,7 +118,7 @@ public sealed partial class BrandingMatchesTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync()); db.ChangeTracker.Clear();
         var update = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => db.FeedbackChanges.Where(c => c.FeedbackId == f.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.InternalNote, "تغيير مباشر ممنوع"))); Assert.Equal("23514", update.SqlState);
         var deletion = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => db.FeedbackChanges.Where(c => c.FeedbackId == f.Id).ExecuteDeleteAsync()); Assert.Equal("23514", deletion.SqlState);
-        var adminId = await db.AcademyMemberships.Where(m => m.AcademyId == group.AcademyId && m.User.Email == DemoSeed.AdminEmail).Select(m => m.Id).SingleAsync();
+        var adminId = await db.AcademyMemberships.Where(m => m.AcademyId == group.AcademyId && m.User.Email == DemoSeed.AdminEmail && m.Role == AcademyRole.AcademyAdmin && m.PrimaryMembershipId == null).Select(m => m.Id).SingleAsync();
         var forged = new Academy.Infrastructure.Operations.FeedbackChange { Id = Guid.NewGuid(), AcademyId = group.AcademyId, FeedbackId = f.Id, ActorMembershipId = adminId, Action = "Transition", FromStatus = "Open", ToStatus = "InProgress", AfterDueOn = f.DueOn, RequestId = Guid.NewGuid(), RequestHash = new string('a', 64), CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         db.FeedbackChanges.Add(forged); var denied = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync()); Assert.Equal("23514", Assert.IsType<Npgsql.PostgresException>(denied.InnerException).SqlState); db.ChangeTracker.Clear();
     }

@@ -5782,6 +5782,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<Guid?>("InvestigationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InvestigatorMembershipId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -5815,6 +5821,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasAlternateKey("AcademyId", "Id");
 
                     b.HasIndex("AcademyId", "FeedbackId");
+
+                    b.HasIndex("AcademyId", "InvestigatorMembershipId");
 
                     b.HasIndex("AcademyId", "ActorMembershipId", "RequestId")
                         .IsUnique();
@@ -5927,6 +5935,16 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("InvestigationBrief")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("InvestigationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InvestigatorMembershipId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -5996,6 +6014,11 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "CoachMembershipId");
 
+                    b.HasIndex("AcademyId", "InvestigationId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "InvestigatorMembershipId");
+
                     b.HasIndex("AcademyId", "PlayerId");
 
                     b.HasIndex("AcademyId", "TrainingGroupId");
@@ -6009,6 +6032,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("GuardianFeedbacks", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Feedback_Investigation", "(\"InvestigationId\" IS NULL AND \"InvestigatorMembershipId\" IS NULL AND \"InvestigationBrief\" IS NULL) OR (\"Kind\" <> 'Rating' AND \"InvestigationId\" IS NOT NULL AND \"InvestigatorMembershipId\" IS NOT NULL AND \"InvestigationBrief\" IS NOT NULL AND length(btrim(\"InvestigationBrief\")) BETWEEN 5 AND 500)");
+
                             t.HasCheckConstraint("CK_GuardianFeedback_KindScore", "(\"Kind\" = 'Rating' AND \"CoachMembershipId\" IS NOT NULL AND \"Score\" BETWEEN 1 AND 5) OR (\"Kind\" IN ('Complaint','Suggestion') AND \"Score\" IS NULL)");
 
                             t.HasCheckConstraint("CK_GuardianFeedback_Status", "\"Status\" IN ('Open','Reviewed','InProgress','AwaitingInfo','Resolved','Closed','Reopened') AND (\"Kind\" <> 'Rating' OR \"Status\" IN ('Open','Reviewed'))");
@@ -15979,6 +16004,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "InvestigatorMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.GroupMediaConsent", b =>
@@ -16042,6 +16073,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "CoachMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "InvestigatorMembershipId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 

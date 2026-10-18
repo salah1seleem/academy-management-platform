@@ -25,6 +25,12 @@ public static partial class GuardianFeedbackEndpoints
         owner.MapPost("/{id:guid}/due", SetDue).AddEndpointFilter<CsrfFilter>();
         owner.MapPost("/{id:guid}/resolve", Resolve).AddEndpointFilter<CsrfFilter>();
         owner.MapPost("/{id:guid}/transition", Transition).AddEndpointFilter<CsrfFilter>();
+        owner.MapGet("/{id:guid}/investigators", Investigators);
+        owner.MapPost("/{id:guid}/assignment", AssignInvestigation).AddEndpointFilter<CsrfFilter>();
+        var investigations = app.MapGroup("/api/v1/my-followups/investigations").RequireAuthorization(AcademyPermissions.FollowUpRead);
+        investigations.MapGet("/", MyInvestigations);
+        investigations.MapGet("/{assignmentId:guid}", InvestigationDetail);
+        investigations.MapPost("/{assignmentId:guid}/transition", SubmitFindings).RequireAuthorization(AcademyPermissions.FollowUpManage).AddEndpointFilter<CsrfFilter>();
     }
 
     private static Guid Actor(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -95,9 +101,13 @@ public static partial class GuardianFeedbackEndpoints
         var history = await db.FeedbackChanges.AsNoTracking().Where(c => c.AcademyId == t.AcademyId && c.FeedbackId == id)
             .OrderByDescending(c => c.CreatedAtUtc).ThenByDescending(c => c.Id).Take(51)
             .Select(c => new { c.Id, c.Action, c.FromStatus, c.ToStatus, c.BeforeDueOn, c.AfterDueOn, c.InternalNote, c.PublicResponse, c.CreatedAtUtc,
+                c.InvestigationId, c.InvestigatorMembershipId,
+                investigatorName = db.AcademyMemberships.Where(m => m.Id == c.InvestigatorMembershipId).Select(m => m.User.DisplayName).FirstOrDefault(),
                 actorName = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == c.ActorMembershipId).Select(m => m.User.DisplayName).FirstOrDefault() }).ToArrayAsync();
         var timeZone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
         return Results.Ok(new { asOfDate = today, timeZone, item.Id, item.Version, item.Kind, item.Score, item.Message, item.Status, item.DueOn,
+            item.InvestigationId, item.InvestigatorMembershipId, item.InvestigationBrief,
+            investigatorName = await db.AcademyMemberships.Where(m => m.Id == item.InvestigatorMembershipId).Select(m => m.User.DisplayName).FirstOrDefaultAsync(),
             history = history.Take(50), historyHasMore = history.Length > 50, historyLimit = 50,
             overdue = item.Status != "Resolved" && item.Status != "Closed" && item.DueOn < today, item.OwnerResponse, item.RespondedAtUtc,
             item.CreatedAtUtc, item.ReviewedAtUtc, item.PlayerId, item.TrainingGroupId,
@@ -170,6 +180,9 @@ public static partial class GuardianFeedbackEndpoints
         var now = clock.GetUtcNow(); var actor = Actor(principal);
         var before = item.Status;
         item.Status = "Resolved"; item.OwnerResponse = response; item.RespondedByUserId = actor; item.RespondedAtUtc = now;
+        // Completion revokes the opaque delegation permanently; reopening needs a
+        // fresh owner-reviewed assignment rather than reviving an old private link.
+        item.InvestigationId = null; item.InvestigatorMembershipId = null; item.InvestigationBrief = null;
         item.ReviewedByUserId ??= actor; item.ReviewedAtUtc ??= now; item.UpdatedAtUtc = now;
         var change = RecordChange(db, item, t, now, "Resolve", before, item.DueOn);
         if (await Linked(db, t.AcademyId, item.GuardianUserId, item.PlayerId))

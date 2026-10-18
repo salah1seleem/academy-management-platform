@@ -5,11 +5,13 @@ import { Button, ErrorState, LoadingState, PageHeader, SectionCard } from "../co
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { feedbackStates, feedbackTransitions } from "./feedback-state";
 import styles from "./feedback-case.module.css";
+import { FeedbackAssignment } from "./feedback-investigations";
 
 export type FeedbackDetail = { id: string; kind: string; score: number | null; message: string; status: string; dueOn: string | null; overdue: boolean;
+  investigatorMembershipId?: string | null; investigationBrief?: string | null; investigatorName?: string | null;
   ownerResponse: string | null; createdAtUtc: string; reviewedAtUtc: string | null; respondedAtUtc: string | null; playerId: string; playerName: string | null;
   trainingGroupId: string; groupName: string | null; branchName: string | null; coachName: string | null;
-  version?: number; timeZone?: string; historyHasMore?: boolean; history?: { id: string; action: string; fromStatus: string; toStatus: string; beforeDueOn: string | null; afterDueOn: string | null; internalNote: string | null; publicResponse: string | null; actorName: string | null; createdAtUtc: string }[] };
+  version?: number; timeZone?: string; historyHasMore?: boolean; history?: { id: string; action: string; fromStatus: string; toStatus: string; beforeDueOn: string | null; afterDueOn: string | null; internalNote: string | null; publicResponse: string | null; actorName: string | null; investigatorName?: string | null; createdAtUtc: string }[] };
 const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح" };
 export function GuardianFeedbackDetail({ id }: { id: string }) {
   const [item, setItem] = useState<FeedbackDetail | null>(null), [error, setError] = useState(""), [message, setMessage] = useState("");
@@ -77,11 +79,15 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
         </form>
         {item.status === "Reopened" && item.ownerResponse && <p>الرد السابق محفوظ. إعادة الفتح تعيد الملاحظة للمتابعة ولا ترسل إشعارًا تلقائيًا.</p>}
       </SectionCard>}
+      {item.kind !== "Rating" && !!item.version && item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="مسؤول التحقيق">
+        <p>المسؤول الحالي: {item.investigatorName ?? "لم يسند"}</p>
+        <FeedbackAssignment key={`${id}:${item.version}`} id={id} version={item.version} current={item.investigatorMembershipId} brief={item.investigationBrief} saved={() => { setMessage("تم حفظ تكليف التحقيق؛ لم يُرسل شيء للأسرة."); setRevision(n => n + 1); }}/>
+      </SectionCard>}
       <SectionCard title="سجل الملاحظة الخاص">
         <p className={styles.hint}>التاريخ السابق لهذه الإضافة لا يُعاد اختلاقه. الأحدث أولًا، حتى 50 تحديثًا.</p>
         {item.historyHasMore && <p>توجد تحديثات أقدم غير معروضة؛ لم تُحذف.</p>}
         {!item.history?.length ? <p>لم تُسجل تحديثات بعد.</p> : <ol className={styles.history}>{item.history.map(c => <li key={c.id}>
-          <div className={styles.historyHead}><strong>{c.action === "Due" ? "تحديد موعد متابعة" : `${feedbackStates[c.fromStatus] ?? c.fromStatus} ← ${feedbackStates[c.toStatus] ?? c.toStatus}`}</strong><span>{c.actorName ?? "مالك الأكاديمية"}</span></div>
+          <div className={styles.historyHead}><strong>{c.action === "Assign" ? `تكليف تحقيق: ${c.investigatorName ?? "إلغاء الإسناد"}` : c.action === "Findings" ? "نتيجة تحقيق خاصة" : c.action === "Due" ? "تحديد موعد متابعة" : `${feedbackStates[c.fromStatus] ?? c.fromStatus} ← ${feedbackStates[c.toStatus] ?? c.toStatus}`}</strong><span>{c.actorName ?? "مسؤول الأكاديمية"}</span></div>
           <time dateTime={c.createdAtUtc}>{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: item.timeZone ?? "UTC" }).format(new Date(c.createdAtUtc))} · توقيت الأكاديمية</time>
           {c.action === "Due" && <p>الموعد: <bdi>{c.afterDueOn}</bdi></p>}
           {c.internalNote && <p>ملاحظة داخلية: {c.internalNote}</p>}{c.publicResponse && <blockquote>{c.action === "Transition" && c.toStatus === "Reopened" ? "الرد السابق المحفوظ عند إعادة الفتح" : "الرد المحفوظ للأسرة"}: {c.publicResponse}</blockquote>}

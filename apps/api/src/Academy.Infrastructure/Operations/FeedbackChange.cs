@@ -7,6 +7,8 @@ public sealed class FeedbackChange : TenantEntity
 {
     public Guid FeedbackId { get; set; }
     public Guid ActorMembershipId { get; set; }
+    public Guid? InvestigationId { get; set; }
+    public Guid? InvestigatorMembershipId { get; set; }
     public Guid? RequestId { get; set; }
     public string? RequestHash { get; set; }
     public required string Action { get; set; }
