@@ -10,6 +10,12 @@ public sealed partial class FoundationDbContext
     private static void ConfigurePlayerLevelReviews(ModelBuilder b)
     {
         Tenant<PlayerLevelReview>(b);var r=b.Entity<PlayerLevelReview>();
+        b.Entity<PlayerTechnicalReviewDecision>().HasAlternateKey(x=>new{x.AcademyId,x.Id,x.SportEnrollmentId,x.SportId});
+        b.Entity<EnrollmentGroupTransfer>().HasAlternateKey(x=>new{x.AcademyId,x.Id,x.SportEnrollmentId,x.SportId});
+        r.HasOne<PlayerTechnicalReviewDecision>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.TechnicalDecisionId,x.SportEnrollmentId,x.SportId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.SportEnrollmentId,x.SportId}).OnDelete(DeleteBehavior.Restrict);
+        r.HasOne<EnrollmentGroupTransfer>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.GroupTransferId,x.SportEnrollmentId,x.SportId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.SportEnrollmentId,x.SportId}).OnDelete(DeleteBehavior.Restrict);
+        r.HasIndex(x=>new{x.AcademyId,x.TechnicalDecisionId}).IsUnique().HasFilter("\"TechnicalDecisionId\" IS NOT NULL");
+        r.ToTable(t=>t.HasCheckConstraint("CK_LevelReview_Promotion","(\"TechnicalDecisionId\" IS NULL AND \"GroupTransferId\" IS NULL) OR (\"TechnicalDecisionId\" IS NOT NULL AND \"GroupTransferId\" IS NOT NULL AND \"Action\"='Changed')"));
         r.HasOne<SportEnrollment>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.SportEnrollmentId,x.SportId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.SportId}).OnDelete(DeleteBehavior.Restrict);
         r.HasOne<TrainingLevel>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.FromLevelId,x.SportId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.SportId}).OnDelete(DeleteBehavior.Restrict);
         r.HasOne<TrainingLevel>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ToLevelId,x.SportId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.SportId}).OnDelete(DeleteBehavior.Restrict);

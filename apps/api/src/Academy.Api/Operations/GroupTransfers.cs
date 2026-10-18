@@ -20,7 +20,7 @@ public sealed partial class GroupPlacementService
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Players\" WHERE \"AcademyId\"={academy} AND \"Id\"={e.PlayerId} FOR UPDATE");
         _ = await db.SubscriptionPeriods.FromSqlInterpolated($"SELECT *, xmin FROM \"SubscriptionPeriods\" WHERE \"AcademyId\"={academy} AND \"SportEnrollmentId\"={id} ORDER BY \"Id\" FOR UPDATE").AsNoTracking().ToArrayAsync();
     }
-    private async Task<GroupTransferPreview> InspectTransfer(Guid id, GroupTransferWrite b, bool write)
+    private async Task<GroupTransferPreview> InspectTransfer(Guid id, GroupTransferWrite b, bool write, Guid? reviewedPromotionLevel = null)
     {
         var t = await Authority("players", write ? "Edit" : "Read"); await Authority("academy", write ? "Edit" : "Read");
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
@@ -37,7 +37,7 @@ public sealed partial class GroupPlacementService
             if (refreshedSource != sourceId) throw new FacilityRejected("تغيرت المجموعة بعد المعاينة؛ راجع النقل من جديد.");
         }
         var (_, target) = await Group(b.GroupId, write);
-        var eligibility = await Inspect(target, [id], effectiveDate: b.EffectiveDate, transfer: true);
+        var eligibility = await Inspect(target, [id], effectiveDate: b.EffectiveDate, transfer: true, reviewedPromotionLevel: reviewedPromotionLevel);
         var conflicts = new List<string>(eligibility.Conflicts.Concat(eligibility.Players.SelectMany(p => p.Reasons)));
         var changes = await db.EnrollmentGroupTransfers.AsNoTracking().Where(x => x.SportEnrollmentId == id).OrderBy(x => x.EffectiveDate).Select(x => new { x.Id, x.EffectiveDate, x.TargetGroupId }).ToArrayAsync();
         if (changes.Any(x => x.EffectiveDate >= b.EffectiveDate)) conflicts.Add("يوجد نقل مجدول في هذا التاريخ أو بعده؛ لا نستبدل قرارًا مؤرخًا بصمت.");

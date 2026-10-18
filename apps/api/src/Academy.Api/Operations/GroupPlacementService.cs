@@ -54,7 +54,7 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
         if (b.EnrollmentIds is null || b.EnrollmentIds.Length is < 1 or > 100 || b.EnrollmentIds.Any(x => x == Guid.Empty) || b.EnrollmentIds.Distinct().Count() != b.EnrollmentIds.Length) throw new FacilityRejected("اختر من لاعب واحد إلى 100 تسجيل مختلف.", 422);
         return b.EnrollmentIds.OrderBy(x => x).ToArray();
     }
-    private async Task<PlacementPreview> Inspect(TrainingGroup g, Guid[] ids, bool assessBatch = true, DateOnly? effectiveDate = null, bool transfer = false, Guid? occurrence = null, bool compensation = false)
+    private async Task<PlacementPreview> Inspect(TrainingGroup g, Guid[] ids, bool assessBatch = true, DateOnly? effectiveDate = null, bool transfer = false, Guid? occurrence = null, bool compensation = false, Guid? reviewedPromotionLevel = null)
     {
         var today = effectiveDate ?? await AttendanceCalendar.TodayAsync(g.AcademyId, db, time);
         var rows = await db.SportEnrollments.AsNoTracking().Include(x => x.Player).Where(x => ids.Contains(x.Id)).OrderBy(x => x.Id).ToListAsync();
@@ -106,7 +106,7 @@ public sealed partial class GroupPlacementService(FoundationDbContext db, Curren
             if (e.SportId != g.SportId || e.BranchId != g.BranchId) reasons.Add("الرياضة أو الفرع لا يطابق المجموعة.");
             if (e.RegistrationFormat != g.RegistrationFormat) reasons.Add("نوع تسجيل اللاعب لا يطابق نمط تدريب المجموعة.");
             if (g.AgeCategory.MinimumBirthYear > e.Player.DateOfBirth.Year || g.AgeCategory.MaximumBirthYear < e.Player.DateOfBirth.Year || e.Player.DateOfBirth > today) reasons.Add("الفئة العمرية لا تناسب اللاعب.");
-            if (level is null || e.TrainingLevelId != level.Id || e.LevelReviewedByUserId is null || e.LevelReviewedAtUtc is null) reasons.Add("راجع مستوى اللاعب؛ المستوى المعتمد يجب أن يطابق المجموعة.");
+            if (level is null || (reviewedPromotionLevel ?? e.TrainingLevelId) != level.Id || e.LevelReviewedByUserId is null || e.LevelReviewedAtUtc is null) reasons.Add("راجع مستوى اللاعب؛ المستوى المعتمد يجب أن يطابق المجموعة.");
             if (!compensation && !periods.Any(p => p.SportEnrollmentId == e.Id && (p.ServiceKindSnapshot ?? p.SubscriptionPlan.ServiceKind) == AcademyServiceKind.Training && Academy.Api.Slice3.PlanCatalog.FormatMatches(g.RegistrationFormat, p.TrainingFormatSnapshot ?? p.SubscriptionPlan.TrainingFormat) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions is > 0))) reasons.Add("لا يوجد استحقاق تدريب سارٍ مطابق للنوع؛ يبقى اللاعب في الانتظار دون حضور مدفوع.");
             if (sessions.Length > 0)
             {

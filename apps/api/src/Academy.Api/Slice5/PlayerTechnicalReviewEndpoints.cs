@@ -28,17 +28,23 @@ public static class PlayerTechnicalReviewEndpoints
     private static string Hash(object o)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(o))));
     private static object RequestRow(PlayerTechnicalReviewRequest r)=>new{r.Id,r.PlanId,r.SportEnrollmentId,r.Sequence,r.SourceReviewSequence,r.LevelName,r.CurriculumTitle,requirements=r.EvidenceReviewIds.Length,r.ActorName,r.CreatedAtUtc,r.Version};
     private static object DecisionRow(PlayerTechnicalReviewDecision d)=>new{d.Id,d.Outcome,d.RecommendedLevelId,d.RecommendedLevelName,d.FamilyNote,d.ActorName,d.CreatedAtUtc};
-    private static async Task<bool> CanDecide(TenantMembership t,FoundationDbContext db,HttpContext h)
+    internal static async Task<bool> CanDecide(TenantMembership t,FoundationDbContext db,HttpContext h)
     {
         if(t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)||!(await h.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(h.User,h,AcademyPermissions.PeopleManage)).Succeeded)return false;
         if(t.Role==AcademyRole.AcademyOwner)return true;
         var member=await db.AcademyMemberships.AsNoTracking().SingleAsync(m=>m.Id==t.MembershipId);
         return member.UseActionGrants?await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.IsActive&&g.Module=="players"&&g.Read&&g.Edit)&&await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.IsActive&&g.Module=="evaluations"&&g.Read):!await db.StaffGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.IsActive&&(g.Permission==AcademyPermissions.PeopleManage||g.Permission==AcademyPermissions.EvaluationRead)&&!g.Allowed);
     }
+    private static async Task<bool> CanPlace(TenantMembership t,FoundationDbContext db,HttpContext h)
+    {
+        if(!(await h.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(h.User,h,AcademyPermissions.StructureManage)).Succeeded)return false;
+        return t.Role==AcademyRole.AcademyOwner||!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants)||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="academy"&&g.IsActive&&g.Read&&g.Edit);
+    }
     private static async Task<object[]> Rows(PlayerTechnicalReviewRequest[] requests,FoundationDbContext db)
     {
         var ids=requests.Select(r=>r.Id).ToArray();var decisions=await db.PlayerTechnicalReviewDecisions.AsNoTracking().Where(d=>ids.Contains(d.TechnicalRequestId)).ToDictionaryAsync(d=>d.TechnicalRequestId);
-        return requests.Select(r=>(object)new{request=RequestRow(r),decision=decisions.TryGetValue(r.Id,out var d)?DecisionRow(d):null}).ToArray();
+        var dids=decisions.Values.Select(d=>d.Id).ToArray();var applications=await db.PlayerLevelReviews.AsNoTracking().Where(x=>x.TechnicalDecisionId!=null&&dids.Contains(x.TechnicalDecisionId.Value)).ToDictionaryAsync(x=>x.TechnicalDecisionId!.Value);
+        return requests.Select(r=>(object)new{request=RequestRow(r),decision=decisions.TryGetValue(r.Id,out var d)?DecisionRow(d):null,application=d!=null&&applications.TryGetValue(d.Id,out var applied)?new{applied.ToLevelName,applied.CreatedAtUtc}:null}).ToArray();
     }
     private static async Task<object> PlanView(PlayerSkillPlan plan,PlayerGoalEndpoints.Context e,TenantMembership t,FoundationDbContext db,HttpContext h,bool family)
     {
@@ -81,7 +87,8 @@ public static class PlayerTechnicalReviewEndpoints
         h.Response.Headers.CacheControl="private, no-store";var t=(await tenant.ResolveAsync())!;var r=await db.PlayerTechnicalReviewRequests.AsNoTracking().SingleOrDefaultAsync(r=>r.Id==id);if(r==null)return Results.NotFound();var e=await PlayerGoalEndpoints.Enrollment(r.SportEnrollmentId,t,db,time);if(e==null)return Results.NotFound();var p=await db.PlayerSkillPlans.AsNoTracking().SingleAsync(p=>p.Id==r.PlanId);var source=await PlayerSkillEvidence.Read(p,e.TrainingLevelId,db);var d=await db.PlayerTechnicalReviewDecisions.AsNoTracking().SingleOrDefaultAsync(d=>d.TechnicalRequestId==id);
         var evidence=await(from v in db.PlayerSkillReviews.AsNoTracking() join s in db.SkillRequirements.AsNoTracking() on v.RequirementId equals s.Id where r.EvidenceReviewIds.Contains(v.Id) orderby s.DisplayOrder select new{s.Name,s.Unit,s.Protocol,v.State,v.MeasuredValue,v.ObservedOn,v.ActorName}).ToArrayAsync();
         var currentLevel=await db.TrainingLevels.AsNoTracking().SingleAsync(l=>l.Id==r.TrainingLevelId);var choices=await db.TrainingLevels.Where(l=>l.IsActive&&l.SportId==r.SportId&&l.Rank>currentLevel.Rank).OrderBy(l=>l.Rank).Select(l=>new{l.Id,name=l.ArabicName}).ToArrayAsync();
-        return Results.Ok(new{request=RequestRow(r),decision=d==null?null:DecisionRow(d),enrollment=e,evidence,currentEligible=source.Eligible&&source.Head==r.SourceReviewSequence,contextChanged=!source.Eligible||source.Head!=r.SourceReviewSequence,canDecide=d==null&&await CanDecide(t,db,h),levels=choices});
+        var application=d==null?null:await db.PlayerLevelReviews.AsNoTracking().Where(x=>x.TechnicalDecisionId==d.Id).Select(x=>new{x.ToLevelName,x.CreatedAtUtc}).SingleOrDefaultAsync();
+return Results.Ok(new{request=RequestRow(r),decision=d==null?null:DecisionRow(d),enrollment=e,evidence,application,currentEligible=source.Eligible&&source.Head==r.SourceReviewSequence,contextChanged=!source.Eligible||source.Head!=r.SourceReviewSequence,canDecide=d==null&&await CanDecide(t,db,h),canReviewPlacement=d?.Outcome=="ReadyForPlacement"&&await CanDecide(t,db,h)&&await CanPlace(t,db,h),levels=choices});
     }
     private static async Task<IResult> Decide(Guid id,TechnicalDecisionWrite r,CurrentTenant tenant,FoundationDbContext db,HttpContext h,TimeProvider time,GroupPlacementService placement)
     {

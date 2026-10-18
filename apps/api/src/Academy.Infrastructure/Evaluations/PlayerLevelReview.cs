@@ -5,6 +5,8 @@ public sealed class PlayerLevelReview : TenantEntity
 {
     public Guid SportEnrollmentId { get; set; }
     public Guid SportId { get; set; }
+    public Guid? TechnicalDecisionId { get; set; }
+    public Guid? GroupTransferId { get; set; }
     public int Revision { get; set; }
     public Guid? FromLevelId { get; set; }
     public Guid? ToLevelId { get; set; }

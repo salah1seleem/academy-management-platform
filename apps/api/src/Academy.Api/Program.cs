@@ -381,6 +381,7 @@ app.MapPlayerGoalEndpoints();
 app.MapSkillCurriculumEndpoints();
 app.MapSessionLessonEndpoints();
 app.MapPlayerTechnicalReviews();
+app.MapTechnicalPromotions();
 app.MapSlice6Endpoints();
 app.MapSlice7Endpoints();
 app.MapSlice8ReportingEndpoints();

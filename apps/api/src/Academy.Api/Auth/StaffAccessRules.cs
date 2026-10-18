@@ -32,6 +32,7 @@ public static class StaffAccessRules
         if (path.StartsWith("/api/v1/help/", StringComparison.Ordinal)) return null;
         if(Academy.Api.Operations.StaffPasskeys.IsOwnPath(path))return null; // Own key management, never staff CRUD.
         // A technical recommendation edits the player-level review, not observations.
+        if (path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.Contains("/promotion", StringComparison.Ordinal)) return "players";
         if (path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.EndsWith("/decision", StringComparison.Ordinal)) return "players";
         if (path.StartsWith("/api/v1/manage/family-renewals", StringComparison.Ordinal)) return "payments";
         if (path.StartsWith("/api/v1/facilities")) return "facilities";
@@ -60,6 +61,7 @@ public static class StaffAccessRules
     }
     public static string Operation(string method, string path)
     {
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.Contains("/promotion", StringComparison.Ordinal)) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.EndsWith("/decision", StringComparison.Ordinal)) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/evaluations/skills/plans/", StringComparison.Ordinal) && path.EndsWith("/reviews", StringComparison.Ordinal)) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/evaluations/skills/curricula/", StringComparison.Ordinal) && path.EndsWith("/retire", StringComparison.Ordinal)) return "Edit";

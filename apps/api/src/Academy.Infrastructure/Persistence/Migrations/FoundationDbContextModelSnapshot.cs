@@ -1493,6 +1493,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<Guid?>("GroupTransferId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -1520,6 +1523,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SportId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TechnicalDecisionId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ToLevelId")
                         .HasColumnType("uuid");
 
@@ -1542,6 +1548,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ActorUserId");
 
+                    b.HasIndex("AcademyId", "TechnicalDecisionId")
+                        .IsUnique()
+                        .HasFilter("\"TechnicalDecisionId\" IS NOT NULL");
+
                     b.HasIndex("AcademyId", "ActorUserId", "RequestId")
                         .IsUnique();
 
@@ -1554,8 +1564,14 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "ToLevelId", "SportId");
 
+                    b.HasIndex("AcademyId", "GroupTransferId", "SportEnrollmentId", "SportId");
+
+                    b.HasIndex("AcademyId", "TechnicalDecisionId", "SportEnrollmentId", "SportId");
+
                     b.ToTable("PlayerLevelReviews", null, t =>
                         {
+                            t.HasCheckConstraint("CK_LevelReview_Promotion", "(\"TechnicalDecisionId\" IS NULL AND \"GroupTransferId\" IS NULL) OR (\"TechnicalDecisionId\" IS NOT NULL AND \"GroupTransferId\" IS NOT NULL AND \"Action\"='Changed')");
+
                             t.HasCheckConstraint("CK_PlayerLevelReview_Action", "\"IsActive\" AND \"Action\" IN ('Reviewed','Changed','Cleared') AND (\"ToLevelId\" IS NULL AND \"ToLevelName\" IS NULL OR \"ToLevelId\" IS NOT NULL AND length(trim(\"ToLevelName\"))>0) AND (\"FromLevelId\" IS NULL AND \"FromLevelName\" IS NULL OR \"FromLevelId\" IS NOT NULL AND length(trim(\"FromLevelName\"))>0)");
 
                             t.HasCheckConstraint("CK_PlayerLevelReview_Revision", "\"Revision\">0");
@@ -13497,6 +13513,18 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "ToLevelId", "SportId")
                         .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.EnrollmentGroupTransfer", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "GroupTransferId", "SportEnrollmentId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportEnrollmentId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewDecision", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TechnicalDecisionId", "SportEnrollmentId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportEnrollmentId", "SportId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

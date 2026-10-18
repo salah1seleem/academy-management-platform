@@ -7,6 +7,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
 import 'player_goals.dart' show goalCommandId;
+import 'technical_promotion.dart';
 
 class PlayerTechnicalReviewsPage extends StatefulWidget {
   final AuthController auth;
@@ -238,6 +239,10 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
           Text('${textOf(r['actorName'])} · ${day(r['createdAtUtc'])}'),
           const SizedBox(height: 12),
           decision(d),
+          if (entry['application'] != null)
+            Text(
+              '${l('تم تنفيذ المستوى بمراجعة إدارية', 'Level applied after administrative review')}: ${map(entry['application'])['toLevelName']}',
+            ),
           if (source != null &&
               (source['eligible'] != true ||
                   source['head'] != r['sourceReviewSequence']))
@@ -322,7 +327,23 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
             Text(textOf(r['curriculumTitle'])),
             const SizedBox(height: 12),
             decision(dec),
-            if (d['contextChanged'] == true)
+            if (d['application'] != null)
+              Text(
+                '${l('تم تنفيذ المستوى بمراجعة إدارية', 'Level applied after administrative review')}: ${map(d['application'])['toLevelName']}',
+              ),
+            if (d['canReviewPlacement'] == true)
+              GLink(
+                l('معاينة وتنفيذ التوصية', 'Preview and apply recommendation'),
+                Icons.move_up_outlined,
+                () => openPage(
+                  context,
+                  TechnicalPromotionPage(
+                    auth: widget.auth,
+                    requestId: widget.requestId!,
+                  ),
+                ),
+              ),
+            if (d['contextChanged'] == true && d['application'] == null)
               Text(
                 l(
                   'تغيرت الأدلة أو الخطة. لا يعتمد الاستعداد على الطلب القديم.',
