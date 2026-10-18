@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-10D2 — مستوى ونقل مؤرخ في معاملة واحدة، 2026-10-18
+
+`c151423`/120/D3-063: تطبيق مخول للتوصية بعد معاينة/إعادة تحقق، سجل مستوى مرتبط بالنقل ويحفظ السابق، الأسرة ترى التنفيذ والموعد دون مال/اشتراك جديد. API4/4/32s وحارسSQL1/17sمتداخل، Unit46، Web11، Flutter14، Browser1/36.4s ومستهلك1/24.5s، iOSرحلة10s ثم5s بعدspacing على طفل آخر. أدوات/EF ناجحة. [Owner Web قراءة لاحقة](evidence/v2-10d2/owner-applied-promotion-web-390.png)، [Family Web](evidence/v2-10d2/guardian-applied-promotion-web-390.png)، [Owner iOS معاينة](evidence/v2-10d2/owner-promotion-preview-ios.png)، [Family iOS](evidence/v2-10d2/guardian-promotion-applied-ios.png) فعلية راجعت؛ [كل المحاولات والبيانات والأوامر والقيود](PROGRESS.md). تطبيق اليوم لتسجيل مسكن فقط، لا مستقبل مبكر/انتظار تسكين/شهادة/إشعار أوH/CI كامل/Android/جهازفعلي؛ V2/V3 غيرمكتملتين وكل المالي المتبقي آخرًا.
+
+
 ## V2-10D1 — مراجعة فنية بأدلة ثابتة قبل النقل، 2026-10-18
 
 `29e6905`/119/D3-062: طلب من إتقان حقيقي وقرار بشري مخول، مصدر تاريخي محفوظ وتفويض حي وCAS/replay، Web/Native والأسرةLinked child دون كتابة؛ لا نقل تلقائي أو مال. API3/3 ثمالمتأثرةInbox1/1، Unit41، Web12، Flutterالجديدة7/7 بعدتصحيحfinder مع10مستهلكات ناجحة أولًا، Browser1/23.5s وiOSرحلة1/6s، أدوات وEF نظيفة. [Web المالك](evidence/v2-10d1/owner-technical-review-web-390.png)، [Web الأسرة](evidence/v2-10d1/guardian-technical-review-web-390.png)، [iOS الأسرة](evidence/v2-10d1/guardian-technical-review-ios.png) فعلية راجعت؛ [كل الفشل المصحح والبيئات والأوامر والحدود](PROGRESS.md). لاFullRegression/Android/physical/AppRoot أوCI شامل؛ تنفيذ التوصية/الشهادة وأرشفة المحتوى وبقيةV2/V3 باقية، وكل المالي المتبقي آخرًا.
