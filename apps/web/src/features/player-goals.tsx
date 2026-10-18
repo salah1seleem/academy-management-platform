@@ -12,18 +12,18 @@ type Data = { enrollment: { id: string; playerId: string; player: string; sport:
 const states: Record<string, string> = { Draft: "مسودة خاصة بفريق التدريب", Published: "قيد العمل · منشور للأسرة", Achieved: "تحقق الهدف بمراجعة المدرب", Withdrawn: "هدف مسحوب" };
 const actions: Record<string, string> = { Created: "إنشاء مسودة", Edited: "تعديل المسودة", Published: "نشر للأسرة", Reviewed: "مراجعة التقدم", Achieved: "تحقق الهدف", Withdrawn: "سحب الهدف" };
 const root = "/api/v1/evaluations/development-goals";
-function useGoalData<T = Data>(path: string, revision: number) {
+export function useGoalData<T = Data>(path: string, revision: number, failureMessage = "الهدف أو اللاعب غير متاح لك الآن. ارجع لملف اللاعب وأعد المحاولة.") {
   const [data, setData] = useState<T | null>(null), [error, setError] = useState("");
   useEffect(() => {
     let controller: AbortController | null = null;
     const read = () => {
       controller?.abort(); controller = new AbortController(); const signal = controller.signal; setData(null); setError("");
-      fetch(path, { cache: "no-store", signal }).then(async r => { if (!r.ok) throw Error(); return r.json() as Promise<T>; }).then(d => { if (!signal.aborted) setData(d); }).catch(() => { if (!signal.aborted) setError("الهدف أو اللاعب غير متاح لك الآن. ارجع لملف اللاعب وأعد المحاولة."); });
+      fetch(path, { cache: "no-store", signal }).then(async r => { if (!r.ok) throw Error(); return r.json() as Promise<T>; }).then(d => { if (!signal.aborted) setData(d); }).catch(() => { if (!signal.aborted) setError(failureMessage); });
     };
     const visibility = () => { if (document.hidden) { controller?.abort(); setData(null); } else read(); };
     read(); window.addEventListener("focus", read); document.addEventListener("visibilitychange", visibility);
     return () => { controller?.abort(); window.removeEventListener("focus", read); document.removeEventListener("visibilitychange", visibility); };
-  }, [path, revision]);
+  }, [path, revision, failureMessage]);
   return { data, error };
 }
 export function PlayerGoals({ enrollmentId }: { enrollmentId: string }) {

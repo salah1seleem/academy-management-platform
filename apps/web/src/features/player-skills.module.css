@@ -1,0 +1,18 @@
+.family { display: grid; gap: 1rem; padding-block-end: 1rem; line-height: 1.7; }
+.family > a { color: #fff; width: fit-content; text-underline-offset: .25em; }
+.family :global(.page-header), .family :global(.guardian-page-header) { color: white; padding: .5rem .25rem; }
+.family :global(.page-header) h1, .family :global(.guardian-page-header) h1 { margin: .4rem 0; font-size: clamp(1.4rem, 6vw, 2rem); line-height: 1.5; }
+.family :global(.breadcrumb) { margin: 0; color: #fff; opacity: .85; font-size: .85rem; }
+.family :global(.section-card) { min-width: 0; padding: 1.1rem; background: var(--surface, #fff); color: var(--text, #17333b); border: 1px solid var(--border, #dce5e9); border-radius: 1.1rem; box-shadow: 0 5px 20px #102b3910; margin-block: .75rem; overflow-wrap: anywhere; }
+.family :global(.section-card) h2 { font-size: 1.1rem; margin: .4rem 0 .75rem; line-height: 1.6; }
+.family :global(.section-card) h3 { font-size: 1rem; }
+.family :global(.section-card) p { font-size: .95rem; margin-block: .6rem; }
+.family :global(.section-card) article + article { border-block-start: 1px solid var(--border, #dce5e9); margin-block-start: 1rem; padding-block-start: .5rem; }
+.family progress { display: block; width: 100%; height: .65rem; accent-color: var(--primary, #d71935); border: 0; border-radius: 1rem; overflow: hidden; }
+.family progress::-webkit-progress-bar { background: var(--primary-soft, #f5e8eb); border-radius: 1rem; }
+.family progress::-webkit-progress-value { background: var(--primary, #d71935); border-radius: 1rem; }
+.family summary { cursor: pointer; font-size: .9rem; font-weight: 700; padding-block: .5rem; }
+.family :global(.button) { display: inline-flex; align-items: center; min-height: 44px; border: 1px solid var(--border, #dce5e9); border-radius: .8rem; padding: .6rem 1rem; background: var(--surface, #fff); color: var(--primary, #9b1731); text-decoration: none; }
+.progressTrack { width: 100%; height: .65rem; accent-color: var(--primary, #d71935); border: 0; border-radius: 1rem; overflow: hidden; }
+.progressTrack::-webkit-progress-bar { background: var(--primary-soft, #f5e8eb); border-radius: 1rem; }
+.progressTrack::-webkit-progress-value { background: var(--primary, #d71935); border-radius: 1rem; }

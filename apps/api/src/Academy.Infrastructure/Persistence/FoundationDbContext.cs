@@ -83,6 +83,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureCompensation(builder);
         ConfigureOperations(builder);
         ConfigurePlayerGoals(builder);
+        ConfigureSkillCurricula(builder);
 
         builder.Entity<ApplicationUser>(entity =>
         {

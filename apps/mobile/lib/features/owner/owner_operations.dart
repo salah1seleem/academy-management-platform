@@ -7,6 +7,7 @@ import '../coach/coach_attendance.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/role_navigation.dart';
 import '../shared/player_goals.dart';
+import '../shared/player_skills.dart';
 import 'owner_feedback.dart';
 import 'owner_followups.dart';
 
@@ -497,6 +498,15 @@ class OwnerGroupOperations extends StatelessWidget {
           Heading(localized(context, 'اللاعبون', 'Players')),
           for (final p in rows(d['players'])) ...[
             UiText(textOf(p['arabicName'])),
+            if (p['id'] is String)
+              GLink(
+                'خطوات تعلم اللاعب',
+                Icons.auto_graph_rounded,
+                () => openPage(
+                  context,
+                  PlayerSkillsPage(auth: auth, enrollmentId: p['id'] as String),
+                ),
+              ),
             if (p['id'] is String)
               GLink(
                 'أهداف التطور',

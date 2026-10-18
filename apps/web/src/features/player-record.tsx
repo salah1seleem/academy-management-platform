@@ -33,6 +33,7 @@ export function PlayerDetails({ id }: { id: string }) {
   const today = player?.asOfDate ? new Date(`${player.asOfDate}T00:00:00Z`) : new Date();
   const age = birth ? today.getUTCFullYear() - birth.getUTCFullYear() - (today.getUTCMonth() < birth.getUTCMonth() || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate()) ? 1 : 0) : null;
   return <><PageHeader title="ملف اللاعب" context="اللاعبون / عرض" action={{ label: "تعديل البيانات", href: `/dashboard/players/${id}/edit` }} />{error ? <ErrorState message={error} /> : !player ? <LoadingState /> : <>
+    <nav className="profile-record-links" aria-label="مهارات اللاعب حسب الرياضة">{player.enrollments.filter(e=>e.status==="Active").map(e=><Link key={e.id} href={`/dashboard/evaluations/skills/journey?enrollmentId=${e.id}`}>رحلة المهارات · {e.sportName}</Link>)}</nav>
     <section className="athlete-hero" aria-label="هوية اللاعب">
       <div><IdentityMark photo={player.photoReference} name={player.arabicName} detail={player.playerCode} large /><div className="team-chips">{player.enrollments.map(enrollment => <span className="team-chip" key={enrollment.id}>{enrollment.sportName} · {enrollment.branchName} · {enrollment.groupName}</span>)}</div></div>
       <StatusBadge status={player.isActive && (player.hasActiveSubscription ?? player.enrollments.some(e => e.subscription?.status === "Active")) ? "Active" : "Inactive"} />

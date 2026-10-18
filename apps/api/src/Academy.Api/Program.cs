@@ -378,6 +378,7 @@ app.MapAttendanceCorrections();
 app.MapPlayerCards();
 app.MapSlice5Endpoints();
 app.MapPlayerGoalEndpoints();
+app.MapSkillCurriculumEndpoints();
 app.MapSlice6Endpoints();
 app.MapSlice7Endpoints();
 app.MapSlice8ReportingEndpoints();
@@ -455,6 +456,8 @@ if (app.Environment.IsEnvironment("Demo"))
             await FeedbackFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:PlayerGoalSeedEnabled"))
             await PlayerGoalDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+        if(app.Configuration.GetValue<bool>("Demo:SkillCurriculumSeedEnabled"))
+            await SkillCurriculumDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:CommunityCampaignSeedEnabled"))
             await CommunityCampaignDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>(),app.Configuration);
         if (app.Configuration.GetValue<bool>("Demo:CoachAgreementSeedEnabled"))

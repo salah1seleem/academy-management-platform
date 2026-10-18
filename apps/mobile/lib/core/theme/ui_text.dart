@@ -64,6 +64,7 @@ class UiText extends StatelessWidget {
 }
 
 const _english = <String, String>{
+  'خطوات تعلم اللاعب': 'Player learning journey',
   'أهداف التطور': 'Development goals',
   'أهداف تطور اللاعب': 'Player development goals',
   'هدف جديد': 'New goal',

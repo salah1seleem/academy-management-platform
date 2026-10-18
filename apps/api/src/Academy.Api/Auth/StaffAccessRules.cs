@@ -58,6 +58,8 @@ public static class StaffAccessRules
     }
     public static string Operation(string method, string path)
     {
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/skills/plans/", StringComparison.Ordinal) && path.EndsWith("/reviews", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/skills/curricula/", StringComparison.Ordinal) && path.EndsWith("/retire", StringComparison.Ordinal)) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/evaluations/development-goals/enrollments/", StringComparison.Ordinal)) return "Add";
         if (method == "POST" && path.StartsWith("/api/v1/attendance/sessions/") && path.EndsWith("/corrections")) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/manage/structure/sessions/") && path.EndsWith("/coach-override/preview")) return "Read";

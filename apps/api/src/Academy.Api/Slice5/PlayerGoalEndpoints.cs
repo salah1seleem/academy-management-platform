@@ -24,31 +24,31 @@ public static class PlayerGoalEndpoints
         app.MapGet("/api/v1/guardian/children/{playerId:guid}/development-goals", GuardianList).RequireAuthorization(AcademyPermissions.GuardianEvaluationRead);
     }
 
-    private sealed record Context(Guid Id, Guid PlayerId, Guid SportId, string Player, string Sport, string? Level);
-    private static async Task<Context?> Enrollment(Guid id, TenantMembership t, FoundationDbContext db, TimeProvider clock)
+    internal sealed record Context(Guid Id, Guid PlayerId, Guid SportId, string Player, string Sport, string? Level, Guid? TrainingLevelId);
+    internal static async Task<Context?> Enrollment(Guid id, TenantMembership t, FoundationDbContext db, TimeProvider clock)
     {
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         var q = db.SportEnrollments.AsNoTracking().Where(e => e.AcademyId == t.AcademyId && e.Id == id && e.IsActive && e.Player.IsActive && e.Sport.IsActive && e.Branch.IsActive);
         if (t.Role == AcademyRole.Coach) q = q.Where(e => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.AcademyMembershipId == t.MembershipId && a.IsActive
             && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, today) && a.TrainingGroup.IsActive && a.AcademyMembership.IsActive && a.AcademyMembership.User.IsActive));
-        return await q.Select(e => new Context(e.Id, e.PlayerId, e.SportId, e.Player.ArabicName, e.Sport.ArabicName, db.TrainingLevels.Where(l => l.Id == e.TrainingLevelId).Select(l => l.ArabicName).FirstOrDefault())).SingleOrDefaultAsync();
+        return await q.Select(e => new Context(e.Id, e.PlayerId, e.SportId, e.Player.ArabicName, e.Sport.ArabicName, db.TrainingLevels.Where(l => l.Id == e.TrainingLevelId).Select(l => l.ArabicName).FirstOrDefault(), e.TrainingLevelId)).SingleOrDefaultAsync();
     }
-    private static async Task<bool> CanWrite(TenantMembership t, FoundationDbContext db, HttpContext h, bool add)
+    internal static async Task<bool> CanWrite(TenantMembership t, FoundationDbContext db, HttpContext h, bool add, string permission = AcademyPermissions.EvaluationManage)
     {
-        if (!(await h.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(h.User, h, AcademyPermissions.EvaluationManage)).Succeeded) return false;
+        if (!(await h.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(h.User, h, permission)).Succeeded) return false;
         if (t.Role != AcademyRole.AcademyAdmin) return true;
         if (await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.UseActionGrants)) return await db.StaffActionGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Module == "evaluations" && g.Read && (add ? g.Add : g.Edit));
-        return !await db.StaffGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Permission == AcademyPermissions.EvaluationManage && !g.Allowed);
+        return !await db.StaffGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Permission == permission && !g.Allowed);
     }
-    private static async Task<bool> LockAuthority(TenantMembership t, FoundationDbContext db, HttpContext h, Guid enrollment, Guid request, bool add)
+    internal static async Task<bool> LockAuthority(TenantMembership t, FoundationDbContext db, HttpContext h, Guid? enrollment, Guid request, bool add, string permission = AcademyPermissions.EvaluationManage)
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"AcademyMemberships\" WHERE \"Id\"={t.MembershipId} AND \"AcademyId\"={t.AcademyId} FOR UPDATE");
         if (!db.RequestScopeEnabled || db.RequestAcademyId != t.AcademyId || db.RequestMembershipId != t.MembershipId || !await db.AcademyMemberships.AsNoTracking().AnyAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.UserId == db.RequestUserId && m.IsActive && m.User.IsActive && m.Academy.IsActive
             && (!m.PrimaryMembershipId.HasValue || db.AcademyMemberships.Any(p => p.Id == m.PrimaryMembershipId && p.IsActive && p.User.IsActive)))) return false;
-        if (!await CanWrite(t, db, h, add)) return false;
+        if (!await CanWrite(t, db, h, add, permission)) return false;
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"player-goal-command:{t.AcademyId}:{db.RequestUserId}:{request}"},0))");
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SportEnrollments\" WHERE \"Id\"={enrollment} AND \"AcademyId\"={t.AcademyId} FOR UPDATE");
+        if (enrollment.HasValue) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SportEnrollments\" WHERE \"Id\"={enrollment.Value} AND \"AcademyId\"={t.AcademyId} FOR UPDATE");
         if (t.Role == AcademyRole.Coach) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"StaffGroupAssignments\" WHERE \"AcademyId\"={t.AcademyId} AND \"AcademyMembershipId\"={t.MembershipId} FOR SHARE");
         return true;
     }
