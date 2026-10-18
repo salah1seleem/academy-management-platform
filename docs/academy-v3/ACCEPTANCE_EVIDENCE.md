@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-10D1 — مراجعة فنية بأدلة ثابتة قبل النقل، 2026-10-18
+
+`29e6905`/119/D3-062: طلب من إتقان حقيقي وقرار بشري مخول، مصدر تاريخي محفوظ وتفويض حي وCAS/replay، Web/Native والأسرةLinked child دون كتابة؛ لا نقل تلقائي أو مال. API3/3 ثمالمتأثرةInbox1/1، Unit41، Web12، Flutterالجديدة7/7 بعدتصحيحfinder مع10مستهلكات ناجحة أولًا، Browser1/23.5s وiOSرحلة1/6s، أدوات وEF نظيفة. [Web المالك](evidence/v2-10d1/owner-technical-review-web-390.png)، [Web الأسرة](evidence/v2-10d1/guardian-technical-review-web-390.png)، [iOS الأسرة](evidence/v2-10d1/guardian-technical-review-ios.png) فعلية راجعت؛ [كل الفشل المصحح والبيئات والأوامر والحدود](PROGRESS.md). لاFullRegression/Android/physical/AppRoot أوCI شامل؛ تنفيذ التوصية/الشهادة وأرشفة المحتوى وبقيةV2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
 ## V2-10C2 — قالب فني ومدة محسوبة وإسناد لحصة فعلية، 2026-10-18
 
 `0cbab383b03f635cdae8ec1170fb5ffabdce3dea`/migration118/D3-061: مكتبة أصلية/مرخصة ومسودة→مراجعة بشرية، تصحيح بنسخة جديدة، خطوات10+15+20+10+5=60 لا76، ورفض اعتماد التعارض أو قبل اعتماد التمارين. إسناد فعلي للمستوى/الرياضة/مدة Scheduled، تاريخ محفوظ وCAS/replay بعد إعادة التفويض، Web إدارة/تحضير وNative Coach تحضير وحفظ. API4/4 ثم3/3 متداخلة مع حالة تفويض جديدة، Web12/12، Flutter19/19 ثم المتأثر4/4 ثم7/7 وanalyze/typecheck/lint/build/EF نظيفة. Browser1/20.3s وiOSرحلة1/7s، وحضور/تقرير/مصادر ثابتة؛ [Web قالب](evidence/v2-10c2/owner-reviewed-lesson-web-390.png)، [Web حصة](evidence/v2-10c2/session-lesson-web-390.png)، [Coach iOS](evidence/v2-10c2/coach-session-lesson-ios.png) فعلية روجعت. [كل المحاولات والأوامر والحدود](PROGRESS.md). seedOFF/مسودات فقط ولا موافقة بشرية مختلقة؛ لا سلامة/ترخيص مضمون أو نشر Guardian/attendance grant/مال/تقويم جديد. تقاعد المحتوى/الترقية والشهادات وبقية§21 باقية؛ ليستH أوAndroid/جهازفعلي/AppRoot أوCI جديد كامل/نشر الديمو اليدوي. المالي المتبقي آخرًا.
