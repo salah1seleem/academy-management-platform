@@ -5,10 +5,12 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/storage/refresh_store.dart';
 import 'package:academy_mobile/features/guardian/guardian_content.dart';
 import 'package:academy_mobile/features/shared/admin_media_gallery.dart';
+import 'package:academy_mobile/features/shared/media_memories.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:academy_mobile/features/shared/player_goals.dart'
     show goalCommandId;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -16,7 +18,7 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'Actual session media is read by family, withdrawn, republished as a new copy, then permanently erased in owner UI',
+    'Actual session media and monthly memories are read and indexed by family, withdrawn, republished and permanently erased without restoring old copies',
     (t) async {
       expect(const bool.fromEnvironment('ISOLATED_DEMO'), true);
       expect(
@@ -271,8 +273,37 @@ void main() {
         );
         await t.pumpAndSettle();
         expect((await family.asset(textOf(fresh['url']))).isNotEmpty, true);
+        await t.scrollUntilVisible(
+          find.text('ذكريات الشهر'),
+          -180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await t.tap(find.text('ذكريات الشهر'));
+        await wait(find.text('$caption — نسخة جديدة'));
+        expect(find.text(caption), findsNothing);
+        final copyIndex = find.widgetWithText(
+          OutlinedButton,
+          'نسخ فهرس الشهر دون الملفات',
+        );
+        await t.ensureVisible(copyIndex);
+        await t.pumpAndSettle();
+        await t.tap(copyIndex);
+        await wait(find.textContaining('تم نسخ فهرس الشهر دون الصور'));
+        final copied = await Clipboard.getData(Clipboard.kTextPlain);
+        expect(copied?.text, contains(textOf(fresh['id'])));
+        expect(copied?.text, isNot(contains(textOf(asset['id']))));
+        expect(copied?.text, isNot(contains('/api/v1/assets/')));
+        await t.ensureVisible(
+          find
+              .ancestor(
+                of: find.text('$caption — نسخة جديدة'),
+                matching: find.byType(GCard),
+              )
+              .first,
+        );
+        await t.pumpAndSettle();
         if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
-          await binding.takeScreenshot('phase-family-new-session-media-ios');
+          await binding.takeScreenshot('phase-family-monthly-memories-ios');
         }
         try {
           await family.asset(textOf(asset['url']));
@@ -285,12 +316,11 @@ void main() {
         );
         await t.pumpWidget(shell(AdminMediaGallery(auth: owner)));
         await wait(find.text('$caption — نسخة جديدة'));
-        final eraseCard = find
-            .ancestor(
-              of: find.text('$caption — نسخة جديدة'),
-              matching: find.byType(GCard),
-            )
-            .first;
+        final eraseCard = find.ancestor(
+          of: find.text('$caption — نسخة جديدة'),
+          matching: find.byType(GCard),
+        );
+        expect(eraseCard, findsOneWidget);
         final erase = find.descendant(
           of: eraseCard,
           matching: find.widgetWithText(OutlinedButton, 'حذف ملف الوسائط'),
@@ -356,6 +386,11 @@ void main() {
         );
         await t.pumpWidget(shell(GalleryPage(auth: family, playerId: child)));
         await wait(find.textContaining('المشاركة مسموحة باختيارك'));
+        expect(find.text('$caption — نسخة جديدة'), findsNothing);
+        await t.pumpWidget(
+          shell(MediaMemoriesPage(auth: family, playerId: child)),
+        );
+        await wait(find.text('كل لحظة في مكانها'));
         expect(find.text('$caption — نسخة جديدة'), findsNothing);
         expect(
           await owner.request(

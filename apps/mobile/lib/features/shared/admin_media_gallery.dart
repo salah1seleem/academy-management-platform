@@ -6,6 +6,7 @@ import '../guardian/guardian_ui.dart';
 import 'private_media.dart';
 import 'player_goals.dart' show goalCommandId;
 import 'media_storage_notice.dart';
+import 'media_memories.dart';
 
 /// The existing private gallery, with administrative withdrawal; never a public feed.
 class AdminMediaGallery extends StatefulWidget {
@@ -101,6 +102,25 @@ class _AdminGalleryState extends State<AdminMediaGallery>
                     ),
                     if (item['withdrawalNote'] != null)
                       Text(textOf(item['withdrawalNote'])),
+                    if (item['playerId'] != null ||
+                        item['trainingGroupId'] != null)
+                      TextButton(
+                        onPressed: () => openPage(
+                          context,
+                          MediaMemoriesPage(
+                            auth: widget.auth,
+                            playerId: item['playerId'] as String?,
+                            groupId: item['trainingGroupId'] as String?,
+                          ),
+                        ),
+                        child: Text(
+                          localized(
+                            context,
+                            'ذكريات الشهر لهذا النطاق',
+                            'Monthly memories for this scope',
+                          ),
+                        ),
+                      ),
                     if (item['canWithdraw'] == true &&
                         item['withdrawn'] != true &&
                         item['erased'] != true &&

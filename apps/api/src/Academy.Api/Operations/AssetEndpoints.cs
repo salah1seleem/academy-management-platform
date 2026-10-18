@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
 
-public static class AssetEndpoints
+public static partial class AssetEndpoints
 {
     public static void MapAssetEndpoints(this WebApplication app)
     {
@@ -18,6 +18,7 @@ public static class AssetEndpoints
         api.MapPost("/upload", Upload).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/{id:guid}", Download);
         api.MapGet("/gallery", Gallery);
+        api.MapGet("/memories", Memories).WithMetadata(new AcademyFeatureMetadata("media"));
     }
     internal static string Root(IConfiguration config, IWebHostEnvironment env) => Path.GetFullPath(config["Media:PrivateRoot"] ?? Path.Combine(env.ContentRootPath, "local-uploads"));
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -203,7 +204,9 @@ public static class AssetEndpoints
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(path, asset.ContentType, enableRangeProcessing: true);
     }
-    private static async Task<IResult> Gallery(Guid? playerId, Guid? groupId,bool? includeWithdrawn, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context)
+    private static Task<IResult> Gallery(Guid? playerId, Guid? groupId,bool? includeWithdrawn, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context)
+        =>ReadGallery(playerId,groupId,includeWithdrawn,tenant,principal,db,authorization,time,context);
+    private static async Task<IResult> ReadGallery(Guid? playerId, Guid? groupId,bool? includeWithdrawn, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context,DateOnly? memoryMonth=null,int page=0,string? format=null)
     {
         var t = (await tenant.ResolveAsync())!; var user = Actor(principal);
         context.Response.Headers.CacheControl="private, no-store";
@@ -228,6 +231,7 @@ public static class AssetEndpoints
             if (!(await authorization.AuthorizeAsync(principal, AcademyPermissions.PlayerMediaRead)).Succeeded) return Results.Forbid();
             if (playerId.HasValue) query = query.Where(x => x.PlayerId == playerId || db.PrivateAssetAudiences.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == playerId && e.AssetId == x.Id)); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         }
+        if(memoryMonth.HasValue)return await ReadMemories(query,playerId,groupId,memoryMonth.Value,page,format,t,db,time);
         var canWithdraw=staff&&await MediaPublication.CanWithdraw(t,context,authorization,db);
         var canPublish=staff&&await MediaPublication.CanPublish(t,context,authorization,db);
         var canDelete=staff&&await PrivateMediaLifecycle.CanDelete(t,context,db,authorization);

@@ -120,7 +120,12 @@ void main() {
       );
       await t.tap(find.widgetWithText(CheckboxListTile, 'عضو المجموعة'));
       await t.pumpAndSettle();
-      await t.ensureVisible(find.byType(DropdownButtonFormField<String>));
+      await t.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>),
+        -120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.pumpAndSettle();
       await t.tap(find.byType(DropdownButtonFormField<String>));
       await t.pumpAndSettle();
       await t.tap(find.text('15:00 — 16:00').last);

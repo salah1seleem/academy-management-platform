@@ -11,6 +11,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/appearance.dart';
 import 'media_storage_notice.dart';
+import 'media_memories.dart';
 import '../guardian/guardian_ui.dart';
 
 bool isPrivateAsset(Object? reference) =>
@@ -413,6 +414,14 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                 ),
               ),
               MediaStorageNotice(auth: widget.auth),
+              GLink(
+                'ذكريات الشهر لهذه المجموعة',
+                Icons.collections_outlined,
+                () => openPage(
+                  context,
+                  MediaMemoriesPage(auth: widget.auth, groupId: widget.groupId),
+                ),
+              ),
               Text(
                 localized(
                   context,
