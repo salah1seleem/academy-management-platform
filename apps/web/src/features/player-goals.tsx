@@ -29,7 +29,7 @@ export function useGoalData<T = Data>(path: string, revision: number, failureMes
 export function PlayerGoals({ enrollmentId }: { enrollmentId: string }) {
   const { data, error } = useGoalData(`${root}/enrollments/${enrollmentId}`, 0);
   return <><PageHeader title="أهداف تطور اللاعب" context="التدريب والتطور" />{error && <ErrorState message={error} />}{!data ? !error && <LoadingState /> : <>
-    <SectionCard title={`${data.enrollment.player} · ${data.enrollment.sport}`}><p>المستوى المسجل: {data.enrollment.level ?? "لم يحدد"}. الهدف الفني خطوة قابلة للمراجعة، وليس ضمانًا زمنيًا أو ترقية تلقائية.</p>
+    <SectionCard title={`${data.enrollment.player} · ${data.enrollment.sport}`}><p>المستوى المسجل: {data.enrollment.level ?? "لم يحدد"}. الهدف الفني خطوة قابلة للمراجعة، وليس ضمانًا زمنيًا أو ترقية تلقائية.</p><Link className="button button-secondary" href={`/dashboard/evaluations/monthly?enrollmentId=${enrollmentId}`}>تقرير التطور الشهري</Link>
       <div className="row-actions"><Link className="button button-secondary" href={`/dashboard/evaluations/badges?enrollmentId=${enrollmentId}`}>شارات المجهود والتحسن</Link><Link className="button button-secondary" href={`/dashboard/players/${data.enrollment.playerId}?tab=development`}>ملف اللاعب</Link>{data.canCreate && <Link className="button button-primary" href={`/dashboard/evaluations/goals/new?enrollmentId=${enrollmentId}`}>هدف جديد</Link>}</div>
     </SectionCard>
     {!data.items?.length && <SectionCard title="ابدأ بخطوة واضحة"><p>لا توجد أهداف مسجلة لهذا الاشتراك الرياضي. أضف ما يعمل عليه اللاعب ثم انشره عندما يكون جاهزًا للأسرة.</p></SectionCard>}
@@ -41,7 +41,7 @@ type FamilyGoals = { hasMore: boolean; items: { goal: Goal; sport: string; revie
 export function GuardianPlayerGoals({ playerId }: { playerId: string }) {
   const { data, error } = useGoalData<FamilyGoals>(`/api/v1/guardian/children/${playerId}/development-goals`, 0);
   return <GuardianShell><header className="guardian-page-header"><h1>خطوات تطور ابنك</h1><p>أهداف منشورة ومراجعات فعلية من فريق التدريب، وليست ترقية تلقائية أو ضمانًا زمنيًا.</p><Link className="back-link" href={`/guardian/children/${playerId}`}>العودة لملف اللاعب</Link></header>
-    {error && <ErrorState message={error}/>} {!data ? !error && <LoadingState/> : <>
+    <Link className="button button-secondary" href={`/guardian/children/${playerId}/monthly`}>تقرير التطور الشهري</Link>{error && <ErrorState message={error}/>} {!data ? !error && <LoadingState/> : <>
       {!data.items.length && <p>لم ينشر فريق التدريب أهدافًا بعد. تظل تقييمات اللاعب متاحة في ملفه.</p>}
       {data.items.filter(x => ["Published", "Achieved"].includes(x.goal.state)).map(({ goal: g, sport, reviews, reviewsHasMore }) => <section className="profile-section" key={g.id}>
         <span className="status-pill">{states[g.state]}</span><h2>{g.title}</h2><p>{sport} · {g.target}</p><p>موعد المراجعة: <bdi>{g.reviewOn}</bdi></p>

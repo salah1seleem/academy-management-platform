@@ -17,6 +17,7 @@ import '../shared/matches.dart';
 import '../shared/player_skills.dart';
 import '../shared/player_certificates.dart';
 import '../shared/player_badges.dart';
+import '../shared/player_monthly.dart';
 import '../shared/player_goals.dart';
 
 class ChildProfile extends StatelessWidget {
@@ -139,6 +140,14 @@ class ChildProfile extends StatelessWidget {
             () => openPage(
               context,
               PlayerCertificatesPage(auth: auth, playerId: playerId),
+            ),
+          ),
+          GLink(
+            'تقرير التطور الشهري',
+            Icons.auto_graph_rounded,
+            () => openPage(
+              context,
+              PlayerMonthlyPage(auth: auth, playerId: playerId),
             ),
           ),
           GLink(

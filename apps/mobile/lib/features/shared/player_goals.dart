@@ -7,6 +7,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import 'player_monthly.dart';
 
 String goalCommandId() {
   final h = commandKey().substring(0, 32);
@@ -197,6 +198,18 @@ class _PlayerGoalsPageState extends State<PlayerGoalsPage>
               ),
               if (message.isNotEmpty) UiText(message),
               if (widget.id == null && !widget.create) ...[
+                GLink(
+                  'تقرير التطور الشهري',
+                  Icons.auto_graph_rounded,
+                  () => openPage(
+                    context,
+                    PlayerMonthlyPage(
+                      auth: widget.auth,
+                      playerId: widget.playerId,
+                      enrollmentId: widget.enrollmentId,
+                    ),
+                  ),
+                ),
                 if (widget.playerId == null)
                   Heading('${enrollment['player']} · ${enrollment['sport']}'),
                 if (widget.playerId == null && data['canCreate'] == true)
