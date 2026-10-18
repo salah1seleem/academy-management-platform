@@ -14,6 +14,7 @@ import 'player_card.dart';
 import 'guardian_visits.dart';
 import 'coach_feedback.dart';
 import '../shared/matches.dart';
+import '../shared/player_goals.dart';
 
 class ChildProfile extends StatelessWidget {
   final AuthController auth;
@@ -111,6 +112,14 @@ class ChildProfile extends StatelessWidget {
             () => openPage(
               context,
               ReportHistory(auth: auth, playerId: playerId),
+            ),
+          ),
+          GLink(
+            'أهداف التطور',
+            Icons.flag_outlined,
+            () => openPage(
+              context,
+              PlayerGoalsPage(auth: auth, playerId: playerId),
             ),
           ),
           GLink(

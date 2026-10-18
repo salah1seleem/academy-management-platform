@@ -10,6 +10,7 @@ import '../guardian/guardian_ui.dart';
 import '../shared/private_media.dart';
 import 'coach_evaluation.dart';
 import '../shared/matches.dart';
+import '../shared/player_goals.dart';
 
 // Uses the existing authorized roster/options, never a guardian or medical API.
 class CoachPlayerPage extends StatefulWidget {
@@ -131,6 +132,18 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
                         if (widget.sessionId != null)
                           'evaluationDate': session['sessionDate'],
                       },
+                    ),
+                  ),
+                ),
+              if (widget.sessionId == null)
+                GLink(
+                  'أهداف التطور',
+                  Icons.flag_outlined,
+                  () => openPage(
+                    context,
+                    PlayerGoalsPage(
+                      auth: widget.auth,
+                      enrollmentId: widget.enrollmentId,
                     ),
                   ),
                 ),

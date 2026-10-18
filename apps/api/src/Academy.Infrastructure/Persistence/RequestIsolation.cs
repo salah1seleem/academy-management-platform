@@ -124,6 +124,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<Receipt>(b, x => Collections.Any(c => c.Id == x.CollectionId));
         BranchFilter<BeneficiaryRenewalReference>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerEvaluation>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<PlayerDevelopmentGoal>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<PlayerGoalChange>(b, x => PlayerDevelopmentGoals.Any(g => g.Id == x.GoalId));
         BranchFilter<EvaluationScore>(b, x => PlayerEvaluations.Any(e => e.Id == x.PlayerEvaluationId));
         BranchFilter<PlayerMedicalRecord>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
         BranchFilter<PlayerMedia>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
@@ -197,6 +199,7 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        GuardPlayerGoalHistory();
         foreach (var e in ChangeTracker.Entries<Academy.Infrastructure.Content.HelpVideoRevision>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
         {
             var original = e.OriginalValues.GetValue<string>(nameof(Academy.Infrastructure.Content.HelpVideoRevision.State));

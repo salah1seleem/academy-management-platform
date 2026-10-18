@@ -82,6 +82,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureSessionMoves(builder);
         ConfigureCompensation(builder);
         ConfigureOperations(builder);
+        ConfigurePlayerGoals(builder);
 
         builder.Entity<ApplicationUser>(entity =>
         {
