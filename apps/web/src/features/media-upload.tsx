@@ -32,7 +32,7 @@ export function MediaUpload({gallery=false}:{gallery?:boolean}){
 function StaffMediaGallery({revision,onReview}:{revision:number;onReview:(asset:Asset)=>void}){
  const[refresh,setRefresh]=useState(0);
  const{data,error}=useGoalData<Asset[]>("/api/v1/assets/gallery?includeWithdrawn=true",revision+refresh,"تعذر فتح المعرض المخول؛ أعد المحاولة.");
- return <section><h2>أحدث100 نسخة · المنشورة والمسحوبة</h2>{error&&<ErrorState message={error}/>}<section className="private-gallery">{data?.map(x=><article className="detail-card" key={x.id}>
+ return <section><h2>أحدث100 نسخة · المنشورة والمسحوبة</h2>{error&&<ErrorState message={error}/>}<section className="private-gallery">{data?.map(x=><article className={`detail-card ${styles.mediaCard}`} key={x.id}>
  {x.contentType.startsWith("video/")?<video src={x.url} controls preload="metadata"/>:<Image unoptimized src={x.url} width={380} height={260} alt={x.caption??"وسائط تدريب"}/>}
  <p>{x.caption}</p><p>{x.trainingSessionId?"مرتبطة بحصة فعلية":"وسائط دون حصة"} · <bdi>{x.mediaEventOn}</bdi></p>
  <p role="status">{x.withdrawn?"مسحوبة من الأسر والمدرب · الأصل للمراجعة الإدارية فقط":"نسخة محفوظة · وصول الأسرة مشروط بالتفويض والموافقة"}</p>
