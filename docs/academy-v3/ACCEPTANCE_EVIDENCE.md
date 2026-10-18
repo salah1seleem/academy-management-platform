@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## F1b5 — الملاحظة الأصلية والرد الخاص للأسرة، 2026-10-18
+
+`dbff455`، migration114/D3-057: ملاحظات تجاوزت موعدًا صريحًا من المالك، عدد الملاحظات وحسابات مقدميها منفصلان، دليل ثابت ومصدر حي. المالك يفتح المصدر Web/Native ويرد؛ Admin ملخص فقط ومصدره403، وClose لا يحل الشكوى. API4/seed1/Web17 ثم المتأثر3/Flutter23 ثم المستهلك2، أدوات ناجحة وEF بلاpending؛ Browser3 في44.8s ثم رحلة المصدر1 في26.1s، iOS رحلة1 في15s، report/history/evidence مطابقة وGuardian يرى الردين. [Web390](evidence/f1b5/owner-family-feedback-web-390.png)، [iOS](evidence/f1b5/owner-family-feedback-ios.png)، [الأوامر والمحاولات والحدود](PROGRESS.md). V2-12/AC40 جزئيان؛ ليست دورة تحقيق/SLA كاملة أوH/CI شامل. التاليV2-10 غير المالي، وكل المالي المتبقي آخرًا.
+
 ## F1b4 — متابعة 3 وقائع غياب مؤهلة دون تعديلها، 2026-10-18
 
 `998ee5fcdc194f7fdb005f7baedfe625df0e69b5`، migration113. نفسالمتابعات؛ آخر3كشوفمسجلة داخل المجموعة، استبعادunknown/cancelled/future/archive/unassigned، Present/Late/Excusedتقطعالسلسلة، أعدادفريدة ودليلIDsثابت. Adminملخصبلاكشفطفلأوصلاحيةحضور، Ownerيفتحالكشفالقائم Web/Native. Closeلايغيرالحضورأويرسل، الحضوراللاحقمنمصدره يزيلالسببفقطمعثباتالدليل/التاريخ/المال. API8ثممتأثر2وfixture1/seed1/Web13/Flutter25ثممتأثر7، أدواتناجحة؛ Browser4/4في55.1s وiOS1في12s وصور[Web](evidence/f1b4/recorded-absence-followup-web-390.png)/[Native](evidence/f1b4/recorded-absence-followup-ios.png)فعليةمراجعة. [المحاولات والأوامر والقيود](PROGRESS.md). V2-12/AC40جزئيان، CI39090988732جارٍ، لاHأوAndroid/جهازفعليأونشر يدوي/Productionمدعى؛ الماليالمتبقيآخرًا.
