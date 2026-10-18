@@ -1730,6 +1730,197 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewDecision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FamilyNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<Guid?>("RecommendedLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RecommendedLevelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TechnicalRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "TechnicalRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "RecommendedLevelId", "SportId");
+
+                    b.HasIndex("AcademyId", "TechnicalRequestId", "SportEnrollmentId", "SportId");
+
+                    b.ToTable("PlayerTechnicalReviewDecisions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlayerTechnicalReviewDecision_Outcome", "\"IsActive\" AND \"Outcome\" IN ('ReadyForPlacement','NeedsPractice','ContextChanged') AND ((\"Outcome\"='ReadyForPlacement' AND \"RecommendedLevelId\" IS NOT NULL AND \"RecommendedLevelName\" IS NOT NULL) OR (\"Outcome\"<>'ReadyForPlacement' AND \"RecommendedLevelId\" IS NULL AND \"RecommendedLevelName\" IS NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CurriculumId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurriculumTitle")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.PrimitiveCollection<Guid[]>("EvidenceReviewIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LevelName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PreviousRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SourceReviewSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TrainingLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "PlanId", "Sequence")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "PreviousRequestId", "PlanId");
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "SportId");
+
+                    b.HasIndex("AcademyId", "CurriculumId", "TrainingLevelId", "SportId");
+
+                    b.HasIndex("AcademyId", "PlanId", "CurriculumId", "SportId");
+
+                    b.ToTable("PlayerTechnicalReviewRequests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlayerTechnicalReviewRequest_Source", "\"IsActive\" AND \"Sequence\">0 AND \"SourceReviewSequence\">0 AND cardinality(\"EvidenceReviewIds\") BETWEEN 1 AND 20");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonAssignment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13362,6 +13553,76 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Evaluations.SkillRequirement", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "RequirementId", "CurriculumId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "CurriculumId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewDecision", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "RecommendedLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewRequest", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TechnicalRequestId", "SportEnrollmentId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportEnrollmentId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewRequest", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.PlayerTechnicalReviewRequest", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "PreviousRequestId", "PlanId")
+                        .HasPrincipalKey("AcademyId", "Id", "PlanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.SportEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportEnrollmentId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.SkillCurriculum", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CurriculumId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingLevelId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.PlayerSkillPlan", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "PlanId", "CurriculumId", "SportId")
                         .HasPrincipalKey("AcademyId", "Id", "CurriculumId", "SportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

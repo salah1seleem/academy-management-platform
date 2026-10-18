@@ -380,6 +380,7 @@ app.MapSlice5Endpoints();
 app.MapPlayerGoalEndpoints();
 app.MapSkillCurriculumEndpoints();
 app.MapSessionLessonEndpoints();
+app.MapPlayerTechnicalReviews();
 app.MapSlice6Endpoints();
 app.MapSlice7Endpoints();
 app.MapSlice8ReportingEndpoints();

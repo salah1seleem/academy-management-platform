@@ -10,6 +10,7 @@ import '../shared/player_goals.dart';
 import '../shared/player_skills.dart';
 import 'owner_feedback.dart';
 import 'owner_followups.dart';
+import '../shared/player_technical_reviews.dart';
 
 /// Hides cached operational records when the selected authorization context ends.
 class OwnerScopedRead extends StatefulWidget {
@@ -92,6 +93,20 @@ class _OwnerDecisionsPageState extends State<OwnerDecisionsPage> {
             auth: widget.auth,
             operations: ops,
             onReturn: refresh,
+          ),
+          OutlinedButton.icon(
+            onPressed: () => openPage(
+              context,
+              PlayerTechnicalReviewsPage(auth: widget.auth),
+            ),
+            icon: const Icon(Icons.fact_check_outlined),
+            label: Text(
+              localized(
+                context,
+                'طلبات المراجعة الفنية للمستويات',
+                'Level technical review requests',
+              ),
+            ),
           ),
           OutlinedButton.icon(
             onPressed: () async {

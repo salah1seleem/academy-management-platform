@@ -86,6 +86,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigureSkillCurricula(builder);
         ConfigurePlayerLevelReviews(builder);
         ConfigureSessionLessons(builder);
+        ConfigurePlayerTechnicalReviews(builder);
 
         builder.Entity<ApplicationUser>(entity =>
         {

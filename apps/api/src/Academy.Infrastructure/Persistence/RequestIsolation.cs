@@ -129,6 +129,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<PlayerSkillPlan>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerSkillReview>(b, x => PlayerSkillPlans.Any(p => p.Id == x.PlanId));
         BranchFilter<PlayerLevelReview>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<PlayerTechnicalReviewRequest>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<PlayerTechnicalReviewDecision>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<SessionLessonAssignment>(b, x => TrainingSessions.Any(s => s.Id == x.TrainingSessionId));
         BranchFilter<EvaluationScore>(b, x => PlayerEvaluations.Any(e => e.Id == x.PlayerEvaluationId));
         BranchFilter<PlayerMedicalRecord>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
@@ -205,6 +207,7 @@ public sealed partial class FoundationDbContext
         ChangeTracker.DetectChanges();
         GuardPlayerGoalHistory();
         GuardSessionLessons();
+        if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerTechnicalReviewRequest or PlayerTechnicalReviewDecision && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("المراجعة الفنية محفوظة؛ لا تكتب فوق الطلب أو القرار السابق.");
         await GuardSkillHistory(token);
         if (ChangeTracker.Entries<PlayerLevelReview>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("مراجعات المستويات محفوظة؛ التصحيح بمراجعة جديدة.");
         foreach (var e in ChangeTracker.Entries<Academy.Infrastructure.Content.HelpVideoRevision>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))

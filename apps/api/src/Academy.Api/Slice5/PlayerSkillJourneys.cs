@@ -23,13 +23,11 @@ public static partial class SkillCurriculumEndpoints
     private static object ReviewRow(PlayerSkillReview r) => new { r.Id, r.RequirementId, r.Sequence, r.State, r.MeasuredValue, r.Note, r.ObservedOn, r.ActorName, r.CreatedAtUtc };
     private static async Task<object> ViewPlan(PlayerSkillPlan p, PlayerGoalEndpoints.Context context, FoundationDbContext db, bool canReview, DateOnly today)
     {
-        var c = await db.SkillCurricula.AsNoTracking().SingleAsync(c => c.AcademyId == p.AcademyId && c.Id == p.CurriculumId);
-        var requirements = await db.SkillRequirements.AsNoTracking().Where(r => r.AcademyId == p.AcademyId && r.CurriculumId == c.Id).OrderBy(r => r.DisplayOrder).ToArrayAsync();
-        var latest = await db.SkillRequirements.Where(r => r.AcademyId == p.AcademyId && r.CurriculumId == c.Id).SelectMany(r => db.PlayerSkillReviews.Where(v => v.AcademyId == p.AcademyId && v.PlanId == p.Id && v.RequirementId == r.Id).OrderByDescending(v => v.ObservedOn).ThenByDescending(v => v.Sequence).Take(1)).AsNoTracking().ToArrayAsync();
+        var source=await PlayerSkillEvidence.Read(p,context.TrainingLevelId,db);var c=source.Curriculum;var requirements=source.Requirements;var latest=source.Latest;
         var baseline = await db.SkillRequirements.Where(r => r.AcademyId == p.AcademyId && r.CurriculumId == c.Id).SelectMany(r => db.PlayerSkillReviews.Where(v => v.AcademyId == p.AcademyId && v.PlanId == p.Id && v.RequirementId == r.Id).OrderBy(v => v.ObservedOn).ThenBy(v => v.Sequence).Take(1)).AsNoTracking().ToArrayAsync();
         var history = await db.PlayerSkillReviews.AsNoTracking().Where(v => v.AcademyId == p.AcademyId && v.PlanId == p.Id).OrderByDescending(v => v.Sequence).Take(21).ToArrayAsync();
         var mastered = latest.Count(v => v.State == "Mastered"); var assessed = latest.Count(v => v.State != "NotAssessed");
-        var changed = context.TrainingLevelId != c.TrainingLevelId || c.State != "Published" || !p.IsActive || !await db.TrainingLevels.AnyAsync(l => l.Id == c.TrainingLevelId && l.IsActive);
+        var changed = !source.Current;
         decimal? percent = requirements.Length == 0 ? null : Math.Round(mastered * 100m / requirements.Length, 2, MidpointRounding.AwayFromZero);
         return new { plan = PlanRow(p, c), enrollment = context, asOfDate = today, contextChanged = changed, canReview = canReview && !changed,
             progress = new { mastered, assessed, total = requirements.Length, equalWeights = true, percentage = changed ? null : percent, sourcePercentage = percent, readyForTechnicalReview = !changed && requirements.Length > 0 && mastered == requirements.Length },

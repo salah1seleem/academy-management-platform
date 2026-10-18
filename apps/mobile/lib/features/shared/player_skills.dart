@@ -7,6 +7,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
 import 'player_goals.dart' show goalCommandId;
+import 'player_technical_reviews.dart';
 
 class PlayerSkillsPage extends StatefulWidget {
   final AuthController auth;
@@ -421,6 +422,18 @@ class _PlayerSkillsState extends State<PlayerSkillsPage>
     final u = chosen['unit'];
     return [
       progress(d),
+      GLink(
+        l('المراجعة الفنية للمستوى', 'Level technical review'),
+        Icons.fact_check_outlined,
+        () => openPage(
+          context,
+          PlayerTechnicalReviewsPage(
+            auth: widget.auth,
+            planId: widget.planId,
+            playerId: widget.playerId,
+          ),
+        ),
+      ),
       if (widget.playerId == null && d['canReview'] == true)
         Form(
           key: form,
