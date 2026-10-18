@@ -2,6 +2,8 @@
 
 ## V2-15B2 — ذكريات خاصة قابلة للحجب لا ألبوم جديد، 2026-10-18
 
+Code `5536aa11a50b894e4705679cc4dd4663ca51cec3` مرفوع؛ [CI39159813736](https://github.com/salah1seleem/academy-management-platform/actions/runs/39159813736) بدأ، ليس نجاح بوابة بعيدة مدعى.
+
 D3-073/schema126 بلاmigration: نفساستعلامالمعرض وجمهوره ثمشهرالواقعة وصفحات وفهرسوصفي1000maxبلا URLs/tickets/bytes. المسحوب/المنتهي/المحذوف/الـpolicy0 يستبعدحتى لذكرياتالإدارة، دونتغييرحقالمراجعةالإداريةالأصلي. Unit9/44ms، API6حالاتعبر5نجاح/1فشلثمإعادة1/12s و1تقاطعأهداف/25sمتداخلة، Web21/3.80s وFlutter11/5s وأدوات/EFناجحة. ليسجولة6/6واحدة؛ [المحاولاتوالبيئاتوالقيود](PROGRESS.md).
 
 Browser2/2/1.2m: 360/390، PNGوموافقةوحصةوFamilyUIوسحبونسخةجديدة، ذكرياتفعليةNaturalWidthوفهرسCSVdownload، وMOVUI/MP4playbackداخلMemories معتقريرمالي مطابق. [كارتصورة360](evidence/v2-15b2/guardian-memory-image-web-360.png)، [فيديو390](evidence/v2-15b2/guardian-memory-video-web-390.png) فعليان راجعتهما؛ لاطفلمصور. iOSرحلةواحدة27s+teardown، نسخفهرسفعليللحافظة دونروابطومعالجديدلاالمسحوب، ثمحذفOwnerUIواختفاءمنالمعرضوالذكريات و404وتحريرمساحة وتقريرمطابق؛ [الصورة](evidence/v2-15b2/guardian-monthly-memories-ios.png) فعليةراجعت: PNG c5bfdالهدفوفيديوBrowser387b4a أسفله لمتشغلNative. الرفعNative API، لاFilePicker/MP4iOS/Android/جهازمادي/AppRoot/H.
