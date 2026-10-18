@@ -5,6 +5,7 @@ import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
 import 'private_media.dart';
 import 'player_goals.dart' show goalCommandId;
+import 'media_storage_notice.dart';
 
 /// The existing private gallery, with administrative withdrawal; never a public feed.
 class AdminMediaGallery extends StatefulWidget {
@@ -60,6 +61,7 @@ class _AdminGalleryState extends State<AdminMediaGallery>
           auth: widget.auth,
           path: '/api/v1/assets/gallery?includeWithdrawn=true',
           builder: (context, value) => gList([
+            MediaStorageNotice(auth: widget.auth),
             Text(
               localized(
                 context,
@@ -77,10 +79,22 @@ class _AdminGalleryState extends State<AdminMediaGallery>
                     Text(
                       localized(
                         context,
-                        item['withdrawn'] == true
+                        item['erased'] == true
+                            ? (item['purged'] == true
+                                  ? 'تم حذف الملف؛ سجل النشر والحذف محفوظ'
+                                  : 'محجوبة عن الجميع؛ إزالة الملف معلقة والمساحة لم تتحرر بعد')
+                            : item['expired'] == true
+                            ? 'انتهت مدة الاحتفاظ؛ النسخة محجوبة عن الجميع'
+                            : item['withdrawn'] == true
                             ? 'مسحوبة من الأسر والمدرب'
                             : 'محفوظة — الوصول مشروط بالتفويض والموافقة',
-                        item['withdrawn'] == true
+                        item['erased'] == true
+                            ? (item['purged'] == true
+                                  ? 'File removed; publication and erasure history retained'
+                                  : 'Hidden from everyone; file removal pending and storage not released')
+                            : item['expired'] == true
+                            ? 'Retention expired; hidden from everyone'
+                            : item['withdrawn'] == true
                             ? 'Withdrawn from families and coach'
                             : 'Saved — access requires current authorization and consent',
                       ),
@@ -88,10 +102,19 @@ class _AdminGalleryState extends State<AdminMediaGallery>
                     if (item['withdrawalNote'] != null)
                       Text(textOf(item['withdrawalNote'])),
                     if (item['canWithdraw'] == true &&
-                        item['withdrawn'] != true)
+                        item['withdrawn'] != true &&
+                        item['erased'] != true &&
+                        item['expired'] != true)
                       _Withdrawal(
                         auth: widget.auth,
                         id: textOf(item['id']),
+                        onSaved: () => setState(() => revision++),
+                      ),
+                    if (item['canDelete'] == true && item['erased'] != true)
+                      _Withdrawal(
+                        auth: widget.auth,
+                        id: textOf(item['id']),
+                        erase: true,
                         onSaved: () => setState(() => revision++),
                       ),
                     if (item['withdrawn'] == true)
@@ -113,10 +136,12 @@ class _AdminGalleryState extends State<AdminMediaGallery>
 }
 
 class _Withdrawal extends StatefulWidget {
+  final bool erase;
   final AuthController auth;
   final String id;
   final VoidCallback onSaved;
   const _Withdrawal({
+    this.erase = false,
     required this.auth,
     required this.id,
     required this.onSaved,
@@ -147,19 +172,26 @@ class _WithdrawalState extends State<_Withdrawal> {
       error = null;
     });
     try {
-      await widget.auth.request(
+      final result = await widget.auth.request(
         'POST',
-        '/api/v1/assets/${widget.id}/withdraw',
+        '/api/v1/assets/${widget.id}/${widget.erase ? 'delete' : 'withdraw'}',
         body: {'requestId': intent, 'note': text.isEmpty ? null : text},
       );
+      if (widget.erase && (result is! Map || result['erased'] != true)) {
+        throw StateError('Unconfirmed erasure');
+      }
       if (mounted) widget.onSaved();
     } catch (_) {
       if (mounted) {
         setState(
           () => error = localized(
             context,
-            'لم نؤكد حفظ السحب. أعد فتح المعرض أو أعد المحاولة بنفس الطلب.',
-            'Could not confirm withdrawal. Reopen or retry the same request.',
+            widget.erase
+                ? 'لم نؤكد الحذف. حدّث المعرض قبل إعادة المحاولة بنفس الطلب.'
+                : 'لم نؤكد حفظ السحب. أعد فتح المعرض أو أعد المحاولة بنفس الطلب.',
+            widget.erase
+                ? 'Could not confirm deletion. Refresh or retry the same request.'
+                : 'Could not confirm withdrawal. Reopen or retry the same request.',
           ),
         );
       }
@@ -173,7 +205,13 @@ class _WithdrawalState extends State<_Withdrawal> {
       ? OutlinedButton.icon(
           onPressed: () => setState(() => open = true),
           icon: const Icon(Icons.visibility_off_outlined),
-          label: Text(localized(context, 'سحب النشر', 'Withdraw publication')),
+          label: Text(
+            localized(
+              context,
+              widget.erase ? 'حذف ملف الوسائط' : 'سحب النشر',
+              widget.erase ? 'Delete media file' : 'Withdraw publication',
+            ),
+          ),
         )
       : Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,8 +219,12 @@ class _WithdrawalState extends State<_Withdrawal> {
             Text(
               localized(
                 context,
-                'يتوقف وصول الأسرة والمدرب لهذه النسخة، مع حفظ الأصل للإدارة المخولة.',
-                'Families and coach lose access to this copy; the authorized administration retains the original.',
+                widget.erase
+                    ? 'إجراء نهائي: تُحجب النسخة عن الجميع ويُطلب إزالة ملفها مع حفظ سجل النشر والحذف. لا يمكن استرجاعها من التطبيق أو استرجاع تنزيل سابق.'
+                    : 'يتوقف وصول الأسرة والمدرب لهذه النسخة، مع حفظ الأصل للإدارة المخولة.',
+                widget.erase
+                    ? 'Permanent action: hidden from everyone and file removal requested, with publication and erasure history retained. No app restore or recall of previous downloads.'
+                    : 'Families and coach lose access to this copy; the authorized administration retains the original.',
               ),
             ),
             const SizedBox(height: 12),
@@ -202,7 +244,13 @@ class _WithdrawalState extends State<_Withdrawal> {
             FilledButton(
               onPressed: busy ? null : save,
               child: Text(
-                localized(context, 'تأكيد سحب النشر', 'Confirm withdrawal'),
+                localized(
+                  context,
+                  widget.erase ? 'تأكيد حذف الملف نهائيًا' : 'تأكيد سحب النشر',
+                  widget.erase
+                      ? 'Confirm permanent deletion'
+                      : 'Confirm withdrawal',
+                ),
               ),
             ),
             TextButton(

@@ -7162,6 +7162,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("DeleteOnExpiry")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -7183,6 +7186,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<string>("Purpose")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("RetainUntilUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("StorageName")
                         .IsRequired()
@@ -7215,7 +7221,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingSessionId", "TrainingGroupId");
 
-                    b.ToTable("PrivateAssets", (string)null);
+                    b.ToTable("PrivateAssets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MediaRetention_Snapshot", "(\"RetainUntilUtc\" IS NULL AND NOT \"DeleteOnExpiry\") OR (\"Purpose\"='Media' AND \"RetainUntilUtc\" IS NOT NULL AND \"RetainUntilUtc\">\"CreatedAtUtc\")");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateAssetAudience", b =>
@@ -7453,6 +7462,167 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("PrivateMediaConsentBasiss", null, t =>
                         {
                             t.HasCheckConstraint("CK_PrivateMediaConsentBasis_Active", "\"IsActive\"");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaDownloadBudget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("ReservedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("UtcDay")
+                        .HasColumnType("date");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("AcademyId", "UserId", "UtcDay")
+                        .IsUnique();
+
+                    b.ToTable("PrivateMediaDownloadBudgets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MediaDownloadBudget_Bytes", "\"IsActive\" AND \"ReservedBytes\">=0");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaErasure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "AssetId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("PrivateMediaErasures", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MediaErasure_Source", "\"IsActive\" AND ((\"Reason\"='Manual' AND \"ActorUserId\" IS NOT NULL) OR (\"Reason\"='Retention' AND \"ActorUserId\" IS NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaPurge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ErasureId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("ReleasedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "AssetId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ErasureId", "AssetId");
+
+                    b.ToTable("PrivateMediaPurges", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MediaPurge_Bytes", "\"IsActive\" AND \"ReleasedBytes\">=0");
                         });
                 });
 
@@ -16331,6 +16501,58 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "ConsentId", "PlayerId")
                         .HasPrincipalKey("AcademyId", "Id", "PlayerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaDownloadBudget", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaErasure", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.PrivateAsset", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AssetId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaPurge", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.PrivateMediaErasure", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ErasureId", "AssetId")
+                        .HasPrincipalKey("AcademyId", "Id", "AssetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

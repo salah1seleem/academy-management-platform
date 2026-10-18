@@ -6,6 +6,7 @@ import 'guardian_ui.dart';
 import 'daily_nutrition.dart';
 import '../shared/private_media.dart';
 import '../shared/group_media_consent.dart';
+import '../shared/media_storage_notice.dart';
 
 class NutritionLibrary extends StatefulWidget {
   final AuthController auth;
@@ -235,6 +236,7 @@ class _GalleryState extends State<GalleryPage> with WidgetsBindingObserver {
       return GuardianPage(
         title: 'الصور والفيديوهات',
         child: gList([
+          MediaStorageNotice(auth: auth),
           GroupMediaConsentCard(
             auth: auth,
             playerId: playerId,

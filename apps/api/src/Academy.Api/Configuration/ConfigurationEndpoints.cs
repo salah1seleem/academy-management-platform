@@ -27,6 +27,7 @@ public static class ConfigurationEndpoints
         var t = (await tenant.ResolveAsync())!;
         return Results.Ok(new
         {
+            canManageMediaRetention=await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t),
             entitlements = await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Feature, x.Enabled, x.PlanCode }).ToListAsync(),
             versions = (await db.AcademyConfigurationVersions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.Revision).Take(50).ToListAsync()).Select(x => new { x.Id, x.Revision, x.State, x.ContentHash, x.Version, x.EffectiveAtUtc, settings = AcademyRuntimeSettings.Read(x.Payload) }),
             history = await db.ConfigurationTransitions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.ConfigurationId, x.From, x.To, x.CreatedAtUtc }).ToListAsync()
@@ -39,6 +40,8 @@ public static class ConfigurationEndpoints
         var audienceErrors = Academy.Api.Help.HelpAudiencePolicy.Validate(body.HelpAudiences);
         if (audienceErrors.Length > 0) return Results.ValidationProblem(new Dictionary<string, string[]> { { "helpAudiences", audienceErrors } }, statusCode: 422);
         await using var tx = await db.Database.BeginTransactionAsync(); await Lock(db, t.AcademyId);
+        if(body.MediaRetention!=(await service.Active(t.AcademyId))?.MediaRetention&&!await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t))return Results.Forbid();
+        if(body.MediaRetention is {Days:<1 or >3650})return Results.UnprocessableEntity(new{message="مدة الاحتفاظ بين يوم و3650 يومًا، أو اتركها دون حذف آلي."});
         if (t.Role != AcademyRole.AcademyOwner && !Academy.Api.Help.HelpAudiencePolicy.Same(body.HelpAudiences, (await service.Active(t.AcademyId))?.HelpAudiences)) return Results.Forbid();
         if (t.Role != AcademyRole.AcademyOwner && body.CashEnabled != ((await service.Active(t.AcademyId))?.CashEnabled ?? false)) return Results.Forbid();
         var row = await service.CreateDraft(t.AcademyId, Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!), body);
@@ -63,6 +66,7 @@ public static class ConfigurationEndpoints
         {
             if (row.EffectiveAtUtc > clock.GetUtcNow()) return Results.Problem(statusCode: 409, title: "لم يحن موعد سريان الإعدادات");
             var previous = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.State == ConfigurationState.Active);
+            if(AcademyRuntimeSettings.Read(row.Payload).MediaRetention!=(previous==null?null:AcademyRuntimeSettings.Read(previous.Payload).MediaRetention)&&!await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t))return Results.Forbid();
             if (t.Role != AcademyRole.AcademyOwner && !Academy.Api.Help.HelpAudiencePolicy.Same(AcademyRuntimeSettings.Read(row.Payload).HelpAudiences, previous is null ? null : AcademyRuntimeSettings.Read(previous.Payload).HelpAudiences)) return Results.Forbid();
             if (t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled != (previous is not null && AcademyRuntimeSettings.Read(previous.Payload).CashEnabled)) return Results.Forbid();
             if (previous is not null) await service.Transition(previous, ConfigurationState.Superseded, user);

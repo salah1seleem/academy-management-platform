@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/appearance.dart';
+import 'media_storage_notice.dart';
 import '../guardian/guardian_ui.dart';
 
 bool isPrivateAsset(Object? reference) =>
@@ -411,6 +412,7 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                   ),
                 ),
               ),
+              MediaStorageNotice(auth: widget.auth),
               Text(
                 localized(
                   context,
@@ -467,7 +469,15 @@ class MediaTile extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (textOf(media['contentType']).startsWith('image/'))
+        if (media['erased'] == true || media['expired'] == true)
+          Text(
+            localized(
+              context,
+              'هذه النسخة غير متاحة للفتح.',
+              'This copy is unavailable.',
+            ),
+          )
+        else if (textOf(media['contentType']).startsWith('image/'))
           PrivateImage(auth: auth, path: media['url'])
         else
           InkWell(
@@ -485,6 +495,14 @@ class MediaTile extends StatelessWidget {
             ),
           ),
         if (media['caption'] != null) UiText(textOf(media['caption'])),
+        if (media['retainUntilUtc'] != null)
+          UiText(
+            localized(
+              context,
+              'موعد انتهاء الاحتفاظ: ${day(media['retainUntilUtc'])}',
+              'Retention ends: ${day(media['retainUntilUtc'])}',
+            ),
+          ),
         UiText(
           day(media['mediaEventOn'] ?? media['createdAtUtc']),
           style: Theme.of(context).textTheme.labelSmall,

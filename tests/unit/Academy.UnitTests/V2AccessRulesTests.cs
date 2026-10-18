@@ -4,6 +4,10 @@ namespace Academy.UnitTests;
 
 public class V2AccessRulesTests
 {
+    [Fact]public void Media_deletion_is_not_add_or_edit_and_policy_is_only_a_read()
+    {
+        Assert.Equal("Delete",StaffAccessRules.Operation("POST","/api/v1/assets/123/delete"));Assert.Equal("Read",StaffAccessRules.Operation("GET","/api/v1/assets/storage-policy"));Assert.Equal("media",StaffAccessRules.ForPath("/api/v1/assets/123/delete"));
+    }
     [Theory]
     [InlineData("/api/v1/help/availability", "GET", true)]
     [InlineData("/api/v1/help/lessons", "GET", true)]

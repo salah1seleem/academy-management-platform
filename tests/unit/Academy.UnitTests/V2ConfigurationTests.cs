@@ -4,6 +4,16 @@ namespace Academy.UnitTests;
 
 public sealed class V2ConfigurationTests
 {
+    [Theory][InlineData(0)][InlineData(-1)][InlineData(3651)]
+    public void Invalid_media_retention_days_do_not_activate(int days)
+    {
+        var settings=AcademyRuntimeSettings.Initial("EGP","Africa/Cairo") with{MediaRetention=new(days,true)};
+        Assert.Contains(settings.Validate(new Dictionary<string,bool>(),"EGP","Africa/Cairo"),e=>e.Contains("الاحتفاظ"));
+    }
+    [Fact]public void Legacy_media_has_no_automatic_expiry_and_new_retention_requires_an_explicit_setting()
+    {
+        var old=AcademyRuntimeSettings.Read("{\"Currency\":\"EGP\",\"TimeZone\":\"Africa/Cairo\",\"Features\":{}}");Assert.Null(old.MediaRetention);var policy=new MediaRetentionPolicy(30);Assert.False(policy.DeleteOnExpiry);Assert.Equal(policy,AcademyRuntimeSettings.Read((old with{MediaRetention=policy}).Serialize()).MediaRetention);
+    }
     [Fact]
     public void Old_payload_without_help_audience_preserves_defaults_and_new_policy_has_stable_serialization()
     {

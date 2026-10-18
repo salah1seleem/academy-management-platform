@@ -181,7 +181,12 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
         response = await download.close().timeout(const Duration(seconds: 20));
       }
       if (response.statusCode != 200) {
-        throw ApiFailure(response.statusCode, 'تعذر عرض الوسائط.');
+        throw ApiFailure(
+          response.statusCode,
+          response.statusCode == 429
+              ? 'بلغت حد تنزيل الوسائط اليومي. يعود الحد مع بداية يوم UTC التالي.'
+              : 'تعذر عرض الوسائط.',
+        );
       }
       final bytes = BytesBuilder();
       await for (final chunk in response.timeout(const Duration(seconds: 20))) {

@@ -1,5 +1,13 @@
 # أدلة قبول V2 + V3
 
+## V2-15A3c — احتفاظ وحذف فعلي وحصص، 2026-10-18
+
+D3-071/schema126: سياسة FullOwner جديدة فقط، Erasure ثم Purge موثقان، فشل القرص/الملف المشترك لا يحرر الحصة، expiry يحجب الجميع، وتخزين أكاديمية وتنزيل User/UTC ذريان. Web/Native حفظ وقراءة وتأكيد، لا نظام موازٍ أو تغيير مالي. Unit73، API8/65s ثم3/56s متداخلة جزئيًا، Web23 وFlutter23، EF/build/typecheck/lint/analyze ناجحة.
+
+Browser النهائي **3/3 في1.6m** للإعداد/الرفع/الحذف وFamily404 وquota وتقرير مطابق، ثم360/390 مع MOVUI/MP4playback. [حذف OwnerWeb390](evidence/v2-15a3c/owner-erased-media-web-390.png) راجعته. iOS **رحلة واحدة29s+teardown30s** للصورة/السحب/نسخةجديدة/الحذف منOwnerUI، erased+purged و404 للمالك والأسرة وتحريرمساحة وتقريرمطابق؛ [الكارت المحذوف](evidence/v2-15a3c/owner-erased-media-ios.png) راجعته، الأصل المسحوب محفوظ أسفله. الرفع Native عبرAPI وليسFilePicker؛ لاMP4علىiOS/Android/جهازمادي/AppRoot أوH. [المحاولات المصححة والبيئات والأوامر والقيود](PROGRESS.md)، [عقد التشغيل](PRIVATE_MEDIA_OPERATIONS.md).
+
+worker default-off؛ no unknown/orphan/backup cleanup أو SLAfairness/فحص50MiBعبرproxy. migration126 فيQA فقط، لاDown/reset/Production/ترحيلالديمواليدوي. CIالسابقad42: frontend/flutter/E2E success وbackend جارٍ، لاCIشامللهذهالشريحة. الذكريات/تقريرالشهر/التصدير وبقيةغيرالمالي تالية؛ كل المالي المتبقي آخرًا، V2/V3 غيرمكتملتين.
+
 ## V2-15A3b — حفظ pixels/samples معاد ترميزها دون geotags، 2026-10-18
 
 Code `ad42c42a976986e3cc5f55b0af86235f1a2d26cd` مرفوع؛ [CI39141523431](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) بدأ ولا يزال بانتظار النتيجة.

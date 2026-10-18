@@ -1,5 +1,29 @@
 # تقدم أكاديميتي V2 + V3
 
+## أحدث checkpoint — V2-15A3c: احتفاظ وحذف فعلي وحصص وسائط، 2026-10-18
+
+استكمال من `3ca5743c040a654669e9f07061b923bff33328cd` النظيف على `codex/15-native-mobile-app`، بلا إعادة15A1–3b. D3-071، migration126 `20261018164619_V3PrivateMediaLifecycle`. **كل المالي المتبقي آخرًا**؛ لا main أو Production أو reset أو بيانات عميل. لم يتغير baseline/approval أو الموديل ولم تستخدم subagents.
+
+**المنفذ المتكامل:** المالك الكامل يحدد احتفاظ الرفع القادم1–3650 يومًا وحذفًا آليًا اختياريًا عبر إصدارات الإعدادات القائمة؛ لا يستطيع مفوض الإعدادات تغيير هذه السياسة. كل Media جديدة تحمل snapshot ثابتًا، والقديم افتراضيهnull/false. عند الانتهاء تحجب bytes عن الجميع، لا الأسرة وحدها. الإدارة ترى حالة وتاريخًا محفوظين. نفس المعرض في Web/Flutter يعرض سياسة صغيرة مطوية وحالة الحذف، مع إجمالي مساحة للمالك الكامل فقط. لا تغيير Photo/Proof/News/Campaign/Help أو الموافقات/روابط120s.
+
+حذف صريح نهائي مع ملاحظة اختيارية وRequestId، يتطلب media Read+Delete ونطاقًا وعضوية حية قبل replay؛ Add/Edit وحدهما لا يكفيان. يسجل Erasure immutable أولًا ثم يحاول إزالة الملف المحدد فقط، ويحفظ Purge عند التأكيد. فشل filesystem يبقى محجوبًا وpending ولا يحرر المساحة؛ تكرار نفس الطلب يكمل دون تكرار الوقائع. أي إشارة أخرى للاسم، حتى بأكاديمية ثانية، تمنع إزالة الملف المشترك. لا حذف لـPrivateAsset/الجمهور/دليل النشر، ولا استرجاع أو إحياء نسخة. GET يفتح stream أثناء الطلب مع معالجة فقدان الملف المتزامن بدل نافذة physical-result500.
+
+حصة تخزين Media فقط لكل أكاديمية تحت قفل ذري: افتراضي1GiB، تشمل القديم والمسحوب والمنتهي والمعلق حتى تأكيد unlink+DB. حجز تنزيل ذري لكلUser+Academy+يومUTC، افتراضي512MiB؛ GET/Range يحجز حجم الملف كاملًا، لا يعد قياسًا للشبكة، و429 برسالة عربية عند الامتلاء. لا يتغير المال أو صلاحية الاشتراك. عامل API الحالي opt-in `Media__LifecycleWorkerEnabled=true`، defaultfalse، ينفذ25 انتهاء صريح و25 إزالة معلقة كل دقيقة؛ ينظف ميزانيات التنزيل الأقدم من32 يومًا فقط. [التشغيل والقيود](PRIVATE_MEDIA_OPERATIONS.md).
+
+**التحقق المنفذ:** Unit73/73 في244ms لإعدادات/AccessRules؛ Web23/23 بأربعة ملفات في5.59s، typecheck/lint/build ناجحة. Flutter23/23 بأربعة ملفات في4s نهائيًا وanalyze نظيف15.1s. إعادة أمر Flutter أخطأت باسمي ملفين غير موجودين:10 اختبارات فعلية نجحت لكن تحميل ملفين فشل؛ أصلح الأمر للأسماء الموجودة وأعيدت23/23، لا اختبارات محذوفة أو assertions مخففة.
+
+API نهائي8/8 في65s:4دورة حياة جديدة وأربع مستهلكة، ثم بعد فتحstream واختبار اسم مشترك **3/3 في56s** (اختبار مشترك جديد واثنان متداخلان). تثبت عزلًا/CSRF/403أو404، grantsحقيقية/سحب فرع قبل replay، إصدار سياسة وصلاحيةمالك، legacyبلاbackfill، expiryوحذفworker مرتين بلا تكرار، failedfilesystem/retry/عدمتحريرquota، حدتخزين، GETمتزامنين واحد200 وآخر429 دون overshoot، موافقات/تذاكر/فيديوMOVوتقريرمالي مطابق. assertions EF/SQL واشتراط موعد حقيقي للحذف الآلي. فشل أولAPI4 كان توقع403بعدسحبفرع بينما السلوك الصحيح404 لإخفاء المورد؛ صحح fixture فقط. compile قبلها رفض xUnit2031 ومسمىEF محليًا مكررًا، وأصلحا قبل الجولات الناجحة.
+
+**iOS رحلة فعلية واحدة نهائية29s+teardown30s** على Academity V3 Coach Review / iPhone17Pro / iOS26.2 `7D6B3C6E-1BBD-4680-B653-EC4D75982034`: موافقةFamily، PNGحقيقي/قراءة/OwnerUIسحب/نسخةجديدة، ثم OwnerUI حذف نهائي، حالتاerased+purged وتحريرمساحة، Owner/Family404، اختفاءالملف منFamily وتقريرمالي مطابق. [صورة الكارت المحذوف راجعتها](evidence/v2-15a3c/owner-erased-media-ios.png): نسخةbcd21الجديدة غيرمتاحة وسجلها محفوظ، والأصل المسحوب أسفلها مازال إداريًا. أولرحلة37s فشلتpurged=false لأنها قرأت بعدErasure وقبلPurge؛ DBأثبت إكماله، فصار الاختبار ينتظر **تأكيد كارت الهدف نفسه** ثم يفحصDBوالbytesوالquota دون تخفيفassertions أوإطالةtimeouts. لاFilePickerUI/MP4playbackعلىiOS أوAndroid/جهازفعلي/AppRoot/H مدعاة؛ الرفع في الرحلة API قائم.
+
+**Browser النهائي3/3 في1.6m** بعد آخرstream/label: ownerUI Draft/Validate/Stage/Activate ورفعPNG/Familyقراءة/DeleteUI/404/تحريرquota/تقريرمطابق واستعادةالإعداد الأصلي؛ ومستهلكا360/390 للسحب/نسخةجديدة، منها رفعMOVمنUI وتشغيلMP4 فعليFamily. [كارت الحذف390 راجعته](evidence/v2-15a3c/owner-erased-media-web-390.png): غيرمتاح وسجلحذفمحفوظ وتاريخاحتفاظمسجل، لا وعدبتوافرالمحذوف. الجولة السابقة1/1 في44.7s متداخلة وليستإضافةلعددالحالات. أولمحاولة120s علقت await Playwright response.json بعد حفظdraft؛ استبدلت بانتظارresponse ثمGETموثوق يتحقق من نفسالدرفت والسياسة، لا force أوزيادةtimeout أوإسقاطفحص.
+
+**البيئة:** migration126 طبقت فقط على `academy_v3_session_media_20261018` و`academy_v3_session_media_journey_20261018`، PG16/127.0.0.1:5433/useromar؛ EF بلا pending model changes. لم ينفذDown، ويحميه guard عند وجودsnapshot/قرارحذف. تقريراAPI في `/tmp/academity-media-lifecycle-tests/lifecycle-final.trx` و`lifecycle-stream-shared.trx`، وليساGit. تخزين الرحلات الاصطناعي السابق `/tmp/academity-session-media-20261018.sXQ3Ms` محفوظ، seedFootballdeterministic القائم وfixturesاصطناعية فقط؛ ليست بيانات قبولV3 الغنية النهائية. لم تُهاجر/تحدث5080/3000 أوPGاليدوي ولاSimulatorالأساسي.
+
+**CI والحدود/التالي:** فحص CIالسابقad42/run39141523431 يثبت frontend/flutter/E2E success وbackend in_progress، لا نجاح كامل. هذه الشريحة لم ترفع بعد في وقت كتابة هذه الفقرة؛ يسجلSHA/runبعدpush. العامل اختبر مباشرةAPI مع ملفات اصطناعية منتهية، وشُغل فيQA5259 فقط؛ لا اختبار انتظارمدةيوم على جهاز، أوpurgebackups/فيروسات/جهازمادي/50MiBعبرproxy/ضغطإنتاجي/GCبعدpowerloss أوSLAfairnessللـ25المعلقة. الاحتفاظ/الحذف/الحصص الأساسية منفذة؛ ضيقنطاقرياضةالميديا، orphan/legacycleanup والتشغيلالإنتاجي والقبولالموحد باقية. التالي **15B الذكريات/تقرير الشهر/التصدير داخل المصادر المخولة القائمة** وبقيةغيرالمالي، ثم الماليالأساسيالمتبقي آخرًا ثمH/UAT؛ **V2/V3 غيرمكتملتين** ولاجاهزيةإصدار أو استمرارخارجالجلسةمدعى.
+
+بعد الرحلة النهائية أوقف فقط APIالاختبار5259 (PID57119 تحقق مساره)، وPlaywright أوقف5258/3258 الخاصين به. إعادة فحص API5080/health/ready وWeb3000/login أعادت200/200، دون تحديثهما أو إيقافهما أوPG/Simulatorاليدوي. screenshots أعلاه من الاختبار الفعلي وليست mockups.
+
 ## أحدث checkpoint — V2-15A3b: فحص محتوى وسائط الأطفال وإزالة metadata/geotags، 2026-10-18
 
 **Code مرفوع: `ad42c42a976986e3cc5f55b0af86235f1a2d26cd`.** تحقق HEAD==origin بعد push، وmain/origin/main باقيان `abda1ed273030e69812321e5c14d260bbc2e2275`. [CI39141523431 لهذه الشريحة](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) بدأ `in_progress`؛ **لا نجاح بعيد مدعى قبل نتيجته**. هذا تحديث checkpoint توثيقي بعد الكود، لا تنفيذ شريحة أخرى أو اكتمال الخطة. أول خطوة لاحقة: فحص نتيجته ثم15A3c، دون إعادة الفحص المنجز أو تقديم المالي على بقية غير المالي.
@@ -1291,7 +1315,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V2-12 | partial | F1a/F1b1–4 مصادر المجموعة/التغطية/المسودات/الغياب وصندوق Admin؛ F1b5 موعد ملاحظة الأسرة المتجاوز ومصدر Web/Native خاص ورد قائم، Close مستقل | dbff455؛ migration114؛ API4/seed1/Web17/Flutter23، Browser3 ثم1متأثرة/iOS1 وصور؛ الدليل أعلى السجل | دورة الشكاوى والتحقيق/SLA/الطلبات الكاملة و09.3 والقبول الموحد؛ المالي آخرًا |
 | V2-13 | missing | لا محاكي متكامل مثبت. | خطة V2 §24 | سيناريوهات مستقلة وحفظ ومقارنة دون أثر تشغيلي |
 | V2-14 | missing | لا CRM منصة/أكاديمية ومركز تواصل متكامل. | خطة V2 §28 | حفظ/نطاق/موافقات/قنوات حقيقية أو fallback صادق |
-| V2-15 | partial | 15A1/A2/A3a/b: موافقة وجمهور مؤرخ وحصة وضيوف وسحب؛ روابط120s؛ فحص وفك/إعادة ترميز الرفع الجديد Media/Photo دون metadata/geotags داخل نفس المعرض، Web/Native | D3-070/schema125؛ Unit9/API7/Web18/Flutter22، Browser2/1.7m مع تشغيل MP4، iOS1/23s للصورة والسحب؛ لا CI شامل مدعى | احتفاظ/حذف وحصص تخزين وتنزيل وGC/legacy، سياق رياضي ضيق، ذكريات/تقرير/تصدير وصوت وAI مقيد والقبول الموحد |
+| V2-15 | partial | 15A1–3c: موافقة وجمهور وحصة وسحب وروابط120s وفحص/إعادة ترميز؛ احتفاظ جديد اختياري وحذف ملف موثق وحصتا تخزين/تنزيل؛ Web/Native داخل الموجود | D3-071/schema126؛ Unit73، API8 ثم3 متداخلة جزئيًا، Web23/Flutter23، Browser3/1.6m وiOS1/29s؛ لا CI شامل مدعى | GC/legacy وتشغيل/fairness، سياق رياضي ضيق، ذكريات/تقرير/تصدير وصوت وAI مقيد والقبول الموحد |
 | V2-16 | partial | F2a حملات داخل الأكاديمية، نسخ ثابتة واعتماد كل فرع وموافقة Guardian/placement/قياس ووسائط خاصة وWeb/Native/E2E | CommunityAds/CommunityAdEndpoints؛7API/21Web/33Flutter/browser24.8s/iOS10s وصور؛migration107 | F2b حملة منصة متعددة الأكاديميات/تفويض/طلب وتسعير مؤجل/تقدير جمهور حقيقي والقبول الموحد |
 | V2-17 | partial | CI واختبارات قديمة كثيرة؛ ليست قبول V2 النهائي. | .github/workflows/ci.yml | جولة موحدة V2+V3 وmanifest/UAT/استعادة/تقرير |
 
@@ -1345,7 +1369,7 @@ Migration `20261015001813_V3PrivateServiceEvidence`: جدولان لمصدر ا�
 | V3-AC44 | partial | OperatingExpenseAllocationTests؛ PayrollCalculatorTests | التوزيع موجود؛ نتيجة المجموعة والأجر المركب الفعلي ناقص |
 | V3-AC45 | partial | V2ImportCommitTests | 1000 صف موجود تاريخيًا؛ توسعاتV3/reconciliation باقية |
 | V3-AC46 | partial | tests/e2e/specs + football | جولة موحدة على candidate لاحقًا |
-| V3-AC47 | partial | صور الأدوار السابقة؛ فحص الميديا الجديدة وروابطها وصور وسحب/نسخة جديدة؛ Web360/390 مع تشغيل MP4 وOwner/Family iOS23s للصورة، Flutter22 مستهدفة | CIc921 السابق frontend/flutter/E2E ناجح وbackend جارٍ؛ الملف الجديد لا يغلق الرحلات/الأدوار كلها أوFilePicker/MP4علىiOS/Android/جهاز مادي/AppRoot/H |
+| V3-AC47 | partial | صور الأدوار السابقة؛ الميديا وروابطها واحتفاظ/حذف/حصص؛ Browser3/1.6m بما فيهMP4 فعلي وOwner/Family iOS29s للصورة والحذف، Flutter23 مستهدفة | CIad42 السابق frontend/flutter/E2E ناجح وbackend جارٍ؛ لا إغلاق لكل الأدوار أوFilePicker/MP4علىiOS/Android/جهاز مادي/AppRoot/H |
 | V3-AC48 | missing | هذه الخريطة | بوابة نهائية بعد إغلاق/تصنيف جميع البنود |
 
 ## التفصيل المالي F01–F12

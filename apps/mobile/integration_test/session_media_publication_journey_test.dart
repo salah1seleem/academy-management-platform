@@ -16,7 +16,7 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'Actual session media is read by family, withdrawn in owner UI, and republished only as a new reviewed copy',
+    'Actual session media is read by family, withdrawn, republished as a new copy, then permanently erased in owner UI',
     (t) async {
       expect(const bool.fromEnvironment('ISOLATED_DEMO'), true);
       expect(
@@ -280,6 +280,83 @@ void main() {
         } on ApiFailure catch (e) {
           expect(e.status, 404);
         }
+        final storageBefore = obj(
+          await owner.request('GET', '/api/v1/assets/storage-policy'),
+        );
+        await t.pumpWidget(shell(AdminMediaGallery(auth: owner)));
+        await wait(find.text('$caption — نسخة جديدة'));
+        final eraseCard = find
+            .ancestor(
+              of: find.text('$caption — نسخة جديدة'),
+              matching: find.byType(GCard),
+            )
+            .first;
+        final erase = find.descendant(
+          of: eraseCard,
+          matching: find.widgetWithText(OutlinedButton, 'حذف ملف الوسائط'),
+        );
+        await t.scrollUntilVisible(
+          erase,
+          160,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await t.tap(erase);
+        await t.pumpAndSettle();
+        final eraseConfirm = find.widgetWithText(
+          FilledButton,
+          'تأكيد حذف الملف نهائيًا',
+        );
+        await t.ensureVisible(eraseConfirm);
+        await t.pumpAndSettle();
+        await t.tap(eraseConfirm);
+        await t.pumpAndSettle();
+        // The erasure transaction commits before the separate filesystem purge.
+        // Wait for this card's confirmed response, not merely a settled frame.
+        await wait(
+          find.descendant(
+            of: eraseCard,
+            matching: find.text('تم حذف الملف؛ سجل النشر والحذف محفوظ'),
+          ),
+        );
+        final erased = rows(
+          await owner.request(
+            'GET',
+            '/api/v1/assets/gallery?includeWithdrawn=true',
+          ),
+        ).singleWhere((a) => a['id'] == fresh['id']);
+        expect(erased['erased'], true);
+        expect(erased['purged'], true);
+        await t.ensureVisible(
+          find
+              .ancestor(
+                of: find.text('$caption — نسخة جديدة'),
+                matching: find.byType(GCard),
+              )
+              .first,
+        );
+        await t.pumpAndSettle();
+        if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+          await binding.takeScreenshot('phase-owner-erased-session-media-ios');
+        }
+        for (final reader in [owner, family]) {
+          try {
+            await reader.asset(textOf(fresh['url']));
+            fail('Permanently erased copy must be unavailable even to owner');
+          } on ApiFailure catch (e) {
+            expect(e.status, 404);
+          }
+        }
+        final storageAfter = obj(
+          await owner.request('GET', '/api/v1/assets/storage-policy'),
+        );
+        expect(
+          (storageAfter['storedBytes'] as num) <
+              (storageBefore['storedBytes'] as num),
+          true,
+        );
+        await t.pumpWidget(shell(GalleryPage(auth: family, playerId: child)));
+        await wait(find.textContaining('المشاركة مسموحة باختيارك'));
+        expect(find.text('$caption — نسخة جديدة'), findsNothing);
         expect(
           await owner.request(
             'GET',

@@ -17,6 +17,8 @@ public sealed class PrivateAsset : TenantEntity
     public int MediaPolicyVersion { get; set; }
     public DateOnly? MediaEventOn { get; set; }
     public bool NoRecognizableChildren { get; set; }
+    public DateTimeOffset? RetainUntilUtc { get; set; }
+    public bool DeleteOnExpiry { get; set; }
 }
 public sealed class AcademyTransferSettings : TenantEntity
 {

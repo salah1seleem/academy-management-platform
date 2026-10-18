@@ -19,7 +19,7 @@ public static class AssetEndpoints
         api.MapGet("/{id:guid}", Download);
         api.MapGet("/gallery", Gallery);
     }
-    private static string Root(IConfiguration config, IWebHostEnvironment env) => Path.GetFullPath(config["Media:PrivateRoot"] ?? Path.Combine(env.ContentRootPath, "local-uploads"));
+    internal static string Root(IConfiguration config, IWebHostEnvironment env) => Path.GetFullPath(config["Media:PrivateRoot"] ?? Path.Combine(env.ContentRootPath, "local-uploads"));
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static Task<bool> Linked(FoundationDbContext db, Guid academy, Guid user, Guid player) => db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == academy && x.Guardian.UserId == user && x.PlayerId == player && x.IsActive && x.Guardian.IsActive && x.Player.IsActive);
     private static Task<bool> Assigned(FoundationDbContext db, Guid academy, Guid user, Guid group) => db.StaffGroupAssignments.AnyAsync(x => x.AcademyId == academy && x.AcademyMembership.UserId == user && x.TrainingGroupId == group && x.IsActive && x.AcademyMembership.IsActive && x.TrainingGroup.IsActive);
@@ -97,6 +97,7 @@ public static class AssetEndpoints
         if(purpose=="Photo"&&!(await authorization.AuthorizeAsync(context.User,context,AcademyPermissions.PeopleManage)).Succeeded)return Results.Forbid();
         if(purpose=="Media")
         {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:"+t.AcademyId},0))");
             if(groupId.HasValue)
             {
                 foreach(var key in new[]{"config:"+t.AcademyId,$"timetable:{t.AcademyId}:{groupId.Value}",$"group-capacity:{t.AcademyId}:{groupId.Value}"})await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key},0))");
@@ -111,6 +112,7 @@ public static class AssetEndpoints
         {
             var problem=await GroupMediaPrivacy.Prepare(asset,form,db,t,context,time);
             if(problem!=null)return Results.UnprocessableEntity(new{message=problem});
+            if(!await context.RequestServices.GetRequiredService<PrivateMediaLifecycle>().Admit(asset))return Results.Json(new{message="لا يمكن نشر الملف: راجع إتاحة الوسائط وحصة تخزين الأكاديمية. لا تُحرر الملفات المسحوبة المساحة قبل إزالتها فعليًا."},statusCode:409);
         }
         var root = Root(config, env); Directory.CreateDirectory(root); var path = Path.Combine(root, asset.StorageName);
         if (prepared != null) File.Move(prepared.Path, path);
@@ -127,7 +129,7 @@ public static class AssetEndpoints
         }
         try { await db.SaveChangesAsync(); if(transaction!=null)await transaction.CommitAsync(); }
         catch { File.Delete(path); throw; }
-        return Results.Created($"/api/v1/assets/{asset.Id}", new { asset.Id, url = $"/api/v1/assets/{asset.Id}", asset.ContentType,asset.MediaPolicyVersion,asset.MediaEventOn });
+        return Results.Created($"/api/v1/assets/{asset.Id}", new { asset.Id, url = $"/api/v1/assets/{asset.Id}", asset.ContentType,asset.MediaPolicyVersion,asset.MediaEventOn,asset.RetainUntilUtc,asset.DeleteOnExpiry });
     }
 
     internal static string? DetectType(byte[] b)
@@ -163,6 +165,7 @@ public static class AssetEndpoints
         context.Response.Headers.CacheControl="private, no-store";
         var t = (await tenant.ResolveAsync())!;
         var asset = await db.PrivateAssets.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
+        if(asset?.Purpose=="Media"&&(asset.RetainUntilUtc<=context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow()||await db.PrivateMediaErasures.AnyAsync(e=>e.AssetId==id)))return Results.NotFound();
         if(asset?.Purpose=="Campaign")
         {
             var allowed=await CommunityAds.FullOwner(db,t);
@@ -188,6 +191,14 @@ public static class AssetEndpoints
             context.Response.Headers["Cross-Origin-Resource-Policy"]="same-origin";
             if(access==null)return Results.Redirect($"/api/v1/assets/{id}?access={Uri.EscapeDataString(links.Issue(scope))}");
             if(!links.Allows(access,scope))return Results.NotFound();
+            if(HttpMethods.IsGet(context.Request.Method)&&!await context.RequestServices.GetRequiredService<PrivateMediaLifecycle>().ReserveDownload(t.AcademyId,Actor(context.User),asset.Length))return Results.Json(new{message="بلغت حد تنزيل الوسائط اليومي. يعود الحد مع بداية يوم UTC التالي؛ لا يتغير الاشتراك أو حق الوصول الدائم."},statusCode:429);
+            // Open within the authorized request, not later by pathname: a concurrent purge
+            // between existence check and open must be a 404, not an unhandled file-result 500.
+            FileStream media;
+            try{media=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete);}
+            catch(FileNotFoundException){return Results.NotFound();}catch(DirectoryNotFoundException){return Results.NotFound();}
+            context.Response.Headers["X-Content-Type-Options"]="nosniff";
+            return Results.File(media,asset.ContentType,enableRangeProcessing:true);
         }
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(path, asset.ContentType, enableRangeProcessing: true);
@@ -198,6 +209,7 @@ public static class AssetEndpoints
         context.Response.Headers.CacheControl="private, no-store";
         var query = db.PrivateAssets.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Purpose == "Media" && x.IsActive);
         var staff=t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin;
+        var now=time.GetUtcNow();if(!staff)query=query.Where(x=>(x.RetainUntilUtc==null||x.RetainUntilUtc>now)&&!db.PrivateMediaErasures.Any(e=>e.AssetId==x.Id));
         if(!staff||includeWithdrawn!=true)query=query.Where(x=>!db.PrivateMediaWithdrawals.Any(w=>w.AssetId==x.Id));
         if (t.Role == AcademyRole.Guardian)
         {
@@ -218,6 +230,7 @@ public static class AssetEndpoints
         }
         var canWithdraw=staff&&await MediaPublication.CanWithdraw(t,context,authorization,db);
         var canPublish=staff&&await MediaPublication.CanPublish(t,context,authorization,db);
-        return Results.Ok(await query.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.PlayerId, x.TrainingGroupId,x.TrainingSessionId, x.ContentType, x.Caption, x.CreatedAtUtc,x.MediaEventOn,x.MediaPolicyVersion,withdrawn=db.PrivateMediaWithdrawals.Any(w=>w.AssetId==x.Id),canWithdraw,canPublish,withdrawnAtUtc=staff?db.PrivateMediaWithdrawals.Where(w=>w.AssetId==x.Id).Select(w=>(DateTimeOffset?)w.CreatedAtUtc).SingleOrDefault():null,withdrawalNote=staff?db.PrivateMediaWithdrawals.Where(w=>w.AssetId==x.Id).Select(w=>w.Note).SingleOrDefault():null, url = "/api/v1/assets/" + x.Id }).ToListAsync());
+        var canDelete=staff&&await PrivateMediaLifecycle.CanDelete(t,context,db,authorization);
+        return Results.Ok(await query.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.PlayerId, x.TrainingGroupId,x.TrainingSessionId, x.ContentType, x.Caption, x.CreatedAtUtc,x.MediaEventOn,x.MediaPolicyVersion,x.RetainUntilUtc,x.DeleteOnExpiry,expired=x.RetainUntilUtc!=null&&x.RetainUntilUtc<=now,erased=db.PrivateMediaErasures.Any(e=>e.AssetId==x.Id),purged=db.PrivateMediaPurges.Any(p=>p.AssetId==x.Id),canDelete,withdrawn=db.PrivateMediaWithdrawals.Any(w=>w.AssetId==x.Id),canWithdraw,canPublish,withdrawnAtUtc=staff?db.PrivateMediaWithdrawals.Where(w=>w.AssetId==x.Id).Select(w=>(DateTimeOffset?)w.CreatedAtUtc).SingleOrDefault():null,withdrawalNote=staff?db.PrivateMediaWithdrawals.Where(w=>w.AssetId==x.Id).Select(w=>w.Note).SingleOrDefault():null, url = "/api/v1/assets/" + x.Id }).ToListAsync());
     }
 }
