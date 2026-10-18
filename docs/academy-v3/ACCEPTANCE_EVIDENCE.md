@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-10E — شهادة من ترقية منفذة، 2026-10-18
+
+`4242b3b311251cac49cb77c16040a3b7d5e538a3`/121/D3-064: إصدار صريح واحد من قرار+نقل فعليين، snapshot ثابت وسحب مستقل، Add/Edit منفصلان وtenant/branch/sport/linked-child/CSRF/CAS/replay وحارس المصدر. Web/Native والأسرة، browser print بعد قراءة مخولة، دون اعتماد خارجي أو مال/ترقية ثانية. API3/3/22s نهائية، Unit51، Web10، Flutter13 بعد إصلاح حفظ حالة نموذج retry، Browser1/30.1s وiOSرحلة1/11s، أدوات وEF نظيفة وتقارير/اشتراك ثابتان. [Web المالك](evidence/v2-10e/owner-issued-certificate-web-390.png)، [print HTML](evidence/v2-10e/guardian-certificate-print-preview.png)، [Family Web بعد التمرير](evidence/v2-10e/guardian-withdrawn-certificate-web-390.png)، [Family iOS](evidence/v2-10e/guardian-withdrawn-certificate-ios.png) فعلية راجعت. [المحاولات والبيانات والاستئناف والقيود](PROGRESS.md). لا PDF/طابعة أو Android/جهازفعلي/AppRoot كامل/H/CI شامل؛ إعادة إصدار/شارات/أرشفة/بقية§21 وV2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
 ## V2-10D2 — مستوى ونقل مؤرخ في معاملة واحدة، 2026-10-18
 
 `c151423`/120/D3-063: تطبيق مخول للتوصية بعد معاينة/إعادة تحقق، سجل مستوى مرتبط بالنقل ويحفظ السابق، الأسرة ترى التنفيذ والموعد دون مال/اشتراك جديد. API4/4/32s وحارسSQL1/17sمتداخل، Unit46، Web11، Flutter14، Browser1/36.4s ومستهلك1/24.5s، iOSرحلة10s ثم5s بعدspacing على طفل آخر. أدوات/EF ناجحة. [Owner Web قراءة لاحقة](evidence/v2-10d2/owner-applied-promotion-web-390.png)، [Family Web](evidence/v2-10d2/guardian-applied-promotion-web-390.png)، [Owner iOS معاينة](evidence/v2-10d2/owner-promotion-preview-ios.png)، [Family iOS](evidence/v2-10d2/guardian-promotion-applied-ios.png) فعلية راجعت؛ [كل المحاولات والبيانات والأوامر والقيود](PROGRESS.md). تطبيق اليوم لتسجيل مسكن فقط، لا مستقبل مبكر/انتظار تسكين/شهادة/إشعار أوH/CI كامل/Android/جهازفعلي؛ V2/V3 غيرمكتملتين وكل المالي المتبقي آخرًا.
