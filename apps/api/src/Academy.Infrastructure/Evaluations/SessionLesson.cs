@@ -60,3 +60,17 @@ public sealed class SessionLessonAssignment : TenantEntity
     public Guid RequestId { get; set; }
     public required string RequestHash { get; set; }
 }
+
+// Retire one immutable version without rewriting its contents or past applications.
+public sealed class TrainingContentArchive : TenantEntity
+{
+    public Guid? ExerciseId { get; set; }
+    public Guid? TemplateId { get; set; }
+    public Guid TrainingLevelId { get; set; }
+    public Guid SportId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public required string ActorName { get; set; }
+    public string? Note { get; set; }
+    public Guid RequestId { get; set; }
+    public required string RequestHash { get; set; }
+}

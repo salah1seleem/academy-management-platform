@@ -46,6 +46,28 @@ Map<String, dynamic> lesson({bool write = false}) => {
   ],
 };
 void main() {
+  testWidgets(
+    'Archived source stays visible with warning and unchanged history, never grants attendance or archive mutation',
+    (t) async {
+      final d = lesson();
+      (d['active'] as Map)['contentRetired'] = true;
+      final auth = await fixture.owner((m, p, b, k) async => d);
+      await t.pumpWidget(
+        fixture.shell(SessionLessonPage(auth: auth, sessionId: 's')),
+      );
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.textContaining('للمرجع التاريخي فقط'),
+        160,
+      );
+      expect(find.textContaining('للمرجع التاريخي فقط'), findsOneWidget);
+      await t.scrollUntilVisible(find.text('60 دقيقة محسوبة · المعلن 60'), 160);
+      expect(find.text('60 دقيقة محسوبة · المعلن 60'), findsOneWidget);
+      expect(find.text('تأكيد أرشفة النسخة'), findsNothing);
+      expect(find.text('حاضر'), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
   for (final width in [360.0, 390.0, 430.0]) {
     testWidgets(
       'Session plan English at $width and200% has computed source without overflow',

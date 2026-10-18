@@ -145,6 +145,15 @@ class _SessionLessonState extends State<SessionLessonPage>
                 ),
               ),
               if (message.isNotEmpty) Text(message),
+              if (active['contentRetired'] == true)
+                GCard(
+                  child: Text(
+                    l(
+                      'تحتوي هذه الخطة نسخة مؤرشفة؛ للمرجع التاريخي فقط. اختر خطة أخرى قبل التدريب.',
+                      'This plan contains archived content; historical reference only. Choose another plan before training.',
+                    ),
+                  ),
+                ),
               if (d['contextChanged'] == true)
                 Text(
                   l(
@@ -301,6 +310,13 @@ class _SessionLessonState extends State<SessionLessonPage>
           Text('${textOf(e['skill'])} · ${textOf(e['equipment'])}'),
           const SizedBox(height: 8),
           Text(textOf(e['instructions'])),
+          if (e['archive'] != null)
+            Text(
+              l(
+                'تمرين مؤرشف — لا يستخدم في خطة جديدة',
+                'Archived exercise — not for new plans',
+              ),
+            ),
           const SizedBox(height: 8),
           Text(
             '${e['rightsKind'] == 'Original' ? l('أصلي', 'Original') : l('مرخص', 'Licensed')} · ${textOf(e['rightsReference'])}',
