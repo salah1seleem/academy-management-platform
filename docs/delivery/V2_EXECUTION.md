@@ -2,6 +2,8 @@
 
 ## V2-15A3b — فحص المحتوى وإزالة metadata/geotags، 2026-10-18
 
+Code `ad42c42a976986e3cc5f55b0af86235f1a2d26cd` مرفوع، [CI39141523431](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) جارٍ؛ لا نتيجة نجاح شاملة مدعاة.
+
 D3-070، دون migration/schema125: نفسالرفع/التخزين/المعرض، Media/Photo جديدان إلىPNG أوMP4 معادترميزهما بفحص فعلي وأدوات محلية وحدود وإخفاق مغلق، ثمإعادة تفويض ونطاق وجمهور حي. لاlegacybackfill أو تغييرمال/حضور، وكلالماليالمتبقيآخرًا. [العقدوالترخيص](../academy-v3/PRIVATE_MEDIA_OPERATIONS.md).
 
 Unit9/4s وAPI7/1m31s وWeb18/5.52s وFlutter22/3s؛ أدوات/EFنظيفة. Browser2/1.7m، رفعMOV/تشغيلMP4 فعليFamily وCSSفيديو/وصفمصَحح، وiOSرحلة1/23s للصورة/السحب/نسخةجديدة، تقاريرمطابقة وصورراجعت. [الفشل المصحح والحدود والاستئناف](../academy-v3/PROGRESS.md). CIc921السابقfrontend/flutter/E2Eناجحة وbackendجارٍ، لاCIكامللهذهالشريحةأوH. التالي15A3cالاحتفاظ/الحذف/الحصة، ثمبقيةغيرالمالي ثمبسيطالماليالأخير؛ لاProduction/main أوreset/تحديثالديمواليدوي.

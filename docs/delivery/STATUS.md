@@ -2,6 +2,8 @@
 
 ## V2-15A3b — فحص فعلي للوسائط وإزالة بيانات الموقع، 2026-10-18
 
+Code `ad42c42a976986e3cc5f55b0af86235f1a2d26cd` مرفوع، HEAD==origin؛ [CI39141523431](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) بدأ ولم يثبت نجاحه بعد. main/origin/main محفوظان عند `abda1ed273030e69812321e5c14d260bbc2e2275`.
+
 D3-070، schema125 دون migration. Media/Photo الجديدان يفكان ويعاد ترميزهما إلىPNG ثابتة أوMP4/H264/AAC قبلالنشر؛ metadata/geotags لا تنقل، بحدود بكسلات/مدة/حجم/وقت وتزامن، وغياب أداة الفحص يفشل دون حفظ الأصل. نفسالمعرض والروابط والموافقات والسحب؛ تفويض ونطاق حي بعد المعالجة. Web/Native حدود وأخطاء واضحة، وإصلاح عرضالفيديو والوصف فوقnav فيGuardianWeb. [عقد التشغيل والترخيص والقيود](../academy-v3/PRIVATE_MEDIA_OPERATIONS.md).
 
 Unit9/4s، API7/1m31s، Web18/5.52s، Flutter22/3s؛ build/typecheck/lint/analyze/EF ناجحة. Browser2/2/1.7m في360/390، **رفعMOV منUI وتشغيلMP4 منحسابFamily** وتقريرمطابق. iOS **رحلةواحدة23s+teardown** للصورةوالسحبوالنسخةالجديدة والتقرير؛ لاMP4playback/FilePicker/Android/جهازمادي مدعى. [الفشل المصحح والأوامر والصور والأدلة](../academy-v3/PROGRESS.md).

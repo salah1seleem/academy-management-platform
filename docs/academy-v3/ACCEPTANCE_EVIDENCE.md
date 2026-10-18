@@ -2,6 +2,8 @@
 
 ## V2-15A3b — حفظ pixels/samples معاد ترميزها دون geotags، 2026-10-18
 
+Code `ad42c42a976986e3cc5f55b0af86235f1a2d26cd` مرفوع؛ [CI39141523431](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) بدأ ولا يزال بانتظار النتيجة.
+
 D3-070/schema125، دونmigration: Media/Photo الجديدان فقط، حدود وفشل503بلاrawfallback، نفسالموافقات والجمهور والسحب والروابط. Unit9/4s وAPI7/1m31s وWeb18/5.52s وFlutter22/3s، EF/build/typecheck/lint/analyzeنظيفة. Browser2/2/1.7m في360/390، منهاMOVيرفعبـUI وMP4يشغلفيFamilyWeb فعليًا ويتقدمالوقت؛ [الفيديوالأحمرالاصطناعيووصفهفوقnav](evidence/v2-15a3b/guardian-reencoded-video-web-390.png) راجعتهبعدإصلاحCSS. iOS **رحلةواحدة23s+teardown** عبرOTP/Family/OwnerUI للسحبوالصورةالمعادترميزهاونشرنسخةجديدةوتقريرمطابق؛ [الكارتالأولهوالهدف28f9c](evidence/v2-15a3b/guardian-processed-image-ios.png)، الأبيضpixelاصطناعيصحيح، والفيديوأسفلهBrowser2d8bd7ولميسجلتشغيلNative. رفعiOSبـAPI لاFilePickerUI؛ لاAndroid/جهازمادي/AppRoot/Hمدعى. [تفاصيلالمحاولاتوالإخفاقاتالمصححةوالعقدوالبيئة](PROGRESS.md).
 
 فحصCIc921السابقأثبتfrontend/flutter/E2Eناجحة، backendجارٍ؛ لاCIكاملللدفعة. **لاantivirus أوتنظيفرجعيأواحتفاظ/حذف/حصصتخزينوتنزيلأوGCبعدانهيارمدعاة**؛ هذه15A3cباقيةثمبقيةغيرالماليوالماليأخيرًاوبوابةH. الخطةغيرمكتملة، ولانشرProductionأوتعديلmain/الديمواليدوي.

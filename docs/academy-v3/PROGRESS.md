@@ -2,6 +2,8 @@
 
 ## أحدث checkpoint — V2-15A3b: فحص محتوى وسائط الأطفال وإزالة metadata/geotags، 2026-10-18
 
+**Code مرفوع: `ad42c42a976986e3cc5f55b0af86235f1a2d26cd`.** تحقق HEAD==origin بعد push، وmain/origin/main باقيان `abda1ed273030e69812321e5c14d260bbc2e2275`. [CI39141523431 لهذه الشريحة](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) بدأ `in_progress`؛ **لا نجاح بعيد مدعى قبل نتيجته**. هذا تحديث checkpoint توثيقي بعد الكود، لا تنفيذ شريحة أخرى أو اكتمال الخطة. أول خطوة لاحقة: فحص نتيجته ثم15A3c، دون إعادة الفحص المنجز أو تقديم المالي على بقية غير المالي.
+
 استكمال فعلي من `94b6f03a9922c96582e5a426672681de66ffca37` النظيف على `codex/15-native-mobile-app`، دون تكرار15A1/A2/A3a. D3-070؛ **لا migration جديدة**، schema125 وEF بلا pending model changes. لا subagents أو تغيير موديل/ميزانية، والمتطلبات/الموافقة وmain محفوظة. **كل المالي المتبقي آخرًا**.
 
 **المنفذ:** Media وPhoto الجديدان يمران بفحص النوع/الحجم ثم probe وفك/إعادة ترميز فعليين عبر FFmpeg/FFprobe محليين. لا يكفي magic header. JPEG/PNG/WebP إلىPNG ثابتة، وMP4/MOV إلىMP4/H264/AAC؛ تحفظ ContentType وLength للناتج فقط. لا نقل EXIF/XMP/geotags أو فصول/subtitles/data/مسارات إضافية. حدود أبعاد/بكسلات ومدة/frames وحجم إدخال وناتج، ورفض قص فيديو صامت. تزامن2 لكلprocess دونqueue، مهلة كلية50s وprocess tree cancellation وlogs محدودة وبيئة بلا أسرار وprotocol=file/demuxer محدد وMOV external refs معطلة. أول استعمال يتحقق من مشفرات البناء؛ تعطل/انشغال الأداة503 دون حفظ الأصل أو نشر زائف. لا حزمة مدفوعة أو API/ACL/معرض موازٍ؛ [عقد التشغيل والحدود والترخيص](PRIVATE_MEDIA_OPERATIONS.md).
