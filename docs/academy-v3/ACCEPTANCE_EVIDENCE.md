@@ -1,5 +1,11 @@
 # أدلة قبول V2 + V3
 
+## V2-12B — تحقيق خاص مفوض في المصدر الحالي، 2026-10-19
+
+Code `f2c69668e03ae1765ae21f5fbf1ad2e8e3817cd3`، migrations129/130 فيقاعدتيQAفقط. API9حالاتمختلفةمثبتةعبرجولة8/9في1m9sوإعادةالمتأثرة1/20s؛ لاجولة9/9واحدةمدعاة. إسناد/نتيجة/replay/CAS وأدواروعزلAcademyB وسحبRead/Edit/فرع/رياضة/ترخيصومنعنفسالشخصبدورCoach وimmutable/forgedSQL وحلثمإعادةفتحدونإحياءرابط، seedوتقريرمالمطابق. Web20/Flutter14 والأدوات/EFناجحة، دونFullRegression.
+
+Browserنهائية **1/20.2s**: شكوىGuardianAPI، موظف/نطاقعبرOwnerAPI، تكليفOwnerUI→نتيجةAdminUI→سجلالمالكفقط→إلغاءOwnerUIوإخفاءحي/404، تقريرمطابق. [Web390](evidence/v2-12b/private-investigation-web-390.png)فعليةنهائيةمراجعةبعدتحسينالكارتوالأزرار. iOS **رحلةواحدة10s+teardown** علىAcademityV3CoachReview/iPhone17Pro/iOS26.2: FamilyAPIثمOwner/AdminUI والخصوصيةوالإلغاءوالمطابقةوالخروج. [الصورة](evidence/v2-12b/private-investigation-ios.png)فعليةمراجعة، widgetshellsليستAppRoot/جهازمادي/Android. [المحاولاتوالقيودوخطةالاستئناف](PROGRESS.md). الموجزمراجعةبشريةوليسanonymizerمضمونًا؛ صندوقأول100وآخر20نتيجةللتكليف، الأرشيفالكاملغيرمدعى. لاProduction/عملاء/مدفوعاتأواتصالاتفعلية، والماليآخرًا؛12C/H/UATباقية.
+
 ## V2-12A — دورة معالجة ودليل خاص دون نشر الأسرة، 2026-10-19
 
 Migrations127/128: المصدر GuardianFeedback الحالي، لا نظام موازٍ. Unit1 يفحص64 انتقالًا، API **9/9 في59s** تشمل التزامن وCAS ومفتاح المحاولة وحد50/51 ورفض tamper/roles/tenantB والأرشيف وlegacy snapshot وseed المحروس والمستهلكين والتقرير المطابق. Web8/Flutter7 والأدوات/EF ناجحة. Browser نهائية **1/17.5s**: شكوى بGuardian API ثم مراحل Owner UI ورد وإغلاق وإعادة فتح ورد ثانٍ؛ الأسرة تقرأ العام فقط و403 للمصدر وتقرير مطابق. [Web390](evidence/v2-12a/private-case-history-web-390.png). iOS أولية1/16s منAPIفعلي، [الصورة](evidence/v2-12a/private-case-history-ios.png)؛ عرض الوقت/التباعد حُسّن بعد المراجعة وإعادة الالتقاط النهائية تسجل في [PROGRESS](PROGRESS.md).
