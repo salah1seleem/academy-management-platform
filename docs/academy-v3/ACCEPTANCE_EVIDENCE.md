@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## V2-10C1 — سجل مراجعات يدوي محفوظ لا تاريخ مخترع، 2026-10-18
+
+`68b6cba`/migration117/D3-060: الأمر القائم يحفظ السابق/الجديد وأسماءهما والفاعل والتاريخ/التسلسل والملاحظة الخاصة ذريًا؛ CAS/replay في الواجهة الجديدة، والعقد القديم متوافق بلا وعدCAS. قارئ Web/Native للأدوار المخولة والأسرة دون private note؛ لا تعديل للمدرب/ولي الأمر أو نقل/ترقية/مال آلي. API4 ثم3مستهلكين ثم المتأثرة1/atomic1، Web18، Flutter20نجاحًا مع1fixturelazyفاشلة ثم6/6المتأثرة، أدوات ناجحة وEF بلاpending. Browser1/16.4s وiOSرحلة1/6s وصور [Owner](evidence/v2-10c1/owner-level-history-web-390.png)/[Family Web](evidence/v2-10c1/guardian-level-history-web-390.png)/[Family iOS](evidence/v2-10c1/guardian-level-history-ios.png)، وسلامة snapshot/rollback/report. [المحاولات والأوامر والحدود](PROGRESS.md). ليس تأريخًا للاستيراد/الصيانة أو الماضي أو ترقية متكاملة، ولاH/Android/جهاز فعلي أوCI جديد كامل؛ V2-10 جزئي، المالي المتبقي آخرًا.
+
 ## V2-10B — متطلبات مستوى وأدلة تعلم لا ترقية آلية، 2026-10-18
 
 `4e1c19c`/migration116/D3-059: نسخة منهج ثابتة على المستوى والرياضة القائمين، إسناد/استبدال صريح وسجل محفوظ، ملاحظات منشورة للأسرة بوحدات/تاريخ/مدرب ونسبة متطلبات فقط. API8/8 في61s ثم المتأثرة1/1 في9s، Web25/25 وFlutter27/27 والأدوات نظيفة وEF بلاpending؛ Browser1/37.1s وiOSرحلة1/8s، profile/report مطابقان وصلاحيات/نطاقات وحفظ/resetguard وseed opt-in مثبتة. [Web Owner](evidence/v2-10b/owner-skills-web-390.png)، [Web Family](evidence/v2-10b/guardian-skills-web-390.png)، [Coach iOS](evidence/v2-10b/coach-skills-ios.png)، [Family iOS](evidence/v2-10b/guardian-skills-ios.png)، [المحاولات والأوامر والحدود](PROGRESS.md). أصلح رابط خطة قديمة أثناء الاستبدال وCSS الأسرة وتباين الشريط مع اختبارات فعلية. ليست مكتبة تمارين أو مراجعة ترقية/شهادات/Native editor للمنهج أوAndroid/جهاز فعلي/H؛ V2-10 وAC47 جزئيان، كل المالي المتبقي آخرًا.
