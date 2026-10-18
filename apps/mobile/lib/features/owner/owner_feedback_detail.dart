@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'owner_followups.dart' show followUpRequestId;
+
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import '../shared/feedback_state.dart';
 
 class OwnerFeedbackDetail extends StatefulWidget {
   final AuthController auth;
@@ -20,6 +23,8 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
       : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final identity = current;
   final reply = TextEditingController();
+  final note = TextEditingController();
+  String? target, attemptSignature, attemptId;
   int revision = 0;
   bool foreground = true, busy = false;
   String message = '';
@@ -33,6 +38,7 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     reply.dispose();
+    note.dispose();
     super.dispose();
   }
 
@@ -42,6 +48,10 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
       foreground = state == AppLifecycleState.resumed;
       revision++;
       reply.clear();
+      note.clear();
+      target = null;
+      attemptId = null;
+      attemptSignature = null;
     });
   }
 
@@ -52,7 +62,10 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
     if (busy || identity == null || identity != current) {
       return;
     }
-    setState(() => busy = true);
+    setState(() {
+      busy = true;
+      message = '';
+    });
     try {
       await widget.auth.request(
         'POST',
@@ -63,6 +76,10 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
         setState(() {
           revision++;
           reply.clear();
+          note.clear();
+          target = null;
+          attemptId = null;
+          attemptSignature = null;
           message = action == 'resolve'
               ? 'تم حفظ الرد وحل الملاحظة. الرد متاح للأسرة المرتبطة داخل التطبيق.'
               : 'تم حفظ تحديث الملاحظة.';
@@ -108,13 +125,7 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                 '${item['playerName'] ?? 'اللاعب غير متاح'} · ${item['groupName']} · ${item['branchName']}',
               ),
               UiText(textOf(item['message'])),
-              UiText(
-                item['status'] == 'Resolved'
-                    ? 'تم الرد والحل'
-                    : item['status'] == 'Reviewed'
-                    ? 'تمت المراجعة'
-                    : 'تنتظر المراجعة',
-              ),
+              UiText(feedbackStates[item['status']] ?? 'غير متاحة'),
               UiText(
                 'موعد المتابعة: ${item['dueOn'] ?? 'لم يحدد'}${item['overdue'] == true ? ' · تجاوزت الموعد المحدد' : ''}',
               ),
@@ -130,6 +141,7 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                   child: const UiText('تسجيل المراجعة'),
                 ),
               if (item['status'] != 'Resolved' &&
+                  item['status'] != 'Closed' &&
                   item['kind'] != 'Rating' &&
                   item['dueOn'] == null)
                 OutlinedButton(
@@ -152,7 +164,9 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                         },
                   child: const UiText('تحديد موعد متابعة'),
                 ),
-              if (item['status'] != 'Resolved' && item['kind'] != 'Rating') ...[
+              if (item['status'] != 'Resolved' &&
+                  item['status'] != 'Closed' &&
+                  item['kind'] != 'Rating') ...[
                 TextField(
                   controller: reply,
                   maxLength: 500,
@@ -181,6 +195,96 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                   child: const UiText('إرسال الرد وحل الملاحظة'),
                 ),
               ],
+              if (item['kind'] != 'Rating' && item['version'] is int) ...[
+                const Heading('مسار المعالجة الخاص'),
+                const UiText(
+                  'للمالك فقط. الملاحظة الداخلية اختيارية ولا تُرسل للأسرة أو المدرب. الحل يتطلب الرد على الأسرة.',
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('transition-$revision'),
+                  decoration: const InputDecoration(
+                    labelText: 'الخطوة التالية',
+                  ),
+                  initialValue: target,
+                  items: [
+                    for (final s
+                        in feedbackTransitions[item['status']] ?? <String>[])
+                      DropdownMenuItem(
+                        value: s,
+                        child: UiText(feedbackStates[s]!),
+                      ),
+                  ],
+                  onChanged: busy ? null : (v) => setState(() => target = v),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: note,
+                  enabled: !busy,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظة داخلية (اختياري)',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: busy || target == null
+                      ? null
+                      : () {
+                          final signature =
+                              '${item['version']}/$target/${note.text.trim()}';
+                          if (attemptSignature != signature) {
+                            attemptSignature = signature;
+                            attemptId = followUpRequestId();
+                          }
+                          save('transition', {
+                            'status': target,
+                            'version': item['version'],
+                            'requestId': attemptId,
+                            'internalNote': note.text.trim().isEmpty
+                                ? null
+                                : note.text.trim(),
+                          });
+                        },
+                  child: const UiText('حفظ مرحلة المعالجة'),
+                ),
+              ],
+              const SizedBox(height: 20),
+              const Heading('سجل الملاحظة الخاص'),
+              const UiText(
+                'الأحدث أولًا، حتى 50 تحديثًا. لا يُختلق سجل سابق لهذه الإضافة.',
+              ),
+              if (item['historyHasMore'] == true)
+                const UiText('توجد تحديثات أقدم غير معروضة؛ لم تُحذف.'),
+              if (rows(item['history'] ?? const []).isEmpty)
+                const UiText('لم تُسجل تحديثات بعد.'),
+              const SizedBox(height: 12),
+              for (final c in rows(item['history'] ?? const []))
+                GCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      UiText(
+                        c['action'] == 'Due'
+                            ? 'تحديد موعد متابعة: ${c['afterDueOn']}'
+                            : '${feedbackStates[c['fromStatus']] ?? 'غير متاحة'} ← ${feedbackStates[c['toStatus']] ?? 'غير متاحة'}',
+                      ),
+                      UiText(textOf(c['actorName'])),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${feedbackUtcTime(c['createdAtUtc'])} · التوقيت العالمي',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (c['internalNote'] is String)
+                        UiText('ملاحظة داخلية: ${c['internalNote']}'),
+                      if (c['publicResponse'] is String)
+                        UiText(
+                          '${c['action'] == 'Transition' && c['toStatus'] == 'Reopened' ? 'الرد السابق المحفوظ عند إعادة الفتح' : 'الرد المحفوظ للأسرة'}: ${c['publicResponse']}',
+                        ),
+                    ],
+                  ),
+                ),
             ]);
           },
         ),

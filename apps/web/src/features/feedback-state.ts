@@ -1,0 +1,2 @@
+export const feedbackStates: Record<string, string> = { Open: "تنتظر المراجعة", Reviewed: "تمت المراجعة", InProgress: "قيد المعالجة", AwaitingInfo: "بانتظار معلومات", Resolved: "تم الرد والحل", Closed: "مغلقة", Reopened: "أعيد فتحها" };
+export const feedbackTransitions: Record<string, string[]> = { Open: ["InProgress"], Reviewed: ["InProgress"], Reopened: ["InProgress"], InProgress: ["AwaitingInfo"], AwaitingInfo: ["InProgress"], Resolved: ["Closed", "Reopened"], Closed: ["Reopened"] };

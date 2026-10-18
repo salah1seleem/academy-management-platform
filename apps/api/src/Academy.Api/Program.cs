@@ -467,6 +467,8 @@ if (app.Environment.IsEnvironment("Demo"))
             await OwnerFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:FeedbackFollowUpSeedEnabled"))
             await FeedbackFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+        if(app.Configuration.GetValue<bool>("Demo:FeedbackCaseSeedEnabled"))
+            await FeedbackFollowUpDemoSeed.SeedCases(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:PlayerGoalSeedEnabled"))
             await PlayerGoalDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:SkillCurriculumSeedEnabled"))

@@ -1,0 +1,9 @@
+.form { display: grid; gap: 1rem; max-width: 48rem; }
+.form label { display: grid; gap: .5rem; font-weight: 600; }
+.form select, .form textarea { width: 100%; min-height: 48px; border: 1px solid var(--border, #ced7dd); border-radius: 12px; padding: .75rem; font: inherit; background: var(--surface, white); color: inherit; }
+.form button { justify-self: start; }
+.hint { color: var(--muted, #60717b); line-height: 1.8; font-size: .9rem; }
+.history { display: grid; gap: 1rem; padding: 0; list-style: none; }
+.history li { border-inline-start: 3px solid var(--staff-primary-700, var(--primary, #be123c)); background: var(--surface-subtle, #f8fafc); padding: 1rem; border-radius: 12px; overflow-wrap: anywhere; }
+.historyHead { display: flex; gap: .75rem; flex-wrap: wrap; justify-content: space-between; }
+.history time { display: block; margin-top: .5rem; color: var(--muted, #60717b); font-size: .85rem; }

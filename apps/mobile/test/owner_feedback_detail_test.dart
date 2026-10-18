@@ -1,6 +1,7 @@
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/owner/owner_feedback_detail.dart';
 import 'package:academy_mobile/features/owner/owner_followups.dart';
+import 'package:academy_mobile/features/shared/feedback_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +21,91 @@ Map<String, dynamic> detail() => {
   'asOfDate': '2026-10-18',
 };
 void main() {
+  test(
+    'private history time has Latin digits and an explicit UTC conversion',
+    () {
+      expect(
+        feedbackUtcTime('2026-10-19T01:05:00+03:00'),
+        '2026/10/18 · 22:05',
+      );
+      expect(feedbackUtcTime(null), 'وقت غير متاح');
+    },
+  );
+  testWidgets(
+    'private stage retries keep intent and never masquerade as a family response',
+    (t) async {
+      var attempts = 0, saved = false;
+      final bodies = <Object?>[];
+      final auth = await fixture.owner((m, p, b, k) async {
+        if (m == 'POST') {
+          expect(p, '/api/v1/manage/feedback/f1/transition');
+          bodies.add(b);
+          attempts++;
+          if (attempts == 1) {
+            throw const ApiFailure(503, 'تعذر حفظ المعالجة الآن.');
+          }
+          saved = true;
+          return {'id': 'f1'};
+        }
+        return {
+          ...detail(),
+          'version': saved ? 8 : 7,
+          'status': saved ? 'InProgress' : 'Open',
+          'history': saved
+              ? [
+                  {
+                    'id': 'c1',
+                    'action': 'Transition',
+                    'fromStatus': 'Open',
+                    'toStatus': 'InProgress',
+                    'internalNote': 'تحقيق داخلي فقط',
+                    'actorName': 'مالك اصطناعي',
+                    'createdAtUtc': '2026-10-19T07:00:00Z',
+                  },
+                ]
+              : [],
+        };
+      });
+      await t.pumpWidget(
+        fixture.shell(OwnerFeedbackDetail(auth: auth, id: 'f1')),
+      );
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.text('الخطوة التالية'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.tap(find.byType(DropdownButtonFormField<String>));
+      await t.pumpAndSettle();
+      await t.tap(find.text('قيد المعالجة').last);
+      await t.pumpAndSettle();
+      final field = find.widgetWithText(TextField, 'ملاحظة داخلية (اختياري)');
+      await t.ensureVisible(field);
+      await t.enterText(field, 'تحقيق داخلي فقط');
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await t.pumpAndSettle();
+      final button = find.text('حفظ مرحلة المعالجة');
+      await t.ensureVisible(button);
+      await t.tap(button);
+      await t.pumpAndSettle();
+      expect(saved, isFalse);
+      expect(find.widgetWithText(TextField, 'تحقيق داخلي فقط'), findsOneWidget);
+      await t.ensureVisible(button);
+      await t.tap(button);
+      await t.pumpAndSettle();
+      expect(saved, isTrue);
+      expect(bodies.length, 2);
+      expect(bodies[1], bodies[0]);
+      expect(bodies[0], containsPair('version', 7));
+      await t.scrollUntilVisible(
+        find.text('ملاحظة داخلية: تحقيق داخلي فقط'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('ملاحظة داخلية: تحقيق داخلي فقط'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
   testWidgets(
     'specific family note saves a source reply, not a follow-up state or money',
     (t) async {

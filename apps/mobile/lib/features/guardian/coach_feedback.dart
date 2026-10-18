@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../shared/feedback_state.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
@@ -240,11 +242,7 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage> {
                     _ => 'اقتراح',
                   }),
                   subtitle: UiText(
-                    '${item['message']?.toString().isEmpty == true ? 'بدون تعليق' : item['message']} · ${item['status'] == 'Resolved'
-                        ? 'تم الرد والحل'
-                        : item['status'] == 'Reviewed'
-                        ? 'راجعتها الإدارة'
-                        : 'بانتظار المراجعة'}${(item['ownerResponse'] is String && (item['ownerResponse'] as String).isNotEmpty) ? '\nرد الإدارة: ${item['ownerResponse']}' : ''}',
+                    '${item['message']?.toString().isEmpty == true ? 'بدون تعليق' : item['message']} · ${item['status'] == 'Open' ? 'بانتظار المراجعة' : feedbackStates[item['status']] ?? 'غير متاحة'}${(item['ownerResponse'] is String && (item['ownerResponse'] as String).isNotEmpty) ? '\nرد الإدارة: ${item['ownerResponse']}' : ''}',
                   ),
                 ),
               ),

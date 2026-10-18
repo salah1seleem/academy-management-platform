@@ -24,7 +24,8 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         await db.AcademyNotices.Where(x => createdNotices.Contains(x.Id)).ExecuteDeleteAsync();
-        await db.GuardianFeedbacks.Where(x => created.Contains(x.Id)).ExecuteDeleteAsync();
+        // Keep immutable case evidence from isolated QA, instead of bypassing its guard during cleanup.
+        await db.GuardianFeedbacks.Where(x => created.Contains(x.Id) && !db.FeedbackChanges.Any(c => c.FeedbackId == x.Id)).ExecuteDeleteAsync();
         await factory.DisposeAsync();
     }
     private static async Task<HttpResponseMessage> Send(HttpClient client, string path, object body, string? key = null)
@@ -57,6 +58,22 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var optionsResponse = await guardian.GetAsync($"{path}-options"); Assert.Equal(HttpStatusCode.OK, optionsResponse.StatusCode);
         var options = (await optionsResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("groups").EnumerateArray().First(x => x.GetProperty("coaches").GetArrayLength() > 0);
         var group = options.GetProperty("id").GetGuid(); var coach = options.GetProperty("coaches")[0].GetProperty("id").GetGuid();
+        // Reused isolated QA can contain other synthetic ratings. Retain an exact
+        // baseline, then assert count and score after this new 5/5, without deleting history.
+        int[] baselineScores, baselineSummaryScores;
+        await using (var baselineScope = factory.Services.CreateAsyncScope())
+        {
+            var db = baselineScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var academy = DemoSeed.NogoomAcademyId;
+            var zone = TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(a=>a.Id==academy).Select(a=>a.TimeZone).SingleAsync());
+            var start = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026,10,1), zone); var end = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026,11,1), zone);
+            var assigned = await db.StaffGroupAssignments.Where(a=>a.AcademyId==academy&&a.AcademyMembershipId==coach&&a.IsActive&&a.TrainingGroup.IsActive).Select(a=>a.TrainingGroupId).ToArrayAsync();
+            baselineScores = await db.GuardianFeedbacks.Where(f=>f.AcademyId==academy&&f.CoachMembershipId==coach&&f.Kind=="Rating"&&assigned.Contains(f.TrainingGroupId)&&f.CreatedAtUtc>=start&&f.CreatedAtUtc<end).Select(f=>f.Score!.Value).ToArrayAsync();
+            var allGroups = await db.TrainingGroups.Where(g=>g.AcademyId==academy&&g.IsActive).Select(g=>g.Id).ToArrayAsync();
+            baselineSummaryScores = await db.GuardianFeedbacks.Where(f=>f.AcademyId==academy&&f.CoachMembershipId==coach&&f.Kind=="Rating"&&allGroups.Contains(f.TrainingGroupId)&&f.CreatedAtUtc>=start&&f.CreatedAtUtc<end).Select(f=>f.Score!.Value).ToArrayAsync();
+        }
+        var expectedScore = Math.Round((decimal)(baselineScores.Sum()+5)/(baselineScores.Length+1),1);
+        var expectedSummaryScore = Math.Round((decimal)(baselineSummaryScores.Sum()+5)/(baselineSummaryScores.Length+1),1);
         var rating = new { trainingGroupId = group, coachMembershipId = coach, kind = "Rating", score = 5, message = "تدريب منظم" };
         Assert.Equal(HttpStatusCode.NotFound, (await Send(guardian, $"/api/v1/guardian/children/{Slice2DemoSeed.OtherPlayerId}/feedback", rating, "unrelated-01")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Send(guardian, path, rating with { coachMembershipId = Guid.NewGuid() }, "foreign-coach-01")).StatusCode);
@@ -116,11 +133,11 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         Assert.DoesNotContain((await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?overdue=true")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         var summary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
         var operations = summary.GetProperty("operations");
-        Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == 5);
+        Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == expectedSummaryScore && x.GetProperty("parentRatingCount").GetInt32() == baselineSummaryScores.Length+1);
         var coachDetailPath = $"/api/v1/reports/coach-performance/{coach}?from=2026-10-01&to=2026-10-31";
         var coachDetail = await owner.GetFromJsonAsync<JsonElement>(coachDetailPath);
-        Assert.Equal(5, coachDetail.GetProperty("parentRating").GetDecimal());
-        Assert.Equal(1, coachDetail.GetProperty("parentRatingCount").GetInt32());
+        Assert.Equal(expectedScore, coachDetail.GetProperty("parentRating").GetDecimal());
+        Assert.Equal(baselineScores.Length+1, coachDetail.GetProperty("parentRatingCount").GetInt32());
         Assert.Contains(coachDetail.GetProperty("groups").EnumerateArray(), x => x.GetProperty("id").GetGuid() == group);
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/v1/reports/coach-performance/{coach}?allDates=true")).StatusCode);
         Assert.Contains((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/feedback?coachId={coach}&kind=Rating")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
@@ -128,6 +145,31 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(coachDetailPath)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(coachDetailPath)).StatusCode);
     }
+    [Fact]
+    public async Task Football_private_cases_seed_is_guarded_idempotent_and_preserves_manual_work()
+    {
+        using var football = new Factory(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING")!, "Football"); _ = football.CreateClient();
+        await using var scope = football.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var options = new DemoOptions { SeedEnabled = true, SeedProfile = "Football" };
+        var env = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>();
+        await FeedbackFollowUpDemoSeed.SeedCases(db, env, options);
+        var ids = Enumerable.Range(0,2).Select(i=>FootballDemoSeed.Id($"feedback-case-demo/{i}")).ToArray();
+        Assert.Equal(2,await db.GuardianFeedbacks.CountAsync(f=>ids.Contains(f.Id)));
+        var baselineIds = new[] { FootballDemoSeed.Id("feedback-case-demo/0/start"), FootballDemoSeed.Id("feedback-case-demo/1/start"), FootballDemoSeed.Id("feedback-case-demo/1/wait") };
+        Assert.Equal(3,await db.FeedbackChanges.CountAsync(c=>baselineIds.Contains(c.Id)));
+        using var owner = football.CreateClient();
+        (await Send(owner,"/api/v1/auth/login",new { email="owner.football@example.test", password="Demo-Only-123!" })).EnsureSuccessStatusCode();
+        var item = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/feedback/{ids[0]}");
+        var status = item.GetProperty("status").GetString()=="AwaitingInfo"?"InProgress":"AwaitingInfo";
+        (await Send(owner,$"/api/v1/manage/feedback/{ids[0]}/transition",new Academy.Api.Operations.FeedbackCaseWrite(status,item.GetProperty("version").GetUInt32(),Guid.NewGuid(),"تحديث يدوي اصطناعي يجب ألا يستبدله seed"))).EnsureSuccessStatusCode();
+        var states = await db.GuardianFeedbacks.AsNoTracking().Where(f=>ids.Contains(f.Id)).OrderBy(f=>f.Id).Select(f=>new { f.Id,f.Status }).ToArrayAsync();
+        var changes = await db.FeedbackChanges.CountAsync(c=>ids.Contains(c.FeedbackId));
+        await FeedbackFollowUpDemoSeed.SeedCases(db, env, options);
+        Assert.Equal(states, await db.GuardianFeedbacks.AsNoTracking().Where(f=>ids.Contains(f.Id)).OrderBy(f=>f.Id).Select(f=>new { f.Id,f.Status }).ToArrayAsync());
+        Assert.Equal(changes, await db.FeedbackChanges.CountAsync(c=>ids.Contains(c.FeedbackId)));
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>FeedbackFollowUpDemoSeed.SeedCases(db,new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName="Production" },options));
+    }
+
     [Fact]
     public async Task Football_demo_feedback_is_synthetic_and_idempotent()
     {

@@ -7,6 +7,7 @@ import '../guardian/guardian_ui.dart';
 import '../../core/theme/appearance.dart';
 import 'owner_operations.dart';
 import 'owner_feedback_detail.dart';
+import '../shared/feedback_state.dart';
 
 class OwnerFeedbackInbox extends StatefulWidget {
   final AuthController auth;
@@ -182,15 +183,14 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                     onPressed: () => review(textOf(item['id'])),
                     child: const UiText('تسجيل المراجعة'),
                   ),
-                if (item['status'] != 'Resolved' && item['kind'] != 'Rating')
+                if (item['status'] != 'Resolved' &&
+                    item['status'] != 'Closed' &&
+                    item['kind'] != 'Rating')
                   TextButton(
                     onPressed: () => resolve(textOf(item['id'])),
                     child: const UiText('الرد والحل'),
                   ),
-                if (item['status'] == 'Resolved')
-                  const UiText('تم الرد والحل')
-                else if (item['status'] == 'Reviewed')
-                  const UiText('تمت المراجعة'),
+                UiText(feedbackStates[item['status']] ?? 'غير متاحة'),
               ],
             ),
           ),

@@ -5744,6 +5744,87 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("Employees", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.FeedbackChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ActorMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("AfterDueOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("BeforeDueOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FeedbackId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PublicResponse")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "FeedbackId");
+
+                    b.HasIndex("AcademyId", "ActorMembershipId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("FeedbackChanges", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FeedbackChange_Active", "\"IsActive\" AND (\"RequestId\" IS NULL) = (\"RequestHash\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.GroupMediaConsent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5903,8 +5984,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("AcademyId", "Id");
-
                     b.HasIndex("DueSetByUserId");
 
                     b.HasIndex("GuardianUserId");
@@ -5931,6 +6010,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("GuardianFeedbacks", null, t =>
                         {
                             t.HasCheckConstraint("CK_GuardianFeedback_KindScore", "(\"Kind\" = 'Rating' AND \"CoachMembershipId\" IS NOT NULL AND \"Score\" BETWEEN 1 AND 5) OR (\"Kind\" IN ('Complaint','Suggestion') AND \"Score\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_GuardianFeedback_Status", "\"Status\" IN ('Open','Reviewed','InProgress','AwaitingInfo','Resolved','Closed','Reopened') AND (\"Kind\" <> 'Rating' OR \"Status\" IN ('Open','Reviewed'))");
                         });
                 });
 
@@ -15875,6 +15956,29 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId", "PhotoAssetId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.FeedbackChange", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ActorMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.GuardianFeedback", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "FeedbackId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.GroupMediaConsent", b =>

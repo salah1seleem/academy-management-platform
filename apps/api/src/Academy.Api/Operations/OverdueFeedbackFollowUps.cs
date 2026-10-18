@@ -13,7 +13,7 @@ public static partial class OwnerFollowUpEndpoints
         // A real, explicitly owner-set deadline, not a guessed SLA from creation time.
         // Never carry family text, identities or child IDs into a delegated summary.
         var feedback = await db.GuardianFeedbacks.AsNoTracking().Where(f => f.AcademyId == academy && groups.Contains(f.TrainingGroupId)
-            && f.IsActive && (f.Kind == "Complaint" || f.Kind == "Suggestion") && (f.Status == "Open" || f.Status == "Reviewed")
+            && f.IsActive && (f.Kind == "Complaint" || f.Kind == "Suggestion") && f.Status != "Resolved" && f.Status != "Closed"
             && f.DueOn != null && f.DueOn < today)
             .OrderBy(f => f.DueOn).ThenBy(f => f.Id)
             .Select(f => new { f.Id, f.TrainingGroupId, f.Kind, f.GuardianUserId, f.DueOn }).ToArrayAsync();

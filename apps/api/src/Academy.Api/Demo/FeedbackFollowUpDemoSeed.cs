@@ -6,6 +6,38 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Demo;
 public static class FeedbackFollowUpDemoSeed
 {
+    public static async Task SeedCases(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
+    {
+        var a = FootballDemoSeed.AcademyId;
+        if (!env.IsEnvironment("Demo") || !options.SeedEnabled || options.SeedProfile != "Football" || !await db.Academies.AnyAsync(x => x.Id == a && x.Slug == FootballDemoSeed.Slug && x.EnglishName == FootballDemoSeed.Marker)) throw new InvalidOperationException("دورة الشكاوى الاصطناعية تتطلب Football Demo معلوم الهوية.");
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"football-feedback-case-demo"},0))");
+        var at = DateTimeOffset.Parse("2026-10-08T06:00:00Z");
+        for (var i = 0; i < 2; i++)
+        {
+            var id = FootballDemoSeed.Id($"feedback-case-demo/{i}"); if (await db.GuardianFeedbacks.AnyAsync(f => f.Id == id)) continue;
+            var f = new GuardianFeedback { Id = id, AcademyId = a, PlayerId = FootballDemoSeed.Id("player/0"), GuardianUserId = FootballDemoSeed.Id("user/guardian1"),
+                BranchId = FootballDemoSeed.Id("branch/0"), TrainingGroupId = FootballDemoSeed.Id("group/0"), CoachMembershipId = FootballDemoSeed.Id("member/coach1"),
+                Kind = i == 0 ? "Complaint" : "Suggestion", Message = i == 0 ? "شكوى اصطناعية: نراجع تنظيم إشعار الحصة مع الإدارة." : "اقتراح اصطناعي: ننتظر تفاصيل الوقت الأنسب من الأسرة.",
+                Status = "Open", DueOn = new(2026,10,10), DueSetByUserId = FootballDemoSeed.Id("user/owner"), DueSetAtUtc = at, PeriodMonth = new(2026,10,1),
+                IdempotencyKey = $"feedback-case-demo/{i}", CreatedAtUtc = at, UpdatedAtUtc = at };
+            db.GuardianFeedbacks.Add(f); await db.SaveChangesAsync();
+            f.Status = "InProgress"; await db.SaveChangesAsync();
+            db.FeedbackChanges.Add(new() { Id = FootballDemoSeed.Id($"feedback-case-demo/{i}/start"), AcademyId = a, FeedbackId = id, ActorMembershipId = FootballDemoSeed.Id("member/owner"),
+                RequestId = FootballDemoSeed.Id($"feedback-case-demo/{i}/request-start"), RequestHash = new string('0',64), Action = "Transition", FromStatus = "Open", ToStatus = "InProgress", AfterDueOn = f.DueOn, BeforeDueOn = f.DueOn,
+                InternalNote = "مثال تجريبي خاص: بدأ المالك المراجعة دون مشاركة بيانات الأسرة.", CreatedAtUtc = at, UpdatedAtUtc = at });
+            await db.SaveChangesAsync();
+            if (i == 1)
+            {
+                f.Status = "AwaitingInfo"; f.UpdatedAtUtc = at.AddMinutes(1); await db.SaveChangesAsync();
+                db.FeedbackChanges.Add(new() { Id = FootballDemoSeed.Id("feedback-case-demo/1/wait"), AcademyId = a, FeedbackId = id, ActorMembershipId = FootballDemoSeed.Id("member/owner"),
+                    RequestId = FootballDemoSeed.Id("feedback-case-demo/1/request-wait"), RequestHash = new string('1',64), Action = "Transition", FromStatus = "InProgress", ToStatus = "AwaitingInfo", AfterDueOn = f.DueOn, BeforeDueOn = f.DueOn,
+                    InternalNote = "انتظار معلومات في السيناريو الاصطناعي؛ لا تواصل خارجي.", CreatedAtUtc = at.AddMinutes(1), UpdatedAtUtc = at.AddMinutes(1) });
+                await db.SaveChangesAsync();
+            }
+        }
+        await tx.CommitAsync();
+    }
     public static async Task Seed(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
     {
         var a=FootballDemoSeed.AcademyId;

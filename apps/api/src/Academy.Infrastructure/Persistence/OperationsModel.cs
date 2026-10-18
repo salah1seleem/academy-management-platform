@@ -33,6 +33,7 @@ public sealed partial class FoundationDbContext
     private static void ConfigureOperations(ModelBuilder b)
     {
         ConfigureOwnerFollowUps(b);
+        ConfigureFeedbackCases(b);
         ConfigureCommunityCampaigns(b);
         b.Entity<AcademyNotice>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
         ConfigureVersionedSettings(b);

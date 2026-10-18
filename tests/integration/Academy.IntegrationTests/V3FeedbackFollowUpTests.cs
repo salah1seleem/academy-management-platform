@@ -17,7 +17,7 @@ public sealed partial class BrandingMatchesTests
     private static async Task<GuardianFeedback[]> OverdueFamilyNotes(FoundationDbContext db,TrainingGroup g)
     {
         var today=await AttendanceCalendar.TodayAsync(g.AcademyId,db,TimeProvider.System);var now=DateTimeOffset.UtcNow;
-        var link=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==g.AcademyId&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.User.PhoneNumber==DemoSeed.GuardianPhone).Select(l=>new{l.PlayerId,l.Guardian.UserId}).FirstAsync();
+        var link=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==g.AcademyId&&l.IsActive&&l.Player.IsActive&&l.Guardian.IsActive&&l.Guardian.User.PhoneNumber==DemoSeed.GuardianPhone).Select(l=>new{l.PlayerId,l.Guardian.UserId}).FirstAsync();
         var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();
         var coach=await db.AcademyMemberships.Where(m=>m.AcademyId==g.AcademyId&&m.Role==AcademyRole.Coach&&m.IsActive).Select(m=>m.Id).FirstAsync();
         var ratingMonth=(await db.GuardianFeedbacks.Where(f=>f.AcademyId==g.AcademyId&&f.Kind=="Rating"&&f.GuardianUserId==link.UserId&&f.PlayerId==link.PlayerId&&f.CoachMembershipId==coach).Select(f=>(DateOnly?)f.PeriodMonth).MaxAsync()??new DateOnly(today.Year,today.Month,1)).AddMonths(1);
