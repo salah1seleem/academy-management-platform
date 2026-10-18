@@ -169,6 +169,7 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
   bool busy = false;
   String? message;
   String eventOn = '';
+  String sessionId = '';
   Set<String> subjects = {};
   bool noChildren = false, confirmed = false, foreground = true;
   int revision = 0;
@@ -224,6 +225,7 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
         'groupId': widget.groupId,
         'caption': caption.text.trim(),
         'eventOn': eventOn.isEmpty ? textOf(audience['eventOn']) : eventOn,
+        if (sessionId.isNotEmpty) 'sessionId': sessionId,
         'subjectPlayerIds': subjects.join(','),
         'noRecognizableChildren': '$noChildren',
         'privacyConfirmed': '$confirmed',
@@ -263,10 +265,10 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
       return GuardianPage(
         title: localized(context, 'صور وفيديوهات المجموعة', 'Group media'),
         child: RemoteBody(
-          key: ValueKey('audience:$revision:$eventOn'),
+          key: ValueKey('audience:$revision:$eventOn:$sessionId'),
           auth: widget.auth,
           path:
-              '/api/v1/assets/media-audience?groupId=${widget.groupId}${eventOn.isEmpty ? '' : '&eventOn=$eventOn'}',
+              '/api/v1/assets/media-audience?groupId=${widget.groupId}${eventOn.isEmpty ? '' : '&eventOn=$eventOn'}${sessionId.isEmpty ? '' : '&sessionId=$sessionId'}',
           builder: (context, value) {
             final audience = obj(value);
             return gList([
@@ -294,6 +296,7 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                                 .toIso8601String()
                                 .split('T')
                                 .first;
+                            sessionId = '';
                             subjects = {};
                             noChildren = false;
                             confirmed = false;
@@ -305,6 +308,46 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                   '${localized(context, 'تاريخ الواقعة', 'Event date')} · ${eventOn.isEmpty ? audience['eventOn'] : eventOn}',
                 ),
               ),
+              DropdownButtonFormField<String>(
+                key: ValueKey('session:$sessionId:$eventOn'),
+                initialValue: sessionId,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: localized(
+                    context,
+                    'الحصة (اختياري)',
+                    'Session (optional)',
+                  ),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(
+                      localized(
+                        context,
+                        'المجموعة دون حصة',
+                        'Group without a session',
+                      ),
+                    ),
+                  ),
+                  for (final s in rows(audience['sessions'] ?? <Json>[]))
+                    DropdownMenuItem(
+                      value: textOf(s['id']),
+                      child: Text(
+                        '${textOf(s['startTime']).substring(0, 5)} — ${textOf(s['endTime']).substring(0, 5)}',
+                      ),
+                    ),
+                ],
+                onChanged: busy
+                    ? null
+                    : (value) => setState(() {
+                        sessionId = value ?? '';
+                        subjects = {};
+                        noChildren = false;
+                        confirmed = false;
+                      }),
+              ),
+              const SizedBox(height: 16),
               CheckboxListTile(
                 value: noChildren,
                 onChanged: busy
@@ -405,7 +448,13 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
 class MediaTile extends StatelessWidget {
   final AuthController auth;
   final Json media;
-  const MediaTile({super.key, required this.auth, required this.media});
+  final Widget? footer;
+  const MediaTile({
+    super.key,
+    required this.auth,
+    required this.media,
+    this.footer,
+  });
   @override
   Widget build(BuildContext context) => GCard(
     child: Column(
@@ -433,6 +482,7 @@ class MediaTile extends StatelessWidget {
           day(media['mediaEventOn'] ?? media['createdAtUtc']),
           style: Theme.of(context).textTheme.labelSmall,
         ),
+        if (footer != null) ...[const SizedBox(height: 12), footer!],
       ],
     ),
   );

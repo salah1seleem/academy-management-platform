@@ -45,6 +45,9 @@ public class V2AccessRulesTests
     public void Modules_have_deterministic_boundaries(string path, string module) => Assert.Equal(module, StaffAccessRules.ForPath(path));
     [Theory]
     [InlineData("GET", "/api/v1/people/players", "Read")]
+    [InlineData("GET", "/api/v1/assets/gallery", "Read")]
+    [InlineData("POST", "/api/v1/assets/upload", "Add")]
+    [InlineData("POST", "/api/v1/assets/123/withdraw", "Edit")]
     [InlineData("POST", "/api/v1/evaluations/badges/rules", "Add")]
     [InlineData("POST", "/api/v1/evaluations/badges/rules/123/retire", "Edit")]
     [InlineData("POST", "/api/v1/evaluations/badges/enrollments/123/grant", "Add")]

@@ -11,6 +11,7 @@ public sealed class PrivateAsset : TenantEntity
     public long Length { get; set; }
     public Guid? PlayerId { get; set; }
     public Guid? TrainingGroupId { get; set; }
+    public Guid? TrainingSessionId { get; set; }
     public required string Purpose { get; set; }
     public string? Caption { get; set; }
     public int MediaPolicyVersion { get; set; }

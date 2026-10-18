@@ -147,6 +147,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PrivateAssetAudience>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
         BranchFilter<GroupMediaConsent>(b,x=>GuardianPlayerLinks.Any(l=>l.Id==x.GuardianPlayerLinkId));
         BranchFilter<PrivateMediaConsentBasis>(b,x=>PrivateAssetAudiences.Any(a=>a.AssetId==x.AssetId&&a.PlayerId==x.PlayerId));
+        BranchFilter<PrivateMediaWithdrawal>(b,x=>PrivateAssets.Any(a=>a.Id==x.AssetId));
         BranchFilter<PrivateAsset>(b, x => x.Purpose == "News" || x.UploadedByUserId == RequestUserId&&x.Purpose!="Media"
             || x.Purpose=="Campaign" && CommunityCampaignRevisions.Any(r=>r.ImageAssetId==x.Id&&CommunityCampaignTargets.Any(t=>t.RevisionId==r.Id&&RequestBranchIds.Contains(t.BranchId)))
             || x.PlayerId.HasValue && SportEnrollments.Any(e => e.PlayerId == x.PlayerId.Value)
@@ -215,7 +216,7 @@ public sealed partial class FoundationDbContext
         if(ChangeTracker.Entries().Any(e=>e.Entity is IBadgeRecord&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("قاعدة الشارة ومنحها وسحبها محفوظة؛ لا تكتب فوق التاريخ.");
         if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerAchievementCertificate or PlayerCertificateWithdrawal && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("الشهادة وسجل سحبها محفوظان؛ لا تكتب فوق المصدر.");
         GuardSessionLessons();
-        if(ChangeTracker.Entries().Any(e=>e.Entity is GroupMediaConsent or PrivateMediaConsentBasis && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("موافقة مشاركة الطفل ودليل النشر محفوظان؛ سجل قرارًا جديدًا بدل تعديل التاريخ.");
+        if(ChangeTracker.Entries().Any(e=>e.Entity is GroupMediaConsent or PrivateMediaConsentBasis or PrivateMediaWithdrawal && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("موافقة مشاركة الطفل ودليل النشر والسحب محفوظة؛ سجل قرارًا جديدًا بدل تعديل التاريخ.");
         if(ChangeTracker.Entries<PrivateAssetAudience>().Any(e=>e.OriginalValues.GetValue<Guid?>(nameof(PrivateAssetAudience.SportEnrollmentId))!=null&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("جمهور واقعة الوسائط محفوظ؛ لا تستبدله بأعضاء المجموعة الجدد.");
         foreach(var e in ChangeTracker.Entries<PrivateAsset>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.OriginalValues.GetValue<int>(nameof(PrivateAsset.MediaPolicyVersion))==1&&(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(PrivateAsset.IsActive) or nameof(PrivateAsset.UpdatedAtUtc)))))throw new InvalidOperationException("مصدر النشر وجمهوره ثابتان؛ ارفع نسخة مراجعة جديدة بدل الكتابة فوق الأصل.");

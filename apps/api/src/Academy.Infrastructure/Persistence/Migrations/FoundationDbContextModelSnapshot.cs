@@ -7192,6 +7192,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("TrainingGroupId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TrainingSessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -7209,6 +7212,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasIndex("AcademyId", "PlayerId");
 
                     b.HasIndex("AcademyId", "TrainingGroupId");
+
+                    b.HasIndex("AcademyId", "TrainingSessionId", "TrainingGroupId");
 
                     b.ToTable("PrivateAssets", (string)null);
                 });
@@ -7448,6 +7453,66 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("PrivateMediaConsentBasiss", null, t =>
                         {
                             t.HasCheckConstraint("CK_PrivateMediaConsentBasis_Active", "\"IsActive\"");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaWithdrawal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "AssetId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("PrivateMediaWithdrawals", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PrivateMediaWithdrawal_Active", "\"IsActive\"");
                         });
                 });
 
@@ -16169,6 +16234,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AcademyId", "TrainingGroupId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Attendance.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingSessionId", "TrainingGroupId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingGroupId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateAssetAudience", b =>
@@ -16260,6 +16331,28 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "ConsentId", "PlayerId")
                         .HasPrincipalKey("AcademyId", "Id", "PlayerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PrivateMediaWithdrawal", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.PrivateAsset", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "AssetId")
+                        .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

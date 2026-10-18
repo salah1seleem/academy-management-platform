@@ -1,12 +1,14 @@
 using Academy.Infrastructure.Identity;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.People;
+using Academy.Infrastructure.Attendance;
 using Microsoft.EntityFrameworkCore;
 namespace Academy.Infrastructure.Persistence;
 public sealed partial class FoundationDbContext
 {
     public DbSet<GroupMediaConsent> GroupMediaConsents => Set<GroupMediaConsent>();
     public DbSet<PrivateMediaConsentBasis> PrivateMediaConsentBases => Set<PrivateMediaConsentBasis>();
+    public DbSet<PrivateMediaWithdrawal> PrivateMediaWithdrawals => Set<PrivateMediaWithdrawal>();
     private static void ConfigureGroupMediaPrivacy(ModelBuilder b)
     {
         Tenant<GroupMediaConsent>(b); Tenant<PrivateMediaConsentBasis>(b);
@@ -27,5 +29,14 @@ public sealed partial class FoundationDbContext
         p.HasOne<GroupMediaConsent>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ConsentId,x.PlayerId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.PlayerId}).OnDelete(DeleteBehavior.Restrict);
         p.HasIndex(x=>new{x.AcademyId,x.AssetId,x.ConsentId}).IsUnique();
         p.ToTable(t=>t.HasCheckConstraint("CK_PrivateMediaConsentBasis_Active","\"IsActive\""));
+        b.Entity<PrivateAsset>().HasOne<TrainingSession>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.TrainingSessionId,x.TrainingGroupId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.TrainingGroupId}).OnDelete(DeleteBehavior.Restrict);
+        Tenant<PrivateMediaWithdrawal>(b);
+        var w=b.Entity<PrivateMediaWithdrawal>();
+        w.HasOne<PrivateAsset>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.AssetId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        w.HasOne<ApplicationUser>().WithMany().HasForeignKey(x=>x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        w.HasIndex(x=>new{x.AcademyId,x.AssetId}).IsUnique();
+        w.HasIndex(x=>new{x.AcademyId,x.ActorUserId,x.RequestId}).IsUnique();
+        w.Property(x=>x.Note).HasMaxLength(500);w.Property(x=>x.RequestHash).HasMaxLength(64);
+        w.ToTable(t=>t.HasCheckConstraint("CK_PrivateMediaWithdrawal_Active","\"IsActive\""));
     }
 }

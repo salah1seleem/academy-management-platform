@@ -108,7 +108,7 @@ public static class AssetEndpoints
     {
         var user = Actor(principal); var policy = asset.Purpose switch { "StaffPhoto" => AcademyPermissions.PayrollRead, "Photo" => AcademyPermissions.PeopleManage, "Proof" => AcademyPermissions.PaymentRead, _ => AcademyPermissions.PlayerMediaRead };
         if ((t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin) && (await authorization.AuthorizeAsync(principal, policy)).Succeeded) return true;
-        if (!asset.IsActive) return false;
+        if (!asset.IsActive||asset.Purpose=="Media"&&await db.PrivateMediaWithdrawals.AnyAsync(w=>w.AssetId==asset.Id)) return false;
         if (asset.Purpose == "StaffPhoto") return false;
         if (asset.Purpose == "Proof") return asset.UploadedByUserId == user;
         var now = clock.UtcNow;
@@ -145,17 +145,19 @@ public static class AssetEndpoints
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(path, asset.ContentType, enableRangeProcessing: true);
     }
-    private static async Task<IResult> Gallery(Guid? playerId, Guid? groupId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context)
+    private static async Task<IResult> Gallery(Guid? playerId, Guid? groupId,bool? includeWithdrawn, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context)
     {
         var t = (await tenant.ResolveAsync())!; var user = Actor(principal);
         context.Response.Headers.CacheControl="private, no-store";
         var query = db.PrivateAssets.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Purpose == "Media" && x.IsActive);
+        var staff=t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin;
+        if(!staff||includeWithdrawn!=true)query=query.Where(x=>!db.PrivateMediaWithdrawals.Any(w=>w.AssetId==x.Id));
         if (t.Role == AcademyRole.Guardian)
         {
             if (!playerId.HasValue || !await Linked(db, t.AcademyId, user, playerId.Value)) return Results.NotFound();
             var today=await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
             var shareable=GroupMediaPrivacy.Shareable(db);
-            query = query.Where(x => x.MediaPolicyVersion==1&&(x.PlayerId == playerId || x.TrainingGroupId!=null&&db.TrainingGroups.Any(g=>g.Id==x.TrainingGroupId&&g.IsActive)&&shareable.Any(a=>a.Id==x.Id)&&db.PrivateAssetAudiences.Any(a=>a.AssetId==x.Id&&a.PlayerId==playerId&&a.IsActive&&a.SportEnrollmentId!=null&&db.SportEnrollments.Any(e=>e.Id==a.SportEnrollmentId&&e.PlayerId==a.PlayerId&&e.IsActive&&e.Player.IsActive&&e.Branch.IsActive&&e.Sport.IsActive&&FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==x.TrainingGroupId))));
+            query = query.Where(x => x.MediaPolicyVersion==1&&(x.PlayerId == playerId || x.TrainingGroupId!=null&&db.TrainingGroups.Any(g=>g.Id==x.TrainingGroupId&&g.IsActive)&&shareable.Any(a=>a.Id==x.Id)&&db.PrivateAssetAudiences.Any(a=>a.AssetId==x.Id&&a.PlayerId==playerId&&a.IsActive&&a.SportEnrollmentId!=null&&db.SportEnrollments.Any(e=>e.Id==a.SportEnrollmentId&&e.PlayerId==a.PlayerId&&e.IsActive&&e.Player.IsActive&&e.Branch.IsActive&&e.Sport.IsActive&&(x.TrainingSessionId!=null?FoundationDbContext.IsSessionAssigned(e.AcademyId,e.Id,x.TrainingSessionId.Value)&&(FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==x.TrainingGroupId||FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,x.MediaEventOn!.Value)!=x.TrainingGroupId&&FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,x.MediaEventOn.Value)&&db.TrainingGroups.Any(home=>home.Id==FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)&&home.IsActive)):FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==x.TrainingGroupId)))));
         }
         else if (t.Role == AcademyRole.Coach)
         {
@@ -167,6 +169,8 @@ public static class AssetEndpoints
             if (!(await authorization.AuthorizeAsync(principal, AcademyPermissions.PlayerMediaRead)).Succeeded) return Results.Forbid();
             if (playerId.HasValue) query = query.Where(x => x.PlayerId == playerId || db.PrivateAssetAudiences.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == playerId && e.AssetId == x.Id)); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         }
-        return Results.Ok(await query.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.PlayerId, x.TrainingGroupId, x.ContentType, x.Caption, x.CreatedAtUtc,x.MediaEventOn,x.MediaPolicyVersion, url = "/api/v1/assets/" + x.Id }).ToListAsync());
+        var canWithdraw=staff&&await MediaPublication.CanWithdraw(t,context,authorization,db);
+        var canPublish=staff&&await MediaPublication.CanPublish(t,context,authorization,db);
+        return Results.Ok(await query.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.PlayerId, x.TrainingGroupId,x.TrainingSessionId, x.ContentType, x.Caption, x.CreatedAtUtc,x.MediaEventOn,x.MediaPolicyVersion,withdrawn=db.PrivateMediaWithdrawals.Any(w=>w.AssetId==x.Id),canWithdraw,canPublish,withdrawnAtUtc=staff?db.PrivateMediaWithdrawals.Where(w=>w.AssetId==x.Id).Select(w=>(DateTimeOffset?)w.CreatedAtUtc).SingleOrDefault():null,withdrawalNote=staff?db.PrivateMediaWithdrawals.Where(w=>w.AssetId==x.Id).Select(w=>w.Note).SingleOrDefault():null, url = "/api/v1/assets/" + x.Id }).ToListAsync());
     }
 }

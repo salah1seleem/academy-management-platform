@@ -19,3 +19,12 @@ public sealed class PrivateMediaConsentBasis : TenantEntity
     public Guid PlayerId { get; set; }
     public Guid ConsentId { get; set; }
 }
+// Withdrawal never overwrites the publication or permits restoring it in place.
+public sealed class PrivateMediaWithdrawal : TenantEntity
+{
+    public Guid AssetId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public Guid RequestId { get; set; }
+    public required string RequestHash { get; set; }
+    public string? Note { get; set; }
+}

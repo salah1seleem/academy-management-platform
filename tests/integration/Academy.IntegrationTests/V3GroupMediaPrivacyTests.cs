@@ -13,13 +13,14 @@ namespace Academy.IntegrationTests;
 public sealed partial class BrandingMatchesTests
 {
     private static readonly byte[] MediaPng=Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=");
-    private static async Task<HttpResponseMessage> PrivacyUpload(HttpClient c,Guid group,DateOnly day,Guid? subject=null,bool noChildren=false,bool confirmed=true)
+    internal static async Task<HttpResponseMessage> PrivacyUpload(HttpClient c,Guid group,DateOnly day,Guid? subject=null,bool noChildren=false,bool confirmed=true,Guid? session=null)
     {
         var csrf=await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var form=new MultipartFormDataContent();var file=new ByteArrayContent(MediaPng);file.Headers.ContentType=new MediaTypeHeaderValue("image/png");form.Add(file,"file","synthetic-pixel.png");
         foreach(var (k,v) in new Dictionary<string,string>{{"purpose","Media"},{"groupId",group.ToString()},{"eventOn",day.ToString("yyyy-MM-dd")},{"privacyConfirmed",confirmed?"true":"false"},{"noRecognizableChildren",noChildren?"true":"false"},{"subjectPlayerIds",subject?.ToString()??""}})form.Add(new StringContent(v),k);
+        if(session.HasValue)form.Add(new StringContent(session.ToString()!),"sessionId");
         using var r=new HttpRequestMessage(HttpMethod.Post,"/api/v1/assets/upload"){Content=form};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());return await c.SendAsync(r);
     }
-    private static async Task<Guid> MediaCreated(HttpResponseMessage r){Assert.True(r.StatusCode==HttpStatusCode.Created,await r.Content.ReadAsStringAsync());return(await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();}
+    internal static async Task<Guid> MediaCreated(HttpResponseMessage r){Assert.True(r.StatusCode==HttpStatusCode.Created,await r.Content.ReadAsStringAsync());return(await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();}
     private static async Task<Academy.Infrastructure.People.SportEnrollment> FreshMediaChild(FoundationDbContext db,Academy.Infrastructure.People.SportEnrollment source,Guid guardian)
     {
         var e=await FreshSkillChild(db,source,guardian);e.CreatedAtUtc=DateTimeOffset.UtcNow;e.UpdatedAtUtc=e.CreatedAtUtc;await db.SaveChangesAsync();return e;
@@ -68,13 +69,22 @@ public sealed partial class BrandingMatchesTests
             grant.Add=true;await db.SaveChangesAsync();
             var id=await MediaCreated(await PrivacyUpload(admin,group.Id,day,e.PlayerId));
             Assert.Equal(HttpStatusCode.OK,(await admin.GetAsync($"/api/v1/assets/{id}")).StatusCode);
+            grant.Edit=false;await db.SaveChangesAsync();
+            var withdraw=new MediaWithdrawalWrite(Guid.NewGuid(),null);
+            Assert.Equal(HttpStatusCode.Forbidden,(await Send(admin,$"/api/v1/assets/{id}/withdraw",withdraw)).StatusCode);
+            var readOnly=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/assets/gallery?groupId={group.Id}&includeWithdrawn=true");Assert.False(readOnly.EnumerateArray().Single(x=>x.GetProperty("id").GetGuid()==id).GetProperty("canWithdraw").GetBoolean());
+            grant.Edit=true;grant.Add=false;await db.SaveChangesAsync();
+            (await Send(admin,$"/api/v1/assets/{id}/withdraw",withdraw)).EnsureSuccessStatusCode();
+            var editOnly=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/assets/gallery?groupId={group.Id}&includeWithdrawn=true");var editRow=editOnly.EnumerateArray().Single(x=>x.GetProperty("id").GetGuid()==id);Assert.True(editRow.GetProperty("canWithdraw").GetBoolean());Assert.False(editRow.GetProperty("canPublish").GetBoolean());
             var branch=await db.MembershipBranchAccesses.SingleAsync(b=>b.MembershipId==member&&b.BranchId==group.BranchId);
             branch.IsActive=false;await db.SaveChangesAsync();
             Assert.Equal(HttpStatusCode.NotFound,(await admin.GetAsync($"/api/v1/assets/{id}")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound,(await admin.GetAsync($"/api/v1/assets/media-audience?groupId={group.Id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,(await Send(admin,$"/api/v1/assets/{id}/withdraw",withdraw)).StatusCode);
             branch.IsActive=true;grant.Read=false;await db.SaveChangesAsync();
             // Explicit module permission denial is 403 at middleware; a foreign branch resource remains hidden with 404.
             Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetAsync($"/api/v1/assets/{id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,(await Send(admin,$"/api/v1/assets/{id}/withdraw",withdraw)).StatusCode);
         }
         finally{if(added)db.StaffActionGrants.Remove(grant);else db.Entry(grant).CurrentValues.SetValues(JsonSerializer.Deserialize<StaffActionGrant>(before!)!);await db.SaveChangesAsync();}
     });

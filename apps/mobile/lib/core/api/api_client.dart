@@ -188,6 +188,7 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
         'subjectPlayerIds',
         'noRecognizableChildren',
         'privacyConfirmed',
+        'sessionId',
       },
     };
     if (bytes.length > 50 * 1024 * 1024 ||

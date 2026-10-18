@@ -36,6 +36,7 @@ void main() {
         'subjectPlayerIds': 'child-test',
         'noRecognizableChildren': 'false',
         'privacyConfirmed': 'true',
+        'sessionId': 'session-test',
       };
       await api.upload(
         Uint8List.fromList(List.filled(20, 0)),
@@ -53,7 +54,7 @@ void main() {
       await expectLater(
         api.upload(Uint8List(20), 'image/png', {
           'purpose': 'Proof',
-          'privacyConfirmed': 'true',
+          'sessionId': 'session-test',
         }, 'synthetic-test-token'),
         throwsA(isA<ApiFailure>().having((e) => e.status, 'status', 400)),
       );

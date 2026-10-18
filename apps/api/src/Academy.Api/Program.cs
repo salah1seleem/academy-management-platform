@@ -391,6 +391,7 @@ app.MapSubscriptionAdjustmentEndpoints();
 app.MapSubscriptionDiscountEndpoints();
 app.MapAssetEndpoints();
 app.MapGroupMediaPrivacy();
+app.MapMediaPublication();
 app.MapDiscountRuleEndpoints();
 app.MapGroupOperations();
 app.MapUnassignedEnrollments();

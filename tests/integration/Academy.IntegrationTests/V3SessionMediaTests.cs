@@ -1,0 +1,68 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Academy.Api.Auth;
+using Academy.Api.Operations;
+using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Operations;
+using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.Tenancy;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Academy.IntegrationTests;
+public sealed partial class BrandingMatchesTests
+{
+    [Fact] public async Task Session_media_regular_members_lose_old_group_access_after_a_dated_transfer_and_SQL_rejects_a_false_session_date()
+    {
+        using var owner=await Staff();var family=await ExclusiveMediaFamily();using var parent=family.Client;
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var source=await db.SportEnrollments.AsNoTracking().FirstAsync(e=>e.AcademyId==DemoSeed.NogoomAcademyId&&e.IsActive&&e.TrainingGroupId!=null);var group=await db.TrainingGroups.AsNoTracking().SingleAsync(g=>g.Id==source.TrainingGroupId);var today=DateOnly.Parse((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={group.Id}")).GetProperty("asOfDate").GetString()!);var day=today.AddDays(-1);var e=await FreshMediaChild(db,source,family.Guardian);e.GroupAssignedFrom=day;await db.SaveChangesAsync();var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();
+        var used=await db.TrainingSessions.Where(s=>s.TrainingGroupId==group.Id&&s.SessionDate==day).Select(s=>s.StartTime).ToArrayAsync();var minute=Enumerable.Range(0,60).First(m=>!used.Contains(new TimeOnly(1,m)));var session=new TrainingSession{Id=Guid.NewGuid(),AcademyId=group.AcademyId,BranchId=group.BranchId,SportId=group.SportId,AgeCategoryId=group.AgeCategoryId,TrainingGroupId=group.Id,SessionDate=day,StartTime=new(1,minute),EndTime=new(2,minute),CreatedByUserId=actor};db.TrainingSessions.Add(session);await db.SaveChangesAsync();
+        (await Send(parent,$"/api/v1/guardian/children/{e.PlayerId}/group-media-consent",new GroupMediaConsentWrite(true,0,Guid.NewGuid()))).EnsureSuccessStatusCode();var id=await MediaCreated(await PrivacyUpload(owner,group.Id,day,e.PlayerId,session:session.Id));var url=$"/api/v1/assets/{id}";Assert.Equal(HttpStatusCode.OK,(await parent.GetAsync(url)).StatusCode);
+        var target=new Academy.Infrastructure.Structure.TrainingGroup{Id=Guid.NewGuid(),AcademyId=group.AcademyId,BranchId=group.BranchId,SportId=group.SportId,AgeCategoryId=group.AgeCategoryId,ArabicName="انتقال خصوصية اصطناعي "+Guid.NewGuid().ToString("N")[..6]};db.TrainingGroups.Add(target);db.EnrollmentGroupTransfers.Add(new(){Id=Guid.NewGuid(),AcademyId=group.AcademyId,SportEnrollmentId=e.Id,BranchId=group.BranchId,SportId=group.SportId,SourceGroupId=group.Id,TargetGroupId=target.Id,EffectiveDate=today,ActorUserId=actor,RequestKey=Guid.NewGuid().ToString(),RequestHash="synthetic",Snapshot="{}"});await db.SaveChangesAsync();
+        Assert.Equal(HttpStatusCode.NotFound,(await parent.GetAsync(url)).StatusCode);Assert.DoesNotContain(id.ToString(),await parent.GetStringAsync($"/api/v1/assets/gallery?playerId={e.PlayerId}"));Assert.Equal(HttpStatusCode.OK,(await owner.GetAsync(url)).StatusCode);
+        db.PrivateAssets.Add(new(){Id=Guid.NewGuid(),AcademyId=group.AcademyId,UploadedByUserId=actor,Purpose="Media",ContentType="image/png",StorageName="synthetic-no-file",Length=100,MediaPolicyVersion=1,MediaEventOn=today,TrainingGroupId=group.Id,TrainingSessionId=session.Id,NoRecognizableChildren=true});var rejected=await Assert.ThrowsAsync<DbUpdateException>(()=>db.SaveChangesAsync());Assert.Equal("23514",Assert.IsType<Npgsql.PostgresException>(rejected.InnerException).SqlState);
+    }
+    [Fact] public async Task Session_media_withdrawal_is_explicit_immutable_idempotent_and_separate_from_consent_and_money()
+    {
+        using var owner=await Staff();using var coach=await Mobile(AcademyRole.Coach);using var foreign=await Staff(DemoSeed.FutureOwnerEmail);
+        var family=await ExclusiveMediaFamily();using var parent=family.Client;
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var opts=await coach.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options");var source=await db.SportEnrollments.AsNoTracking().SingleAsync(e=>e.Id==opts.GetProperty("enrollments")[0].GetProperty("id").GetGuid());
+        var e=await FreshMediaChild(db,source,family.Guardian);var group=e.TrainingGroupId!.Value;var audience=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={group}");var day=DateOnly.Parse(audience.GetProperty("asOfDate").GetString()!);
+        var consent=$"/api/v1/guardian/children/{e.PlayerId}/group-media-consent";(await Send(parent,consent,new GroupMediaConsentWrite(true,0,Guid.NewGuid()))).EnsureSuccessStatusCode();
+        var before=(await db.PlayerAttendances.CountAsync(),await db.SubscriptionPeriods.CountAsync(),await db.AcademyNotices.CountAsync());var money=await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28");
+        var id=await MediaCreated(await PrivacyUpload(coach,group,day,e.PlayerId));var url=$"/api/v1/assets/{id}";var path=url+"/withdraw";var body=new MediaWithdrawalWrite(Guid.NewGuid(),"ملاحظة إدارية اصطناعية لا تصل للأسرة");
+        Assert.Equal(HttpStatusCode.Forbidden,(await Send(parent,path,body)).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await Send(coach,path,body)).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await Send(foreign,path,body)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PostAsJsonAsync(path,body)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await Send(owner,path,body with{RequestId=Guid.Empty})).StatusCode);
+        (await Send(owner,path,body)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.OK,(await Send(owner,path,body)).StatusCode);Assert.Equal(HttpStatusCode.Conflict,(await Send(owner,path,body with{Note="محتوى آخر"})).StatusCode);Assert.Equal(HttpStatusCode.Conflict,(await Send(owner,path,body with{RequestId=Guid.NewGuid()})).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await parent.GetAsync(url)).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await coach.GetAsync(url)).StatusCode);Assert.DoesNotContain(id.ToString(),await parent.GetStringAsync($"/api/v1/assets/gallery?playerId={e.PlayerId}&includeWithdrawn=true"));Assert.DoesNotContain(id.ToString(),await coach.GetStringAsync($"/api/v1/assets/gallery?groupId={group}&includeWithdrawn=true"));Assert.Equal(HttpStatusCode.OK,(await owner.GetAsync(url)).StatusCode);
+        var staff=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/assets/gallery?groupId={group}&includeWithdrawn=true");var item=staff.EnumerateArray().Single(x=>x.GetProperty("id").GetGuid()==id);Assert.True(item.GetProperty("withdrawn").GetBoolean());Assert.True(item.GetProperty("canWithdraw").GetBoolean());Assert.Equal(body.Note,item.GetProperty("withdrawalNote").GetString());
+        Assert.True((await parent.GetFromJsonAsync<JsonElement>(consent)).GetProperty("allowed").GetBoolean());var fresh=await MediaCreated(await PrivacyUpload(owner,group,day,e.PlayerId));Assert.NotEqual(id,fresh);Assert.Equal(HttpStatusCode.OK,(await parent.GetAsync($"/api/v1/assets/{fresh}")).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await parent.GetAsync(url)).StatusCode);
+        var w=await db.PrivateMediaWithdrawals.SingleAsync(w=>w.AssetId==id);w.Note="تغيير";await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());db.ChangeTracker.Clear();Assert.Equal("23514",(await Assert.ThrowsAsync<Npgsql.PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"PrivateMediaWithdrawals\" WHERE \"AssetId\"={id}"))).SqlState);
+        Assert.Equal(before,(await db.PlayerAttendances.CountAsync(),await db.SubscriptionPeriods.CountAsync(),await db.AcademyNotices.CountAsync()));Assert.Equal(money,await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28"));
+    }
+    [Fact] public async Task Session_media_uses_actual_visitor_roster_and_never_claims_attendance_or_gives_later_members_an_archive()
+    {
+        using var owner=await Staff();using var coach=await Mobile(AcademyRole.Coach);var family=await ExclusiveMediaFamily();using var parent=family.Client;
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var opts=await coach.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options");var source=await db.SportEnrollments.AsNoTracking().SingleAsync(e=>e.Id==opts.GetProperty("enrollments")[0].GetProperty("id").GetGuid());var target=await db.TrainingGroups.SingleAsync(g=>g.Id==source.TrainingGroupId);var today=DateOnly.Parse((await owner.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={target.Id}")).GetProperty("asOfDate").GetString()!);
+        var other=new Academy.Infrastructure.Structure.TrainingGroup{Id=Guid.NewGuid(),AcademyId=target.AcademyId,BranchId=target.BranchId,SportId=target.SportId,AgeCategoryId=target.AgeCategoryId,ArabicName="مجموعة ضيف وسائط اصطناعية "+Guid.NewGuid().ToString("N")[..6]};db.TrainingGroups.Add(other);await db.SaveChangesAsync();var e=await FreshMediaChild(db,new(){AcademyId=target.AcademyId,BranchId=target.BranchId,SportId=target.SportId,TrainingGroupId=other.Id},family.Guardian);e.GroupAssignedFrom=today;await db.SaveChangesAsync();
+        var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();
+        TrainingSession Session(Guid group,int hour,int minute=0)=>new(){Id=Guid.NewGuid(),AcademyId=target.AcademyId,BranchId=target.BranchId,SportId=target.SportId,AgeCategoryId=target.AgeCategoryId,TrainingGroupId=group,SessionDate=today,StartTime=new(hour,minute),EndTime=new(hour+1,minute),CreatedByUserId=actor};
+        var used=await db.TrainingSessions.Where(s=>s.TrainingGroupId==target.Id&&s.SessionDate==today).Select(s=>s.StartTime).ToArrayAsync();var minute=Enumerable.Range(0,60).First(m=>!used.Contains(new TimeOnly(3,m)));
+        var from=Session(other.Id,2);var to=Session(target.Id,3,minute);db.TrainingSessions.AddRange(from,to);
+        // Explicit persisted fixture for the existing immutable single-session move; no attendance record.
+        db.EnrollmentSessionMoves.Add(new(){Id=Guid.NewGuid(),AcademyId=target.AcademyId,BranchId=target.BranchId,SportId=target.SportId,SportEnrollmentId=e.Id,SourceGroupId=other.Id,SourceSessionId=from.Id,TargetGroupId=target.Id,TargetSessionId=to.Id,BatchId=Guid.NewGuid(),ActorUserId=actor,RequestKey=Guid.NewGuid().ToString(),RequestHash="synthetic",Snapshot="{}"});await db.SaveChangesAsync();
+        var consent=$"/api/v1/guardian/children/{e.PlayerId}/group-media-consent";(await Send(parent,consent,new GroupMediaConsentWrite(true,0,Guid.NewGuid()))).EnsureSuccessStatusCode();
+        var regular=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={target.Id}");Assert.DoesNotContain(regular.GetProperty("players").EnumerateArray(),p=>p.GetProperty("id").GetGuid()==e.PlayerId);
+        var actual=await coach.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={target.Id}&sessionId={to.Id}");Assert.Contains(actual.GetProperty("players").EnumerateArray(),p=>p.GetProperty("id").GetGuid()==e.PlayerId);var movedOut=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={other.Id}&sessionId={from.Id}");Assert.DoesNotContain(movedOut.GetProperty("players").EnumerateArray(),p=>p.GetProperty("id").GetGuid()==e.PlayerId);
+        Assert.Equal(HttpStatusCode.NotFound,(await owner.GetAsync($"/api/v1/assets/media-audience?groupId={other.Id}&sessionId={to.Id}")).StatusCode);Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PrivacyUpload(owner,other.Id,today,e.PlayerId,session:to.Id)).StatusCode);Assert.Equal(HttpStatusCode.UnprocessableEntity,(await PrivacyUpload(owner,target.Id,today.AddDays(-1),e.PlayerId,session:to.Id)).StatusCode);
+        var before=await db.PlayerAttendances.CountAsync();var id=await MediaCreated(await PrivacyUpload(coach,target.Id,today,e.PlayerId,session:to.Id));var url=$"/api/v1/assets/{id}";Assert.Equal(HttpStatusCode.OK,(await parent.GetAsync(url)).StatusCode);Assert.Contains(id.ToString(),await parent.GetStringAsync($"/api/v1/assets/gallery?playerId={e.PlayerId}"));Assert.Equal(to.Id,(await db.PrivateAssets.SingleAsync(a=>a.Id==id)).TrainingSessionId);
+        var later=await FreshMediaChild(db,source,family.Guardian);Assert.DoesNotContain(id.ToString(),await parent.GetStringAsync($"/api/v1/assets/gallery?playerId={later.PlayerId}"));
+        // The existing move protects its real timetable; media must not weaken that invariant.
+        to.Status=TrainingSessionStatus.Cancelled;await Assert.ThrowsAsync<DbUpdateException>(()=>db.SaveChangesAsync());db.ChangeTracker.Clear();
+        var current=await db.SportEnrollments.SingleAsync(x=>x.Id==e.Id);current.IsActive=false;await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.NotFound,(await parent.GetAsync(url)).StatusCode);Assert.DoesNotContain(id.ToString(),await parent.GetStringAsync($"/api/v1/assets/gallery?playerId={e.PlayerId}"));Assert.Equal(HttpStatusCode.OK,(await owner.GetAsync(url)).StatusCode);Assert.Equal(before,await db.PlayerAttendances.CountAsync());
+    }
+}

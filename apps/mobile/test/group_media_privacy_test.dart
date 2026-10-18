@@ -129,6 +129,11 @@ void main() {
       );
       await t.pumpWidget(f.shell(UploadSessionMedia(auth: auth, groupId: 'g')));
       await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.widgetWithText(CheckboxListTile, 'طفل غير موافق'),
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(
         t
             .widget<CheckboxListTile>(

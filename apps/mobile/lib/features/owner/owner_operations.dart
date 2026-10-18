@@ -12,6 +12,7 @@ import '../shared/player_skills.dart';
 import 'owner_feedback.dart';
 import 'owner_followups.dart';
 import '../shared/player_technical_reviews.dart';
+import '../shared/admin_media_gallery.dart';
 
 /// Hides cached operational records when the selected authorization context ends.
 class OwnerScopedRead extends StatefulWidget {
@@ -94,6 +95,18 @@ class _OwnerDecisionsPageState extends State<OwnerDecisionsPage> {
             auth: widget.auth,
             operations: ops,
             onReturn: refresh,
+          ),
+          OutlinedButton.icon(
+            onPressed: () =>
+                openPage(context, AdminMediaGallery(auth: widget.auth)),
+            icon: const Icon(Icons.perm_media_outlined),
+            label: Text(
+              localized(
+                context,
+                'مراجعة وسحب وسائط اللاعبين',
+                'Review and withdraw player media',
+              ),
+            ),
           ),
           OutlinedButton.icon(
             onPressed: () => openPage(

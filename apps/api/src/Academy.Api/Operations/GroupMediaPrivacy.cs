@@ -27,6 +27,8 @@ public static class GroupMediaPrivacy
     {
         var current=Current(db);var links=Links(db);
         return db.PrivateAssets.Where(a=>a.Purpose=="Media"&&a.MediaPolicyVersion==1&&a.IsActive&&a.MediaEventOn!=null&&
+            !db.PrivateMediaWithdrawals.Any(w=>w.AssetId==a.Id)&&
+            (a.TrainingSessionId==null||db.TrainingSessions.Any(s=>s.Id==a.TrainingSessionId&&s.TrainingGroupId==a.TrainingGroupId&&s.SessionDate==a.MediaEventOn&&s.IsActive&&s.Status!=Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled))&&
             !db.PrivateMediaConsentBases.Any(b=>b.AssetId==a.Id&&!current.Any(c=>c.Id==b.ConsentId))&&
             (a.NoRecognizableChildren||db.PrivateAssetAudiences.Any(s=>s.AssetId==a.Id&&s.IsSubject))&&
             !db.PrivateAssetAudiences.Any(s=>s.AssetId==a.Id&&s.IsSubject&&(!links.Any(l=>l.PlayerId==s.PlayerId)||links.Any(l=>l.PlayerId==s.PlayerId&&!db.PrivateMediaConsentBases.Any(b=>b.AssetId==a.Id&&b.PlayerId==s.PlayerId&&current.Any(c=>c.Id==b.ConsentId&&c.GuardianPlayerLinkId==l.Id))))));
@@ -36,8 +38,8 @@ public static class GroupMediaPrivacy
         var zone=TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(a=>a.Id==academy).Select(a=>a.TimeZone).SingleAsync());
         return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(day.AddDays(1).ToDateTime(TimeOnly.MinValue),zone));
     }
-    internal static IQueryable<Academy.Infrastructure.People.SportEnrollment> Roster(FoundationDbContext db,Guid group,DateOnly day,DateTimeOffset end)=>db.SportEnrollments.AsNoTracking().Where(e=>e.IsActive&&e.Player.IsActive&&e.Player.DateOfBirth<=day&&e.Branch.IsActive&&e.Sport.IsActive&&(e.GroupAssignedFrom!=null||e.CreatedAtUtc>DateTimeOffset.MinValue&&e.CreatedAtUtc<end)&&FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,day)==group);
-    internal static IQueryable<PrivateAssetAudience> CurrentAudience(FoundationDbContext db,Guid group,DateOnly today)=>db.PrivateAssetAudiences.Where(a=>a.IsActive&&a.SportEnrollmentId!=null&&db.TrainingGroups.Any(g=>g.Id==group&&g.IsActive)&&db.SportEnrollments.Any(e=>e.Id==a.SportEnrollmentId&&e.PlayerId==a.PlayerId&&e.IsActive&&e.Player.IsActive&&e.Branch.IsActive&&e.Sport.IsActive&&FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==group));
+    internal static IQueryable<Academy.Infrastructure.People.SportEnrollment> Roster(FoundationDbContext db,Guid group,DateOnly day,DateTimeOffset end,Guid? session=null)=>db.SportEnrollments.AsNoTracking().Where(e=>e.IsActive&&e.Player.IsActive&&e.Player.DateOfBirth<=day&&e.Branch.IsActive&&e.Sport.IsActive&&(e.GroupAssignedFrom!=null||e.CreatedAtUtc>DateTimeOffset.MinValue&&e.CreatedAtUtc<end)&&(session!=null?FoundationDbContext.IsSessionAssigned(e.AcademyId,e.Id,session.Value):FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,day)==group));
+    internal static IQueryable<PrivateAssetAudience> CurrentAudience(FoundationDbContext db,Guid group,DateOnly today)=>db.PrivateAssetAudiences.Where(a=>a.IsActive&&a.SportEnrollmentId!=null&&db.TrainingGroups.Any(g=>g.Id==group&&g.IsActive)&&db.SportEnrollments.Any(e=>e.Id==a.SportEnrollmentId&&e.PlayerId==a.PlayerId&&e.IsActive&&e.Player.IsActive&&e.Branch.IsActive&&e.Sport.IsActive&&db.PrivateAssets.Any(p=>p.Id==a.AssetId&&(p.TrainingSessionId!=null?FoundationDbContext.IsSessionAssigned(e.AcademyId,e.Id,p.TrainingSessionId.Value)&&(FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==group||FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,p.MediaEventOn!.Value)!=group&&FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,p.MediaEventOn.Value)&&db.TrainingGroups.Any(home=>home.Id==FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)&&home.IsActive)):FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==group))));
     internal static Task<bool> Assigned(FoundationDbContext db,TenantMembership t,Guid group)=>db.StaffGroupAssignments.AnyAsync(a=>a.TrainingGroupId==group&&a.AcademyMembershipId==t.MembershipId&&a.IsActive&&a.AcademyMembership.IsActive&&a.AcademyMembership.User.IsActive&&a.TrainingGroup.IsActive);
     internal static async Task<bool> Staff(TenantMembership t,FoundationDbContext db,HttpContext h,Guid group,bool write)
     {
@@ -62,12 +64,15 @@ public static class GroupMediaPrivacy
         var now=clock.GetUtcNow();var c=new GroupMediaConsent{Id=Guid.NewGuid(),AcademyId=t.AcademyId,GuardianPlayerLinkId=link.Id,PlayerId=playerId,ActorUserId=db.RequestUserId,Revision=b.Revision+1,Allowed=b.Allowed,RequestId=b.RequestId,RequestHash=hash,CreatedAtUtc=now,UpdatedAtUtc=now};db.GroupMediaConsents.Add(c);await db.SaveChangesAsync();await tx.CommitAsync();return Results.Ok(new{c.Id});
     }
     private static IResult Conflict()=>Results.Conflict(new{message="تغير اختيار المشاركة؛ أعد فتح الصفحة قبل الحفظ."});
-    private static async Task<IResult> Options(Guid groupId,DateOnly? eventOn,CurrentTenant tenant,FoundationDbContext db,HttpContext h,TimeProvider clock)
+    private static async Task<IResult> Options(Guid groupId,DateOnly? eventOn,Guid? sessionId,CurrentTenant tenant,FoundationDbContext db,HttpContext h,TimeProvider clock)
     {
         h.Response.Headers.CacheControl="private, no-store";var t=(await tenant.ResolveAsync())!;if(!await Staff(t,db,h,groupId,false)||!await db.TrainingGroups.AnyAsync(g=>g.Id==groupId&&g.IsActive))return Results.NotFound();var today=await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock);var day=eventOn??today;if(day>today)return Results.BadRequest(new{message="تاريخ الواقعة لا يكون في المستقبل."});
-        var end=await EventEnd(db,t.AcademyId,day);var roster=await Roster(db,groupId,day,end).OrderBy(e=>e.Player.ArabicName).Take(201).Select(e=>new{e.PlayerId,name=e.Player.ArabicName}).Distinct().ToArrayAsync();if(roster.Length>200)return Results.UnprocessableEntity(new{message="قائمة الوسائط تتجاوز200 لاعب؛ قسم المجموعة للمراجعة الآمنة."});
+        var sessions=await db.TrainingSessions.AsNoTracking().Where(s=>s.TrainingGroupId==groupId&&s.SessionDate==day&&s.IsActive&&s.Status!=Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled).OrderBy(s=>s.StartTime).ThenBy(s=>s.Id).Take(201).Select(s=>new{s.Id,s.StartTime,s.EndTime}).ToArrayAsync();
+        if(sessions.Length>200)return Results.UnprocessableEntity(new{message="عدد حصص اليوم يتجاوز حد المراجعة؛ راجع المجموعة."});
+        if(sessionId.HasValue&&!sessions.Any(s=>s.Id==sessionId))return Results.NotFound();
+        var end=await EventEnd(db,t.AcademyId,day);var roster=await Roster(db,groupId,day,end,sessionId).OrderBy(e=>e.Player.ArabicName).Take(201).Select(e=>new{e.PlayerId,name=e.Player.ArabicName}).Distinct().ToArrayAsync();if(roster.Length>200)return Results.UnprocessableEntity(new{message="قائمة الوسائط تتجاوز200 لاعب؛ قسم المجموعة للمراجعة الآمنة."});
         var current=Current(db);var ids=roster.Select(e=>e.PlayerId).ToArray();var safe=await db.Players.Where(p=>ids.Contains(p.Id)&&Links(db).Any(l=>l.PlayerId==p.Id)&&!Links(db).Any(l=>l.PlayerId==p.Id&&!current.Any(c=>c.GuardianPlayerLinkId==l.Id))).Select(p=>p.Id).ToArrayAsync();
-        return Results.Ok(new{eventOn=day,asOfDate=today,players=roster.Select(e=>new{id=e.PlayerId,e.name,consented=safe.Contains(e.PlayerId)}),notice="حدد كل طفل يمكن التعرف عليه. غير الموافق يمنع النشر الجماعي؛ قص أو اطمس خارجيًا ثم راجع القائمة. القائمة جمهور الواقعة، والتنزيل مشروط باستمرار العضوية والموافقة. هذا إقرار المراجع وليس كشف وجوه آليًا."});
+        return Results.Ok(new{eventOn=day,asOfDate=today,sessionId,sessions,players=roster.Select(e=>new{id=e.PlayerId,e.name,consented=safe.Contains(e.PlayerId)}),notice="حدد كل طفل يمكن التعرف عليه. اختر الحصة لإدراج ضيوفها المصرح لهم واستبعاد المنقولين منها؛ بدون حصة تُستخدم عضوية المجموعة المؤرخة فقط. غير الموافق يمنع النشر الجماعي؛ قص أو اطمس خارجيًا ثم راجع القائمة. التنزيل مشروط باستمرار التفويض والموافقة؛ ليس هذا كشف وجوه آليًا."});
     }
     // Called inside the upload transaction, before writing any bytes.
     internal static async Task<string?> Prepare(PrivateAsset a,IFormCollection form,FoundationDbContext db,TenantMembership t,HttpContext h,TimeProvider clock)
@@ -76,10 +81,15 @@ public static class GroupMediaPrivacy
         var today=await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock);
         if(!DateOnly.TryParse(form["eventOn"],out var day)||day>today)return "حدد تاريخ الواقعة حتى اليوم الفعلي.";
         a.MediaPolicyVersion=1;a.MediaEventOn=day;
+        if(!string.IsNullOrWhiteSpace(form["sessionId"]))
+        {
+            if(!Guid.TryParse(form["sessionId"],out var session)||a.PlayerId.HasValue||!await db.TrainingSessions.AnyAsync(s=>s.Id==session&&s.TrainingGroupId==a.TrainingGroupId&&s.SessionDate==day&&s.IsActive&&s.Status!=Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled))return "الحصة غير متاحة لهذه المجموعة وتاريخ الواقعة؛ أعد مراجعة الجمهور.";
+            a.TrainingSessionId=session;
+        }
         if(a.PlayerId.HasValue)return null; // The reviewer attests only this child is identifiable; never a group audience.
         var group=a.TrainingGroupId!.Value;
         if(!await Staff(t,db,h,group,true))return "لا تملك صلاحية النشر لهذه المجموعة الآن.";
-        var end=await EventEnd(db,t.AcademyId,day);var roster=await Roster(db,group,day,end).OrderBy(e=>e.Id).Take(201).Select(e=>new{e.Id,e.PlayerId}).ToArrayAsync();
+        var end=await EventEnd(db,t.AcademyId,day);var roster=await Roster(db,group,day,end,a.TrainingSessionId).OrderBy(e=>e.Id).Take(201).Select(e=>new{e.Id,e.PlayerId}).ToArrayAsync();
         if(roster.Length==0||roster.Length>200)return "لا يوجد جمهور مؤرخ صالح، أو تجاوزت القائمة200 تسجيل؛ راجع المجموعة.";
         var members=roster.DistinctBy(e=>e.PlayerId).ToArray();
         var parts=form["subjectPlayerIds"].ToString().Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
