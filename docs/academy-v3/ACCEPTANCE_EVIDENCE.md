@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## V2-10A — هدف فني محفوظ ومقروء للأسرة، 2026-10-18
+
+`0c9e908`/migration115/D3-058: مسودة/نشر/مراجعات/تحقق أو سحب على التسجيل الرياضي نفسه، نص منشور وتاريخ ثابتان بلا ترقية أو مال أو إشعار ضمني. Owner/Admin في النطاق، Coach المجموعة الحالية، Guardian المنشور فقط. API4/4 في29s، Web19، Flutter أول31 ثم آخر17 مع analyze، EF بلاpending؛ Browser1/16.6s وiOS1/7s، نفس profile/report وخصوصية المسودات ومصفوفة Add/Edit وسحب النطاق. [Web](evidence/v2-10a/owner-goal-web-390.png)، [Coach](evidence/v2-10a/coach-goal-ios.png)، [Guardian](evidence/v2-10a/guardian-goal-ios.png)، [المحاولات والأوامر والقيود](PROGRESS.md). ليست مهارات/منهج/ترقية/خطة كاملة أوH/CI شامل؛ V2-10 جزئي والمالي المتبقي آخرًا.
+
 ## F1b5 — الملاحظة الأصلية والرد الخاص للأسرة، 2026-10-18
 
 `dbff455`، migration114/D3-057: ملاحظات تجاوزت موعدًا صريحًا من المالك، عدد الملاحظات وحسابات مقدميها منفصلان، دليل ثابت ومصدر حي. المالك يفتح المصدر Web/Native ويرد؛ Admin ملخص فقط ومصدره403، وClose لا يحل الشكوى. API4/seed1/Web17 ثم المتأثر3/Flutter23 ثم المستهلك2، أدوات ناجحة وEF بلاpending؛ Browser3 في44.8s ثم رحلة المصدر1 في26.1s، iOS رحلة1 في15s، report/history/evidence مطابقة وGuardian يرى الردين. [Web390](evidence/f1b5/owner-family-feedback-web-390.png)، [iOS](evidence/f1b5/owner-family-feedback-ios.png)، [الأوامر والمحاولات والحدود](PROGRESS.md). V2-12/AC40 جزئيان؛ ليست دورة تحقيق/SLA كاملة أوH/CI شامل. التاليV2-10 غير المالي، وكل المالي المتبقي آخرًا.
