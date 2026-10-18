@@ -382,6 +382,7 @@ app.MapSkillCurriculumEndpoints();
 app.MapSessionLessonEndpoints();
 app.MapPlayerTechnicalReviews();
 app.MapPlayerCertificates();
+app.MapPlayerBadges();
 app.MapTechnicalPromotions();
 app.MapSlice6Endpoints();
 app.MapSlice7Endpoints();

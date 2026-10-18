@@ -16,6 +16,7 @@ import 'coach_feedback.dart';
 import '../shared/matches.dart';
 import '../shared/player_skills.dart';
 import '../shared/player_certificates.dart';
+import '../shared/player_badges.dart';
 import '../shared/player_goals.dart';
 
 class ChildProfile extends StatelessWidget {
@@ -138,6 +139,14 @@ class ChildProfile extends StatelessWidget {
             () => openPage(
               context,
               PlayerCertificatesPage(auth: auth, playerId: playerId),
+            ),
+          ),
+          GLink(
+            'شارات المجهود والتحسن',
+            Icons.auto_awesome,
+            () => openPage(
+              context,
+              PlayerBadgesPage(auth: auth, playerId: playerId),
             ),
           ),
           GLink(

@@ -6,6 +6,7 @@ import '../../core/theme/ui_text.dart';
 import '../coach/coach_attendance.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/role_navigation.dart';
+import '../shared/player_badges.dart';
 import '../shared/player_goals.dart';
 import '../shared/player_skills.dart';
 import 'owner_feedback.dart';
@@ -529,6 +530,15 @@ class OwnerGroupOperations extends StatelessWidget {
                 () => openPage(
                   context,
                   PlayerGoalsPage(auth: auth, enrollmentId: p['id'] as String),
+                ),
+              ),
+            if (p['id'] is String)
+              GLink(
+                'شارات المجهود والتحسن',
+                Icons.auto_awesome,
+                () => openPage(
+                  context,
+                  PlayerBadgesPage(auth: auth, enrollmentId: p['id'] as String),
                 ),
               ),
           ],

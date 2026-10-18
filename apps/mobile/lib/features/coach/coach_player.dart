@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../shared/help_center.dart';
+import '../shared/player_badges.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
@@ -155,6 +156,18 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
                   () => openPage(
                     context,
                     PlayerGoalsPage(
+                      auth: widget.auth,
+                      enrollmentId: widget.enrollmentId,
+                    ),
+                  ),
+                ),
+              if (widget.sessionId == null)
+                GLink(
+                  'شارات المجهود والتحسن',
+                  Icons.auto_awesome,
+                  () => openPage(
+                    context,
+                    PlayerBadgesPage(
                       auth: widget.auth,
                       enrollmentId: widget.enrollmentId,
                     ),
