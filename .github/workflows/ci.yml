@@ -46,6 +46,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
+      - name: Install private media inspection tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet restore AcademyManagementPlatform.slnx
       - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release
@@ -94,6 +96,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Install private media inspection tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet restore AcademyManagementPlatform.slnx
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api

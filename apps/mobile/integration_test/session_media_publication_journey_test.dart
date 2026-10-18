@@ -261,7 +261,14 @@ void main() {
         expect(fresh['id'], isNot(asset['id']));
         await t.pumpWidget(shell(GalleryPage(auth: family, playerId: child)));
         await wait(find.text('$caption — نسخة جديدة'));
-        await t.ensureVisible(find.text('$caption — نسخة جديدة'));
+        await t.ensureVisible(
+          find
+              .ancestor(
+                of: find.text('$caption — نسخة جديدة'),
+                matching: find.byType(GCard),
+              )
+              .first,
+        );
         await t.pumpAndSettle();
         expect((await family.asset(textOf(fresh['url']))).isNotEmpty, true);
         if (const bool.fromEnvironment('CAPTURE_VISUALS')) {

@@ -6,6 +6,53 @@ import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final status in [400, 503]) {
+    test(
+      'Content inspection failure $status never becomes a successful upload',
+      () async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        var requests = 0;
+        final listener = server.listen((r) async {
+          requests++;
+          await r.drain<void>();
+          r.response.statusCode = status;
+          r.response.write(
+            '<html>private-path synthetic stack trace secret</html>',
+          );
+          await r.response.close();
+        });
+        final api = HttpApiTransport(
+          AppConfig('Demo', 'http://127.0.0.1:${server.port}'),
+        );
+        try {
+          await expectLater(
+            api.upload(Uint8List(20), 'image/png', {
+              'purpose': 'Media',
+            }, 'synthetic-test-token'),
+            throwsA(
+              isA<ApiFailure>()
+                  .having((e) => e.status, 'status', status)
+                  .having(
+                    (e) => e.message,
+                    'actionable Arabic',
+                    contains(status == 503 ? 'لم يُنشر' : 'لم يُحفظ'),
+                  )
+                  .having(
+                    (e) => e.message,
+                    'no technical leak',
+                    isNot(contains('private-path')),
+                  ),
+            ),
+          );
+          expect(requests, 1); // Never automatic multipart replay.
+        } finally {
+          api.close();
+          await listener.cancel();
+          await server.close(force: true);
+        }
+      },
+    );
+  }
   test('Actual multipart transport sends dated media privacy fields but does not expand unrelated upload purposes', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
         requests = <String>[];

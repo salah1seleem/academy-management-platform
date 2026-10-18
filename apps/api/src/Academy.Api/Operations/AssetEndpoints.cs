@@ -55,11 +55,48 @@ public static class AssetEndpoints
             if (playerId.HasValue && !await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId)) return Results.NotFound();
             if (groupId.HasValue && !await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId && x.IsActive)) return Results.NotFound();
         }
-        await using var transaction=purpose=="Media"?await db.Database.BeginTransactionAsync():null;
-        if(purpose=="Media")
+        await using var source = file.OpenReadStream();
+        var header = new byte[12]; await source.ReadExactlyAsync(header, context.RequestAborted);
+        var detected = DetectType(header);
+        if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto" or "Campaign") && !detected.StartsWith("image/")))
+            return Results.BadRequest(new { message = "الأنواع المدعومة: JPEG وPNG وWebP، وMP4 وMOV." });
+        if (detected.StartsWith("image/") && file.Length > 8 * 1024 * 1024) return Results.BadRequest(new { message = "الصورة لا تتجاوز 8 ميجابايت." });
+        ProcessedMedia? processed = null;
+        try
+        {
+            // Expensive decoding precedes locks. Live authority/audience are checked again below
+            // before publishing; a permission or consent revoked during processing still wins.
+            if (purpose is "Media" or "Photo")
+            {
+                await using var original = file.OpenReadStream();
+                processed = await context.RequestServices.GetRequiredService<PrivateMediaProcessor>().Prepare(original, detected, Root(config, env), context.RequestAborted);
+            }
+        }
+        catch (MediaProcessingException error) { return Results.Json(new { message = error.Message }, statusCode: error.Status); }
+        using var prepared = processed;
+        await using var transaction=purpose is "Media" or "Photo"?await db.Database.BeginTransactionAsync():null;
+        if(purpose is "Media" or "Photo")
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
-            if(!await db.AcademyMemberships.AsNoTracking().AnyAsync(m=>m.Id==t.MembershipId&&m.UserId==actor&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive&&(!m.PrimaryMembershipId.HasValue||db.AcademyMemberships.Any(p=>p.Id==m.PrimaryMembershipId&&p.IsActive))))return Results.Forbid();
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"AcademyMemberships\" WHERE \"Id\"={t.MembershipId} AND \"AcademyId\"={t.AcademyId} FOR SHARE");
+            var live=await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(m=>m.Id==t.MembershipId&&m.UserId==actor&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive&&(!m.PrimaryMembershipId.HasValue||db.AcademyMemberships.Any(p=>p.Id==m.PrimaryMembershipId&&p.IsActive&&p.User.IsActive)));
+            if(live==null||live.Role!=t.Role)return Results.Forbid();
+            if(t.Role==AcademyRole.AcademyAdmin&&!live.AllBranches)
+            {
+                var branches=await db.MembershipBranchAccesses.Where(a=>a.MembershipId==t.MembershipId&&a.IsActive&&db.Branches.Any(b=>b.Id==a.BranchId&&b.IsActive)).Select(a=>a.BranchId).ToArrayAsync();
+                if(!db.BranchScopeRestricted||db.RequestBranchIds.Any(b=>!branches.Contains(b)))return Results.Forbid();
+            }
+            if(!live.AllSports)
+            {
+                var sports=await db.MembershipSportAccesses.Where(a=>a.MembershipId==t.MembershipId&&a.IsActive).Select(a=>a.SportId).ToArrayAsync();
+                if(!db.SportScopeRestricted||db.RequestSportIds.Any(s=>!sports.Contains(s)))return Results.Forbid();
+            }
+            if(playerId.HasValue&&!await db.Players.AnyAsync(p=>p.Id==playerId))return Results.NotFound();
+            if(groupId.HasValue&&!await db.TrainingGroups.AnyAsync(g=>g.Id==groupId&&g.IsActive))return Results.NotFound();
+        }
+        if(purpose=="Photo"&&!(await authorization.AuthorizeAsync(context.User,context,AcademyPermissions.PeopleManage)).Succeeded)return Results.Forbid();
+        if(purpose=="Media")
+        {
             if(groupId.HasValue)
             {
                 foreach(var key in new[]{"config:"+t.AcademyId,$"timetable:{t.AcademyId}:{groupId.Value}",$"group-capacity:{t.AcademyId}:{groupId.Value}"})await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key},0))");
@@ -68,22 +105,20 @@ public static class AssetEndpoints
             else if(t.Role is not(AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)||!(await authorization.AuthorizeAsync(context.User,context,AcademyPermissions.PlayerMediaManage)).Succeeded)return Results.Forbid();
             await GroupMediaPrivacy.Lock(db,t.AcademyId);
         }
-        await using var source = file.OpenReadStream();
-        var header = new byte[12]; await source.ReadExactlyAsync(header);
-        var detected = DetectType(header);
-        if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto" or "Campaign") && !detected.StartsWith("image/")))
-            return Results.BadRequest(new { message = "الأنواع المدعومة: JPEG وPNG وWebP، وMP4 وMOV." });
-        if (detected.StartsWith("image/") && file.Length > 8 * 1024 * 1024) return Results.BadRequest(new { message = "الصورة لا تتجاوز 8 ميجابايت." });
         var now = purpose=="Media"?time.GetUtcNow():clock.UtcNow;
-        var asset = new PrivateAsset { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UploadedByUserId = actor, ContentType = detected, StorageName = Guid.NewGuid().ToString("N"), Length = file.Length, Purpose = purpose, PlayerId = playerId, TrainingGroupId = groupId, Caption = form["caption"].ToString().Trim(), CreatedAtUtc = now, UpdatedAtUtc = now };
+        var asset = new PrivateAsset { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UploadedByUserId = actor, ContentType = prepared?.ContentType ?? detected, StorageName = Guid.NewGuid().ToString("N"), Length = prepared?.Length ?? file.Length, Purpose = purpose, PlayerId = playerId, TrainingGroupId = groupId, Caption = form["caption"].ToString().Trim(), CreatedAtUtc = now, UpdatedAtUtc = now };
         if(purpose=="Media")
         {
             var problem=await GroupMediaPrivacy.Prepare(asset,form,db,t,context,time);
             if(problem!=null)return Results.UnprocessableEntity(new{message=problem});
         }
         var root = Root(config, env); Directory.CreateDirectory(root); var path = Path.Combine(root, asset.StorageName);
-        await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        { await output.WriteAsync(header); await source.CopyToAsync(output); }
+        if (prepared != null) File.Move(prepared.Path, path);
+        else
+        {
+            await using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            await output.WriteAsync(header, context.RequestAborted); await source.CopyToAsync(output, context.RequestAborted);
+        }
         db.PrivateAssets.Add(asset);
         if (purpose == "Photo")
         {

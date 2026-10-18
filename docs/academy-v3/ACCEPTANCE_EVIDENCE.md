@@ -1,5 +1,11 @@
 # أدلة قبول V2 + V3
 
+## V2-15A3b — حفظ pixels/samples معاد ترميزها دون geotags، 2026-10-18
+
+D3-070/schema125، دونmigration: Media/Photo الجديدان فقط، حدود وفشل503بلاrawfallback، نفسالموافقات والجمهور والسحب والروابط. Unit9/4s وAPI7/1m31s وWeb18/5.52s وFlutter22/3s، EF/build/typecheck/lint/analyzeنظيفة. Browser2/2/1.7m في360/390، منهاMOVيرفعبـUI وMP4يشغلفيFamilyWeb فعليًا ويتقدمالوقت؛ [الفيديوالأحمرالاصطناعيووصفهفوقnav](evidence/v2-15a3b/guardian-reencoded-video-web-390.png) راجعتهبعدإصلاحCSS. iOS **رحلةواحدة23s+teardown** عبرOTP/Family/OwnerUI للسحبوالصورةالمعادترميزهاونشرنسخةجديدةوتقريرمطابق؛ [الكارتالأولهوالهدف28f9c](evidence/v2-15a3b/guardian-processed-image-ios.png)، الأبيضpixelاصطناعيصحيح، والفيديوأسفلهBrowser2d8bd7ولميسجلتشغيلNative. رفعiOSبـAPI لاFilePickerUI؛ لاAndroid/جهازمادي/AppRoot/Hمدعى. [تفاصيلالمحاولاتوالإخفاقاتالمصححةوالعقدوالبيئة](PROGRESS.md).
+
+فحصCIc921السابقأثبتfrontend/flutter/E2Eناجحة، backendجارٍ؛ لاCIكاملللدفعة. **لاantivirus أوتنظيفرجعيأواحتفاظ/حذف/حصصتخزينوتنزيلأوGCبعدانهيارمدعاة**؛ هذه15A3cباقيةثمبقيةغيرالماليوالماليأخيرًاوبوابةH. الخطةغيرمكتملة، ولانشرProductionأوتعديلmain/الديمواليدوي.
+
 ## V2-15A3a — رابط محدود لا يستبدل التفويض، 2026-10-18
 
 `e8e45d7`/D3-069 دون migration، نفس schema125. Unit6/123ms لعمر120s والتلاعب والهوية والسياق والجلسة؛ API10 مميزة نجحت عبر9/10 ثم المتأثر2/2 وsession1/1 متداخل، لا جولة10/10 واحدة مدعاة. Flutter20/11s، Browser1/50s، iOS1/17s بنقل302/bytes وسحب ونسخة جديدة وتقرير مطابق. ليست رحلة FilePicker/MP4 أوAndroid أوجهاز مادي أوAppRoot.

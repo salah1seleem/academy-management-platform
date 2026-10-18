@@ -99,7 +99,9 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode(body));
       }
-      final response = await request.close().timeout(const Duration(seconds: 20));
+      final response = await request.close().timeout(
+        const Duration(seconds: 20),
+      );
       final raw = await utf8.decoder
           .bind(response)
           .join()
@@ -148,9 +150,7 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
           .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      var response = await request.close().timeout(
-        const Duration(seconds: 20),
-      );
+      var response = await request.close().timeout(const Duration(seconds: 20));
       if (response.statusCode == 302 &&
           RegExp(r'^/api/v1/assets/[a-fA-F0-9-]{36}$').hasMatch(path)) {
         final location = response.headers.value(HttpHeaders.locationHeader);
@@ -266,6 +266,11 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
           response.statusCode,
           response.statusCode == 422 && fields['purpose'] == 'Media'
               ? 'لم ينشر الملف. راجع موافقات الأطفال الظاهرين، تاريخ الواقعة وإقرار المراجعة.'
+              : response.statusCode == 503
+              ? 'فحص الملفات غير متاح أو مشغول؛ لم يُنشر الملف. حاول لاحقًا أو تواصل مع الإدارة.'
+              : response.statusCode == 400 &&
+                    {'Media', 'Photo'}.contains(fields['purpose'])
+              ? 'لم يُحفظ الملف. راجع سلامته وحدوده: صورة 8 ميجابايت و20 مليون بكسل؛ فيديو 50 ميجابايت ودقيقتان و1080p.'
               : 'تعذر رفع الملف. راجع النوع والحجم والصلاحية.',
         );
       }

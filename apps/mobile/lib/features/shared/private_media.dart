@@ -411,6 +411,13 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                   ),
                 ),
               ),
+              Text(
+                localized(
+                  context,
+                  'صورة ثابتة حتى 8 ميجابايت و20 مليون بكسل؛ فيديو حتى 50 ميجابايت ودقيقتين و1080p و60 إطارًا/ثانية. نحفظ نسخة معاد ترميزها دون بيانات موقع الكاميرا. راجع محتواها قبل النشر؛ قد يستغرق الفحص قليلًا.',
+                  'Still image up to 8 MB / 20 MP; video up to 50 MB / 2 minutes / 1080p / 60 fps. A re-encoded copy is stored without camera location metadata. Review its content before publishing; inspection may take a moment.',
+                ),
+              ),
               CheckboxListTile(
                 value: confirmed,
                 onChanged: busy

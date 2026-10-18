@@ -74,7 +74,7 @@ public static class GroupMediaPrivacy
         var current=Current(db);var ids=roster.Select(e=>e.PlayerId).ToArray();var safe=await db.Players.Where(p=>ids.Contains(p.Id)&&Links(db).Any(l=>l.PlayerId==p.Id)&&!Links(db).Any(l=>l.PlayerId==p.Id&&!current.Any(c=>c.GuardianPlayerLinkId==l.Id))).Select(p=>p.Id).ToArrayAsync();
         return Results.Ok(new{eventOn=day,asOfDate=today,sessionId,sessions,players=roster.Select(e=>new{id=e.PlayerId,e.name,consented=safe.Contains(e.PlayerId)}),notice="حدد كل طفل يمكن التعرف عليه. اختر الحصة لإدراج ضيوفها المصرح لهم واستبعاد المنقولين منها؛ بدون حصة تُستخدم عضوية المجموعة المؤرخة فقط. غير الموافق يمنع النشر الجماعي؛ قص أو اطمس خارجيًا ثم راجع القائمة. التنزيل مشروط باستمرار التفويض والموافقة؛ ليس هذا كشف وجوه آليًا."});
     }
-    // Called inside the upload transaction, before writing any bytes.
+    // Called inside the publication transaction, before moving processed bytes into the gallery.
     internal static async Task<string?> Prepare(PrivateAsset a,IFormCollection form,FoundationDbContext db,TenantMembership t,HttpContext h,TimeProvider clock)
     {
         if(form["privacyConfirmed"]!="true")return "أكد مراجعة خصوصية الصورة أو الفيديو قبل النشر.";
