@@ -87,6 +87,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         ConfigurePlayerLevelReviews(builder);
         ConfigurePlayerCertificates(builder);
         ConfigurePlayerBadges(builder);
+        ConfigureGroupMediaPrivacy(builder);
         ConfigureSessionLessons(builder);
         ConfigurePlayerTechnicalReviews(builder);
 

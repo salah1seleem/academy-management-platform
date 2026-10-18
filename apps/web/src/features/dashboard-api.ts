@@ -22,7 +22,7 @@ export async function csrfRequest(path: string, method: "PUT" | "POST", body: un
   return response;
 }
 
-export async function uploadAsset(file: File, purpose: "Photo" | "Media" | "Proof" | "News" | "StaffPhoto" | "Campaign", target: { playerId?: string; groupId?: string; caption?: string } = {}) {
+export async function uploadAsset(file: File, purpose: "Photo" | "Media" | "Proof" | "News" | "StaffPhoto" | "Campaign", target: { playerId?: string; groupId?: string; caption?: string; eventOn?:string; privacyConfirmed?:string; subjectPlayerIds?:string; noRecognizableChildren?:string } = {}) {
   const csrf = await fetch("/api/v1/auth/csrf");
   if (!csrf.ok) throw new Error("تعذر بدء الطلب الآمن.");
   const { token } = await csrf.json() as { token: string };

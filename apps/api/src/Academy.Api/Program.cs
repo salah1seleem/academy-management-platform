@@ -390,6 +390,7 @@ app.MapSlice8ReportingEndpoints();
 app.MapSubscriptionAdjustmentEndpoints();
 app.MapSubscriptionDiscountEndpoints();
 app.MapAssetEndpoints();
+app.MapGroupMediaPrivacy();
 app.MapDiscountRuleEndpoints();
 app.MapGroupOperations();
 app.MapUnassignedEnrollments();

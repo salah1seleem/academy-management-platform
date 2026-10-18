@@ -145,7 +145,9 @@ public sealed partial class FoundationDbContext
         BranchFilter<CollectionRefund>(b, x => Collections.Any(c => c.Id == x.CollectionId));
         BranchFilter<PaymentProof>(b, x => PaymentRequests.Any(p => p.Id == x.PaymentRequestId));
         BranchFilter<PrivateAssetAudience>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
-        BranchFilter<PrivateAsset>(b, x => x.Purpose == "News" || x.UploadedByUserId == RequestUserId
+        BranchFilter<GroupMediaConsent>(b,x=>GuardianPlayerLinks.Any(l=>l.Id==x.GuardianPlayerLinkId));
+        BranchFilter<PrivateMediaConsentBasis>(b,x=>PrivateAssetAudiences.Any(a=>a.AssetId==x.AssetId&&a.PlayerId==x.PlayerId));
+        BranchFilter<PrivateAsset>(b, x => x.Purpose == "News" || x.UploadedByUserId == RequestUserId&&x.Purpose!="Media"
             || x.Purpose=="Campaign" && CommunityCampaignRevisions.Any(r=>r.ImageAssetId==x.Id&&CommunityCampaignTargets.Any(t=>t.RevisionId==r.Id&&RequestBranchIds.Contains(t.BranchId)))
             || x.PlayerId.HasValue && SportEnrollments.Any(e => e.PlayerId == x.PlayerId.Value)
             || x.TrainingGroupId.HasValue && TrainingGroups.Any(g => g.Id == x.TrainingGroupId.Value)
@@ -213,6 +215,10 @@ public sealed partial class FoundationDbContext
         if(ChangeTracker.Entries().Any(e=>e.Entity is IBadgeRecord&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("قاعدة الشارة ومنحها وسحبها محفوظة؛ لا تكتب فوق التاريخ.");
         if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerAchievementCertificate or PlayerCertificateWithdrawal && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("الشهادة وسجل سحبها محفوظان؛ لا تكتب فوق المصدر.");
         GuardSessionLessons();
+        if(ChangeTracker.Entries().Any(e=>e.Entity is GroupMediaConsent or PrivateMediaConsentBasis && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("موافقة مشاركة الطفل ودليل النشر محفوظان؛ سجل قرارًا جديدًا بدل تعديل التاريخ.");
+        if(ChangeTracker.Entries<PrivateAssetAudience>().Any(e=>e.OriginalValues.GetValue<Guid?>(nameof(PrivateAssetAudience.SportEnrollmentId))!=null&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("جمهور واقعة الوسائط محفوظ؛ لا تستبدله بأعضاء المجموعة الجدد.");
+        foreach(var e in ChangeTracker.Entries<PrivateAsset>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.OriginalValues.GetValue<int>(nameof(PrivateAsset.MediaPolicyVersion))==1&&(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(PrivateAsset.IsActive) or nameof(PrivateAsset.UpdatedAtUtc)))))throw new InvalidOperationException("مصدر النشر وجمهوره ثابتان؛ ارفع نسخة مراجعة جديدة بدل الكتابة فوق الأصل.");
         if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerTechnicalReviewRequest or PlayerTechnicalReviewDecision && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("المراجعة الفنية محفوظة؛ لا تكتب فوق الطلب أو القرار السابق.");
         await GuardSkillHistory(token);
         if (ChangeTracker.Entries<PlayerLevelReview>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("مراجعات المستويات محفوظة؛ التصحيح بمراجعة جديدة.");

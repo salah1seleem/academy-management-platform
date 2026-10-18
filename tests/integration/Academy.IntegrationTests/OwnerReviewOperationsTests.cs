@@ -28,15 +28,22 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     private async Task CleanupOwnedFixtures()
     {
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var players = await db.Players.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName.StartsWith("لاعب اختبار التسجيل ")).Select(x => x.Id).ToArrayAsync();
-        var enrollments = await db.SportEnrollments.Where(x => players.Contains(x.PlayerId)).Select(x => x.Id).ToArrayAsync();
+        // Preserve published source identities, but retire this class's owned fixtures
+        // and clean its unposted legacy financial records so later seed totals stay stable.
+        var allPlayers=await db.Players.Where(x=>x.AcademyId==DemoSeed.NogoomAcademyId&&x.ArabicName.StartsWith("لاعب اختبار التسجيل ")).Select(x=>x.Id).ToArrayAsync();
+        var retainedEnrollments=await db.PrivateAssetAudiences.Where(a=>allPlayers.Contains(a.PlayerId)&&a.SportEnrollmentId!=null).Select(a=>a.SportEnrollmentId!.Value).Distinct().ToArrayAsync();
+        var retainedPlayers=await db.SportEnrollments.Where(e=>retainedEnrollments.Contains(e.Id)).Select(e=>e.PlayerId).ToArrayAsync();
+        var players=allPlayers.Except(retainedPlayers).ToArray();
+        var enrollments = await db.SportEnrollments.Where(x => allPlayers.Contains(x.PlayerId)).Select(x => x.Id).ToArrayAsync();
+        await db.SportEnrollments.Where(e=>retainedEnrollments.Contains(e.Id)).ExecuteUpdateAsync(s=>s.SetProperty(e=>e.IsActive,false));
+        await db.Players.Where(p=>retainedPlayers.Contains(p.Id)).ExecuteUpdateAsync(s=>s.SetProperty(p=>p.IsActive,false));
         var payments = await db.PaymentRequests.Where(x => enrollments.Contains(x.RenewalRequest.SportEnrollmentId)).Select(x => x.Id).ToArrayAsync();
         var collections = await db.Collections.Where(x => enrollments.Contains(x.SportEnrollmentId)).Select(x => x.Id).ToArrayAsync();
         var products = await db.SportCatalogItems.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName.StartsWith("منتج اختبار عمليات ")).Select(x => x.Id).ToArrayAsync();
         await db.ProductSales.Where(x => products.Contains(x.ProductId)).ExecuteDeleteAsync();
         await db.NewEnrollmentRequests.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.NewChildArabicName != null && x.NewChildArabicName.StartsWith("لاعب اختبار التسجيل ")).ExecuteDeleteAsync();
         await db.SportCatalogItems.Where(x => products.Contains(x.Id)).ExecuteDeleteAsync();
-        var assets = await db.PrivateAssets.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && (players.Contains(x.PlayerId ?? Guid.Empty) || x.Caption!.StartsWith("اختبار عمليات "))).Select(x => x.Id).ToArrayAsync();
+        var assets = await db.PrivateAssets.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.MediaPolicyVersion==0&&(players.Contains(x.PlayerId ?? Guid.Empty) || x.Caption!.StartsWith("اختبار عمليات "))).Select(x => x.Id).ToArrayAsync();
         await db.AcademyNews.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Title.StartsWith("خبر اختبار عمليات ")).ExecuteDeleteAsync();
         await db.PrivateAssetAudiences.Where(x => assets.Contains(x.AssetId) || players.Contains(x.PlayerId)).ExecuteDeleteAsync();
         await db.Players.Where(x => players.Contains(x.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.PhotoReference, (string?)null));
@@ -65,11 +72,11 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
         await db.PaymentRequests.Where(x => payments.Contains(x.Id)).ExecuteDeleteAsync();
         await db.RenewalRequests.Where(x => enrollments.Contains(x.SportEnrollmentId)).ExecuteDeleteAsync();
         await db.PlayerDiscountLinks.Where(x => players.Contains(x.PlayerId)).ExecuteDeleteAsync();
-        await db.SportEnrollments.Where(x => enrollments.Contains(x.Id)).ExecuteDeleteAsync();
+        await db.SportEnrollments.Where(x => enrollments.Contains(x.Id)&&!retainedEnrollments.Contains(x.Id)).ExecuteDeleteAsync();
         await db.GuardianPlayerLinks.Where(x => players.Contains(x.PlayerId)).ExecuteDeleteAsync();
         await db.Players.Where(x => players.Contains(x.Id)).ExecuteDeleteAsync();
         // Immutable timetable revisions retain their original group/session history across reruns.
-        var historicalGroups = db.TrainingScheduleRevisions.Select(x => x.TrainingGroupId);
+        var historicalGroups = db.TrainingScheduleRevisions.Select(x => x.TrainingGroupId).Union(db.PrivateAssets.Where(a=>a.MediaPolicyVersion==1&&a.TrainingGroupId!=null).Select(a=>a.TrainingGroupId!.Value));
         await db.TrainingGroups.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.ArabicName.StartsWith("جدول اختبار مستقل ") && historicalGroups.Contains(x.Id)).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
         var groups = await db.TrainingGroups.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && (x.ArabicName.StartsWith("جدول اختبار مستقل ") || x.ArabicName.StartsWith("مجموعة نقل اختبار ")) && !historicalGroups.Contains(x.Id)).Select(x => x.Id).ToArrayAsync();
         await db.TrainingSessions.Where(x => groups.Contains(x.TrainingGroupId)).ExecuteDeleteAsync();
@@ -122,6 +129,7 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     {
         using var form = new MultipartFormDataContent(); var file = new ByteArrayContent(valid ? new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0 } : new byte[12]); file.Headers.ContentType = new("image/png"); form.Add(file, "file", "demo.png"); form.Add(new StringContent(purpose), "purpose"); form.Add(new StringContent("اختبار عمليات " + Guid.NewGuid()), "caption");
         if (player.HasValue) form.Add(new StringContent(player.Value.ToString()), "playerId"); if (group.HasValue) form.Add(new StringContent(group.Value.ToString()), "groupId");
+        if(purpose=="Media") { var audience=await c.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={group}");form.Add(new StringContent(audience.GetProperty("eventOn").GetString()!),"eventOn");form.Add(new StringContent("true"),"privacyConfirmed");form.Add(new StringContent("true"),"noRecognizableChildren"); } // Synthetic header fixture contains no identifiable child.
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = form }; request.Headers.Add("X-CSRF-TOKEN", (await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString());
         var r = await c.SendAsync(request); if (!valid) { Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode); return Guid.Empty; }
         Assert.Equal(HttpStatusCode.Created, r.StatusCode); return (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();

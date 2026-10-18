@@ -178,6 +178,18 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
     Map<String, String> fields,
     String token,
   ) async {
+    final uploadFields = {
+      'purpose',
+      'playerId',
+      'groupId',
+      'caption',
+      if (fields['purpose'] == 'Media') ...{
+        'eventOn',
+        'subjectPlayerIds',
+        'noRecognizableChildren',
+        'privacyConfirmed',
+      },
+    };
     if (bytes.length > 50 * 1024 * 1024 ||
         !{
           'image/jpeg',
@@ -186,9 +198,7 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
           'video/mp4',
           'video/quicktime',
         }.contains(contentType) ||
-        fields.keys.any(
-          (k) => !{'purpose', 'playerId', 'groupId', 'caption'}.contains(k),
-        )) {
+        fields.keys.any((k) => !uploadFields.contains(k))) {
       throw const ApiFailure(400, 'ملف غير مدعوم أو أكبر من المسموح.');
     }
     final boundary = 'academy-${DateTime.now().microsecondsSinceEpoch}';
@@ -226,7 +236,9 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
       if (response.statusCode != 201) {
         throw ApiFailure(
           response.statusCode,
-          'تعذر رفع الملف. راجع النوع والحجم والصلاحية.',
+          response.statusCode == 422 && fields['purpose'] == 'Media'
+              ? 'لم ينشر الملف. راجع موافقات الأطفال الظاهرين، تاريخ الواقعة وإقرار المراجعة.'
+              : 'تعذر رفع الملف. راجع النوع والحجم والصلاحية.',
         );
       }
       return jsonDecode(raw);

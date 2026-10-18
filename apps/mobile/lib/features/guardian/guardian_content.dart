@@ -5,6 +5,7 @@ import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
 import 'daily_nutrition.dart';
 import '../shared/private_media.dart';
+import '../shared/group_media_consent.dart';
 
 class NutritionLibrary extends StatefulWidget {
   final AuthController auth;
@@ -187,44 +188,97 @@ class MedicalPage extends StatelessWidget {
   );
 }
 
-class GalleryPage extends StatelessWidget {
+class GalleryPage extends StatefulWidget {
   final AuthController auth;
   final String playerId;
   const GalleryPage({super.key, required this.auth, required this.playerId});
   @override
-  Widget build(BuildContext context) => GuardianPage(
-    title: 'الصور والفيديوهات',
-    child: RemoteBody(
-      auth: auth,
-      path: '/api/v1/guardian/children/$playerId/media',
-      builder: (context, value) => gList([
-        RemoteBody(
-          auth: auth,
-          path: '/api/v1/assets/gallery?playerId=$playerId',
-          builder: (context, v) => Column(
-            children: [
-              for (final m in rows(v)) MediaTile(auth: auth, media: m),
-            ],
+  State<GalleryPage> createState() => _GalleryState();
+}
+
+class _GalleryState extends State<GalleryPage> with WidgetsBindingObserver {
+  int revision = 0;
+  bool foreground = true;
+  String? get identity => auth.session?.selected == null
+      ? null
+      : '${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}';
+  late final original = identity;
+  AuthController get auth => widget.auth;
+  String get playerId => widget.playerId;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    setState(() {
+      foreground = s == AppLifecycleState.resumed;
+      revision++;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: auth,
+    builder: (context, _) {
+      if (!foreground || identity == null || identity != original) {
+        return const SizedBox.shrink();
+      }
+      return GuardianPage(
+        title: 'الصور والفيديوهات',
+        child: gList([
+          GroupMediaConsentCard(
+            auth: auth,
+            playerId: playerId,
+            onSaved: () => setState(() => revision++),
           ),
-        ),
-        if (rows(value).isEmpty) const SizedBox.shrink(),
-        for (final d in rows(value))
-          GCard(
-            child: Column(
+          RemoteBody(
+            key: ValueKey('legacy:$revision'),
+            auth: auth,
+            path: '/api/v1/guardian/children/$playerId/media',
+            builder: (context, value) => Column(
               children: [
-                DemoImage(
-                  d['thumbnailReference'] ?? d['mediaReference'],
-                  height: 210,
+                RemoteBody(
+                  key: ValueKey('private:$revision'),
+                  auth: auth,
+                  path: '/api/v1/assets/gallery?playerId=$playerId',
+                  builder: (context, v) => Column(
+                    children: [
+                      for (final m in rows(v)) MediaTile(auth: auth, media: m),
+                    ],
+                  ),
                 ),
-                if (d['arabicCaption'] != null) UiText(d['arabicCaption']),
-                if (d['type'] == 'Video')
-                  const UiText(
-                    'صورة مصغرة للفيديو · تشغيل وسائط الإنتاج غير متاح في الديمو',
+                if (rows(value).isEmpty) const SizedBox.shrink(),
+                for (final d in rows(value))
+                  GCard(
+                    child: Column(
+                      children: [
+                        DemoImage(
+                          d['thumbnailReference'] ?? d['mediaReference'],
+                          height: 210,
+                        ),
+                        if (d['arabicCaption'] != null)
+                          UiText(d['arabicCaption']),
+                        if (d['type'] == 'Video')
+                          const UiText(
+                            'صورة مصغرة للفيديو · تشغيل وسائط الإنتاج غير متاح في الديمو',
+                          ),
+                      ],
+                    ),
                   ),
               ],
             ),
           ),
-      ]),
-    ),
+        ]),
+      );
+    },
   );
 }

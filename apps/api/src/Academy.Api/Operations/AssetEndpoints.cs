@@ -37,6 +37,7 @@ public static class AssetEndpoints
         if (file is null || file.Length < 12 || file.Length > 50 * 1024 * 1024 || form.Files.Count != 1 || form["caption"].ToString().Length > 300)
             return Results.BadRequest(new { message = "ارفع ملفًا واحدًا لا يتجاوز 50 ميجابايت." });
         if (purpose is not ("Photo" or "Media" or "Proof" or "News" or "StaffPhoto" or "Campaign")) return Results.BadRequest();
+        if(purpose=="Media"&&!await context.RequestServices.GetRequiredService<AcademyConfigurationService>().Enabled(t.AcademyId,"media"))return Results.Forbid();
         if(purpose=="Campaign"&&(!await CommunityAds.FullOwner(db,t)||!await context.RequestServices.GetRequiredService<AcademyConfigurationService>().Enabled(t.AcademyId,"community_ads")||playerId.HasValue||groupId.HasValue||file.Length>10*1024*1024))return Results.Forbid();
         if (purpose == "Proof")
         {
@@ -54,32 +55,44 @@ public static class AssetEndpoints
             if (playerId.HasValue && !await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId)) return Results.NotFound();
             if (groupId.HasValue && !await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId && x.IsActive)) return Results.NotFound();
         }
+        await using var transaction=purpose=="Media"?await db.Database.BeginTransactionAsync():null;
+        if(purpose=="Media")
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
+            if(!await db.AcademyMemberships.AsNoTracking().AnyAsync(m=>m.Id==t.MembershipId&&m.UserId==actor&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive&&(!m.PrimaryMembershipId.HasValue||db.AcademyMemberships.Any(p=>p.Id==m.PrimaryMembershipId&&p.IsActive))))return Results.Forbid();
+            if(groupId.HasValue)
+            {
+                foreach(var key in new[]{"config:"+t.AcademyId,$"timetable:{t.AcademyId}:{groupId.Value}",$"group-capacity:{t.AcademyId}:{groupId.Value}"})await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key},0))");
+                if(!await GroupMediaPrivacy.Staff(t,db,context,groupId.Value,true))return Results.Forbid();
+            }
+            else if(t.Role is not(AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)||!(await authorization.AuthorizeAsync(context.User,context,AcademyPermissions.PlayerMediaManage)).Succeeded)return Results.Forbid();
+            await GroupMediaPrivacy.Lock(db,t.AcademyId);
+        }
         await using var source = file.OpenReadStream();
         var header = new byte[12]; await source.ReadExactlyAsync(header);
         var detected = DetectType(header);
         if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto" or "Campaign") && !detected.StartsWith("image/")))
             return Results.BadRequest(new { message = "الأنواع المدعومة: JPEG وPNG وWebP، وMP4 وMOV." });
         if (detected.StartsWith("image/") && file.Length > 8 * 1024 * 1024) return Results.BadRequest(new { message = "الصورة لا تتجاوز 8 ميجابايت." });
-        var now = clock.UtcNow;
+        var now = purpose=="Media"?time.GetUtcNow():clock.UtcNow;
         var asset = new PrivateAsset { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UploadedByUserId = actor, ContentType = detected, StorageName = Guid.NewGuid().ToString("N"), Length = file.Length, Purpose = purpose, PlayerId = playerId, TrainingGroupId = groupId, Caption = form["caption"].ToString().Trim(), CreatedAtUtc = now, UpdatedAtUtc = now };
+        if(purpose=="Media")
+        {
+            var problem=await GroupMediaPrivacy.Prepare(asset,form,db,t,context,time);
+            if(problem!=null)return Results.UnprocessableEntity(new{message=problem});
+        }
         var root = Root(config, env); Directory.CreateDirectory(root); var path = Path.Combine(root, asset.StorageName);
         await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         { await output.WriteAsync(header); await source.CopyToAsync(output); }
         db.PrivateAssets.Add(asset);
-        if (purpose == "Media" && groupId.HasValue)
-        {
-            var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
-            var roster = await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) == groupId && x.IsActive && x.Player.IsActive).Select(x => x.PlayerId).Distinct().ToListAsync();
-            db.PrivateAssetAudiences.AddRange(roster.Select(id => new PrivateAssetAudience { Id = Guid.NewGuid(), AcademyId = t.AcademyId, AssetId = asset.Id, PlayerId = id, CreatedAtUtc = now, UpdatedAtUtc = now }));
-        }
         if (purpose == "Photo")
         {
             var row = await db.Players.SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId);
             row.PhotoReference = $"/api/v1/assets/{asset.Id}"; row.UpdatedAtUtc = now;
         }
-        try { await db.SaveChangesAsync(); }
+        try { await db.SaveChangesAsync(); if(transaction!=null)await transaction.CommitAsync(); }
         catch { File.Delete(path); throw; }
-        return Results.Created($"/api/v1/assets/{asset.Id}", new { asset.Id, url = $"/api/v1/assets/{asset.Id}", asset.ContentType });
+        return Results.Created($"/api/v1/assets/{asset.Id}", new { asset.Id, url = $"/api/v1/assets/{asset.Id}", asset.ContentType,asset.MediaPolicyVersion,asset.MediaEventOn });
     }
 
     internal static string? DetectType(byte[] b)
@@ -91,7 +104,7 @@ public static class AssetEndpoints
         return null;
     }
 
-    private static async Task<bool> CanRead(PrivateAsset asset, TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization, ISubscriptionClock clock)
+    private static async Task<bool> CanRead(PrivateAsset asset, TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization, ISubscriptionClock clock,TimeProvider time)
     {
         var user = Actor(principal); var policy = asset.Purpose switch { "StaffPhoto" => AcademyPermissions.PayrollRead, "Photo" => AcademyPermissions.PeopleManage, "Proof" => AcademyPermissions.PaymentRead, _ => AcademyPermissions.PlayerMediaRead };
         if ((t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin) && (await authorization.AuthorizeAsync(principal, policy)).Succeeded) return true;
@@ -100,13 +113,19 @@ public static class AssetEndpoints
         if (asset.Purpose == "Proof") return asset.UploadedByUserId == user;
         var now = clock.UtcNow;
         if (asset.Purpose == "News") return await db.AcademyNews.AnyAsync(x => x.AcademyId == t.AcademyId && x.ImageAssetId == asset.Id && x.IsActive && x.PublishedAtUtc <= now && x.PublishedAtUtc.Value.AddDays(x.VisibleDays) > now);
-        if (asset.PlayerId.HasValue && await Linked(db, t.AcademyId, user, asset.PlayerId.Value)) return true;
+        if (asset.PlayerId.HasValue && (asset.Purpose!="Media"||asset.MediaPolicyVersion==1) && await Linked(db, t.AcademyId, user, asset.PlayerId.Value)) return true;
         if (asset.Purpose == "Media" && asset.TrainingGroupId.HasValue)
-            return await Assigned(db, t.AcademyId, user, asset.TrainingGroupId.Value) || await db.PrivateAssetAudiences.AnyAsync(x => x.AcademyId == t.AcademyId && x.AssetId == asset.Id && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.PlayerId && l.Guardian.UserId == user && l.IsActive && l.Guardian.IsActive && l.Player.IsActive));
+        {
+            if(t.Role==AcademyRole.Coach)return await GroupMediaPrivacy.Assigned(db,t,asset.TrainingGroupId.Value);
+            if(t.Role!=AcademyRole.Guardian||!await GroupMediaPrivacy.Shareable(db).AnyAsync(a=>a.Id==asset.Id))return false;
+            var today=await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
+            return await GroupMediaPrivacy.CurrentAudience(db,asset.TrainingGroupId.Value,today).AnyAsync(x=>x.AssetId==asset.Id&&GroupMediaPrivacy.Links(db).Any(l=>l.PlayerId==x.PlayerId&&l.Guardian.UserId==user));
+        }
         return false;
     }
     private static async Task<IResult> Download(Guid id, HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, AcademyConfigurationService features)
     {
+        context.Response.Headers.CacheControl="private, no-store";
         var t = (await tenant.ResolveAsync())!;
         var asset = await db.PrivateAssets.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
         if(asset?.Purpose=="Campaign")
@@ -121,23 +140,26 @@ public static class AssetEndpoints
             var campaignPath=Path.Combine(Root(config,env),asset.StorageName);if(!File.Exists(campaignPath))return Results.NotFound();context.Response.Headers.CacheControl="private, no-store";context.Response.Headers["X-Content-Type-Options"]="nosniff";return Results.File(campaignPath,asset.ContentType);
         }
         if (asset is not null && asset.Purpose is "Media" or "News" && !await features.Enabled(t.AcademyId, asset.Purpose == "News" ? "news" : "media")) return Results.NotFound();
-        if (asset is null || !await CanRead(asset, t, context.User, db, authorization, clock)) return Results.NotFound();
+        if (asset is null || !await CanRead(asset, t, context.User, db, authorization, clock,context.RequestServices.GetRequiredService<TimeProvider>())) return Results.NotFound();
         var path = Path.Combine(Root(config, env), asset.StorageName); if (!File.Exists(path)) return Results.NotFound();
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(path, asset.ContentType, enableRangeProcessing: true);
     }
-    private static async Task<IResult> Gallery(Guid? playerId, Guid? groupId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization)
+    private static async Task<IResult> Gallery(Guid? playerId, Guid? groupId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context)
     {
         var t = (await tenant.ResolveAsync())!; var user = Actor(principal);
+        context.Response.Headers.CacheControl="private, no-store";
         var query = db.PrivateAssets.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Purpose == "Media" && x.IsActive);
         if (t.Role == AcademyRole.Guardian)
         {
             if (!playerId.HasValue || !await Linked(db, t.AcademyId, user, playerId.Value)) return Results.NotFound();
-            query = query.Where(x => x.PlayerId == playerId || db.PrivateAssetAudiences.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == playerId && e.AssetId == x.Id));
+            var today=await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
+            var shareable=GroupMediaPrivacy.Shareable(db);
+            query = query.Where(x => x.MediaPolicyVersion==1&&(x.PlayerId == playerId || x.TrainingGroupId!=null&&db.TrainingGroups.Any(g=>g.Id==x.TrainingGroupId&&g.IsActive)&&shareable.Any(a=>a.Id==x.Id)&&db.PrivateAssetAudiences.Any(a=>a.AssetId==x.Id&&a.PlayerId==playerId&&a.IsActive&&a.SportEnrollmentId!=null&&db.SportEnrollments.Any(e=>e.Id==a.SportEnrollmentId&&e.PlayerId==a.PlayerId&&e.IsActive&&e.Player.IsActive&&e.Branch.IsActive&&e.Sport.IsActive&&FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,today)==x.TrainingGroupId))));
         }
         else if (t.Role == AcademyRole.Coach)
         {
-            if (!groupId.HasValue || !await Assigned(db, t.AcademyId, user, groupId.Value)) return Results.NotFound();
+            if (!groupId.HasValue || !await GroupMediaPrivacy.Assigned(db,t,groupId.Value)) return Results.NotFound();
             query = query.Where(x => x.TrainingGroupId == groupId);
         }
         else
@@ -145,6 +167,6 @@ public static class AssetEndpoints
             if (!(await authorization.AuthorizeAsync(principal, AcademyPermissions.PlayerMediaRead)).Succeeded) return Results.Forbid();
             if (playerId.HasValue) query = query.Where(x => x.PlayerId == playerId || db.PrivateAssetAudiences.Any(e => e.AcademyId == t.AcademyId && e.PlayerId == playerId && e.AssetId == x.Id)); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         }
-        return Results.Ok(await query.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.PlayerId, x.TrainingGroupId, x.ContentType, x.Caption, x.CreatedAtUtc, url = "/api/v1/assets/" + x.Id }).ToListAsync());
+        return Results.Ok(await query.OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.Id, x.PlayerId, x.TrainingGroupId, x.ContentType, x.Caption, x.CreatedAtUtc,x.MediaEventOn,x.MediaPolicyVersion, url = "/api/v1/assets/" + x.Id }).ToListAsync());
     }
 }

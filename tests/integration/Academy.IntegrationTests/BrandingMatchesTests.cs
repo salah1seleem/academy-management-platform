@@ -146,5 +146,9 @@ public sealed partial class BrandingMatchesTests : IAsyncLifetime
         using var owner = await Staff();
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(owner, "/api/v1/manage/matches/tournaments", new TournamentWrite("حد قاعدة البيانات", Slice2DemoSeed.FootballId, 10000000000000000m, "EGP", true))).StatusCode);
     }
-    private sealed class Factory(string connection):WebApplicationFactory<Program> { protected override void ConfigureWebHost(IWebHostBuilder b){b.UseEnvironment("Demo");b.UseSetting("ConnectionStrings:Default",connection);b.UseSetting("Demo:SeedProfile","LegacyRegression");b.UseSetting("Demo:SeedEnabled","true");b.UseSetting("Demo:FixedOtpEnabled","true");b.UseSetting("Demo:FixedOtp","246810");b.UseSetting("Demo:StaffPassword","Demo-Only-123!");b.UseSetting("Demo:ReferenceDate","2026-09-28");} }
+    private sealed class Factory(string connection):WebApplicationFactory<Program> {
+        private readonly string mediaRoot=Path.Combine(Path.GetTempPath(),"academity-private-media-test-"+Guid.NewGuid().ToString("N"));
+        protected override void ConfigureWebHost(IWebHostBuilder b){b.UseEnvironment("Demo");b.UseSetting("Media:PrivateRoot",mediaRoot);b.UseSetting("ConnectionStrings:Default",connection);b.UseSetting("Demo:SeedProfile","LegacyRegression");b.UseSetting("Demo:SeedEnabled","true");b.UseSetting("Demo:FixedOtpEnabled","true");b.UseSetting("Demo:FixedOtp","246810");b.UseSetting("Demo:StaffPassword","Demo-Only-123!");b.UseSetting("Demo:ReferenceDate","2026-09-28");}
+        public override async ValueTask DisposeAsync(){await base.DisposeAsync();if(Directory.Exists(mediaRoot))Directory.Delete(mediaRoot,true);}
+    }
 }

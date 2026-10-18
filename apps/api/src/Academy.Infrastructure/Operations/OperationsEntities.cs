@@ -13,6 +13,9 @@ public sealed class PrivateAsset : TenantEntity
     public Guid? TrainingGroupId { get; set; }
     public required string Purpose { get; set; }
     public string? Caption { get; set; }
+    public int MediaPolicyVersion { get; set; }
+    public DateOnly? MediaEventOn { get; set; }
+    public bool NoRecognizableChildren { get; set; }
 }
 public sealed class AcademyTransferSettings : TenantEntity
 {
@@ -25,6 +28,8 @@ public sealed class PrivateAssetAudience : TenantEntity
 {
     public Guid AssetId { get; set; }
     public Guid PlayerId { get; set; }
+    public Guid? SportEnrollmentId { get; set; }
+    public bool IsSubject { get; set; }
 }
 public sealed class PaymentProof : TenantEntity
 {
