@@ -1461,6 +1461,107 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerLevelReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("FromLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromLevelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("PreviousRecordedReviewAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PrivateNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SportEnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ToLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToLevelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "FromLevelId", "SportId");
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "SportEnrollmentId", "SportId");
+
+                    b.HasIndex("AcademyId", "ToLevelId", "SportId");
+
+                    b.ToTable("PlayerLevelReviews", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlayerLevelReview_Action", "\"IsActive\" AND \"Action\" IN ('Reviewed','Changed','Cleared') AND (\"ToLevelId\" IS NULL AND \"ToLevelName\" IS NULL OR \"ToLevelId\" IS NOT NULL AND length(trim(\"ToLevelName\"))>0) AND (\"FromLevelId\" IS NULL AND \"FromLevelName\" IS NULL OR \"FromLevelId\" IS NOT NULL AND length(trim(\"FromLevelName\"))>0)");
+
+                            t.HasCheckConstraint("CK_PlayerLevelReview_Revision", "\"Revision\">0");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerSkillPlan", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12846,6 +12947,40 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id", "SportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerLevelReview", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "FromLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.People.SportEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SportEnrollmentId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ToLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Evaluations.PlayerSkillPlan", b =>

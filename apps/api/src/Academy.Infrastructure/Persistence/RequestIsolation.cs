@@ -128,6 +128,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PlayerGoalChange>(b, x => PlayerDevelopmentGoals.Any(g => g.Id == x.GoalId));
         BranchFilter<PlayerSkillPlan>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerSkillReview>(b, x => PlayerSkillPlans.Any(p => p.Id == x.PlanId));
+        BranchFilter<PlayerLevelReview>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<EvaluationScore>(b, x => PlayerEvaluations.Any(e => e.Id == x.PlayerEvaluationId));
         BranchFilter<PlayerMedicalRecord>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
         BranchFilter<PlayerMedia>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
@@ -203,6 +204,7 @@ public sealed partial class FoundationDbContext
         ChangeTracker.DetectChanges();
         GuardPlayerGoalHistory();
         await GuardSkillHistory(token);
+        if (ChangeTracker.Entries<PlayerLevelReview>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("مراجعات المستويات محفوظة؛ التصحيح بمراجعة جديدة.");
         foreach (var e in ChangeTracker.Entries<Academy.Infrastructure.Content.HelpVideoRevision>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
         {
             var original = e.OriginalValues.GetValue<string>(nameof(Academy.Infrastructure.Content.HelpVideoRevision.State));

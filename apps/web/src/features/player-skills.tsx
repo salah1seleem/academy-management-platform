@@ -7,6 +7,7 @@ import { GuardianShell } from "../components/guardian-shell";
 import { csrfRequest } from "./dashboard-api";
 import { useGoalData } from "./player-goals";
 import styles from "./player-skills.module.css";
+import {PlayerLevelHistory,type LevelHistory} from "./player-level-history";
 
 const root = "/api/v1/evaluations/skills";
 const units: Record<string,string> = { Checklist: "مراجعة فنية", Count: "عدد", Seconds: "ثانية", Metres: "متر" };
@@ -20,7 +21,7 @@ type Context = { id: string; playerId: string; player: string; sport: string; le
 type PlanData = { enrollment: Context; plan: Plan; asOfDate: string; contextChanged: boolean; canReview: boolean;
   progress: { mastered: number; assessed: number; total: number; percentage: number|null; sourcePercentage: number|null; readyForTechnicalReview: boolean };
   skills: { requirement: Requirement; latest: Review|null; baseline: Review|null }[]; history: Review[]; historyHasMore: boolean };
-type Journey = { enrollment: Context; asOfDate: string; canAssign: boolean; availableCurricula: Curriculum[]; active: PlanData|null; history: Plan[]; historyHasMore: boolean };
+type Journey = { enrollment: Context; asOfDate: string; canAssign: boolean; availableCurricula: Curriculum[]; active: PlanData|null; history: Plan[]; historyHasMore: boolean;levelHistory?:LevelHistory };
 type Options = { canCreate: boolean; canEdit: boolean; canCreateLevel: boolean; levels: {id:string; arabicName:string; sport:string}[]; sports: {id:string;name:string}[] };
 function useSkills<T>(path:string,revision=0) {return useGoalData<T>(path,revision,"خطة المهارات أو اللاعب غير متاح لك الآن. أعد فتح ملف اللاعب.");}
 function useCommand(onSaved:(data:{id:string})=>void) {
@@ -88,6 +89,7 @@ export function PlayerSkillJourney({enrollmentId}:{enrollmentId:string}) {
       {data.canAssign&&<form className="form-shell" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);if(data.active&&!window.confirm("استبدال الخطة يبدأ متابعة نسخة جديدة ويحفظ القديمة. هل تتابع؟"))return;void command.save(`${root}/enrollments/${enrollmentId}/skill-plan`,{curriculumId:f.get("curriculum"),previousPlanId:data.active?.plan.id??null,previousVersion:data.active?.plan.version??0});}}><label>نسخة المستوى الحالي<select name="curriculum" required disabled={command.busy}><option value="">اختر أحدث نسخة منشورة</option>{data.availableCurricula.map(c=><option key={c.id} value={c.id}>{c.title} · نسخة{c.revisionNumber}</option>)}</select></label><Button type="submit" disabled={command.busy||!data.availableCurricula.length}>{data.active?"استبدال الخطة مع حفظ التاريخ":"إسناد خطة المهارات"}</Button>{!data.availableCurricula.length&&<p>راجع المستوى الفني من ملف اللاعب ثم جهز وانشر منهجًا لنفس المستوى.</p>}</form>}
       {data.active?<><Progress data={data.active}/>{!command.busy&&(!expectedPlan||data.active.plan.id===expectedPlan)&&<Link className="button button-primary" href={`/dashboard/evaluations/skills/plans/${data.active.plan.id}`}>فتح المهارات والملاحظات</Link>}</>:<p>لم تُسند خطة مهارات بعد؛ لا نحسب نسبة افتراضية.</p>}
       <SectionCard title="الخطط السابقة">{data.history.map(p=><p key={p.id}><Link href={`/dashboard/evaluations/skills/plans/${p.id}`}>{p.curriculum.title} · نسخة{p.curriculum.revisionNumber} · {p.assignedOn}</Link></p>)}{!data.history.length&&<p>لا توجد خطط سابقة.</p>}{data.historyHasMore&&<p>تظهر أحدث20 خطة سابقة.</p>}</SectionCard>
+      <SectionCard title="التطور الفني المحفوظ"><PlayerLevelHistory history={data.levelHistory}/></SectionCard>
     </>}
   </>;
 }
@@ -113,5 +115,5 @@ export function PlayerSkillPlan({id,playerId}:{id:string;playerId?:string}) {
 }
 export function GuardianPlayerSkills({playerId}:{playerId:string}) {
   const {data,error}=useSkills<{items:Journey[]}>(`/api/v1/guardian/children/${playerId}/skills`);
-  return <GuardianShell><div className={styles.family}><header className="guardian-page-header"><h1>خطوات تعلم ابنك</h1><p>أدلة فنية فعلية من مدربيه، وليس توقعًا أو ترقية تلقائية.</p><Link className="button" href={`/guardian/children/${playerId}`}>العودة لملف اللاعب</Link></header>{error&&<ErrorState message={error}/>}{!data?!error&&<LoadingState/>:data.items.map(j=><section key={j.enrollment.id}>{j.active?<><Progress data={j.active}/><Link className="button button-secondary" href={`/guardian/children/${playerId}/skills/plans/${j.active.plan.id}`}>مهارات {j.enrollment.sport} وملاحظات المدرب</Link></>:<p>{j.enrollment.sport} · لم تُنشر خطة مهارات بعد.</p>}{j.history.map(p=><p key={p.id}><Link className="button" href={`/guardian/children/${playerId}/skills/plans/${p.id}`}>خطة سابقة · {p.curriculum.title} · نسخة{p.curriculum.revisionNumber}</Link></p>)}</section>)}</div></GuardianShell>;
+  return <GuardianShell><div className={styles.family}><header className="guardian-page-header"><h1>خطوات تعلم ابنك</h1><p>أدلة فنية فعلية من مدربيه، وليس توقعًا أو ترقية تلقائية.</p><Link className="button" href={`/guardian/children/${playerId}`}>العودة لملف اللاعب</Link></header>{error&&<ErrorState message={error}/>}{!data?!error&&<LoadingState/>:data.items.map(j=><section key={j.enrollment.id}>{j.active?<><Progress data={j.active}/><Link className="button button-secondary" href={`/guardian/children/${playerId}/skills/plans/${j.active.plan.id}`}>مهارات {j.enrollment.sport} وملاحظات المدرب</Link></>:<p className={styles.noPlan}>{j.enrollment.sport} · لم تُنشر خطة مهارات بعد.</p>}{j.history.map(p=><p key={p.id}><Link className="button" href={`/guardian/children/${playerId}/skills/plans/${p.id}`}>خطة سابقة · {p.curriculum.title} · نسخة{p.curriculum.revisionNumber}</Link></p>)}<div className="section-card"><PlayerLevelHistory history={j.levelHistory}/></div></section>)}</div></GuardianShell>;
 }

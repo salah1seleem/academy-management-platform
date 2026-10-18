@@ -1,5 +1,6 @@
 using Academy.Api.Auth;
 using Academy.Api.Slice4;
+using Academy.Api.Operations;
 using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,7 @@ public static partial class SkillCurriculumEndpoints
         var canAssign = !family && await PlayerGoalEndpoints.CanWrite(t, db, h, true) && (active == null || await PlayerGoalEndpoints.CanWrite(t, db, h, false));
         var canReview = !family && await PlayerGoalEndpoints.CanWrite(t, db, h, false);
         return new { enrollment = context, asOfDate = today, canAssign, availableCurricula = choices.Select(CurriculumRow), active = active == null ? null : await ViewPlan(active, context, db, canReview, today),
-            history = old.Take(20).Select(p => PlanRow(p, definitions[p.CurriculumId])), historyHasMore = old.Length > 20 };
+            history = old.Take(20).Select(p => PlanRow(p, definitions[p.CurriculumId])), historyHasMore = old.Length > 20, levelHistory = await PlayerLevelHistory.Read(db,t.AcademyId,enrollmentId) };
     }
     private static async Task<IResult> Journey(Guid enrollmentId, CurrentTenant tenant, FoundationDbContext db, HttpContext h, TimeProvider clock)
     {

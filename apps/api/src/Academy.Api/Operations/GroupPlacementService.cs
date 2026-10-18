@@ -16,7 +16,7 @@ namespace Academy.Api.Operations;
 public sealed record PlacementWrite(Guid[] EnrollmentIds, string? Fingerprint = null);
 public sealed record PlacementCandidate(Guid Id, Guid PlayerId, string Player, string PlayerCode, Guid? LevelId, string? Level, string[] Reasons);
 public sealed record PlacementPreview(string Fingerprint, DateOnly EffectiveDate, int CurrentPlayers, int? Capacity, int Selected, string[] Conflicts, PlacementCandidate[] Players);
-public sealed record PlacementLevelWrite(Guid? LevelId);
+public sealed record PlacementLevelWrite(Guid? LevelId, Guid? RequestId=null, uint? Version=null, string? Note=null);
 public sealed record TrainingLevelWrite(Guid SportId, string ArabicName, int Rank);
 
 public sealed partial class GroupPlacementService(FoundationDbContext db, CurrentTenant tenant, ResourceSessionCoordinator coordinator, TimeProvider time)

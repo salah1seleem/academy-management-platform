@@ -302,6 +302,36 @@ class _PlayerSkillsState extends State<PlayerSkillsPage>
         Text(
           l('تظهر أحدث20 خطة سابقة.', 'Showing the latest 20 previous plans.'),
         ),
+      GCard(
+        child: ExpansionTile(
+          title: Text(l('سجل مراجعات المستوى', 'Level review history')),
+          children: [
+            if (list(map(d['levelHistory'])['items']).isEmpty)
+              Text(
+                l(
+                  'لا توجد مراجعات مؤرخة محفوظة بعد؛ لا نفترض تاريخ ترقية من المستوى المسجل وحده.',
+                  'No dated reviews saved yet; a recorded level alone does not prove a promotion date.',
+                ),
+              ),
+            for (final r in list(map(d['levelHistory'])['items']))
+              ListTile(
+                title: Text(
+                  '${r['fromLevelName'] ?? l('لم يحدد', 'Not set')} ← ${r['toLevelName'] ?? l('لم يحدد', 'Not set')}',
+                ),
+                subtitle: Text(
+                  '${day(r['reviewedOn'] ?? r['createdAtUtc'])} · ${r['actorName']} · ${r['revision']}',
+                ),
+              ),
+            if (map(d['levelHistory'])['hasMore'] == true)
+              Text(
+                l(
+                  'تظهر أحدث20 مراجعة؛ راجع الإدارة للسجل الأقدم.',
+                  'Showing the latest 20 reviews; contact administration for older records.',
+                ),
+              ),
+          ],
+        ),
+      ),
     ];
   }
 

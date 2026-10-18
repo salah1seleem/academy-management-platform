@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Check, ShieldCheck, UsersRound } from "lucide-react";
 import { csrfRequest } from "./dashboard-api";
 import { formatDateAr } from "../lib/formatters";
+import {useGoalData} from "./player-goals";
+import {PlayerLevelHistory,type LevelHistory} from "./player-level-history";
 
 type Level = { id: string; sportId: string; arabicName: string };
 type Candidate = { id: string; playerId: string; player: string; playerCode: string; level?: string; reasons: string[] };
@@ -12,10 +14,14 @@ type Preview = { fingerprint: string; effectiveDate: string; currentPlayers: num
 const message = (caught: unknown) => caught instanceof Error ? caught.message : "تعذر إتمام التسكين.";
 
 export function EnrollmentLevelReview({ enrollmentId, sportId, levelId, onSaved }: { enrollmentId: string; sportId: string; levelId?: string | null; onSaved: () => void }) {
+  const [revision,setRevision]=useState(0);const pending=useRef<{body:string;requestId:string}|null>(null);
+  const {data:context,error:contextError}=useGoalData<{version:number;trainingLevelId:string|null;history:LevelHistory}>(`/api/v1/people/enrollments/${enrollmentId}/placement-level`,revision,"مراجعة مستوى اللاعب غير متاحة لك الآن.");
   const [levels, setLevels] = useState<Level[]>([]); const [selected, setSelected] = useState(levelId ?? ""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [loadedVersion,setLoadedVersion]=useState<number|null>(null);
+  if(context&&context.version!==loadedVersion){setLoadedVersion(context.version);setSelected(context.trainingLevelId??"");}
   useEffect(() => { let alive = true; fetch("/api/v1/people/placement-levels").then(async r => { if (!r.ok) throw new Error("تعذر تحميل مستويات التدريب."); const data = await r.json(); if (alive) setLevels(data); }).catch(c => { if (alive) setError(message(c)); }); return () => { alive = false; }; }, []);
-  async function save(e: FormEvent) { e.preventDefault(); setBusy(true); setError(""); try { await csrfRequest(`/api/v1/people/enrollments/${enrollmentId}/placement-level`, "PUT", { levelId: selected || null }); onSaved(); } catch (c) { setError(message(c)); } finally { setBusy(false); } }
-  return <details className="placement-level"><summary>مراجعة مستوى اللاعب</summary><form className="form-shell" onSubmit={e => void save(e)}><label>مستوى التدريب لهذه الرياضة<select value={selected} onChange={e => setSelected(e.target.value)}><option value="">لم يُراجع المستوى بعد</option>{levels.filter(l => l.sportId === sportId).map(l => <option key={l.id} value={l.id}>{l.arabicName}</option>)}</select></label><p className="muted">اعتماد إداري بعد المراجعة الفنية؛ لا يغير اشتراكًا أو يُرقي اللاعب تلقائيًا.</p>{error && <p role="alert">{error}</p>}<div className="form-actions"><button className="secondary-button" disabled={busy}>اعتماد المراجعة</button></div></form></details>;
+  async function save(e: FormEvent<HTMLFormElement>) { e.preventDefault();if(!context||busy)return;const fields=new FormData(e.currentTarget);const body={levelId:selected||null,version:context.version,note:fields.get("levelNote")||null};const encoded=JSON.stringify(body);if(pending.current?.body!==encoded)pending.current={body:encoded,requestId:crypto.randomUUID()};setBusy(true); setError(""); try { await csrfRequest(`/api/v1/people/enrollments/${enrollmentId}/placement-level`, "PUT", {...body,requestId:pending.current.requestId});pending.current=null;setRevision(n=>n+1);onSaved(); } catch (c) { setError(message(c)); } finally { setBusy(false); } }
+  return <details className="placement-level"><summary>مراجعة مستوى اللاعب</summary>{contextError&&<p role="alert">{contextError}</p>}{context&&<><form className="form-shell" onSubmit={e => void save(e)}><label>مستوى التدريب لهذه الرياضة<select value={selected} onChange={e => setSelected(e.target.value)} disabled={busy}><option value="">لم يُراجع المستوى بعد</option>{levels.filter(l => l.sportId === sportId).map(l => <option key={l.id} value={l.id}>{l.arabicName}</option>)}</select></label><label>ملاحظة داخلية (اختياري)<textarea name="levelNote" maxLength={500} disabled={busy}/></label><p className="muted">اعتماد إداري بعد المراجعة الفنية؛ يحفظ المستوى السابق ولا يغير اشتراكًا أو مجموعة أو فئة عمرية.</p>{error && <p role="alert">{error}</p>}<div className="form-actions"><button className="secondary-button" disabled={busy}>اعتماد المراجعة</button></div></form><PlayerLevelHistory history={context.history} showPrivateNotes/></>}</details>;
 }
 
 export function GroupPlacement({ id, sportId, levelId, onSaved, focusEnrollmentId }: { id: string; sportId: string; levelId?: string | null; onSaved: () => void; focusEnrollmentId?: string | null }) {

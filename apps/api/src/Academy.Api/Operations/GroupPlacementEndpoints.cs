@@ -3,6 +3,7 @@ using Academy.Api.Configuration;
 using Academy.Api.Facilities;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Evaluations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
@@ -35,17 +36,33 @@ public static class GroupPlacementEndpoints
         })).AddEndpointFilter<CsrfFilter>();
         var players = api.MapGroup("/people").RequireAuthorization(AcademyPermissions.PeopleManage);
         players.MapGet("/placement-levels", async (FoundationDbContext db) => Results.Ok(await db.TrainingLevels.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Rank).Select(x => new { x.Id, x.SportId, x.ArabicName }).ToArrayAsync()));
+        players.MapGet("/enrollments/{id:guid}/placement-level", async (Guid id,FoundationDbContext db,HttpContext h)=>{
+            h.Response.Headers.CacheControl="private, no-store";var e=await db.SportEnrollments.AsNoTracking().SingleOrDefaultAsync(e=>e.Id==id&&e.IsActive);return e==null?Results.NotFound():Results.Ok(new{e.Id,e.TrainingLevelId,e.Version,history=await PlayerLevelHistory.Read(db,db.RequestAcademyId,id,true)});
+        });
         players.MapPut("/enrollments/{id:guid}/placement-level", async (Guid id, PlacementLevelWrite b, FoundationDbContext db, GroupPlacementService service, TimeProvider time) => await Run(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync(); var t = await service.Authority("players", "Edit");
             var row = await db.SportEnrollments.FromSqlInterpolated($"SELECT *, xmin FROM \"SportEnrollments\" WHERE \"AcademyId\"={t.AcademyId} AND \"Id\"={id} FOR UPDATE").SingleOrDefaultAsync() ?? throw new FacilityRejected("التسجيل غير متاح.", 404); await service.Authority("players", "Edit", row.BranchId);
+            if(b.RequestId==Guid.Empty||b.Note?.Length>500)throw new FacilityRejected("راجع معرف الطلب والملاحظة الاختيارية.",422);
+            var hash=PlayerLevelHistory.Hash(id,b);
+            if(b.RequestId.HasValue)await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"player-level-review:{t.AcademyId}:{db.RequestUserId}:{b.RequestId}"},0))");
+            if(b.RequestId is Guid request){var replay=await db.PlayerLevelReviews.AsNoTracking().SingleOrDefaultAsync(r=>r.AcademyId==t.AcademyId&&r.ActorUserId==db.RequestUserId&&r.RequestId==request);if(replay!=null){if(replay.SportEnrollmentId!=id||replay.RequestHash!=hash)throw new FacilityRejected("استُخدم معرف الطلب لبيانات أخرى.",409);return new {row.Id,TrainingLevelId=replay.ToLevelId,LevelReviewedAtUtc=replay.ToLevelId.HasValue?(DateTimeOffset?)replay.CreatedAtUtc:null};}}
+            if(b.Version.HasValue&&row.Version!=b.Version)throw new FacilityRejected("تغير مستوى اللاعب؛ أعد فتح المراجعة قبل الاعتماد.",409);
+            // Preserve old clients without manufacturing duplicate reviews on a lost response.
+            if(b.RequestId==null&&string.IsNullOrWhiteSpace(b.Note)&&row.TrainingLevelId==b.LevelId&&(b.LevelId==null||row.LevelReviewedAtUtc!=null&&row.LevelReviewedByUserId!=null))return new {row.Id,row.TrainingLevelId,row.LevelReviewedAtUtc};
             if (b.LevelId.HasValue && !await db.TrainingLevels.AnyAsync(x => x.Id == b.LevelId && x.SportId == row.SportId && x.IsActive)) throw new FacilityRejected("المستوى لا يطابق رياضة التسجيل.", 422);
             if (row.TrainingLevelId != b.LevelId && await db.CompensationBookings.AnyAsync(x => x.SportEnrollmentId == id && x.State == Academy.Infrastructure.People.CompensationBookingState.Reserved)) throw new FacilityRejected("حرر حجوزات التعويض قبل تغيير مستوى اللاعب.");
             if (row.TrainingGroupId.HasValue)
             {
                 if (await db.TrainingGroups.AnyAsync(g => (g.Id == row.TrainingGroupId || db.EnrollmentGroupTransfers.Any(tr => tr.SportEnrollmentId == id && tr.TargetGroupId == g.Id) || db.EnrollmentSessionMoves.Any(m => m.SportEnrollmentId == id && m.TargetGroupId == g.Id)) && g.TrainingLevelId.HasValue && g.TrainingLevelId != b.LevelId)) throw new FacilityRejected("المستوى الجديد لا يطابق المجموعة الحالية أو النقل المجدول؛ استخدم مسار النقل والترقية المراجع.");
             }
-            row.TrainingLevelId = b.LevelId; row.LevelReviewedByUserId = b.LevelId.HasValue ? db.RequestUserId : null; row.LevelReviewedAtUtc = b.LevelId.HasValue ? time.GetUtcNow() : null; row.UpdatedAtUtc = time.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, row.TrainingLevelId, row.LevelReviewedAtUtc };
+            var now=time.GetUtcNow();var from=row.TrainingLevelId;var previous=row.LevelReviewedAtUtc;
+            var names=await db.TrainingLevels.Where(l=>l.Id==from||l.Id==b.LevelId).ToDictionaryAsync(l=>l.Id,l=>l.ArabicName);
+            var actor=await db.Users.Where(u=>u.Id==db.RequestUserId).Select(u=>u.DisplayName).SingleAsync();
+            var revision=(await db.PlayerLevelReviews.Where(r=>r.SportEnrollmentId==id).Select(r=>(int?)r.Revision).MaxAsync()??0)+1;
+            row.TrainingLevelId = b.LevelId; row.LevelReviewedByUserId = b.LevelId.HasValue ? db.RequestUserId : null; row.LevelReviewedAtUtc = b.LevelId.HasValue ? now : null; row.UpdatedAtUtc = now;
+            db.PlayerLevelReviews.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,SportEnrollmentId=id,SportId=row.SportId,Revision=revision,FromLevelId=from,ToLevelId=b.LevelId,FromLevelName=from.HasValue?names[from.Value]:null,ToLevelName=b.LevelId.HasValue?names[b.LevelId.Value]:null,ActorUserId=db.RequestUserId,ActorName=actor,Action=b.LevelId==null?"Cleared":from==b.LevelId?"Reviewed":"Changed",PrivateNote=string.IsNullOrWhiteSpace(b.Note)?null:b.Note.Trim(),RequestId=b.RequestId??Guid.NewGuid(),RequestHash=hash,PreviousRecordedReviewAtUtc=previous,CreatedAtUtc=now,UpdatedAtUtc=now});
+            await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, row.TrainingLevelId, row.LevelReviewedAtUtc };
         })).AddEndpointFilter<CsrfFilter>();
         manage.MapGet("/groups/{id:guid}/placement-candidates", async (Guid id, string? search, int? offset, Guid? enrollmentId, GroupPlacementService service) => await Run(() => service.Candidates(id, search, offset ?? 0, enrollmentId))).RequireAuthorization(AcademyPermissions.PeopleManage);
         manage.MapPut("/groups/{id:guid}/training-format", async (Guid id, GroupTrainingFormatWrite body, GroupPlacementService service) => await Run(() => service.TrainingFormat(id, body))).RequireAuthorization(AcademyPermissions.PeopleManage).AddEndpointFilter<CsrfFilter>();
