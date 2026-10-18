@@ -129,6 +129,8 @@ public sealed partial class FoundationDbContext
         BranchFilter<PlayerSkillPlan>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerSkillReview>(b, x => PlayerSkillPlans.Any(p => p.Id == x.PlanId));
         BranchFilter<PlayerLevelReview>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<PlayerAchievementCertificate>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<PlayerCertificateWithdrawal>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerTechnicalReviewRequest>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerTechnicalReviewDecision>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<SessionLessonAssignment>(b, x => TrainingSessions.Any(s => s.Id == x.TrainingSessionId));
@@ -206,6 +208,7 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardPlayerGoalHistory();
+        if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerAchievementCertificate or PlayerCertificateWithdrawal && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("الشهادة وسجل سحبها محفوظان؛ لا تكتب فوق المصدر.");
         GuardSessionLessons();
         if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerTechnicalReviewRequest or PlayerTechnicalReviewDecision && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("المراجعة الفنية محفوظة؛ لا تكتب فوق الطلب أو القرار السابق.");
         await GuardSkillHistory(token);

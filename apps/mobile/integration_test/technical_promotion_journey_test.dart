@@ -6,6 +6,7 @@ import 'package:academy_mobile/features/shared/player_goals.dart'
     show goalCommandId;
 import 'package:academy_mobile/features/shared/player_technical_reviews.dart';
 import 'package:academy_mobile/features/shared/technical_promotion.dart';
+import 'package:academy_mobile/features/shared/player_certificates.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +15,7 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'Owner previews and confirms actual reviewed promotion; linked family reads application and new schedule without financial change',
+    'Reviewed promotion and explicit certificate publication and withdrawal reach linked family without financial change',
     (t) async {
       expect(const bool.fromEnvironment('ISOLATED_DEMO'), true);
       expect(
@@ -297,6 +298,69 @@ void main() {
         );
         if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
           await binding.takeScreenshot('phase-promotion-family-applied-ios');
+        }
+        final sourceId = textOf(
+          rows(obj(saved['history'])['items']).first['id'],
+        );
+        await t.pumpWidget(
+          shell(PlayerCertificatesPage(auth: owner, sourceId: sourceId)),
+        );
+        await wait(find.text('إصدار شهادة الإنجاز لولي الأمر'));
+        await t.tap(find.text('إصدار شهادة الإنجاز لولي الأمر'));
+        await wait(find.text('شهادة إنجاز فني'));
+        final issued = obj(
+          (await read(
+            '/api/v1/evaluations/certificates/sources/$sourceId',
+          ))['certificate'],
+        );
+        expect(issued['state'], 'Issued');
+        if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+          await binding.takeScreenshot('phase-certificate-owner-issued-ios');
+        }
+        await t.pumpWidget(
+          shell(PlayerCertificatesPage(auth: family, playerId: child)),
+        );
+        await wait(find.textContaining('· صادرة'));
+        await t.tap(find.textContaining('· صادرة'));
+        await wait(find.text('شهادة إنجاز فني'));
+        expect(find.text(textOf(issued['number'])), findsOneWidget);
+        expect(find.text('سحب الشهادة مع حفظ سجلها'), findsNothing);
+        if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+          await binding.takeScreenshot('phase-certificate-family-issued-ios');
+        }
+        await t.pumpWidget(
+          shell(PlayerCertificatesPage(auth: owner, id: textOf(issued['id']))),
+        );
+        await wait(find.text('سحب الشهادة مع حفظ سجلها'));
+        await t.scrollUntilVisible(
+          find.text('سحب الشهادة مع حفظ سجلها'),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await t.tap(find.text('سحب الشهادة مع حفظ سجلها'));
+        await t.pumpAndSettle();
+        await t.scrollUntilVisible(
+          find.text('تأكيد سحب الشهادة'),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await t.tap(find.text('تأكيد سحب الشهادة'));
+        await wait(find.text('الشهادة مسحوبة — لا تعد سارية'));
+        await t.pumpWidget(
+          shell(
+            PlayerCertificatesPage(
+              auth: family,
+              playerId: child,
+              id: textOf(issued['id']),
+            ),
+          ),
+        );
+        await wait(find.text('الشهادة مسحوبة — لا تعد سارية'));
+        expect(find.text('تأكيد سحب الشهادة'), findsNothing);
+        if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+          await binding.takeScreenshot(
+            'phase-certificate-family-withdrawn-ios',
+          );
         }
         final familyProfile = obj(
           await family.request(

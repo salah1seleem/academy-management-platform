@@ -12,9 +12,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 public sealed partial class BrandingMatchesTests
 {
-    private async Task<(TechnicalFixture F,Guid Request,Guid Target)> PromotionSetup(HttpClient owner,HttpClient coach,FoundationDbContext db)
+    private async Task<(TechnicalFixture F,Guid Request,Guid Target)> PromotionSetup(HttpClient owner,HttpClient coach,FoundationDbContext db,Academy.Infrastructure.Structure.TrainingGroup? selected=null)
     {
-        var f=await TechnicalSetup(owner,coach,db);await MasterAll(coach,f);
+        var f=await TechnicalSetup(owner,coach,db,selected);await MasterAll(coach,f);
         var response=await Send(coach,TechnicalPath(f.Plan),TechnicalBody(await TechnicalView(coach,f.Plan)));response.EnsureSuccessStatusCode();var rid=(await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var detail=await owner.GetFromJsonAsync<JsonElement>($"{Technical}/{rid}");(await Send(owner,$"{Technical}/{rid}/decision",new TechnicalDecisionWrite(detail.GetProperty("request").GetProperty("version").GetUInt32(),"ReadyForPlacement",f.Next,null,Guid.NewGuid()))).EnsureSuccessStatusCode();
         var source=await db.TrainingGroups.AsNoTracking().SingleAsync(g=>g.Id==f.Group);var target=Guid.NewGuid();var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();var coachId=await db.StaffGroupAssignments.Where(a=>a.TrainingGroupId==f.Group).Select(a=>a.AcademyMembershipId).SingleAsync();

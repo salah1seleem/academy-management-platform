@@ -8,6 +8,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
 import 'player_goals.dart' show goalCommandId;
+import 'player_certificates.dart';
 
 class TechnicalPromotionPage extends StatefulWidget {
   final AuthController auth;
@@ -162,6 +163,21 @@ class _TechnicalPromotionState extends State<TechnicalPromotionPage>
                     if (applied != null)
                       Text(
                         '${l('تم التنفيذ إلى', 'Applied to')}: ${applied['toLevelName']}',
+                      ),
+                    if (applied != null)
+                      GLink(
+                        l(
+                          'شهادة إنجاز من هذا المصدر',
+                          'Achievement certificate from this source',
+                        ),
+                        Icons.workspace_premium_outlined,
+                        () => openPage(
+                          context,
+                          PlayerCertificatesPage(
+                            auth: widget.auth,
+                            sourceId: textOf(applied['id']),
+                          ),
+                        ),
                       ),
                     if (applied == null && d['canPreview'] != true)
                       Text(

@@ -25,6 +25,8 @@ public class V2AccessRulesTests
     }
     [Theory]
     [InlineData("/api/v1/manage/staff/attendance", "attendance")]
+    [InlineData("/api/v1/evaluations/certificates/sources/123/issue", "evaluations")]
+    [InlineData("/api/v1/evaluations/certificates/123/withdraw", "evaluations")]
     [InlineData("/api/v1/manage/staff/123/access", "staff")]
     [InlineData("/api/v1/reports/financial/export", "finance")]
     [InlineData("/api/v1/manage/structure/options", "academy")]
@@ -43,6 +45,9 @@ public class V2AccessRulesTests
     public void Modules_have_deterministic_boundaries(string path, string module) => Assert.Equal(module, StaffAccessRules.ForPath(path));
     [Theory]
     [InlineData("GET", "/api/v1/people/players", "Read")]
+    [InlineData("GET", "/api/v1/evaluations/certificates/123", "Read")]
+    [InlineData("POST", "/api/v1/evaluations/certificates/sources/123/issue", "Add")]
+    [InlineData("POST", "/api/v1/evaluations/certificates/123/withdraw", "Edit")]
     [InlineData("POST", "/api/v1/people/registration-quote", "Read")]
     [InlineData("POST", "/api/v1/manage/groups", "Add")]
     [InlineData("POST", "/api/v1/manage/structure/sessions/123/coach-override/preview", "Read")]

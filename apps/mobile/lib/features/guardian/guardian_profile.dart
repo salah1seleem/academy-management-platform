@@ -15,6 +15,7 @@ import 'guardian_visits.dart';
 import 'coach_feedback.dart';
 import '../shared/matches.dart';
 import '../shared/player_skills.dart';
+import '../shared/player_certificates.dart';
 import '../shared/player_goals.dart';
 
 class ChildProfile extends StatelessWidget {
@@ -129,6 +130,14 @@ class ChildProfile extends StatelessWidget {
             () => openPage(
               context,
               PlayerGoalsPage(auth: auth, playerId: playerId),
+            ),
+          ),
+          GLink(
+            'إنجازات وشهادات اللاعب',
+            Icons.workspace_premium_outlined,
+            () => openPage(
+              context,
+              PlayerCertificatesPage(auth: auth, playerId: playerId),
             ),
           ),
           GLink(
