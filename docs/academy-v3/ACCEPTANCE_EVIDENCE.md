@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-15A1 — جمهور واقعة الوسائط وموافقة الأسرة، 2026-10-18
+
+`d61d5de7ef72d19a46f57392b52868ab83b97ce7`/124/D3-067: اختيار Guardian مستقل افتراضيهOFF، مراجعة الناشر للظاهرين، roster مؤرخ وموافقات محفوظة، إعادة تحقق وتنزيلno-store، السحب/فك الرابط لا يحيي الملف بإعادة السماح أو حذف الساحب. لا مال/حضور/إعلان ضمني، وRead/Add/branch للرافع نفسه. API5/5/30s، Web13 بملفين، Flutter9 (7Widget+2HTTP)، Browser1/20.7s وiOSرحلة1/7s، تقرير مالي مطابق وأدوات/EF ناجحة. [Owner Web](evidence/v2-15a1/owner-media-audience-web-390.png)، [Family Web](evidence/v2-15a1/guardian-withdrawn-media-consent-web-390.png)، [Family iOS منشور](evidence/v2-15a1/guardian-published-media-ios.png)، [iOS مسحوب](evidence/v2-15a1/guardian-withdrawn-media-ios.png) فعلية راجعت؛ الأبيض PNG اختبار صحيح لا صورة طفل. [كل المحاولات والبيئات والحدود](PROGRESS.md). لاH/CI شامل/FilePicker أو MP4 جهاز/Android/جهاز مادي/AppRoot كامل أو نشر5080. الحصة وضيوفها والسحب الإداري والفحص والاحتفاظ والتصدير/الذكريات وبقيةV2-15/V2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
 ## V2-10G — شارات المجهود بقواعد ونشر خاصين، 2026-10-18
 
 `8f84b9f8d35d07fe99d5e45618dd9e374bd2982e`/123/D3-066: قاعدة رياضية ثابتة، نشر/إيقاف صريحان، grant/revoke بسجل وملاحظة أسرة اختيارية وملخص لنفس الرياضة؛ لا مال/حضور/ترقية/لوحة ترتيب أو إعادة منح ضمنية. تفويض حي وCRUD/نطاق/coach assignment/linked child/CSRF/CAS/replay وEF/SQL. API3/3/32s، Unit57، Web10 بملفين، Flutter6، Browser1/30.3s وiOS رحلة1/7s، profile/report مطابقان، build/typecheck/lint/analyze/EF ناجحة. [Owner Web](evidence/v2-10g/owner-granted-badge-web-390.png)، [Family Web](evidence/v2-10g/guardian-revoked-badge-web-390.png)، [Family iOS](evidence/v2-10g/guardian-revoked-badge-ios.png) فعلية راجعت. [المحاولات المصححة والبيانات والأوامر والقيود](PROGRESS.md): صورتاiOS40→20 تحفظان منحة المحاولة الأولى، ليستا0→20/بيانات قبول نهائي. لاH/CI شامل/Android/جهاز فعلي/AppRoot/Native Rule Editor أو نشر5080؛ V2/V3 جزئيتان، كل المالي المتبقي آخرًا.
