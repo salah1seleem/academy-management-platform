@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-10F — أرشفة المصدر دون محو الحصة، 2026-10-18
+
+`53d8c220a7518030edbc9c358abe4d9ab6d64a01`/122/D3-065: واقعة أرشفة ثابتة، منع الاستخدام/الاعتماد الجديد والقالب المتأثر، مرجع الحصة محفوظ بتحذير Web/Native، صلاحية عامةRead/Edit وCSRF/CAS/replay/SQL. API6/6/1m33s معseed والمستهلكات، Unit53، Web7، Flutter8، Browser1/21.7s وiOSرحلة1/4s وتقارير/حضور/تاريخ مطابق، أدوات وEF نظيفة. [Owner Web](evidence/v2-10f/owner-archived-exercise-web-390.png)، [الحصة Web](evidence/v2-10f/session-archived-source-web-390.png)، [Coach iOS](evidence/v2-10f/coach-archive-warning-ios.png) فعلية راجعت؛ [كل المحاولات والقيود والاستئناف](PROGRESS.md). لاH/CI شامل/Android/جهازفعلي/Native editor أو نشر5080؛ الشارات وبقية§21/V2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
 ## V2-10E — شهادة من ترقية منفذة، 2026-10-18
 
 `4242b3b311251cac49cb77c16040a3b7d5e538a3`/121/D3-064: إصدار صريح واحد من قرار+نقل فعليين، snapshot ثابت وسحب مستقل، Add/Edit منفصلان وtenant/branch/sport/linked-child/CSRF/CAS/replay وحارس المصدر. Web/Native والأسرة، browser print بعد قراءة مخولة، دون اعتماد خارجي أو مال/ترقية ثانية. API3/3/22s نهائية، Unit51، Web10، Flutter13 بعد إصلاح حفظ حالة نموذج retry، Browser1/30.1s وiOSرحلة1/11s، أدوات وEF نظيفة وتقارير/اشتراك ثابتان. [Web المالك](evidence/v2-10e/owner-issued-certificate-web-390.png)، [print HTML](evidence/v2-10e/guardian-certificate-print-preview.png)، [Family Web بعد التمرير](evidence/v2-10e/guardian-withdrawn-certificate-web-390.png)، [Family iOS](evidence/v2-10e/guardian-withdrawn-certificate-ios.png) فعلية راجعت. [المحاولات والبيانات والاستئناف والقيود](PROGRESS.md). لا PDF/طابعة أو Android/جهازفعلي/AppRoot كامل/H/CI شامل؛ إعادة إصدار/شارات/أرشفة/بقية§21 وV2/V3 باقية، وكل المالي المتبقي آخرًا.
