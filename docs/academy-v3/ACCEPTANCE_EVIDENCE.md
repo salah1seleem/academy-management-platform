@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## V2-10B — متطلبات مستوى وأدلة تعلم لا ترقية آلية، 2026-10-18
+
+`4e1c19c`/migration116/D3-059: نسخة منهج ثابتة على المستوى والرياضة القائمين، إسناد/استبدال صريح وسجل محفوظ، ملاحظات منشورة للأسرة بوحدات/تاريخ/مدرب ونسبة متطلبات فقط. API8/8 في61s ثم المتأثرة1/1 في9s، Web25/25 وFlutter27/27 والأدوات نظيفة وEF بلاpending؛ Browser1/37.1s وiOSرحلة1/8s، profile/report مطابقان وصلاحيات/نطاقات وحفظ/resetguard وseed opt-in مثبتة. [Web Owner](evidence/v2-10b/owner-skills-web-390.png)، [Web Family](evidence/v2-10b/guardian-skills-web-390.png)، [Coach iOS](evidence/v2-10b/coach-skills-ios.png)، [Family iOS](evidence/v2-10b/guardian-skills-ios.png)، [المحاولات والأوامر والحدود](PROGRESS.md). أصلح رابط خطة قديمة أثناء الاستبدال وCSS الأسرة وتباين الشريط مع اختبارات فعلية. ليست مكتبة تمارين أو مراجعة ترقية/شهادات/Native editor للمنهج أوAndroid/جهاز فعلي/H؛ V2-10 وAC47 جزئيان، كل المالي المتبقي آخرًا.
+
 ## V2-10A — هدف فني محفوظ ومقروء للأسرة، 2026-10-18
 
 `0c9e908`/migration115/D3-058: مسودة/نشر/مراجعات/تحقق أو سحب على التسجيل الرياضي نفسه، نص منشور وتاريخ ثابتان بلا ترقية أو مال أو إشعار ضمني. Owner/Admin في النطاق، Coach المجموعة الحالية، Guardian المنشور فقط. API4/4 في29s، Web19، Flutter أول31 ثم آخر17 مع analyze، EF بلاpending؛ Browser1/16.6s وiOS1/7s، نفس profile/report وخصوصية المسودات ومصفوفة Add/Edit وسحب النطاق. [Web](evidence/v2-10a/owner-goal-web-390.png)، [Coach](evidence/v2-10a/coach-goal-ios.png)، [Guardian](evidence/v2-10a/guardian-goal-ios.png)، [المحاولات والأوامر والقيود](PROGRESS.md). ليست مهارات/منهج/ترقية/خطة كاملة أوH/CI شامل؛ V2-10 جزئي والمالي المتبقي آخرًا.

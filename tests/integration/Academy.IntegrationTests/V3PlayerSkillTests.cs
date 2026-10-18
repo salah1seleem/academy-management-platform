@@ -69,6 +69,8 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(owner, $"{Skills}/plans/{plan}/reviews", numeric with { State = "Learning", MeasuredValue = 1.5m, RequestId = Guid.NewGuid() })).StatusCode);
         (await Send(owner, $"{Skills}/plans/{plan}/reviews", numeric with { State = "Mastered", MeasuredValue = 8, RequestId = Guid.NewGuid() })).EnsureSuccessStatusCode();
         var full = await Read(); Assert.Equal(100, full.GetProperty("progress").GetProperty("percentage").GetDecimal()); Assert.True(full.GetProperty("progress").GetProperty("readyForTechnicalReview").GetBoolean()); Assert.Equal(3, full.GetProperty("history").GetArrayLength());
+        var numericEvidence=full.GetProperty("skills").EnumerateArray().Single(s=>s.GetProperty("requirement").GetProperty("id").GetGuid()==b);
+        Assert.Equal("NotAssessed",numericEvidence.GetProperty("baseline").GetProperty("state").GetString());Assert.Equal(JsonValueKind.Null,numericEvidence.GetProperty("baseline").GetProperty("measuredValue").ValueKind);Assert.Equal(8,numericEvidence.GetProperty("latest").GetProperty("measuredValue").GetDecimal());
         var mine = await family.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{player}/skills/plans/{plan}"); Assert.False(mine.GetProperty("canReview").GetBoolean()); Assert.Equal(100, mine.GetProperty("progress").GetProperty("percentage").GetDecimal());
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(family, $"{Skills}/plans/{plan}/reviews", review with { RequestId = Guid.NewGuid() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync($"{Skills}/plans/{plan}")).StatusCode);
