@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-15A2 — حصة فعلية وضيوف وسحب إداري، 2026-10-18
+
+`f831feb91379f6e9a0563213a2e52ff4abc95460`/125/D3-068: نفس الجمهور والمعرض، مصدر حصة وعزل موافقات/عضوية، سحب إداري محفوظ وملاحظة اختيارية وفصلRead/Edit/Add، لا إحياء للأصل أو مال/حضور/إشعار ضمني. API7/50s+تعويض1/15s وgrants1/22s متداخل، Unit60/Web21/Flutter11، Browser1/31.7s وiOS1/24s؛ تقارير مطابقة وأدوات/EF ناجحة. [Owner Web390](evidence/v2-15a2/owner-withdrawn-session-media-web-390.png)، [Owner iOS](evidence/v2-15a2/owner-withdrawn-session-media-ios.png)، [Family iOS نسخة جديدة](evidence/v2-15a2/guardian-new-session-media-ios.png) فعلية راجعت؛ الأبيض PNG اصطناعي صحيح لا صورة طفل. NativeOwner في موضع تمرير، فلا تنسب الصورة التالية لحالة السحب أعلاها؛ معرف النسخة مثبت بالرحلة. [المحاولات والبيئات والحدود والاستئناف](PROGRESS.md). لاH/Full Regression أو MP4/FilePicker جهاز/Android/جهاز مادي/AppRoot شامل؛ فحص الملفات والروابط والاحتفاظ وبقيةV2-15/V2/V3 باقية، كل المالي المتبقي آخرًا.
+
+
 ## V2-15A1 — جمهور واقعة الوسائط وموافقة الأسرة، 2026-10-18
 
 `d61d5de7ef72d19a46f57392b52868ab83b97ce7`/124/D3-067: اختيار Guardian مستقل افتراضيهOFF، مراجعة الناشر للظاهرين، roster مؤرخ وموافقات محفوظة، إعادة تحقق وتنزيلno-store، السحب/فك الرابط لا يحيي الملف بإعادة السماح أو حذف الساحب. لا مال/حضور/إعلان ضمني، وRead/Add/branch للرافع نفسه. API5/5/30s، Web13 بملفين، Flutter9 (7Widget+2HTTP)، Browser1/20.7s وiOSرحلة1/7s، تقرير مالي مطابق وأدوات/EF ناجحة. [Owner Web](evidence/v2-15a1/owner-media-audience-web-390.png)، [Family Web](evidence/v2-15a1/guardian-withdrawn-media-consent-web-390.png)، [Family iOS منشور](evidence/v2-15a1/guardian-published-media-ios.png)، [iOS مسحوب](evidence/v2-15a1/guardian-withdrawn-media-ios.png) فعلية راجعت؛ الأبيض PNG اختبار صحيح لا صورة طفل. [كل المحاولات والبيئات والحدود](PROGRESS.md). لاH/CI شامل/FilePicker أو MP4 جهاز/Android/جهاز مادي/AppRoot كامل أو نشر5080. الحصة وضيوفها والسحب الإداري والفحص والاحتفاظ والتصدير/الذكريات وبقيةV2-15/V2/V3 باقية، وكل المالي المتبقي آخرًا.
