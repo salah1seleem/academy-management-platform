@@ -11,6 +11,7 @@ import 'coach_player.dart';
 import '../shared/past_attendance.dart';
 import '../shared/attendance_draft.dart';
 import 'session_context.dart';
+import '../shared/session_lesson.dart';
 
 class CoachAttendance extends StatefulWidget {
   final AuthController auth;
@@ -274,6 +275,17 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                       ),
                       const SizedBox(height: 8),
                       SessionContextBadges(session: session, showSource: true),
+                      GLink(
+                        localized(context, 'خطة الحصة', 'Session plan'),
+                        Icons.playlist_add_check,
+                        () => openPage(
+                          context,
+                          SessionLessonPage(
+                            auth: widget.auth,
+                            sessionId: widget.sessionId,
+                          ),
+                        ),
+                      ),
                       UiText(day(session['sessionDate'])),
                       UiText(
                         '${textOf(session['startTime']).split(':').take(2).join(':')} — ${textOf(session['endTime'] ?? '—').split(':').take(2).join(':')}',

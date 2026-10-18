@@ -50,7 +50,7 @@ export function GroupSessions({ initialGroupId = "", initialDate }: { initialGro
         { key: "coach", header: "المدرب", render: s => s.coaches.join("، ") || "—" },
         { key: "location", header: "الفرع والرياضة", render: s => <>{s.branch}<small>{s.sport}</small></> },
         { key: "players", header: "اللاعبون", render: s => s.playerCount },
-        { key: "actions", header: "الحضور وإدارة الحصة", render: s => <div className="row-actions"><Link className="secondary-button" href={`/dashboard/attendance/sessions/${s.id}/players${filters.playerId ? `?playerId=${filters.playerId}` : ""}`}>حضور اللاعبين</Link>{canEditCoach && <button className="secondary-button" onClick={() => setOverriding(s.id)}>بديل لهذه الحصة</button>}</div> },
+        { key: "actions", header: "الحضور وإدارة الحصة", render: s => <div className="row-actions"><Link className="secondary-button" href={`/dashboard/attendance/sessions/${s.id}/players${filters.playerId ? `?playerId=${filters.playerId}` : ""}`}>حضور اللاعبين</Link><Link className="secondary-button" href={`/dashboard/attendance/sessions/${s.id}/lesson`}>خطة الحصة</Link>{canEditCoach && <button className="secondary-button" onClick={() => setOverriding(s.id)}>بديل لهذه الحصة</button>}</div> },
       ]} /><div className="sessions-toolbar"><button type="button" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</button><button type="button" disabled={(page + 1) * 50 >= sessions.length} onClick={() => setPage(p => p + 1)}>التالي</button></div>
     </> }</section></>;
 }

@@ -1730,6 +1730,223 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AcademyId", "ActorUserId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "TemplateId", "SportId");
+
+                    b.HasIndex("AcademyId", "TrainingSessionId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "TrainingSessionId", "SportId");
+
+                    b.ToTable("SessionLessonAssignments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SessionLessonAssignment_Revision", "\"IsActive\" AND \"Revision\">0");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TrainingLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "TemplateId", "Position")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "ExerciseId", "TrainingLevelId", "SportId");
+
+                    b.HasIndex("AcademyId", "TemplateId", "TrainingLevelId", "SportId");
+
+                    b.ToTable("SessionLessonSteps", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SessionLessonStep_Range", "\"IsActive\" AND \"Minutes\" BETWEEN 1 AND 180 AND \"Position\" BETWEEN 0 AND 19");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CopiedFromId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DeclaredMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TrainingLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("AcademyId", "CreatedByUserId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "TrainingLevelId", "SportId");
+
+                    b.HasIndex("AcademyId", "CopiedFromId", "TrainingLevelId", "SportId");
+
+                    b.ToTable("SessionLessonTemplates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SessionLessonTemplate_Review", "\"IsActive\" AND \"DeclaredMinutes\" BETWEEN 1 AND 180 AND \"State\" IN ('Draft','Reviewed') AND (\"State\"<>'Reviewed' OR \"ReviewedByUserId\" IS NOT NULL AND \"ReviewedAtUtc\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Evaluations.SkillCurriculum", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1898,6 +2115,115 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("SkillRequirements", null, t =>
                         {
                             t.HasCheckConstraint("CK_SkillRequirement_Protocol", "\"IsActive\" AND length(trim(\"Name\"))>0 AND length(trim(\"Protocol\"))>0 AND \"Unit\" IN ('Checklist','Count','Seconds','Metres') AND \"DisplayOrder\" BETWEEN 0 AND 19");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.TrainingExercise", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CopiedFromId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Equipment")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RightsKind")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<string>("RightsReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Skill")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("SportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TrainingLevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("AcademyId", "CreatedByUserId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "TrainingLevelId", "SportId");
+
+                    b.HasIndex("AcademyId", "CopiedFromId", "TrainingLevelId", "SportId");
+
+                    b.ToTable("TrainingExercises", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TrainingExercise_Review", "\"IsActive\" AND \"Minutes\" BETWEEN 1 AND 180 AND \"RightsKind\" IN ('Original','Licensed') AND length(trim(\"RightsReference\"))>0 AND \"State\" IN ('Draft','Reviewed') AND (\"State\"<>'Reviewed' OR \"ReviewedByUserId\" IS NOT NULL AND \"ReviewedAtUtc\" IS NOT NULL)");
                         });
                 });
 
@@ -13041,6 +13367,91 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonAssignment", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.SessionLessonTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TemplateId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Attendance.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingSessionId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonStep", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.TrainingExercise", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ExerciseId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingLevelId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.SessionLessonTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TemplateId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingLevelId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.SessionLessonTemplate", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.SessionLessonTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CopiedFromId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingLevelId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Evaluations.SkillCurriculum", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -13093,6 +13504,39 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id", "SportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Evaluations.TrainingExercise", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Structure.TrainingLevel", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Evaluations.TrainingExercise", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CopiedFromId", "TrainingLevelId", "SportId")
+                        .HasPrincipalKey("AcademyId", "Id", "TrainingLevelId", "SportId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Facilities.AccessEntitlement", b =>

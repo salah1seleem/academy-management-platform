@@ -129,6 +129,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<PlayerSkillPlan>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
         BranchFilter<PlayerSkillReview>(b, x => PlayerSkillPlans.Any(p => p.Id == x.PlanId));
         BranchFilter<PlayerLevelReview>(b, x => SportEnrollments.Any(e => e.Id == x.SportEnrollmentId));
+        BranchFilter<SessionLessonAssignment>(b, x => TrainingSessions.Any(s => s.Id == x.TrainingSessionId));
         BranchFilter<EvaluationScore>(b, x => PlayerEvaluations.Any(e => e.Id == x.PlayerEvaluationId));
         BranchFilter<PlayerMedicalRecord>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
         BranchFilter<PlayerMedia>(b, x => SportEnrollments.Any(e => e.PlayerId == x.PlayerId));
@@ -203,6 +204,7 @@ public sealed partial class FoundationDbContext
     {
         ChangeTracker.DetectChanges();
         GuardPlayerGoalHistory();
+        GuardSessionLessons();
         await GuardSkillHistory(token);
         if (ChangeTracker.Entries<PlayerLevelReview>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)) throw new InvalidOperationException("مراجعات المستويات محفوظة؛ التصحيح بمراجعة جديدة.");
         foreach (var e in ChangeTracker.Entries<Academy.Infrastructure.Content.HelpVideoRevision>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
@@ -311,6 +313,7 @@ public sealed partial class FoundationDbContext
             }
             if (BranchScopeRestricted && entry.Entity is Branch scopedBranch && !RequestBranchIds.Contains(scopedBranch.Id)) throw new ResourceScopeException();
             if (BranchScopeRestricted && entry.Entity is SkillCurriculum or SkillRequirement) throw new ResourceScopeException();
+            if (BranchScopeRestricted && entry.Entity is TrainingExercise or SessionLessonTemplate or SessionLessonStep) throw new ResourceScopeException();
             foreach (var name in new[] { "BranchId", "PreferredBranchId" })
                 if (BranchScopeRestricted && entry.Metadata.FindProperty(name) is not null && entry.Property(name).CurrentValue is Guid branch && !RequestBranchIds.Contains(branch)) throw new ResourceScopeException();
             foreach (var fk in entry.Metadata.GetForeignKeys().Where(f => f.PrincipalEntityType.FindProperty("AcademyId") is not null))
