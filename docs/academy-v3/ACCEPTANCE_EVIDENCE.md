@@ -1,5 +1,10 @@
 # أدلة قبول V2 + V3
 
+## V2-10G — شارات المجهود بقواعد ونشر خاصين، 2026-10-18
+
+`8f84b9f8d35d07fe99d5e45618dd9e374bd2982e`/123/D3-066: قاعدة رياضية ثابتة، نشر/إيقاف صريحان، grant/revoke بسجل وملاحظة أسرة اختيارية وملخص لنفس الرياضة؛ لا مال/حضور/ترقية/لوحة ترتيب أو إعادة منح ضمنية. تفويض حي وCRUD/نطاق/coach assignment/linked child/CSRF/CAS/replay وEF/SQL. API3/3/32s، Unit57، Web10 بملفين، Flutter6، Browser1/30.3s وiOS رحلة1/7s، profile/report مطابقان، build/typecheck/lint/analyze/EF ناجحة. [Owner Web](evidence/v2-10g/owner-granted-badge-web-390.png)، [Family Web](evidence/v2-10g/guardian-revoked-badge-web-390.png)، [Family iOS](evidence/v2-10g/guardian-revoked-badge-ios.png) فعلية راجعت. [المحاولات المصححة والبيانات والأوامر والقيود](PROGRESS.md): صورتاiOS40→20 تحفظان منحة المحاولة الأولى، ليستا0→20/بيانات قبول نهائي. لاH/CI شامل/Android/جهاز فعلي/AppRoot/Native Rule Editor أو نشر5080؛ V2/V3 جزئيتان، كل المالي المتبقي آخرًا.
+
+
 ## V2-10F — أرشفة المصدر دون محو الحصة، 2026-10-18
 
 `53d8c220a7518030edbc9c358abe4d9ab6d64a01`/122/D3-065: واقعة أرشفة ثابتة، منع الاستخدام/الاعتماد الجديد والقالب المتأثر، مرجع الحصة محفوظ بتحذير Web/Native، صلاحية عامةRead/Edit وCSRF/CAS/replay/SQL. API6/6/1m33s معseed والمستهلكات، Unit53، Web7، Flutter8، Browser1/21.7s وiOSرحلة1/4s وتقارير/حضور/تاريخ مطابق، أدوات وEF نظيفة. [Owner Web](evidence/v2-10f/owner-archived-exercise-web-390.png)، [الحصة Web](evidence/v2-10f/session-archived-source-web-390.png)، [Coach iOS](evidence/v2-10f/coach-archive-warning-ios.png) فعلية راجعت؛ [كل المحاولات والقيود والاستئناف](PROGRESS.md). لاH/CI شامل/Android/جهازفعلي/Native editor أو نشر5080؛ الشارات وبقية§21/V2/V3 باقية، وكل المالي المتبقي آخرًا.
