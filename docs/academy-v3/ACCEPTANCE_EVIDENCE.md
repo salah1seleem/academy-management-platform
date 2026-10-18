@@ -2,6 +2,8 @@
 
 ## V2-15B1 — شهر الطفل من الدليل لا من مؤشر مختلق، 2026-10-18
 
+Code `3e0a0fe3a8e491e6546ec1d8fa23c8898069ba2e` مرفوع؛ [CI39151268156](https://github.com/salah1seleem/academy-management-platform/actions/runs/39151268156) بدأ ولم يتحقق نجاحه بعد.
+
 D3-072/schema126 بلاmigration: مراجعات مهارات منشورة، شارات وشهادات بحالة السحب الحالية، لكل تسجيل وشهر حقيقي، مصدر مباشر وصفحات وتصديرشهر كامل مخول. لا متوسط/AI/مال أوشرطتجديد، ولا ميديا/حضور/أهدافخاصة فيالتجميع. Unit8/51ms وAPI4/35s ثمCoach1/15s، Web8/3.17s وFlutter8/6s، EF/build/typecheck/lint/analyze ناجحة. حدود2000/2001 مثبتةUnit، لا تحميل6000سطر أوقياسstressمدعى.
 
 Browserنهائي1/28.2s: Owner/Family، تنزيلCSVفعلي ومحتواه منالخادم، سحبومصدر وشهرخلو/عرض390 وتقريرمالي مطابق. [OwnerWeb](evidence/v2-15b1/owner-monthly-web-390.png)، [FamilyWeb](evidence/v2-15b1/guardian-monthly-web-390.png) فعليتان راجعتهما بعدإصلاحCSS/fixture. iOS **رحلةواحدة7s+teardown**، نسخ تقريرCSVفعليًا للحافظةومطابقتهبالخادم، سحبوتحديث وتقريرمالي مطابق وlogout؛ [FamilyiOS](evidence/v2-15b1/guardian-monthly-ios.png) راجعته: كارت25100 هدفالرحلةالمسحوب معأثرBrowserسابق، لقطةمركزةعلىالدليل وليستAppRoot. لاAndroid/جهازمادي/Nativefile أوH. [المحاولات والأوامر والبيئات والقيود](PROGRESS.md).
