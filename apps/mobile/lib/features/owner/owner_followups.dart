@@ -8,6 +8,7 @@ import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../coach/coach_attendance.dart';
 import 'owner_operations.dart';
+import 'owner_feedback_detail.dart';
 
 const followUpStates = {
   'New': 'جديد',
@@ -23,7 +24,27 @@ const followUpConditions = {
   'GroupSessionCoverage': 'حصص قادمة بلا مدرب مسند مخول',
   'GroupEvaluationDrafts': 'مسودات تقييم منذ 7 أيام',
   'GroupRecordedAbsences': 'غياب متكرر مسجل',
+  'GroupOverdueFeedback': 'ملاحظات تجاوزت موعد المتابعة',
 };
+Widget overdueFeedbackSummary(Json source) {
+  final d = source['overdueFeedback'];
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      UiText(
+        d is! Map
+            ? 'بيانات الملاحظات غير متاحة حاليًا.'
+            : '${d['complaintCount']} شكوى · ${d['suggestionCount']} اقتراح · ${d['submitterCount']} حساب مقدم فريد',
+      ),
+      if (d is Map)
+        UiText('أقدم موعد متابعة: ${d['oldestDueOn'] ?? 'غير محدد'}'),
+      const UiText(
+        'تجاوزت موعدًا حدده المالك؛ ليست اتهامًا أو رسالة أو تسوية مالية.',
+      ),
+    ],
+  );
+}
+
 Widget recordedAbsenceSummary(Json source) {
   final d = source['recordedAbsences'];
   return Column(
@@ -469,6 +490,8 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
                         evaluationDraftSummary(obj(c['source'])),
                       if (c['condition'] == 'GroupRecordedAbsences')
                         recordedAbsenceSummary(obj(c['source'])),
+                      if (c['condition'] == 'GroupOverdueFeedback')
+                        overdueFeedbackSummary(obj(c['source'])),
                       UiText(
                         '${obj(c['source'])['enrollments']} تسجيلًا مسندًا · السعة ${obj(c['source'])['capacity'] ?? 'غير محددة'}',
                       ),
@@ -594,6 +617,21 @@ class _FollowUpFormState extends State<_FollowUpForm> {
     return followUpList([
       UiText(followUpConditions[item['condition']] ?? 'متابعة'),
       UiText(textOf(source['name'])),
+      if (item['condition'] == 'GroupOverdueFeedback') ...[
+        overdueFeedbackSummary(source),
+        for (final id
+            in (obj(item['evidence'])['feedbackIds'] as List? ?? []).take(3))
+          TextButton(
+            onPressed: () => openPage(
+              context,
+              OwnerFeedbackDetail(auth: widget.auth, id: id.toString()),
+            ),
+            child: const UiText('فتح ملاحظة من دليل الإنشاء'),
+          ),
+        const UiText(
+          'أول 3 ملاحظات من دليل الإنشاء؛ إغلاق المتابعة لا يحل الملاحظة أو يرسل ردًا.',
+        ),
+      ],
       if (item['condition'] == 'GroupRecordedAbsences') ...[
         recordedAbsenceSummary(source),
         const UiText('دليل الإنشاء ثابت؛ إغلاق المتابعة لا يغير حضور أي لاعب.'),

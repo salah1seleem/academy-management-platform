@@ -450,6 +450,8 @@ if (app.Environment.IsEnvironment("Demo"))
         if (app.Configuration.GetValue<bool>("Demo:AssignedFollowUpSeedEnabled")) await AssignedFollowUpDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:OwnerFollowUpSeedEnabled"))
             await OwnerFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
+        if(app.Configuration.GetValue<bool>("Demo:FeedbackFollowUpSeedEnabled"))
+            await FeedbackFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:CommunityCampaignSeedEnabled"))
             await CommunityCampaignDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>(),app.Configuration);
         if (app.Configuration.GetValue<bool>("Demo:CoachAgreementSeedEnabled"))

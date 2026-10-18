@@ -38,6 +38,7 @@ public static partial class OwnerFollowUpEndpoints
         if (!includeEvaluationIds) {
             evidence.Remove("evaluationIds");
             evidence.Remove("absenceEvidence");
+            evidence.Remove("feedbackIds");
         }
         return JsonSerializer.SerializeToElement(evidence);
     }

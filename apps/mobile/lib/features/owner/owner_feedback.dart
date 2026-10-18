@@ -6,6 +6,7 @@ import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../../core/theme/appearance.dart';
 import 'owner_operations.dart';
+import 'owner_feedback_detail.dart';
 
 class OwnerFeedbackInbox extends StatefulWidget {
   final AuthController auth;
@@ -161,9 +162,20 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                   '${item['coachName'] ?? 'ملاحظة عامة'} · ${item['branchName']}',
                 ),
                 if (item['score'] != null) UiText('${item['score']}/5'),
+                TextButton(
+                  onPressed: () => openPage(
+                    context,
+                    OwnerFeedbackDetail(
+                      auth: widget.auth,
+                      id: textOf(item['id']),
+                    ),
+                  ),
+                  child: const UiText('فتح الملاحظة'),
+                ),
                 if (textOf(item['message']).isNotEmpty)
                   UiText(textOf(item['message'])),
-                if (textOf(item['ownerResponse']).isNotEmpty)
+                if ((item['ownerResponse'] is String &&
+                    (item['ownerResponse'] as String).isNotEmpty))
                   UiText('رد الإدارة: ${item['ownerResponse']}'),
                 if (item['status'] == 'Open')
                   TextButton(

@@ -20,6 +20,7 @@ public static class GuardianFeedbackEndpoints
         guardian.MapPost("/feedback", Submit).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("guardian-feedback");
         var owner = app.MapGroup("/api/v1/manage/feedback").RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         owner.MapGet("/", List);
+        owner.MapGet("/{id:guid}", Detail);
         owner.MapPost("/{id:guid}/review", Review).AddEndpointFilter<CsrfFilter>();
         owner.MapPost("/{id:guid}/due", SetDue).AddEndpointFilter<CsrfFilter>();
         owner.MapPost("/{id:guid}/resolve", Resolve).AddEndpointFilter<CsrfFilter>();
@@ -83,14 +84,31 @@ public static class GuardianFeedbackEndpoints
         return Results.Created($"/api/v1/guardian/children/{playerId}/feedback-options", new { feedback.Id });
     }
 
-    private static async Task<IResult> List(Guid? branchId, Guid? coachId, string? kind, string? status, bool? overdue, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> Detail(Guid id, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, HttpContext http)
+    {
+        var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        http.Response.Headers.CacheControl = "private, no-store";
+        var item = await db.GuardianFeedbacks.AsNoTracking().SingleOrDefaultAsync(f => f.AcademyId == t.AcademyId && f.Id == id && f.IsActive);
+        if (item == null) return Results.NotFound();
+        var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
+        return Results.Ok(new { asOfDate = today, item.Id, item.Kind, item.Score, item.Message, item.Status, item.DueOn,
+            overdue = item.Status != "Resolved" && item.DueOn < today, item.OwnerResponse, item.RespondedAtUtc,
+            item.CreatedAtUtc, item.ReviewedAtUtc, item.PlayerId, item.TrainingGroupId,
+            playerName = await db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == item.PlayerId).Select(p => p.ArabicName).FirstOrDefaultAsync(),
+            groupName = await db.TrainingGroups.Where(g => g.AcademyId == t.AcademyId && g.Id == item.TrainingGroupId).Select(g => g.ArabicName).FirstOrDefaultAsync(),
+            branchName = await db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == item.BranchId).Select(b => b.ArabicName).FirstOrDefaultAsync(),
+            coachName = await db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == item.CoachMembershipId).Select(m => m.User.DisplayName).FirstOrDefaultAsync() });
+    }
+
+    private static async Task<IResult> List(Guid? branchId, Guid? coachId, Guid? groupId, string? kind, string? status, bool? overdue, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
         if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status is not (null or "Open" or "Reviewed" or "Resolved" or "Unresolved")) return Results.BadRequest(new { message = "فلتر غير صالح." });
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) return Results.NotFound();
+        if (groupId.HasValue && !await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId)) return Results.NotFound();
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
-        return Results.Ok(await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (!coachId.HasValue || x.CoachMembershipId == coachId) && (kind == null || x.Kind == kind) && (status == null || status == "Unresolved" && (x.Status == "Open" || x.Status == "Reviewed") || x.Status == status)
-            && (overdue != true || x.Status != "Resolved" && x.DueOn != null && x.DueOn < today))
+        return Results.Ok(await db.GuardianFeedbacks.Where(x => x.IsActive && x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (!groupId.HasValue || x.TrainingGroupId == groupId) && (!coachId.HasValue || x.CoachMembershipId == coachId) && (kind == null || x.Kind == kind) && (status == null || status == "Unresolved" && (x.Status == "Open" || x.Status == "Reviewed") || x.Status == status)
+            && (overdue != true || x.Kind != "Rating" && x.Status != "Resolved" && x.DueOn != null && x.DueOn < today))
             .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Take(200)
             .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.DueOn, overdue = x.Status != "Resolved" && x.DueOn != null && x.DueOn < today, x.OwnerResponse, x.RespondedAtUtc, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());
     }

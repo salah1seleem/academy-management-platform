@@ -9,7 +9,9 @@ test("Owner opens an overdue synthetic family follow-up on mobile", async ({ pag
   await page.waitForURL("**/dashboard");
   const followup = page.getByRole("link", { name: /ملاحظات تجاوزت موعد المتابعة/ });
   await expect(followup).toBeVisible();
-  await expect(followup).toContainText("1");
+  const overdue = await (await page.request.get('/api/v1/manage/feedback?overdue=true')).json();
+  expect(overdue.length).toBeGreaterThan(0);
+  await expect(followup).toContainText(String(overdue.length));
   await followup.click();
   await expect(page).toHaveURL(/\/dashboard\/feedback\?overdue=true/);
   await expect(page.getByRole("combobox", { name: "الموعد" })).toHaveValue("overdue");

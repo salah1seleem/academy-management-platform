@@ -5,8 +5,9 @@ import { ClipboardCheck, CalendarClock, ArrowRight } from "lucide-react";
 import { csrfRequest } from "./dashboard-api";
 import { conditions, followUpStates, DraftReview, type DraftReviewData } from "./owner-followups";
 import { RecordedAbsenceReview, type RecordedAbsenceData } from "./recorded-absence-evidence";
+import { OverdueFeedbackReview, type OverdueFeedbackData } from "./overdue-feedback-evidence";
 import "./assigned-followups.css";
-type Item = { id: string; version: number; state: string; condition: string; conditionActive: boolean | null; overdue: boolean; dueOn: string | null; note: string | null; resolutionReason: string | null; sourceUrl: string; source: { name: string; branch: string; sport: string; enrollments: number; capacity: number | null; recordedAbsences?: RecordedAbsenceData | null; evaluationDrafts?: DraftReviewData | null; coverageGaps?: { sessionDate: string; startTime: string }[] } | null };
+type Item = { id: string; version: number; state: string; condition: string; conditionActive: boolean | null; overdue: boolean; dueOn: string | null; note: string | null; resolutionReason: string | null; sourceUrl: string; source: { name: string; branch: string; sport: string; enrollments: number; capacity: number | null; overdueFeedback?: OverdueFeedbackData | null; recordedAbsences?: RecordedAbsenceData | null; evaluationDrafts?: DraftReviewData | null; coverageGaps?: { sessionDate: string; startTime: string }[] } | null };
 type Data = { item?: Item; items?: Item[]; history?: { id: string; createdAtUtc: string; after: string }[]; canEdit: boolean; canOpenSource: boolean; hasMore?: boolean };
 export function AssignedFollowUps({ id }: { id?: string }) {
   const [range, setRange] = useState<{ from?: string; to?: string; allDates?: string }>({});
@@ -36,6 +37,7 @@ function Summary({ item: i, canOpenSource }: { item: Item; canOpenSource: boolea
     <h2>{i.source?.name ?? "المصدر غير متاح"}</h2><p>{conditions[i.condition]}</p><p>{i.source?.branch} · {i.source?.sport}</p>
     {i.condition === "GroupEvaluationDrafts" && <DraftReview data={i.source?.evaluationDrafts}/>}
     {i.condition === "GroupRecordedAbsences" && <RecordedAbsenceReview data={i.source?.recordedAbsences}/>}
+    {i.condition === "GroupOverdueFeedback" && <OverdueFeedbackReview data={i.source?.overdueFeedback}/>}
     {i.condition === "GroupLowOccupancy" && i.source && <p>تسجيلات فعالة مسندة: {i.source.enrollments}، السعة: {i.source.capacity ?? "غير محددة"}</p>}
     {i.condition === "GroupSessionCoverage" && <p>{i.source?.coverageGaps?.length ?? 0} حصة قادمة بلا إسناد مدرب مخول؛ ليست غيابًا مسجلًا أو خصمًا.</p>}
     <p><CalendarClock size={18}/>موعد المتابعة: <bdi>{i.dueOn ?? "غير محدد"}</bdi></p>

@@ -295,6 +295,8 @@ class _Summary extends StatelessWidget {
           evaluationDraftSummary(source),
         if (item['condition'] == 'GroupRecordedAbsences')
           recordedAbsenceSummary(source),
+        if (item['condition'] == 'GroupOverdueFeedback')
+          overdueFeedbackSummary(source),
         if (item['condition'] == 'GroupLowOccupancy')
           UiText(
             'تسجيلات فعالة مسندة: ${source['enrollments']}، السعة: ${source['capacity'] ?? 'غير محددة'}',
