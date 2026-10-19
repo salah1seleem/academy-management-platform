@@ -8,6 +8,7 @@ import { SportsQuickActions } from "../components/sports-ui";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { RenewalOpportunityCard } from "./renewal-opportunities";
 import { VipMembers } from "./vip-members";
+import { CoachRatingLeaders } from "./coach-rating-leaders";
 
 type Filters = Record<string, string>;
 type Summary = {
@@ -80,6 +81,7 @@ export function PremiumOwnerDashboard() {
     </section>}
     <div className="owner-chart-grid"><SectionCard title="حالة الاشتراكات"><DonutChart center={number(total)} caption="لاعبًا" rows={[{ name: "فعالة — لا تنتهي قريبًا", value: Math.max(0, s.active - s.expiring), href: players("stable") }, { name: "تنتهي قريبًا", value: s.expiring, href: players("expiring") }, { name: "منتهية", value: s.expired, href: players("expired") }, ...(other ? [{ name: "مجمدة / لم تبدأ", value: other, href: players("other") }] : [])]} /></SectionCard><SectionCard title="تحصيل الاشتراكات حسب الفرع"><DonutChart caption="قبل الاسترداد" center={cash(d.byBranch.reduce((n, r) => n + r.amount, 0), d.currency)} rows={d.byBranch.map(r => ({ name: r.name, value: r.amount, display: cash(r.amount, d.currency), href: `/dashboard/reports/financial?${params({ from, to, collectionType: "Subscription", branchId: r.id ?? filters.branchId ?? "" })}` }))} /></SectionCard><SectionCard title="حضور الفترة"><DonutChart center={number(d.attendance.present + d.attendance.absent + d.attendance.notRecorded)} caption="سجل حضور" rows={[{ name: "حاضر", value: d.attendance.present, href: `/dashboard/reports/attendance?${params({ ...filters, from, to, status: "Present" })}` }, { name: "غائب", value: d.attendance.absent, href: `/dashboard/reports/attendance?${params({ ...filters, from, to, status: "Absent" })}` }, { name: "لم يُسجل", value: d.attendance.notRecorded, href: `/dashboard/reports/attendance?${params({ ...filters, from, to, status: "NotRecorded" })}` }]} /></SectionCard></div>
     {role === "AcademyOwner" && <VipMembers branchId={filters.branchId} asOf={to}/>}
+    {role === "AcademyOwner" && <CoachRatingLeaders branchId={filters.branchId} from={from} to={to}/>}
     {role === "AcademyOwner" && <section className="owner-secondary-metrics" aria-label="فرص التجديد الحالية"><RenewalOpportunityCard branchId={filters.branchId} /></section>}
     <SectionCard title="إجراءات سريعة"><SportsQuickActions /></SectionCard></>}</>;
 }

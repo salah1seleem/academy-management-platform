@@ -21,6 +21,7 @@ public static partial class GuardianFeedbackEndpoints
         guardian.MapPost("/feedback", Submit).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("guardian-feedback");
         var owner = app.MapGroup("/api/v1/manage/feedback").RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         owner.MapGet("/", List);
+        owner.MapGet("/coach-rankings", CoachRankings);
         owner.MapGet("/{id:guid}", Detail);
         owner.MapPost("/{id:guid}/review", Review).AddEndpointFilter<CsrfFilter>();
         owner.MapPost("/{id:guid}/due", SetDue).AddEndpointFilter<CsrfFilter>();
@@ -146,7 +147,7 @@ public static partial class GuardianFeedbackEndpoints
             coachName = await db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == item.CoachMembershipId).Select(m => m.User.DisplayName).FirstOrDefaultAsync() });
     }
 
-    private static async Task<IResult> List(Guid? branchId, Guid? coachId, Guid? groupId, string? kind, string? status, bool? overdue, string? subject, string? urgency, bool? safetyOnly, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, HttpContext h)
+    private static async Task<IResult> List(Guid? branchId, Guid? coachId, Guid? groupId, string? kind, string? status, bool? overdue, string? subject, string? urgency, bool? safetyOnly, DateOnly? from, DateOnly? to, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, HttpContext h)
     {
         h.Response.Headers.CacheControl = "private, no-store";
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
@@ -154,9 +155,14 @@ public static partial class GuardianFeedbackEndpoints
         if (subject != null && !FeedbackSubjects.Contains(subject) || urgency != null && !FeedbackUrgencies.Contains(urgency)) return Results.BadRequest(new { message = "راجع فلتر الموضوع والاستعجال." });
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) return Results.NotFound();
         if (groupId.HasValue && !await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId)) return Results.NotFound();
+        if(from>to||to==DateOnly.MaxValue)return Results.UnprocessableEntity(new{message="اختر فترة صحيحة للملاحظات."});
+        var zone=TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.TimeZone).SingleAsync());
+        DateTimeOffset? first=from.HasValue?TimeZoneInfo.ConvertTimeToUtc(from.Value.ToDateTime(TimeOnly.MinValue),zone):null;
+        DateTimeOffset? after=to.HasValue?TimeZoneInfo.ConvertTimeToUtc(to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue),zone):null;
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         return Results.Ok(await db.GuardianFeedbacks.Where(x => x.IsActive && x.AcademyId == t.AcademyId && (!branchId.HasValue || x.BranchId == branchId) && (!groupId.HasValue || x.TrainingGroupId == groupId) && (!coachId.HasValue || x.CoachMembershipId == coachId) && (kind == null || x.Kind == kind) && (status == null || status == "Unresolved" && x.Status != "Resolved" && x.Status != "Closed" || x.Status == status)
             && (subject == null || x.Subject == subject) && (urgency == null || x.Urgency == urgency) && (safetyOnly != true || x.Urgency == "Safety" || x.ReportedUrgency == "Safety")
+            && (!first.HasValue||x.CreatedAtUtc>=first)&&(!after.HasValue||x.CreatedAtUtc<after)
             && (overdue != true || x.Kind != "Rating" && x.Status != "Resolved" && x.Status != "Closed" && x.DueOn != null && x.DueOn < today))
             .OrderByDescending(x => x.Status != "Resolved" && x.Status != "Closed" && (x.Urgency == "Safety" || x.ReportedUrgency == "Safety")).ThenByDescending(x => x.Status != "Resolved" && x.Status != "Closed" && x.Urgency == "Urgent").ThenByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Take(200)
             .Select(x => new { x.Id, x.Kind, x.Score, x.Message, x.Status, x.DueOn, x.Subject, x.Urgency, x.TriagedAtUtc, safety = x.Urgency == "Safety" || x.ReportedUrgency == "Safety", overdue = x.Status != "Resolved" && x.Status != "Closed" && x.DueOn != null && x.DueOn < today, x.OwnerResponse, x.RespondedAtUtc, x.CreatedAtUtc, x.ReviewedAtUtc, x.PlayerId, playerName = db.Players.Where(p => p.AcademyId == t.AcademyId && p.Id == x.PlayerId).Select(p => p.ArabicName).FirstOrDefault(), x.BranchId, branchName = db.Branches.Where(b => b.AcademyId == t.AcademyId && b.Id == x.BranchId).Select(b => b.ArabicName).FirstOrDefault(), x.CoachMembershipId, coachName = db.AcademyMemberships.Where(c => c.AcademyId == t.AcademyId && c.Id == x.CoachMembershipId).Select(c => c.User.DisplayName).FirstOrDefault() }).ToArrayAsync());

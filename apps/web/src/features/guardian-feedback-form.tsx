@@ -3,14 +3,15 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { GuardianShell } from "../components/guardian-shell";
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
+import { CoachRatingStars } from "./coach-rating-leaders";
 import { feedbackSubjects, feedbackUrgencies } from "./feedback-triage";
 import { feedbackStates } from "./feedback-state";
 import styles from "./player-skills.module.css";
 import { FeedbackIncident, FeedbackIncidentPicker } from "./feedback-incident";
 type Options = { asOfDate: string; groups: { id: string; name: string; coaches: { id: string; name: string }[] }[]; mine: { id: string; kind: string; message: string; status: string; ownerResponse: string | null; reportedSubject?: string | null; reportedUrgency?: string | null }[] };
-export function GuardianFeedbackForm({ playerId }: { playerId: string }) {
+export function GuardianFeedbackForm({ playerId, initialKind = "Complaint" }: { playerId: string; initialKind?: "Complaint" | "Rating" }) {
   const [data, setData] = useState<Options>(), [error, setError] = useState(""), [success, setSuccess] = useState(""), [revision, setRevision] = useState(0);
-  const [group, setGroup] = useState(""), [coach, setCoach] = useState(""), [kind, setKind] = useState("Complaint"), [subject, setSubject] = useState("Other"), [urgency, setUrgency] = useState("Routine"), [incident, setIncident] = useState(""), [message, setMessage] = useState(""), [score, setScore] = useState(5), [busy, setBusy] = useState(false);
+  const [group, setGroup] = useState(""), [coach, setCoach] = useState(""), [kind, setKind] = useState<string>(initialKind), [subject, setSubject] = useState("Other"), [urgency, setUrgency] = useState("Routine"), [incident, setIncident] = useState(""), [message, setMessage] = useState(""), [score, setScore] = useState(5), [busy, setBusy] = useState(false);
   const attempt = useRef<{ signature: string; key: string } | null>(null);
   const [linkedSession, setLinkedSession] = useState<FeedbackIncident | null>(null);
   function changeSession(s: FeedbackIncident | null) { setLinkedSession(s); setCoach(""); if (s) setGroup(s.groupId); else if (linkedSession) setGroup(""); }
@@ -29,7 +30,7 @@ export function GuardianFeedbackForm({ playerId }: { playerId: string }) {
     <label>نوع الملاحظة<select value={kind} disabled={busy} onChange={e => { setKind(e.target.value); setCoach(""); changeSession(null); }}><option value="Complaint">شكوى</option><option value="Suggestion">اقتراح</option><option value="Request">طلب للإدارة</option><option value="Rating">تقييم المدرب</option></select></label>
     {kind === "Request" && <p role="note">اكتب ما تحتاجه من الإدارة لهذا الطفل. الرد أو حل الطلب لا ينفّذ دفعًا أو تجديدًا أو نقل مجموعة أو تغيير حضور؛ لكل إجراء مساره وصلاحيته.</p>}
     <label>{kind === "Rating" ? "المدرب" : "المدرب المعني (اختياري)"}<select required={kind === "Rating"} disabled={busy} value={coach} onChange={e => setCoach(e.target.value)}><option value="">{kind === "Rating" ? "اختر المدرب" : "لا أعرف / ملاحظة عامة"}</option>{(linkedSession?.coaches ?? data.groups.find(g => g.id === group)?.coaches)?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-    {kind === "Rating" ? <label>التقييم<select value={score} disabled={busy} onChange={e => setScore(Number(e.target.value))}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} من 5</option>)}</select></label> : <>
+    {kind === "Rating" ? <CoachRatingStars value={score} disabled={busy} onChange={setScore}/> : <>
       <label>موضوع الملاحظة<select value={subject} disabled={busy} onChange={e => setSubject(e.target.value)}>{Object.entries(feedbackSubjects).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
       <label>درجة الاستعجال<select value={urgency} disabled={busy} onChange={e => setUrgency(e.target.value)}>{Object.entries(feedbackUrgencies).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
       <label>تاريخ الواقعة (اختياري)<input type="date" max={data.asOfDate} value={incident} disabled={busy} onChange={e => { setIncident(e.target.value); changeSession(null); }}/></label>

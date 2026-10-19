@@ -263,24 +263,24 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
                       ),
                       if (kind == 'Rating') ...[
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<int>(
-                          initialValue: score,
-                          decoration: const InputDecoration(
-                            labelText: 'تقييم ولي الأمر',
-                          ),
-                          items: [
+                        const UiText('تقييم ولي الأمر'),
+                        Wrap(
+                          children: [
                             for (var i = 1; i <= 5; i++)
-                              DropdownMenuItem(
-                                value: i,
-                                child: UiText('$i من 5'),
+                              IconButton(
+                                tooltip: '$i من 5',
+                                isSelected: i <= score,
+                                icon: const Icon(Icons.star_border_rounded),
+                                selectedIcon: const Icon(Icons.star_rounded),
+                                color: Colors.amber.shade700,
+                                onPressed: busy
+                                    ? null
+                                    : () => setState(() {
+                                        score = i;
+                                        requestKey = commandKey();
+                                      }),
                               ),
                           ],
-                          onChanged: busy
-                              ? null
-                              : (value) => setState(() {
-                                  score = value ?? 5;
-                                  requestKey = commandKey();
-                                }),
                         ),
                       ],
                       if (kind == 'Request')

@@ -839,3 +839,10 @@ footer {
 .vip-member-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem .25rem; border-bottom: 1px solid #e6eaf0; }
 .vip-member-list a { color: inherit; text-decoration: none; }
 .vip-member-list strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rating-stars { border: 0; padding: .5rem 0; display: flex; gap: .3rem; align-items: center; }
+.rating-stars label { position: relative; cursor: pointer; }
+.rating-stars input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; }
+.rating-stars label > span:not(.sr-only) { display: grid; place-items: center; width: 3rem; height: 3rem; font-size: 2rem; color: #9aabbd; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.rating-stars span.selected { color: #a66e00 !important; }
+.rating-stars input:focus-visible + span { outline: 2px solid #315de6; outline-offset: 2px; border-radius: .4rem; }
