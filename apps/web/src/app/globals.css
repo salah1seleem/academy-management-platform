@@ -851,5 +851,9 @@ footer {
 .workspace-destinations a { display:flex; justify-content:space-between; gap:1rem; border:1px solid #e3e7ee; border-radius:1rem; padding:1.2rem; background:#fafbfd; }
 .sidebar-security-link summary { cursor:pointer; }
 .sidebar-security-link a { display:block; padding:.5rem; }
+.employee-profile-hero { display:flex; gap:1rem; align-items:center; background:linear-gradient(120deg,#fff,#fff1f3); border:1px solid #f0dce2; border-radius:1.5rem; padding:1.5rem; margin-block-end:1rem; }
+.employee-profile-hero img { border-radius:1.25rem; object-fit:cover; }
+.employee-profile-hero h2,.employee-profile-hero p { margin:.25rem 0; }
+.employee-profile-hero > .status-pill { margin-inline-start:auto; }
 .rating-stars span.selected { color: #a66e00 !important; }
 .rating-stars input:focus-visible + span { outline: 2px solid #315de6; outline-offset: 2px; border-radius: .4rem; }

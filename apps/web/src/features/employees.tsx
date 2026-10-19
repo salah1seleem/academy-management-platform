@@ -7,27 +7,29 @@ import { AdminDataTable, EmptyState, ErrorState, ListSearch, LoadingState, PageH
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { csrfRequest, uploadAsset } from "./dashboard-api";
 import { usePayrollManage, usePayrollPermission } from "./payroll-access";
-import { formatDateAr, formatMoneyAr } from "../lib/formatters";
+import { formatMoneyAr } from "../lib/formatters";
 
-type Employee = { id: string; name: string; phone: string; jobTitle: string; branchId: string; monthlySalary: number; currency: string; contractStart: string; contractEnd?: string; hasContractHistory?: boolean; membershipId?: string; photoAssetId?: string; photoUrl?: string; isActive: boolean };
+type EmployeeFinancial={baseDue:number;deductions:number;additions:number;netDue:number};
+type Employee = { financial?:EmployeeFinancial|null; id: string; name: string; phone: string; jobTitle: string; branchId: string; monthlySalary: number; currency: string; contractStart: string; contractEnd?: string; hasContractHistory?: boolean; membershipId?: string; photoAssetId?: string; photoUrl?: string; isActive: boolean };
 type Options = { items: Employee[]; branches: { id: string; name: string }[]; accounts: { id: string; name: string; phone: string }[] };
 
 export function EmployeeList() {
-  const canManage = usePayrollManage();
-  const canSalary = usePayrollPermission("payroll.salary.manage");
-  const [data, setData] = useState<Options | null>(null), [error, setError] = useState(""), [search, setSearch] = useState("");
-  useEffect(() => { fetch("/api/v1/manage/employees/").then(async r => { if (!r.ok) throw new Error(); setData(await r.json()); }).catch(() => setError("تعذر تحميل الموظفين أو لا توجد صلاحية.")); }, []);
-  const rows = data?.items.filter(x => `${x.name} ${x.phone} ${x.jobTitle}`.includes(search)) ?? [];
-  return <><PageHeader title="الموظفون" context="فريق الأكاديمية" action={canManage && canSalary ? { label: "إضافة موظف", href: "/dashboard/staff/employees/new" } : undefined} secondaryActions={[{ label: "الحسابات والصلاحيات", href: "/dashboard/staff" }, { label: "الرواتب", href: "/dashboard/payroll" }]} />
-    {error && <ErrorState message={error} />}{!data && !error ? <LoadingState /> : <section className="list-card"><ListSearch label="البحث بالاسم أو الهاتف" value={search} onChange={setSearch} />
-      {!rows.length ? <EmptyState message="لا يوجد موظفون مطابقون." /> : <AdminDataTable label="الموظفون" rows={rows} rowKey={x => x.id} columns={[
-        { key: "name", header: "الموظف", primary: true, render: x => <><b>{x.name}</b><small dir="ltr">{x.phone}</small></> },
-        { key: "job", header: "الوظيفة / الفرع", render: x => <>{x.jobTitle}<small>{data?.branches.find(b => b.id === x.branchId)?.name}</small></> },
-        { key: "salary", header: "الراتب الشهري", render: x => <Link href={`/dashboard/staff/employees/${x.id}/salary`}>{formatMoneyAr(x.monthlySalary, x.currency)}<small>السجل والتغييرات</small></Link> },
-        { key: "contract", header: "العقد", render: x => <Link href={`/dashboard/staff/employees/${x.id}/contract`}>{x.contractEnd ? `${formatDateAr(x.contractStart)} — ${formatDateAr(x.contractEnd)}` : "دائم"}<small>سجل العقد</small></Link> },
-        { key: "account", header: "الحساب", render: x => x.membershipId ? "مرتبط بحساب مستقل" : "بدون حساب دخول" },
-        { key: "actions", header: "الإجراء", render: x => <RowActions actions={[...(canManage ? [{ label: "تعديل", href: `/dashboard/staff/employees/${x.id}` }] : []), { label: "المستحقات", href: `/dashboard/payroll?employeeId=${x.id}` }]} /> },
-      ]} />}</section>}</>;
+  const canManage=usePayrollManage(),canSalary=usePayrollPermission("payroll.salary.manage"),defaults=useDateFilterDefaults();
+  const [month,setMonth]=useState(defaults.to.slice(0,7)),[data,setData]=useState<Options|null>(null),[error,setError]=useState(""),[search,setSearch]=useState(""),[branch,setBranch]=useState(""),[sort,setSort]=useState("name");
+  useEffect(()=>{const c=new AbortController();fetch(`/api/v1/manage/employees/?month=${month}-01`,{signal:c.signal,cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error();return r.json();}).then(d=>{if(!c.signal.aborted){setData(d);setError("");}}).catch(()=>{if(!c.signal.aborted){setData(null);setError("تعذر تحميل الموظفين ومستحقات الشهر.");}});return()=>c.abort();},[month]);
+  const rows=(data?.items??[]).filter(x=>`${x.name} ${x.phone} ${x.jobTitle}`.includes(search)&&(!branch||x.branchId===branch)).sort((a,b)=>sort==="net"?(b.financial?.netDue??-Infinity)-(a.financial?.netDue??-Infinity)||a.name.localeCompare(b.name,"ar"):a.name.localeCompare(b.name,"ar"));
+  const amount=(x:Employee,key:keyof EmployeeFinancial)=>x.financial?formatMoneyAr(Number(x.financial[key]),x.currency):"لا كشف مؤهل لهذا الشهر";
+  return <><PageHeader title="المدربون والموظفون" context="إدارة الأكاديمية" action={canManage&&canSalary?{label:"إضافة موظف",href:"/dashboard/staff/employees/new"}:undefined} secondaryActions={[{label:"إسناد مجموعات المدربين",href:"/dashboard/academy/coaches"}]}/>
+    <div className="report-filters"><ListSearch label="البحث بالاسم أو الهاتف" value={search} onChange={setSearch}/><label>شهر المستحقات<input type="month" required value={month} onChange={e=>{if(e.target.value){setMonth(e.target.value);setData(null);}}}/></label><label>الفرع<select value={branch} onChange={e=>setBranch(e.target.value)}><option value="">كل الفروع</option>{data?.branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label>الترتيب<select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">الاسم</option><option value="net">الأعلى مستحقًا</option></select></label><button onClick={()=>{setSearch("");setBranch("");setSort("name");}}>مسح البحث والفلاتر</button></div>
+    {error&&<ErrorState message={error}/>} {!data&&!error?<LoadingState/>:<section className="list-card">{!rows.length?<EmptyState message="لا يوجد موظفون مطابقون."/>:<AdminDataTable label="الموظفون" rows={rows} rowKey={x=>x.id} columns={[
+      {key:"name",header:"الموظف",primary:true,render:x=><Link href={`/dashboard/staff/employees/${x.id}`}>{x.name}</Link>},
+      {key:"phone",header:"رقم الهاتف",render:x=><bdi>{x.phone}</bdi>},{key:"job",header:"الوظيفة",render:x=>x.jobTitle},
+      {key:"branch",header:"الفرع",render:x=>data?.branches.find(b=>b.id===x.branchId)?.name??"—"},
+      {key:"base",header:"الأساسي الشهري",render:x=>formatMoneyAr(x.monthlySalary,x.currency)},
+      {key:"add",header:"إضافات الشهر",render:x=>amount(x,"additions")},{key:"deduct",header:"خصومات الشهر",render:x=>amount(x,"deductions")},
+      {key:"net",header:"مستحق الشهر",render:x=><strong>{amount(x,"netDue")}</strong>},
+      {key:"actions",header:"الإجراء",render:x=><RowActions actions={[{label:"فتح الملف",href:`/dashboard/staff/employees/${x.id}?month=${month}`},...(canManage?[{label:"تعديل",href:`/dashboard/staff/employees/${x.id}/edit`}]:[]),{label:"المستحقات والصرف",href:`/dashboard/staff/employees/${x.id}?tab=payroll&month=${month}`} ]}/>}
+    ]}/>}<small>الاستحقاق من نفس كشف الرواتب: الأساسي المستحق بحسب أيام العقد − الخصومات + الإضافات. عدم وجود كشف مؤهل ليس صفرًا.</small></section>}</>;
 }
 
 export function EmployeeForm({ id }: { id?: string }) {

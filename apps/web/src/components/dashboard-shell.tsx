@@ -30,8 +30,8 @@ const modules: NavModule[] = [
     {label:"الرياضات",href:"/dashboard/academy/sports"},{label:"الفروع",href:"/dashboard/academy/branches"},
     {label:"الفئات العمرية",href:"/dashboard/academy/categories"},{label:"المجموعات",href:"/dashboard/academy/groups"},
     {label:"الحصص وجداول التدريب",href:"/dashboard/academy/groups/sessions"},{label:"باقات الاشتراك",href:"/dashboard/subscriptions/plans"},
-    {label:"إدارة الخصومات",href:"/dashboard/discounts"},{label:"المدربون",href:"/dashboard/academy/coaches"},
-    {label:"الموظفون",href:"/dashboard/staff/employees"},{label:"معايير تقييم اللاعبين",href:"/dashboard/evaluations/criteria"},
+    {label:"إدارة الخصومات",href:"/dashboard/discounts"},
+    {label:"المدربون والموظفون",href:"/dashboard/staff/employees"},{label:"معايير تقييم اللاعبين",href:"/dashboard/evaluations/criteria"},
     {label:"استيراد البيانات",href:"/dashboard/import"},{label:"التغذية والصحة",href:"/dashboard/content/nutrition"},
     {label:"المرافق العامة",href:"/dashboard/facilities"},{label:"إعدادات الأكاديمية",href:"/dashboard/settings"}]},
   {id:"operations",title:"عمليات الأكاديمية",group:"التشغيل",icon:ClipboardCheck,links:[
@@ -136,7 +136,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const navigation = useMemo(() => visibleModules(identity.role).map(m => ({ ...m, links: m.links.filter(l => {
     if (l.href === "/dashboard/facilities" && !brand.navigation?.generalFacilitiesEnabled) return false;
     if (l.href === "/dashboard/my-followups") return identity.role === "AcademyAdmin" && permissions.includes("followups.read");
-    if (l.href.startsWith("/dashboard/staff") && identity.role !== "AcademyOwner") return false;
+    if (l.href.startsWith("/dashboard/staff") && !l.href.startsWith("/dashboard/staff/employees") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/provider-quarantine") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/operating-expenses") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/settlement-comparisons") && identity.role !== "AcademyOwner") return false;
