@@ -44,7 +44,7 @@ public static partial class OwnerFollowUpEndpoints
         public DraftReviewSummary? EvaluationDrafts { get; init; }
         public RecordedAbsenceSummary? RecordedAbsences { get; init; }
         public OverdueFeedbackSummary? OverdueFeedback { get; init; }
-        public bool Applies(string condition) => SourceActive && (condition == OverdueFeedbackCondition ? OverdueFeedback is { ComplaintCount: > 0 } or { SuggestionCount: > 0 } : condition == RecordedAbsenceCondition ? RecordedAbsences is { PlayerCount: > 0 } : condition == EvaluationDraftCondition ? EvaluationDrafts is { DraftCount: > 0 } : condition == "GroupCoachMissing" ? !HasCoach : condition == "GroupSessionCoverage" ? CoverageGaps is { Length: > 0 } : condition == "GroupLowOccupancy" && Capacity > 0 && Enrollments * 2 < Capacity);
+        public bool Applies(string condition) => SourceActive && (condition == OverdueFeedbackCondition ? OverdueFeedback is { ComplaintCount: > 0 } or { SuggestionCount: > 0 } or { RequestCount: > 0 } : condition == RecordedAbsenceCondition ? RecordedAbsences is { PlayerCount: > 0 } : condition == EvaluationDraftCondition ? EvaluationDrafts is { DraftCount: > 0 } : condition == "GroupCoachMissing" ? !HasCoach : condition == "GroupSessionCoverage" ? CoverageGaps is { Length: > 0 } : condition == "GroupLowOccupancy" && Capacity > 0 && Enrollments * 2 < Capacity);
     }
     internal static async Task<GroupSignal[]> Signals(FoundationDbContext db, Guid academy, DateOnly today, Guid? groupId = null, DateTimeOffset? asOf = null)
     {

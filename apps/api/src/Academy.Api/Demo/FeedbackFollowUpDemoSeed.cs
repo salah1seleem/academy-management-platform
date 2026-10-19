@@ -6,6 +6,24 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Demo;
 public static class FeedbackFollowUpDemoSeed
 {
+    public static async Task SeedRequests(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
+    {
+        var a = FootballDemoSeed.AcademyId;
+        if (!env.IsEnvironment("Demo") || !options.SeedEnabled || options.SeedProfile != "Football" || !await db.Academies.AnyAsync(x => x.Id == a && x.Slug == FootballDemoSeed.Slug && x.EnglishName == FootballDemoSeed.Marker)) throw new InvalidOperationException("طلبات الأسر الاصطناعية تتطلب Football Demo معلوم الهوية.");
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"football-feedback-request-demo"},0))");
+        var id = FootballDemoSeed.Id("feedback-request-demo/0");
+        if (await db.GuardianFeedbacks.AnyAsync(f => f.Id == id)) return;
+        var child = FootballDemoSeed.Id("player/10");
+        var guardian = await db.GuardianPlayerLinks.Where(l => l.AcademyId == a && l.PlayerId == child && l.IsActive).Select(l => l.Guardian.UserId).SingleAsync();
+        var at = DateTimeOffset.Parse("2026-10-08T06:00:00Z");
+        db.GuardianFeedbacks.Add(new() { Id = id, AcademyId = a, PlayerId = child, GuardianUserId = guardian,
+            BranchId = FootballDemoSeed.Id("branch/1"), TrainingGroupId = FootballDemoSeed.Id("group/2"), Kind = "Request",
+            Message = "طلب اصطناعي للإدارة: أحتاج توضيح مواعيد التدريب قبل ترتيب مواصلات الطفل. لا تغيير تلقائي للجدول.",
+            Subject = "Schedule", ReportedSubject = "Schedule", Urgency = "Routine", ReportedUrgency = "Routine",
+            Status = "Open", PeriodMonth = new(2026,10,1), IdempotencyKey = "feedback-request-demo/0", CreatedAtUtc = at, UpdatedAtUtc = at });
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+    }
     public static async Task SeedIncident(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
     {
         var a=FootballDemoSeed.AcademyId; var child=FootballDemoSeed.Id("player/0"); var id=FootballDemoSeed.Id("feedback-incident-demo/0");

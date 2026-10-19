@@ -20,6 +20,7 @@ type Summary = {
     pendingPaymentBacklog?: number;
     openComplaints: number;
     openSuggestions: number;
+    openRequests?: number;
     overdueFeedback?: number;
     openSafetyFeedback?: number;
     attentionRule: string;
@@ -58,6 +59,7 @@ export function PremiumOwnerDashboard() {
   const decisions = d ? [
     ...((d.operations?.pendingPaymentBacklog ?? p.total) > 0 ? [{ title: "راجع طلبات الدفع", detail: `${number(d.operations?.pendingPaymentBacklog ?? p.total)} طلب بانتظار قرار`, href: `/dashboard/subscriptions/payments?${params({ branchId: filters.branchId ?? "", status: "Pending" })}` }] : []),
     ...(d.operations?.openComplaints ? [{ title: "تابع شكاوى الأسر", detail: `${number(d.operations.openComplaints)} شكوى لم تُغلق`, href: "/dashboard/feedback?kind=Complaint&status=Unresolved" }] : []),
+    ...(d.operations?.openRequests ? [{ title: "راجع طلبات الأسر", detail: `${number(d.operations.openRequests)} طلب يحتاج متابعة`, href: `/dashboard/feedback?${params({ kind: "Request", status: "Unresolved", branchId: filters.branchId ?? "" })}` }] : []),
     ...(d.operations?.groupAttention.filter(g => !g.hasCoach).slice(0, 1).map(g => ({ title: "إسناد مدرب للمجموعة", detail: g.name, href: `/dashboard/academy/coaches/new?groupId=${g.id}` })) ?? []),
   ].slice(0, 3) : [];
   return <><PageHeader title="الرئيسية" context="لوحة المالك" />{role === "AcademyOwner" && <p><Link href="/dashboard/operations/follow-ups">متابعات المالك المحفوظة · حالات التشغيل ومسؤولوها</Link> · <Link href="/dashboard/community-campaigns">المحتوى برعاية وموافقات الفروع</Link></p>}<div className={`report-filters owner-filter-bar${filtersOpen ? " expanded" : ""}`}><button type="button" className="owner-filter-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}><CalendarDays size={18} /><span><b>الفترة والفرع</b><small>{from && to ? `${from} — ${to}` : "كل الفترات"} · {branches.find(x => x.id === filters.branchId)?.arabicName ?? "كل الفروع"}</small></span><span aria-hidden="true">{filtersOpen ? "−" : "+"}</span></button><label>من تاريخ<input aria-label="من تاريخ" type="date" value={from} onChange={e => setFilters({ ...filters, from: e.target.value })} /></label><label>إلى تاريخ<input aria-label="إلى تاريخ" type="date" value={to} onChange={e => setFilters({ ...filters, to: e.target.value })} /></label><label>الفرع<select aria-label="الفرع" value={filters.branchId ?? ""} onChange={e => setFilters({ ...filters, branchId: e.target.value })}><option value="">كل الفروع</option>{branches.map(x => <option value={x.id} key={x.id}>{x.arabicName}</option>)}</select></label><button onClick={() => { setData(null); setFilters({}); }}>مسح</button><span className="filter-period-note"><CalendarDays size={16} /> المؤشرات حسب الفترة المختارة</span></div>

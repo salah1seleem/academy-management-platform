@@ -17,7 +17,7 @@ export type FeedbackDetail = { id: string; kind: string; score: number | null; m
   ownerResponse: string | null; createdAtUtc: string; reviewedAtUtc: string | null; respondedAtUtc: string | null; playerId: string; playerName: string | null;
   trainingGroupId: string; groupName: string | null; branchName: string | null; coachName: string | null;
   version?: number; timeZone?: string; historyHasMore?: boolean; history?: { beforeSubject?: string | null; afterSubject?: string | null; beforeUrgency?: string | null; afterUrgency?: string | null; id: string; action: string; fromStatus: string; toStatus: string; beforeDueOn: string | null; afterDueOn: string | null; internalNote: string | null; publicResponse: string | null; actorName: string | null; investigatorName?: string | null; createdAtUtc: string }[] };
-const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح" };
+const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح", Request: "طلب للإدارة" };
 export function GuardianFeedbackDetail({ id }: { id: string }) {
   const [item, setItem] = useState<FeedbackDetail | null>(null), [error, setError] = useState(""), [message, setMessage] = useState("");
   const [reply, setReply] = useState(""), [due, setDue] = useState(""), [busy, setBusy] = useState(false), [revision, setRevision] = useState(0);

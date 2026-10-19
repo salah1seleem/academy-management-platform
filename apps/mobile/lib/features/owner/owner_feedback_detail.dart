@@ -123,6 +123,8 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                     ? 'شكوى'
                     : item['kind'] == 'Suggestion'
                     ? 'اقتراح'
+                    : item['kind'] == 'Request'
+                    ? 'طلب للإدارة'
                     : 'تقييم مدرب',
               ),
               UiText(

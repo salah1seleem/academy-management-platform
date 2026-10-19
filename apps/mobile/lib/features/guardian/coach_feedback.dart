@@ -211,6 +211,10 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
                             value: 'Suggestion',
                             child: UiText('اقتراح'),
                           ),
+                          DropdownMenuItem(
+                            value: 'Request',
+                            child: UiText('طلب للإدارة'),
+                          ),
                         ],
                         onChanged: busy
                             ? null
@@ -279,6 +283,10 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
                                 }),
                         ),
                       ],
+                      if (kind == 'Request')
+                        const UiText(
+                          'اكتب ما تحتاجه من الإدارة لهذا الطفل. الرد أو حل الطلب لا ينفّذ دفعًا أو تجديدًا أو نقل مجموعة أو تغيير حضور؛ لكل إجراء مساره وصلاحيته.',
+                        ),
                       if (kind != 'Rating') ...[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
@@ -424,6 +432,7 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
                       title: UiText(switch (item['kind']) {
                         'Rating' => 'تقييم المدرب · ${item['score']}/5',
                         'Complaint' => 'شكوى',
+                        'Request' => 'طلب للإدارة',
                         _ => 'اقتراح',
                       }),
                       subtitle: UiText(

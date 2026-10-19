@@ -4,6 +4,14 @@ import { DonutChart, PremiumOwnerDashboard } from "./owner-home";
 import { AcademySettings } from "./academy-settings";
 import { DateFilterDefaults } from "../components/date-filter-defaults";
 afterEach(cleanup);
+it("requests have their own actionable owner drill-down, not a complaint score", async () => {
+  const data={...summary,operations:{coachPerformance:[],groupAttention:[],pendingExpenses:[],unpaidExpenses:[],receivables:[],accessChanges:0,openRequests:2,openComplaints:0,openSuggestions:0}};
+  global.fetch=vi.fn(input=>String(input).endsWith("/me")?response({role:"AcademyOwner"}):String(input).includes("options")?response({branches:[{id:"b1",arabicName:"فرع اصطناعي"}]}):response(data)) as typeof fetch;
+  render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-19"}}><PremiumOwnerDashboard/></DateFilterDefaults>);
+  expect(await screen.findByRole("link",{name:/راجع طلبات الأسر/})).toHaveAttribute("href","/dashboard/feedback?kind=Request&status=Unresolved&allDates=true");
+  fireEvent.click(screen.getByRole("button",{name:/الفترة والفرع/}));fireEvent.change(screen.getByLabelText("الفرع"),{target:{value:"b1"}});
+  await waitFor(()=>expect(screen.getByRole("link",{name:/راجع طلبات الأسر/})).toHaveAttribute("href","/dashboard/feedback?kind=Request&status=Unresolved&branchId=b1&allDates=true"));
+});
 const response = (v: unknown) => Promise.resolve(new Response(JSON.stringify(v), { headers: { "Content-Type": "application/json" } }));
 const summary = { from: "2026-09-01", to: "2026-09-28", currency: "EGP", collections: { today: 1800, month: 5600 }, subscriptions: { total: 30, active: 20, expiring: 5, expired: 7 }, payments: { pending: 4 }, paymentRequests: { total: 4, newEnrollments: 1, renewals: 1, products: 1, tournaments: 1 }, attendance: { present: 10, absent: 2, notRecorded: 1 }, byBranch: [{ id: "b1", name: "فرع تجريبي", amount: 1800 }], activePlayers: 20, coaches: 3, newSubscriptions: 2 };
 it("drills down from a real post-contract payable without presenting it as monthly base salary",async()=>{

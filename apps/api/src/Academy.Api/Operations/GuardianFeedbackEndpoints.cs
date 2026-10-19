@@ -70,7 +70,7 @@ public static partial class GuardianFeedbackEndpoints
         var urgency = body.Kind == "Rating" ? null : body.Urgency ?? "Routine";
         if (body.IncidentSessionId.HasValue && (body.Kind == "Rating" || !body.IncidentOn.HasValue) || body.Kind == "Rating" && (body.Subject != null || body.Urgency != null || body.IncidentOn != null) || body.Kind != "Rating" && (!FeedbackSubjects.Contains(subject!) || !FeedbackUrgencies.Contains(urgency!)) || body.IncidentOn.HasValue && (body.IncidentOn == DateOnly.MinValue || body.IncidentOn > await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock)))
             return Results.UnprocessableEntity(new { message = "اختر موضوعًا واستعجالًا صحيحين، وتاريخ واقعة لا يتجاوز اليوم الفعلي." });
-        if (key.Length is < 8 or > 100 || body.Kind is not ("Rating" or "Complaint" or "Suggestion") || message.Length > 500 ||
+        if (key.Length is < 8 or > 100 || body.Kind is not ("Rating" or "Complaint" or "Suggestion" or "Request") || message.Length > 500 ||
             body.Kind == "Rating" && (body.CoachMembershipId is null || body.Score is < 1 or > 5 || body.Score is null) ||
             body.Kind != "Rating" && (body.Score is not null || message.Length < 5))
             return Results.UnprocessableEntity(new { message = "اختر نوع الملاحظة ومجموعة الطفل، مع تقييم 1–5 أو نص واضح للشكوى والاقتراح." });
@@ -150,7 +150,7 @@ public static partial class GuardianFeedbackEndpoints
     {
         h.Response.Headers.CacheControl = "private, no-store";
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        if (kind is not (null or "Rating" or "Complaint" or "Suggestion") || status != null && status != "Unresolved" && !CaseStatuses.Contains(status)) return Results.BadRequest(new { message = "فلتر غير صالح." });
+        if (kind is not (null or "Rating" or "Complaint" or "Suggestion" or "Request") || status != null && status != "Unresolved" && !CaseStatuses.Contains(status)) return Results.BadRequest(new { message = "فلتر غير صالح." });
         if (subject != null && !FeedbackSubjects.Contains(subject) || urgency != null && !FeedbackUrgencies.Contains(urgency)) return Results.BadRequest(new { message = "راجع فلتر الموضوع والاستعجال." });
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) return Results.NotFound();
         if (groupId.HasValue && !await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId)) return Results.NotFound();
@@ -171,7 +171,7 @@ public static partial class GuardianFeedbackEndpoints
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"guardian-feedback-resolve:{t.AcademyId}:{id}"}, 0))");
         var item = await db.GuardianFeedbacks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive);
         if (item is null) return Results.NotFound();
-        if (item.Kind == "Rating" || item.Status is "Resolved" or "Closed") return Results.UnprocessableEntity(new { message = "الموعد للشكاوى والاقتراحات المفتوحة فقط." });
+        if (item.Kind == "Rating" || item.Status is "Resolved" or "Closed") return Results.UnprocessableEntity(new { message = "الموعد للشكاوى والاقتراحات والطلبات المفتوحة فقط." });
         if (item.DueOn.HasValue) return item.DueOn == body.DueOn ? Results.Ok(new { item.Id, replay = true }) : Results.Conflict(new { message = "حُدد موعد المتابعة بالفعل؛ لا يُبدل بصمت." });
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         if (body.DueOn < today) return Results.UnprocessableEntity(new { message = "موعد المتابعة لا يسبق اليوم." });
@@ -204,7 +204,7 @@ public static partial class GuardianFeedbackEndpoints
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"guardian-feedback-resolve:{t.AcademyId}:{id}"}, 0))");
         var item = await db.GuardianFeedbacks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.IsActive);
         if (item is null) return Results.NotFound();
-        if (item.Kind == "Rating") return Results.UnprocessableEntity(new { message = "الردّ متاح للشكاوى والاقتراحات فقط." });
+        if (item.Kind == "Rating") return Results.UnprocessableEntity(new { message = "الردّ متاح للشكاوى والاقتراحات والطلبات فقط." });
         if (item.Status == "Resolved") return item.OwnerResponse == response
             ? Results.Ok(new { item.Id, replay = true }) : Results.Conflict(new { message = "حُلّت الملاحظة برد مختلف بالفعل." });
         if (item.Status == "Closed") return Results.Conflict(new { message = "الملاحظة مغلقة؛ أعد فتحها صراحة قبل إرسال رد جديد." });

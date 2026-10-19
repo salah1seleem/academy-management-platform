@@ -34,12 +34,12 @@ Widget overdueFeedbackSummary(Json source) {
       UiText(
         d is! Map
             ? 'بيانات الملاحظات غير متاحة حاليًا.'
-            : '${d['complaintCount']} شكوى · ${d['suggestionCount']} اقتراح · ${d['submitterCount']} حساب مقدم فريد',
+            : '${d['complaintCount']} شكوى · ${d['suggestionCount']} اقتراح${d['requestCount'] == null ? '' : ' · ${d['requestCount']} طلب'} · ${d['submitterCount']} حساب مقدم فريد',
       ),
       if (d is Map)
         UiText('أقدم موعد متابعة: ${d['oldestDueOn'] ?? 'غير محدد'}'),
       const UiText(
-        'تجاوزت موعدًا حدده المالك؛ ليست اتهامًا أو رسالة أو تسوية مالية.',
+        'تجاوزت موعد متابعة يدويًا أو من سياسة منشورة؛ ليست اتهامًا أو رسالة أو تسوية مالية.',
       ),
     ],
   );

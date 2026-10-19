@@ -390,8 +390,8 @@ class OwnerOperationsPanel extends StatelessWidget {
       GLink(
         localized(
           context,
-          'شكاوى ${operations['openComplaints']} · اقتراحات ${operations['openSuggestions']}',
-          'Complaints ${operations['openComplaints']} · suggestions ${operations['openSuggestions']}',
+          'شكاوى ${operations['openComplaints']} · اقتراحات ${operations['openSuggestions']} · طلبات ${operations['openRequests'] ?? 0}',
+          'Complaints ${operations['openComplaints']} · suggestions ${operations['openSuggestions']} · requests ${operations['openRequests'] ?? 0}',
         ),
         Icons.feedback_outlined,
         () => open(

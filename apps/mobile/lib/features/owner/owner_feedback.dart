@@ -149,6 +149,7 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
             ),
             DropdownMenuItem(value: 'Complaint', child: UiText('الشكاوى')),
             DropdownMenuItem(value: 'Suggestion', child: UiText('الاقتراحات')),
+            DropdownMenuItem(value: 'Request', child: UiText('طلبات الإدارة')),
           ],
           onChanged: (value) => setState(() => kind = value ?? ''),
         ),
@@ -208,6 +209,8 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                       ? 'تقييم'
                       : item['kind'] == 'Complaint'
                       ? 'شكوى'
+                      : item['kind'] == 'Request'
+                      ? 'طلب للإدارة'
                       : 'اقتراح'} · ${item['playerName']}',
                 ),
                 UiText(

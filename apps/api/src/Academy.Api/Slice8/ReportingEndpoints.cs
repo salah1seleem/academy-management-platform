@@ -217,6 +217,7 @@ public static partial class ReportingEndpoints
                 overdueFeedback = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.IsActive && x.Kind != "Rating" && x.Status != "Resolved" && x.Status != "Closed" && x.DueOn != null && x.DueOn < feedbackToday && (!branchId.HasValue || x.BranchId == branchId)),
                 openComplaints = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.IsActive && x.Kind == "Complaint" && x.Status != "Resolved" && x.Status != "Closed" && (!branchId.HasValue || x.BranchId == branchId)),
                 openSuggestions = await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.IsActive && x.Kind == "Suggestion" && x.Status != "Resolved" && x.Status != "Closed" && (!branchId.HasValue || x.BranchId == branchId)),
+                openRequests = current.Role != AcademyRole.AcademyOwner ? 0 : await db.GuardianFeedbacks.CountAsync(x => x.AcademyId == academyId && x.IsActive && x.Kind == "Request" && x.Status != "Resolved" && x.Status != "Closed" && (!branchId.HasValue || x.BranchId == branchId)),
                 attentionRule = "مدرب غير مسند، أو 3 سجلات حضور غير مسجلة، أو غياب 30% فأكثر من 5 سجلات على الأقل" }
         });
     }

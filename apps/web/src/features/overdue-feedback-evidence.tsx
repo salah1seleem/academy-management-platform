@@ -1,9 +1,9 @@
 import Link from "next/link";
-export type OverdueFeedbackData = { complaintCount: number; suggestionCount: number; submitterCount: number; oldestDueOn: string | null; asOfDate: string };
+export type OverdueFeedbackData = { complaintCount: number; suggestionCount: number; requestCount?: number; submitterCount: number; oldestDueOn: string | null; asOfDate: string };
 export function OverdueFeedbackReview({ data }: { data?: OverdueFeedbackData | null }) {
-  return <div aria-label="ملخص الملاحظات المتأخرة">{data ? <><p>{data.complaintCount} شكوى · {data.suggestionCount} اقتراح · {data.submitterCount} حساب مقدم فريد</p>
+  return <div aria-label="ملخص الملاحظات المتأخرة">{data ? <><p>{data.complaintCount} شكوى · {data.suggestionCount} اقتراح{data.requestCount != null && <> · {data.requestCount} طلب</>} · {data.submitterCount} حساب مقدم فريد</p>
     <p>أقدم موعد متابعة: <bdi>{data.oldestDueOn ?? "غير محدد"}</bdi></p></> : <p>بيانات الملاحظات غير متاحة حاليًا.</p>}
-    <small>تجاوزت موعدًا حدده المالك؛ ليست اتهامًا أو رسالة أو تسوية مالية.</small></div>;
+    <small>تجاوزت موعد متابعة يدويًا أو من سياسة منشورة؛ ليست اتهامًا أو رسالة أو تسوية مالية.</small></div>;
 }
 export function OverdueFeedbackLinks({ ids, groupId }: { ids?: string[] | null; groupId: string }) {
   return <>{ids?.slice(0, 3).map((id, i) => <p key={id}><Link href={`/dashboard/feedback/${id}`}>فتح ملاحظة من دليل الإنشاء {i + 1}</Link></p>)}

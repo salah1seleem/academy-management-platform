@@ -8,7 +8,7 @@ import { feedbackStates } from "./feedback-state";
 import { feedbackSubjects, feedbackUrgencies } from "./feedback-triage";
 
 type Feedback = { subject?: string | null; urgency?: string | null; safety?: boolean; triagedAtUtc?: string | null; id: string; kind: string; score: number | null; message: string; status: string; dueOn: string | null; overdue: boolean; ownerResponse: string | null; createdAtUtc: string; playerId: string; playerName: string; branchName: string; coachName: string | null };
-const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح" };
+const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح", Request: "طلب للإدارة" };
 export function GuardianFeedbackInbox({ initialKind = "", initialStatus = "", initialCoachId = "", initialOverdue = false, initialBranchId = "", initialGroupId = "", initialSafetyOnly = false }: { initialKind?: string; initialStatus?: string; initialCoachId?: string; initialOverdue?: boolean; initialBranchId?: string; initialGroupId?: string; initialSafetyOnly?: boolean }) {
   const [kind, setKind] = useState(initialKind);
   const [subject, setSubject] = useState(""), [urgency, setUrgency] = useState(""), [safetyOnly, setSafetyOnly] = useState(initialSafetyOnly);
