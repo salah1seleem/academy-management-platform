@@ -265,24 +265,27 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   return <span className={`status-badge status-${mapped.tone}`} data-status={status}><span aria-hidden="true" />{label ?? mapped.label}</span>;
 }
 
-export type DataColumn<T> = { key: string; header: string; width?: string; primary?: boolean; render: (row: T) => ReactNode };
-export function AdminDataTable<T>({ columns, rows, rowKey, rowClassName, label }: { columns: DataColumn<T>[]; rows: T[]; rowKey: (row: T) => string; rowClassName?: (row: T) => string; label: string }) {
+export type DataColumn<T> = { key: string; header: string; width?: string; primary?: boolean; render: (row: T) => ReactNode; onSort?: () => void; sortDirection?: "ascending" | "descending" | "none" };
+type ServerPagination = { page: number; pageSize: number; total: number; onPageChange: (page: number) => void; onPageSizeChange: (size: number) => void };
+export function AdminDataTable<T>({ columns, rows, rowKey, rowClassName, label, serverPagination }: { columns: DataColumn<T>[]; rows: T[]; rowKey: (row: T) => string; rowClassName?: (row: T) => string; label: string; serverPagination?: ServerPagination }) {
   const [pageSize, setPageSize] = useState(25);
   const [hidden, setHidden] = useState<string[]>([]);
   const signature = rows.map(rowKey).join("|");
   const [position, setPosition] = useState({ signature, page: 0 });
-  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const page = position.signature === signature ? Math.min(position.page, pages - 1) : 0;
+  const size = serverPagination?.pageSize ?? pageSize, total = serverPagination?.total ?? rows.length;
+  const pages = Math.max(1, Math.ceil(total / size));
+  const page = serverPagination?.page ?? (position.signature === signature ? Math.min(position.page, pages - 1) : 0);
+  const changePage = (next: number) => serverPagination ? serverPagination.onPageChange(next) : setPosition({ signature, page: next });
   const visible = columns.filter(column => column.primary || !hidden.includes(column.key));
   const template = visible.map(column => column.width ?? "minmax(0, 1fr)").join(" ");
-  const first = page * pageSize;
+  const first = page * size;
   return <div className="data-workspace">
-    <div className="table-controls"><span>{rows.length} سجل</span><details className="table-columns"><summary>الأعمدة</summary><div>{columns.map(column => <label key={column.key}><input type="checkbox" aria-label={`إظهار عمود ${column.header}`} checked={visible.includes(column)} disabled={column.primary || visible.length === 1 && visible.includes(column)} onChange={event => setHidden(event.target.checked ? hidden.filter(key => key !== column.key) : [...hidden, column.key])} />إظهار عمود {column.header}</label>)}</div></details></div>
-    <div className="admin-data-table" role="table" aria-label={label} aria-rowcount={rows.length + 1} aria-colcount={visible.length} style={{ "--table-columns": template } as CSSProperties}>
-      <div className="admin-data-header" role="row" aria-rowindex={1}>{visible.map(column => <div role="columnheader" key={column.key}>{column.header}</div>)}</div>
-      <div className="admin-data-body" role="rowgroup">{rows.slice(first, first + pageSize).map((row, index) => <article className={`admin-data-row ${rowClassName?.(row) ?? ""}`.trim()} role="row" aria-rowindex={first + index + 2} key={rowKey(row)}>{visible.map(column => <div className={column.primary ? "data-primary" : ""} role="cell" data-label={column.header} key={column.key}>{column.render(row)}</div>)}</article>)}</div>
+    <div className="table-controls"><span>{total} سجل</span><details className="table-columns"><summary>الأعمدة</summary><div>{columns.map(column => <label key={column.key}><input type="checkbox" aria-label={`إظهار عمود ${column.header}`} checked={visible.includes(column)} disabled={column.primary || visible.length === 1 && visible.includes(column)} onChange={event => setHidden(event.target.checked ? hidden.filter(key => key !== column.key) : [...hidden, column.key])} />إظهار عمود {column.header}</label>)}</div></details></div>
+    <div className="admin-data-table" role="table" aria-label={label} aria-rowcount={total + 1} aria-colcount={visible.length} style={{ "--table-columns": template } as CSSProperties}>
+      <div className="admin-data-header" role="row" aria-rowindex={1}>{visible.map(column => <div role="columnheader" aria-sort={column.sortDirection} key={column.key}>{column.onSort ? <button className="table-sort" type="button" onClick={column.onSort}>{column.header} <span aria-hidden="true">{column.sortDirection === "ascending" ? "↑" : column.sortDirection === "descending" ? "↓" : "↕"}</span></button> : column.header}</div>)}</div>
+      <div className="admin-data-body" role="rowgroup">{(serverPagination ? rows : rows.slice(first, first + size)).map((row, index) => <article className={`admin-data-row ${rowClassName?.(row) ?? ""}`.trim()} role="row" aria-rowindex={first + index + 2} key={rowKey(row)}>{visible.map(column => <div className={column.primary ? "data-primary" : ""} role="cell" data-label={column.header} key={column.key}>{column.render(row)}</div>)}</article>)}</div>
     </div>
-    <nav className="table-pagination" aria-label={`صفحات ${label}`}><label>صفوف الصفحة<select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPosition({ signature, page: 0 }); }}>{[10, 25, 50].map(size => <option key={size} value={size}>{size}</option>)}</select></label><span role="status">{rows.length ? first + 1 : 0}–{Math.min(first + pageSize, rows.length)} من {rows.length}</span><button type="button" disabled={page === 0} onClick={() => setPosition({ signature, page: page - 1 })} aria-label="الصفحة السابقة"><ChevronDown style={{ transform: "rotate(-90deg)" }} /></button><button type="button" disabled={page === pages - 1} onClick={() => setPosition({ signature, page: page + 1 })} aria-label="الصفحة التالية"><ChevronDown style={{ transform: "rotate(90deg)" }} /></button></nav>
+    <nav className="table-pagination" aria-label={`صفحات ${label}`}><label>صفوف الصفحة<select value={size} onChange={event => { const value = Number(event.target.value); if (serverPagination) serverPagination.onPageSizeChange(value); else { setPageSize(value); setPosition({ signature, page: 0 }); } }}>{[10, 25, 50].map(value => <option key={value} value={value}>{value}</option>)}</select></label><span role="status">{total ? first + 1 : 0}–{Math.min(first + size, total)} من {total}</span><button type="button" disabled={page === 0} onClick={() => changePage(page - 1)} aria-label="الصفحة السابقة"><ChevronDown style={{ transform: "rotate(-90deg)" }} /></button><button type="button" disabled={page >= pages - 1} onClick={() => changePage(page + 1)} aria-label="الصفحة التالية"><ChevronDown style={{ transform: "rotate(90deg)" }} /></button></nav>
   </div>;
 }
 

@@ -73,7 +73,7 @@ public static class Slice2Endpoints
 
         var people = api.MapGroup("/people").RequireAuthorization(AcademyPermissions.PeopleManage);
         people.MapGet("/players", SearchPlayers);
-        people.MapGet("/guardians", async (string? search, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var normalizedPhone = EgyptPhoneNormalizer.Normalize(search); return Results.Ok(await db.GuardianProfiles.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && (string.IsNullOrWhiteSpace(search) || x.DisplayName.Contains(search.Trim()) || (normalizedPhone != null && x.ContactPhone == normalizedPhone))).OrderBy(x => x.DisplayName).Select(x => new { x.Id, x.DisplayName, x.ContactPhone }).ToListAsync()); });
+        people.MapGet("/guardians", MemberSubscriptionValues.GuardianList);
         people.MapPost("/registrations", RegisterPlayer).AddEndpointFilter<CsrfFilter>();
         people.MapGet("/registration-cash-options", async (Guid branchId, Guid planId, CashRegisterService cash) => {
             try { return Results.Ok(await cash.RegistrationOptions(branchId, planId)); }
@@ -94,9 +94,12 @@ public static class Slice2Endpoints
         }).RequireAuthorization(AcademyPermissions.CoachGroupsRead);
     }
 
-    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, string? subscriptionState, DateOnly? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time)
+    private static async Task<IResult> SearchPlayers(string? search, Guid? branchId, Guid? sportId, Guid? ageCategoryId, Guid? groupId, string? subscriptionState, DateOnly? asOf, string? sort, int? page, int? pageSize, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var date = asOf ?? clock.Today;
+        if (sort is not (null or "" or "name" or "value_asc" or "value_desc") || page is < 1 or > 1000000 || pageSize is < 1 or > 100) return Results.UnprocessableEntity(new { message = "اختر ترتيبًا وصفحة صحيحين." });
+        var currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync();
+        var values = MemberSubscriptionValues.Active(db, t.AcademyId, date, currency, branchId, sportId);
         var groupDate = asOf ?? await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         if (subscriptionState is not (null or "" or "active" or "expiring" or "expired" or "subscribed" or "stable" or "other")) return Results.UnprocessableEntity();
         var query = db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
@@ -121,9 +124,11 @@ public static class Slice2Endpoints
         if (subscriptionState == "active") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
         if (subscriptionState == "expiring") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && p.EndDate >= date && p.EndDate <= date.AddDays(7) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
         if (subscriptionState == "expired") query = query.Where(x => eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && (p.EndDate < date || (p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0)) && !eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)));
-        return Results.Ok(await query.OrderBy(x => x.ArabicName).Select(x => new
+        var projected = query.Select(x => new
         {
             x.Id, x.PlayerCode, x.ArabicName, x.DateOfBirth, x.IsActive, x.PhotoReference,
+            monthlySubscriptionValue = Math.Round(values.Where(v => v.PlayerId == x.Id).Sum(v => v.MonthlyValue) ?? 0, 2),
+            unpricedSubscriptions = values.Count(v => v.PlayerId == x.Id && v.MonthlyValue == null), currency,
             hasActiveSubscription = eligible.Any(p => p.SportEnrollment.PlayerId == x.Id && p.StartDate <= date && (p.EndDate == null || p.EndDate >= date) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
             enrollments = db.SportEnrollments.Count(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id && e.Status == EnrollmentStatus.Active),
             enrollmentSummaries = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).ThenBy(e => e.Id).Select(e => new
@@ -132,7 +137,15 @@ public static class Slice2Endpoints
                 subscription = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == e.Id).OrderByDescending(p => p.UpdatedAtUtc)
                     .Select(p => new { plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < date || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > date ? "Scheduled" : "Active" }).FirstOrDefault()
             }).ToList()
-        }).ToListAsync());
+        });
+        var ordered = sort switch {
+            "value_desc" => projected.OrderBy(x => x.unpricedSubscriptions > 0).ThenByDescending(x => x.monthlySubscriptionValue).ThenBy(x => x.ArabicName).ThenBy(x => x.Id),
+            "value_asc" => projected.OrderBy(x => x.unpricedSubscriptions > 0).ThenBy(x => x.monthlySubscriptionValue).ThenBy(x => x.ArabicName).ThenBy(x => x.Id),
+            _ => projected.OrderBy(x => x.ArabicName).ThenBy(x => x.Id)
+        };
+        if (!page.HasValue && !pageSize.HasValue) return Results.Ok(await ordered.ToArrayAsync());
+        var size = pageSize ?? 25; var number = page ?? 1;
+        return Results.Ok(new { items = await ordered.Skip((number - 1) * size).Take(size).ToArrayAsync(), total = await query.CountAsync(), page = number, pageSize = size, currency, asOf = date, basis = MemberSubscriptionValues.Basis });
     }
 
     private static async Task<IResult> GuardianChildren(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)

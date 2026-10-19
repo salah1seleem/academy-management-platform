@@ -833,3 +833,9 @@ footer {
 .context-option span { display: grid; gap: .4rem; overflow-wrap: anywhere; }
 .context-option small { color: var(--staff-text-muted, #546575); }
 .work-context-link { display: block; margin: 0 1rem .7rem; padding: .65rem .8rem; border: 1px solid #ffffff30; border-radius: .7rem; text-align: center; color: #fff; font-size: .85rem; }
+.table-sort { display: inline-flex; align-items: center; gap: .5rem; border: 0; padding: .35rem 0; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.table-sort:focus-visible { outline: 2px solid var(--staff-primary-700, #315de6); outline-offset: 4px; border-radius: .35rem; }
+.vip-member-list { list-style: none; padding: 0; margin: .8rem 0 0; display: grid; gap: .2rem; }
+.vip-member-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem .25rem; border-bottom: 1px solid #e6eaf0; }
+.vip-member-list a { color: inherit; text-decoration: none; }
+.vip-member-list strong { font-variant-numeric: tabular-nums; white-space: nowrap; }

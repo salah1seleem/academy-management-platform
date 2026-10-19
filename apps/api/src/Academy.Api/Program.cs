@@ -415,6 +415,7 @@ app.MapStaffPasskeys();
 app.MapStaffVerifiedAttendance();
 app.MapStaffAttendanceExceptions();
 app.MapGuardianFeedback();
+app.MapVipMembers();
 app.MapOwnerFollowUps();
 app.MapHelp();
 app.MapHelpVideos();

@@ -12,6 +12,7 @@ import '../shared/academy_news.dart';
 import '../shared/role_navigation.dart';
 import 'owner_reports.dart';
 import 'owner_operations.dart';
+import 'member_values.dart';
 
 class OwnerDashboard extends StatefulWidget {
   final AuthController auth;
@@ -533,6 +534,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                     ),
                   ),
                 ],
+                OwnerVipMembers(auth: widget.auth, branch: branch, asOf: to),
                 NewsStrip(auth: widget.auth),
                 NextMatchStrip(auth: widget.auth),
                 FilledButton.icon(
