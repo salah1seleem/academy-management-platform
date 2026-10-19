@@ -202,7 +202,9 @@ public sealed class GuardianFeedback : TenantEntity
     public required string IdempotencyKey { get; set; }
     public Guid? ReviewedByUserId { get; set; }
     public DateTimeOffset? ReviewedAtUtc { get; set; }
-    // An owner-set, one-time follow-up deadline. It is not an automated resolution promise.
+    // Immutable intake policy evidence; null means legacy/unconfigured, not an inferred SLA.
+    public string? FollowUpPolicyEvidence { get; set; }
+    // A one-time owner/published-policy follow-up deadline, not a resolution promise.
     public DateOnly? DueOn { get; set; }
     public Guid? DueSetByUserId { get; set; }
     public DateTimeOffset? DueSetAtUtc { get; set; }

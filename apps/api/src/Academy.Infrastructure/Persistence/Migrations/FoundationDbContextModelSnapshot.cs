@@ -5943,6 +5943,10 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DueSetByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("FollowUpPolicyEvidence")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<Guid>("GuardianUserId")
                         .HasColumnType("uuid");
 

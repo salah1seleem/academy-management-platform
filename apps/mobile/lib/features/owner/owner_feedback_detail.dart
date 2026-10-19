@@ -7,6 +7,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/feedback_state.dart';
+import '../shared/feedback_deadline.dart';
 import '../shared/feedback_investigations.dart';
 import 'feedback_triage.dart';
 import '../shared/feedback_incident.dart';
@@ -147,8 +148,8 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
               UiText(
                 'موعد المتابعة: ${item['dueOn'] ?? 'لم يحدد'}${item['overdue'] == true ? ' · تجاوزت الموعد المحدد' : ''}',
               ),
-              const UiText(
-                'موعد حدده المالك، وليس وعد استجابة تلقائيًا. لا تظهر هوية مقدم الملاحظة للمدرب موضوعها.',
+              FeedbackDeadlineEvidence(
+                evidence: item['followUpPolicyEvidence'] as String?,
               ),
               if (message.isNotEmpty) UiText(message),
               if (item['kind'] != 'Rating' &&

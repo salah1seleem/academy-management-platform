@@ -8,8 +8,10 @@ import styles from "./feedback-case.module.css";
 import { FeedbackAssignment } from "./feedback-investigations";
 import { FeedbackTriage, feedbackSubjects, feedbackUrgencies } from "./feedback-triage";
 import { FeedbackIncidentEvidence } from "./feedback-incident";
+import { FeedbackDeadlineEvidence } from "./feedback-deadline-policy";
 
 export type FeedbackDetail = { id: string; kind: string; score: number | null; message: string; status: string; dueOn: string | null; overdue: boolean;
+  followUpPolicyEvidence?: string | null;
   subject?: string | null; urgency?: string | null; reportedSubject?: string | null; reportedUrgency?: string | null; incidentOn?: string | null; triagedAtUtc?: string | null; safety?: boolean; incidentSessionEvidence?: string | null;
   investigatorMembershipId?: string | null; investigationBrief?: string | null; investigatorName?: string | null;
   ownerResponse: string | null; createdAtUtc: string; reviewedAtUtc: string | null; respondedAtUtc: string | null; playerId: string; playerName: string | null;
@@ -60,7 +62,7 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
         {item.kind !== "Rating" && <><p>عند التقديم: {feedbackSubjects[item.reportedSubject ?? ""] ?? "لم يصنف وقتها"} · {feedbackUrgencies[item.reportedUrgency ?? ""] ?? "لم يحدد"} · الواقعة: <bdi>{item.incidentOn ?? "غير محددة"}</bdi></p><p>مراجعة الإدارة: {feedbackSubjects[item.subject ?? ""] ?? "لم تصنف بعد"} · {feedbackUrgencies[item.urgency ?? ""] ?? "لم تحدد"}</p>{item.safety && <p role="note">بلاغ سلامة يحتاج متابعة بشرية، وليس إثبات خطأ أو حكمًا آليًا.{!item.triagedAtUtc && " لم يؤكد الفرز البشري بعد."}</p>}</>}
         <p>الحالة: <strong>{feedbackStates[item.status] ?? "غير متاحة"}</strong></p>
         <p>موعد المتابعة: <bdi>{item.dueOn ?? "لم يحدد"}</bdi>{item.overdue ? " · تجاوزت الموعد المحدد" : ""}</p>
-        <small>هذا موعد حدده المالك، وليس وعد استجابة تلقائيًا. لا تُعرض هوية مقدم الملاحظة للمدرب موضوعها.</small>
+        <FeedbackDeadlineEvidence evidence={item.followUpPolicyEvidence}/>
         <p><Link href={`/dashboard/feedback?groupId=${item.trainingGroupId}`}>ملاحظات المجموعة نفسها</Link> · <Link href={`/dashboard/players/${item.playerId}`}>ملف اللاعب نفسه</Link></p>
         {item.ownerResponse && <blockquote>رد الإدارة: {item.ownerResponse}</blockquote>}
       </SectionCard>

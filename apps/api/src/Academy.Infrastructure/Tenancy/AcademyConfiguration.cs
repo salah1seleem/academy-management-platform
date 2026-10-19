@@ -41,7 +41,8 @@ public static class AcademyFeatures
 public sealed record AcademyRuntimeSettings(
     string Currency, string TimeZone, Dictionary<string, bool> Features,
     bool CashEnabled = false, int ConsecutiveAbsenceAlert = 3, bool TenantMarketingOptIn = false,
-    Dictionary<string, string[]>? HelpAudiences = null, MediaRetentionPolicy? MediaRetention = null)
+    Dictionary<string, string[]>? HelpAudiences = null, MediaRetentionPolicy? MediaRetention = null,
+    int? FeedbackFollowUpDays = null)
 {
     public static AcademyRuntimeSettings Initial(string currency, string zone, bool preserveExisting = false) =>
         new(currency, zone, AcademyFeatures.All.ToDictionary(f => f, f => preserveExisting && AcademyFeatures.Existing.Contains(f)), preserveExisting);
@@ -49,6 +50,7 @@ public sealed record AcademyRuntimeSettings(
     public string[] Validate(IReadOnlyDictionary<string, bool> entitlements, string existingCurrency, string existingTimeZone)
     {
         var errors = new List<string>();
+        if (FeedbackFollowUpDays is < 1 or > 30) errors.Add("مهلة متابعة الملاحظات بين يوم و30 يومًا، أو اتركها دون مهلة تلقائية.");
         if (MediaRetention is { Days: < 1 or > 3650 }) errors.Add("مدة الاحتفاظ بالوسائط بين يوم و3650 يومًا، أو اتركها دون حذف آلي.");
         if (Currency != existingCurrency) errors.Add("عملة الأكاديمية لا تُغيّر من إعدادات التشغيل بعد إنشاء السجلات المالية.");
         if (string.IsNullOrWhiteSpace(TimeZone) || !TimeZoneInfo.TryFindSystemTimeZoneById(TimeZone, out _)) errors.Add("المنطقة الزمنية غير صالحة.");

@@ -107,6 +107,7 @@ public static partial class GuardianFeedbackEndpoints
             Subject = subject, ReportedSubject = subject, Urgency = urgency, ReportedUrgency = urgency, IncidentOn = body.IncidentOn,
             IncidentTrainingSessionId = body.IncidentSessionId, IncidentSessionEvidence = evidence,
             CreatedAtUtc = now, UpdatedAtUtc = now };
+        await FeedbackDeadlinePolicy.Apply(db, feedback, zone, DateOnly.FromDateTime(local.DateTime));
         db.GuardianFeedbacks.Add(feedback);
         if (urgency == "Safety")
         {
@@ -131,7 +132,7 @@ public static partial class GuardianFeedbackEndpoints
                 investigatorName = db.AcademyMemberships.Where(m => m.Id == c.InvestigatorMembershipId).Select(m => m.User.DisplayName).FirstOrDefault(),
                 actorName = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == c.ActorMembershipId).Select(m => m.User.DisplayName).FirstOrDefault() }).ToArrayAsync();
         var timeZone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
-        return Results.Ok(new { asOfDate = today, timeZone, item.Id, item.Version, item.Kind, item.Score, item.Message, item.Status, item.DueOn,
+        return Results.Ok(new { asOfDate = today, timeZone, item.Id, item.Version, item.Kind, item.Score, item.Message, item.Status, item.DueOn, item.FollowUpPolicyEvidence,
             item.Subject, item.Urgency, item.ReportedSubject, item.ReportedUrgency, item.IncidentOn, item.TriagedAtUtc, item.IncidentTrainingSessionId, item.IncidentSessionEvidence,
             safety = item.Urgency == "Safety" || item.ReportedUrgency == "Safety",
             item.InvestigationId, item.InvestigatorMembershipId, item.InvestigationBrief,

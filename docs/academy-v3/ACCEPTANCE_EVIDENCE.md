@@ -1,5 +1,9 @@
 # أدلة قبول V2 + V3
 
+## V2-12C3 / V3-AC40 الجزئي — 2026-10-19
+
+سياسة متابعة1–30يومًا بأيام تقويمية مع اعتماد مالك ونسخة ثابتة لكل تقديم جديد؛لا backfill أو تغيير عند الإلغاء، وخصوصية/سجل/نفسDueOn. Unit16/API5/Web11/Flutter6، Browser1/16.8s وصورة فعلية وتقريرمطابق، schema133/EFبلاpending علىQAفقط. [التفاصيل والإخفاقات المصححة والقيود](PROGRESS.md). الطلبات والمرفقات والتجميع/الرضا وبقيةالخريطة/الماليالأخير/Hلمتغلق،لا اختبار Native جديد أوCI نهائي أوUAT مدعى.
+
 ## V2-12C2 — الحصة ومدرب الواقعة دون تخمين، 2026-10-19
 
 Code `3fe45b7` /D3-077/schema132 في قاعدتي QA فقط. API **7/7/45s** نهائية: مصادر قرار الحصة/Present لا الحالي أو الغائب، نسخة محفوظة/replay/SQL، أخطاء الربط/Rating/التاريخ، عزل طفل وأكاديمية ثانية وسحب التسجيل، seed وثبات التقرير ومستهلكو12A/B/C1. TRX `/tmp/academity-feedback-incident-tests/feedback-incident-verified.trx`؛ filter `Feedback_incident_|Feedback_triage_|Feedback_case_lifecycle|Feedback_investigation_private` مع FullyQualifiedName لكل جزء وACADEMY_TEST_CONNECTION_STRING صريحة. Web **24/4ملفات/2.95s** وlint/build/typecheck، Flutter **15/5ملفات ثم373/373/1m38s** لإغلاق فشلCI، ثم2متأثرتين بعد تنسيق الوقت وتحليل نظيف6.7s؛ دون إضعاف assertions أو full backend regression.

@@ -18,3 +18,12 @@ it("does not load configuration or expose controls without the server permission
   render(<VersionedConfiguration />); await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
   expect(screen.queryByRole("button", { name: "حفظ إصدار مسودة" })).not.toBeInTheDocument();
 });
+it("owner saves the follow-up policy as a draft, not an immediate live change", async () => {
+  const fetcher = vi.fn().mockImplementation(async (url, init) => ({ ok: true, status: 200, json: async () => url === "/api/v1/my-permissions" ? ["academy.settings.manage"] : url === "/api/v1/me" ? {role:"AcademyOwner"} : url === "/api/v1/manage/configuration/help-options" ? {lessons:[]} : url === "/api/v1/auth/csrf" ? {token:"csrf"} : init ? {} : {entitlements:[],versions:[{id:"v1",revision:1,version:5,state:"Active",contentHash:"a".repeat(64),settings}],history:[]} }));
+  global.fetch = fetcher; render(<VersionedConfiguration/>);
+  fireEvent.click(await screen.findByRole("checkbox", {name:"تحديد مهلة متابعة تلقائية"}));
+  fireEvent.change(screen.getByLabelText("مهلة المتابعة بالأيام"), {target:{value:"2"}});
+  fireEvent.click(screen.getByRole("button", {name:"حفظ إصدار مسودة"}));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/manage/configuration/drafts", expect.objectContaining({body:expect.stringContaining('"feedbackFollowUpDays":2')})));
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes("transition"))).toBe(false);
+});

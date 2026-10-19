@@ -4,6 +4,18 @@ namespace Academy.UnitTests;
 
 public sealed class V2ConfigurationTests
 {
+    [Theory][InlineData(0)][InlineData(-1)][InlineData(31)]
+    public void Invalid_feedback_deadline_cannot_publish(int days)
+    {
+        var settings = AcademyRuntimeSettings.Initial("EGP", "Africa/Cairo") with { FeedbackFollowUpDays = days };
+        Assert.Contains(settings.Validate(new Dictionary<string,bool>(), "EGP", "Africa/Cairo"), e => e.Contains("مهلة"));
+    }
+    [Fact] public void Legacy_feedback_configuration_has_no_implicit_promise()
+    {
+        var old = AcademyRuntimeSettings.Read("{\"Currency\":\"EGP\",\"TimeZone\":\"Africa/Cairo\",\"Features\":{}}");
+        Assert.Null(old.FeedbackFollowUpDays);
+        Assert.Equal(2, AcademyRuntimeSettings.Read((old with { FeedbackFollowUpDays = 2 }).Serialize()).FeedbackFollowUpDays);
+    }
     [Theory][InlineData(0)][InlineData(-1)][InlineData(3651)]
     public void Invalid_media_retention_days_do_not_activate(int days)
     {
