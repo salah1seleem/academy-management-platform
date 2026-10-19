@@ -11,6 +11,20 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 public sealed partial class V2StaffScopeTests
 {
+    [Fact] public async Task V4_admin_can_record_scoped_expense_without_financial_report_or_approval_permission()
+    {
+        var f=await CreateAdmin();using var owner=f.Owner;using var admin=f.Admin;var data=await Data();
+        var grants=StaffAccessRules.Modules.Select(m=>new Academy.Api.Operations.StaffActionValue(m,m is "finance" or "academy",m=="finance",m=="finance",false)).ToArray();
+        (await Write(owner,$"/api/v1/manage/staff/{f.Member}/access",new Academy.Api.Operations.StaffAccessWrite(false,[data.A],grants,WorkflowActions:["workflow.expenses.record"])) ).EnsureSuccessStatusCode();
+        var body=new Academy.Api.Finance.OperatingExpenseWrite(data.A,Academy.Infrastructure.Finance.OperatingExpenseScope.Branch,data.A,"Supplies",new(2026,10,1),new(2026,10,19),new(2026,10,19),100,"EGP","مصروف اصطناعي مخول");
+        var csrf=await admin.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var request=new HttpRequestMessage(HttpMethod.Post,"/api/v1/finance/operating-expenses/"){Content=JsonContent.Create(body)};request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var created=await admin.SendAsync(request);created.EnsureSuccessStatusCode();var id=(await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await Write(admin,$"/api/v1/finance/operating-expenses/{id}/approve",new{},false)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await Write(admin,$"/api/v1/finance/operating-expenses/{id}/post",new{quoteHash=new string('a',64)},false)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await admin.GetAsync($"/api/v1/finance/operating-expenses/{Guid.NewGuid()}")).StatusCode);
+        Assert.False((await admin.GetFromJsonAsync<JsonElement>("/api/v1/finance/operating-expenses/options")).GetProperty("canApprove").GetBoolean());
+        Assert.True((await admin.GetFromJsonAsync<JsonElement>("/api/v1/finance/operating-expenses/options")).GetProperty("canRecord").GetBoolean());
+    }
     [Fact] public async Task V4_daily_actions_narrow_CRUD_independently_and_are_revalidated_under_write_lock()
     {
         var fixture=await CreateAdmin();using var owner=fixture.Owner;using var admin=fixture.Admin;

@@ -12,7 +12,7 @@ it("keeps expense creation, review and posted shares separate from collections",
     const path = String(input); calls.push(path);
     if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [{ id: "group-1", branchId: "branch-1", arabicName: "مجموعة اصطناعية" }] });
     if (path === "/api/v1/facilities") return response({ resources: [] });
-    if (path === "/api/v1/finance/operating-expenses/options") return response({ currency: "EGP", categories: [] });
+    if (path === "/api/v1/finance/operating-expenses/options") return response({ currency: "EGP", categories: [], canApprove:true, canRecord:true });
     if (path.startsWith("/api/v1/finance/operating-expenses/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
     if (path === "/api/v1/auth/csrf") return response({ token: "test-only" });
     if (path.startsWith("/api/v1/finance/operating-expenses/?")) return response({ count: 1, items: [{ ...row, status }] });
@@ -52,7 +52,7 @@ it("keeps owner KPI period, branch and approved status in the expense list", asy
     const path = String(input); calls.push(path);
     if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [] });
     if (path === "/api/v1/facilities") return response({ resources: [] });
-    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [] });
+    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [], canApprove:true, canRecord:true });
     if (path.includes("/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
     if (path.includes("operating-expenses/?")) return response({ count: 0, items: [] });
     throw new Error(`Unexpected request: ${path}`);
@@ -69,7 +69,7 @@ it("opens the all-time unpaid owner KPI without silently applying a month filter
     const path = String(input); calls.push(path);
     if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [] });
     if (path === "/api/v1/facilities") return response({ resources: [] });
-    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [] });
+    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [], canApprove:true, canRecord:true });
     if (path.includes("/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
     if (path.includes("operating-expenses/?")) return response({ count: 0, items: [] });
     throw new Error(`Unexpected request: ${path}`);
@@ -85,7 +85,7 @@ it("offers branch and branch-scoped sport shared costs without a misleading grou
     const path = String(input);
     if (path.includes("structure/options")) return response({ branches: [{ id: "branch-1", arabicName: "فرع اصطناعي" }], groups: [], sports: [{ id: "sport-1", arabicName: "سباحة" }] });
     if (path === "/api/v1/facilities") return response({ resources: [] });
-    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [] });
+    if (path.endsWith("/options")) return response({ currency: "EGP", categories: [], canApprove:true, canRecord:true });
     if (path.includes("/allocations?")) return response({ count: 0, items: [], total: 0, truncated: false });
     if (path.includes("operating-expenses/?")) return response({ count: 0, items: [] });
     if (path === "/api/v1/auth/csrf") return response({ token: "demo-token" });

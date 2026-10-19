@@ -41,13 +41,17 @@ public static class OperatingExpenseEndpoints
 public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenant current, IHttpContextAccessor accessor, TimeProvider time)
 {
     private static readonly HashSet<string> Categories = ["Facility", "Electricity", "Water", "Heating", "Maintenance", "Rent", "Supplies", "Administration", "CollectionFees", "Other"];
-    private async Task<(TenantMembership Membership, Guid Actor)> Owner()
+    private async Task<(TenantMembership Membership, Guid Actor)> Owner(bool ownerOnly=false, bool write=false)
     {
         var t = await current.ResolveAsync() ?? throw new OperatingExpenseRejected("سجل الدخول أولًا.", 401);
-        if (t.Role != AcademyRole.AcademyOwner) throw new OperatingExpenseRejected("المصروفات التشغيلية متاحة للمالك فقط.", 403);
+        if (t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin) || ownerOnly && t.Role != AcademyRole.AcademyOwner) throw new OperatingExpenseRejected("اعتماد وترحيل المصروفات للمالك فقط.",403);
+        if(write)await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
+        var m=await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(m=>m.Id==t.MembershipId&&m.IsActive&&m.User.IsActive&&m.Academy.IsActive);
+        if(m is null||m.Role!=t.Role)throw new OperatingExpenseRejected("عضوية الموظف لم تعد متاحة.",403);
+        if(t.Role==AcademyRole.AcademyAdmin&&(!m.UseActionGrants||!await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==m.Id&&g.Module=="finance"&&g.IsActive&&g.Read&&(!write||g.Add&&g.Edit))||write&&!await StaffWorkflowAccess.Allows(db,m.Id,"/api/v1/finance/operating-expenses","POST")))throw new OperatingExpenseRejected("تسجيل المصروف يتطلب تفويضه المالي ونطاق الفرع.",403);
         var claim = accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(claim, out var actor) || !await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.UserId == actor && m.IsActive && m.Role == AcademyRole.AcademyOwner))
-            throw new OperatingExpenseRejected("عضوية المالك غير متاحة.", 403);
+        if (!Guid.TryParse(claim, out var actor) || !await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.UserId == actor && m.IsActive && m.Role == t.Role))
+            throw new OperatingExpenseRejected("عضوية الموظف غير متاحة.", 403);
         return (t, actor);
     }
     private static void Key(string key)
@@ -60,7 +64,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     public async Task<object> Options()
     {
         var (t, _) = await Owner();
-        return new { currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(), categories = Categories.OrderBy(x => x).ToArray() };
+        return new { canApprove=t.Role==AcademyRole.AcademyOwner, canRecord=t.Role==AcademyRole.AcademyOwner||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="finance"&&g.IsActive&&g.Read&&g.Add&&g.Edit)&&await StaffWorkflowAccess.Allows(db,t.MembershipId,"/api/v1/finance/operating-expenses","POST"), currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(), categories = Categories.OrderBy(x => x).ToArray() };
     }
 
     public async Task<object> List(DateOnly? from, DateOnly? to, int? page, Guid? branchId = null, string? status = null, bool? unpaid = null,string? category=null,bool? paid=null,int? pageSize=null)
@@ -108,7 +112,8 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     }
     public async Task<object> Create(OperatingExpenseWrite body, string key)
     {
-        var (t, actor) = await Owner(); Key(key);
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var (t, actor) = await Owner(write:true); Key(key);
         if (body.BranchId == Guid.Empty || body.TargetId == Guid.Empty || !Categories.Contains(body.Category) || body.PeriodFrom == default || body.PeriodTo == default || body.PeriodFrom > body.PeriodTo || (body.PaidOn.HasValue && body.PaidOn.Value == default)
             || body.Amount <= 0 || body.Amount > 999999999m || decimal.Round(body.Amount, 2) != body.Amount || body.Currency is { Length: not 3 } || body.Note?.Trim().Length > 400
             || body.Scope is not (OperatingExpenseScope.Group or OperatingExpenseScope.Resource or OperatingExpenseScope.Branch or OperatingExpenseScope.Sport)
@@ -125,7 +130,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         if (!targetValid) throw new OperatingExpenseRejected("هدف المصروف لا يتبع هذا الفرع.", 404);
         var normalized = body with { Category = body.Category.Trim(), Currency = currency, Note = body.Note?.Trim() };
         var hash = StatementComparisonRules.Hash(normalized);
-        await using var tx = await db.Database.BeginTransactionAsync();
+
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"operating-expense:{t.AcademyId}:{actor}:{key}"},0))");
         var prior = await db.OperatingExpenses.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.CreatedByUserId == actor && x.RequestKey == key);
         if (prior is not null) { if (prior.RequestHash != hash) throw new OperatingExpenseRejected("معرف العملية مستخدم بتفاصيل مختلفة."); return new { prior.Id, replay = true }; }
@@ -139,7 +144,7 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     }
     public async Task<object> Approve(Guid id)
     {
-        var (t, actor) = await Owner(); await using var tx = await db.Database.BeginTransactionAsync();
+        await using var tx = await db.Database.BeginTransactionAsync(); var (t, actor) = await Owner(ownerOnly:true,write:true);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"OperatingExpenses\" WHERE \"AcademyId\"={t.AcademyId} AND \"Id\"={id} FOR UPDATE");
         var row = await Find(t.AcademyId, id);
         if (row.Status == OperatingExpenseStatus.Draft) { row.Status = OperatingExpenseStatus.Approved; row.ApprovedByUserId = actor; row.ApprovedAtUtc = row.UpdatedAtUtc = time.GetUtcNow(); await db.SaveChangesAsync(); }
@@ -184,16 +189,17 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     }
     public async Task<object> Quote(Guid id)
     {
-        var (t, _) = await Owner(); var row = await Find(t.AcademyId, id); var (shares, hash) = await Prepare(row);
+        var (t, _) = await Owner(ownerOnly:true); var row = await Find(t.AcademyId, id); var (shares, hash) = await Prepare(row);
         return new { quoteHash = hash, shares, total = shares.Sum(s => s.Amount), row.Currency,
             method = row.Scope switch { OperatingExpenseScope.Group => "مجموعة مباشرة", OperatingExpenseScope.Resource => "دقائق الحجوزات بين الخدمات، ثم بالتساوي بين مجموعات التدريب", _ => "بالتساوي بين المجموعات ذات حصص أو حجوزات تدريب محفوظة في الفرع والفترة" },
             warning = shares.Count == 1 && shares[0].GroupId is null ? "لا توجد مجموعات تشغيلية مؤهلة؛ سيبقى المصروف غير موزع." : null };
     }
     public async Task<object> Post(Guid id, OperatingExpensePost body, string key)
     {
-        var (t, actor) = await Owner(); Key(key);
-        if (body.QuoteHash?.Length != 64) throw new OperatingExpenseRejected("راجع التوزيع قبل الترحيل.", 422);
         await using var tx = await db.Database.BeginTransactionAsync();
+        var (t, actor) = await Owner(ownerOnly:true,write:true); Key(key);
+        if (body.QuoteHash?.Length != 64) throw new OperatingExpenseRejected("راجع التوزيع قبل الترحيل.", 422);
+
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"OperatingExpenses\" WHERE \"AcademyId\"={t.AcademyId} AND \"Id\"={id} FOR UPDATE");
         var row = await Find(t.AcademyId, id);
         if (row.Status == OperatingExpenseStatus.Posted)
