@@ -1,5 +1,13 @@
 # أدلة قبول V2 + V3
 
+## V2-12C2 — الحصة ومدرب الواقعة دون تخمين، 2026-10-19
+
+Code `3fe45b7` /D3-077/schema132 في قاعدتي QA فقط. API **7/7/45s** نهائية: مصادر قرار الحصة/Present لا الحالي أو الغائب، نسخة محفوظة/replay/SQL، أخطاء الربط/Rating/التاريخ، عزل طفل وأكاديمية ثانية وسحب التسجيل، seed وثبات التقرير ومستهلكو12A/B/C1. TRX `/tmp/academity-feedback-incident-tests/feedback-incident-verified.trx`؛ filter `Feedback_incident_|Feedback_triage_|Feedback_case_lifecycle|Feedback_investigation_private` مع FullyQualifiedName لكل جزء وACADEMY_TEST_CONNECTION_STRING صريحة. Web **24/4ملفات/2.95s** وlint/build/typecheck، Flutter **15/5ملفات ثم373/373/1m38s** لإغلاق فشلCI، ثم2متأثرتين بعد تنسيق الوقت وتحليل نظيف6.7s؛ دون إضعاف assertions أو full backend regression.
+
+Browser390 النهائية **1/18.1s** في `v3-feedback-triage.spec.ts` بعد build معزول5258/3258؛ [الأسرة](evidence/v2-12c2/guardian-incident-intake-web-390.png)، [سياق المالك](evidence/v2-12c2/owner-incident-context-web-390.png) فعلية نهائية مراجعة. iOSQA **رحلة27s+teardown** من `integration_test/feedback_triage_journey_test.dart` وAPI5259 حقيقية معISOLATED_DEMO/CAPTURE_VISUALS، علىiPhone17Pro/iOS26.2؛ [النسخة الخاصة](evidence/v2-12c2/owner-incident-context-ios.png) موضع تمرير فعلي. ربط/فرز/رد/خصوصية/عداد وتقرير مطابق وlogout. ليست AppRoot/Android/جهازًا فعليًا أو بصمة. [المحاولات المصححة والأوامر والبيئات والقيود والاستئناف](PROGRESS.md): استعلام اسم غير محمل، finder لحقل التاريخ، اختبارCI قديم لزر خارج الشاشة. لا ملفات معدلة لإيهام النجاح أواتصال/دفع حقيقي.
+
+Seedاختياري `Demo__FeedbackIncidentSeedEnabled=true` محروس ومفاتيحه ثابتة، لا اختلاق مدرب أو reset/إشعار/مال؛ بيانات اصطناعية مرتبطة بحصة2026-09-28 موجودة. لا معرف حضور وظيفي في اقتراح الأسرة. SLA/صندوق الطلبات وبقية V2-12/AC40 والقبول الموحد ما زالت partial، وكل المالي المتبقي آخرًا. CI السابقFlutter370/1فشل معروف أصلح محليًا؛ نجاحCI للرأس الجديد ينتظر التحقق.
+
 ## V2-12C1 — تقديم سلامة وفرز بشري لا يغير الأصل، 2026-10-19
 
 Code `787a11f` /D3-076/schema131 على قاعدتي QA فقط. API نهائية5/5/25s تشمل حالتين جديدتين وseed ومستهلكي12A/B، مع replay/CAS/SQL/roles/tenantB/منع الحل دون فرز/إعادة الفتح والخصوصية وثبات التقرير. Web28/4ملفات/4.83s وFlutter11/4ملفات/5s؛ build/typecheck/lint/analyze وEF ناجحة. لا Full Regression أو نجاحCI جديد مفترض.
