@@ -109,7 +109,9 @@ class PlayerReport extends StatelessWidget {
               spacing: 12,
               runSpacing: 8,
               children: [
-                for (final a in rows(d['axes']))
+                for (final a in rows(
+                  d['axes'],
+                ).where((a) => validAssessment(a['value'])))
                   UiText('${label(a['axis'])}: ${textOf(a['value'])}'),
               ],
             ),
@@ -126,7 +128,9 @@ class PlayerReport extends StatelessWidget {
             style: const TextStyle(fontSize: 12, color: Colors.white60),
           ),
           const Heading('المعايير التفصيلية'),
-          for (final c in rows(d['criteria']))
+          for (final c in rows(
+            d['criteria'],
+          ).where((c) => validAssessment(c['score'])))
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,6 +173,9 @@ Color scoreColor(Object? score) => score == null
     : score >= 60
     ? Colors.orangeAccent
     : Colors.redAccent;
+
+bool validAssessment(dynamic value) =>
+    value is num && value.isFinite && value >= 0 && value <= 100;
 
 class RadarChart extends StatelessWidget {
   final List<Json> axes;

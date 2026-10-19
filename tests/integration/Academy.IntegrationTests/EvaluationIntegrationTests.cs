@@ -21,6 +21,22 @@ public sealed class EvaluationIntegrationTests : IAsyncLifetime
     public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
     public async Task DisposeAsync() => await factory.DisposeAsync();
 
+    [Fact] public async Task V4_guardian_report_has_only_saved_assessments_including_zero_without_mutating_snapshot()
+    {
+        using var admin=await Staff(DemoSeed.AdminEmail);using var guardian=await Guardian();
+        var id=await CreateDraft(admin);var details=await GetDetails(admin,id);
+        Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/guardian/evaluations/{id}/report")).StatusCode);
+        (await Put(admin,$"/api/v1/evaluations/{id}",new{reportingPeriod="تقييم جزئي اصطناعي V4",version=details.Version,scores=new[]{new{criterionId=details.CriterionId,score=0}}})).EnsureSuccessStatusCode();
+        var saved=await GetDetails(admin,id);(await Post(admin,$"/api/v1/evaluations/{id}/publish",new{version=saved.Version})).EnsureSuccessStatusCode();
+        var family=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/evaluations/{id}/report");
+        Assert.Single(family.GetProperty("criteria").EnumerateArray());Assert.Equal(0,family.GetProperty("criteria")[0].GetProperty("score").GetInt32());
+        Assert.All(family.GetProperty("axes").EnumerateArray(),a=>Assert.InRange(a.GetProperty("value").GetDecimal(),0,100));
+        var staff=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/evaluations/{id}/report");Assert.True(staff.GetProperty("criteria").GetArrayLength()>1);
+        Assert.Equal(staff.GetProperty("totalApplicableCriteria").GetInt32(),family.GetProperty("totalApplicableCriteria").GetInt32());Assert.Equal(staff.GetProperty("completenessPercentage").GetDecimal(),family.GetProperty("completenessPercentage").GetDecimal());
+        Assert.Equal(HttpStatusCode.Conflict,(await Put(admin,$"/api/v1/evaluations/{id}",new{reportingPeriod="لا يعدل المنشور",version=saved.Version,scores=Array.Empty<object>()})).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/guardian/evaluations/{Slice5DemoSeed.AcademyBEvaluationId}/report")).StatusCode);
+    }
+
     [Fact] public async Task Admin_creates_criterion_for_own_academy()
     { using var client = await Staff(DemoSeed.AdminEmail); var response = await Post(client, "/api/v1/evaluations/criteria", new { sportId = Slice2DemoSeed.FootballId, arabicName = $"معيار اختبار {Guid.NewGuid():N}", displayOrder = 90, isActive = true, weight = 1.25, footballAxis = "Passing" }); Assert.Equal(HttpStatusCode.Created, response.StatusCode); }
 

@@ -189,17 +189,17 @@ public static class Slice5Endpoints
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
         var entity = await db.PlayerEvaluations.AsNoTracking().Include(x => x.Scores).ThenInclude(x => x.EvaluationCriterion).Include(x => x.SportEnrollment).ThenInclude(x => x.Player).Include(x => x.Sport).Include(x => x.EvaluatedByUser).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.Status == EvaluationStatus.Published && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == x.SportEnrollment.PlayerId && l.Guardian.UserId == user && l.IsActive));
-        if (entity is null) return Results.NotFound(); return Results.Ok(BuildReport(entity, calculator));
+        if (entity is null) return Results.NotFound(); return Results.Ok(BuildReport(entity, calculator, assessedOnly: true));
     }
 
-    private static object BuildReport(PlayerEvaluation entity, IEvaluationReportCalculator calculator)
+    private static object BuildReport(PlayerEvaluation entity, IEvaluationReportCalculator calculator, bool assessedOnly = false)
     {
         var calc = calculator.Calculate(entity.Scores); var player = entity.SportEnrollment.Player;
         var age = entity.EvaluationDate.Year - player.DateOfBirth.Year; if (entity.EvaluationDate < player.DateOfBirth.AddYears(age)) age--;
         return new { entity.Id, player = player.ArabicName, player.PhotoReference, player.FootballPosition, sport = entity.Sport.ArabicName, entity.EvaluationDate, entity.ReportingPeriod, evaluator = entity.EvaluatedByUser.DisplayName, entity.GeneralNotes, age, player.HeightCm, player.WeightKg, preferredFoot = player.PreferredFoot?.ToString(),
             isFootballReport = IsFootball(entity.Sport), calc.OverallScore, calc.ScoredCriteria, calc.TotalApplicableCriteria, calc.CompletenessPercentage, calc.AvailableAxes,
-            axes = calc.Axes.Select(x => new { axis = x.Axis.ToString(), x.Value }),
-            criteria = entity.Scores.OrderBy(x => x.EvaluationCriterion.DisplayOrder).Select(x => new { name = x.CriterionNameSnapshot, x.Score, x.Notes, axis = x.FootballAxisSnapshot == null ? null : x.FootballAxisSnapshot.ToString() }) };
+            axes = calc.Axes.Where(x => !assessedOnly || x.Value is >= 0 and <= 100).Select(x => new { axis = x.Axis.ToString(), x.Value }),
+            criteria = entity.Scores.Where(x => !assessedOnly || x.Score is >= 0 and <= 100).OrderBy(x => x.EvaluationCriterion.DisplayOrder).Select(x => new { name = x.CriterionNameSnapshot, x.Score, x.Notes, axis = x.FootballAxisSnapshot == null ? null : x.FootballAxisSnapshot.ToString() }) };
     }
 
     private static IQueryable<PlayerEvaluation> AccessibleEvaluations(TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db)

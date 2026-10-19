@@ -15,6 +15,10 @@ beforeEach(() => { push.mockReset(); });
 afterEach(cleanup);
 
 describe("evaluation experience", () => {
+  it("shows only valid assessed fields for the family including zero without fabricating a radar polygon",async()=>{
+    global.fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({...footballReport,axes:[{axis:"Passing",value:0},{axis:"Speed",value:null}],criteria:[{name:"دقة التمرير",score:0},{name:"الرؤية",score:null},{name:"التمركز",score:undefined},{name:"درجة غير صالحة",score:101}]})});
+    render(<EvaluationReport id="partial" guardian/>);expect(await screen.findByText("0 / 100")).toBeVisible();expect(screen.getByText("دقة التمرير")).toBeVisible();expect(screen.queryByText("الرؤية")).not.toBeInTheDocument();expect(screen.queryByText("التمركز")).not.toBeInTheDocument();expect(screen.queryByText("درجة غير صالحة")).not.toBeInTheDocument();expect(screen.queryByText("غير متاح")).not.toBeInTheDocument();expect(screen.queryByText("لم يُقيّم")).not.toBeInTheDocument();expect(document.querySelector("polygon.radar-value")).toBeNull();expect(document.querySelectorAll("circle.radar-value")).toHaveLength(1);
+  });
   it("renders the criteria list with sport, axis, weight and functional actions", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [{ id: "c1", sportId: "s1", sport: "كرة القدم", arabicName: "دقة التمرير", displayOrder: 1, isActive: true, weight: 1, footballAxis: "Passing", version: 3, referenced: true }] });
     render(<CriteriaList />); expect(await screen.findByText("دقة التمرير")).toBeVisible(); expect(screen.getByText(/التمرير · الوزن 1/)).toBeVisible(); expect(screen.getByRole("link", { name: "تعديل" })).toBeVisible(); expect(screen.getByRole("button", { name: "إيقاف" })).toBeVisible();

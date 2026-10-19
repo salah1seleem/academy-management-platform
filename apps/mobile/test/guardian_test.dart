@@ -345,7 +345,8 @@ void main() {
       expect(find.text('74'), findsOneWidget);
       expect(find.text('AMF'), findsOneWidget);
       expect(find.text('التمرير: 0'), findsOneWidget);
-      expect(find.text('السرعة: غير متاح'), findsOneWidget);
+      expect(find.text('السرعة: غير متاح'), findsNothing);
+      expect(find.text('سرعة الجري'), findsNothing);
       await tester.scrollUntilVisible(find.text('ملاحظة المدرب'), 250);
       expect(find.text('ملاحظة المدرب'), findsOneWidget);
       expect(find.text('مخطط الملعب'), findsNothing);
