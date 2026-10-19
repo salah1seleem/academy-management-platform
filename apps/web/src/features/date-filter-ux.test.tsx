@@ -47,6 +47,7 @@ it.each([
   ["طلبات التسجيل القديمة", <AdminEnrollmentRequests key="enrollments" />, "إعادة الضبط"],
 ] as const)("%s: starts month-to-date and clear remains blank after async responses", async (_name, content, reset) => {
   render(<DateFilterDefaults range={range}>{content}</DateFilterDefaults>);
+  if(_name==="المباريات")fireEvent.click(screen.getByRole("button",{name:"المباريات"}));
   const from = await screen.findByLabelText("من تاريخ"), to = screen.getByLabelText("إلى تاريخ");
   expect(from).toHaveValue(_name === "قائمة الحضور" ? range.to : range.from); expect(to).toHaveValue(range.to);
   fireEvent.click(await screen.findByRole("button", { name: reset }));

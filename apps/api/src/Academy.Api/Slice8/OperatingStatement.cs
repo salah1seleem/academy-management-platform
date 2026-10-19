@@ -59,10 +59,11 @@ public static partial class ReportingEndpoints
         income.Add(new("rental","تأجير مسبح وحارات محصل",rental,"/dashboard/reports/financial?collectionType=External&externalKind=PoolRental"));
         income.Add(new("external","اتفاقيات برامج خارجية محصلة",externalProgram,"/dashboard/reports/financial?collectionType=External&externalKind=ExternalProgram"));
         var warnings=new List<string>{"أساس نقدي: المقبوض ليس إيرادًا مكتسبًا بالضرورة. لا يحدد هذا التقرير التزامات الاشتراكات المؤجلة أو ربح الاستحقاق.","الاتفاقات والتأجير تظهر بإيصالات التحصيل الفعلية فقط؛ الرصيد غير المحصل مستقل عن الراتب وعن الفائض النقدي.","المصروفات غير المسجلة لا تُفترض صفرًا. لا توجد تكلفة مخزون موثقة للمنتجات ضمن هذه القائمة."};
+        if(r.EndUtcExclusive==DateTimeOffset.MaxValue)warnings.Add("بعد مسح الفترة، تشمل التدفقات كل التواريخ بما فيها المصروفات المسجلة بعد تاريخ مرجع الديمو؛ تاريخ النهاية المرجعي ليس حدًا للاستبعاد.");
         var expenses=new List<OperatingStatementLine>();
         var operating=db.OperatingExpenses.Where(e=>e.AcademyId==academy&&e.Currency==r.Currency&&e.Status==OperatingExpenseStatus.Posted&&(!branch.HasValue||e.BranchId==branch));
         if(sport.HasValue)operating=operating.Where(e=>e.SportId==sport||e.TrainingGroupId.HasValue&&db.TrainingGroups.Any(g=>g.Id==e.TrainingGroupId&&g.SportId==sport));
-        var categoryRows=await operating.Where(e=>e.PaidOn>=r.From&&e.PaidOn<=r.To).GroupBy(e=>e.Category).Select(g=>new{key=g.Key,amount=g.Sum(e=>e.Amount)}).ToArrayAsync();
+        var categoryRows=await operating.Where(e=>e.PaidOn!=null&&(r.StartUtc==DateTimeOffset.MinValue||e.PaidOn>=r.From)&&(r.EndUtcExclusive==DateTimeOffset.MaxValue||e.PaidOn<=r.To)).GroupBy(e=>e.Category).Select(g=>new{key=g.Key,amount=g.Sum(e=>e.Amount)}).ToArrayAsync();
         foreach(var c in categoryRows)expenses.Add(new(c.key,ExpenseLabel(c.key),c.amount,"/dashboard/finance/operating-expenses"));
         decimal payrollCash=0,privateCash=0,advanceCash=0,advanceApplied=0,payable=0;
         if(!sport.HasValue)
@@ -86,7 +87,7 @@ public static partial class ReportingEndpoints
         var balances=ReceivableEndpoints.Rows(db,academy,r.EndUtcExclusive==DateTimeOffset.MaxValue?clock.UtcNow:r.EndUtcExclusive.AddTicks(-1),r.To,branch,null,null);
         if(sport.HasValue)balances=balances.Where(b=>db.SportEnrollments.Any(e=>e.Id==b.EnrollmentId&&e.SportId==sport));
         var receivables=await balances.Where(b=>b.Currency==r.Currency&&b.Outstanding>0).SumAsync(b=>(decimal?)b.Outstanding)??0;
-        var unpaid=await operating.Where(e=>e.PeriodFrom<=r.To&&e.PaidOn==null).SumAsync(e=>(decimal?)e.Amount)??0;
+        var unpaid=await operating.Where(e=>(r.EndUtcExclusive==DateTimeOffset.MaxValue||e.PeriodFrom<=r.To)&&e.PaidOn==null).SumAsync(e=>(decimal?)e.Amount)??0;
         var known=categoryRows.Select(c=>c.key).ToHashSet();foreach(var key in new[]{"Rent","Electricity","Water","Maintenance","CollectionFees"})if(!known.Contains(key))warnings.Add($"لم يسجل بند {ExpenseLabel(key)} مدفوعًا ومرحّلًا في النطاق؛ راجع اكتمال التكلفة.");
         var externalOutstanding=await db.ExternalAgreements.Where(a=>a.AcademyId==academy&&a.Currency==r.Currency&&a.CancelledAtUtc==null&&(!branch.HasValue||a.BranchId==branch)&&(!sport.HasValue||a.SportId==sport)&&a.CreatedAtUtc<r.EndUtcExclusive).SumAsync(a=>(decimal?)(a.Amount-db.ExternalAgreementReceipts.Where(p=>p.AgreementId==a.Id&&p.ReceivedAtUtc<r.EndUtcExclusive).Sum(p=>p.Amount)))??0;
         var incomeTotal=income.Sum(x=>x.Amount);var expenseTotal=expenses.Sum(x=>x.Amount);

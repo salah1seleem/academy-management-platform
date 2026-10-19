@@ -73,6 +73,7 @@ describe("owner-review operations", () => {
     const writes: unknown[] = [];
     global.fetch = vi.fn((input, init) => String(input).includes("/csrf") ? response({ token: "csrf" }) : init ? (writes.push(JSON.parse(String(init.body))), response({ id: "news" })) : response([])) as typeof fetch;
     render(<NewsManagement />);
+    fireEvent.click(screen.getByRole("button",{name:"إنشاء خبر"}));
     expect(screen.getByLabelText("مدة الظهور بالأيام")).toHaveValue(7);
     expect(screen.queryByLabelText("التاريخ")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("عنوان الخبر"), { target: { value: "خبر تجريبي" } });

@@ -12,9 +12,13 @@ namespace Academy.Api.Slice2;
 public static class MemberSubscriptionValues
 {
     public const string Basis = "القيمة الشهرية المكافئة للاشتراكات السارية؛ ليست تحصيلًا أو إثباتًا للدافع.";
-    public sealed record PeriodValue(Guid PlayerId, decimal? MonthlyValue);
-    public sealed record GuardianValue(Guid Id, string DisplayName, string? ContactPhone, int LinkedChildren,
-        decimal MonthlySubscriptionValue, int UnpricedSubscriptions, string Currency);
+    // Member initializers remain composable inside EF aggregates and ordering.
+    public sealed class PeriodValue { public Guid PlayerId {get;init;} public decimal? MonthlyValue {get;init;} }
+    public sealed class GuardianValue {
+        public Guid Id {get;init;} public required string DisplayName {get;init;} public string? ContactPhone {get;init;}
+        public int LinkedChildren {get;init;} public decimal MonthlySubscriptionValue {get;init;}
+        public int UnpricedSubscriptions {get;init;} public required string Currency {get;init;}
+    }
 
     public static IQueryable<PeriodValue> Active(FoundationDbContext db, Guid academy, DateOnly day, string currency,
         Guid? branch = null, Guid? sport = null)
@@ -35,8 +39,8 @@ public static class MemberSubscriptionValues
         });
         // Calendar-month terms take precedence; day-based legacy terms use an explicit 30-day equivalent.
         // Never read a mutable plan price to invent a historical amount. Undated session packs remain unknown.
-        return terms.Select(p => new PeriodValue(p.PlayerId,
-            p.CurrencySnapshot != currency || p.Price == null || p.Price < 0 ? null : p.Price == 0 ? 0m : p.Months > 0 ? p.Price / p.Months : p.Days > 0 ? p.Price * 30m / p.Days : null));
+        return terms.Select(p => new PeriodValue {PlayerId=p.PlayerId,MonthlyValue=
+            p.CurrencySnapshot != currency || p.Price == null || p.Price < 0 ? null : p.Price == 0 ? 0m : p.Months > 0 ? p.Price / p.Months : p.Days > 0 ? p.Price * 30m / p.Days : null});
     }
 
     public static IQueryable<GuardianValue> Guardians(FoundationDbContext db, Guid academy, DateOnly day, string currency,
@@ -51,10 +55,10 @@ public static class MemberSubscriptionValues
         return db.GuardianProfiles.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive
             && (string.IsNullOrEmpty(term) || g.DisplayName.Contains(term) || phone != null && g.ContactPhone == phone)
             && (!branch.HasValue && !sport.HasValue || links.Any(l => l.GuardianId == g.Id)))
-            .Select(g => new GuardianValue(g.Id, g.DisplayName, g.ContactPhone,
-                links.Count(l => l.GuardianId == g.Id),
-                Math.Round(values.Where(v => links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)).Sum(v => v.MonthlyValue) ?? 0, 2),
-                values.Count(v => v.MonthlyValue == null && links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)), currency));
+            .Select(g => new GuardianValue {Id=g.Id, DisplayName=g.DisplayName, ContactPhone=g.ContactPhone,
+                LinkedChildren=links.Count(l => l.GuardianId == g.Id),
+                MonthlySubscriptionValue=Math.Round(values.Where(v => links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)).Sum(v => v.MonthlyValue) ?? 0, 2),
+                UnpricedSubscriptions=values.Count(v => v.MonthlyValue == null && links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)), Currency=currency});
     }
 
     public static async Task<IResult> GuardianList(string? search, string? sort, int? page, int? pageSize, Guid? branchId, Guid? sportId,

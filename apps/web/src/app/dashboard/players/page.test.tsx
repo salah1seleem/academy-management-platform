@@ -10,7 +10,7 @@ it("keeps the latest player search when the earlier unfiltered response arrives 
   const child = { id: "synthetic", playerCode: "TEST-1", arabicName: "طفل البحث الاصطناعي", dateOfBirth: "2017-01-01", enrollments: 1, isActive: true, enrollmentSummaries: [] };
   global.fetch = vi.fn(input => {
     if (String(input).includes("structure/options")) return Promise.resolve(new Response(JSON.stringify({ branches: [], sports: [], groups: [], categories: [] })));
-    if (String(input).endsWith("search=")) return new Promise<Response>(resolve => { finishOld = resolve; });
+    if (String(input).includes("/people/players?") && new URL(String(input),"http://qa.test").searchParams.get("search")==="") return new Promise<Response>(resolve => { finishOld = resolve; });
     return Promise.resolve(new Response(JSON.stringify([child])));
   }) as typeof fetch;
   render(<PlayersPage />);

@@ -104,6 +104,7 @@ it("offers branch and branch-scoped sport shared costs without a misleading grou
   fireEvent.click(screen.getByRole("button", { name: "حفظ مسودة المصروف" }));
   await waitFor(() => expect(created).toHaveLength(1));
   expect(created[0]).toMatchObject({ branchId: "branch-1", scope: "Branch", targetId: "branch-1" });
+  fireEvent.click(await screen.findByRole("button",{name:"← العودة إلى المصروفات"}));fireEvent.click(await screen.findByRole("button",{name:"تسجيل مصروف"}));
   fireEvent.change(screen.getByLabelText("نطاق التكلفة"), { target: { value: "Sport" } });
   expect(screen.getByLabelText("الرياضة")).toContainHTML("سباحة");
 });

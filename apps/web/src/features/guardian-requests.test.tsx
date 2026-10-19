@@ -26,7 +26,7 @@ it("family submits a request without inventing a payment or rating and retries t
 it("owner filters requests separately, clear restores all kinds, and overdue evidence counts requests explicitly",async()=>{
   const fetcher=vi.fn(async(path)=>Response.json(String(path).includes("options")?{branches:[]}:[]));global.fetch=fetcher as typeof fetch;
   render(<GuardianFeedbackInbox initialKind="Request"/>);await waitFor(()=>expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("kind=Request"),expect.objectContaining({signal:expect.any(AbortSignal)})));
-  expect(screen.getByLabelText("النوع")).toHaveValue("Request");fireEvent.click(screen.getByRole("button",{name:"مسح"}));await waitFor(()=>expect(screen.getByLabelText("النوع")).toHaveValue(""));
+  expect(screen.getByLabelText("النوع")).toHaveValue("Request");fireEvent.click(screen.getByRole("button",{name:"مسح جميع الفلاتر"}));await waitFor(()=>expect(screen.getByLabelText("النوع")).toHaveValue(""));
   render(<OverdueFeedbackReview data={{complaintCount:0,suggestionCount:0,requestCount:2,submitterCount:1,oldestDueOn:"2026-10-10",asOfDate:"2026-10-19"}}/>);
   expect(screen.getByLabelText("ملخص الملاحظات المتأخرة")).toHaveTextContent("2 طلب");expect(screen.getByLabelText("ملخص الملاحظات المتأخرة")).toHaveTextContent("1 حساب مقدم فريد");
 });

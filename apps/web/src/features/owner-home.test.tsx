@@ -49,7 +49,7 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   expect(screen.getByRole("link", { name: /طلبات دفع تحتاج قرارًا/ })).toHaveTextContent("7 طلب · كل الفترات");
   expect(screen.getByRole("link", { name: /طلبات دفع تحتاج قرارًا/ })).toHaveAttribute("href", expect.stringContaining("allDates=true"));
   expect(screen.getByRole("link", { name: /مجموعة تجربة/ })).toHaveAttribute("href", "/dashboard/academy/groups/group-1?tab=performance");
-  expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved");
+  expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved&allDates=true");
   expect(screen.getByRole("link", { name: /ملاحظات تجاوزت موعد المتابعة/ })).toHaveAttribute("href", expect.stringContaining("overdue=true"));
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));

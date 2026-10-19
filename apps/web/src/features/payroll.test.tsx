@@ -57,8 +57,9 @@ it("does not replace the selected payroll month with a slower previous response"
 it("shows employees without accounts and opens an editable fixed contract", async () => {
   global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : response(options)) as typeof fetch;
   renderPage(<EmployeeList />); expect(await screen.findByText("بدون حساب دخول")).toBeVisible();
-  expect(screen.getByRole("link", { name: "تعديل" })).toHaveAttribute("href", "/dashboard/staff/employees/worker");
-  expect(screen.getByRole("link", { name: "المستحقات" })).toHaveAttribute("href", "/dashboard/payroll?employeeId=worker");
+  fireEvent.click(await screen.findByRole("button",{name:"المزيد من الإجراءات"}));
+  expect(screen.getByRole("menuitem", { name: "تعديل" })).toHaveAttribute("href", "/dashboard/staff/employees/worker/edit");
+  expect(screen.getByRole("menuitem", { name: "المستحقات والصرف" })).toHaveAttribute("href", "/dashboard/staff/employees/worker?tab=payroll&month=2026-10");
   expect(screen.queryByRole("link", { name: "إضافة موظف" })).not.toBeInTheDocument();
 });
 

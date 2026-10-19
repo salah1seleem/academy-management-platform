@@ -92,7 +92,7 @@ function linkPermission(href: string) {
 
 function currentModule(path: string) {
   if (path === "/dashboard/help" || path.startsWith("/dashboard/help/")) return "help";
-  const match = modules.flatMap(module => module.links.map(link => ({ id: module.id, href: link.href.split("?")[0] })))
+  const match = modules.flatMap(module => module.links.filter(link => !link.href.includes("?")).map(link => ({ id: module.id, href: link.href.split("?")[0] })))
     .filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`)))
     .sort((a, b) => b.href.length - a.href.length)[0];
   if (match) return match.id;

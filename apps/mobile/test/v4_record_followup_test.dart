@@ -50,6 +50,7 @@ void main() {
       await tester.tap(find.textContaining('لاعب اصطناعي').last);
       await tester.pumpAndSettle();
       final save = find.text('حفظ المتابعة');
+      await tester.scrollUntilVisible(save, 200, scrollable: find.byType(Scrollable).first);
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();

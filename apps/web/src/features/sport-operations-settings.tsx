@@ -15,7 +15,7 @@ const kinds: Record<Kind, string> = { General: "رياضة عامة", Football: 
 
 export function SportOperationsSettings() {
   const [data, setData] = useState<Data | null>(null);
-  const initialSport=useSearchParams().get("sportId")??"";
+  const initialSport=useSearchParams()?.get("sportId")??"";
   const [selected, setSelected] = useState(initialSport);
   const [kind, setKind] = useState<Kind>("General");
   const [detail, setDetail] = useState<Detail | null>(null);

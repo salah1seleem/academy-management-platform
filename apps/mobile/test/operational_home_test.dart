@@ -69,7 +69,7 @@ void main() {
       var reads = 0;
       final auth = await owner((m, p, b, t) async {
         if (p.contains('/payment-requests')) return {'pending': 9, 'items': []};
-        reads++;
+        if (p.contains("/reports/owner-summary")) reads++;
         return {
           'operations': {
             ...operations(),
@@ -312,7 +312,7 @@ void main() {
                 ]
               : [];
         }
-        reads++;
+        if (p.contains("/reports/owner-summary")) reads++;
         return {
           ...summary(),
           'from': '2026-09-01',

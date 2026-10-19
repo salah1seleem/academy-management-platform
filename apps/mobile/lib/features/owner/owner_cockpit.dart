@@ -47,6 +47,19 @@ class OwnerCockpitContent extends StatelessWidget {
   final VoidCallback onCapacity;
   @override
   Widget build(BuildContext context) {
+    if ([
+          'collections',
+          'target',
+          'overdue',
+          'risk',
+          'attendance',
+          'capacity',
+        ].any((key) => data[key] is! Map) ||
+        data['collections']['net'] is! num) {
+      return const UiText(
+        'تعذر تحميل ملخص الأكاديمية؛ لا توجد أرقام تقديرية بديلة.',
+      );
+    }
     final collections = obj(data['collections']),
         target = obj(data['target']),
         overdue = obj(data['overdue']),
@@ -70,120 +83,123 @@ class OwnerCockpitContent extends StatelessWidget {
         onTap: action,
       ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        GCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.insights_rounded,
-                    color: Theme.of(context).colorScheme.primary,
+    return Material(
+      color: Colors.transparent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.insights_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Heading('ملخص الأكاديمية'),
+                  ],
+                ),
+                const UiText('صافي التحصيل المؤكد خلال الفترة'),
+                TextButton(
+                  onPressed: () => onReport('financial'),
+                  child: UiText(
+                    money(collections['net'], data['currency']),
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  const SizedBox(width: 8),
-                  const Heading('ملخص الأكاديمية'),
-                ],
-              ),
-              const UiText('صافي التحصيل المؤكد خلال الفترة'),
-              TextButton(
-                onPressed: () => onReport('financial'),
-                child: UiText(
-                  money(collections['net'], data['currency']),
-                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
-              ),
-              UiText(
-                change == null
-                    ? 'لا نسبة مقارنة قابلة للاعتماد لهذه الفترة.'
-                    : '${change < 0 ? 'انخفاض' : 'زيادة'} ${change.abs()}% عن الفترة السابقة',
-              ),
-              UiText(
-                '${collections['previousFrom']} — ${collections['previousTo']} · ${money(collections['previous'], data['currency'])}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const Divider(height: 24),
-              const UiText('هدف التحصيل الشهري'),
-              if (target['amount'] != null && progress != null) ...[
                 UiText(
-                  '${progress.toStringAsFixed(1)}% من ${money(target['amount'], data['currency'])}',
+                  change == null
+                      ? 'لا نسبة مقارنة قابلة للاعتماد لهذه الفترة.'
+                      : '${change < 0 ? 'انخفاض' : 'زيادة'} ${change.abs()}% عن الفترة السابقة',
                 ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: (progress / 100).clamp(0.0, 1.0).toDouble(),
-                  semanticsLabel: 'تحقيق هدف التحصيل',
+                UiText(
+                  '${collections['previousFrom']} — ${collections['previousTo']} · ${money(collections['previous'], data['currency'])}',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-              ] else
-                const UiText(
-                  'لم يحدد هدف سارٍ لهذه الفترة. يضبطه المالك من إعدادات الأكاديمية في لوحة الويب.',
+                const Divider(height: 24),
+                const UiText('هدف التحصيل الشهري'),
+                if (target['amount'] != null && progress != null) ...[
+                  UiText(
+                    '${progress.toStringAsFixed(1)}% من ${money(target['amount'], data['currency'])}',
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: (progress / 100).clamp(0.0, 1.0).toDouble(),
+                    semanticsLabel: 'تحقيق هدف التحصيل',
+                  ),
+                ] else
+                  const UiText(
+                    'لم يحدد هدف سارٍ لهذه الفترة. يضبطه المالك من إعدادات الأكاديمية في لوحة الويب.',
+                  ),
+              ],
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                avatar: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 18,
                 ),
+                label: UiText(
+                  'متأخرات · ${money(overdue['amount'], data['currency'])}',
+                ),
+                onPressed: () => onReport('receivables'),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.favorite_outline, size: 18),
+                label: UiText('متابعة تجديد · ${risk['players']} لاعب'),
+                onPressed: () => onReport('renewals'),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.event_available, size: 18),
+                label: UiText(
+                  'الحضور · ${attendance['percentage'] == null ? 'عينة غير كافية' : '${attendance['percentage']}%'}',
+                ),
+                onPressed: () => onReport('attendance'),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.groups_outlined, size: 18),
+                label: UiText('أماكن متاحة · ${capacity['seats']}'),
+                onPressed: onCapacity,
+              ),
             ],
           ),
-        ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ActionChip(
-              avatar: const Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 18,
-              ),
-              label: UiText(
-                'متأخرات · ${money(overdue['amount'], data['currency'])}',
-              ),
-              onPressed: () => onReport('receivables'),
+          const SizedBox(height: 12),
+          const Heading('مركز القرارات الذكية'),
+          const UiText('قواعد من السجلات؛ لا إرسال رسائل أو خصومات تلقائية.'),
+          if ((overdue['amount'] as num? ?? 0) > 0)
+            decision(
+              Icons.receipt_long_outlined,
+              'أولوية 1 · متابعة المستحقات',
+              '${overdue['families']} أسر مرتبطة · مراجعة كشف التحصيل للتحضير',
+              () => onReport('receivables'),
             ),
-            ActionChip(
-              avatar: const Icon(Icons.favorite_outline, size: 18),
-              label: UiText('متابعة تجديد · ${risk['players']} لاعب'),
-              onPressed: () => onReport('renewals'),
+          if ((risk['players'] as num? ?? 0) > 0)
+            decision(
+              Icons.restart_alt,
+              'أولوية 2 · متابعة التجديد',
+              textOf(risk['basis']),
+              () => onReport('renewals'),
             ),
-            ActionChip(
-              avatar: const Icon(Icons.event_available, size: 18),
-              label: UiText(
-                'الحضور · ${attendance['percentage'] == null ? 'عينة غير كافية' : '${attendance['percentage']}%'}',
-              ),
-              onPressed: () => onReport('attendance'),
+          if ((capacity['seats'] as num? ?? 0) > 0)
+            decision(
+              Icons.event_seat_outlined,
+              'أولوية 3 · مراجعة الأماكن المتاحة',
+              'فرصة مشروطة ${money(capacity['conditionalValue'], data['currency'])} قبل الخصومات؛ ليست ربحًا. ${capacity['unpricedGroups']} مجموعات بلا سعر مؤهل.',
+              onCapacity,
             ),
-            ActionChip(
-              avatar: const Icon(Icons.groups_outlined, size: 18),
-              label: UiText('أماكن متاحة · ${capacity['seats']}'),
-              onPressed: onCapacity,
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const Heading('مركز القرارات الذكية'),
-        const UiText('قواعد من السجلات؛ لا إرسال رسائل أو خصومات تلقائية.'),
-        if ((overdue['amount'] as num? ?? 0) > 0)
-          decision(
-            Icons.receipt_long_outlined,
-            'أولوية 1 · متابعة المستحقات',
-            '${overdue['families']} أسر مرتبطة · مراجعة كشف التحصيل للتحضير',
-            () => onReport('receivables'),
-          ),
-        if ((risk['players'] as num? ?? 0) > 0)
-          decision(
-            Icons.restart_alt,
-            'أولوية 2 · متابعة التجديد',
-            textOf(risk['basis']),
-            () => onReport('renewals'),
-          ),
-        if ((capacity['seats'] as num? ?? 0) > 0)
-          decision(
-            Icons.event_seat_outlined,
-            'أولوية 3 · مراجعة الأماكن المتاحة',
-            'فرصة مشروطة ${money(capacity['conditionalValue'], data['currency'])} قبل الخصومات؛ ليست ربحًا. ${capacity['unpricedGroups']} مجموعات بلا سعر مؤهل.',
-            onCapacity,
-          ),
-        if ((overdue['amount'] as num? ?? 0) <= 0 &&
-            (risk['players'] as num? ?? 0) == 0 &&
-            (capacity['seats'] as num? ?? 0) == 0)
-          const UiText('لا توجد إجراءات وفق هذه القواعد حاليًا.'),
-      ],
+          if ((overdue['amount'] as num? ?? 0) <= 0 &&
+              (risk['players'] as num? ?? 0) == 0 &&
+              (capacity['seats'] as num? ?? 0) == 0)
+            const UiText('لا توجد إجراءات وفق هذه القواعد حاليًا.'),
+        ],
+      ),
     );
   }
 }

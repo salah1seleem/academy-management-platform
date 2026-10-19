@@ -31,5 +31,5 @@ it("guardian submits a safety report with incident date and no accusation, prese
 });
 it("safety inbox clear removes the safety constraint rather than leaving a hidden filter", async () => {
   const requests: string[] = []; global.fetch = vi.fn(async path => { requests.push(String(path)); return Response.json(String(path).includes("structure/options") ? { branches: [] } : []); }) as typeof fetch;
-  render(<GuardianFeedbackInbox initialSafetyOnly initialStatus="Unresolved"/>); await waitFor(() => expect(requests.some(p => p.includes("safetyOnly=true"))).toBe(true)); fireEvent.click(screen.getByRole("button", { name: "مسح" })); await waitFor(() => expect(requests.at(-1)).toBe("/api/v1/manage/feedback?")); expect(screen.getByLabelText("مسار السلامة")).toHaveValue("");
+  render(<GuardianFeedbackInbox initialSafetyOnly initialStatus="Unresolved"/>); await waitFor(() => expect(requests.some(p => p.includes("safetyOnly=true"))).toBe(true)); fireEvent.click(screen.getByRole("button", { name: "مسح جميع الفلاتر" })); await waitFor(() => expect(requests.at(-1)).toBe("/api/v1/manage/feedback?")); expect(screen.getByLabelText("مسار السلامة")).toHaveValue("");
 });

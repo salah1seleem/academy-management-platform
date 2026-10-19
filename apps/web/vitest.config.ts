@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
+    // Bound jsdom memory/CPU: deterministic defaults on local and CI runners.
+    maxWorkers: 2,
   },
 });

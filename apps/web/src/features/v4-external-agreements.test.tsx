@@ -1,9 +1,10 @@
-import { fireEvent,render,screen,waitFor } from "@testing-library/react";
-import {beforeEach,expect,it,vi} from "vitest";
+import { cleanup,fireEvent,render,screen,waitFor } from "@testing-library/react";
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {ExternalAgreementDetail,ExternalAgreements} from "./external-agreements";
 vi.mock("next/navigation",()=>({useSearchParams:()=>new URLSearchParams(),useRouter:()=>({push:vi.fn()})}));
 vi.mock("./dashboard-api",()=>({csrfRequest:vi.fn(async()=>({json:async()=>({id:"receipt",receiptNumber:"EXT-demo"})}))}));
 vi.mock("../components/date-filter-defaults",()=>({useDateFilterDefaults:()=>({from:"2026-10-01",to:"2026-10-19"})}));
+afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 const agreement={id:"contract",version:1,title:"اتفاق تجريبي",counterpartyName:"طرف اصطناعي",kind:"ExternalProgram",fromDate:"2026-10-01",toDate:"2026-10-31",dueOn:"2026-10-19",amount:1000,currency:"EGP",paid:400,remaining:600,state:"Open"};
 beforeEach(()=>{vi.clearAllMocks();vi.stubGlobal("fetch",vi.fn(async(input)=>({ok:true,json:async()=>String(input).includes("/options")?{canManage:true,currency:"EGP",branches:[],sports:[],employees:[],resources:[]}:String(input).includes("/contract")?{agreement,paid:400,remaining:600,canManage:true,cash:{cashEnabled:false,sessions:[]},bookings:[],receipts:[{id:"receipt",receiptNumber:"EXT-demo",amount:400,currency:"EGP",paymentMethod:"Online",receivedAtUtc:"2026-10-19T08:00:00Z"}]}:{canManage:true,count:1,page:1,pageSize:25,items:[agreement]}})))});
 it("opens list first and clears default dates without resetting them",async()=>{render(<ExternalAgreements/>);expect(await screen.findByText("اتفاق تجريبي")).toBeInTheDocument();expect(screen.getByRole("link",{name:/إنشاء اتفاق/})).toBeInTheDocument();expect(screen.queryByRole("button",{name:"حفظ الاتفاق"})).not.toBeInTheDocument();fireEvent.click(screen.getByRole("button",{name:"مسح"}));await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).includes("allDates=true"))).toBe(true));});

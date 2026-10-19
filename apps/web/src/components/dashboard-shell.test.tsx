@@ -64,9 +64,8 @@ describe("dashboard navigation governance", () => {
     currentPath = "/dashboard/subscriptions/plans";
     render(<DashboardShell><div>المحتوى</div></DashboardShell>);
     expect(await screen.findByRole("link", { name: "باقات الاشتراك" })).toHaveAttribute("aria-current", "page");
-    fireEvent.click(screen.getByRole("button", { name: "المتابعات والطلبات" }));
-    expect(screen.getByRole("link", { name: "طلبات الدفع" })).toHaveAttribute("href", "/dashboard/subscriptions/payments");
-    expect(screen.getByRole("link", { name: "طلبات الدفع" })).toBeVisible();
+    expect(screen.getByRole("link", {name:"المتابعات والطلبات"})).toHaveAttribute("href","/dashboard/subscriptions/payments");
+    expect(screen.getByRole("link", {name:"المتابعات والطلبات"})).toBeVisible();
     expect(screen.queryByRole("button", { name: "الاشتراكات" })).not.toBeInTheDocument();
     expect(screen.queryByText("نظرة عامة")).not.toBeInTheDocument();
     expect(screen.queryByText("الإدارة")).not.toBeInTheDocument();
