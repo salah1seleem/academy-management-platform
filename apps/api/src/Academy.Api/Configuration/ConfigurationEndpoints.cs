@@ -42,6 +42,8 @@ public static class ConfigurationEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(); await Lock(db, t.AcademyId);
         if (body.FeedbackFollowUpDays is < 1 or > 30) return Results.UnprocessableEntity(new { message = "مهلة متابعة الملاحظات بين يوم و30 يومًا." });
         if (t.Role != AcademyRole.AcademyOwner && body.FeedbackFollowUpDays != (await service.Active(t.AcademyId))?.FeedbackFollowUpDays) return Results.Forbid();
+        if(body.MonthlyCollectionTarget.HasValue&&(body.MonthlyCollectionTarget<=0||body.MonthlyCollectionTarget>1_000_000_000||decimal.Round(body.MonthlyCollectionTarget.Value,2)!=body.MonthlyCollectionTarget))return Results.UnprocessableEntity(new{message="أدخل هدف تحصيل شهري موجبًا بدقتين عشريتين."});
+        if(t.Role!=AcademyRole.AcademyOwner&&body.MonthlyCollectionTarget!=(await service.Active(t.AcademyId))?.MonthlyCollectionTarget)return Results.Forbid();
         if(body.MediaRetention!=(await service.Active(t.AcademyId))?.MediaRetention&&!await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t))return Results.Forbid();
         if(body.MediaRetention is {Days:<1 or >3650})return Results.UnprocessableEntity(new{message="مدة الاحتفاظ بين يوم و3650 يومًا، أو اتركها دون حذف آلي."});
         if (t.Role != AcademyRole.AcademyOwner && !Academy.Api.Help.HelpAudiencePolicy.Same(body.HelpAudiences, (await service.Active(t.AcademyId))?.HelpAudiences)) return Results.Forbid();
@@ -60,6 +62,7 @@ public static class ConfigurationEndpoints
         if (!valid) return Results.Problem(statusCode: 409, title: "انتقال حالة الإعدادات غير مسموح");
         if (body.Target == ConfigurationState.Suspended && t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled) return Results.Forbid();
         if (body.Target == ConfigurationState.Suspended && t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).FeedbackFollowUpDays != null) return Results.Forbid();
+        if(body.Target==ConfigurationState.Suspended&&t.Role!=AcademyRole.AcademyOwner&&AcademyRuntimeSettings.Read(row.Payload).MonthlyCollectionTarget!=null)return Results.Forbid();
         if (body.Target is ConfigurationState.Validated or ConfigurationState.Active or ConfigurationState.Staged)
         {
             var errors = await service.Validate(row); if (errors.Length > 0) return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = errors }, statusCode: 422);
@@ -70,6 +73,7 @@ public static class ConfigurationEndpoints
             if (row.EffectiveAtUtc > clock.GetUtcNow()) return Results.Problem(statusCode: 409, title: "لم يحن موعد سريان الإعدادات");
             var previous = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.State == ConfigurationState.Active);
             if (t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).FeedbackFollowUpDays != (previous == null ? null : AcademyRuntimeSettings.Read(previous.Payload).FeedbackFollowUpDays)) return Results.Forbid();
+            if(t.Role!=AcademyRole.AcademyOwner&&AcademyRuntimeSettings.Read(row.Payload).MonthlyCollectionTarget!=(previous==null?null:AcademyRuntimeSettings.Read(previous.Payload).MonthlyCollectionTarget))return Results.Forbid();
             if(AcademyRuntimeSettings.Read(row.Payload).MediaRetention!=(previous==null?null:AcademyRuntimeSettings.Read(previous.Payload).MediaRetention)&&!await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t))return Results.Forbid();
             if (t.Role != AcademyRole.AcademyOwner && !Academy.Api.Help.HelpAudiencePolicy.Same(AcademyRuntimeSettings.Read(row.Payload).HelpAudiences, previous is null ? null : AcademyRuntimeSettings.Read(previous.Payload).HelpAudiences)) return Results.Forbid();
             if (t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled != (previous is not null && AcademyRuntimeSettings.Read(previous.Payload).CashEnabled)) return Results.Forbid();

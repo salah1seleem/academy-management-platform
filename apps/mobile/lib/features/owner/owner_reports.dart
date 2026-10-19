@@ -9,21 +9,24 @@ import 'renewal_opportunities.dart';
 import 'cash_registers.dart';
 import 'provider_quarantine.dart';
 import 'settlement_comparisons.dart';
+import 'owner_cockpit.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
   final Map<String, String> initialFilters;
+  final String initialReport;
   const OwnerReports({
     super.key,
     required this.auth,
     this.initialFilters = const {},
+    this.initialReport = 'financial',
   });
   @override
   State<OwnerReports> createState() => _OwnerReportsState();
 }
 
 class _OwnerReportsState extends State<OwnerReports> {
-  String report = 'financial';
+  late String report = widget.initialReport;
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'التقارير التنفيذية',
@@ -37,6 +40,7 @@ class _OwnerReportsState extends State<OwnerReports> {
             children: [
               for (final item in const {
                 'financial': 'المال',
+                'operating': 'الفائض والعجز',
                 'attendance': 'الحضور',
                 'receivables': 'الأرصدة',
                 'cash': 'الصناديق',
@@ -54,7 +58,12 @@ class _OwnerReportsState extends State<OwnerReports> {
           ),
         ),
         Expanded(
-          child: report == 'settlement-comparisons'
+          child: report == 'operating'
+              ? NativeOperatingStatement(
+                  auth: widget.auth,
+                  filters: widget.initialFilters,
+                )
+              : report == 'settlement-comparisons'
               ? NativeSettlementComparisons(auth: widget.auth)
               : report == 'provider-quarantine'
               ? NativeProviderQuarantine(auth: widget.auth)
@@ -66,7 +75,16 @@ class _OwnerReportsState extends State<OwnerReports> {
                   branchId: widget.initialFilters['branchId'] ?? '',
                 )
               : report == 'receivables'
-              ? ReceivableBalances(auth: widget.auth, staff: true)
+              ? ReceivableBalances(
+                  auth: widget.auth,
+                  staff: true,
+                  filters: {
+                    if (widget.initialFilters['branchId'] != null)
+                      'branchId': widget.initialFilters['branchId']!,
+                    if (widget.initialFilters['state'] != null)
+                      'state': widget.initialFilters['state']!,
+                  },
+                )
               : report == 'subscriptions'
               ? _subscription(widget.auth)
               : _report(widget.auth, report),
@@ -102,7 +120,7 @@ class _OwnerReportsState extends State<OwnerReports> {
     auth: auth,
     path: kind == 'financial'
         ? '/api/v1/reports/financial?${Uri(queryParameters: {'pageSize': '20', ...widget.initialFilters}).query}'
-        : '/api/v1/reports/attendance?subject=players&pageSize=20',
+        : '/api/v1/reports/attendance?${Uri(queryParameters: {'subject': 'players', 'pageSize': '20', ...widget.initialFilters}).query}',
     builder: (context, value) {
       final d = obj(value), items = rows(d['items']);
       return ListView(

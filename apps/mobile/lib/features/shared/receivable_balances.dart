@@ -18,12 +18,18 @@ class ReceivableBalancesPage extends StatelessWidget {
 class ReceivableBalances extends StatelessWidget {
   final AuthController auth;
   final bool staff;
-  const ReceivableBalances({super.key, required this.auth, this.staff = false});
+  final Map<String, String> filters;
+  const ReceivableBalances({
+    super.key,
+    required this.auth,
+    this.staff = false,
+    this.filters = const {},
+  });
   @override
   Widget build(BuildContext context) => RemoteBody(
     auth: auth,
     path: staff
-        ? '/api/v1/finance/receivables'
+        ? '/api/v1/finance/receivables?${Uri(queryParameters: filters).query}'
         : '/api/v1/guardian/receivables',
     builder: (context, value) => ReceivableBalanceContent(data: obj(value)),
   );

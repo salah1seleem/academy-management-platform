@@ -94,7 +94,7 @@ public static class RenewalOpportunityEndpoints
             if (last is null || !RenewalOpportunity.PaidForecastSource(last.Origin) || !RenewalOpportunity.Expired(last, last.SubscriptionPlan, today)
                 || history.Any(p => p.IsActive && p.Status != SubscriptionPeriodStatus.Cancelled && !RenewalOpportunity.Expired(p, p.SubscriptionPlan, today))
                 || last.Origin == SubscriptionOrigin.Collected && (!last.Collection.IsActive || last.Collection.PaymentRequest.Status != PaymentRequestStatus.Confirmed
-                || last.Collection.Amount - refunds.GetValueOrDefault(last.CollectionId!.Value) < last.PriceSnapshot)) continue;
+                || last.Collection.Amount - refunds.GetValueOrDefault(last.CollectionId!.Value) < last.Collection.PaymentRequest.Amount)) continue;
             var plan = plans.GetValueOrDefault(last.SubscriptionPlanId);
             if (plan is not null && !(plan.AllBranches || plan.BranchPublications.Any(b => b.IsActive && b.BranchId == e.BranchId))) plan = null;
             candidates.Add((e, last, plan));

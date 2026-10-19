@@ -28,6 +28,7 @@ public static partial class ReportingEndpoints
     {
         var reports = app.MapGroup("/api/v1/reports");
         reports.MapGet("/owner-summary", OwnerSummary).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
+        reports.MapGet("/owner-cockpit",OwnerCockpit).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/coach-performance/{coachId:guid}", CoachPerformance).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/staff-access-audit", StaffAccessAudit).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         reports.MapGet("/financial-decisions", FinancialDecisions).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);

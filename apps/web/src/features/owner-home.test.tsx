@@ -3,6 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { DonutChart, PremiumOwnerDashboard } from "./owner-home";
 import { AcademySettings } from "./academy-settings";
 import { DateFilterDefaults } from "../components/date-filter-defaults";
+// These independently fetched panels have their own source/interaction suites.
+vi.mock("./owner-cockpit",()=>({OwnerCockpit:()=>null}));
+vi.mock("./operating-statement",()=>({OperatingStatementSnapshot:()=>null}));
 afterEach(cleanup);
 it("requests have their own actionable owner drill-down, not a complaint score", async () => {
   const data={...summary,operations:{coachPerformance:[],groupAttention:[],pendingExpenses:[],unpaidExpenses:[],receivables:[],accessChanges:0,openRequests:2,openComplaints:0,openSuggestions:0}};
@@ -41,12 +44,11 @@ it("shows stored coach ratings and actionable family feedback without inventing 
   const operational = { ...summary, paymentRequests: { total: 0, newEnrollments: 0, renewals: 0, products: 0 }, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [{ id: "group-1", name: "مجموعة تجربة", hasCoach: false, sessions: 1, absent: 0, notRecorded: 0 }], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], unpaidExpenses: [{ currency: "EGP", count: 2, amount: 450 }], receivables: [{ currency: "EGP", outstanding: 1740, overdue: 1240, openCount: 3 }], accessChanges: 2, pendingPaymentBacklog: 7, openComplaints: 1, openSuggestions: 1, overdueFeedback: 1, attentionRule: "غياب متكرر" } };
   global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(operational)) as typeof fetch;
   render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
-  expect(await screen.findByText(/4\.5\/5 من 2/)).toBeVisible();
-  const decisions = screen.getByRole("region", { name: "قرارات تحتاجك" });
-  expect(decisions.querySelectorAll("a")).toHaveLength(3);
-  expect(screen.getByRole("link", { name: /راجع طلبات الدفع/ })).toHaveTextContent("7 طلب بانتظار قرار");
-  expect(screen.getByRole("link", { name: /راجع طلبات الدفع/ })).toHaveAttribute("href", expect.stringContaining("allDates=true"));
-  expect(screen.getByRole("link", { name: /إسناد مدرب للمجموعة/ })).toHaveAttribute("href", "/dashboard/academy/coaches/new?groupId=group-1");
+  expect(await screen.findByText(/4\.5 \/ 5 · 2 تقييمات/)).toBeVisible();
+  expect(screen.getByRole("heading",{name:"ملخص المدربين"})).toBeVisible();
+  expect(screen.getByRole("link", { name: /طلبات دفع تحتاج قرارًا/ })).toHaveTextContent("7 طلب · كل الفترات");
+  expect(screen.getByRole("link", { name: /طلبات دفع تحتاج قرارًا/ })).toHaveAttribute("href", expect.stringContaining("allDates=true"));
+  expect(screen.getByRole("link", { name: /مجموعة تجربة/ })).toHaveAttribute("href", "/dashboard/academy/groups/group-1?tab=performance");
   expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved");
   expect(screen.getByRole("link", { name: /ملاحظات تجاوزت موعد المتابعة/ })).toHaveAttribute("href", expect.stringContaining("overdue=true"));
   expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");

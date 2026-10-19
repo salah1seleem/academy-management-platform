@@ -14,6 +14,7 @@ import 'owner_reports.dart';
 import 'owner_operations.dart';
 import 'member_values.dart';
 import 'coach_rating_leaders.dart';
+import 'owner_cockpit.dart';
 
 class OwnerDashboard extends StatefulWidget {
   final AuthController auth;
@@ -30,6 +31,7 @@ class OwnerDashboard extends StatefulWidget {
 class _OwnerDashboardState extends State<OwnerDashboard> {
   String from = '', to = '', branch = '';
   int revision = 0;
+  bool cleared = false;
   String? identity;
   String? get currentIdentity => widget.auth.session?.selected == null
       ? null
@@ -48,6 +50,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       from = '';
       to = '';
       branch = '';
+      cleared = false;
       revision++;
     });
   }
@@ -62,6 +65,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       from = '';
       to = '';
       branch = '';
+      cleared = false;
       revision++;
     }
   }
@@ -85,6 +89,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       setState(() {
         from = day(chosen.start.toIso8601String());
         to = day(chosen.end.toIso8601String());
+        cleared = false;
         revision++;
       });
     }
@@ -106,7 +111,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             key: ValueKey(revision),
             auth: widget.auth,
             path:
-                '/api/v1/reports/owner-summary?${Uri(queryParameters: {if (from.isNotEmpty) 'from': from, if (to.isNotEmpty) 'to': to, if (branch.isNotEmpty) 'branchId': branch}).query}',
+                '/api/v1/reports/owner-summary?${Uri(queryParameters: {if (from.isNotEmpty) 'from': from, if (to.isNotEmpty) 'to': to, if (cleared) 'allDates': 'true', if (branch.isNotEmpty) 'branchId': branch}).query}',
             builder: (context, value) {
               final d = obj(value),
                   c = obj(d['collections']),
@@ -197,6 +202,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         from = '';
                         to = '';
                         branch = '';
+                        cleared = true;
                         revision++;
                       }),
                       child: UiText(localized(context, 'مسح', 'Clear')),
@@ -232,6 +238,15 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                       }),
                     ),
                   ),
+                ),
+                OwnerCockpit(
+                  auth: widget.auth,
+                  filters: {
+                    if (!cleared) 'from': textOf(d['from']),
+                    if (!cleared) 'to': textOf(d['to']),
+                    if (cleared) 'allDates': 'true',
+                    if (branch.isNotEmpty) 'branchId': branch,
+                  },
                 ),
                 GCard(
                   onTap: requests,
