@@ -8,6 +8,7 @@ import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/feedback_state.dart';
 import '../shared/feedback_investigations.dart';
+import 'feedback_triage.dart';
 
 class OwnerFeedbackDetail extends StatefulWidget {
   final AuthController auth;
@@ -126,6 +127,18 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                 '${item['playerName'] ?? 'اللاعب غير متاح'} · ${item['groupName']} · ${item['branchName']}',
               ),
               UiText(textOf(item['message'])),
+              if (item['kind'] != 'Rating') ...[
+                UiText(
+                  'عند التقديم: ${feedbackSubjects[item['reportedSubject']] ?? 'لم يصنف وقتها'} · ${feedbackUrgencies[item['reportedUrgency']] ?? 'لم يحدد'} · الواقعة: ${item['incidentOn'] ?? 'غير محددة'}',
+                ),
+                UiText(
+                  'مراجعة الإدارة: ${feedbackSubjects[item['subject']] ?? 'لم تصنف بعد'} · ${feedbackUrgencies[item['urgency']] ?? 'لم تحدد'}',
+                ),
+                if (item['safety'] == true)
+                  const UiText(
+                    'بلاغ سلامة يحتاج متابعة بشرية، وليس إثبات خطأ أو حكمًا آليًا.',
+                  ),
+              ],
               UiText(feedbackStates[item['status']] ?? 'غير متاحة'),
               UiText(
                 'موعد المتابعة: ${item['dueOn'] ?? 'لم يحدد'}${item['overdue'] == true ? ' · تجاوزت الموعد المحدد' : ''}',
@@ -134,6 +147,20 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                 'موعد حدده المالك، وليس وعد استجابة تلقائيًا. لا تظهر هوية مقدم الملاحظة للمدرب موضوعها.',
               ),
               if (message.isNotEmpty) UiText(message),
+              if (item['kind'] != 'Rating' &&
+                  item['version'] is int &&
+                  item['status'] != 'Resolved' &&
+                  item['status'] != 'Closed')
+                FeedbackHumanTriage(
+                  key: ValueKey('triage-${item['version']}'),
+                  auth: widget.auth,
+                  item: item,
+                  saved: () => setState(() {
+                    revision++;
+                    message =
+                        'تم تأكيد الفرز البشري دون تغيير بلاغ الأسرة الأصلي.';
+                  }),
+                ),
               if (item['kind'] != 'Rating' &&
                   item['version'] is int &&
                   item['status'] != 'Resolved' &&
@@ -194,7 +221,9 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                   'الرد وإشعاره داخل التطبيق للأسرة المرتبطة فقط؛ ليس تواصلًا خارجيًا أو إغلاقًا لمهمة التشغيل.',
                 ),
                 FilledButton(
-                  onPressed: busy
+                  onPressed:
+                      busy ||
+                          item['safety'] == true && item['triagedAtUtc'] == null
                       ? null
                       : () {
                           if (reply.text.trim().length < 5) {
@@ -280,7 +309,9 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       UiText(
-                        c['action'] == 'Assign'
+                        c['action'] == 'Triage'
+                            ? 'فرز بشري: ${feedbackSubjects[c['afterSubject']]} · ${feedbackUrgencies[c['afterUrgency']]}'
+                            : c['action'] == 'Assign'
                             ? 'تكليف تحقيق: ${c['investigatorName'] ?? 'إلغاء الإسناد'}'
                             : c['action'] == 'Findings'
                             ? 'نتيجة تحقيق خاصة'

@@ -75,7 +75,13 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
-      await t.tap(find.byType(DropdownButtonFormField<String>));
+      final step = find.widgetWithText(
+        DropdownButtonFormField<String>,
+        'الخطوة التالية',
+      );
+      await t.ensureVisible(step);
+      await t.pumpAndSettle();
+      await t.tap(step);
       await t.pumpAndSettle();
       await t.tap(find.text('قيد المعالجة').last);
       await t.pumpAndSettle();

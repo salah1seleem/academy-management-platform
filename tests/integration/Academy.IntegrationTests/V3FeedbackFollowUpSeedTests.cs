@@ -11,6 +11,15 @@ namespace Academy.IntegrationTests;
 [Collection("Tenant authentication database")]
 public sealed class V3FeedbackFollowUpSeedTests
 {
+    [Fact] public async Task Feedback_triage_seed_is_optional_preserves_manual_review_and_refuses_production()
+    {
+        await using var factory = new Factory(); using var client = factory.CreateClient(); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var env = new HostingEnvironment { EnvironmentName = "Demo" }; var options = new DemoOptions { SeedEnabled = true, SeedProfile = "Football" };
+        var notices = await db.AcademyNotices.CountAsync(); var money = await db.Collections.CountAsync(); await FeedbackFollowUpDemoSeed.SeedTriage(db, env, options);
+        var f = await db.GuardianFeedbacks.SingleAsync(x => x.Id == FootballDemoSeed.Id("feedback-triage-demo/0")); var before = f.Status; f.Status = "Reviewed"; await db.SaveChangesAsync();
+        try { await FeedbackFollowUpDemoSeed.SeedTriage(db, env, options); Assert.Equal("Reviewed", (await db.GuardianFeedbacks.AsNoTracking().SingleAsync(x => x.Id == f.Id)).Status); Assert.Equal("Safety", f.ReportedUrgency); Assert.Equal(2, await db.GuardianFeedbacks.CountAsync(x => x.IdempotencyKey.StartsWith("feedback-triage-demo/"))); Assert.Equal(notices, await db.AcademyNotices.CountAsync()); Assert.Equal(money, await db.Collections.CountAsync()); await Assert.ThrowsAsync<InvalidOperationException>(() => FeedbackFollowUpDemoSeed.SeedTriage(db, new HostingEnvironment { EnvironmentName = "Production" }, options)); }
+        finally { f.Status = before; await db.SaveChangesAsync(); }
+    }
     [Fact] public async Task Feedback_investigation_seed_keeps_manual_brief_and_never_regrants_or_notifies()
     {
         await using var factory = new Factory(); using var client = factory.CreateClient(); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

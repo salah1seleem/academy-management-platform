@@ -18,6 +18,14 @@ public sealed partial class FoundationDbContext
         c.Property(x => x.InternalNote).HasMaxLength(500); c.Property(x => x.PublicResponse).HasMaxLength(500);
         c.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.InvestigatorMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         var f = b.Entity<GuardianFeedback>();
+        f.Property(x => x.ReportedSubject).HasMaxLength(16); f.Property(x => x.Subject).HasMaxLength(16);
+        f.Property(x => x.ReportedUrgency).HasMaxLength(16); f.Property(x => x.Urgency).HasMaxLength(16);
+        c.Property(x => x.BeforeSubject).HasMaxLength(16); c.Property(x => x.AfterSubject).HasMaxLength(16);
+        c.Property(x => x.BeforeUrgency).HasMaxLength(16); c.Property(x => x.AfterUrgency).HasMaxLength(16);
+        f.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TriagedByMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        const string subjects = "('Coach','Schedule','Administration','Facility','Water','Payment','Other')";
+        const string urgencies = "('Routine','Urgent','Safety')";
+        f.ToTable(t => t.HasCheckConstraint("CK_Feedback_Triage", $"(\"Subject\" IS NULL) = (\"Urgency\" IS NULL) AND (\"ReportedSubject\" IS NULL) = (\"ReportedUrgency\" IS NULL) AND (\"Subject\" IS NULL OR \"Subject\" IN {subjects}) AND (\"ReportedSubject\" IS NULL OR \"ReportedSubject\" IN {subjects}) AND (\"Urgency\" IS NULL OR \"Urgency\" IN {urgencies}) AND (\"ReportedUrgency\" IS NULL OR \"ReportedUrgency\" IN {urgencies}) AND (\"TriagedAtUtc\" IS NULL) = (\"TriagedByMembershipId\" IS NULL) AND (\"TriagedAtUtc\" IS NULL OR \"Subject\" IS NOT NULL) AND (\"Kind\" <> 'Rating' OR (\"Subject\" IS NULL AND \"ReportedSubject\" IS NULL AND \"IncidentOn\" IS NULL AND \"TriagedAtUtc\" IS NULL))"));
         f.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.InvestigatorMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         f.HasIndex(x => new { x.AcademyId, x.InvestigationId }).IsUnique();
         f.Property(x => x.InvestigationBrief).HasMaxLength(500);

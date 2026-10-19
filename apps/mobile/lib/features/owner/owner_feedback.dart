@@ -23,12 +23,20 @@ class OwnerFeedbackInbox extends StatefulWidget {
 
 class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
   late String kind = widget.initialFilters['kind'] ?? '';
+  late bool safetyOnly = widget.initialFilters['safetyOnly'] == 'true';
+  String subject = '', urgency = '';
+  bool cleared = false;
   String message = '';
   int revision = 0;
   Map<String, String> get filters => {
-    for (final e in widget.initialFilters.entries)
-      if (e.key != 'kind') e.key: e.value,
+    if (!cleared)
+      for (final e in widget.initialFilters.entries)
+        if (!['kind', 'safetyOnly', 'subject', 'urgency'].contains(e.key))
+          e.key: e.value,
     if (kind.isNotEmpty) 'kind': kind,
+    if (safetyOnly) 'safetyOnly': 'true',
+    if (subject.isNotEmpty) 'subject': subject,
+    if (urgency.isNotEmpty) 'urgency': urgency,
   };
   Future<void> review(String id) async {
     try {
@@ -112,7 +120,7 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
   Widget build(BuildContext context) => GuardianPage(
     title: 'ملاحظات أولياء الأمور',
     child: OwnerScopedRead(
-      key: ValueKey('$revision/$kind'),
+      key: ValueKey('$revision/${filters.toString()}'),
       auth: widget.auth,
       path:
           '/api/v1/manage/feedback${filters.isEmpty ? '' : '?${Uri(queryParameters: filters).query}'}',
@@ -145,6 +153,49 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
           onChanged: (value) => setState(() => kind = value ?? ''),
         ),
         const SizedBox(height: 14),
+        SwitchListTile(
+          title: const UiText('بلاغات السلامة الأصلية أو المراجعة'),
+          value: safetyOnly,
+          onChanged: (v) => setState(() => safetyOnly = v),
+        ),
+        DropdownButtonFormField<String>(
+          key: ValueKey('subject-$subject'),
+          initialValue: subject,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'الموضوع'),
+          items: [
+            const DropdownMenuItem(value: '', child: UiText('كل الموضوعات')),
+            ...feedbackSubjects.entries.map(
+              (e) => DropdownMenuItem(value: e.key, child: UiText(e.value)),
+            ),
+          ],
+          onChanged: (v) => setState(() => subject = v ?? ''),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          key: ValueKey('urgency-$urgency'),
+          initialValue: urgency,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'الاستعجال'),
+          items: [
+            const DropdownMenuItem(value: '', child: UiText('كل الدرجات')),
+            ...feedbackUrgencies.entries.map(
+              (e) => DropdownMenuItem(value: e.key, child: UiText(e.value)),
+            ),
+          ],
+          onChanged: (v) => setState(() => urgency = v ?? ''),
+        ),
+        TextButton(
+          onPressed: () => setState(() {
+            cleared = true;
+            kind = '';
+            subject = '';
+            urgency = '';
+            safetyOnly = false;
+            revision++;
+          }),
+          child: const UiText('مسح الفلاتر'),
+        ),
         if (rows(value).isEmpty)
           const EmptyMessage('لا توجد ملاحظات في هذا القسم.'),
         for (final item in rows(value))
@@ -163,6 +214,16 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                   '${item['coachName'] ?? 'ملاحظة عامة'} · ${item['branchName']}',
                 ),
                 if (item['score'] != null) UiText('${item['score']}/5'),
+                if (item['kind'] != 'Rating')
+                  UiText(
+                    '${feedbackSubjects[item['subject']] ?? 'لم يصنف وقتها'} · ${feedbackUrgencies[item['urgency']] ?? 'غير محددة'}',
+                  ),
+                if (item['safety'] == true)
+                  UiText(
+                    item['triagedAtUtc'] == null
+                        ? 'بلاغ سلامة — يحتاج فرزًا بشريًا'
+                        : 'بلاغ سلامة — متابعة بشرية',
+                  ),
                 TextButton(
                   onPressed: () => openPage(
                     context,
@@ -185,6 +246,7 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                   ),
                 if (item['status'] != 'Resolved' &&
                     item['status'] != 'Closed' &&
+                    (item['safety'] != true || item['triagedAtUtc'] != null) &&
                     item['kind'] != 'Rating')
                   TextButton(
                     onPressed: () => resolve(textOf(item['id'])),

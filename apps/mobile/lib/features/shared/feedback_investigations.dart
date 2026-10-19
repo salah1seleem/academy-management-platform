@@ -105,6 +105,7 @@ class _AssignmentState extends State<OwnerInvestigationAssignment> {
               children: [
                 DropdownButtonFormField<String>(
                   key: ValueKey(member),
+                  isExpanded: true,
                   initialValue: choices.any((m) => m['id'] == member)
                       ? member
                       : null,

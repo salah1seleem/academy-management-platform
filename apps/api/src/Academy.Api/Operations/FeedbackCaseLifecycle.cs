@@ -61,6 +61,7 @@ public static partial class GuardianFeedbackEndpoints
         if (item.Version != body.Version) return Results.Conflict(new { message = "تغيرت الملاحظة؛ حدّث تفاصيلها قبل الحفظ." });
         if (!CanTransition(item.Status, body.Status)) return Results.Conflict(new { message = "هذا الانتقال غير متاح. الحل يتطلب ردًا للأسرة، والإغلاق بعد الحل فقط." });
         var now = clock.GetUtcNow(); var before = item.Status; item.Status = body.Status; item.UpdatedAtUtc = now;
+        if (body.Status == "Reopened") { item.TriagedAtUtc = null; item.TriagedByMembershipId = null; }
         var change = RecordChange(db, item, t, now, "Transition", before, item.DueOn, string.IsNullOrEmpty(note) ? null : note, body.RequestId, hash);
         try
         {

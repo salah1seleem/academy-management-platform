@@ -469,6 +469,8 @@ if (app.Environment.IsEnvironment("Demo"))
             await FeedbackFollowUpDemoSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:FeedbackCaseSeedEnabled"))
             await FeedbackFollowUpDemoSeed.SeedCases(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+        if(app.Configuration.GetValue<bool>("Demo:FeedbackTriageSeedEnabled"))
+            await FeedbackFollowUpDemoSeed.SeedTriage(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:FeedbackInvestigationSeedEnabled"))
         {
             await AssignedFollowUpDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);

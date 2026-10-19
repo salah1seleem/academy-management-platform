@@ -6,12 +6,14 @@ import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { feedbackStates, feedbackTransitions } from "./feedback-state";
 import styles from "./feedback-case.module.css";
 import { FeedbackAssignment } from "./feedback-investigations";
+import { FeedbackTriage, feedbackSubjects, feedbackUrgencies } from "./feedback-triage";
 
 export type FeedbackDetail = { id: string; kind: string; score: number | null; message: string; status: string; dueOn: string | null; overdue: boolean;
+  subject?: string | null; urgency?: string | null; reportedSubject?: string | null; reportedUrgency?: string | null; incidentOn?: string | null; triagedAtUtc?: string | null; safety?: boolean;
   investigatorMembershipId?: string | null; investigationBrief?: string | null; investigatorName?: string | null;
   ownerResponse: string | null; createdAtUtc: string; reviewedAtUtc: string | null; respondedAtUtc: string | null; playerId: string; playerName: string | null;
   trainingGroupId: string; groupName: string | null; branchName: string | null; coachName: string | null;
-  version?: number; timeZone?: string; historyHasMore?: boolean; history?: { id: string; action: string; fromStatus: string; toStatus: string; beforeDueOn: string | null; afterDueOn: string | null; internalNote: string | null; publicResponse: string | null; actorName: string | null; investigatorName?: string | null; createdAtUtc: string }[] };
+  version?: number; timeZone?: string; historyHasMore?: boolean; history?: { beforeSubject?: string | null; afterSubject?: string | null; beforeUrgency?: string | null; afterUrgency?: string | null; id: string; action: string; fromStatus: string; toStatus: string; beforeDueOn: string | null; afterDueOn: string | null; internalNote: string | null; publicResponse: string | null; actorName: string | null; investigatorName?: string | null; createdAtUtc: string }[] };
 const kinds: Record<string, string> = { Rating: "تقييم مدرب", Complaint: "شكوى", Suggestion: "اقتراح" };
 export function GuardianFeedbackDetail({ id }: { id: string }) {
   const [item, setItem] = useState<FeedbackDetail | null>(null), [error, setError] = useState(""), [message, setMessage] = useState("");
@@ -53,6 +55,7 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
       <SectionCard title={kinds[item.kind] ?? "ملاحظة"}>
         <p>{item.playerName ?? "اللاعب غير متاح"} · {item.groupName} · {item.branchName}</p><p>المدرب المذكور: {item.coachName ?? "لم يحدد"}</p>
         <p>{item.score ? `${item.score}/5 · ` : ""}{item.message || "لا يوجد نص إضافي"}</p>
+        {item.kind !== "Rating" && <><p>عند التقديم: {feedbackSubjects[item.reportedSubject ?? ""] ?? "لم يصنف وقتها"} · {feedbackUrgencies[item.reportedUrgency ?? ""] ?? "لم يحدد"} · الواقعة: <bdi>{item.incidentOn ?? "غير محددة"}</bdi></p><p>مراجعة الإدارة: {feedbackSubjects[item.subject ?? ""] ?? "لم تصنف بعد"} · {feedbackUrgencies[item.urgency ?? ""] ?? "لم تحدد"}</p>{item.safety && <p role="note">بلاغ سلامة يحتاج متابعة بشرية، وليس إثبات خطأ أو حكمًا آليًا.{!item.triagedAtUtc && " لم يؤكد الفرز البشري بعد."}</p>}</>}
         <p>الحالة: <strong>{feedbackStates[item.status] ?? "غير متاحة"}</strong></p>
         <p>موعد المتابعة: <bdi>{item.dueOn ?? "لم يحدد"}</bdi>{item.overdue ? " · تجاوزت الموعد المحدد" : ""}</p>
         <small>هذا موعد حدده المالك، وليس وعد استجابة تلقائيًا. لا تُعرض هوية مقدم الملاحظة للمدرب موضوعها.</small>
@@ -67,9 +70,10 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
         {item.kind !== "Rating" && <form onSubmit={e => { e.preventDefault(); void save("resolve"); }} className="feedback-reply">
           <label>الرد على الملاحظة<textarea required minLength={5} maxLength={500} value={reply} disabled={busy} onChange={e => setReply(e.target.value)}/></label>
           <p>يرسل إشعارًا داخليًا عامًا للأسرة المرتبطة فقط؛ ليس رسالة خارجية. لا يُغلق أي متابعة تشغيلية بدلًا عنها.</p>
-          <Button type="submit" disabled={busy}>إرسال الرد وحل الملاحظة</Button>
+          <Button type="submit" disabled={busy || item.safety && !item.triagedAtUtc}>إرسال الرد وحل الملاحظة</Button>
         </form>}
       </SectionCard>}
+      {item.kind !== "Rating" && !!item.version && item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="تصنيف الملاحظة والاستعجال"><FeedbackTriage key={`triage:${item.version}`} id={id} version={item.version} subject={item.subject} urgency={item.urgency} safety={item.safety} saved={() => { setMessage("تم تأكيد الفرز البشري وحفظ تصنيف الإدارة دون تغيير بلاغ الأسرة الأصلي."); setRevision(n => n + 1); }}/></SectionCard>}
       {item.kind !== "Rating" && !!item.version && <SectionCard title="مسار المعالجة الخاص">
         <p className={styles.hint}>هذا السجل للمالك فقط. الملاحظة الداخلية اختيارية ولا تُرسل للأسرة أو المدرب. استخدم الرد أعلاه لإبلاغ الأسرة بالحل.</p>
         <form className={styles.form} onSubmit={e => { e.preventDefault(); void save("transition"); }}>
@@ -87,10 +91,11 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
         <p className={styles.hint}>التاريخ السابق لهذه الإضافة لا يُعاد اختلاقه. الأحدث أولًا، حتى 50 تحديثًا.</p>
         {item.historyHasMore && <p>توجد تحديثات أقدم غير معروضة؛ لم تُحذف.</p>}
         {!item.history?.length ? <p>لم تُسجل تحديثات بعد.</p> : <ol className={styles.history}>{item.history.map(c => <li key={c.id}>
-          <div className={styles.historyHead}><strong>{c.action === "Assign" ? `تكليف تحقيق: ${c.investigatorName ?? "إلغاء الإسناد"}` : c.action === "Findings" ? "نتيجة تحقيق خاصة" : c.action === "Due" ? "تحديد موعد متابعة" : `${feedbackStates[c.fromStatus] ?? c.fromStatus} ← ${feedbackStates[c.toStatus] ?? c.toStatus}`}</strong><span>{c.actorName ?? "مسؤول الأكاديمية"}</span></div>
+          <div className={styles.historyHead}><strong>{c.action === "Triage" ? "فرز بشري" : c.action === "Assign" ? `تكليف تحقيق: ${c.investigatorName ?? "إلغاء الإسناد"}` : c.action === "Findings" ? "نتيجة تحقيق خاصة" : c.action === "Due" ? "تحديد موعد متابعة" : `${feedbackStates[c.fromStatus] ?? c.fromStatus} ← ${feedbackStates[c.toStatus] ?? c.toStatus}`}</strong><span>{c.actorName ?? "مسؤول الأكاديمية"}</span></div>
           <time dateTime={c.createdAtUtc}>{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: item.timeZone ?? "UTC" }).format(new Date(c.createdAtUtc))} · توقيت الأكاديمية</time>
           {c.action === "Due" && <p>الموعد: <bdi>{c.afterDueOn}</bdi></p>}
           {c.internalNote && <p>ملاحظة داخلية: {c.internalNote}</p>}{c.publicResponse && <blockquote>{c.action === "Transition" && c.toStatus === "Reopened" ? "الرد السابق المحفوظ عند إعادة الفتح" : "الرد المحفوظ للأسرة"}: {c.publicResponse}</blockquote>}
+          {c.action === "Triage" && <p>{feedbackSubjects[c.beforeSubject ?? ""] ?? "غير مصنف"} · {feedbackUrgencies[c.beforeUrgency ?? ""] ?? "غير محددة"} ← {feedbackSubjects[c.afterSubject ?? ""] ?? "غير مصنف"} · {feedbackUrgencies[c.afterUrgency ?? ""] ?? "غير محددة"}. هذا فرز بشري وليس ردًا للأسرة.</p>}
         </li>)}</ol>}
       </SectionCard>
     </>}

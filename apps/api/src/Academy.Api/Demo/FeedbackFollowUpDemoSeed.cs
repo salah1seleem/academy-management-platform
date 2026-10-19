@@ -6,6 +6,20 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Demo;
 public static class FeedbackFollowUpDemoSeed
 {
+    public static async Task SeedTriage(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
+    {
+        var a = FootballDemoSeed.AcademyId;
+        if (!env.IsEnvironment("Demo") || !options.SeedEnabled || options.SeedProfile != "Football" || !await db.Academies.AnyAsync(x => x.Id == a && x.Slug == FootballDemoSeed.Slug && x.EnglishName == FootballDemoSeed.Marker)) throw new InvalidOperationException("فرز البلاغات الاصطناعية يتطلب Football Demo معلوم الهوية.");
+        await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"football-feedback-triage-demo"},0))");
+        var guardian = await db.GuardianPlayerLinks.Where(l => l.AcademyId == a && l.PlayerId == FootballDemoSeed.Id("player/10") && l.IsActive).Select(l => l.Guardian.UserId).SingleAsync();
+        var at = DateTimeOffset.Parse("2026-10-08T06:00:00Z");
+        for (var i = 0; i < 2; i++) {
+            var id = FootballDemoSeed.Id($"feedback-triage-demo/{i}"); if (await db.GuardianFeedbacks.AnyAsync(f => f.Id == id)) continue;
+            var subject = i == 0 ? "Water" : "Schedule"; var urgency = i == 0 ? "Safety" : "Urgent";
+            db.GuardianFeedbacks.Add(new() { Id = id, AcademyId = a, PlayerId = FootballDemoSeed.Id("player/10"), GuardianUserId = guardian, BranchId = FootballDemoSeed.Id("branch/1"), TrainingGroupId = FootballDemoSeed.Id("group/2"), Kind = "Complaint", Message = i == 0 ? "بلاغ سلامة اصطناعي عن المرفق للمراجعة البشرية؛ ليس واقعة حقيقية أو إثبات ضرر." : "بلاغ اصطناعي عاجل لمراجعة موعد التدريب.", Status = "Open", Subject = subject, ReportedSubject = subject, Urgency = urgency, ReportedUrgency = urgency, IncidentOn = new(2026,10,7), PeriodMonth = new(2026,10,1), IdempotencyKey = $"feedback-triage-demo/{i}", CreatedAtUtc = at, UpdatedAtUtc = at });
+        }
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+    }
     public static async Task SeedInvestigation(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
     {
         var a = FootballDemoSeed.AcademyId;

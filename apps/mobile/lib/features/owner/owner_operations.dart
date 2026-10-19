@@ -171,6 +171,25 @@ class OwnerDecisionsPanel extends StatelessWidget {
     final complaints = (operations['openComplaints'] as num?)?.toInt() ?? 0;
     final suggestions = (operations['openSuggestions'] as num?)?.toInt() ?? 0;
     final decisions = <Widget>[
+      if ((operations['openSafetyFeedback'] as num? ?? 0) > 0)
+        _decision(
+          context,
+          'راجع بلاغات السلامة',
+          'Review safety reports',
+          '${operations['openSafetyFeedback']} بلاغ مفتوح · كل الفترات ضمن الفرع المختار، وليس حكمًا أو طوارئ مُراقبة',
+          Icons.health_and_safety_outlined,
+          () => openPage(
+            context,
+            OwnerFeedbackInbox(
+              auth: auth,
+              initialFilters: {
+                'safetyOnly': 'true',
+                'status': 'Unresolved',
+                if (branchId.isNotEmpty) 'branchId': branchId,
+              },
+            ),
+          ),
+        ),
       if (payments != null && payments > 0)
         _decision(
           context,

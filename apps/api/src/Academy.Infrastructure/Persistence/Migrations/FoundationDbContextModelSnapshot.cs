@@ -5764,8 +5764,24 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("AfterDueOn")
                         .HasColumnType("date");
 
+                    b.Property<string>("AfterSubject")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("AfterUrgency")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateOnly?>("BeforeDueOn")
                         .HasColumnType("date");
+
+                    b.Property<string>("BeforeSubject")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("BeforeUrgency")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -5935,6 +5951,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateOnly?>("IncidentOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("InvestigationBrief")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -5968,6 +5987,14 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PlayerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ReportedSubject")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ReportedUrgency")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset?>("RespondedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -5988,11 +6015,25 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("Subject")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<Guid>("TrainingGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("TriagedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TriagedByMembershipId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Urgency")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
@@ -6023,6 +6064,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "TrainingGroupId");
 
+                    b.HasIndex("AcademyId", "TriagedByMembershipId");
+
                     b.HasIndex("AcademyId", "GuardianUserId", "IdempotencyKey")
                         .IsUnique();
 
@@ -6033,6 +6076,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("GuardianFeedbacks", null, t =>
                         {
                             t.HasCheckConstraint("CK_Feedback_Investigation", "(\"InvestigationId\" IS NULL AND \"InvestigatorMembershipId\" IS NULL AND \"InvestigationBrief\" IS NULL) OR (\"Kind\" <> 'Rating' AND \"InvestigationId\" IS NOT NULL AND \"InvestigatorMembershipId\" IS NOT NULL AND \"InvestigationBrief\" IS NOT NULL AND length(btrim(\"InvestigationBrief\")) BETWEEN 5 AND 500)");
+
+                            t.HasCheckConstraint("CK_Feedback_Triage", "(\"Subject\" IS NULL) = (\"Urgency\" IS NULL) AND (\"ReportedSubject\" IS NULL) = (\"ReportedUrgency\" IS NULL) AND (\"Subject\" IS NULL OR \"Subject\" IN ('Coach','Schedule','Administration','Facility','Water','Payment','Other')) AND (\"ReportedSubject\" IS NULL OR \"ReportedSubject\" IN ('Coach','Schedule','Administration','Facility','Water','Payment','Other')) AND (\"Urgency\" IS NULL OR \"Urgency\" IN ('Routine','Urgent','Safety')) AND (\"ReportedUrgency\" IS NULL OR \"ReportedUrgency\" IN ('Routine','Urgent','Safety')) AND (\"TriagedAtUtc\" IS NULL) = (\"TriagedByMembershipId\" IS NULL) AND (\"TriagedAtUtc\" IS NULL OR \"Subject\" IS NOT NULL) AND (\"Kind\" <> 'Rating' OR (\"Subject\" IS NULL AND \"ReportedSubject\" IS NULL AND \"IncidentOn\" IS NULL AND \"TriagedAtUtc\" IS NULL))");
 
                             t.HasCheckConstraint("CK_GuardianFeedback_KindScore", "(\"Kind\" = 'Rating' AND \"CoachMembershipId\" IS NOT NULL AND \"Score\" BETWEEN 1 AND 5) OR (\"Kind\" IN ('Complaint','Suggestion') AND \"Score\" IS NULL)");
 
@@ -16095,6 +16140,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TriagedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.GuardianSponsorPreference", b =>

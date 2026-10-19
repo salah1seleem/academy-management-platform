@@ -8,6 +8,21 @@ const feedbackStates = <String, String>{
   'Reopened': 'أعيد فتحها',
 };
 
+const feedbackSubjects = <String, String>{
+  'Coach': 'المدرب',
+  'Schedule': 'المواعيد',
+  'Administration': 'الإدارة',
+  'Facility': 'المرفق',
+  'Water': 'المياه',
+  'Payment': 'الدفع',
+  'Other': 'موضوع آخر',
+};
+const feedbackUrgencies = <String, String>{
+  'Routine': 'عادية',
+  'Urgent': 'عاجلة',
+  'Safety': 'سلامة أو إساءة',
+};
+
 String feedbackUtcTime(Object? value) {
   final date = DateTime.tryParse(value?.toString() ?? '')?.toUtc();
   if (date == null) return 'وقت غير متاح';

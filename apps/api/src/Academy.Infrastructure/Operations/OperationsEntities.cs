@@ -176,6 +176,13 @@ public sealed class BranchCheckInSiteAudit : TenantEntity
 // Feedback is child-linked and private to academy management; it is never a public coach score.
 public sealed class GuardianFeedback : TenantEntity
 {
+    public string? ReportedSubject { get; set; }
+    public string? ReportedUrgency { get; set; }
+    public DateOnly? IncidentOn { get; set; }
+    public string? Subject { get; set; }
+    public string? Urgency { get; set; }
+    public Guid? TriagedByMembershipId { get; set; }
+    public DateTimeOffset? TriagedAtUtc { get; set; }
     // A new opaque assignment on every owner-reviewed brief; never a family-facing projection.
     public Guid? InvestigationId { get; set; }
     public Guid? InvestigatorMembershipId { get; set; }

@@ -7,6 +7,10 @@ public sealed class FeedbackChange : TenantEntity
 {
     public Guid FeedbackId { get; set; }
     public Guid ActorMembershipId { get; set; }
+    public string? BeforeSubject { get; set; }
+    public string? AfterSubject { get; set; }
+    public string? BeforeUrgency { get; set; }
+    public string? AfterUrgency { get; set; }
     public Guid? InvestigationId { get; set; }
     public Guid? InvestigatorMembershipId { get; set; }
     public Guid? RequestId { get; set; }

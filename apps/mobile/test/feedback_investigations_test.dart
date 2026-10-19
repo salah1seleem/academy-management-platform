@@ -73,6 +73,10 @@ void main() {
   testWidgets(
     'owner reviews explicit brief and read-only delegate has no result action',
     (t) async {
+      t.view.physicalSize = const Size(390, 844);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
       Object? sent;
       final auth = await fixture.owner((m, p, b, k) async {
         if (m == 'POST') {
@@ -81,7 +85,10 @@ void main() {
         }
         return {
           'items': [
-            {'id': 'admin', 'name': 'إداري مخول اصطناعي'},
+            {
+              'id': 'admin',
+              'name': 'إداري مخول اصطناعي باسم طويل لا يخرج من القائمة',
+            },
           ],
         };
       });
@@ -101,7 +108,9 @@ void main() {
       );
       await t.tap(find.byType(DropdownButtonFormField<String>));
       await t.pumpAndSettle();
-      await t.tap(find.text('إداري مخول اصطناعي').last);
+      await t.tap(
+        find.text('إداري مخول اصطناعي باسم طويل لا يخرج من القائمة').last,
+      );
       await t.pumpAndSettle();
       await t.enterText(find.byType(TextField), 'راجع تنظيم وقت التدريب');
       await t.tap(find.text('حفظ تكليف التحقيق'));
