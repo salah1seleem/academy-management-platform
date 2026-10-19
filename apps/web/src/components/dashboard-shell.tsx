@@ -6,7 +6,7 @@ import Image from "next/image";
 import { WorkContextLink } from "../features/work-context-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  AlertCircle, BarChart3, Building2, Check, ChevronDown, ChevronLeft,
+  AlertCircle, ArrowRight, Building2, Check, ChevronDown, ChevronLeft,
   CircleDollarSign, ClipboardCheck, FileText, Filter,
   Trophy, LayoutDashboard, Layers3, LoaderCircle, LogOut, Menu,
   MoreHorizontal, Plus, Search, ShieldCheck, Star, Users, X,
@@ -23,55 +23,45 @@ type NavModule = {
   links: { label: string; href: string }[];
 };
 
-const existingModules: NavModule[] = [
-  { id: "home", title: "الرئيسية", group: "الأساس", icon: LayoutDashboard, links: [{ label: "الرئيسية", href: "/dashboard" }] },
-  { id: "academy", title: "الأكاديمية", group: "الإدارة", icon: Building2, links: [
-    { label: "الفروع", href: "/dashboard/academy/branches" }, { label: "الرياضات", href: "/dashboard/academy/sports" },
-    { label: "الفئات العمرية", href: "/dashboard/academy/categories" }, { label: "المجموعات", href: "/dashboard/academy/groups" },
-    { label: "الحصص", href: "/dashboard/academy/groups/sessions" },
-    { label: "المدربون", href: "/dashboard/academy/coaches" },
-  ] },
-  { id: "players", title: "اللاعبون", group: "الإدارة", icon: Users, links: [
-    { label: "اللاعبون", href: "/dashboard/players" }, { label: "أولياء الأمور", href: "/dashboard/guardians" },
-    { label: "طلبات الدفع", href: "/dashboard/subscriptions/payments" },
-    { label: "الإصابات والاستشارات", href: "/dashboard/players/medical" }, { label: "معرض اللاعبين", href: "/dashboard/players/media" },
-  ] },
-  { id: "plans", title: "الباقات", group: "التشغيل", icon: Layers3, links: [{ label: "الباقات", href: "/dashboard/subscriptions/plans" }] },
-  { id: "discounts", title: "إدارة الخصومات", group: "التشغيل", icon: CircleDollarSign, links: [{ label: "إدارة الخصومات", href: "/dashboard/discounts" }] },
-  { id: "catalog", title: "المنتجات الرياضية", group: "الإدارة", icon: Layers3, links: [{ label: "المنتجات الرياضية", href: "/dashboard/content/catalog" }] },
-  { id: "news", title: "الأخبار", group: "الإدارة", icon: FileText, links: [{ label: "الأخبار", href: "/dashboard/news" }] },
-  { id: "staff", title: "الموظفون والصلاحيات", group: "الإدارة", icon: ShieldCheck, links: [{ label: "الموظفون", href: "/dashboard/staff/employees" }, { label: "الحسابات والصلاحيات", href: "/dashboard/staff" }] },
-  { id: "payroll", title: "الرواتب", group: "التحليل", icon: CircleDollarSign, links: [{ label: "الرواتب والمستحقات", href: "/dashboard/payroll" }, { label: "الخصومات", href: "/dashboard/payroll/deductions" }, { label: "المبالغ الإضافية", href: "/dashboard/payroll/requests" }] },
-  { id: "nutrition", title: "التغذية والصحة", group: "الإدارة", icon: Layers3, links: [{ label: "التغذية والصحة", href: "/dashboard/content/nutrition" }] },
-  { id: "attendance", title: "الحضور", group: "التشغيل", icon: ClipboardCheck, links: [
-    { label: "حضور اللاعبين", href: "/dashboard/attendance/sessions" }, { label: "حضور المدربين", href: "/dashboard/attendance/staff" }, { label: "تصحيح الأيام السابقة", href: "/dashboard/attendance/corrections" },
-  ] },
-  { id: "evaluations", title: "التقييمات", group: "التشغيل", icon: Star, links: [
-    { label: "تقييمات اللاعبين", href: "/dashboard/evaluations" }, { label: "معايير التقييم", href: "/dashboard/evaluations/criteria" },
-  ] },
-  { id: "reports", title: "التقارير", group: "التحليل", icon: BarChart3, links: [
-    { label: "التقارير المالية", href: "/dashboard/reports/financial" }, { label: "تقارير الحضور", href: "/dashboard/reports/attendance" },
-  ] },
-  { id: "matches", title: "المباريات", group: "التشغيل", icon: Trophy, links: [{ label: "المباريات والبطولات", href: "/dashboard/matches" }] },
-  { id: "settings", title: "إعدادات الأكاديمية", group: "الإدارة", icon: Building2, links: [{ label: "إعدادات الأكاديمية", href: "/dashboard/settings" }] },
-];
-// Reorganize navigation, not capabilities or routes. Every existing destination
-// retains its server permission and remains reachable in one of seven workspaces.
-const linksOf = (...ids: string[]) => ids.flatMap(id => existingModules.find(m => m.id === id)?.links ?? []);
+// V4: destinations remain canonical; navigation is not an authorization boundary.
 const modules: NavModule[] = [
-  existingModules[0],
-  { id: "players", title: "الأعضاء والاشتراكات", group: "الإدارة", icon: Users, links: linksOf("players", "plans", "discounts") },
-  { id: "operations", title: "التشغيل اليومي", group: "التشغيل", icon: ClipboardCheck, links: [{ label: "متابعاتي المسندة", href: "/dashboard/my-followups" }, ...linksOf("academy").filter(l => !l.href.endsWith("/coaches")), { label: "المرافق والحارات", href: "/dashboard/facilities" }, ...linksOf("attendance", "matches"), { label: "طلبات إثبات حضور الموظفين", href: "/dashboard/attendance/staff/exceptions" }] },
-  { id: "development", title: "الفريق والتطوير", group: "التشغيل", icon: Star, links: [...linksOf("academy").filter(l => l.href.endsWith("/coaches")), ...linksOf("evaluations", "nutrition")] },
-  { id: "finance", title: "المالية", group: "التحليل", icon: CircleDollarSign, links: [{ label: "المطالبات والأرصدة", href: "/dashboard/finance/receivables" }, { label: "المصروفات التشغيلية", href: "/dashboard/finance/operating-expenses" }, { label: "الصناديق والعهد", href: "/dashboard/finance/cash-registers" }, { label: "متابعة اختلافات الدفع", href: "/dashboard/finance/provider-quarantine" }, { label: "مطابقة كشوف التحصيل", href: "/dashboard/finance/settlement-comparisons" }, { label: "فرص التجديد", href: "/dashboard/finance/renewals" }, ...linksOf("reports").filter(l => l.href.endsWith("/financial")), ...linksOf("payroll")] },
-  { id: "communication", title: "التواصل والنمو", group: "الإدارة", icon: FileText, links: linksOf("news", "catalog") },
-  { id: "analytics", title: "التحليل والقرارات", group: "التحليل", icon: BarChart3, links: linksOf("reports").filter(l => l.href.endsWith("/attendance")) },
-  { id: "settings", title: "الإعدادات والمساعدة", group: "الإدارة", icon: ShieldCheck, links: [...linksOf("settings", "staff"), { label: "استيراد البيانات", href: "/dashboard/import" }] },
+  {id:"home",title:"الرئيسية",group:"الأساس",icon:LayoutDashboard,links:[{label:"الرئيسية",href:"/dashboard"}]},
+  {id:"academy",title:"إدارة الأكاديمية",group:"الإدارة",icon:Building2,links:[
+    {label:"الرياضات",href:"/dashboard/academy/sports"},{label:"الفروع",href:"/dashboard/academy/branches"},
+    {label:"الفئات العمرية",href:"/dashboard/academy/categories"},{label:"المجموعات",href:"/dashboard/academy/groups"},
+    {label:"الحصص وجداول التدريب",href:"/dashboard/academy/groups/sessions"},{label:"باقات الاشتراك",href:"/dashboard/subscriptions/plans"},
+    {label:"إدارة الخصومات",href:"/dashboard/discounts"},{label:"المدربون",href:"/dashboard/academy/coaches"},
+    {label:"الموظفون",href:"/dashboard/staff/employees"},{label:"معايير تقييم اللاعبين",href:"/dashboard/evaluations/criteria"},
+    {label:"استيراد البيانات",href:"/dashboard/import"},{label:"التغذية والصحة",href:"/dashboard/content/nutrition"},
+    {label:"المرافق العامة",href:"/dashboard/facilities"},{label:"إعدادات الأكاديمية",href:"/dashboard/settings"}]},
+  {id:"operations",title:"عمليات الأكاديمية",group:"التشغيل",icon:ClipboardCheck,links:[
+    {label:"تسجيل لاعب / اشتراك جديد",href:"/dashboard/players/new"},{label:"تجديد اشتراك",href:"/dashboard/subscriptions/renew/new"},
+    {label:"تسكين اللاعبين بالمجموعات",href:"/dashboard/players?placement=true"},{label:"تسجيل حضور اللاعبين",href:"/dashboard/attendance/sessions"},
+    {label:"حضور وانصراف الموظفين",href:"/dashboard/attendance/staff"},{label:"سجل الحضور",href:"/dashboard/attendance/history"},
+    {label:"طلبات إثبات حضور الموظفين",href:"/dashboard/attendance/staff/exceptions"},{label:"فرص التجديد",href:"/dashboard/finance/renewals"}]},
+  {id:"players",title:"الأعضاء والاشتراكات",group:"الإدارة",icon:Users,links:[
+    {label:"اللاعبون",href:"/dashboard/players"},{label:"أولياء الأمور",href:"/dashboard/guardians"},
+    {label:"الاشتراكات",href:"/dashboard/subscriptions/current"},{label:"معرض الصور والفيديوهات",href:"/dashboard/players/media"},
+    {label:"الإصابات والاستشارات",href:"/dashboard/players/medical"},{label:"تقييمات اللاعبين",href:"/dashboard/evaluations"},
+    {label:"سجل حضور اللاعبين",href:"/dashboard/attendance/history?subject=players"}]},
+  {id:"followups",title:"المتابعات والطلبات",group:"التشغيل",icon:ClipboardCheck,links:[
+    {label:"المتابعات واتخاذ القرار",href:"/dashboard/operations/follow-ups"},{label:"متابعاتي المسندة",href:"/dashboard/my-followups"},
+    {label:"طلبات الدفع",href:"/dashboard/subscriptions/payments"},{label:"طلبات مبالغ إضافية",href:"/dashboard/payroll/requests"}]},
+  {id:"feedback",title:"الشكاوى والاقتراحات",group:"الإدارة",icon:Star,links:[{label:"الشكاوى والاقتراحات",href:"/dashboard/feedback"}]},
+  {id:"finance",title:"الحسابات والماليات",group:"التحليل",icon:CircleDollarSign,links:[{label:"الحسابات والماليات",href:"/dashboard/finance"}]},
+  {id:"matches",title:"البطولات والمباريات",group:"التشغيل",icon:Trophy,links:[{label:"البطولات والمباريات",href:"/dashboard/matches"}]},
+  {id:"catalog",title:"المنتجات الرياضية",group:"الإدارة",icon:Layers3,links:[{label:"المنتجات الرياضية",href:"/dashboard/content/catalog"}]},
+  {id:"news",title:"الأخبار",group:"الإدارة",icon:FileText,links:[{label:"الأخبار",href:"/dashboard/news"}]},
+  {id:"permissions",title:"الصلاحيات",group:"الإدارة",icon:ShieldCheck,links:[{label:"الصلاحيات",href:"/dashboard/staff"}]},
 ];
 
 const roleLabels: Record<string, string> = { AcademyOwner: "مالك", AcademyAdmin: "إداري", Coach: "مدرب" };
 
 function linkPermission(href: string) {
+  if (href.startsWith("/dashboard/operations/follow-ups") || href.startsWith("/dashboard/feedback")) return "dashboard.owner.read";
+  if (href === "/dashboard/finance") return "reports.financial.read";
+  if (href.startsWith("/dashboard/subscriptions/renew/")) return "subscription.renew.manage";
+  if (href === "/dashboard/subscriptions/current") return "subscription.read";
   if (href === "/dashboard/my-followups") return "followups.read";
   if (href.startsWith("/dashboard/attendance/staff/exceptions")) return "staff.provision";
   if (href === "/dashboard") return null; // The basic task home remains available without financial metrics.
@@ -102,7 +92,7 @@ function linkPermission(href: string) {
 
 function currentModule(path: string) {
   if (path === "/dashboard/help" || path.startsWith("/dashboard/help/")) return "help";
-  const match = modules.flatMap(module => module.links.map(link => ({ id: module.id, href: link.href })))
+  const match = modules.flatMap(module => module.links.map(link => ({ id: module.id, href: link.href.split("?")[0] })))
     .filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`)))
     .sort((a, b) => b.href.length - a.href.length)[0];
   if (match) return match.id;
@@ -139,11 +129,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [navOverride, setNavOverride] = useState<{ path: string; id: string | null } | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [identity, setIdentity] = useState({ name: "", role: "", academyName: "", contextName: "" });
-  const [brand, setBrand] = useState<{ displayName?: string; primaryColor?: string; secondaryColor?: string; logoUrl?: string; platformBrandOperator?: boolean }>({});
+  const [brand, setBrand] = useState<{ displayName?: string; primaryColor?: string; secondaryColor?: string; logoUrl?: string; platformBrandOperator?: boolean; navigation?:{generalFacilitiesEnabled:boolean} }>({});
   const toggleRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const openModule = navOverride?.path === path ? navOverride.id : activeModule;
   const navigation = useMemo(() => visibleModules(identity.role).map(m => ({ ...m, links: m.links.filter(l => {
+    if (l.href === "/dashboard/facilities" && !brand.navigation?.generalFacilitiesEnabled) return false;
     if (l.href === "/dashboard/my-followups") return identity.role === "AcademyAdmin" && permissions.includes("followups.read");
     if (l.href.startsWith("/dashboard/staff") && identity.role !== "AcademyOwner") return false;
     if (l.href.startsWith("/dashboard/finance/provider-quarantine") && identity.role !== "AcademyOwner") return false;
@@ -151,7 +142,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     if (l.href.startsWith("/dashboard/finance/settlement-comparisons") && identity.role !== "AcademyOwner") return false;
     if (l.href === "/dashboard/academy/groups/sessions") return identity.role === "AcademyOwner" || ["structure.manage", "people.manage", "attendance.read"].every(p => permissions.includes(p));
     return identity.role === "AcademyOwner" || l.href === "/dashboard/settings" && brand.platformBrandOperator || linkPermission(l.href) === null || permissions.includes(linkPermission(l.href)!);
-  }) })).filter(m => m.links.length > 0), [identity.role, permissions, brand.platformBrandOperator]);
+  }) })).filter(m => m.links.length > 0), [identity.role, permissions, brand.platformBrandOperator,brand.navigation?.generalFacilitiesEnabled]);
   const activeHref = useMemo(() => navigation.flatMap(module => module.links).filter(link => path === link.href || (link.href !== "/dashboard" && path.startsWith(`${link.href}/`))).sort((a, b) => b.href.length - a.href.length)[0]?.href, [navigation, path]);
 
   useEffect(() => {
@@ -199,16 +190,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           const isExpanded = openModule === module.id;
           const Icon = module.icon;
           return <div key={module.id}><section className={`nav-module ${activeModule === module.id ? "current" : ""}`}>
-            {module.links.length === 1 || module.id === "players" ? <div className="module-direct"><Link className="module-toggle" href={module.links[0].href} aria-current={activeHref === module.links[0].href ? "page" : undefined} onClick={() => setDrawerOpen(false)}><span><Icon aria-hidden="true" />{module.title}</span></Link>{module.id === "players" && <button aria-label="خيارات اللاعبين" aria-expanded={isExpanded} onClick={() => toggleModule(module.id)}><ChevronDown /></button>}</div> : <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span><Icon aria-hidden="true" />{module.title}</span><ChevronDown className="nav-chevron" aria-hidden="true" /></button>}
+            {module.links.length === 1 && module.id !== "players" ? <div className="module-direct"><Link className="module-toggle" href={module.links[0].href} aria-current={activeHref === module.links[0].href ? "page" : undefined} onClick={() => setDrawerOpen(false)}><span><Icon aria-hidden="true" />{module.title}</span></Link></div> : <button className="module-toggle" aria-expanded={isExpanded} aria-controls={`nav-${module.id}`} onClick={() => toggleModule(module.id)}><span><Icon aria-hidden="true" />{module.title}</span><ChevronDown className="nav-chevron" aria-hidden="true" /></button>}
 
-            <div className={`nav-reveal ${isExpanded ? "expanded" : ""}`} inert={!isExpanded} aria-hidden={!isExpanded}><div className="nav-reveal-inner"><div id={`nav-${module.id}`} className="submodule-list">{module.links.filter((_, index) => module.links.length > 1 && (module.id !== "players" || index > 0)).map(link => {
+            <div className={`nav-reveal ${isExpanded ? "expanded" : ""}`} inert={!isExpanded} aria-hidden={!isExpanded}><div className="nav-reveal-inner"><div id={`nav-${module.id}`} className="submodule-list">{module.links.filter(() => module.links.length > 1 || module.id === "players").map(link => {
               const isActive = activeHref === link.href;
               return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "active" : ""} href={link.href} key={link.href} onClick={() => setDrawerOpen(false)}><span>{link.label}</span><ChevronLeft aria-hidden="true" /></Link>;
             })}</div></div></div>
           </section></div>;
         })}
       </nav>
-      <Link className="sidebar-security-link" href="/dashboard/account/verification" onClick={closeDrawer}><ShieldCheck size={18}/>وسائل التحقق الخاصة بي</Link>
+      <details className="sidebar-security-link"><summary>حسابي والأمان</summary><Link href="/dashboard/account/verification" onClick={closeDrawer}>وسائل التحقق الخاصة بي</Link><Link href="/dashboard/account/attendance" onClick={closeDrawer}>حضوري الوظيفي</Link></details>
       <HelpEntry key={path} current={activeModule === "help"} onNavigate={closeDrawer} />
       <div className="sidebar-account sidebar-account-bottom"><span className="account-avatar" aria-hidden="true">{identity.name.trim().slice(0, 1) || "…"}</span><span className="sidebar-account-copy"><b>{identity.name || "حساب الموظف"}</b><small>{roleLabels[identity.role] ?? ""}</small></span><button className="sidebar-logout" aria-label="تسجيل الخروج" title="تسجيل الخروج" onClick={() => void logout()}><LogOut /></button></div>
     </aside>
@@ -219,7 +210,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 export type HeaderAction = { label: string; href: string; tone?: "primary" | "secondary" };
 export function PageHeader({ title, context, description, action, secondaryActions = [] }: { title: string; context: string; description?: string; action?: HeaderAction; secondaryActions?: HeaderAction[] }) {
   const actions = [...secondaryActions, ...(action ? [action] : [])];
-  return <header className="page-header"><div className="page-title-block"><p className="breadcrumb">{context}</p><h1>{title}</h1>{description && <p className="page-description">{description}</p>}</div>{actions.length > 0 && <div className="page-header-actions">{actions.map(item => <Link className={`button ${item.tone === "secondary" ? "button-secondary" : "button-primary"}`} href={item.href} key={`${item.label}-${item.href}`}>{item.tone === "secondary" ? <FileText /> : <Plus />}{item.label}</Link>)}</div>}</header>;
+  return <header className="page-header"><div className="page-title-block"><p className="breadcrumb">{context}</p><h1>{title}</h1>{description && <p className="page-description">{description}</p>}</div>{actions.length > 0 && <div className="page-header-actions">{actions.map(item => <Link className={`button ${item.tone === "secondary" ? "button-secondary" : "button-primary"}`} href={item.href} key={`${item.label}-${item.href}`}>{/عودة|رجوع|العودة|الرجوع/.test(item.label) ? <ArrowRight /> : item.tone === "secondary" ? <FileText /> : <Plus />}{item.label}</Link>)}</div>}</header>;
 }
 
 export function Button({ children, variant = "primary", type = "button", disabled, onClick, className = "" }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger"; type?: "button" | "submit"; disabled?: boolean; onClick?: () => void; className?: string }) {

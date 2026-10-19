@@ -1,2 +1,2 @@
-import { AttendanceReport } from "../../../../features/reports";
-export default function Page() { return <AttendanceReport />; }
+import { AttendanceWorkspace } from "../../../../features/attendance-workspace";
+export default function Page() { return <AttendanceWorkspace initialTab="reports" />; }

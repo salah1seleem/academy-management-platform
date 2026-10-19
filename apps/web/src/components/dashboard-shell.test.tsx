@@ -23,14 +23,15 @@ describe("dashboard navigation governance", () => {
   });
   it("auto-expands the current module, highlights its list route, and supports accordion toggling", async () => {
     render(<DashboardShell><div>المحتوى</div></DashboardShell>);
-    const players = await screen.findByRole("button", { name: "خيارات اللاعبين" });
+    const players = await screen.findByRole("button", { name: "الأعضاء والاشتراكات" });
     expect(players).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("link", { name: "الأعضاء والاشتراكات" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "التشغيل اليومي" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("link", { name: "اللاعبون" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "الأعضاء والاشتراكات" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "عمليات الأكاديمية" })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(players);
     expect(players).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(screen.getByRole("button", { name: "التشغيل اليومي" }));
-    expect(screen.getByRole("button", { name: "التشغيل اليومي" })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "عمليات الأكاديمية" }));
+    expect(screen.getByRole("button", { name: "عمليات الأكاديمية" })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("keeps the create action visible and row actions execute real links or callbacks", () => {
@@ -59,10 +60,12 @@ describe("dashboard navigation governance", () => {
     expect(screen.getByRole("link", { name: "تعديل" })).not.toBe(link);
   });
 
-  it("keeps plans and payments in the same members workspace without losing routes", async () => {
+  it("relocates plans to setup and payments to followups without losing canonical routes", async () => {
     currentPath = "/dashboard/subscriptions/plans";
     render(<DashboardShell><div>المحتوى</div></DashboardShell>);
-    expect(await screen.findByRole("link", { name: "الباقات" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("link", { name: "باقات الاشتراك" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "المتابعات والطلبات" }));
+    expect(screen.getByRole("link", { name: "طلبات الدفع" })).toHaveAttribute("href", "/dashboard/subscriptions/payments");
     expect(screen.getByRole("link", { name: "طلبات الدفع" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "الاشتراكات" })).not.toBeInTheDocument();
     expect(screen.queryByText("نظرة عامة")).not.toBeInTheDocument();
@@ -72,9 +75,9 @@ describe("dashboard navigation governance", () => {
   it("shows the evaluation module with criteria and players, without the published reports sub-tab", async () => {
     currentPath = "/dashboard/evaluations";
     render(<DashboardShell><div>المحتوى</div></DashboardShell>);
-    const evaluationModule = await screen.findByRole("button", { name: "الفريق والتطوير" });
+    const evaluationModule = await screen.findByRole("button", { name: "الأعضاء والاشتراكات" });
     expect(evaluationModule).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("link", { name: "معايير التقييم" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "معايير تقييم اللاعبين", hidden: true })).toHaveAttribute("href", "/dashboard/evaluations/criteria");
     expect(screen.getByRole("link", { name: "تقييمات اللاعبين" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "التقارير المنشورة" })).not.toBeInTheDocument();
   });

@@ -251,6 +251,7 @@ public static class Slice4Endpoints
 
     private static async Task<IResult> History(string? search, Guid? playerId, Guid? branchId, Guid? sportId, Guid? groupId, DateOnly? from, DateOnly? to, string? status, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
+        if(from>to)return Results.UnprocessableEntity(new{message="تاريخ البداية لا يتجاوز النهاية."});
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var query = db.PlayerAttendances.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
         if (t.Role == AcademyRole.Coach) query = query.Where(x => db.AcademyMemberships.Any(m => m.AcademyId == t.AcademyId && m.UserId == user && FoundationDbContext.IsSessionStaffAssigned(t.AcademyId, m.Id, x.TrainingSessionId)));
         if (playerId.HasValue) query = query.Where(x => x.SportEnrollment.PlayerId == playerId);

@@ -1,2 +1,2 @@
-import { AttendanceCorrections } from "../../../../features/attendance-corrections";
-export default function Page(){return <AttendanceCorrections/>;}
+import { AttendanceWorkspace } from "../../../../features/attendance-workspace";
+export default function Page(){return <AttendanceWorkspace initialTab="corrections"/>;}

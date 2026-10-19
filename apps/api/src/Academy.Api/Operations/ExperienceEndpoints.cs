@@ -33,7 +33,10 @@ public static partial class ExperienceEndpoints
         var kinds=await db.Sports.Where(s=>s.AcademyId==t.AcademyId&&s.IsActive).Select(s=>s.Kind).Distinct().ToArrayAsync();
         var sportTheme=kinds.Length==1&&kinds[0]==Academy.Infrastructure.Structure.SportKind.Football?"football":kinds.Length==1&&kinds[0]==Academy.Infrastructure.Structure.SportKind.Swimming?"swimming":"general";
         var features=new List<string>();foreach(var feature in Academy.Infrastructure.Tenancy.AcademyFeatures.All)if(await config.Enabled(t.AcademyId,feature))features.Add(feature);
-        return Results.Ok(new { displayName = x?.DisplayName ?? t.AcademyName, primaryColor = x?.PrimaryColor ?? "#D71935", secondaryColor = x?.SecondaryColor ?? "#171923", logoUrl = x?.Logo == null ? null : "/api/v1/academy/branding/logo", coachAttendanceEnabled = x is { CoachAttendancePolicyConfirmed: true, CoachAttendanceEnabled: true }, platformBrandOperator = false, onboarding=new{templateVersion=1,sportTheme,features} });
+        // Only reveal general-purpose facilities that are actually configured in the trusted scope.
+        // Pools remain reachable from Swimming settings, not football's daily navigation.
+        var generalFacilitiesEnabled=features.Contains("facilities")&&await db.FacilitySpaces.AnyAsync(s=>s.AcademyId==t.AcademyId&&s.IsActive&&s.Kind!=Academy.Infrastructure.Facilities.FacilitySpaceKind.Pool&&db.Sports.Any(p=>p.Id==s.SportId&&p.IsActive&&p.Kind!=Academy.Infrastructure.Structure.SportKind.Swimming));
+        return Results.Ok(new { displayName = x?.DisplayName ?? t.AcademyName, primaryColor = x?.PrimaryColor ?? "#D71935", secondaryColor = x?.SecondaryColor ?? "#171923", logoUrl = x?.Logo == null ? null : "/api/v1/academy/branding/logo", coachAttendanceEnabled = x is { CoachAttendancePolicyConfirmed: true, CoachAttendanceEnabled: true }, platformBrandOperator = false, navigation=new{cashEnabled=(await config.Active(t.AcademyId))?.CashEnabled==true,swimmingEnabled=kinds.Contains(Academy.Infrastructure.Structure.SportKind.Swimming)&&features.Contains("facilities"),generalFacilitiesEnabled}, onboarding=new{templateVersion=1,sportTheme,features} });
     }
     private static async Task<IResult> Logo(CurrentTenant tenant, FoundationDbContext db, HttpContext context)
     {

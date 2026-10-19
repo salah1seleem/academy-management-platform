@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {useSearchParams} from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
@@ -14,7 +15,8 @@ const kinds: Record<Kind, string> = { General: "رياضة عامة", Football: 
 
 export function SportOperationsSettings() {
   const [data, setData] = useState<Data | null>(null);
-  const [selected, setSelected] = useState("");
+  const initialSport=useSearchParams().get("sportId")??"";
+  const [selected, setSelected] = useState(initialSport);
   const [kind, setKind] = useState<Kind>("General");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
@@ -29,10 +31,10 @@ export function SportOperationsSettings() {
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/v1/manage/sport-settings", { cache: "no-store", signal: controller.signal })
-      .then(async response => { if (!response.ok) throw new Error("خصائص الرياضات متاحة للمالك فقط. تعذر تحميل الإعدادات."); return response.json(); }).then(setData)
+      .then(async response => { if (!response.ok) throw new Error("خصائص الرياضات متاحة للمالك فقط. تعذر تحميل الإعدادات."); return response.json(); }).then(value=>{setData(value);setKind(value.sports.find((s:Sport)=>s.id===initialSport)?.kind??"General");})
       .catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
-  }, []);
+  }, [initialSport]);
   useEffect(() => {
     if (sport?.kind !== "Swimming") return;
     const controller = new AbortController();
@@ -66,6 +68,7 @@ export function SportOperationsSettings() {
       <section className="detail-card sport-settings-picker"><label>الرياضة<select disabled={busy} value={selected} onChange={e => select(e.target.value)}><option value="">اختر الرياضة</option>{data.sports.map(x => <option key={x.id} value={x.id}>{x.name}{x.isActive ? "" : " — موقوفة"}</option>)}</select></label>
         {sport && <form className="sport-kind-form" onSubmit={e => void saveKind(e)}><label>نوع الرياضة<select disabled={busy} value={kind} onChange={e => setKind(e.target.value as Kind)}>{Object.entries(kinds).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><p className="muted">يحدد إعدادات التشغيل، ولا يغيّر الاسم أو الباقات. النوع المرتبط بمرفق أو إعداد محفوظ لا يُبدّل.</p><button className="primary-button" disabled={busy || kind === sport.kind}>حفظ نوع الرياضة</button></form>}
       </section>
+      {sport&&sport.kind!=="Swimming"&&data.facilitiesEnabled&&<section className="detail-card"><h2>مرافق الرياضة</h2><Link href="/dashboard/facilities">الملاعب والمناطق والحجوزات</Link></section>}
       {sport?.kind === "Swimming" && <section className="detail-card" aria-label="إعدادات السباحة"><h2>إعدادات السباحة حسب الفرع</h2><p className="muted">إيقاف الفرع يمنع عمليات سباحة جديدة ويحفظ سجلاته. الأسعار والنسب في الاتفاقات المالية؛ اعتماد السعة لكل مورد في المرافق.</p>
         {!data.facilitiesEnabled && <p className="notice">ميزة المرافق غير متاحة في الإعدادات أو خطة الأكاديمية. يمكنك مراجعة التاريخ وإيقاف الإعداد؛ التفعيل يحتاج إتاحة الميزة.</p>}
         {!detail ? <LoadingState /> : <><div className="sport-policy-grid">{data.branches.map(branch => { const policy = detail.policies.find(x => x.branchId === branch.id); return <form key={`${branch.id}:${policy?.version ?? 0}`} className="sport-policy-card" onSubmit={e => void savePolicy(e, branch.id, policy?.version ?? 0)}><h3>{branch.name}</h3><label className="checkbox-line"><input name="enabled" type="checkbox" defaultChecked={policy?.enabled ?? false} disabled={(!data.facilitiesEnabled || !sport.isActive) && !policy?.enabled} />تشغيل مرافق السباحة في هذا الفرع</label><label className="checkbox-line"><input name="private" type="checkbox" defaultChecked={policy?.privateTrainingEnabled ?? false} />تدريب خاص أو شبه خاص</label><label className="checkbox-line"><input name="open" type="checkbox" defaultChecked={policy?.openSwimEnabled ?? false} />سباحة حرة</label><label className="checkbox-line"><input name="day" type="checkbox" defaultChecked={policy?.dayPassEnabled ?? false} />زيارة يومية</label><div className="form-actions"><button className="primary-button" disabled={busy}>حفظ إعدادات الفرع</button><Link href={`/dashboard/facilities?branchId=${branch.id}`}>المرافق والمواعيد</Link></div></form>; })}</div><small>تغييرات إعدادات مسجلة: {detail.history.length}</small></>}
