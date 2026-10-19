@@ -1,5 +1,15 @@
 # أدلة قبول V2 + V3
 
+## V2-12C1 — تقديم سلامة وفرز بشري لا يغير الأصل، 2026-10-19
+
+Code `787a11f` /D3-076/schema131 على قاعدتي QA فقط. API نهائية5/5/25s تشمل حالتين جديدتين وseed ومستهلكي12A/B، مع replay/CAS/SQL/roles/tenantB/منع الحل دون فرز/إعادة الفتح والخصوصية وثبات التقرير. Web28/4ملفات/4.83s وFlutter11/4ملفات/5s؛ build/typecheck/lint/analyze وEF ناجحة. لا Full Regression أو نجاحCI جديد مفترض.
+
+Browser390 نهائية1/30.4s من تقديم FamilyUI إلى قائمة/فرز/رد OwnerUI وانعكاس خاص وتقرير مطابق. [الأسرة](evidence/v2-12c1/guardian-safety-intake-web-390.png)، [المالك](evidence/v2-12c1/owner-human-triage-web-390.png) فعلية. iOSQA رحلة17s+teardown علىiPhone17Pro/iOS26.2 وAPIحقيقية، تقديم/فرز/حل/خصوصية/عدّاد/مطابقة/logout؛ [السجل](evidence/v2-12c1/owner-human-triage-ios.png) فعلي بموضع تمرير، ليستAppRoot/Android/جهازًا ماديًا أو بصمة. [الأوامر والمحاولات المصححة والحدود والاستئناف](PROGRESS.md): locator ثم استهلاك رد الإرسال؛ overflow اسم مسؤول طويل واتجاه تمرير الاختبار. لا timeout أكبر أو assertion محذوفة.
+
+إعادة التحقق: API `dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~Feedback_triage_|FullyQualifiedName~Feedback_case_lifecycle|FullyQualifiedName~Feedback_investigation_private'` مع ACADEMY_TEST_CONNECTION_STRING لقاعدةQAالمذكورة؛ TRX تحت`/tmp/academity-feedback-triage-tests`. Web `npm run test -w @academy/web -- --run src/features/feedback-triage.test.tsx src/features/guardian-feedback-detail.test.tsx src/features/owner-home.test.tsx src/features/guardian-core.test.tsx`؛ Flutter `flutter test test/feedback_triage_test.dart test/owner_feedback_detail_test.dart test/coach_feedback_test.dart test/feedback_investigations_test.dart`. Browser `v3-feedback-triage.spec.ts` مع build معزولAPI5258/Web3258 وConnectionStrings__Default صريحة، وNative `integration_test/feedback_triage_journey_test.dart` مع API5259 وISOLATED_DEMO/CAPTURE_VISUALS، لا استخدام5080 أو reset.
+
+Seed `Demo__FeedbackTriageSeedEnabled=true` اختياري محروس، بلاغان ثابتان ولا فرز بشري مفبرك/إشعار/مال. V2-12/AC40 جزئيان؛ مدرب الواقعة/الحصة وSLA/الطلبات باقية ثم بقية غير المالي، **كل المالي المتبقي آخرًا** ثمH/UAT. لاProduction أو بيانات عملاء/اتصال حقيقي أو نشر ديمو يدوي.
+
 ## V2-12B — تحقيق خاص مفوض في المصدر الحالي، 2026-10-19
 
 Code `f2c69668e03ae1765ae21f5fbf1ad2e8e3817cd3`، migrations129/130 فيقاعدتيQAفقط. API9حالاتمختلفةمثبتةعبرجولة8/9في1m9sوإعادةالمتأثرة1/20s؛ لاجولة9/9واحدةمدعاة. إسناد/نتيجة/replay/CAS وأدواروعزلAcademyB وسحبRead/Edit/فرع/رياضة/ترخيصومنعنفسالشخصبدورCoach وimmutable/forgedSQL وحلثمإعادةفتحدونإحياءرابط، seedوتقريرمالمطابق. Web20/Flutter14 والأدوات/EFناجحة، دونFullRegression.
