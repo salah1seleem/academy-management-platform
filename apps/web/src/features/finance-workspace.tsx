@@ -8,7 +8,7 @@ const sections=[
  {id:"payroll",label:"الرواتب والمستحقات",permission:"payroll.read",links:[["كشف المستحقات والصرف","/dashboard/payroll"],["خصومات الموظفين","/dashboard/payroll/deductions"],["طلبات المبالغ الإضافية","/dashboard/payroll/requests"]]},
  {id:"private",label:"البرايفت والعمولات",permission:"payroll.read",links:[["اتفاقات وخدمات المدربين من الملف","/dashboard/academy/coaches"]]},
  {id:"agreements",label:"الاتفاقيات والتأجير",permission:"facilities.read",links:[["إعدادات الرياضة والاتفاقيات","/dashboard/settings/sports"]]},
- {id:"reports",label:"التقارير",permission:"reports.financial.read",links:[["تقرير التحصيلات","/dashboard/reports/financial"],["القرارات المالية الموثقة","/dashboard/finance/decisions"]]}
+ {id:"reports",label:"التقارير المالية",permission:"reports.financial.read",links:[["قائمة الأرباح والخسائر — أساس نقدي","/dashboard/finance/operating-statement"],["تقرير التحصيلات","/dashboard/reports/financial"],["القرارات المالية الموثقة","/dashboard/finance/decisions"]]}
 ];
 export function FinanceWorkspace(){
  const [permissions,setPermissions]=useState<string[]|null>(null),[tab,setTab]=useState("collections"),[cash,setCash]=useState(false);

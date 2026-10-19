@@ -22,7 +22,8 @@ it("keeps expense creation, review and posted shares separate from collections",
     throw new Error(`Unexpected request: ${path}`);
   });
   render(<OperatingExpenses />);
-  await screen.findByRole("heading", { name: "تسجيل مصروف" });
+  await screen.findByRole("button", { name: "تسجيل مصروف" });
+  expect(screen.queryByRole("heading", {name:"تسجيل مصروف"})).not.toBeInTheDocument();
   expect(screen.getByText(/ليست رواتب أو تحصيلًا/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "عرض وتوزيع" }));
   fireEvent.click(screen.getByRole("button", { name: "اعتماد المصروف" }));
@@ -32,9 +33,10 @@ it("keeps expense creation, review and posted shares separate from collections",
   expect(screen.getByText(/التدريب · مجموعة اصطناعية —/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "ترحيل التكلفة مرة واحدة" }));
   await screen.findByText(/تم ترحيل المصروف وأنصبته المحفوظة مرة واحدة/);
+  fireEvent.click(screen.getByRole("button", {name:"← العودة إلى المصروفات"}));
   expect(calls.some(p => p.includes("/api/v1/reports/financial"))).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "مسح الفلاتر" }));
-  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1"));
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&pageSize=25"));
 });
 
 it("does not expose expense records when the owner API denies access", async () => {
@@ -56,9 +58,9 @@ it("keeps owner KPI period, branch and approved status in the expense list", asy
     throw new Error(`Unexpected request: ${path}`);
   });
   render(<OperatingExpenses initialFrom="2026-09-01" initialTo="2026-09-28" initialBranchId="branch-1" initialStatus="Approved" />);
-  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&from=2026-09-01&to=2026-09-28&branchId=branch-1&status=Approved"));
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&pageSize=25&from=2026-09-01&to=2026-09-28&branchId=branch-1&status=Approved"));
   fireEvent.click(screen.getByRole("button", { name: "مسح الفلاتر" }));
-  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1"));
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&pageSize=25"));
 });
 
 it("opens the all-time unpaid owner KPI without silently applying a month filter", async () => {
@@ -73,7 +75,7 @@ it("opens the all-time unpaid owner KPI without silently applying a month filter
     throw new Error(`Unexpected request: ${path}`);
   });
   render(<OperatingExpenses initialBranchId="branch-1" initialUnpaid />);
-  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&branchId=branch-1&unpaid=true"));
+  await waitFor(() => expect(calls).toContain("/api/v1/finance/operating-expenses/?page=1&pageSize=25&branchId=branch-1&unpaid=true"));
   expect(screen.getByLabelText("السداد")).toHaveValue("unpaid");
 });
 
@@ -92,6 +94,7 @@ it("offers branch and branch-scoped sport shared costs without a misleading grou
     throw new Error(`Unexpected request: ${path}`);
   });
   render(<OperatingExpenses />);
+  fireEvent.click(await screen.findByRole("button", {name:"تسجيل مصروف"}));
   await screen.findByRole("heading", { name: "تسجيل مصروف" });
   fireEvent.change(screen.getAllByLabelText("الفرع")[0], { target: { value: "branch-1" } });
   fireEvent.change(screen.getByLabelText("نطاق التكلفة"), { target: { value: "Branch" } });

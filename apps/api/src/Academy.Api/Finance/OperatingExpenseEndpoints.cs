@@ -24,7 +24,7 @@ public static class OperatingExpenseEndpoints
         var api = app.MapGroup("/api/v1/finance/operating-expenses").RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         api.MapGet("/options", async (OperatingExpenseService service) => await Run(service.Options));
         api.MapGet("/allocations", async (Guid? groupId, DateOnly? from, DateOnly? to, OperatingExpenseService service) => await Run(() => service.Allocations(groupId, from, to)));
-        api.MapGet("/", async (DateOnly? from, DateOnly? to, int? page, Guid? branchId, string? status, bool? unpaid, OperatingExpenseService service) => await Run(() => service.List(from, to, page, branchId, status, unpaid)));
+        api.MapGet("/", async (DateOnly? from, DateOnly? to, int? page, Guid? branchId, string? status, bool? unpaid, string? category, bool? paid, int? pageSize, OperatingExpenseService service) => await Run(() => service.List(from, to, page, branchId, status, unpaid,category,paid,pageSize)));
         api.MapGet("/{id:guid}", async (Guid id, OperatingExpenseService service) => await Run(() => service.Detail(id)));
         api.MapPost("/", async (OperatingExpenseWrite body, HttpRequest request, OperatingExpenseService service) => await Run(() => service.Create(body, request.Headers["Idempotency-Key"].ToString()))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/{id:guid}/approve", async (Guid id, OperatingExpenseService service) => await Run(() => service.Approve(id))).AddEndpointFilter<CsrfFilter>();
@@ -40,7 +40,7 @@ public static class OperatingExpenseEndpoints
 
 public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenant current, IHttpContextAccessor accessor, TimeProvider time)
 {
-    private static readonly HashSet<string> Categories = ["Facility", "Electricity", "Water", "Heating", "Maintenance", "Rent", "Supplies", "Administration", "Other"];
+    private static readonly HashSet<string> Categories = ["Facility", "Electricity", "Water", "Heating", "Maintenance", "Rent", "Supplies", "Administration", "CollectionFees", "Other"];
     private async Task<(TenantMembership Membership, Guid Actor)> Owner()
     {
         var t = await current.ResolveAsync() ?? throw new OperatingExpenseRejected("سجل الدخول أولًا.", 401);
@@ -63,10 +63,11 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         return new { currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(), categories = Categories.OrderBy(x => x).ToArray() };
     }
 
-    public async Task<object> List(DateOnly? from, DateOnly? to, int? page, Guid? branchId = null, string? status = null, bool? unpaid = null)
+    public async Task<object> List(DateOnly? from, DateOnly? to, int? page, Guid? branchId = null, string? status = null, bool? unpaid = null,string? category=null,bool? paid=null,int? pageSize=null)
     {
         var (t, _) = await Owner();
         if (page is < 1 or > 10000 || from > to) throw new OperatingExpenseRejected("راجع فترة التقرير والصفحة.", 422);
+        if(category!=null&&!Categories.Contains(category)||unpaid==true&&paid==true||pageSize is <1 or >100)throw new OperatingExpenseRejected("راجع فئة المصروف وحالة السداد وحجم الصفحة.",422);
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) throw new OperatingExpenseRejected("الفرع غير متاح.", 404);
         if (status is not null && (!Enum.TryParse<OperatingExpenseStatus>(status, out var parsed) || !Enum.IsDefined(parsed))) throw new OperatingExpenseRejected("حالة المصروف غير صالحة.", 422);
         var query = db.OperatingExpenses.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
@@ -75,10 +76,13 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
         if (status is not null) { var selected = Enum.Parse<OperatingExpenseStatus>(status); query = query.Where(x => x.Status == selected); }
         if (unpaid == true) query = query.Where(x => x.PaidOn == null && (x.Status == OperatingExpenseStatus.Approved || x.Status == OperatingExpenseStatus.Posted));
+        if(paid==true)query=query.Where(x=>x.PaidOn!=null&&(x.Status==OperatingExpenseStatus.Approved||x.Status==OperatingExpenseStatus.Posted));
+        if(category!=null)query=query.Where(x=>x.Category==category);
         var count = await query.CountAsync();
-        var rows = await query.OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(((page ?? 1) - 1) * 50).Take(50)
+        var size=pageSize??50;
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(((page ?? 1) - 1) * size).Take(size)
             .Select(x => new { x.Id, x.BranchId, x.Scope, x.TrainingGroupId, x.ResourceId, x.SportId, x.Category, x.PeriodFrom, x.PeriodTo, x.PaidOn, x.Amount, x.Currency, x.Status, x.CreatedAtUtc }).ToArrayAsync();
-        return new { count, page = page ?? 1, items = rows };
+        return new { count, page = page ?? 1,pageSize=size, items = rows };
     }
     public async Task<object> Detail(Guid id)
     {

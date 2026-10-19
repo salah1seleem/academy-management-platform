@@ -855,5 +855,15 @@ footer {
 .employee-profile-hero img { border-radius:1.25rem; object-fit:cover; }
 .employee-profile-hero h2,.employee-profile-hero p { margin:.25rem 0; }
 .employee-profile-hero > .status-pill { margin-inline-start:auto; }
+.operating-statement-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+.operating-statement-lines > a,.operating-statement-total { display:flex; justify-content:space-between; gap:1rem; padding:1rem 0; border-bottom:1px solid #edf0f5; }
+.operating-statement-total { border-top:2px solid #d8e0eb; color:#142d39; font-size:1.15rem; }
+.statement-basis { border-inline-start:4px solid #d79010; padding:.75rem 1rem; background:#fffaeb; border-radius:.5rem; }
+.operating-result { background:linear-gradient(125deg,#073e36,#12665c); color:white; padding:1.5rem; border-radius:1.4rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-block:1rem; }
+.operating-result.deficit { background:linear-gradient(125deg,#7d1b32,#a72e4a); }
+.operating-result h2 { margin:.5rem 0; font-size:clamp(1.5rem,4vw,2.3rem); }
+.statement-reconciliation { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr)); gap:1rem; }
+.statement-reconciliation a { padding:1rem; background:#f5f7fb; border-radius:1rem; display:grid; gap:.5rem; }
+@media(max-width:700px){.operating-statement-grid{grid-template-columns:1fr}.operating-result{align-items:start;flex-direction:column}}
 .rating-stars span.selected { color: #a66e00 !important; }
 .rating-stars input:focus-visible + span { outline: 2px solid #315de6; outline-offset: 2px; border-radius: .4rem; }

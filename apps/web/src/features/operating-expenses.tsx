@@ -14,11 +14,12 @@ type Expense = { id: string; branchId: string; scope: ExpenseScope; trainingGrou
 type Share = { groupId: string | null; serviceKind: string; weight: number; amount: number };
 type Quote = { quoteHash: string; shares: Share[]; total: number; currency: string; method: string; warning?: string };
 type AllocationRow = { expenseId: string; trainingGroupId: string | null; serviceKind: string; amount: number; currency: string; expenseAmount: number; category: string; periodFrom: string; periodTo: string };
-const categories: Record<string, string> = { Facility: "تشغيل مرفق", Electricity: "كهرباء", Water: "مياه", Heating: "تدفئة", Maintenance: "صيانة", Rent: "إيجار", Supplies: "مستلزمات", Administration: "إدارة", Other: "أخرى" };
+const categories: Record<string, string> = { Facility: "تشغيل مرفق", Electricity: "كهرباء", Water: "مياه", Heating: "تدفئة", Maintenance: "صيانة", Rent: "إيجار", Supplies: "مستلزمات", Administration: "إدارة", CollectionFees: "رسوم التحصيل الإلكتروني", Other: "أخرى" };
 const statuses: Record<string, string> = { Draft: "مسودة", Approved: "معتمد للمراجعة", Posted: "مرحّل", Reversed: "معكوس" };
 const services: Record<string, string> = { Training: "التدريب", DayPass: "زيارة يومية", OpenSwim: "سباحة حرة", FacilityBooking: "حجز مرفق", Event: "فعالية", Unallocated: "غير موزع" };
 
 export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, initialStatus, initialUnpaid = false, initialExpenseId }: { initialFrom?: string; initialTo?: string; initialBranchId?: string; initialStatus?: string; initialUnpaid?: boolean; initialExpenseId?: string } = {}) {
+  const [creating,setCreating]=useState(false),[pageSize,setPageSize]=useState(25),[listCategory,setListCategory]=useState(""),[paidOnly,setPaidOnly]=useState(false);
   const [options, setOptions] = useState<{ branches: Option[]; groups: Option[]; sports: Option[] }>();
   const [currency, setCurrency] = useState("");
   const [resources, setResources] = useState<Resource[]>([]), [items, setItems] = useState<Expense[]>([]);
@@ -39,12 +40,12 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
     return () => controller.abort();
   }, [initialExpenseId]);
   const load = useCallback(async () => {
-    const query = new URLSearchParams({ page: String(page), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}), ...(listBranchId ? { branchId: listBranchId } : {}), ...(listStatus ? { status: listStatus } : {}), ...(unpaidOnly ? { unpaid: "true" } : {}) });
+    const query = new URLSearchParams({ page: String(page),pageSize:String(pageSize),...(listCategory?{category:listCategory}:{}),...(paidOnly?{paid:"true"}:{}), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}), ...(listBranchId ? { branchId: listBranchId } : {}), ...(listStatus ? { status: listStatus } : {}), ...(unpaidOnly ? { unpaid: "true" } : {}) });
     const response = await fetch(`${root}/?${query}`, { cache: "no-store" });
     if (!response.ok) throw new Error(response.status === 403 ? "هذه الصفحة متاحة للمالك فقط." : "تعذر تحميل المصروفات.");
     const data = await response.json() as { count: number; items: Expense[] };
     setItems(data.items); setTotal(data.count);
-  }, [page, range, listBranchId, listStatus, unpaidOnly]);
+  }, [page, pageSize,listCategory,paidOnly,range, listBranchId, listStatus, unpaidOnly]);
   const loadAllocations = useCallback(async () => {
     const query = new URLSearchParams({ ...(allocationGroupId ? { groupId: allocationGroupId } : {}), ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}) });
     const response = await fetch(`${root}/allocations?${query}`, { cache: "no-store" });
@@ -74,7 +75,7 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
       const response = await csrfRequest(`${root}/`, "POST", { branchId, scope, targetId: scope === "Branch" ? branchId : targetId, category, periodFrom, periodTo, paidOn: paidOn || null, amount, currency, note: note || null }, { "Idempotency-Key": createKey.current }, { announce: false });
       const saved = await response.json() as { id: string };
       const detail = await fetch(`${root}/${saved.id}`).then(r => r.json()) as { expense: Expense };
-      choose(detail.expense); createKey.current = crypto.randomUUID(); setNotice("حُفظ المصروف مسودة دون أثر على التحصيل. اعتمده وراجع التوزيع قبل الترحيل.");
+      choose(detail.expense);setCreating(false);createKey.current = crypto.randomUUID(); setNotice("حُفظ المصروف مسودة دون أثر على التحصيل. اعتمده وراجع التوزيع قبل الترحيل.");
     });
   }
   async function approve() {
@@ -97,8 +98,10 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
   }
   if (!options && !error) return <LoadingState />;
   return <div className="operating-expenses-page"><PageHeader title="المصروفات التشغيلية" context="المالية / توزيع تكلفة" />
-    <section className="detail-card"><h2>مصدر تكلفة واحد</h2><p>المصروفات التشغيلية اليدوية فقط، وليست رواتب أو تحصيلًا. المرفق المشترك يُقسم بين الخدمات حسب دقائق الحجز. مصروف الفرع أو الرياضة يُوزع بالتساوي على مجموعات التدريب ذات حصة أو حجز محفوظ في الفترة؛ إن لم توجد مجموعة يبقى غير موزع. راجع المعاينة قبل الترحيل.</p></section>
-    {options && <section className="detail-card"><h2>تسجيل مصروف</h2><form className="form-shell" onSubmit={e => void create(e)}><div className="form-grid">
+    <details className="detail-card"><summary>كيف تُوزع تكلفة المصروف؟</summary><p>المصروفات التشغيلية اليدوية فقط، وليست رواتب أو تحصيلًا. المرفق المشترك يُقسم بين الخدمات حسب دقائق الحجز. مصروف الفرع أو الرياضة يُوزع بالتساوي على مجموعات التدريب ذات حصة أو حجز محفوظ في الفترة؛ إن لم توجد مجموعة يبقى غير موزع. راجع المعاينة قبل الترحيل.</p></details>
+    {(creating||selected)&&<button className="back-link" type="button" onClick={()=>{setCreating(false);setSelected(undefined);setQuote(undefined);}}>← العودة إلى المصروفات</button>}
+    {error && <ErrorState message={error} />}{notice && <p role="status" className="success-note">{notice}</p>}
+    {options && creating && <section className="detail-card"><h2>تسجيل مصروف</h2><form className="form-shell" onSubmit={e => void create(e)}><div className="form-grid">
       <label>الفرع<select required value={branchId} onChange={e => { setBranchId(e.target.value); setTargetId(""); }}><option value="">اختر الفرع</option>{options.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label>
       <label>نطاق التكلفة<select value={scope} onChange={e => { setScope(e.target.value as ExpenseScope); setTargetId(""); }}><option value="Group">مجموعة مباشرة</option>{resources.length > 0 && <option value="Resource">مرفق تدريب مشترك</option>}<option value="Branch">الفرع كله</option><option value="Sport">رياضة داخل الفرع</option></select></label>
       {scope !== "Branch" && <label>{scope === "Group" ? "المجموعة" : scope === "Resource" ? "المرفق" : "الرياضة"}<select required value={targetId} onChange={e => setTargetId(e.target.value)}><option value="">اختر {scope === "Group" ? "المجموعة" : scope === "Resource" ? "المرفق" : "الرياضة"}</option>{targets.map(t => <option key={t.id} value={t.id}>{"arabicName" in t ? t.arabicName : t.name}</option>)}</select></label>}
@@ -107,20 +110,19 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
       <label>تاريخ السداد · اختياري<input type="date" value={paidOn} onChange={e => setPaidOn(e.target.value)} /></label><label>المبلغ · {currency}<input required type="number" min="0.01" max="999999999" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} /></label>
       <label>ملاحظة · اختياري<input maxLength={400} value={note} onChange={e => setNote(e.target.value)} /></label>
     </div><button className="primary-button" disabled={busy || !branchId || scope !== "Branch" && !targetId}>حفظ مسودة المصروف</button></form></section>}
-    <section className="filter-bar" aria-label="فلاتر المصروفات"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><label>الفرع<select value={listBranchId} onChange={e => { setListBranchId(e.target.value); setPage(1); }}><option value="">كل الفروع</option>{options?.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label><label>الحالة<select value={listStatus} onChange={e => { setListStatus(e.target.value); setPage(1); }}><option value="">كل الحالات</option>{Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>السداد<select value={unpaidOnly ? "unpaid" : ""} onChange={e => { setUnpaidOnly(e.target.value === "unpaid"); setPage(1); }}><option value="">الكل</option><option value="unpaid">غير مسدد مسجلًا</option></select></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setListBranchId(""); setListStatus(""); setUnpaidOnly(false); setPage(1); }}>مسح الفلاتر</button></section>
-    {error && <ErrorState message={error} />}{notice && <p role="status" className="success-note">{notice}</p>}
-    {!items.length ? <EmptyState title="لا توجد مصروفات ضمن الفترة" /> : <DataTable label="المصروفات التشغيلية" rows={items} rowKey={r => r.id} columns={[
+    {!creating&&!selected&&<><div className="form-actions"><button className="primary-button" onClick={()=>setCreating(true)}>تسجيل مصروف</button></div><section className="filter-bar" aria-label="فلاتر المصروفات"><label>من تاريخ<input type="date" value={range.from} onChange={e => { setRange({ ...range, from: e.target.value }); setPage(1); }} /></label><label>إلى تاريخ<input type="date" value={range.to} onChange={e => { setRange({ ...range, to: e.target.value }); setPage(1); }} /></label><label>الفرع<select value={listBranchId} onChange={e => { setListBranchId(e.target.value); setPage(1); }}><option value="">كل الفروع</option>{options?.branches.map(b => <option key={b.id} value={b.id}>{b.arabicName}</option>)}</select></label><label>الحالة<select value={listStatus} onChange={e => { setListStatus(e.target.value); setPage(1); }}><option value="">كل الحالات</option>{Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>الفئة<select value={listCategory} onChange={e=>{setListCategory(e.target.value);setPage(1);}}><option value="">كل الفئات</option>{Object.entries(categories).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>السداد<select value={unpaidOnly ? "unpaid" : paidOnly?"paid":""} onChange={e => { setUnpaidOnly(e.target.value === "unpaid");setPaidOnly(e.target.value==="paid"); setPage(1); }}><option value="">الكل</option><option value="unpaid">غير مسدد مسجلًا</option><option value="paid">مسدد مسجلًا</option></select></label><button className="secondary-button" onClick={() => { setRange({ from: "", to: "" }); setListBranchId(""); setListStatus(""); setUnpaidOnly(false);setPaidOnly(false);setListCategory(""); setPage(1); }}>مسح الفلاتر</button></section>
+    {!items.length ? <EmptyState title="لا توجد مصروفات ضمن الفترة" /> : <DataTable label="المصروفات التشغيلية" rows={items} rowKey={r => r.id} serverPagination={{page:page-1,pageSize,total,onPageChange:p=>setPage(p+1),onPageSizeChange:n=>{setPageSize(n);setPage(1);}}} columns={[
       { key: "category", header: "المصروف", primary: true, render: r => <><strong>{categories[r.category] ?? r.category}</strong><small>{r.periodFrom} — {r.periodTo}</small></> },
       { key: "amount", header: "المبلغ", render: r => formatMoneyAr(r.amount, r.currency) },
       { key: "status", header: "الحالة", render: r => statuses[r.status] ?? r.status },
       { key: "action", header: "المراجعة", render: r => <button className="secondary-button" onClick={() => choose(r)}>عرض وتوزيع</button> },
     ]} />}
-    <nav className="form-actions" aria-label="صفحات المصروفات"><button className="secondary-button" disabled={page === 1} onClick={() => setPage(page - 1)}>السابق</button><span>{page} / {Math.max(1, Math.ceil(total / 50))}</span><button className="secondary-button" disabled={page * 50 >= total} onClick={() => setPage(page + 1)}>التالي</button></nav>
+    </>}
     {selected && <section className="detail-card" aria-label="مراجعة المصروف"><h2>{categories[selected.category] ?? selected.category} · {formatMoneyAr(selected.amount, selected.currency)}</h2><p>فترة الاستحقاق: {selected.periodFrom} — {selected.periodTo} · الحالة: {statuses[selected.status]}</p>
       <div className="form-actions">{selected.status === "Draft" && <button className="primary-button" disabled={busy} onClick={() => void approve()}>اعتماد المصروف</button>}{selected.status === "Approved" && <button className="secondary-button" disabled={busy} onClick={() => void preview()}>معاينة توزيع التكلفة</button>}</div>
       {quote && selected.status === "Approved" && <><h3>أنصبة محفوظة عند الترحيل</h3><p>قاعدة التوزيع: {quote.method}</p>{quote.warning && <p role="alert">{quote.warning}</p>}<ul>{quote.shares.map(s => <li key={`${s.serviceKind}:${s.groupId ?? "unallocated"}`}>{services[s.serviceKind] ?? s.serviceKind} · {s.groupId ? options?.groups.find(g => g.id === s.groupId)?.arabicName ?? "مجموعة تشغيلية" : "خارج المجموعات"} — {formatMoneyAr(s.amount, quote.currency)}</li>)}</ul><p>المجموع: {formatMoneyAr(quote.total, quote.currency)}</p><button className="primary-button" disabled={busy} onClick={() => void post()}>ترحيل التكلفة مرة واحدة</button></>}
     </section>}
-    <section className="detail-card" aria-label="أنصبة التكاليف المحفوظة"><h2>أنصبة المجموعات المرحّلة</h2><p>تصفية مجموعة واحدة تعرض نصيبها المحفوظ ولا تعيد تقسيم المصروف الكامل عليها.</p>
+    <details className="detail-card" aria-label="أنصبة التكاليف المحفوظة"><summary>أنصبة المجموعات المرحّلة</summary><p>تصفية مجموعة واحدة تعرض نصيبها المحفوظ ولا تعيد تقسيم المصروف الكامل عليها.</p>
       <label>المجموعة<select value={allocationGroupId} onChange={e => setAllocationGroupId(e.target.value)}><option value="">كل المجموعات</option>{options?.groups.map(g => <option key={g.id} value={g.id}>{g.arabicName}</option>)}</select></label>
       {!allocationData ? <LoadingState /> : <><p role="status">{allocationData.count} نصيب · الإجمالي {formatMoneyAr(allocationData.total, currency)}</p>{allocationData.truncated && <p role="alert">تظهر أول 500 حركة فقط؛ الإجمالي يشمل جميع الحركات ضمن الفلتر.</p>}
         {!allocationData.items.length ? <EmptyState title="لا توجد أنصبة مرحّلة ضمن الفلتر" /> : <DataTable label="أنصبة تكلفة المجموعات" rows={allocationData.items} rowKey={r => `${r.expenseId}:${r.serviceKind}:${r.trainingGroupId ?? "unallocated"}`} columns={[
@@ -129,6 +131,6 @@ export function OperatingExpenses({ initialFrom, initialTo, initialBranchId, ini
           { key: "share", header: "النصيب المحفوظ", render: r => formatMoneyAr(r.amount, r.currency) },
           { key: "original", header: "أصل المصروف", render: r => formatMoneyAr(r.expenseAmount, r.currency) },
         ]} />}</>}
-    </section>
+    </details>
   </div>;
 }
