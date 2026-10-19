@@ -165,7 +165,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchParticipant>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         BranchFilter<MatchCoachAssignment>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
-        BranchFilter<OwnerFollowUp>(b, x => TrainingGroups.Any(g => g.Id == x.TrainingGroupId));
+        BranchFilter<OwnerFollowUp>(b, x => x.SourceKind=="Group"?TrainingGroups.Any(g=>g.Id==x.TrainingGroupId):x.SourceBranchId.HasValue&&RequestBranchIds.Contains(x.SourceBranchId.Value));
         BranchFilter<OwnerFollowUpChange>(b, x => OwnerFollowUps.Any(f => f.Id == x.FollowUpId));
         BranchFilter<CommunityCampaignTarget>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CommunityCampaignReview>(b, x => !x.BranchId.HasValue || RequestBranchIds.Contains(x.BranchId.Value));

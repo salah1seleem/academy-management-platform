@@ -476,6 +476,7 @@ if (app.Environment.IsEnvironment("Demo"))
             await FeedbackFollowUpDemoSeed.SeedIncident(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
         if(app.Configuration.GetValue<bool>("Demo:FeedbackRequestSeedEnabled"))
             await FeedbackFollowUpDemoSeed.SeedRequests(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+            if(app.Configuration.GetValue<bool>("Demo:V4AcceptanceSeed"))await V4AcceptanceSeed.Seed(db,app.Environment,app.Services.GetRequiredService<IOptions<DemoOptions>>().Value,app.Services.GetRequiredService<TimeProvider>());
         if(app.Configuration.GetValue<bool>("Demo:FeedbackInvestigationSeedEnabled"))
         {
             await AssignedFollowUpDemoSeed.Seed(db, configSeed.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(), app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);

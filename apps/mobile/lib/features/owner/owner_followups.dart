@@ -9,6 +9,7 @@ import '../guardian/guardian_ui.dart';
 import '../coach/coach_attendance.dart';
 import 'owner_operations.dart';
 import 'owner_feedback_detail.dart';
+import 'record_followup.dart';
 
 const followUpStates = {
   'New': 'جديد',
@@ -19,6 +20,7 @@ const followUpStates = {
   'Rejected': 'مرفوض',
 };
 const followUpConditions = {
+  'RecordFollowUp': 'متابعة سجل',
   'GroupCoachMissing': 'مجموعة بلا مدرب مخول',
   'GroupLowOccupancy': 'إشغال أقل من نصف السعة',
   'GroupSessionCoverage': 'حصص قادمة بلا مدرب مسند مخول',
@@ -626,27 +628,48 @@ class _FollowUpFormState extends State<_FollowUpForm> {
             }),
           ],
         ),
-      UiText(
-        'تسجيلات مسندة حاليًا: ${source['enrollments'] ?? 'غير معروف'}، السعة: ${source['capacity'] ?? 'غير محددة'}',
-      ),
-      UiText(
-        item['conditionActive'] == true
-            ? 'الحالة الأصلية ما زالت قائمة — إغلاق المتابعة لا يحلها تلقائيًا.'
-            : item['conditionActive'] == false
-            ? 'الحالة الأصلية لم تعد تنطبق أو المصدر متوقف.'
-            : 'حالة المصدر غير متاحة؛ ليست محلولة.',
-      ),
-      OutlinedButton(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => OwnerGroupOperations(
-              auth: widget.auth,
-              id: textOf(item['trainingGroupId']),
-            ),
+      if (item['condition'] != 'RecordFollowUp')
+        UiText(
+          'تسجيلات مسندة حاليًا: ${source['enrollments'] ?? 'غير معروف'}، السعة: ${source['capacity'] ?? 'غير محددة'}',
+        ),
+      if (item['condition'] != 'RecordFollowUp')
+        UiText(
+          item['conditionActive'] == true
+              ? 'الحالة الأصلية ما زالت قائمة — إغلاق المتابعة لا يحلها تلقائيًا.'
+              : item['conditionActive'] == false
+              ? 'الحالة الأصلية لم تعد تنطبق أو المصدر متوقف.'
+              : 'حالة المصدر غير متاحة؛ ليست محلولة.',
+        ),
+      if (item['condition'] == 'RecordFollowUp')
+        GLink(
+          'فتح السجل المرتبط',
+          Icons.open_in_new,
+          () => openPage(
+            context,
+            item['sourceKind'] == 'Request'
+                ? OwnerFeedbackDetail(
+                    auth: widget.auth,
+                    id: textOf(item['sourceId']),
+                  )
+                : OwnerRecordSource(
+                    auth: widget.auth,
+                    kind: textOf(item['sourceKind']),
+                    id: textOf(item['sourceId']),
+                  ),
           ),
         ),
-        child: const UiText('فتح المجموعة نفسها'),
-      ),
+      if (item['condition'] != 'RecordFollowUp')
+        OutlinedButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => OwnerGroupOperations(
+                auth: widget.auth,
+                id: textOf(item['trainingGroupId']),
+              ),
+            ),
+          ),
+          child: const UiText('فتح المجموعة نفسها'),
+        ),
       const UiText('لا يغيّر الحفظ المدرب أو اللاعبين أو السداد.'),
       DropdownButtonFormField<String>(
         initialValue: state,
@@ -755,11 +778,32 @@ class OwnerFollowUpCreatePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: 'إنشاء متابعة',
-    child: OwnerScopedRead(
-      auth: auth,
-      path: '/api/v1/manage/owner-followups/options',
-      builder: (context, value) =>
-          _NewFollowUpForm(auth: auth, data: obj(value)),
+    child: Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: GLink(
+            'متابعة لاعب أو موظف أو ولي أمر أو طلب أو مطالبة',
+            Icons.playlist_add,
+            () async {
+              final id = await Navigator.of(context).push<String>(
+                MaterialPageRoute(
+                  builder: (_) => OwnerRecordFollowUpCreate(auth: auth),
+                ),
+              );
+              if (id != null && context.mounted) Navigator.of(context).pop(id);
+            },
+          ),
+        ),
+        Expanded(
+          child: OwnerScopedRead(
+            auth: auth,
+            path: '/api/v1/manage/owner-followups/options',
+            builder: (context, value) =>
+                _NewFollowUpForm(auth: auth, data: obj(value)),
+          ),
+        ),
+      ],
     ),
   );
 }

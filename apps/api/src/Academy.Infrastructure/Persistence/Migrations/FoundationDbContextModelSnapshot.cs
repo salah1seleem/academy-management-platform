@@ -6387,6 +6387,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("ManualPriority")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -6403,12 +6406,40 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<Guid?>("SourceBranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceBranchSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Group");
+
+                    b.Property<string>("SourceNameSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("SourceSportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceSportSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<Guid>("TrainingGroupId")
+                    b.Property<Guid?>("TrainingGroupId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
@@ -6424,8 +6455,16 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "AssignedToMembershipId");
 
+                    b.HasIndex("AcademyId", "SourceBranchId");
+
+                    b.HasIndex("AcademyId", "SourceSportId");
+
                     b.HasIndex("AcademyId", "CreatedByMembershipId", "RequestId")
                         .IsUnique();
+
+                    b.HasIndex("AcademyId", "SourceKind", "SourceId")
+                        .IsUnique()
+                        .HasFilter("\"SourceKind\" <> 'Group' AND \"State\" NOT IN ('Closed','Rejected')");
 
                     b.HasIndex("AcademyId", "TrainingGroupId", "Condition")
                         .IsUnique()
@@ -6433,7 +6472,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("OwnerFollowUps", null, t =>
                         {
-                            t.HasCheckConstraint("CK_OwnerFollowUp_State", "\"IsActive\" AND \"Condition\" IN ('GroupCoachMissing','GroupLowOccupancy','GroupSessionCoverage','GroupEvaluationDrafts','GroupRecordedAbsences','GroupOverdueFeedback') AND \"State\" IN ('New','Assigned','InProgress','Snoozed','Closed','Rejected') AND (\"State\" NOT IN ('Assigned','InProgress') OR \"AssignedToMembershipId\" IS NOT NULL) AND (\"State\" <> 'Snoozed' OR \"DueOn\" IS NOT NULL) AND (\"State\" NOT IN ('Closed','Rejected') OR length(trim(\"ResolutionReason\")) > 0 AND \"ResolutionReason\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_OwnerFollowUp_Source", "(\"SourceKind\"='Group' AND \"TrainingGroupId\" IS NOT NULL AND \"SourceId\" IS NULL AND \"ManualPriority\" IS NULL) OR (\"SourceKind\" IN ('Player','Employee','Guardian','Request','Receivable') AND \"TrainingGroupId\" IS NULL AND \"SourceId\" IS NOT NULL AND \"Condition\"='RecordFollowUp' AND length(trim(\"SourceNameSnapshot\"))>0 AND \"SourceNameSnapshot\" IS NOT NULL AND \"ManualPriority\" IS NOT NULL AND \"ManualPriority\" IN (1,2))");
+
+                            t.HasCheckConstraint("CK_OwnerFollowUp_State", "\"IsActive\" AND \"Condition\" IN ('RecordFollowUp','GroupCoachMissing','GroupLowOccupancy','GroupSessionCoverage','GroupEvaluationDrafts','GroupRecordedAbsences','GroupOverdueFeedback') AND \"State\" IN ('New','Assigned','InProgress','Snoozed','Closed','Rejected') AND (\"State\" NOT IN ('Assigned','InProgress') OR \"AssignedToMembershipId\" IS NOT NULL) AND (\"State\" <> 'Snoozed' OR \"DueOn\" IS NOT NULL) AND (\"State\" NOT IN ('Closed','Rejected') OR length(trim(\"ResolutionReason\")) > 0 AND \"ResolutionReason\" IS NOT NULL)");
                         });
                 });
 
@@ -16318,12 +16359,23 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Academy.Infrastructure.Structure.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SourceBranchId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Structure.Sport", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "SourceSportId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Academy.Infrastructure.Structure.TrainingGroup", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "TrainingGroupId")
                         .HasPrincipalKey("AcademyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUpChange", b =>

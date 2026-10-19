@@ -19,7 +19,7 @@ public static partial class OwnerFollowUpEndpoints
     public static void MapOwnerFollowUps(this WebApplication app)
     {
         var g = app.MapGroup("/api/v1/manage/owner-followups").RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
-        g.MapGet("/options", Options); g.MapGet("/", List); g.MapGet("/summary",Summary);g.MapGet("/{id:guid}", Details);
+        g.MapGet("/records", RecordOptions);g.MapPost("/records",CreateRecord).AddEndpointFilter<CsrfFilter>();g.MapGet("/options", Options); g.MapGet("/", List); g.MapGet("/summary",Summary);g.MapGet("/{id:guid}", Details);
         g.MapPost("/", Create).AddEndpointFilter<CsrfFilter>();
         g.MapPost("/{id:guid}", Change).AddEndpointFilter<CsrfFilter>();
         var mine = app.MapGroup("/api/v1/my-followups").RequireAuthorization(AcademyPermissions.FollowUpRead);
@@ -32,8 +32,8 @@ public static partial class OwnerFollowUpEndpoints
         if(!await Owner(tenant,db,http))return Results.Forbid();var t=(await tenant.ResolveAsync())!;
         if(branchId.HasValue&&!await db.Branches.AnyAsync(b=>b.Id==branchId&&b.AcademyId==t.AcademyId))return Results.NotFound();
         var today=await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock);
-        var q=db.OwnerFollowUps.AsNoTracking().Where(f=>f.AcademyId==t.AcademyId&&f.State!="Closed"&&f.State!="Rejected"&&(!branchId.HasValue||db.TrainingGroups.Any(g=>g.Id==f.TrainingGroupId&&g.BranchId==branchId)));
-        return Results.Ok(new{asOf=today,open=await q.CountAsync(),high=await q.CountAsync(f=>f.DueOn<today||f.Condition=="GroupCoachMissing"||f.Condition=="GroupSessionCoverage"),overdue=await q.CountAsync(f=>f.DueOn<today),unassigned=await q.CountAsync(f=>f.AssignedToMembershipId==null)});
+        var q=db.OwnerFollowUps.AsNoTracking().Where(f=>f.AcademyId==t.AcademyId&&f.State!="Closed"&&f.State!="Rejected"&&(!branchId.HasValue||(f.SourceKind=="Group"?db.TrainingGroups.Any(g=>g.Id==f.TrainingGroupId&&g.BranchId==branchId):f.SourceBranchId==branchId)));
+        return Results.Ok(new{asOf=today,open=await q.CountAsync(),high=await q.CountAsync(f=>f.DueOn<today||f.ManualPriority==2||f.Condition=="GroupCoachMissing"||f.Condition=="GroupSessionCoverage"),overdue=await q.CountAsync(f=>f.DueOn<today),unassigned=await q.CountAsync(f=>f.AssignedToMembershipId==null)});
     }
     private static string Hash(object body) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(body))));
     private static async Task<bool> Owner(CurrentTenant tenant, FoundationDbContext db, HttpContext http, Guid? assignee = null, bool write = false)
@@ -82,10 +82,10 @@ public static partial class OwnerFollowUpEndpoints
         return signals.Select(s=>s with{CoverageGaps=gaps.Where(x=>x.TrainingGroupId==s.GroupId).Select(x=>x.session).ToArray(),CoverageAsOfUtc=now,CoverageUntilUtc=until,EvaluationDrafts=drafts?.GetValueOrDefault(s.GroupId),RecordedAbsences=absences.GetValueOrDefault(s.GroupId),OverdueFeedback=feedback.GetValueOrDefault(s.GroupId)}).ToArray();
     }
     private static object Snapshot(OwnerFollowUp f) => new { f.State, f.AssignedToMembershipId, f.DueOn, f.Note, f.ResolutionReason };
-    private static int Priority(OwnerFollowUp f,DateOnly today)=>f.State is "Closed" or "Rejected"?0:f.DueOn<today||f.Condition is "GroupCoachMissing" or "GroupSessionCoverage"?2:1;
-    private static object Row(OwnerFollowUp f, GroupSignal? source, DateOnly today, bool includeEvaluationIds = true) => new { f.Id, f.Version, f.TrainingGroupId, f.Condition, f.State, f.AssignedToMembershipId, f.DueOn, f.Note, f.ResolutionReason, f.CreatedOn, f.CreatedAtUtc, f.UpdatedAtUtc,priority=Priority(f,today),priorityBasis="موعد متأخر أو نقص إسناد التدريب، وإلا عادية؛ ليست أولوية طوارئ أو قرارًا آليًا.",
-        evidence = FollowUpEvidence(f, includeEvaluationIds), source, conditionActive = f.Condition == EvaluationDraftCondition && source is { SourceActive: true, EvaluationDrafts: null } || source is { SourceActive: true, Capacity: null or <= 0 } && f.Condition == "GroupLowOccupancy" ? (bool?)null : source?.Applies(f.Condition), overdue = f.State is not ("Closed" or "Rejected") && f.DueOn < today,
-        sourceUrl = $"/dashboard/academy/groups/{f.TrainingGroupId}" };
+    private static int Priority(OwnerFollowUp f,DateOnly today)=>f.State is "Closed" or "Rejected"?0:f.DueOn<today||f.ManualPriority==2||f.Condition is "GroupCoachMissing" or "GroupSessionCoverage"?2:1;
+    private static object Row(OwnerFollowUp f, GroupSignal? source, DateOnly today, bool includeEvaluationIds = true) => new { f.Id, f.Version, f.TrainingGroupId, f.Condition, f.SourceKind,f.SourceId, f.State, f.AssignedToMembershipId, f.DueOn, f.Note, f.ResolutionReason, f.CreatedOn, f.CreatedAtUtc, f.UpdatedAtUtc,priority=Priority(f,today),priorityBasis="موعد متأخر أو نقص إسناد التدريب، وإلا عادية؛ ليست أولوية طوارئ أو قرارًا آليًا.",
+        evidence = FollowUpEvidence(f, includeEvaluationIds), source=(object?)source??RecordDisplay(f), conditionActive = f.Condition == EvaluationDraftCondition && source is { SourceActive: true, EvaluationDrafts: null } || source is { SourceActive: true, Capacity: null or <= 0 } && f.Condition == "GroupLowOccupancy" ? (bool?)null : source?.Applies(f.Condition), overdue = f.State is not ("Closed" or "Rejected") && f.DueOn < today,
+        sourceUrl = RecordUrl(f) };
     private static async Task<object[]> Owners(FoundationDbContext db, Guid academy, GroupSignal? source = null)
     {
         var candidates = await db.AcademyMemberships.Where(m => m.AcademyId == academy && m.IsActive && m.User.IsActive && (m.Role == AcademyRole.AcademyOwner || m.Role == AcademyRole.AcademyAdmin)).OrderBy(m => m.User.DisplayName).Select(m => new { m.Id, name = m.User.DisplayName }).ToArrayAsync();
@@ -109,20 +109,20 @@ public static partial class OwnerFollowUpEndpoints
         if (state is not (null or "" or "Open") && !States.Contains(state)) return Invalid("اختر حالة متابعة صحيحة.");
         if (!allDates && from == null && to == null) { from = new DateOnly(today.Year, today.Month, 1); to = today; }
         if (from > to) return Invalid("بداية الفترة يجب ألا تتجاوز نهايتها.");
-        var q = db.OwnerFollowUps.AsNoTracking().Where(f => (!from.HasValue || f.CreatedOn >= from) && (!to.HasValue || f.CreatedOn <= to) && (!branchId.HasValue || db.TrainingGroups.Any(g => g.Id == f.TrainingGroupId && g.BranchId == branchId)));
+        var q = db.OwnerFollowUps.AsNoTracking().Where(f => (!from.HasValue || f.CreatedOn >= from) && (!to.HasValue || f.CreatedOn <= to) && (!branchId.HasValue || (f.SourceKind=="Group"?db.TrainingGroups.Any(g=>g.Id==f.TrainingGroupId&&g.BranchId==branchId):f.SourceBranchId==branchId)));
         if (state == "Open") q = q.Where(f => f.State != "Closed" && f.State != "Rejected"); else if (!string.IsNullOrEmpty(state)) q = q.Where(f => f.State == state);
         if(page is <1 or >100000||pageSize is <1 or >100||priority is <0 or >2||search?.Length>120)return Invalid("راجع الفلاتر والصفحة المطلوبة.");
         if(assignedTo.HasValue)q=q.Where(f=>f.AssignedToMembershipId==assignedTo);
         if(unassigned==true)q=q.Where(f=>f.AssignedToMembershipId==null);
-        if(!string.IsNullOrWhiteSpace(search)){var term=search.Trim();q=q.Where(f=>f.Note!=null&&f.Note.Contains(term)||db.TrainingGroups.Any(g=>g.Id==f.TrainingGroupId&&g.ArabicName.Contains(term)));}
+        if(!string.IsNullOrWhiteSpace(search)){var term=search.Trim();q=q.Where(f=>f.Note!=null&&f.Note.Contains(term)||f.SourceNameSnapshot!=null&&f.SourceNameSnapshot.Contains(term)||db.TrainingGroups.Any(g=>g.Id==f.TrainingGroupId&&g.ArabicName.Contains(term)));}
         if(overdue==true)q=q.Where(f=>f.State!="Closed"&&f.State!="Rejected"&&f.DueOn<today);
         if(priority==0)q=q.Where(f=>f.State=="Closed"||f.State=="Rejected");
-        if(priority==1)q=q.Where(f=>f.State!="Closed"&&f.State!="Rejected"&&(!f.DueOn.HasValue||f.DueOn>=today)&&f.Condition!="GroupCoachMissing"&&f.Condition!="GroupSessionCoverage");
-        if(priority==2)q=q.Where(f=>f.State!="Closed"&&f.State!="Rejected"&&(f.DueOn<today||f.Condition=="GroupCoachMissing"||f.Condition=="GroupSessionCoverage"));
+        if(priority==1)q=q.Where(f=>f.State!="Closed"&&f.State!="Rejected"&&(!f.DueOn.HasValue||f.DueOn>=today)&&f.ManualPriority!=2&&f.Condition!="GroupCoachMissing"&&f.Condition!="GroupSessionCoverage");
+        if(priority==2)q=q.Where(f=>f.State!="Closed"&&f.State!="Rejected"&&(f.DueOn<today||f.ManualPriority==2||f.Condition=="GroupCoachMissing"||f.Condition=="GroupSessionCoverage"));
         var count=await q.CountAsync();var size=pageSize??100;var current=page??1;
-        var rows = await q.OrderByDescending(f => f.State!="Closed"&&f.State!="Rejected"&&(f.DueOn<today||f.Condition=="GroupCoachMissing"||f.Condition=="GroupSessionCoverage")).ThenBy(f=>f.DueOn??DateOnly.MaxValue).ThenByDescending(f=>f.UpdatedAtUtc).ThenBy(f => f.Id).Skip((current-1)*size).Take(size).ToArrayAsync();
-        var signals = (await Signals(db, a, today,asOf:clock.GetUtcNow(),groupIds:rows.Select(f=>f.TrainingGroupId).Distinct().ToArray())).ToDictionary(g => g.GroupId);
-        return Results.Ok(new { from, to, asOfDate = today,count,page=current,pageSize=size, hasMore = current*size<count, limit = size, owners = await Owners(db, a), items = rows.Select(f => Row(f, signals.GetValueOrDefault(f.TrainingGroupId), today)).ToArray() });
+        var rows = await q.OrderByDescending(f => f.State!="Closed"&&f.State!="Rejected"&&(f.DueOn<today||f.ManualPriority==2||f.Condition=="GroupCoachMissing"||f.Condition=="GroupSessionCoverage")).ThenBy(f=>f.DueOn??DateOnly.MaxValue).ThenByDescending(f=>f.UpdatedAtUtc).ThenBy(f => f.Id).Skip((current-1)*size).Take(size).ToArrayAsync();
+        var signals = (await Signals(db, a, today,asOf:clock.GetUtcNow(),groupIds:rows.Where(f=>f.TrainingGroupId.HasValue).Select(f=>f.TrainingGroupId!.Value).Distinct().ToArray())).ToDictionary(g => g.GroupId);
+        return Results.Ok(new { from, to, asOfDate = today,count,page=current,pageSize=size, hasMore = current*size<count, limit = size, owners = await Owners(db, a), items = rows.Select(f => Row(f, signals.GetValueOrDefault(f.TrainingGroupId??Guid.Empty), today)).ToArray() });
     }
     private static async Task<IResult> Details(Guid id, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, HttpContext http)
     {
@@ -131,8 +131,8 @@ public static partial class OwnerFollowUpEndpoints
         if (f == null) return Results.NotFound();
         var today = await AttendanceCalendar.TodayAsync(a, db, clock);
         var history = await db.OwnerFollowUpChanges.Where(c => c.FollowUpId == id).OrderBy(c => c.CreatedAtUtc).ThenBy(c => c.Id).Select(c => new { c.Id, c.ActorMembershipId, actorName=db.AcademyMemberships.Where(m=>m.Id==c.ActorMembershipId).Select(m=>m.User.DisplayName).FirstOrDefault(), c.CreatedAtUtc, before = c.BeforeJson, after = c.AfterJson }).ToArrayAsync();
-        var source = (await Signals(db, a, today, f.TrainingGroupId,clock.GetUtcNow())).SingleOrDefault();
-        return Results.Ok(new { item = Row(f, source, today), history, owners = await Owners(db, a, source) });
+        var source = await FollowUpSignal(db,a,today,f,clock.GetUtcNow());
+        return Results.Ok(new { item = Row(f, source, today), history, owners = f.SourceKind=="Group"?await Owners(db,a,source):await RecordOwners(db,a,f) });
     }
     private static async Task<IResult> Create(OwnerFollowUpCreate body, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, HttpContext http)
     {
@@ -151,7 +151,7 @@ public static partial class OwnerFollowUpEndpoints
         if(body.DueOn.HasValue&&(body.DueOn<today||body.DueOn.Value.Year>9998))return Invalid("اختر موعد متابعة من اليوم أو اتركه دون موعد.");
         var existing = await db.OwnerFollowUps.Where(f => f.TrainingGroupId == body.TrainingGroupId && f.Condition == body.Condition && f.State != "Closed" && f.State != "Rejected").Select(f => (Guid?)f.Id).SingleOrDefaultAsync();
         if (existing.HasValue) return Results.Conflict(new { message = "للمجموعة متابعة مفتوحة لهذه الحالة بالفعل.", id = existing });
-        if (body.AssignedToMembershipId.HasValue && !await EligibleOwner(db, t.AcademyId, body.AssignedToMembershipId.Value, source)) return Invalid("اختر مسؤولًا فعالًا مخولًا لتحديث المتابعة وفي نطاق المجموعة.");
+        if (body.AssignedToMembershipId.HasValue && !await EligibleOwner(db,t.AcademyId,body.AssignedToMembershipId.Value,source)) return Invalid("اختر مسؤولًا فعالًا مخولًا لتحديث المتابعة وفي نطاق المجموعة.");
         var now = clock.GetUtcNow();
         var f = new OwnerFollowUp { Id = Guid.NewGuid(), AcademyId = t.AcademyId, TrainingGroupId = body.TrainingGroupId, CreatedByMembershipId = t.MembershipId, AssignedToMembershipId = body.AssignedToMembershipId, Condition = body.Condition, State = body.AssignedToMembershipId.HasValue ? "Assigned" : "New", CreatedOn = today, DueOn = body.DueOn, Note = body.Note?.Trim(), RequestId = body.RequestId, RequestHash = hash, EvidenceJson = JsonSerializer.Serialize(new { source, observedAtUtc = now, asOfDate = today, evaluationIds = body.Condition == EvaluationDraftCondition ? source.EvaluationDrafts?.EvaluationIds : null, absenceEvidence = body.Condition == RecordedAbsenceCondition ? source.RecordedAbsences?.Evidence : null, feedbackIds = body.Condition == OverdueFeedbackCondition ? source.OverdueFeedback?.FeedbackIds : null }), CreatedAtUtc = now, UpdatedAtUtc = now };
         db.OwnerFollowUps.Add(f); db.OwnerFollowUpChanges.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, FollowUpId = f.Id, ActorMembershipId = t.MembershipId, RequestId = body.RequestId, RequestHash = hash, BeforeJson = "{}", AfterJson = JsonSerializer.Serialize(Snapshot(f)), CreatedAtUtc = now, UpdatedAtUtc = now });
@@ -172,15 +172,15 @@ public static partial class OwnerFollowUpEndpoints
         var hash = Hash(new { id, body }); var prior = await db.OwnerFollowUpChanges.SingleOrDefaultAsync(c => c.ActorMembershipId == t.MembershipId && c.RequestId == body.RequestId);
         if (prior != null) return prior.RequestHash == hash && prior.FollowUpId == id ? Results.Ok(new { id, replay = true }) : Results.Conflict(new { message = "مفتاح المحاولة استُخدم لبيانات أخرى." });
         var f = await db.OwnerFollowUps.SingleOrDefaultAsync(f => f.Id == id); if (f == null) return Results.NotFound();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"followup-source:{t.AcademyId}:{f.TrainingGroupId}:{f.Condition}"},0))");
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"followup-source:{t.AcademyId}:{f.TrainingGroupId??f.SourceId}:{f.Condition}"},0))");
         await db.Entry(f).ReloadAsync();
         if (f.Version != body.Version) return Results.Conflict(new { message = "المتابعة تغيرت؛ حدّث التفاصيل قبل الحفظ." });
         var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         if (body.State == "Snoozed" && (!body.DueOn.HasValue || body.DueOn <= today)) return Invalid("اختر موعد متابعة لاحقًا لليوم عند التأجيل.");
-        var source = (await Signals(db, t.AcademyId, today, f.TrainingGroupId,clock.GetUtcNow())).SingleOrDefault();
-        if (source == null) return Results.NotFound();
-        if (body.AssignedToMembershipId.HasValue && (body.AssignedToMembershipId != f.AssignedToMembershipId || body.State is "Assigned" or "InProgress") && !await EligibleOwner(db, t.AcademyId, body.AssignedToMembershipId.Value, source)) return Invalid("اختر مسؤولًا فعالًا مخولًا لتحديث المتابعة وفي نطاق المجموعة.");
-        if (body.State is not ("Closed" or "Rejected") && await db.OwnerFollowUps.AnyAsync(o => o.Id != id && o.TrainingGroupId == f.TrainingGroupId && o.Condition == f.Condition && o.State != "Closed" && o.State != "Rejected")) return Results.Conflict(new { message = "توجد متابعة مفتوحة أخرى لهذه الحالة؛ افتحها بدل تكرارها." });
+        var source = await FollowUpSignal(db,t.AcademyId,today,f,clock.GetUtcNow());
+        if (source == null && f.SourceKind=="Group") return Results.NotFound();
+        if (body.AssignedToMembershipId.HasValue && (body.AssignedToMembershipId != f.AssignedToMembershipId || body.State is "Assigned" or "InProgress") && !(f.SourceKind=="Group"?await EligibleOwner(db,t.AcademyId,body.AssignedToMembershipId.Value,source!):await EligibleRecordOwner(db,t.AcademyId,body.AssignedToMembershipId.Value,f))) return Invalid("اختر مسؤولًا فعالًا مخولًا لتحديث المتابعة وفي نطاق المجموعة.");
+        if (body.State is not ("Closed" or "Rejected") && await db.OwnerFollowUps.AnyAsync(o => o.Id != id && o.SourceKind==f.SourceKind&&(f.SourceKind=="Group"?o.TrainingGroupId==f.TrainingGroupId:o.SourceId==f.SourceId) && o.Condition == f.Condition && o.State != "Closed" && o.State != "Rejected")) return Results.Conflict(new { message = "توجد متابعة مفتوحة أخرى لهذه الحالة؛ افتحها بدل تكرارها." });
         var before = JsonSerializer.Serialize(Snapshot(f)); var now = clock.GetUtcNow();
         f.State = body.State; f.AssignedToMembershipId = body.AssignedToMembershipId; f.DueOn = body.DueOn; f.Note = body.Note?.Trim(); f.ResolutionReason = body.State is "Closed" or "Rejected" ? body.ResolutionReason?.Trim() : null; f.UpdatedAtUtc = now;
         db.OwnerFollowUpChanges.Add(new() { Id = Guid.NewGuid(), AcademyId = t.AcademyId, FollowUpId = id, ActorMembershipId = t.MembershipId, RequestId = body.RequestId, RequestHash = hash, BeforeJson = before, AfterJson = JsonSerializer.Serialize(Snapshot(f)), CreatedAtUtc = now, UpdatedAtUtc = now });

@@ -43,8 +43,8 @@ function Summary({ item: i, canOpenSource }: { item: Item; canOpenSource: boolea
     {i.condition === "GroupLowOccupancy" && i.source && <p>تسجيلات فعالة مسندة: {i.source.enrollments}، السعة: {i.source.capacity ?? "غير محددة"}</p>}
     {i.condition === "GroupSessionCoverage" && <p>{i.source?.coverageGaps?.length ?? 0} حصة قادمة بلا إسناد مدرب مخول؛ ليست غيابًا مسجلًا أو خصمًا.</p>}
     <p><CalendarClock size={18}/>موعد المتابعة: <bdi>{i.dueOn ?? "غير محدد"}</bdi></p>
-    <p>الحالة الأصلية: {i.conditionActive === true ? "ما زالت قائمة؛ إغلاق المتابعة لا يحلها تلقائيًا" : i.conditionActive === false ? "لم تعد تنطبق أو المصدر متوقف" : "غير متاحة، لا نفترض أنها حُلت"}</p>
-    {i.source?.coverageGaps?.slice(0, 3).map((s, n) => <p key={n}><bdi>{s.sessionDate} · {s.startTime.slice(0, 5)}</bdi></p>)}{i.note && <p>{i.note}</p>}{i.resolutionReason && <p>سبب الإغلاق: {i.resolutionReason}</p>}{canOpenSource && <Link href={i.sourceUrl}>فتح المجموعة نفسها</Link>}</div>;
+    <p>{i.condition==="RecordFollowUp"?"متابعة بشرية مرتبطة بالسجل، دون تغيير محتواه أو مستحقاته.":`الحالة الأصلية: ${i.conditionActive===true?"ما زالت قائمة؛ إغلاق المتابعة لا يحلها تلقائيًا":i.conditionActive===false?"لم تعد تنطبق أو المصدر متوقف":"غير متاحة، لا نفترض أنها حُلت"}`}</p>
+    {i.source?.coverageGaps?.slice(0, 3).map((s, n) => <p key={n}><bdi>{s.sessionDate} · {s.startTime.slice(0, 5)}</bdi></p>)}{i.note && <p>{i.note}</p>}{i.resolutionReason && <p>سبب الإغلاق: {i.resolutionReason}</p>}{canOpenSource && <Link href={i.sourceUrl}>{i.condition==="RecordFollowUp"?"فتح السجل المرتبط":"فتح المجموعة نفسها"}</Link>}</div>;
 }
 function Update({ item, saved }: { item: Item; saved: () => void }) {
   const [state, setState] = useState("InProgress"), [due, setDue] = useState(item.dueOn ?? ""), [note, setNote] = useState(item.note ?? ""), [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
