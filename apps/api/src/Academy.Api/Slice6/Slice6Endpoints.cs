@@ -134,6 +134,8 @@ public static class Slice6Endpoints
             PlanTerms.From(plan).Capture(entity);
         }
         db.NewEnrollmentRequests.Add(entity);
+        var vipGuardian=await db.GuardianProfiles.Where(g=>g.UserId==user&&g.IsActive).Select(g=>(Guid?)g.Id).SingleOrDefaultAsync();
+        await VipRewards.Reserve(db,t.AcademyId,entity.DiscountRuleIdSnapshot,"Enrollment",entity.Id,user,clock.Today,clock.UtcNow,entity.ExistingPlayerId,vipGuardian);
         try { await db.SaveChangesAsync(); } catch (DbUpdateException) { return Results.Conflict(new { message = "تم إرسال هذا الطلب بالفعل." }); }
         await tx.CommitAsync();
         return Results.Created($"/api/v1/guardian/enrollment-requests/{entity.Id}", new { entity.Id, entity.FinalAmount, entity.Currency, status = entity.Status.ToString(), message = "تم إرسال طلب الاشتراك بنجاح" });
@@ -238,7 +240,7 @@ public static class Slice6Endpoints
                     entity.DiscountReason ?? (discount > 0 ? "عرض محفوظ عند طلب الاشتراك" : null),
                     discount > 0 ? UserId(principal) : null, discount > 0 ? clock.UtcNow : null, entity.DiscountRuleIdSnapshot, entity.DiscountRuleRevisionSnapshot);
                 var capturedPlan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == entity.SubscriptionPlanId);
-                entity.PaymentRequestId = await collections.CreateCashAsync(t.AcademyId, UserId(principal), enrollment.Id, entity.SubscriptionPlanId.Value, "enroll-" + id.ToString("N"), "Online", entity.RequestedByGuardianUserId, snapshot, fixedTerms: PlanTerms.From(entity, capturedPlan));
+                entity.PaymentRequestId = await collections.CreateCashAsync(t.AcademyId, UserId(principal), enrollment.Id, entity.SubscriptionPlanId.Value, "enroll-" + id.ToString("N"), "Online", entity.RequestedByGuardianUserId, snapshot, fixedTerms: PlanTerms.From(entity, capturedPlan),vipEnrollmentSource:id);
                 if (group.RegistrationFormat != TrainingRegistrationFormat.Group) await placement.FinishSpecialAdmission(group, enrollment);
                 db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, Message = "تم قبول طلب الاشتراك وتفعيل الباقة. مواعيد المجموعة والإيصال متاحة في ملف الطفل.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
                 await db.SaveChangesAsync();

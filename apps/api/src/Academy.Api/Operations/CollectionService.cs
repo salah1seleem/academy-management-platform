@@ -25,6 +25,7 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         payment.Status = PaymentRequestStatus.Confirmed; payment.ConfirmedAtUtc = clock.UtcNow; payment.UpdatedAtUtc = clock.UtcNow;
         r.Status = RenewalRequestStatus.Paid; r.UpdatedAtUtc = clock.UtcNow;
         var c = new PaymentCollection { Id = Guid.NewGuid(), AcademyId = academyId, SportEnrollmentId = r.SportEnrollmentId, RenewalRequestId = r.Id, PaymentRequestId = paymentId, Amount = payment.Amount, Currency = payment.Currency, PaymentMethod = method, Provider = "Manual", ProviderReference = payment.ProviderReference, ConfirmedAtUtc = clock.UtcNow, ConfirmedBy = actorId.ToString(), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+        await VipRewards.Consume(db,r,clock.UtcNow);
         db.Collections.Add(c);
         var latest = await db.SubscriptionPeriods.Where(x => x.AcademyId == academyId && x.SportEnrollmentId == r.SportEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled).MaxAsync(x => x.EndDate);
         var start = latest.HasValue && latest >= clock.Today ? latest.Value.AddDays(1) : clock.Today;
@@ -36,7 +37,7 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         receipt.DiscountReason = r.DiscountReason;
         db.Receipts.Add(receipt); await db.SaveChangesAsync(); return receipt.Id;
     }
-    public async Task<Guid> CreateCashAsync(Guid academyId, Guid actorId, Guid enrollmentId, Guid planId, string key, string method, Guid? requestedBy = null, RenewalFinancialSnapshot? fixedSnapshot = null, string? registrationPayloadHash = null, PlanTerms? fixedTerms = null, Guid? familyRequestId = null, string? fixedCurrency = null)
+    public async Task<Guid> CreateCashAsync(Guid academyId, Guid actorId, Guid enrollmentId, Guid planId, string key, string method, Guid? requestedBy = null, RenewalFinancialSnapshot? fixedSnapshot = null, string? registrationPayloadHash = null, PlanTerms? fixedTerms = null, Guid? familyRequestId = null, string? fixedCurrency = null,Guid? vipEnrollmentSource=null)
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"renewal-enrollment:{academyId:N}:{enrollmentId:N}"}, 0))");
         if (await db.FamilyRenewalLines.IgnoreQueryFilters().AnyAsync(l => l.AcademyId == academyId && l.SportEnrollmentId == enrollmentId && l.RequestId != familyRequestId && l.Request.Status == FamilyRenewalStatus.Pending)) throw new Academy.Api.Finance.CashRejected("لهذا التسجيل طلب أسرة مفتوح؛ راجع الطلب كاملًا أولًا.", 409);
@@ -60,6 +61,11 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         r.DiscountRuleRevisionSnapshot = snapshot.DiscountRuleRevision;
         r.OriginalAmount = snapshot.OriginalAmount;
         (fixedTerms ?? PlanTerms.From(plan)).Capture(r);
+        if(vipEnrollmentSource.HasValue&&r.DiscountRuleIdSnapshot.HasValue&&await db.VipRewards.AnyAsync(v=>v.DiscountRuleId==r.DiscountRuleIdSnapshot))r.VipRewardUseId=await db.VipRewardUses.Where(u=>u.SourceKind=="Enrollment"&&u.SourceId==vipEnrollmentSource&&u.ReleasedAtUtc==null).Select(u=>(Guid?)u.Id).SingleOrDefaultAsync()??throw new VipRewardConflict("حجز مكافأة طلب الاشتراك غير متاح.");
+        else if(familyRequestId.HasValue&&fixedSnapshot?.DiscountRuleId is Guid familyRule&&await db.VipRewards.AnyAsync(v=>v.DiscountRuleId==familyRule)){
+            r.VipRewardUseId=await db.FamilyRenewalRequests.Where(f=>f.Id==familyRequestId).Select(f=>f.VipRewardUseId).SingleAsync();
+            if(r.VipRewardUseId==null)throw new VipRewardConflict("طلب الأسرة لا يحمل حجز هذه المكافأة.");
+        }else r.VipRewardUseId=await VipRewards.Reserve(db,academyId,r.DiscountRuleIdSnapshot,"Renewal",r.Id,requestedBy??actorId,clock.Today,clock.UtcNow,player:enrollment.PlayerId);
         db.RenewalRequests.Add(r); db.PaymentRequests.Add(p); await db.SaveChangesAsync();
         await ConfirmAsync(academyId, actorId, p.Id, method); return p.Id;
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {useSearchParams} from "next/navigation";
 import { useEffect, useState } from "react";
 import { CalendarDays, CreditCard, UsersRound } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState, MetricCard, PageHeader, SectionCard } from "../components/dashboard-shell";
@@ -44,7 +45,8 @@ const number = (n: number) => new Intl.NumberFormat("ar-EG-u-nu-latn", { maximum
 const cash = (n: number, currency: string) => `${number(n)} ${currency === "EGP" ? "جنيه" : currency}`;
 export function PremiumOwnerDashboard() {
   const defaults = useDateFilterDefaults();
-  const [role, setRole] = useState(""); const [allowed, setAllowed] = useState(false); const [filters, setFilters] = useState<Filters>({ ...defaults });
+  const incoming=useSearchParams();
+  const [role, setRole] = useState(""); const [allowed, setAllowed] = useState(false); const [filters, setFilters] = useState<Filters>(()=>({from:incoming.get("allDates")==="true"?"":incoming.get("from")??defaults.from,to:incoming.get("allDates")==="true"?"":incoming.get("to")??defaults.to,branchId:incoming.get("branchId")??""}));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [data, setData] = useState<Summary | null>(null); const [error, setError] = useState(""); const [branches, setBranches] = useState<{ id: string; arabicName: string }[]>([]);
   useEffect(() => {

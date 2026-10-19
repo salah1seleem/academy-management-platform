@@ -260,10 +260,17 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
                 title: UiText(textOf(e['player'])),
                 subtitle: UiText('${e['sport']} · ${e['branch']}'),
                 value: selection.containsKey(e['id']),
-                onChanged: busy || rows(e['plans']).isEmpty
+                onChanged:
+                    busy ||
+                        rows(e['plans']).isEmpty ||
+                        e['hasOpenRequest'] == true
                     ? null
                     : (checked) => change(e['id'], checked == true ? '' : null),
               ),
+              if (e['hasOpenRequest'] == true)
+                const UiText(
+                  'يوجد طلب دفع مفتوح لهذا التسجيل؛ راجعه قبل إنشاء تجديد آخر.',
+                ),
               if (rows(e['plans']).isEmpty)
                 UiText(
                   l(

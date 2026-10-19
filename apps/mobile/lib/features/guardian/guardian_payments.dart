@@ -436,6 +436,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   'السعر الأصلي: ${money(d['originalAmount'], d['currency'])}',
                 ),
                 UiText('الخصم: ${money(d['discountAmount'], d['currency'])}'),
+                if (d['discountType'] == 'Percentage')
+                  UiText('نسبة الخصم: ${d['discountValue']}%'),
+                if (d['discountReason'] != null)
+                  UiText(textOf(d['discountReason'])),
                 Heading(money(d['finalAmount'], d['currency'])),
               ],
             ),

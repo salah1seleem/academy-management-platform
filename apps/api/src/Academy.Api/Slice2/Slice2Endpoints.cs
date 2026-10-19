@@ -238,7 +238,7 @@ public static class Slice2Endpoints
         var enrollment = new SportEnrollment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, SportId = group.SportId, BranchId = group.BranchId, TrainingGroupId = group.RegistrationFormat == TrainingRegistrationFormat.Group ? group.Id : null, RegistrationFormat = group.RegistrationFormat, TrainingLevelId = group.RegistrationFormat != TrainingRegistrationFormat.Group ? request.TrainingLevelId : null, LevelReviewedByUserId = group.RegistrationFormat != TrainingRegistrationFormat.Group ? actorId : null, LevelReviewedAtUtc = group.RegistrationFormat != TrainingRegistrationFormat.Group ? clock.UtcNow : null, Status = EnrollmentStatus.Active, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
         db.SportEnrollments.Add(enrollment);
         if (request.DiscountRuleId is Guid ruleId) {
-            if (!await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == ruleId && x.IsActive && !x.IsSiblingOffer)) return Results.NotFound();
+            if (!await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == ruleId && x.IsActive && !x.IsSiblingOffer&&!db.VipRewards.Any(v=>v.DiscountRuleId==x.Id))) return Results.NotFound();
             if (!await db.PlayerDiscountLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == player.Id && x.DiscountRuleId == ruleId)) db.PlayerDiscountLinks.Add(new Academy.Infrastructure.Operations.PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, DiscountRuleId = ruleId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         }
         await db.SaveChangesAsync();

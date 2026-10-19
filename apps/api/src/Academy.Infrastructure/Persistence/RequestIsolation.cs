@@ -222,6 +222,7 @@ public sealed partial class FoundationDbContext
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        GuardVipRewards();
         GuardPlayerGoalHistory();
         if(ChangeTracker.Entries().Any(e=>e.Entity is IBadgeRecord&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("قاعدة الشارة ومنحها وسحبها محفوظة؛ لا تكتب فوق التاريخ.");
         if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerAchievementCertificate or PlayerCertificateWithdrawal && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("الشهادة وسجل سحبها محفوظان؛ لا تكتب فوق المصدر.");

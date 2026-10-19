@@ -6,7 +6,16 @@ import { DateFilterDefaults } from "../components/date-filter-defaults";
 // These independently fetched panels have their own source/interaction suites.
 vi.mock("./owner-cockpit",()=>({OwnerCockpit:()=>null}));
 vi.mock("./operating-statement",()=>({OperatingStatementSnapshot:()=>null}));
-afterEach(cleanup);
+const incoming=new URLSearchParams();
+vi.mock("next/navigation",()=>({useSearchParams:()=>incoming}));
+afterEach(()=>{cleanup();for(const key of [...incoming.keys()])incoming.delete(key);});
+it("incoming date and branch scope is reflected by the controls and actual source requests",async()=>{
+  incoming.set("from","2026-09-01");incoming.set("to","2026-09-28");incoming.set("branchId","b1");
+  const fetcher=vi.fn((input)=>String(input).endsWith("/me")?response({role:"AcademyOwner"}):String(input).includes("options")?response({branches:[{id:"b1",arabicName:"فرع اصطناعي"}]}):response(summary));global.fetch=fetcher as typeof fetch;
+  render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-19"}}><PremiumOwnerDashboard/></DateFilterDefaults>);
+  expect(await screen.findByLabelText("من تاريخ")).toHaveValue("2026-09-01");expect(screen.getByLabelText("إلى تاريخ")).toHaveValue("2026-09-28");
+  await waitFor(()=>expect(fetcher.mock.calls.some(([p])=>String(p).includes("owner-summary?from=2026-09-01&to=2026-09-28&branchId=b1"))).toBe(true));
+});
 it("requests have their own actionable owner drill-down, not a complaint score", async () => {
   const data={...summary,operations:{coachPerformance:[],groupAttention:[],pendingExpenses:[],unpaidExpenses:[],receivables:[],accessChanges:0,openRequests:2,openComplaints:0,openSuggestions:0}};
   global.fetch=vi.fn(input=>String(input).endsWith("/me")?response({role:"AcademyOwner"}):String(input).includes("options")?response({branches:[{id:"b1",arabicName:"فرع اصطناعي"}]}):response(data)) as typeof fetch;

@@ -877,3 +877,4 @@ footer {
 @media(max-width:1000px){.cockpit-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.academy-cockpit{grid-template-columns:1fr;padding:1.25rem;gap:1.25rem}.cockpit-target{border-inline-start:0;border-top:1px solid #ffffff22;padding-inline-start:0;padding-top:1rem}.cockpit-kpis{gap:.6rem}.cockpit-kpi{padding:.8rem}.cockpit-kpi strong{font-size:1.25rem}}
 .rating-stars span.selected { color: #a66e00 !important; }
 .rating-stars input:focus-visible + span { outline: 2px solid #315de6; outline-offset: 2px; border-radius: .4rem; }
+.statement-snapshot {display:grid;gap:.6rem}.statement-snapshot .command-value {display:block;font-size:clamp(1.65rem,3vw,2.2rem);line-height:1.4;font-variant-numeric:tabular-nums}.statement-snapshot[data-negative=true] .command-value{color:#b11e43}.statement-snapshot small{display:block;color:#607087}.statement-snapshot p{margin:.2rem 0}

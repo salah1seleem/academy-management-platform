@@ -16,7 +16,7 @@ public sealed partial class DiscountRules
     {
         if (lines.Count == 0) return [];
         var players = lines.Select(l => l.PlayerId).Distinct().ToArray();
-        var rules = await db.DiscountRules.AsNoTracking().Where(r => r.AcademyId == academy && !r.IsSiblingOffer && r.IsActive).ToListAsync();
+        var rules = await db.DiscountRules.AsNoTracking().Where(r => r.AcademyId == academy && !r.IsSiblingOffer && r.IsActive&&!db.VipRewards.Any(v=>v.DiscountRuleId==r.Id)).ToListAsync();
         var links = await db.PlayerDiscountLinks.AsNoTracking().Where(l => l.AcademyId == academy && l.IsActive && players.Contains(l.PlayerId)).Select(l => new { l.PlayerId, l.DiscountRuleId }).ToListAsync();
         var byPlayer = links.ToLookup(l => l.PlayerId, l => l.DiscountRuleId);
         var today = clock.Today;
@@ -42,7 +42,12 @@ public sealed partial class DiscountRules
         }
         var sibling = await db.DiscountRules.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(r => r.AcademyId == academy && r.IsSiblingOffer)
             ?? new DiscountRule { AcademyId = academy, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي" };
-        return lines.ToDictionary(l => l.EnrollmentId, l => Quote(rules.Where(r => byPlayer[l.PlayerId].Contains(r.Id))
+        var result=lines.ToDictionary(l => l.EnrollmentId, l => Quote(rules.Where(r => byPlayer[l.PlayerId].Contains(r.Id))
             .Concat(siblingEligible.Contains(l.PlayerId) && sibling.IsActive ? [sibling] : []), l.Plan.Price, actor, l.Plan, l.BranchId));
+        // One reward improves one package, even when the checkout contains multiple children/sports.
+        var options=new List<(Guid Enrollment,RenewalFinancialSnapshot Quote,decimal Saving)>();
+        foreach(var l in lines){var q=Quote(await VipRewards.RulesForPlayer(db,academy,l.PlayerId,actor,today,familyGuardianId),l.Plan.Price,actor,l.Plan,l.BranchId);if(q.DiscountAmount>result[l.EnrollmentId].DiscountAmount)options.Add((l.EnrollmentId,q,q.DiscountAmount-result[l.EnrollmentId].DiscountAmount));}
+        var best=options.OrderByDescending(o=>o.Saving).ThenBy(o=>o.Enrollment).FirstOrDefault();if(best.Quote is not null)result[best.Enrollment]=best.Quote;
+        return result;
     }
 }

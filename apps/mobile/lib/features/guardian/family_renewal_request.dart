@@ -166,6 +166,8 @@ class _NativeFamilyRenewalRequestState
                     '${line['sport']} · ${line['branch']} · ${line['plan']}',
                   ),
                   UiText(money(line['finalAmount'], line['currency'])),
+                  if (line['discountReason'] != null)
+                    UiText(textOf(line['discountReason'])),
                   if (!widget.staff && line['receiptId'] != null)
                     TextButton(
                       onPressed: () => openPage(

@@ -8,6 +8,7 @@ public enum FamilyRenewalStatus { Pending, Approved, Rejected, Cancelled }
 // Pending family instructions are not individual chargeable payments or receipts.
 public sealed class FamilyRenewalRequest : TenantEntity
 {
+    public Guid? VipRewardUseId {get;set;}
     public Guid GuardianId { get; set; }
     public Guid RequestedByUserId { get; set; }
     public required string IdempotencyKey { get; set; }

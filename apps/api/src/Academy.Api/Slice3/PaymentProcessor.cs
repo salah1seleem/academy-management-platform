@@ -106,6 +106,7 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             PaymentMethod = "Online", Provider = payment.Provider, ProviderReference = payment.ProviderReference, ConfirmedAtUtc = clock.UtcNow,
             ConfirmedBy = "system/provider", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
         };
+        await Academy.Api.Operations.VipRewards.Consume(db,payment.RenewalRequest,clock.UtcNow);
         db.Collections.Add(collection);
         var plan = payment.RenewalRequest.SubscriptionPlan;
         var terms = PlanTerms.From(payment.RenewalRequest, plan);

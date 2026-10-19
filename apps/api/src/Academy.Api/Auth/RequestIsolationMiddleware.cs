@@ -52,6 +52,8 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
             }
         }
         try { await next(context); }
+        catch (Academy.Api.Operations.VipRewardConflict e) { context.Response.StatusCode=409; await context.Response.WriteAsJsonAsync(new{title=e.Message,status=409}); }
+        catch(Exception e) when ((e as Npgsql.PostgresException??e.InnerException as Npgsql.PostgresException)?.ConstraintName is "vip_source" or "vip_history" or "IX_VipRewardUses_AcademyId_RewardId") {context.Response.StatusCode=409;await context.Response.WriteAsJsonAsync(new{title="تغير استحقاق المكافأة أو حجزها؛ حدّث السعر وراجع الطلب قبل الدفع.",status=409});}
         catch (ResourceScopeException) { context.Response.StatusCode = 403; await context.Response.WriteAsJsonAsync(new { title = "العملية خارج نطاق الأكاديمية أو الفروع المسموح بها", status = 403 }); }
     }
     private static async Task Deny(HttpContext context) { context.Response.StatusCode = 403; await context.Response.WriteAsJsonAsync(new { title = "لا تملك صلاحية هذه العملية", status = 403 }); }

@@ -42,6 +42,7 @@ public static class RuleCatalog
             && (!body.BranchId.HasValue || x.AllBranches || x.BranchPublications.Any(p => p.BranchId == body.BranchId && p.IsActive)))) return Results.UnprocessableEntity(new { message = "الباقة غير متوافقة مع نطاق العرض." });
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"discount-rules:{t.AcademyId}"}, 0))");
+        if(id.HasValue&&await db.VipRewards.AnyAsync(v=>v.DiscountRuleId==id))return Results.Conflict(new{message="المكافأة استحقاق لمرة واحدة؛ استخدم سجل المكافآت ولا تعدل عرضها العام."});
         var row = id.HasValue ? await db.DiscountRules.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id) : null;
         if (id.HasValue && row is null) return Results.NotFound();
         if ((body.IsSiblingOffer || row?.IsSiblingOffer == true) && t.Role != AcademyRole.AcademyOwner) return Results.Forbid();

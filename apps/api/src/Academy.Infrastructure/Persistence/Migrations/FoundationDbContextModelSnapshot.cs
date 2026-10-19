@@ -4953,8 +4953,6 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("AcademyId", "Id");
-
                     b.HasIndex("AcademyId", "MatchId");
 
                     b.ToTable("AcademyNotices", (string)null);
@@ -9317,6 +9315,152 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("TournamentPayments", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.VipReward", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CancelledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid>("DiscountRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("ExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("GuardianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("IssuedByMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("IssuedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("NoticeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Percentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademyId", "CancelledByMembershipId");
+
+                    b.HasIndex("AcademyId", "DiscountRuleId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "GuardianId");
+
+                    b.HasIndex("AcademyId", "NoticeId");
+
+                    b.HasIndex("AcademyId", "IssuedByMembershipId", "RequestId", "GuardianId")
+                        .IsUnique();
+
+                    b.ToTable("VipRewards", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_VipReward_Terms", "\"IsActive\" AND \"Percentage\">0 AND \"Percentage\"<100 AND \"ExpiresOn\">=\"IssuedOn\" AND (\"CancelledAtUtc\" IS NULL)=(\"CancelledByMembershipId\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.VipRewardUse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("ReleasedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RewardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("UsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademyId", "RewardId")
+                        .IsUnique()
+                        .HasFilter("\"ReleasedAtUtc\" IS NULL");
+
+                    b.ToTable("VipRewardUses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_VipRewardUse_Terms", "\"IsActive\" AND \"SourceKind\" IN ('Renewal','Family','Enrollment') AND NOT (\"UsedAtUtc\" IS NOT NULL AND \"ReleasedAtUtc\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.People.AcademyImportJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11884,6 +12028,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<Guid?>("VipRewardUseId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DecidedByUserId");
@@ -11896,6 +12043,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "ProofAssetId")
                         .IsUnique();
+
+                    b.HasIndex("AcademyId", "VipRewardUseId");
 
                     b.HasIndex("AcademyId", "RequestedByUserId", "IdempotencyKey")
                         .IsUnique();
@@ -13161,11 +13310,16 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<Guid?>("VipRewardUseId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DiscountAppliedByUserId");
 
                     b.HasIndex("AcademyId", "IsActive");
+
+                    b.HasIndex("AcademyId", "VipRewardUseId");
 
                     b.HasIndex("AcademyId", "DiscountRuleIdSnapshot", "DiscountRuleRevisionSnapshot");
 
@@ -17706,6 +17860,65 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.VipReward", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CancelledByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.DiscountRule", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "DiscountRuleId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.GuardianProfile", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "GuardianId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "IssuedByMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.AcademyNotice", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "NoticeId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.VipRewardUse", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.VipReward", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "RewardId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.People.AcademyImportJob", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -18732,6 +18945,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Academy.Infrastructure.Operations.VipRewardUse", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "VipRewardUseId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Guardian");
                 });
 
@@ -19095,6 +19314,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("DiscountAppliedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Operations.VipRewardUse", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "VipRewardUseId")
+                        .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Academy.Infrastructure.Operations.DiscountRuleVersion", null)

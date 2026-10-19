@@ -1,0 +1,19 @@
+.page { color:#173042; background:#f7f9fd; border:1px solid #e1e7ef; border-radius:1.4rem; padding:clamp(.9rem,3vw,1.6rem); display:grid; gap:1rem; }
+.page h1 { font-size:clamp(1.45rem,4vw,2rem); line-height:1.4; margin:.5rem 0; }
+.page p { margin:.3rem 0; line-height:1.8; }
+.page small { font-size:.83rem; line-height:1.8; }
+.page :global(.back-link) { color:#264d62; }
+.page :global(.section-card) { min-width:0; }
+.page fieldset { border:1px solid #dce4ef; border-radius:1rem; padding:1rem; grid-column:1/-1; }
+.page fieldset label { display:flex; gap:.65rem; align-items:center; padding:.6rem 0; }
+.page input[type=checkbox] { flex:0 0 1.1rem; width:1.1rem; height:1.1rem; }
+.page :global(.form-grid) { gap:1rem; }
+.page textarea { min-height:7rem; }
+.page [aria-label="تأكيد المكافأة"] { padding:1rem; border-radius:1rem; border:1px solid #e3c9d2; background:#fff4f7; }
+.rewardCard { display:flex; flex-direction:column; align-items:stretch; gap:.9rem; margin:1rem 0; padding:1.2rem; border:1px solid #dde5ef; border-inline-start:4px solid #bd214b; border-radius:1.1rem; background:white; box-shadow:0 4px 15px #1c335207; }
+.rewardCard>div { display:grid; gap:.5rem; min-width:0; }
+.rewardCard strong { font-size:1.05rem; line-height:1.7; }
+.rewardCard small { display:block; color:#54677b; }
+.rewardCard small a { display:block; margin-top:.4rem; font-weight:700; }
+.rewardCard :global(.primary-button),.rewardCard :global(.secondary-button) { align-self:flex-start; max-width:100%; text-align:center; }
+@media(max-width:600px){.rewardCard{padding:.9rem}.rewardCard :global(.primary-button){align-self:stretch}.page fieldset{padding:.7rem}.page h1{font-size:1.5rem}}

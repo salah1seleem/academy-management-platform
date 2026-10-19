@@ -96,6 +96,7 @@ public sealed class SubscriptionAdjustment : TenantEntity
 
 public sealed class RenewalRequest : TenantEntity, IPlanTermsSnapshot
 {
+    public Guid? VipRewardUseId {get;set;}
     public Guid? DiscountRuleIdSnapshot { get; set; }
     public int? DiscountRuleRevisionSnapshot { get; set; }
     public int? DurationMonthsSnapshot { get; set; }

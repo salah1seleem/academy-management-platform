@@ -47,6 +47,7 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
             ?? throw new DiscountNotFoundException();
         if (renewal.Version != expectedVersion)
             throw new DiscountConflictException("تغير طلب التجديد منذ فتح الصفحة. أعد التحميل قبل حفظ الخصم.");
+        if(renewal.VipRewardUseId.HasValue)throw new DiscountConflictException("طلب بمكافأة محجوزة لا يعدل يدويًا؛ ألغِ محاولة الدفع غير المحصلة وابدأ طلبًا بالسعر المطلوب.");
         if (renewal.Status is not (RenewalRequestStatus.PendingPayment or RenewalRequestStatus.PaymentInProgress))
             throw new DiscountConflictException("لا يمكن تعديل الخصم بعد تأكيد أو انتهاء محاولة الدفع.");
 

@@ -212,6 +212,13 @@ class _EnrollmentPaymentPageState extends State<EnrollmentPaymentPage> {
       builder: (context, value) {
         final d = obj(value);
         return gList([
+          if (d['originalAmount'] != null)
+            UiText(
+              'السعر الأصلي: ${money(d['originalAmount'], d['currency'])}',
+            ),
+          if (d['discountAmount'] != null)
+            UiText('الخصم: ${money(d['discountAmount'], d['currency'])}'),
+          if (d['discountReason'] != null) UiText(textOf(d['discountReason'])),
           Heading(money(d['amount'], d['currency'])),
           if (d['status'] == 'Pending' ||
               d['status'] == 'UnderReview' ||

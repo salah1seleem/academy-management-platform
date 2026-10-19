@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import '../shared/vip_rewards.dart';
 
 class OwnerVipMembers extends StatelessWidget {
   const OwnerVipMembers({
@@ -38,6 +39,12 @@ class OwnerVipMembers extends StatelessWidget {
             ],
           ),
           const UiText('قيمة شهرية مرتبطة بالأبناء، وليست مدفوعات ولي الأمر.'),
+          TextButton.icon(
+            onPressed: () =>
+                openPage(context, NativeVipRewards(auth: auth, owner: true)),
+            icon: const Icon(Icons.card_giftcard_rounded),
+            label: const UiText('إدارة مكافآت الأعضاء المميزين'),
+          ),
           RemoteBody(
             auth: auth,
             path: '/api/v1/reports/vip-members?$q',

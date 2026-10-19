@@ -13,7 +13,7 @@ public sealed partial class DiscountRules(FoundationDbContext db, ISubscriptionC
 {
     public async Task<RenewalFinancialSnapshot> CalculateAsync(Guid academy, Guid playerId, decimal amount, Guid actor, Guid? guardianId = null, Guid? selectedRule = null, SubscriptionPlan? plan = null, Guid? branchId = null)
     {
-        var rules = await db.DiscountRules.AsNoTracking().Where(x => x.AcademyId == academy && x.IsActive && !x.IsSiblingOffer && (x.Id == selectedRule || db.PlayerDiscountLinks.Any(l => l.AcademyId == academy && l.PlayerId == playerId && l.DiscountRuleId == x.Id && l.IsActive))).ToListAsync();
+        var rules = await db.DiscountRules.AsNoTracking().Where(x => x.AcademyId == academy && x.IsActive && !x.IsSiblingOffer && !db.VipRewards.Any(v=>v.AcademyId==academy&&v.DiscountRuleId==x.Id) && (x.Id == selectedRule || db.PlayerDiscountLinks.Any(l => l.AcademyId == academy && l.PlayerId == playerId && l.DiscountRuleId == x.Id && l.IsActive))).ToListAsync();
         // Shared guardian alone is insufficient: another child must have a current paid period.
         // A trusted child's linked family may span branches. Only eligibility is returned, never another branch's roster.
         var guardians = db.GuardianProfiles.IgnoreQueryFilters().Where(g => g.AcademyId == academy && g.IsActive && (g.Id == guardianId || db.GuardianPlayerLinks.IgnoreQueryFilters().Any(l => l.AcademyId == academy && l.PlayerId == playerId && l.IsActive && l.GuardianId == g.Id))).Select(g => g.Id);
@@ -24,7 +24,9 @@ public sealed partial class DiscountRules(FoundationDbContext db, ISubscriptionC
             if (sibling is null) rules.Add(new DiscountRule { AcademyId = academy, ArabicName = "عرض الإخوة", Percentage = 20, IsSiblingOffer = true, Reason = "عرض الإخوة الافتراضي" });
             else if (sibling.IsActive) rules.Add(sibling);
         }
-        return Quote(rules, amount, actor, plan, branchId);
+        var standard=Quote(rules,amount,actor,plan,branchId);
+        var vip=Quote(await VipRewards.RulesForPlayer(db,academy,playerId,actor,clock.Today,guardianId),amount,actor,plan,branchId);
+        return vip.DiscountAmount>standard.DiscountAmount?vip:standard;
     }
     private RenewalFinancialSnapshot Quote(IEnumerable<DiscountRule> rules, decimal amount, Guid actor, SubscriptionPlan? plan, Guid? branchId)
     {
@@ -44,7 +46,7 @@ public static class DiscountRuleEndpoints
         var api = app.MapGroup("/api/v1/discount-rules").RequireAuthorization(AcademyPermissions.SubscriptionDiscountManage);
         api.MapGet("/", async (CurrentTenant tenant, FoundationDbContext db) => {
             var t = (await tenant.ResolveAsync())!;
-            var rows = await db.DiscountRules.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.IsSiblingOffer).ThenBy(x => x.ArabicName).ToListAsync();
+            var rows = await db.DiscountRules.AsNoTracking().Where(x => x.AcademyId == t.AcademyId&&!db.VipRewards.Any(v=>v.DiscountRuleId==x.Id)).OrderByDescending(x => x.IsSiblingOffer).ThenBy(x => x.ArabicName).ToListAsync();
             return Results.Ok(new { defaultSiblingPercentage = 20, items = rows.Select(RuleCatalog.View) });
         });
         api.MapPost("/", RuleCatalog.Create).AddEndpointFilter<CsrfFilter>();
@@ -60,7 +62,7 @@ public static class DiscountRuleEndpoints
         app.MapPost("/api/v1/people/registration-quote", async (RegistrationQuote body, CurrentTenant tenant, FoundationDbContext db, DiscountRules rules, ClaimsPrincipal principal) => {
             var t = (await tenant.ResolveAsync())!;
             var plan = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.PlanId && x.IsActive);
-            if (plan is null || body.DiscountRuleId.HasValue && !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer)) return Results.NotFound();
+            if (plan is null || body.DiscountRuleId.HasValue && !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer && !db.VipRewards.Any(v=>v.DiscountRuleId==x.Id))) return Results.NotFound();
             if (body.BranchId.HasValue && (!await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.BranchId && x.IsActive) || !await db.SubscriptionPlans.TrainingOnly().ForBranch(body.BranchId.Value).AnyAsync(x => x.Id == plan.Id))) return Results.UnprocessableEntity(new { message = "الباقة غير منشورة لهذا الفرع." });
             var phone = EgyptPhoneNormalizer.Normalize(body.GuardianPhone);
             var guardian = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.ContactPhone == phone).Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
@@ -71,7 +73,7 @@ public static class DiscountRuleEndpoints
         api.MapGet("/players/{playerId:guid}", async (Guid playerId, CurrentTenant tenant, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; if (!await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId)) return Results.NotFound(); return Results.Ok(await db.PlayerDiscountLinks.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive).Select(x => x.DiscountRuleId).ToListAsync()); });
         api.MapPut("/players/{playerId:guid}", async (Guid playerId, PlayerRuleWrite body, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock) => {
             var t = (await tenant.ResolveAsync())!;
-            if (!await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId) || !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer)) return Results.NotFound();
+            if (!await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId) || !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer&&!db.VipRewards.Any(v=>v.DiscountRuleId==x.Id))) return Results.NotFound();
             await using var tx = await db.Database.BeginTransactionAsync();
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"player-rule:{t.AcademyId}:{playerId}:{body.DiscountRuleId}"}, 0))");
             var link = await db.PlayerDiscountLinks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.DiscountRuleId == body.DiscountRuleId);

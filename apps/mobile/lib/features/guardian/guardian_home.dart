@@ -8,6 +8,7 @@ import 'guardian_profile.dart';
 import 'guardian_payments.dart';
 import 'guardian_report.dart';
 import 'daily_nutrition.dart';
+import '../shared/vip_rewards.dart';
 import 'enrollment_requests.dart';
 import '../shared/academy_news.dart';
 import '../shared/community_ads.dart';
@@ -228,6 +229,11 @@ class _GuardianHomeState extends State<GuardianHome> {
                   const SizedBox(height: 18),
                 ],
                 Heading(localized(context, 'خدمات الأسرة', 'Family services')),
+                TextButton.icon(
+                  onPressed: () => open(NativeVipRewards(auth: widget.auth)),
+                  icon: const Icon(Icons.card_giftcard_rounded),
+                  label: const UiText('مكافآت أسرتك وشروط استخدامها'),
+                ),
                 LayoutBuilder(
                   builder: (context, bounds) => Wrap(
                     spacing: 10,

@@ -27,7 +27,7 @@ public static class SubscriptionDiscountEndpoints
                 x.DiscountValue, x.DiscountAmount, x.FinalAmount, x.Currency, status = x.Status.ToString(),
                 x.DiscountReason, discountAppliedBy = x.DiscountAppliedByUserId == null ? null : db.Users.Where(u => u.Id == x.DiscountAppliedByUserId).Select(u => u.DisplayName).Single(),
                 x.DiscountAppliedAtUtc, x.PaymentRequestId, paymentStatus = db.PaymentRequests.Where(p => p.AcademyId == current.AcademyId && p.Id == x.PaymentRequestId).Select(p => p.Status.ToString()).Single(),
-                x.RequestedAtUtc, x.Version
+                x.RequestedAtUtc, x.Version,x.VipRewardUseId
             }).SingleOrDefaultAsync();
         if (renewal is null) return Results.NotFound();
         var audit = await db.RenewalDiscountAdjustments.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.RenewalRequestId == id)
@@ -38,7 +38,7 @@ public static class SubscriptionDiscountEndpoints
                 x.PreviousDiscountAmount, x.NewDiscountAmount, x.PreviousFinalAmount, x.NewFinalAmount, x.Reason,
                 performedBy = db.Users.Where(u => u.Id == x.PerformedByUserId).Select(u => u.DisplayName).Single(), x.CreatedAtUtc
             }).ToListAsync();
-        var canModify = renewal.status is "PendingPayment" or "PaymentInProgress" && renewal.paymentStatus is "Created" or "Pending";
+        var canModify = renewal.VipRewardUseId==null&&(renewal.status is "PendingPayment" or "PaymentInProgress")&&(renewal.paymentStatus is "Created" or "Pending");
         return Results.Ok(new { renewal.Id, renewal.player, renewal.sport, renewal.plan, renewal.OriginalAmount, renewal.discountType,
             renewal.DiscountValue, renewal.DiscountAmount, renewal.FinalAmount, renewal.Currency, renewal.status, renewal.DiscountReason,
             renewal.discountAppliedBy, renewal.DiscountAppliedAtUtc, renewal.PaymentRequestId, renewal.paymentStatus,

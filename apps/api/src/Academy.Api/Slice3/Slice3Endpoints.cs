@@ -94,7 +94,7 @@ public static class Slice3Endpoints
     }
     private static async Task<IResult> GuardianPayment(Guid paymentId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
-        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var p = await db.PaymentRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == paymentId && x.RenewalRequest.RequestedByUserId == user).Select(x => new { x.Id, renewalId = x.RenewalRequestId, x.ProviderReference, x.Provider, x.Amount, x.Currency, status = x.Status.ToString(), player = x.RenewalRequest.SportEnrollment.Player.ArabicName, sport = x.RenewalRequest.SubscriptionPlan.Sport.ArabicName, plan = (x.RenewalRequest.PlanNameSnapshot ?? x.RenewalRequest.SubscriptionPlan.ArabicName), x.RenewalRequest.OriginalAmount, discountType = x.RenewalRequest.DiscountType == null ? null : x.RenewalRequest.DiscountType.ToString(), x.RenewalRequest.DiscountValue, x.RenewalRequest.DiscountAmount, x.RenewalRequest.FinalAmount, currentPaymentId = x.RenewalRequest.PaymentRequestId, isCurrent = x.RenewalRequest.PaymentRequestId == x.Id, receiptId = db.Receipts.Where(r => r.AcademyId == t.AcademyId && r.Collection.PaymentRequestId == x.Id).Select(r => (Guid?)r.Id).FirstOrDefault() }).SingleOrDefaultAsync(); return p is null ? Results.NotFound() : Results.Ok(p);
+        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var p = await db.PaymentRequests.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == paymentId && x.RenewalRequest.RequestedByUserId == user).Select(x => new { x.Id, renewalId = x.RenewalRequestId, x.ProviderReference, x.Provider, x.Amount, x.Currency, status = x.Status.ToString(), player = x.RenewalRequest.SportEnrollment.Player.ArabicName, sport = x.RenewalRequest.SubscriptionPlan.Sport.ArabicName, plan = (x.RenewalRequest.PlanNameSnapshot ?? x.RenewalRequest.SubscriptionPlan.ArabicName), x.RenewalRequest.OriginalAmount, discountType = x.RenewalRequest.DiscountType == null ? null : x.RenewalRequest.DiscountType.ToString(), x.RenewalRequest.DiscountValue, x.RenewalRequest.DiscountAmount, x.RenewalRequest.FinalAmount,x.RenewalRequest.DiscountReason, currentPaymentId = x.RenewalRequest.PaymentRequestId, isCurrent = x.RenewalRequest.PaymentRequestId == x.Id, receiptId = db.Receipts.Where(r => r.AcademyId == t.AcademyId && r.Collection.PaymentRequestId == x.Id).Select(r => (Guid?)r.Id).FirstOrDefault() }).SingleOrDefaultAsync(); return p is null ? Results.NotFound() : Results.Ok(p);
     }
     private static async Task<IResult> Simulate(Guid paymentId, SimulationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IPaymentGateway gateway, PaymentProcessor processor)
     {
@@ -337,6 +337,7 @@ public static class Slice3Endpoints
                 discountType = x.RenewalRequest.DiscountType == null ? null : x.RenewalRequest.DiscountType.ToString(),
                 x.RenewalRequest.DiscountValue,
                 x.RenewalRequest.DiscountAmount,
+                x.RenewalRequest.DiscountReason,
                 x.RenewalRequest.FinalAmount,
                 x.CreatedAtUtc,
                 x.ConfirmedAtUtc,

@@ -142,6 +142,7 @@ public sealed class RenewalCreationService(
             UpdatedAtUtc = clock.UtcNow
         };
         renewal.PaymentRequestId = payment.Id;
+        renewal.VipRewardUseId=await Academy.Api.Operations.VipRewards.Reserve(db,academyId,renewal.DiscountRuleIdSnapshot,"Renewal",renewal.Id,actorUserId,clock.Today,clock.UtcNow,player:enrollment.PlayerId);
         db.RenewalRequests.Add(renewal);
         db.PaymentRequests.Add(payment);
         await db.SaveChangesAsync(ct);
