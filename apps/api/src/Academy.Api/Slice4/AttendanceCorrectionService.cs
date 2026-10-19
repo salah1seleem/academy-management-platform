@@ -59,6 +59,7 @@ public sealed class AttendanceCorrectionService(FoundationDbContext db, CurrentT
     {
         if(string.IsNullOrWhiteSpace(key)||key.Length>100||string.IsNullOrWhiteSpace(body.Reason)||body.Reason.Length>500)throw new FacilityRejected("سبب تصحيح الماضي مطلوب حتى500حرف ومعرف العملية غير فارغ.",422);
         await using var tx=await db.Database.BeginTransactionAsync();var t=await Authority(true);var s=await Session(id);await Lock(t.AcademyId,id);s=await Session(id);
+        if(t.Role==AcademyRole.AcademyAdmin&&await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants)&&!await StaffWorkflowAccess.Allows(db,t.MembershipId,$"/api/v1/attendance/sessions/{id}/{(body.Kind==AttendanceCorrectionKind.Players?"players":"staff")}","PUT"))throw new FacilityRejected("لا تملك صلاحية تصحيح هذا النوع من الحضور.",403);
         var hash=Hash(new{id,body.Kind,body.Items,reason=body.Reason.Trim()});var prior=await db.AttendanceCorrections.AsNoTracking().SingleOrDefaultAsync(c=>c.RequestedByUserId==db.RequestUserId&&c.RequestKey==key);
         if(prior is not null){if(prior.RequestHash!=hash)throw new FacilityRejected("معرف العملية مرتبط بطلب آخر.");await tx.CommitAsync();return new{prior.Id,state=prior.State.ToString()};}
         await Past(s);var snapshot=await Snapshot(s,body.Kind,body.Items);if(snapshot.All(i=>i.Before==i.After))throw new FacilityRejected("لم تختر تغييرًا في الحضور.",422);

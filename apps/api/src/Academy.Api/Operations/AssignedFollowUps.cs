@@ -11,7 +11,8 @@ public static partial class OwnerFollowUpEndpoints
 {
     public static Task<bool> DelegateAllowed(FoundationDbContext db, Guid academy, Guid member, bool edit) => db.AcademyMemberships.AsNoTracking().AnyAsync(m => m.AcademyId == academy && m.Id == member && m.Role == AcademyRole.AcademyAdmin && m.IsActive && m.User.IsActive && m.UseActionGrants
         && (!m.PrimaryMembershipId.HasValue || db.AcademyMemberships.Any(p => p.Id == m.PrimaryMembershipId && p.IsActive && p.User.IsActive))
-        && db.StaffActionGrants.Any(g => g.AcademyId == academy && g.MembershipId == member && g.IsActive && g.Module == "followups" && g.Read && (!edit || g.Edit)));
+        && db.StaffActionGrants.Any(g => g.AcademyId == academy && g.MembershipId == member && g.IsActive && g.Module == "followups" && g.Read && (!edit || g.Edit))
+        && (!edit||!db.StaffGrants.Any(g=>g.AcademyId==academy&&g.MembershipId==member&&g.IsActive&&g.Permission=="workflow.followups.update"&&!g.Allowed)));
     private static async Task<bool> CanOpenGroup(FoundationDbContext db, TenantMembership t) => await db.StaffActionGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Module == "academy" && g.Read);
     private static async Task<IResult> MyList(CurrentTenant tenant, FoundationDbContext db, HttpContext h, TimeProvider clock, DateOnly? from, DateOnly? to, string? state, bool allDates = false)
     {

@@ -2,6 +2,9 @@ using Academy.Infrastructure.Structure;
 
 namespace Academy.Infrastructure.Tenancy;
 
+// Trusted per-request projection of existing named and module grants; not stored.
+public sealed record WorkflowGrantRequirement(string Key,string Module,string Operation);
+
 public sealed class MembershipBranchAccess : TenantEntity
 {
     public Guid MembershipId { get; set; }

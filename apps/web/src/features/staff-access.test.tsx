@@ -3,6 +3,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { StaffAccessEditor } from "./staff-access";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("separates employee attendance from player attendance in the simple editor and saves explicit leaf decisions",async()=>{
+ const fixture={...value,useActionGrants:true,modules:["attendance"],actions:[{module:"attendance",read:true,add:false,edit:true,delete:false}],workflowActions:[{key:"workflow.attendance.players",label:"تسجيل حضور اللاعبين",module:"attendance",operation:"Edit",allowed:true},{key:"workflow.attendance.staff",label:"تسجيل حضور المدربين والموظفين",module:"attendance",operation:"Edit",allowed:true}]};
+ const fetcher=vi.fn().mockImplementation(async(url:string)=>({ok:true,status:200,json:async()=>url.endsWith("/csrf")?{token:"csrf"}:fixture}));global.fetch=fetcher;const close=vi.fn();render(<StaffAccessEditor id="operator" name="إداري اصطناعي" onClose={close} simple/>);
+ const children=await screen.findByRole("switch",{name:"تسجيل حضور اللاعبين"});fireEvent.click(children);expect(children).not.toBeChecked();expect(screen.getByRole("switch",{name:"تسجيل حضور المدربين والموظفين"})).toBeChecked();expect(screen.queryByLabelText("قالب الصلاحيات")).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"اعتماد الصلاحيات"}));fireEvent.click(screen.getByRole("button",{name:"تأكيد الاعتماد"}));await waitFor(()=>expect(close).toHaveBeenCalledOnce());expect(JSON.parse(fetcher.mock.calls.find(([,init])=>init?.method==="PUT")![1].body).workflowActions).toEqual(["workflow.attendance.staff"]);
+});
+
 it("sensitive payroll actions start denied, require CRUD, and are explicitly reviewed rather than inherited from a template", async () => {
   const payroll = { module: "payroll", read: true, add: true, edit: true, delete: false };
   const fixture = { ...value, modules: ["payroll"], actions: [payroll], sensitivePermissions: ["payroll.pay", "payroll.addition.review", "payroll.salary.manage", "payroll.statement.approve", "payroll.advance.manage"], selectedSensitivePermissions: [], templates: [{ key: "finance", name: "متابعة رواتب", actions: [payroll] }] };

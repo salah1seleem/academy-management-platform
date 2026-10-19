@@ -30,14 +30,17 @@ public sealed partial class FoundationDbContext
     public Guid[] RequestSportIds { get; private set; } = [];
     public string? RequestModule { get; private set; }
     public string RequestOperation { get; private set; } = "Read";
+    public WorkflowGrantRequirement[] RequestWorkflowRequirements { get; private set; } = [];
+    public string[] RequestWorkflowKeys => RequestWorkflowRequirements.Select(r=>r.Key).ToArray();
     public bool AdditionalContextScope { get; private set; }
-    public void BindRequestScope(Guid academy, Guid user, Guid member, Guid[]? branches, Guid[]? sports = null, string? module = null, string operation = "Read", bool additionalContext = false)
+    public void BindRequestScope(Guid academy, Guid user, Guid member, Guid[]? branches, Guid[]? sports = null, string? module = null, string operation = "Read", bool additionalContext = false, WorkflowGrantRequirement[]? workflowRequirements = null)
     {
         if (RequestScopeEnabled) throw new InvalidOperationException("Request scope already bound");
         RequestAcademyId = academy; RequestUserId = user; RequestMembershipId = member;
         BranchScopeRestricted = branches is not null; RequestBranchIds = branches ?? [];
         SportScopeRestricted = sports is not null; RequestSportIds = sports ?? [];
         RequestModule = module; RequestOperation = operation;
+        RequestWorkflowRequirements = workflowRequirements ?? [];
         AdditionalContextScope = additionalContext;
         RequestScopeEnabled = true;
     }
@@ -317,7 +320,7 @@ public sealed partial class FoundationDbContext
             if (new[] { nameof(SubscriptionPeriod.Origin), nameof(SubscriptionPeriod.ImportJobId), nameof(SubscriptionPeriod.CollectionId), nameof(SubscriptionPeriod.PriceSnapshot) }.Any(p => entry.Property(p).IsModified))
                 throw new InvalidOperationException("اتفاق الاستيراد ثابت، ولا يتحول إلى تحصيل أو يعاد تسعيره تلقائيًا.");
         if (!RequestScopeEnabled) return;
-        if (SportScopeRestricted || AdditionalContextScope) await RevalidateSportAuthority(token);
+        if (SportScopeRestricted || AdditionalContextScope || RequestWorkflowKeys.Length > 0) await RevalidateSportAuthority(token);
         ChangeTracker.DetectChanges();
         var entries = ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted && e.Metadata.FindProperty("AcademyId") is not null).ToArray();
         foreach (var entry in entries)

@@ -141,6 +141,10 @@ public sealed partial class FoundationDbContext
         }
         if (RequestModule is not null && !await StaffActionGrants.IgnoreQueryFilters().AnyAsync(g => g.AcademyId == RequestAcademyId && g.MembershipId == m.Id && g.Module == RequestModule && g.IsActive && g.Read
             && (RequestOperation == "Read" || RequestOperation == "Add" && g.Add || RequestOperation == "Edit" && g.Edit || RequestOperation == "Delete" && g.Delete), token)) throw new ResourceScopeException();
+        if (RequestWorkflowKeys.Length > 0 && await StaffGrants.IgnoreQueryFilters().AnyAsync(g => g.AcademyId == RequestAcademyId && g.MembershipId == m.Id && g.IsActive && !g.Allowed && RequestWorkflowKeys.Contains(g.Permission),token)) throw new ResourceScopeException();
+        foreach(var required in RequestWorkflowRequirements)
+            if(await StaffGrants.IgnoreQueryFilters().AnyAsync(g=>g.AcademyId==RequestAcademyId&&g.MembershipId==m.Id&&g.IsActive&&g.Permission==required.Key,token)
+                &&!await StaffActionGrants.IgnoreQueryFilters().AnyAsync(g=>g.AcademyId==RequestAcademyId&&g.MembershipId==m.Id&&g.Module==required.Module&&g.IsActive&&g.Read&&(required.Operation=="Read"||required.Operation=="Add"&&g.Add||required.Operation=="Edit"&&g.Edit||required.Operation=="Write"&&g.Add&&g.Edit),token))throw new ResourceScopeException();
     }
     private async Task GuardSportWrite(EntityEntry entry, EntityEntry[] entries, CancellationToken token)
     {
