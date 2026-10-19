@@ -276,6 +276,13 @@ class NativeOperatingStatement extends StatelessWidget {
             money(d['unpaidOperatingExpenses'], d['currency']),
           ),
         ]),
+        if (d['externalReceivables'] != null)
+          Facts([
+            (
+              'رصيد الاتفاقيات الخارجية — مستقل عن الرواتب',
+              money(d['externalReceivables'], d['currency']),
+            ),
+          ]),
         for (final warning in (d['warnings'] as List? ?? const []))
           UiText('• $warning'),
       ]);

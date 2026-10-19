@@ -57,6 +57,8 @@ public static class FacilityEndpoints
         try { return Results.Ok(await operation()); }
         catch (FacilityRejected e) { return Results.Problem(statusCode: e.Status, title: e.Message); }
         catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23505" }) { return Results.Problem(statusCode: 409, title: "الاسم أو معرف العملية مستخدم. راجع السجل الموجود بدل تكراره."); }
+        catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23514" }) { return Results.Problem(statusCode:409,title:"تعارضت العملية مع سياسة المورد أو ارتباطه المالي؛ راجع الحجز أو الاتفاق المرتبط."); }
+        catch (Npgsql.PostgresException e) when (e.SqlState is "23514" or "40001" or "40P01") { return Results.Problem(statusCode:409,title:"تعذر إتمام الحجز بسبب ارتباطه المالي أو تعارض متزامن؛ حدّث السجل وراجع الاتفاق المرتبط."); }
     }
     private static async Task<IResult> Board(DateOnly? date, Guid? branchId, FoundationDbContext db, CurrentTenant tenant, TimeProvider time)
     {

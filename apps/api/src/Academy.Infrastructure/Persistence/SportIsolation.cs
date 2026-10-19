@@ -32,6 +32,10 @@ public sealed partial class FoundationDbContext
         }
         SportFilter<Sport>(b, x => RequestSportIds.Contains(x.Id));
         SportFilter<OperatingExpense>(b, x => x.SportId.HasValue && RequestSportIds.Contains(x.SportId.Value));
+        SportFilter<ExternalAgreement>(b,x=>RequestSportIds.Contains(x.SportId));
+        SportFilter<ExternalAgreementBooking>(b,x=>ExternalAgreements.Any(a=>a.Id==x.AgreementId));
+        SportFilter<ExternalAgreementReceipt>(b,x=>ExternalAgreements.Any(a=>a.Id==x.AgreementId));
+        SportFilter<CashExternalReceiptPosting>(b,x=>ExternalAgreementReceipts.Any(r=>r.Id==x.ReceiptId));
         // Shared discount definitions may be read for correct sibling pricing, not changed.
         SportFilter<DiscountRule>(b, x => !x.SportId.HasValue || RequestSportIds.Contains(x.SportId.Value));
         SportFilter<DiscountRuleVersion>(b, x => DiscountRules.Any(r => r.Id == x.DiscountRuleId));

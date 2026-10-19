@@ -90,7 +90,7 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
     {
         if(!await db.CashierAssignments.AnyAsync(a=>a.RegisterId==register.Id&&a.MembershipId==t.MembershipId&&a.IsActive)) throw new CashRejected("لم يعيّنك المالك أمينًا لهذا الصندوق.",403);
     }
-    private async Task<decimal> Balance(CashSession session) => session.OpeningAmount+(await db.CashMovements.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)+(await db.CashReceiptPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)+(await db.CashProductPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)-(await db.CashRefundPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0);
+    private async Task<decimal> Balance(CashSession session) => session.OpeningAmount+(await db.CashMovements.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)+(await db.CashReceiptPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)+(await db.CashProductPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)+(await db.CashExternalReceiptPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0)-(await db.CashRefundPostings.Where(m=>m.SessionId==session.Id).SumAsync(m=>(decimal?)m.Amount)??0);
     public async Task<object> Options()
     {
         var (t,_)=await Context();
@@ -114,6 +114,8 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         foreach(var row in collected) balances[row.id]=balances.GetValueOrDefault(row.id)+row.amount;
         var productCash=await db.CashProductPostings.Where(m=>sessionIds.Contains(m.SessionId)).GroupBy(m=>m.SessionId).Select(g=>new{id=g.Key,amount=g.Sum(m=>m.Amount)}).ToListAsync();
         foreach(var row in productCash) balances[row.id]=balances.GetValueOrDefault(row.id)+row.amount;
+        var externalCash=await db.CashExternalReceiptPostings.Where(m=>sessionIds.Contains(m.SessionId)).GroupBy(m=>m.SessionId).Select(g=>new{id=g.Key,amount=g.Sum(m=>m.Amount)}).ToListAsync();
+        foreach(var row in externalCash) balances[row.id]=balances.GetValueOrDefault(row.id)+row.amount;
         var refunds=await db.CashRefundPostings.Where(m=>sessionIds.Contains(m.SessionId)).GroupBy(m=>m.SessionId).Select(g=>new{id=g.Key,amount=g.Sum(m=>m.Amount)}).ToListAsync();
         foreach(var row in refunds) balances[row.id]=balances.GetValueOrDefault(row.id)-row.amount;
         var branchIds=registers.Select(r=>r.BranchId).Distinct().ToArray();
@@ -146,7 +148,7 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         var payoutPlayers=payouts.Select(p=>p.PlayerId).Distinct().ToArray();
         var visiblePlayers=await db.Players.Where(p=>payoutPlayers.Contains(p.Id)).Select(p=>p.Id).ToListAsync();
         var refunds=payouts.Select(p=>new{p.Id,p.RefundId,p.PlayerId,p.amount,p.Currency,p.CreatedAtUtc,p.Reason,p.receiptId,p.voidReceiptId,canReadPlayer=visiblePlayers.Contains(p.PlayerId)});
-        return new {session,register.Name,register.Currency,canClose,canCollect,canCrossBranchPayment,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts,productSales=await db.CashProductPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ProductSaleId,amount=Money(p.Amount),p.Currency,p.ProductSale.ProductName,p.ProductSale.Quantity,p.CreatedAtUtc}).ToListAsync(),refunds};
+        return new {session,register.Name,register.Currency,canClose,canCollect,canCrossBranchPayment,balance=Money(await Balance(session)),variance=session.CountedAmount.HasValue?Money(session.CountedAmount.Value-session.ExpectedAmount!.Value):null,movements=await db.CashMovements.Where(m=>m.SessionId==id).OrderBy(m=>m.CreatedAtUtc).ToListAsync(),receipts,productSales=await db.CashProductPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ProductSaleId,amount=Money(p.Amount),p.Currency,p.ProductSale.ProductName,p.ProductSale.Quantity,p.CreatedAtUtc}).ToListAsync(),externalReceipts=await db.CashExternalReceiptPostings.Where(p=>p.SessionId==id).OrderByDescending(p=>p.CreatedAtUtc).Take(100).Select(p=>new{p.Id,p.ReceiptId,p.Amount,p.Currency,p.Receipt.ReceiptNumber,p.Receipt.AgreementId,p.Receipt.Agreement.Title,p.Receipt.Agreement.CounterpartyName,p.CreatedAtUtc}).ToListAsync(),refunds};
     }
     public async Task<object> Create(CashRegisterWrite body,string key)
     {

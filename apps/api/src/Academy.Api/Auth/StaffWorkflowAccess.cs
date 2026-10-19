@@ -48,6 +48,7 @@ public static class StaffWorkflowAccess
         if(path.StartsWith("/api/v1/manage/staff-attendance",StringComparison.Ordinal)||path.StartsWith("/api/v1/attendance/sessions/",StringComparison.Ordinal)&&path.EndsWith("/staff",StringComparison.Ordinal))return ["workflow.attendance.staff"];
         if(path.StartsWith("/api/v1/attendance/sessions/",StringComparison.Ordinal)&&path.EndsWith("/players",StringComparison.Ordinal))return ["workflow.attendance.players"];
         if(path.StartsWith("/api/v1/finance/operating-expenses",StringComparison.Ordinal))return ["workflow.expenses.record"];
+        if(path.StartsWith("/api/v1/finance/external-agreements/",StringComparison.Ordinal)&&path.EndsWith("/receipts",StringComparison.Ordinal))return ["workflow.payments.collect"];
         if(path.StartsWith("/api/v1/my-followups/",StringComparison.Ordinal))return ["workflow.followups.update"];
         if(path.StartsWith("/api/v1/manage/news",StringComparison.Ordinal))return ["workflow.news.manage"];
         if(path.StartsWith("/api/v1/manage/payments/",StringComparison.Ordinal)&&(path.EndsWith("/collect",StringComparison.Ordinal)||path.EndsWith("/review",StringComparison.Ordinal)))return ["workflow.payments.collect"];

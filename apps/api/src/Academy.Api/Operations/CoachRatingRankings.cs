@@ -22,11 +22,11 @@ public static partial class GuardianFeedbackEndpoints
             &&(!sportId.HasValue||db.TrainingGroups.Any(g=>g.AcademyId==t.AcademyId&&g.Id==f.TrainingGroupId&&g.SportId==sportId)));
         var aggregate=ratings.GroupBy(f=>f.CoachMembershipId!.Value).Select(g=>new{Id=g.Key,ReviewCount=g.Count(),Average=g.Average(x=>(decimal)x.Score!.Value)});
         var coaches=from r in aggregate join c in db.AcademyMemberships.AsNoTracking().Where(c=>c.AcademyId==t.AcademyId&&c.IsActive&&c.User.IsActive&&c.Role==AcademyRole.Coach) on r.Id equals c.Id
-            select new{r.Id,name=c.User.DisplayName,r.ReviewCount,averageRating=Math.Round(r.Average,2)};
+            select new{r.Id,name=c.User.DisplayName,r.ReviewCount,rawAverage=r.Average};
         const int minimumReviews=3;
         var eligible=coaches.Where(c=>c.ReviewCount>=minimumReviews);
-        var highest=await eligible.OrderByDescending(c=>c.averageRating).ThenByDescending(c=>c.ReviewCount).ThenBy(c=>c.name).ThenBy(c=>c.Id).Take(5).ToArrayAsync();
-        var lowest=await eligible.OrderBy(c=>c.averageRating).ThenByDescending(c=>c.ReviewCount).ThenBy(c=>c.name).ThenBy(c=>c.Id).Take(5).ToArrayAsync();
+        var highest=await eligible.OrderByDescending(c=>c.rawAverage).ThenByDescending(c=>c.ReviewCount).ThenBy(c=>c.name).ThenBy(c=>c.Id).Take(5).Select(c=>new{c.Id,c.name,c.ReviewCount,averageRating=Math.Round(c.rawAverage,2)}).ToArrayAsync();
+        var lowest=await eligible.OrderBy(c=>c.rawAverage).ThenByDescending(c=>c.ReviewCount).ThenBy(c=>c.name).ThenBy(c=>c.Id).Take(5).Select(c=>new{c.Id,c.name,c.ReviewCount,averageRating=Math.Round(c.rawAverage,2)}).ToArrayAsync();
         return Results.Ok(new{from=start,to=end,minimumReviews,highest,lowest,insufficientSampleCount=await coaches.CountAsync(c=>c.ReviewCount<minimumReviews),basis="تقييمات أولياء الأمور المقدمة؛ ليست تقييمات فنية للاعبين أو حكمًا آليًا على المدرب."});
     }
 }

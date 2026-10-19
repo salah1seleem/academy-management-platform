@@ -63,6 +63,10 @@ public sealed partial class FoundationDbContext
         BranchFilter<CashProductPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<DayPassTicket>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<OperatingExpense>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ExternalAgreement>(b,x=>RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<ExternalAgreementBooking>(b,x=>ExternalAgreements.Any(a=>a.Id==x.AgreementId));
+        BranchFilter<ExternalAgreementReceipt>(b,x=>ExternalAgreements.Any(a=>a.Id==x.AgreementId));
+        BranchFilter<CashExternalReceiptPosting>(b,x=>ExternalAgreementReceipts.Any(r=>r.Id==x.ReceiptId));
         BranchFilter<OperatingExpenseAllocation>(b, x => OperatingExpenses.Any(e => e.Id == x.ExpenseId));
         BranchFilter<CashRefundPosting>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CashReceiptVoid>(b, x => RequestBranchIds.Contains(x.BranchId));
@@ -251,6 +255,9 @@ public sealed partial class FoundationDbContext
             if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(OwnerFollowUp.State) or nameof(OwnerFollowUp.AssignedToMembershipId) or nameof(OwnerFollowUp.DueOn) or nameof(OwnerFollowUp.Note) or nameof(OwnerFollowUp.ResolutionReason) or nameof(OwnerFollowUp.UpdatedAtUtc))))throw new InvalidOperationException("مصدر المتابعة ودليل إنشائها ثابتان.");
         if(ChangeTracker.Entries<MatchCoachAssignment>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("إسناد مدرب المباراة محفوظ؛ أضف مراجعة جديدة دون تعديل التاريخ أو حذفه.");
         GuardCashPaymentPurpose();
+        if(ChangeTracker.Entries().Any(e=>e.Entity is ExternalAgreementReceipt or ExternalAgreementBooking or CashExternalReceiptPosting&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("تحصيل الاتفاق وحجوزه ثابتان؛ لا يعدل أو يحذف السجل المالي.");
+        foreach(var e in ChangeTracker.Entries<ExternalAgreement>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||e.OriginalValues.GetValue<DateTimeOffset?>(nameof(ExternalAgreement.CancelledAtUtc))!=null||e.Entity.CancelledAtUtc==null||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(ExternalAgreement.CancelledAtUtc) or nameof(ExternalAgreement.CancelledByUserId) or nameof(ExternalAgreement.CancellationReason) or nameof(ExternalAgreement.UpdatedAtUtc))))throw new InvalidOperationException("الاتفاق المالي ثابت؛ المتاح إلغاء غير المحصل فقط دون مسح التاريخ.");
         foreach(var e in ChangeTracker.Entries<StaffPasskey>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.State==EntityState.Deleted||!e.OriginalValues.GetValue<bool>(nameof(StaffPasskey.IsActive))||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(StaffPasskey.SignCount) or nameof(StaffPasskey.BackedUp) or nameof(StaffPasskey.LastVerifiedAtUtc) or nameof(StaffPasskey.IsActive) or nameof(StaffPasskey.RevokedAtUtc) or nameof(StaffPasskey.UpdatedAtUtc))))throw new InvalidOperationException("هوية وسيلة التحقق ثابتة؛ أوقفها دون حذف الدليل أو تبديل المفتاح.");
         foreach(var e in ChangeTracker.Entries<StaffPasskeyChallenge>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))

@@ -49,5 +49,6 @@ public static partial class ReportingEndpoints
         +(await ProductFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,null,branch,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0)
         +(await TournamentQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,null,branch,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0)
         +(await DayPassFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,null,branch,null,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0)
+        +(await ExternalFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,null,branch,null,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0)
         -(await RefundFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,null,branch,null,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0);
 }

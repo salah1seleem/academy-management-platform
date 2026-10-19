@@ -10,6 +10,7 @@ import 'cash_registers.dart';
 import 'provider_quarantine.dart';
 import 'settlement_comparisons.dart';
 import 'owner_cockpit.dart';
+import 'external_agreements.dart';
 
 class OwnerReports extends StatefulWidget {
   final AuthController auth;
@@ -41,6 +42,7 @@ class _OwnerReportsState extends State<OwnerReports> {
               for (final item in const {
                 'financial': 'المال',
                 'operating': 'الفائض والعجز',
+                'external': 'الاتفاقيات والتأجير',
                 'attendance': 'الحضور',
                 'receivables': 'الأرصدة',
                 'cash': 'الصناديق',
@@ -58,7 +60,12 @@ class _OwnerReportsState extends State<OwnerReports> {
           ),
         ),
         Expanded(
-          child: report == 'operating'
+          child: report == 'external'
+              ? NativeExternalAgreements(
+                  auth: widget.auth,
+                  branch: widget.initialFilters['branchId'] ?? '',
+                )
+              : report == 'operating'
               ? NativeOperatingStatement(
                   auth: widget.auth,
                   filters: widget.initialFilters,
@@ -140,6 +147,16 @@ class _OwnerReportsState extends State<OwnerReports> {
           for (final item in items)
             Card(
               child: ListTile(
+                onTap:
+                    kind == 'financial' && item['collectionType'] == 'External'
+                    ? () => openPage(
+                        context,
+                        NativeExternalAgreementDetail(
+                          auth: auth,
+                          id: textOf(item['receiptId']),
+                        ),
+                      )
+                    : null,
                 title: UiText(
                   textOf(kind == 'financial' ? item['player'] : item['player']),
                 ),

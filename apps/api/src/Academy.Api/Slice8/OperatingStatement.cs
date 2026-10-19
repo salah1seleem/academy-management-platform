@@ -16,7 +16,7 @@ public sealed record OperatingStatementLine(string Key,string Label,decimal Amou
 public sealed record OperatingStatementData(DateOnly From,DateOnly To,string Currency,string Basis,
     OperatingStatementLine[] Income,OperatingStatementLine[] Expenses,decimal TotalIncome,decimal TotalExpenses,decimal Surplus,
     decimal Refunds,decimal Discounts,decimal Receivables,decimal ApprovedPayrollPayable,decimal UnpaidOperatingExpenses,
-    decimal AdvanceCashOut,decimal AdvanceApplied,decimal? EarnedRevenue,string[] Warnings);
+    decimal AdvanceCashOut,decimal AdvanceApplied,decimal? EarnedRevenue,string[] Warnings,decimal ExternalReceivables=0);
 
 public static partial class ReportingEndpoints
 {
@@ -53,7 +53,12 @@ public static partial class ReportingEndpoints
         var discounts=await db.Receipts.Where(x=>query.Any(c=>c.Id==x.CollectionId)).SumAsync(x=>(decimal?)x.DiscountAmount)??0;
         var income=new List<OperatingStatementLine>{new("subscription","اشتراكات محصلة",subscriptions,"/dashboard/reports/financial?collectionType=Subscription"),new("private","برايفت محصل",privateIncome,"/dashboard/reports/financial?collectionType=Subscription"),new("product","مبيعات منتجات محصلة",products,"/dashboard/reports/financial?collectionType=Product"),new("tournament","رسوم بطولات محصلة",tournaments,"/dashboard/reports/financial?collectionType=Tournament"),new("refund","استردادات وعكس إيصالات",-refunds,"/dashboard/reports/financial")};
         if(visits!=0)income.Add(new("visits","زيارات وخدمات مرافق محصلة",visits,"/dashboard/reports/financial?collectionType=DayPass"));
-        var warnings=new List<string>{"أساس نقدي: المقبوض ليس إيرادًا مكتسبًا بالضرورة. لا يحدد هذا التقرير التزامات الاشتراكات المؤجلة أو ربح الاستحقاق.","العقود الخارجية والتأجير غير مكتملة في المصدر الحالي؛ عدم عرضها لا يعني أن قيمتها صفر.","المصروفات غير المسجلة لا تُفترض صفرًا. لا توجد تكلفة مخزون موثقة للمنتجات ضمن هذه القائمة."};
+        var external=ExternalFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,sport,branch,null,null,null,db);
+        var rental=await external.Where(x=>x.Agreement.Kind==ExternalAgreementKind.PoolRental).SumAsync(x=>(decimal?)x.Amount)??0;
+        var externalProgram=await external.Where(x=>x.Agreement.Kind==ExternalAgreementKind.ExternalProgram).SumAsync(x=>(decimal?)x.Amount)??0;
+        income.Add(new("rental","تأجير مسبح وحارات محصل",rental,"/dashboard/reports/financial?collectionType=External&externalKind=PoolRental"));
+        income.Add(new("external","اتفاقيات برامج خارجية محصلة",externalProgram,"/dashboard/reports/financial?collectionType=External&externalKind=ExternalProgram"));
+        var warnings=new List<string>{"أساس نقدي: المقبوض ليس إيرادًا مكتسبًا بالضرورة. لا يحدد هذا التقرير التزامات الاشتراكات المؤجلة أو ربح الاستحقاق.","الاتفاقات والتأجير تظهر بإيصالات التحصيل الفعلية فقط؛ الرصيد غير المحصل مستقل عن الراتب وعن الفائض النقدي.","المصروفات غير المسجلة لا تُفترض صفرًا. لا توجد تكلفة مخزون موثقة للمنتجات ضمن هذه القائمة."};
         var expenses=new List<OperatingStatementLine>();
         var operating=db.OperatingExpenses.Where(e=>e.AcademyId==academy&&e.Currency==r.Currency&&e.Status==OperatingExpenseStatus.Posted&&(!branch.HasValue||e.BranchId==branch));
         if(sport.HasValue)operating=operating.Where(e=>e.SportId==sport||e.TrainingGroupId.HasValue&&db.TrainingGroups.Any(g=>g.Id==e.TrainingGroupId&&g.SportId==sport));
@@ -83,8 +88,9 @@ public static partial class ReportingEndpoints
         var receivables=await balances.Where(b=>b.Currency==r.Currency&&b.Outstanding>0).SumAsync(b=>(decimal?)b.Outstanding)??0;
         var unpaid=await operating.Where(e=>e.PeriodFrom<=r.To&&e.PaidOn==null).SumAsync(e=>(decimal?)e.Amount)??0;
         var known=categoryRows.Select(c=>c.key).ToHashSet();foreach(var key in new[]{"Rent","Electricity","Water","Maintenance","CollectionFees"})if(!known.Contains(key))warnings.Add($"لم يسجل بند {ExpenseLabel(key)} مدفوعًا ومرحّلًا في النطاق؛ راجع اكتمال التكلفة.");
+        var externalOutstanding=await db.ExternalAgreements.Where(a=>a.AcademyId==academy&&a.Currency==r.Currency&&a.CancelledAtUtc==null&&(!branch.HasValue||a.BranchId==branch)&&(!sport.HasValue||a.SportId==sport)&&a.CreatedAtUtc<r.EndUtcExclusive).SumAsync(a=>(decimal?)(a.Amount-db.ExternalAgreementReceipts.Where(p=>p.AgreementId==a.Id&&p.ReceivedAtUtc<r.EndUtcExclusive).Sum(p=>p.Amount)))??0;
         var incomeTotal=income.Sum(x=>x.Amount);var expenseTotal=expenses.Sum(x=>x.Amount);
-        return new(r.From,r.To,r.Currency,"Cash",income.ToArray(),expenses.ToArray(),incomeTotal,expenseTotal,incomeTotal-expenseTotal,refunds,discounts,receivables,payable,unpaid,advanceCash,advanceApplied,null,warnings.ToArray());
+        return new(r.From,r.To,r.Currency,"Cash",income.ToArray(),expenses.ToArray(),incomeTotal,expenseTotal,incomeTotal-expenseTotal,refunds,discounts,receivables,payable,unpaid,advanceCash,advanceApplied,null,warnings.ToArray(),externalOutstanding);
     }
     private static string ExpenseLabel(string key)=>key switch{"Rent"=>"إيجار المنشأة","Electricity"=>"الكهرباء","Water"=>"المياه","Heating"=>"التدفئة","Maintenance"=>"الصيانة والتشغيل","CollectionFees"=>"رسوم التحصيل الإلكتروني","Supplies"=>"المستلزمات","Administration"=>"المصروفات الإدارية","Facility"=>"تشغيل المرافق",_=>"مصروفات أخرى"};
 }

@@ -108,6 +108,7 @@ public static partial class ReportingEndpoints
         var c = await collections.Select(x => new { x.Id, x.Amount, x.PaymentMethod, x.ConfirmedAtUtc }).ToListAsync();
         var p = await products.Select(x => new { x.Id, x.Amount, x.PaymentMethod, ConfirmedAtUtc = x.ConfirmedAtUtc!.Value }).ToListAsync();
         p.AddRange(await tournaments.Select(x => new { x.Id, x.Amount, x.PaymentMethod, ConfirmedAtUtc = x.ConfirmedAtUtc!.Value }).ToListAsync());
+        p.AddRange(await ExternalFinancialQuery(academyId,range.Currency,range.StartUtc,range.EndUtcExclusive,null,branchId,null,null,null,db).Select(x=>new{x.Id,x.Amount,PaymentMethod=(string?)x.PaymentMethod,ConfirmedAtUtc=x.ReceivedAtUtc}).ToListAsync());
         p.AddRange(await dayPasses.Select(x => new { x.Id, x.Amount, PaymentMethod = (string?)"Online", ConfirmedAtUtc = x.ReviewedAtUtc!.Value }).ToListAsync());
         var refundRows = await RefundFinancialQuery(academyId,range.Currency,range.StartUtc,range.EndUtcExclusive,null,branchId,null,null,null,db)
             .Select(r=>new {amount=-r.Amount,PaymentMethod=r.PayoutMethod ?? (db.CashRefundPostings.Any(p=>p.RefundId==r.Id)?"Cash":"Unspecified"),ConfirmedAtUtc=r.CreatedAtUtc}).ToListAsync();
@@ -224,55 +225,67 @@ public static partial class ReportingEndpoints
         });
     }
 
-    private static async Task<IResult> FinancialReport(DateOnly? from, DateOnly? to, bool? allDates, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, string? collectionType, int? page, int? pageSize, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> FinancialReport(DateOnly? from, DateOnly? to, bool? allDates, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, string? collectionType, string? externalKind, int? page, int? pageSize, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var current = (await tenant.ResolveAsync())!;
         var range = await FinancialRange(current.AcademyId, from, to, db, clock, allDates == true);
         if (range.Error is not null) return range.Error;
-        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament" or "DayPass")) return Validation("collectionType", "نوع التحصيل غير صالح.");
+        var externalQuery=ExternalFinancialQuery(current.AcademyId,range.Currency,range.StartUtc,range.EndUtcExclusive,sportId,branchId,planId,provider,search,db);
+        if(!string.IsNullOrEmpty(collectionType)&&collectionType!="External")externalQuery=externalQuery.Where(r=>false);
+        if(externalKind=="PoolRental")externalQuery=externalQuery.Where(r=>r.Agreement.Kind==Academy.Infrastructure.Finance.ExternalAgreementKind.PoolRental);
+        if(externalKind=="ExternalProgram")externalQuery=externalQuery.Where(r=>r.Agreement.Kind==Academy.Infrastructure.Finance.ExternalAgreementKind.ExternalProgram);
+        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament" or "DayPass" or "External")) return Validation("collectionType", "نوع التحصيل غير صالح.");
+        if(externalKind is not(null or "" or "PoolRental" or "ExternalProgram") || !string.IsNullOrEmpty(externalKind)&&collectionType!="External")return Validation("externalKind","اختر نوع التحصيل الخارجي ونوع الاتفاق الصحيح.");
         var query = FinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var productQuery = ProductFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
         var tournamentQuery = TournamentQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
         var dayPassQuery = DayPassFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var refundQuery=RefundFinancialQuery(current.AcademyId,range.Currency,range.StartUtc,range.EndUtcExclusive,sportId,branchId,planId,provider,search,db);
-        if (collectionType is "Product" or "Tournament" or "DayPass") query = query.Where(x => false);
-        if (collectionType is "Product" or "Tournament" or "DayPass") refundQuery=refundQuery.Where(x=>false);
-        if (collectionType is "Subscription" or "Tournament" or "DayPass" || planId.HasValue) productQuery = productQuery.Where(x => false);
-        if (collectionType is "Subscription" or "Product" or "DayPass" || planId.HasValue) tournamentQuery = tournamentQuery.Where(x => false);
-        if (collectionType is "Subscription" or "Product" or "Tournament") dayPassQuery = dayPassQuery.Where(x => false);
-        var count = await query.CountAsync() + await productQuery.CountAsync() + await tournamentQuery.CountAsync()+await refundQuery.CountAsync()+await dayPassQuery.CountAsync();
-        var total = (await query.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await productQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await tournamentQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await dayPassQuery.SumAsync(x => (decimal?)x.Amount) ?? 0);
+        if (collectionType is "Product" or "Tournament" or "DayPass" or "External") query = query.Where(x => false);
+        if (collectionType is "Product" or "Tournament" or "DayPass" or "External") refundQuery=refundQuery.Where(x=>false);
+        if (collectionType is "Subscription" or "Tournament" or "DayPass" or "External" || planId.HasValue) productQuery = productQuery.Where(x => false);
+        if (collectionType is "Subscription" or "Product" or "DayPass" or "External" || planId.HasValue) tournamentQuery = tournamentQuery.Where(x => false);
+        if (collectionType is "Subscription" or "Product" or "Tournament" or "External") dayPassQuery = dayPassQuery.Where(x => false);
+        var count = await query.CountAsync() + await productQuery.CountAsync() + await tournamentQuery.CountAsync()+await refundQuery.CountAsync()+await dayPassQuery.CountAsync()+await externalQuery.CountAsync();
+        var total = (await query.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await productQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await tournamentQuery.SumAsync(x => (decimal?)x.Amount) ?? 0) + (await dayPassQuery.SumAsync(x => (decimal?)x.Amount) ?? 0)+(await externalQuery.SumAsync(x=>(decimal?)x.Amount)??0);
         var refunds = await refundQuery.SumAsync(r => (decimal?)r.Amount) ?? 0;
         var size = Math.Clamp(pageSize ?? 50, 1, 100); var currentPage = Math.Clamp(page ?? 1, 1, 100000);
-        var ids = await query.Select(x => new { x.Id, Date = x.ConfirmedAtUtc }).Concat(productQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(tournamentQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(refundQuery.Select(x=>new{x.Id,Date=x.CreatedAtUtc})).Concat(dayPassQuery.Select(x=>new{x.Id,Date=x.ReviewedAtUtc!.Value})).OrderByDescending(x => x.Date).ThenBy(x => x.Id).Skip((currentPage - 1) * size).Take(size).Select(x => x.Id).ToListAsync();
+        var ids = await query.Select(x => new { x.Id, Date = x.ConfirmedAtUtc }).Concat(productQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(tournamentQuery.Select(x => new { x.Id, Date = x.ConfirmedAtUtc!.Value })).Concat(refundQuery.Select(x=>new{x.Id,Date=x.CreatedAtUtc})).Concat(dayPassQuery.Select(x=>new{x.Id,Date=x.ReviewedAtUtc!.Value})).Concat(externalQuery.Select(x=>new{x.Id,Date=x.ReceivedAtUtc})).OrderByDescending(x => x.Date).ThenBy(x => x.Id).Skip((currentPage - 1) * size).Take(size).Select(x => x.Id).ToListAsync();
         var rows = await FinancialRows(query.Where(x => ids.Contains(x.Id)), current.AcademyId, db).ToListAsync();
         rows.AddRange(await ProductFinancialRows(productQuery.Where(x => ids.Contains(x.Id)), db).ToListAsync());
         rows.AddRange(await TournamentRows(tournamentQuery.Where(x => ids.Contains(x.Id)), db).ToListAsync());
         rows.AddRange(await RefundFinancialRows(refundQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
         rows.AddRange(await DayPassFinancialRows(dayPassQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
+        rows.AddRange(await ExternalFinancialRows(externalQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
         return Results.Ok(new { from = range.From, to = range.To, totalAmount = total, totalRefunds = refunds, netAmount = total - refunds, totalCount = count, currency = range.Currency, page = currentPage, pageSize = size, items = rows.OrderByDescending(x => x.ConfirmedAtUtc).ThenBy(x => x.CollectionId) });
     }
 
-    private static async Task<IResult> FinancialExport(DateOnly? from, DateOnly? to, bool? allDates, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, string? collectionType, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> FinancialExport(DateOnly? from, DateOnly? to, bool? allDates, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, string? collectionType, string? externalKind, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var current = (await tenant.ResolveAsync())!;
         var range = await FinancialRange(current.AcademyId, from, to, db, clock, allDates == true);
         if (range.Error is not null) return range.Error;
-        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament" or "DayPass")) return Validation("collectionType", "نوع التحصيل غير صالح.");
+        if (collectionType is not (null or "" or "Subscription" or "Product" or "Tournament" or "DayPass" or "External")) return Validation("collectionType", "نوع التحصيل غير صالح.");
+        if(externalKind is not(null or "" or "PoolRental" or "ExternalProgram") || !string.IsNullOrEmpty(externalKind)&&collectionType!="External")return Validation("externalKind","اختر نوع التحصيل الخارجي ونوع الاتفاق الصحيح.");
         var query = FinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var products = ProductFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
         var tournaments = TournamentQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, provider, search, db);
         var dayPasses = DayPassFinancialQuery(current.AcademyId, range.Currency, range.StartUtc, range.EndUtcExclusive, sportId, branchId, planId, provider, search, db);
         var refunds=RefundFinancialQuery(current.AcademyId,range.Currency,range.StartUtc,range.EndUtcExclusive,sportId,branchId,planId,provider,search,db);
-        var count = (collectionType is "Product" or "Tournament" or "DayPass" ? 0 : await query.CountAsync()+await refunds.CountAsync()) + (collectionType is "Subscription" or "Tournament" or "DayPass" || planId.HasValue ? 0 : await products.CountAsync()) + (collectionType is "Subscription" or "Product" or "DayPass" || planId.HasValue ? 0 : await tournaments.CountAsync()) + (collectionType is "Subscription" or "Product" or "Tournament" ? 0 : await dayPasses.CountAsync());
+        var externalQuery=ExternalFinancialQuery(current.AcademyId,range.Currency,range.StartUtc,range.EndUtcExclusive,sportId,branchId,planId,provider,search,db);
+        if(!string.IsNullOrEmpty(collectionType)&&collectionType!="External")externalQuery=externalQuery.Where(r=>false);
+        if(externalKind=="PoolRental")externalQuery=externalQuery.Where(r=>r.Agreement.Kind==Academy.Infrastructure.Finance.ExternalAgreementKind.PoolRental);
+        if(externalKind=="ExternalProgram")externalQuery=externalQuery.Where(r=>r.Agreement.Kind==Academy.Infrastructure.Finance.ExternalAgreementKind.ExternalProgram);
+        var count = (collectionType is "Product" or "Tournament" or "DayPass" or "External" ? 0 : await query.CountAsync()+await refunds.CountAsync()) + (collectionType is "Subscription" or "Tournament" or "DayPass" or "External" || planId.HasValue ? 0 : await products.CountAsync()) + (collectionType is "Subscription" or "Product" or "DayPass" or "External" || planId.HasValue ? 0 : await tournaments.CountAsync()) + (collectionType is "Subscription" or "Product" or "Tournament" or "External" ? 0 : await dayPasses.CountAsync())+await externalQuery.CountAsync();
         if (count > MaxExportRows) return Results.Problem(statusCode: 413, title: "نطاق التصدير كبير", detail: $"الحد الأقصى {MaxExportRows} سجل.");
-        var rows = collectionType is "Product" or "Tournament" or "DayPass" ? new List<FinancialRow>() : await FinancialRows(query.OrderBy(x => x.ConfirmedAtUtc), current.AcademyId, db).ToListAsync();
-        if (collectionType is not ("Subscription" or "Tournament" or "DayPass") && !planId.HasValue) rows.AddRange(await ProductFinancialRows(products, db).ToListAsync());
-        if (collectionType is not ("Subscription" or "Product" or "DayPass") && !planId.HasValue) rows.AddRange(await TournamentRows(tournaments, db).ToListAsync());
-        if(collectionType is not ("Product" or "Tournament" or "DayPass")) rows.AddRange(await RefundFinancialRows(refunds,db).ToListAsync());
-        if(collectionType is not ("Subscription" or "Product" or "Tournament")) rows.AddRange(await DayPassFinancialRows(dayPasses,db).ToListAsync());
-        var csv = new List<string[]> { new[] { "رقم الإيصال", "اللاعب", "الرياضة", "الفرع", "المجموعة", "الباقة", "المبلغ", "العملة", "طريقة الدفع", "مزود الدفع", "مرجع المزود", "وقت التحصيل", "الاسترداد", "الصافي", "نوع التحصيل" } };
-        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="DayPass"?"زيارة يومية":x.CollectionType=="Void"?"عكس إيصال نقدي":x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
+        var rows = collectionType is "Product" or "Tournament" or "DayPass" or "External" ? new List<FinancialRow>() : await FinancialRows(query.OrderBy(x => x.ConfirmedAtUtc), current.AcademyId, db).ToListAsync();
+        if (collectionType is not ("Subscription" or "Tournament" or "DayPass" or "External") && !planId.HasValue) rows.AddRange(await ProductFinancialRows(products, db).ToListAsync());
+        if (collectionType is not ("Subscription" or "Product" or "DayPass" or "External") && !planId.HasValue) rows.AddRange(await TournamentRows(tournaments, db).ToListAsync());
+        if(collectionType is not ("Product" or "Tournament" or "DayPass" or "External")) rows.AddRange(await RefundFinancialRows(refunds,db).ToListAsync());
+        if(collectionType is not ("Subscription" or "Product" or "Tournament" or "External")) rows.AddRange(await DayPassFinancialRows(dayPasses,db).ToListAsync());
+        rows.AddRange(await ExternalFinancialRows(externalQuery,db).ToListAsync());
+        var csv = new List<string[]> { new[] { "رقم الإيصال", "اللاعب / الطرف", "الرياضة", "الفرع", "المجموعة", "الباقة", "المبلغ", "العملة", "طريقة الدفع", "مزود الدفع", "مرجع المزود", "وقت التحصيل", "الاسترداد", "الصافي", "نوع التحصيل" } };
+        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="External"?"اتفاق خارجي":x.CollectionType=="DayPass"?"زيارة يومية":x.CollectionType=="Void"?"عكس إيصال نقدي":x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
         return Csv(csv, $"financial-collections-{range.From:yyyy-MM}.csv");
     }
 

@@ -435,6 +435,7 @@ app.MapSportSettings();
 app.MapReceivables();
 app.MapReceivableCredit();
 app.MapOperatingExpenses();
+app.MapExternalAgreements();
 app.MapCashRegisters();
 app.MapProviderQuarantine();
 app.MapSettlementComparisons();

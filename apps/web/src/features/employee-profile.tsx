@@ -10,6 +10,7 @@ import {formatDateAr,formatMoneyAr,formatStaffCheckout} from "../lib/formatters"
 import {csrfRequest} from "./dashboard-api";
 import {PayrollStatement} from "./payroll-statement";
 import {CoachAgreementsWithServices} from "./coach-agreements";
+import {ExternalAgreements} from "./external-agreements";
 type Employee={id:string;name:string;phone:string;jobTitle:string;branchName?:string;monthlySalary:number;currency:string;contractStart:string;contractEnd?:string;membershipId?:string;membershipRole?:string;photoUrl?:string;isActive:boolean};
 export function EmployeeProfile({id}:{id:string}){
  const defaults=useDateFilterDefaults(),query=useSearchParams();const requestedMonth=query.get("month")??"";
@@ -24,7 +25,7 @@ export function EmployeeProfile({id}:{id:string}){
  {id:"payroll",label:"المستحقات والرواتب",content:<><div className="report-filters"><label>شهر المستحقات<input type="month" required value={month} onChange={e=>{if(e.target.value){setMonth(e.target.value);setAdjustment(null);}}}/></label>{canManage&&<button onClick={()=>setAdjustment("Deduction")}>تسجيل خصم</button>}{canManage&&permissions.includes("payroll.addition.review")&&<button onClick={()=>setAdjustment("Addition")}>إضافة مبلغ إضافي</button>}<Link href={`/dashboard/payroll/${id}/account`}>حساب الموظف والأشهر السابقة</Link></div>{notice&&<p role="status">{notice}</p>}{adjustment?<EmployeeAdjustment id={id} name={employee.name} kind={adjustment} currency={employee.currency} date={`${month}-01`} onCancel={()=>setAdjustment(null)} onSaved={()=>{setAdjustment(null);setRevision(v=>v+1);setNotice("تم حفظ الحركة وتحديث كشف الشهر.");}}/>:<PayrollStatement embedded key={`${month}-${revision}`} id={id} month={`${month}-01`}/>}</>},
  ...(employee.membershipId&&permissions.includes("reports.attendance.read")?[{id:"attendance",label:"الحضور والانصراف",content:<EmployeeAttendance membershipId={employee.membershipId} month={month}/>}]:[]),
  ...(coach&&permissions.includes("structure.manage")?[{id:"groups",label:"المجموعات والحصص",content:<EmployeeCoachGroups membershipId={employee.membershipId!}/>}]:[]),
- ...(coach?[{id:"agreements",label:"الاتفاقيات والعمولات",content:<><p className="muted">حساب الموظف مستقل عن أي تعامل خارجي؛ لا تخصم مديونية خارجية من الراتب تلقائيًا.</p><CoachAgreementsWithServices coachId={employee.membershipId!}/></>}]:[]),
+ ...(coach||permissions.includes("reports.financial.read")?[{id:"agreements",label:"الاتفاقيات والعمولات",content:<><p className="muted">حساب الموظف مستقل عن أي تعامل خارجي؛ لا تخصم مديونية خارجية من الراتب تلقائيًا.</p>{coach&&<CoachAgreementsWithServices coachId={employee.membershipId!}/>} {permissions.includes("reports.financial.read")&&<ExternalAgreements employeeId={id} embedded/>}</>}]:[]),
  {id:"documents",label:"الفواتير والمستندات",content:<section className="list-card"><h2>مستندات الموظف</h2><div className="workspace-destinations"><Link href={`/dashboard/payroll/${id}/account`}>كشف الحساب والصرف المسجل</Link><Link href={`/dashboard/staff/employees/${id}/contract`}>سجل العقد المعتمد</Link><Link href={`/dashboard/staff/employees/${id}/salary`}>سجل تغيرات الراتب</Link>{coach&&<Link href={`/dashboard/academy/coaches/${employee.membershipId}?tab=accounts`}>مصادر الخاص والاتفاقيات</Link>}</div></section>}
  ]}/></>}</>;
 }

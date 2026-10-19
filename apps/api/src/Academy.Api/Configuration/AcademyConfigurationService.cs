@@ -12,6 +12,12 @@ public sealed class AcademyConfigurationService(FoundationDbContext db, TimeProv
     // the next authorized call. Any future cache must key academy + revision.
     private readonly Dictionary<Guid, AcademyRuntimeSettings?> requestSettings = [];
     private readonly Dictionary<Guid, Dictionary<string, bool>> requestLicenses = [];
+    // A write that acquires the configuration lock must not reuse a pre-lock read.
+    public void DiscardRequestCache(Guid academyId)
+    {
+        requestSettings.Remove(academyId);
+        requestLicenses.Remove(academyId);
+    }
     public async Task<AcademyRuntimeSettings?> Active(Guid academyId)
     {
         if (requestSettings.TryGetValue(academyId, out var stored)) return stored;
