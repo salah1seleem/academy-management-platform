@@ -7,6 +7,7 @@ it("shows licensed features separately and creates a draft without activating it
   const fetcher = vi.fn().mockImplementation(async (url, init) => ({ ok: true, status: 200, json: async () => url === "/api/v1/my-permissions" ? ["academy.settings.manage"] : url === "/api/v1/auth/csrf" ? { token: "csrf" } : init ? {} : { entitlements: [{ feature: "nutrition", enabled: true, planCode: "Core" }, { feature: "community_ads", enabled: false, planCode: "Core" }], versions: [{ id: "v1", revision: 1, version: 5, state: "Active", contentHash: "a".repeat(64), settings }], history: [] } }));
   global.fetch = fetcher; render(<VersionedConfiguration />);
   await screen.findByRole("checkbox", { name: "التغذية" });
+  expect(screen.getByLabelText("رمز العملة")).toHaveValue("EGP");expect(screen.getByLabelText("رمز العملة")).toHaveAttribute("readonly");
   expect(screen.getByRole("checkbox", { name: /إعلانات المجتمع/ })).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox", { name: "التغذية" }));
   fireEvent.click(screen.getByRole("button", { name: "حفظ إصدار مسودة" }));

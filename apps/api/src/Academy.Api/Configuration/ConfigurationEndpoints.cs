@@ -27,6 +27,7 @@ public static class ConfigurationEndpoints
         var t = (await tenant.ResolveAsync())!;
         return Results.Ok(new
         {
+            academyCurrency=await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.DefaultCurrency).SingleAsync(),
             canManageMediaRetention=await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t),
             entitlements = await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Feature, x.Enabled, x.PlanCode }).ToListAsync(),
             versions = (await db.AcademyConfigurationVersions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.Revision).Take(50).ToListAsync()).Select(x => new { x.Id, x.Revision, x.State, x.ContentHash, x.Version, x.EffectiveAtUtc, settings = AcademyRuntimeSettings.Read(x.Payload) }),
