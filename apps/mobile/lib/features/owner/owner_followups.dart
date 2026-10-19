@@ -210,10 +210,9 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
   late final identity = followUpContext(widget.auth);
   Json? options, data;
   String? from, to;
-  String state = 'Open', branch = '', error = '', busy = '';
+  String state = 'Open', branch = '', error = '';
   int generation = 0;
   bool initialized = false, loading = true;
-  String? draft, requestId;
   @override
   void initState() {
     super.initState();
@@ -287,42 +286,6 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
     }
   }
 
-  Future<void> create(Json c) async {
-    if (busy.isNotEmpty) {
-      return;
-    }
-    final s = obj(c['source']),
-        body = {'trainingGroupId': s['groupId'], 'condition': c['condition']},
-        serialized = jsonEncode(body);
-    if (draft != serialized) {
-      draft = serialized;
-      requestId = followUpRequestId();
-    }
-    setState(() => busy = '${s['groupId']}:${c['condition']}');
-    try {
-      final r = obj(
-        await widget.auth.request(
-          'POST',
-          '/api/v1/manage/owner-followups/',
-          body: {...body, 'requestId': requestId},
-        ),
-      );
-      if (mounted && identity == followUpContext(widget.auth)) {
-        await open(textOf(r['id']));
-      }
-    } catch (e) {
-      if (mounted && identity == followUpContext(widget.auth)) {
-        setState(
-          () => error = e is ApiFailure ? e.message : 'تعذر حفظ المتابعة.',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => busy = '');
-      }
-    }
-  }
-
   Future<void> dateFilter(bool start) async {
     final picked = await showDatePicker(
       context: context,
@@ -354,7 +317,7 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
         return const SizedBox.shrink();
       }
       return GuardianPage(
-        title: 'متابعات المالك',
+        title: 'المتابعات واتخاذ القرار',
         child: followUpList([
           const UiText(
             'متابعة بشرية مرتبطة بالمصدر، وليست تسوية مالية. يسندها المالك لمسؤول مخول داخل نطاق المجموعة.',
@@ -432,7 +395,7 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
           if (loading) const Center(child: CircularProgressIndicator()),
           if (!loading && data != null) ...[
             const UiText(
-              'المتابعات المحفوظة',
+              'المتابعات واتخاذ القرار',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
             ),
             if (rows(data!['items']).isEmpty)
@@ -467,51 +430,21 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
             if (data!['hasMore'] == true)
               const UiText('أحدث 100 متابعة؛ ضيق الفترة أو الفرع لعرض الباقي.'),
           ],
-          if (options != null) ...[
-            const UiText(
-              'حالات حالية يمكن متابعتها',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-            ),
-            UiText(textOf(options!['rule'])),
-            for (final c in rows(options!['candidates']).where(
-              (c) => branch.isEmpty || obj(c['source'])['branchId'] == branch,
-            ))
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      UiText(textOf(obj(c['source'])['name'])),
-                      UiText(followUpConditions[c['condition']] ?? ''),
-                      if (c['condition'] == 'GroupSessionCoverage')
-                        coverageSummary(obj(c['source'])),
-                      if (c['condition'] == 'GroupEvaluationDrafts')
-                        evaluationDraftSummary(obj(c['source'])),
-                      if (c['condition'] == 'GroupRecordedAbsences')
-                        recordedAbsenceSummary(obj(c['source'])),
-                      if (c['condition'] == 'GroupOverdueFeedback')
-                        overdueFeedbackSummary(obj(c['source'])),
-                      UiText(
-                        '${obj(c['source'])['enrollments']} تسجيلًا مسندًا · السعة ${obj(c['source'])['capacity'] ?? 'غير محددة'}',
-                      ),
-                      FilledButton(
-                        onPressed: busy.isNotEmpty
-                            ? null
-                            : () => c['activeFollowUpId'] != null
-                                  ? open(textOf(c['activeFollowUpId']))
-                                  : create(c),
-                        child: UiText(
-                          c['activeFollowUpId'] != null
-                              ? 'فتح المتابعة القائمة'
-                              : 'إنشاء متابعة',
-                        ),
-                      ),
-                    ],
-                  ),
+          if (options != null)
+            GLink('إنشاء متابعة', Icons.add_task, () async {
+              final id = await Navigator.of(context).push<String>(
+                MaterialPageRoute(
+                  builder: (_) => OwnerFollowUpCreatePage(auth: widget.auth),
                 ),
-              ),
-          ],
+              );
+              if (id != null &&
+                  mounted &&
+                  identity == followUpContext(widget.auth)) {
+                await open(id);
+              } else if (mounted) {
+                await load();
+              }
+            }, subtitle: 'اختر مصدرًا ومسؤولًا وموعدًا في نموذج واحد'),
         ]),
       );
     },
@@ -812,6 +745,179 @@ class _FollowUpFormState extends State<_FollowUpForm> {
             textOf(obj(jsonDecode(textOf(h['after'])))['ResolutionReason']),
           ),
       ],
+    ]);
+  }
+}
+
+class OwnerFollowUpCreatePage extends StatelessWidget {
+  final AuthController auth;
+  const OwnerFollowUpCreatePage({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: 'إنشاء متابعة',
+    child: OwnerScopedRead(
+      auth: auth,
+      path: '/api/v1/manage/owner-followups/options',
+      builder: (context, value) =>
+          _NewFollowUpForm(auth: auth, data: obj(value)),
+    ),
+  );
+}
+
+class _NewFollowUpForm extends StatefulWidget {
+  final AuthController auth;
+  final Json data;
+  const _NewFollowUpForm({required this.auth, required this.data});
+  @override
+  State<_NewFollowUpForm> createState() => _NewFollowUpFormState();
+}
+
+class _NewFollowUpFormState extends State<_NewFollowUpForm> {
+  late final identity = followUpContext(widget.auth);
+  final note = TextEditingController();
+  String selected = '', owner = '', error = '';
+  String? due, signature, requestId;
+  bool busy = false;
+  @override
+  void dispose() {
+    note.dispose();
+    super.dispose();
+  }
+
+  Future<void> save(Json candidate) async {
+    if (busy) return;
+    final source = obj(candidate['source']),
+        body = {
+          'trainingGroupId': source['groupId'],
+          'condition': candidate['condition'],
+          'assignedToMembershipId': owner.isEmpty ? null : owner,
+          'dueOn': due,
+          'note': note.text.trim().isEmpty ? null : note.text.trim(),
+        },
+        encoded = jsonEncode(body);
+    if (signature != encoded) {
+      signature = encoded;
+      requestId = followUpRequestId();
+    }
+    setState(() => busy = true);
+    try {
+      final saved = obj(
+        await widget.auth.request(
+          'POST',
+          '/api/v1/manage/owner-followups/',
+          body: {...body, 'requestId': requestId},
+        ),
+      );
+      if (mounted && identity == followUpContext(widget.auth)) {
+        Navigator.of(context).pop(textOf(saved['id']));
+      }
+    } catch (e) {
+      if (mounted && identity == followUpContext(widget.auth)) {
+        setState(
+          () => error = e is ApiFailure
+              ? e.message
+              : 'تعذر تأكيد حفظ المتابعة؛ أعد نفس الطلب.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final candidates = rows(widget.data['candidates']),
+        candidate = candidates
+            .where(
+              (c) =>
+                  '${obj(c['source'])['groupId']}:${c['condition']}' ==
+                  selected,
+            )
+            .firstOrNull;
+    return followUpList([
+      if (error.isNotEmpty) UiText(error),
+      DropdownButtonFormField<String>(
+        initialValue: selected,
+        decoration: const InputDecoration(labelText: 'مصدر المتابعة'),
+        items: [
+          const DropdownMenuItem(
+            value: '',
+            child: UiText('اختر حالة تشغيل فعلية'),
+          ),
+          for (final c in candidates)
+            DropdownMenuItem(
+              value: '${obj(c['source'])['groupId']}:${c['condition']}',
+              child: UiText(
+                '${obj(c['source'])['name']} · ${followUpConditions[c['condition']]}',
+              ),
+            ),
+        ],
+        onChanged: busy
+            ? null
+            : (v) => setState(() {
+                selected = v ?? '';
+                owner = '';
+              }),
+      ),
+      if (candidates.isEmpty)
+        const UiText('لا توجد حالات تشغيل تنطبق عليها القواعد الحالية.'),
+      if (candidate != null) ...[
+        if (candidate['activeFollowUpId'] != null)
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context)
+                    .pop(textOf(candidate['activeFollowUpId'])),
+            child: const UiText('فتح المتابعة القائمة'),
+          )
+        else ...[
+          DropdownButtonFormField<String>(
+            key: ValueKey(selected),
+            initialValue: owner,
+            decoration: const InputDecoration(labelText: 'المسؤول'),
+            items: [
+              const DropdownMenuItem(value: '', child: UiText('غير مسند الآن')),
+              for (final o in rows(widget.data['owners']))
+                DropdownMenuItem(
+                  value: textOf(o['id']),
+                  child: UiText(textOf(o['name'])),
+                ),
+            ],
+            onChanged: busy ? null : (v) => setState(() => owner = v ?? ''),
+          ),
+          OutlinedButton(
+            onPressed: busy
+                ? null
+                : () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null &&
+                        mounted &&
+                        identity == followUpContext(widget.auth)) {
+                      setState(
+                        () => due = date.toIso8601String().split('T').first,
+                      );
+                    }
+                  },
+            child: UiText('موعد المتابعة: ${due ?? 'لم يحدد'}'),
+          ),
+          TextField(
+            controller: note,
+            maxLength: 500,
+            maxLines: 3,
+            enabled: !busy,
+            decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)'),
+          ),
+          FilledButton(
+            onPressed: busy ? null : () => save(candidate),
+            child: UiText(busy ? 'جارٍ الحفظ…' : 'حفظ المتابعة'),
+          ),
+        ],
+      ],
+      const UiText('لا تحصيل أو تغيير حضور أو نشر تقييم من إنشاء متابعة.'),
     ]);
   }
 }
