@@ -249,6 +249,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('تغيير موعد تجريبي'), findsOneWidget);
       expect(find.text('تسجيل المراجعة'), findsOneWidget);
+      await tester.ensureVisible(find.text('الرد والحل'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('الرد والحل'));
       await tester.pumpAndSettle();
       await tester.enterText(

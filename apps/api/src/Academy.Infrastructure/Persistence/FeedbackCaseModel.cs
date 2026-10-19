@@ -18,6 +18,9 @@ public sealed partial class FoundationDbContext
         c.Property(x => x.InternalNote).HasMaxLength(500); c.Property(x => x.PublicResponse).HasMaxLength(500);
         c.HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.InvestigatorMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         var f = b.Entity<GuardianFeedback>();
+        f.Property(x => x.IncidentSessionEvidence).HasMaxLength(10000);
+        f.HasOne<Academy.Infrastructure.Attendance.TrainingSession>().WithMany().HasForeignKey(x => new { x.AcademyId, x.IncidentTrainingSessionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        f.ToTable(t => t.HasCheckConstraint("CK_Feedback_IncidentSession", "(\"IncidentTrainingSessionId\" IS NULL) = (\"IncidentSessionEvidence\" IS NULL) AND (\"IncidentTrainingSessionId\" IS NULL OR (\"IncidentOn\" IS NOT NULL AND \"Kind\" <> 'Rating'))"));
         f.Property(x => x.ReportedSubject).HasMaxLength(16); f.Property(x => x.Subject).HasMaxLength(16);
         f.Property(x => x.ReportedUrgency).HasMaxLength(16); f.Property(x => x.Urgency).HasMaxLength(16);
         c.Property(x => x.BeforeSubject).HasMaxLength(16); c.Property(x => x.AfterSubject).HasMaxLength(16);

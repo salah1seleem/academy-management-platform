@@ -33,7 +33,7 @@ public static class GroupMediaPrivacy
             (a.NoRecognizableChildren||db.PrivateAssetAudiences.Any(s=>s.AssetId==a.Id&&s.IsSubject))&&
             !db.PrivateAssetAudiences.Any(s=>s.AssetId==a.Id&&s.IsSubject&&(!links.Any(l=>l.PlayerId==s.PlayerId)||links.Any(l=>l.PlayerId==s.PlayerId&&!db.PrivateMediaConsentBases.Any(b=>b.AssetId==a.Id&&b.PlayerId==s.PlayerId&&current.Any(c=>c.Id==b.ConsentId&&c.GuardianPlayerLinkId==l.Id))))));
     }
-    private static async Task<DateTimeOffset> EventEnd(FoundationDbContext db,Guid academy,DateOnly day)
+    internal static async Task<DateTimeOffset> EventEnd(FoundationDbContext db,Guid academy,DateOnly day)
     {
         var zone=TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(a=>a.Id==academy).Select(a=>a.TimeZone).SingleAsync());
         return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(day.AddDays(1).ToDateTime(TimeOnly.MinValue),zone));

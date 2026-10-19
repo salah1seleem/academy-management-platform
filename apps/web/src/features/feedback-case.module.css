@@ -1,4 +1,9 @@
 .form { display: grid; gap: 1rem; max-width: 48rem; }
+.incidentEvidence { display: grid; gap: .75rem; min-width: 0; padding: 1rem; margin-block: .8rem; border: 1px solid var(--border, #dce5e9); border-radius: 14px; background: var(--surface-subtle, #f8fafc); line-height: 1.8; overflow-wrap: anywhere; }
+.incidentEvidence h3 { margin: 0; font-size: 1rem; white-space: normal; }
+.incidentEvidence p { margin: 0; font-size: .9rem; }
+.incidentEvidence bdi { display: inline-block; direction: ltr; white-space: nowrap; }
+.incidentEvidence small { color: var(--muted, #60717b); font-size: .8rem; }
 .form label { display: grid; gap: .5rem; font-weight: 600; }
 .form select, .form textarea { width: 100%; min-height: 48px; border: 1px solid var(--border, #ced7dd); border-radius: 12px; padding: .75rem; font: inherit; background: var(--surface, white); color: inherit; }
 .form button { justify-self: start; }

@@ -7,9 +7,10 @@ import { feedbackStates, feedbackTransitions } from "./feedback-state";
 import styles from "./feedback-case.module.css";
 import { FeedbackAssignment } from "./feedback-investigations";
 import { FeedbackTriage, feedbackSubjects, feedbackUrgencies } from "./feedback-triage";
+import { FeedbackIncidentEvidence } from "./feedback-incident";
 
 export type FeedbackDetail = { id: string; kind: string; score: number | null; message: string; status: string; dueOn: string | null; overdue: boolean;
-  subject?: string | null; urgency?: string | null; reportedSubject?: string | null; reportedUrgency?: string | null; incidentOn?: string | null; triagedAtUtc?: string | null; safety?: boolean;
+  subject?: string | null; urgency?: string | null; reportedSubject?: string | null; reportedUrgency?: string | null; incidentOn?: string | null; triagedAtUtc?: string | null; safety?: boolean; incidentSessionEvidence?: string | null;
   investigatorMembershipId?: string | null; investigationBrief?: string | null; investigatorName?: string | null;
   ownerResponse: string | null; createdAtUtc: string; reviewedAtUtc: string | null; respondedAtUtc: string | null; playerId: string; playerName: string | null;
   trainingGroupId: string; groupName: string | null; branchName: string | null; coachName: string | null;
@@ -55,6 +56,7 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
       <SectionCard title={kinds[item.kind] ?? "ملاحظة"}>
         <p>{item.playerName ?? "اللاعب غير متاح"} · {item.groupName} · {item.branchName}</p><p>المدرب المذكور: {item.coachName ?? "لم يحدد"}</p>
         <p>{item.score ? `${item.score}/5 · ` : ""}{item.message || "لا يوجد نص إضافي"}</p>
+        <FeedbackIncidentEvidence evidence={item.incidentSessionEvidence}/>
         {item.kind !== "Rating" && <><p>عند التقديم: {feedbackSubjects[item.reportedSubject ?? ""] ?? "لم يصنف وقتها"} · {feedbackUrgencies[item.reportedUrgency ?? ""] ?? "لم يحدد"} · الواقعة: <bdi>{item.incidentOn ?? "غير محددة"}</bdi></p><p>مراجعة الإدارة: {feedbackSubjects[item.subject ?? ""] ?? "لم تصنف بعد"} · {feedbackUrgencies[item.urgency ?? ""] ?? "لم تحدد"}</p>{item.safety && <p role="note">بلاغ سلامة يحتاج متابعة بشرية، وليس إثبات خطأ أو حكمًا آليًا.{!item.triagedAtUtc && " لم يؤكد الفرز البشري بعد."}</p>}</>}
         <p>الحالة: <strong>{feedbackStates[item.status] ?? "غير متاحة"}</strong></p>
         <p>موعد المتابعة: <bdi>{item.dueOn ?? "لم يحدد"}</bdi>{item.overdue ? " · تجاوزت الموعد المحدد" : ""}</p>

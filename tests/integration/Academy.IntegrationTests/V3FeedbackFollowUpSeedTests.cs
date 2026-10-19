@@ -11,6 +11,14 @@ namespace Academy.IntegrationTests;
 [Collection("Tenant authentication database")]
 public sealed class V3FeedbackFollowUpSeedTests
 {
+    [Fact] public async Task Feedback_incident_seed_is_optional_idempotent_preserves_review_and_refuses_production()
+    {
+        await using var factory=new Factory(); using var client=factory.CreateClient(); await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var env=new HostingEnvironment{EnvironmentName="Demo"}; var options=new DemoOptions{SeedEnabled=true,SeedProfile="Football"}; var notices=await db.AcademyNotices.CountAsync(); var money=await db.Collections.CountAsync();
+        await FeedbackFollowUpDemoSeed.SeedIncident(db,env,options); var id=FootballDemoSeed.Id("feedback-incident-demo/0"); var f=await db.GuardianFeedbacks.SingleAsync(f=>f.Id==id); Assert.NotNull(f.IncidentTrainingSessionId); Assert.NotNull(f.IncidentSessionEvidence); var old=f.Status; f.Status="Reviewed"; await db.SaveChangesAsync();
+        try { await FeedbackFollowUpDemoSeed.SeedIncident(db,env,options); Assert.Equal("Reviewed",(await db.GuardianFeedbacks.AsNoTracking().SingleAsync(f=>f.Id==id)).Status); Assert.Equal(notices,await db.AcademyNotices.CountAsync()); Assert.Equal(money,await db.Collections.CountAsync()); await Assert.ThrowsAsync<InvalidOperationException>(()=>FeedbackFollowUpDemoSeed.SeedIncident(db,new HostingEnvironment{EnvironmentName="Production"},options)); }
+        finally {f.Status=old; await db.SaveChangesAsync();}
+    }
     [Fact] public async Task Feedback_triage_seed_is_optional_preserves_manual_review_and_refuses_production()
     {
         await using var factory = new Factory(); using var client = factory.CreateClient(); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();

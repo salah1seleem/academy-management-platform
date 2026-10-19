@@ -17,6 +17,7 @@ public static partial class GuardianFeedbackEndpoints
     {
         var guardian = app.MapGroup("/api/v1/guardian/children/{playerId:guid}").RequireAuthorization(AcademyPermissions.GuardianChildrenRead);
         guardian.MapGet("/feedback-options", Options);
+        guardian.MapGet("/feedback-incidents", IncidentOptions);
         guardian.MapPost("/feedback", Submit).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("guardian-feedback");
         var owner = app.MapGroup("/api/v1/manage/feedback").RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
         owner.MapGet("/", List);
@@ -54,7 +55,7 @@ public static partial class GuardianFeedbackEndpoints
             .Select(a => new { a.TrainingGroupId, id = a.AcademyMembershipId, name = a.AcademyMembership.User.DisplayName }).ToArrayAsync();
         var groups = groupRows.Select(g => new { g.id, g.name, g.sport, coaches = assigned.Where(a => a.TrainingGroupId == g.id).Select(a => new { a.id, a.name }).Distinct().ToArray() }).ToArray();
         var mine = await db.GuardianFeedbacks.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.GuardianUserId == actor)
-            .OrderByDescending(x => x.CreatedAtUtc).Take(30).Select(x => new { x.Id, x.Kind, x.CoachMembershipId, x.TrainingGroupId, x.Score, x.Message, x.Status, x.OwnerResponse, x.RespondedAtUtc, x.PeriodMonth, x.CreatedAtUtc, x.ReportedSubject, x.ReportedUrgency, x.IncidentOn }).ToArrayAsync();
+            .OrderByDescending(x => x.CreatedAtUtc).Take(30).Select(x => new { x.Id, x.Kind, x.CoachMembershipId, x.TrainingGroupId, x.Score, x.Message, x.Status, x.OwnerResponse, x.RespondedAtUtc, x.PeriodMonth, x.CreatedAtUtc, x.ReportedSubject, x.ReportedUrgency, x.IncidentOn, x.IncidentTrainingSessionId }).ToArrayAsync();
         return Results.Ok(new { periodMonth, asOfDate = DateOnly.FromDateTime(local.DateTime), groups, mine });
     }
 
@@ -67,7 +68,7 @@ public static partial class GuardianFeedbackEndpoints
         var message = body.Message?.Trim() ?? "";
         var subject = body.Kind == "Rating" ? null : body.Subject ?? "Other";
         var urgency = body.Kind == "Rating" ? null : body.Urgency ?? "Routine";
-        if (body.Kind == "Rating" && (body.Subject != null || body.Urgency != null || body.IncidentOn != null) || body.Kind != "Rating" && (!FeedbackSubjects.Contains(subject!) || !FeedbackUrgencies.Contains(urgency!)) || body.IncidentOn.HasValue && (body.IncidentOn == DateOnly.MinValue || body.IncidentOn > await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock)))
+        if (body.IncidentSessionId.HasValue && (body.Kind == "Rating" || !body.IncidentOn.HasValue) || body.Kind == "Rating" && (body.Subject != null || body.Urgency != null || body.IncidentOn != null) || body.Kind != "Rating" && (!FeedbackSubjects.Contains(subject!) || !FeedbackUrgencies.Contains(urgency!)) || body.IncidentOn.HasValue && (body.IncidentOn == DateOnly.MinValue || body.IncidentOn > await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock)))
             return Results.UnprocessableEntity(new { message = "اختر موضوعًا واستعجالًا صحيحين، وتاريخ واقعة لا يتجاوز اليوم الفعلي." });
         if (key.Length is < 8 or > 100 || body.Kind is not ("Rating" or "Complaint" or "Suggestion") || message.Length > 500 ||
             body.Kind == "Rating" && (body.CoachMembershipId is null || body.Score is < 1 or > 5 || body.Score is null) ||
@@ -77,23 +78,34 @@ public static partial class GuardianFeedbackEndpoints
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"guardian-feedback:{t.AcademyId}:{actor}:{key}"}, 0))");
         var previous = await db.GuardianFeedbacks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.GuardianUserId == actor && x.IdempotencyKey == key);
         if (previous is not null)
-            return previous.PlayerId == playerId && previous.Kind == body.Kind && previous.TrainingGroupId == body.TrainingGroupId && previous.CoachMembershipId == body.CoachMembershipId && previous.Score == body.Score && previous.Message == message && previous.IncidentOn == body.IncidentOn
+            return previous.PlayerId == playerId && previous.Kind == body.Kind && previous.TrainingGroupId == body.TrainingGroupId && previous.CoachMembershipId == body.CoachMembershipId && previous.Score == body.Score && previous.Message == message && previous.IncidentOn == body.IncidentOn && previous.IncidentTrainingSessionId == body.IncidentSessionId
                 && (previous.ReportedSubject == subject || previous.ReportedSubject == null && body.Subject == null) && (previous.ReportedUrgency == urgency || previous.ReportedUrgency == null && body.Urgency == null)
                 ? Results.Ok(new { previous.Id, replay = true }) : Results.Conflict(new { message = "هذا المفتاح استُخدم لطلب مختلف." });
+        if (body.IncidentSessionId.HasValue) {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"timetable:{t.AcademyId}:{body.TrainingGroupId}"},0))");
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-capacity:{t.AcademyId}:{body.TrainingGroupId}"},0))");
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"GuardianPlayerLinks\" WHERE \"AcademyId\"={t.AcademyId} AND \"PlayerId\"={playerId} AND \"IsActive\" FOR SHARE");
+            if (!await Linked(db,t.AcademyId,actor,playerId)) return Results.NotFound();
+        }
+        var incident = body.IncidentSessionId.HasValue ? (await IncidentSessions(db, t.AcademyId, playerId, body.IncidentOn!.Value)).SingleOrDefault(s => s.Id == body.IncidentSessionId && s.GroupId == body.TrainingGroupId) : null;
+        if (body.IncidentSessionId.HasValue && (incident == null || body.CoachMembershipId.HasValue && !incident.Coaches.Any(c => c.Id == body.CoachMembershipId))) return Results.NotFound();
         var enrollment = await db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive && x.Status == EnrollmentStatus.Active && x.TrainingGroupId == body.TrainingGroupId && x.TrainingGroup!.IsActive)
             .Select(x => new { x.BranchId }).FirstOrDefaultAsync();
-        if (enrollment is null) return Results.NotFound();
-        if (body.CoachMembershipId.HasValue && !await db.StaffGroupAssignments.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == body.TrainingGroupId && x.AcademyMembershipId == body.CoachMembershipId && x.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.Role == AcademyRole.Coach)) return Results.NotFound();
+        if (incident == null && enrollment is null) return Results.NotFound();
+        if (incident == null && body.CoachMembershipId.HasValue && !await db.StaffGroupAssignments.AnyAsync(x => x.AcademyId == t.AcademyId && x.TrainingGroupId == body.TrainingGroupId && x.AcademyMembershipId == body.CoachMembershipId && x.IsActive && x.AcademyMembership.IsActive && x.AcademyMembership.Role == AcademyRole.Coach)) return Results.NotFound();
         var zone = await db.Academies.Where(x => x.Id == t.AcademyId).Select(x => x.TimeZone).SingleAsync();
         var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(zone));
         var period = new DateOnly(local.Year, local.Month, 1);
         if (body.Kind == "Rating" && await db.GuardianFeedbacks.AnyAsync(x => x.AcademyId == t.AcademyId && x.Kind == "Rating" && x.GuardianUserId == actor && x.PlayerId == playerId && x.CoachMembershipId == body.CoachMembershipId && x.PeriodMonth == period))
             return Results.Conflict(new { message = "أرسلت تقييمًا لهذا المدرب وهذا الطفل خلال الشهر الحالي بالفعل." });
         var now = clock.GetUtcNow();
+        var evidence = incident == null ? null : IncidentSnapshot(incident, body.CoachMembershipId);
+        if (evidence?.Length > 10000) return Results.UnprocessableEntity(new { message = "سجل الحصة يتجاوز حد المراجعة؛ اختر ملاحظة عامة لتراجع الإدارة التفاصيل." });
         var feedback = new GuardianFeedback { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = playerId, GuardianUserId = actor,
-            BranchId = enrollment.BranchId, TrainingGroupId = body.TrainingGroupId, CoachMembershipId = body.CoachMembershipId,
+            BranchId = incident?.BranchId ?? enrollment!.BranchId, TrainingGroupId = body.TrainingGroupId, CoachMembershipId = body.CoachMembershipId,
             Kind = body.Kind, Score = body.Score, Message = message, PeriodMonth = period, Status = "Open", IdempotencyKey = key,
             Subject = subject, ReportedSubject = subject, Urgency = urgency, ReportedUrgency = urgency, IncidentOn = body.IncidentOn,
+            IncidentTrainingSessionId = body.IncidentSessionId, IncidentSessionEvidence = evidence,
             CreatedAtUtc = now, UpdatedAtUtc = now };
         db.GuardianFeedbacks.Add(feedback);
         if (urgency == "Safety")
@@ -120,7 +132,7 @@ public static partial class GuardianFeedbackEndpoints
                 actorName = db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.Id == c.ActorMembershipId).Select(m => m.User.DisplayName).FirstOrDefault() }).ToArrayAsync();
         var timeZone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
         return Results.Ok(new { asOfDate = today, timeZone, item.Id, item.Version, item.Kind, item.Score, item.Message, item.Status, item.DueOn,
-            item.Subject, item.Urgency, item.ReportedSubject, item.ReportedUrgency, item.IncidentOn, item.TriagedAtUtc,
+            item.Subject, item.Urgency, item.ReportedSubject, item.ReportedUrgency, item.IncidentOn, item.TriagedAtUtc, item.IncidentTrainingSessionId, item.IncidentSessionEvidence,
             safety = item.Urgency == "Safety" || item.ReportedUrgency == "Safety",
             item.InvestigationId, item.InvestigatorMembershipId, item.InvestigationBrief,
             investigatorName = await db.AcademyMemberships.Where(m => m.Id == item.InvestigatorMembershipId).Select(m => m.User.DisplayName).FirstOrDefaultAsync(),
@@ -215,6 +227,6 @@ public static partial class GuardianFeedbackEndpoints
     }
 }
 
-public sealed record FeedbackWrite(Guid TrainingGroupId, Guid? CoachMembershipId, string Kind, int? Score, string? Message, string? Subject = null, string? Urgency = null, DateOnly? IncidentOn = null);
+public sealed record FeedbackWrite(Guid TrainingGroupId, Guid? CoachMembershipId, string Kind, int? Score, string? Message, string? Subject = null, string? Urgency = null, DateOnly? IncidentOn = null, Guid? IncidentSessionId = null);
 public sealed record FeedbackResolution(string? Response);
 public sealed record FeedbackDueDate(DateOnly DueOn);

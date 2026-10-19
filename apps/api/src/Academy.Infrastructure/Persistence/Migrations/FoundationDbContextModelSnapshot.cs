@@ -5954,6 +5954,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("IncidentOn")
                         .HasColumnType("date");
 
+                    b.Property<string>("IncidentSessionEvidence")
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)");
+
+                    b.Property<Guid?>("IncidentTrainingSessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("InvestigationBrief")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -6055,6 +6062,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcademyId", "CoachMembershipId");
 
+                    b.HasIndex("AcademyId", "IncidentTrainingSessionId");
+
                     b.HasIndex("AcademyId", "InvestigationId")
                         .IsUnique();
 
@@ -6075,6 +6084,8 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.ToTable("GuardianFeedbacks", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Feedback_IncidentSession", "(\"IncidentTrainingSessionId\" IS NULL) = (\"IncidentSessionEvidence\" IS NULL) AND (\"IncidentTrainingSessionId\" IS NULL OR (\"IncidentOn\" IS NOT NULL AND \"Kind\" <> 'Rating'))");
+
                             t.HasCheckConstraint("CK_Feedback_Investigation", "(\"InvestigationId\" IS NULL AND \"InvestigatorMembershipId\" IS NULL AND \"InvestigationBrief\" IS NULL) OR (\"Kind\" <> 'Rating' AND \"InvestigationId\" IS NOT NULL AND \"InvestigatorMembershipId\" IS NOT NULL AND \"InvestigationBrief\" IS NOT NULL AND length(btrim(\"InvestigationBrief\")) BETWEEN 5 AND 500)");
 
                             t.HasCheckConstraint("CK_Feedback_Triage", "(\"Subject\" IS NULL) = (\"Urgency\" IS NULL) AND (\"ReportedSubject\" IS NULL) = (\"ReportedUrgency\" IS NULL) AND (\"Subject\" IS NULL OR \"Subject\" IN ('Coach','Schedule','Administration','Facility','Water','Payment','Other')) AND (\"ReportedSubject\" IS NULL OR \"ReportedSubject\" IN ('Coach','Schedule','Administration','Facility','Water','Payment','Other')) AND (\"Urgency\" IS NULL OR \"Urgency\" IN ('Routine','Urgent','Safety')) AND (\"ReportedUrgency\" IS NULL OR \"ReportedUrgency\" IN ('Routine','Urgent','Safety')) AND (\"TriagedAtUtc\" IS NULL) = (\"TriagedByMembershipId\" IS NULL) AND (\"TriagedAtUtc\" IS NULL OR \"Subject\" IS NOT NULL) AND (\"Kind\" <> 'Rating' OR (\"Subject\" IS NULL AND \"ReportedSubject\" IS NULL AND \"IncidentOn\" IS NULL AND \"TriagedAtUtc\" IS NULL))");
@@ -16118,6 +16129,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
                         .WithMany()
                         .HasForeignKey("AcademyId", "CoachMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Academy.Infrastructure.Attendance.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "IncidentTrainingSessionId")
                         .HasPrincipalKey("AcademyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 

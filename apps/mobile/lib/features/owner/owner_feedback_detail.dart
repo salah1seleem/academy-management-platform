@@ -9,6 +9,7 @@ import '../guardian/guardian_ui.dart';
 import '../shared/feedback_state.dart';
 import '../shared/feedback_investigations.dart';
 import 'feedback_triage.dart';
+import '../shared/feedback_incident.dart';
 
 class OwnerFeedbackDetail extends StatefulWidget {
   final AuthController auth;
@@ -127,6 +128,9 @@ class _OwnerFeedbackDetailState extends State<OwnerFeedbackDetail>
                 '${item['playerName'] ?? 'اللاعب غير متاح'} · ${item['groupName']} · ${item['branchName']}',
               ),
               UiText(textOf(item['message'])),
+              FeedbackIncidentEvidence(
+                evidence: item['incidentSessionEvidence'] as String?,
+              ),
               if (item['kind'] != 'Rating') ...[
                 UiText(
                   'عند التقديم: ${feedbackSubjects[item['reportedSubject']] ?? 'لم يصنف وقتها'} · ${feedbackUrgencies[item['reportedUrgency']] ?? 'لم يحدد'} · الواقعة: ${item['incidentOn'] ?? 'غير محددة'}',

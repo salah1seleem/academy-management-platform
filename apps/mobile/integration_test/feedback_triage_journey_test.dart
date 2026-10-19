@@ -112,6 +112,37 @@ void main() {
       await select('نوع الملاحظة', 'شكوى');
       await select('موضوع الملاحظة', 'المياه');
       await select('درجة الاستعجال', 'سلامة أو إساءة');
+      const day = '2026-09-28';
+      final occurrence = rows(
+        obj(
+          await family.request(
+            'GET',
+            '/api/v1/guardian/children/$child/feedback-incidents?incidentOn=$day',
+          ),
+        )['sessions'],
+      ).first;
+      final date = find.textContaining('تاريخ الواقعة (اختياري):');
+      await scroll(date, 200);
+      await t.tap(date);
+      await t.pumpAndSettle();
+      await t.tap(find.byIcon(Icons.edit_outlined));
+      await t.pumpAndSettle();
+      final locale = MaterialLocalizations.of(
+        t.element(find.byType(DatePickerDialog)),
+      );
+      await t.enterText(
+        find.descendant(
+          of: find.byType(DatePickerDialog),
+          matching: find.byType(TextField),
+        ),
+        locale.formatCompactDate(DateTime.parse(day)),
+      );
+      await t.tap(find.text(locale.okButtonLabel));
+      await t.pumpAndSettle();
+      await select(
+        'الحصة المرتبطة (اختياري)',
+        '${occurrence['groupName']} · ${textOf(occurrence['startTime']).substring(0, 5)}–${textOf(occurrence['endTime']).substring(0, 5)}',
+      );
       final text =
           'بلاغ سلامة اصطناعي في رحلة المحاكي ${followUpRequestId().substring(0, 8)}';
       final field = find.widgetWithText(TextFormField, 'اكتب الملاحظة');
@@ -135,6 +166,7 @@ void main() {
       final id = textOf(created['id']);
       expect(created['reportedUrgency'], 'Safety');
       expect(created['reportedSubject'], 'Water');
+      expect(created['incidentTrainingSessionId'], occurrence['id']);
       expect(created['coachMembershipId'], isNull);
       expect(await safetyCount(), before + 1);
       await t.pumpWidget(shell(OwnerFeedbackDetail(auth: owner, id: id)));
@@ -166,6 +198,12 @@ void main() {
       final record = obj(
         await owner.request('GET', '/api/v1/manage/feedback/$id'),
       );
+      expect(record['incidentTrainingSessionId'], occurrence['id']);
+      final occurrenceEvidence = find.text('الحصة المرتبطة وقت تقديم الملاحظة');
+      await scroll(occurrenceEvidence, -250);
+      if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+        await binding.takeScreenshot('phase-incident-context-ios');
+      }
       expect(record['reportedUrgency'], 'Safety');
       expect(record['urgency'], 'Routine');
       expect(record['safety'], isTrue);

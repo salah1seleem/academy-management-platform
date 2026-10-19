@@ -18,6 +18,7 @@ it("owner confirms triage with an optional private note and a stable retry inten
 it("guardian submits a safety report with incident date and no accusation, preserving the key on retry", async () => {
   const posts: { body: object; key: string | undefined }[] = [];
   global.fetch = vi.fn(async (path, init) => {
+    if (String(path).includes("feedback-incidents?")) return Response.json({ sessions: [], notice: "لا نخمن المدرب الحالي", hasMore: false });
     if (String(path).endsWith("/csrf")) return Response.json({ token: "qa" });
     if (init?.method === "POST") { expect(String(path)).toBe("/api/v1/guardian/children/child/feedback"); posts.push({ body: JSON.parse(String(init.body)), key: (init.headers as Record<string, string>)["Idempotency-Key"] }); return posts.length === 1 ? Response.json({ message: "تعذر الإرسال الآن." }, { status: 503 }) : Response.json({ id: "f" }); }
     return Response.json({ asOfDate: "2026-10-19", groups: [{ id: "g", name: "مجموعة اصطناعية", coaches: [] }], mine: [] });

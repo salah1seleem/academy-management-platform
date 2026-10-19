@@ -6,6 +6,18 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Demo;
 public static class FeedbackFollowUpDemoSeed
 {
+    public static async Task SeedIncident(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
+    {
+        var a=FootballDemoSeed.AcademyId; var child=FootballDemoSeed.Id("player/0"); var id=FootballDemoSeed.Id("feedback-incident-demo/0");
+        if(!env.IsEnvironment("Demo") || !options.SeedEnabled || options.SeedProfile!="Football" || !await db.Academies.AnyAsync(x=>x.Id==a && x.Slug==FootballDemoSeed.Slug && x.EnglishName==FootballDemoSeed.Marker)) throw new InvalidOperationException("سياق الحصة الاصطناعي يتطلب Football Demo معلوم الهوية.");
+        await using var tx=await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"football-feedback-incident-demo"},0))");
+        if(await db.GuardianFeedbacks.AnyAsync(f=>f.Id==id)) return;
+        var day=new DateOnly(2026,9,28); var session=(await Academy.Api.Operations.GuardianFeedbackEndpoints.IncidentSessions(db,a,child,day)).FirstOrDefault() ?? throw new InvalidOperationException("لا توجد حصة ديمو مؤرخة صالحة؛ لن نختلق إسنادًا تاريخيًا.");
+        var guardian=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==a && l.PlayerId==child && l.IsActive).Select(l=>l.Guardian.UserId).SingleAsync();
+        var at=DateTimeOffset.Parse("2026-10-08T06:00:00Z");
+        db.GuardianFeedbacks.Add(new(){Id=id,AcademyId=a,PlayerId=child,GuardianUserId=guardian,BranchId=session.BranchId,TrainingGroupId=session.GroupId,Kind="Complaint",Message="ملاحظة اصطناعية مرتبطة بحصة الديمو، دون اتهام مدرب أو إثبات حضور.",Status="Open",Subject="Schedule",ReportedSubject="Schedule",Urgency="Routine",ReportedUrgency="Routine",IncidentOn=day,IncidentTrainingSessionId=session.Id,IncidentSessionEvidence=Academy.Api.Operations.GuardianFeedbackEndpoints.IncidentSnapshot(session,null),PeriodMonth=new(2026,10,1),IdempotencyKey="feedback-incident-demo/0",CreatedAtUtc=at,UpdatedAtUtc=at});
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+    }
     public static async Task SeedTriage(FoundationDbContext db, IHostEnvironment env, DemoOptions options)
     {
         var a = FootballDemoSeed.AcademyId;

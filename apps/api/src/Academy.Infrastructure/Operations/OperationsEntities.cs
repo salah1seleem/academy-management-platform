@@ -179,6 +179,8 @@ public sealed class GuardianFeedback : TenantEntity
     public string? ReportedSubject { get; set; }
     public string? ReportedUrgency { get; set; }
     public DateOnly? IncidentOn { get; set; }
+    public Guid? IncidentTrainingSessionId { get; set; }
+    public string? IncidentSessionEvidence { get; set; }
     public string? Subject { get; set; }
     public string? Urgency { get; set; }
     public Guid? TriagedByMembershipId { get; set; }
