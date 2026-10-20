@@ -32,6 +32,7 @@ flutter:
     - assets/branding/
     - assets/demo/
     - assets/demo/nutrition/
+    - assets/demo/portraits/
   fonts:
     - family: Cairo
       fonts:

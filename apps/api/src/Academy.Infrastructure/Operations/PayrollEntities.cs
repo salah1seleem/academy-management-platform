@@ -14,6 +14,7 @@ public sealed class Employee : TenantEntity
     public DateOnly ContractStart { get; set; }
     public DateOnly? ContractEnd { get; set; }
     public Guid? PhotoAssetId { get; set; }
+    public string? DemoPortraitReference { get; set; }
 }
 
 public sealed class PayrollReason : TenantEntity

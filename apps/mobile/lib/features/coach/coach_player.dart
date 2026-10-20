@@ -8,7 +8,6 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../guardian/guardian_ui.dart';
-import '../shared/private_media.dart';
 import 'coach_evaluation.dart';
 import '../shared/matches.dart';
 import '../shared/player_goals.dart';
@@ -204,30 +203,8 @@ class CoachPlayerAvatar extends StatelessWidget {
     this.size = 48,
   });
   @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: ClipOval(
-      child: isPrivateAsset(reference)
-          ? PrivateImage(
-              auth: auth,
-              path: reference.toString(),
-              height: size,
-              fallback: Icon(
-                Icons.person_outline_rounded,
-                size: size * .6,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            )
-          : ColoredBox(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: Icon(
-                Icons.person_outline_rounded,
-                color: Theme.of(context).colorScheme.onPrimaryContainer,
-                size: size * .6,
-              ),
-            ),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      PlayerAvatar('', auth: auth, reference: reference, size: size);
 }
 
 bool playerMatches(Json player, String query) {

@@ -40,8 +40,8 @@ internal static class GuardianAbsenceNotice
                 var id = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"academy/absence-three/v1/{academyId:N}/{enrollmentId:N}/{sessionId:N}/{guardian:N}"))[..16]);
                 if (await db.AcademyNotices.AnyAsync(n => n.AcademyId == academyId && n.Id == id, ct)) continue;
                 var now = clock.GetUtcNow();
-                db.AcademyNotices.Add(new AcademyNotice { Id = id, AcademyId = academyId, UserId = guardian,
-                    Message = $"تغيب {child.player} عن آخر 3 حصص متتالية في {child.sport}. راجع المواعيد أو تواصل مع إدارة الأكاديمية.",
+                db.AcademyNotices.Add(new AcademyNotice { Id = id, AcademyId = academyId, UserId = guardian, AudienceRole="Guardian",TargetKind="Contact",TargetId=child.PlayerId,
+                    Message = await Academy.Api.Operations.NoticeText.Render(db,academyId,"Absence",$"تغيب {child.player} عن آخر 3 حصص متتالية في {child.sport}. للتواصل أو تقديم شكوى أو اقتراح افتح التواصل مع الأكاديمية.",child.player),
                     CreatedAtUtc = now, UpdatedAtUtc = now });
             }
         }

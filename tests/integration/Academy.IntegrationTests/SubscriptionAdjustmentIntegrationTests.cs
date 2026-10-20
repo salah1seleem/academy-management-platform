@@ -96,6 +96,24 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
         Assert.Equal(1, await AdjustmentCount(s, SubscriptionAdjustmentType.FreezeStarted));
     }
 
+    [Fact] public async Task V41_current_frozen_subscription_is_not_misclassified_by_its_older_expired_history()
+    {
+        var old=await NewScenario(status:SubscriptionPeriodStatus.Expired,end:Today.AddDays(-1));
+        var current=await AddPaidPeriod(old,Today.AddDays(-1),Today.AddDays(29),SubscriptionPeriodStatus.Active);
+        using var owner=await Staff(DemoSeed.OwnerEmail);
+        var query=$"from=2026-09-01&to={Today:yyyy-MM-dd}";
+        var before=(await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?"+query)).GetProperty("subscriptions");
+        await Freeze(current);
+        var after=(await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?"+query)).GetProperty("subscriptions");
+        Assert.Equal(before.GetProperty("total").GetInt32(),after.GetProperty("total").GetInt32());
+        Assert.Equal(before.GetProperty("active").GetInt32()-1,after.GetProperty("active").GetInt32());
+        Assert.Equal(before.GetProperty("expired").GetInt32(),after.GetProperty("expired").GetInt32());
+        var list=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/subscription-snapshot?state=expired&asOf={Today:yyyy-MM-dd}");
+        Assert.DoesNotContain(list.GetProperty("items").EnumerateArray(),e=>e.GetProperty("id").GetGuid()==current.EnrollmentId);
+        var roster=await owner.GetFromJsonAsync<JsonElement>("/api/v1/people/roster");var row=roster.GetProperty("enrollments").EnumerateArray().Single(e=>e.GetProperty("id").GetGuid()==current.EnrollmentId);
+        Assert.True(row.GetProperty("subscription").GetProperty("frozen").GetBoolean());Assert.False(row.GetProperty("subscription").GetProperty("expired").GetBoolean());
+    }
+
     [Fact] public async Task Duplicate_freeze_command_is_idempotent()
     {
         var s = await NewScenario(); var key = Guid.NewGuid().ToString(); var first = await Freeze(s, key); var second = await Freeze(s, key);

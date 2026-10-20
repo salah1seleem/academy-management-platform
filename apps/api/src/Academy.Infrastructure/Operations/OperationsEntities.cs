@@ -116,6 +116,9 @@ public sealed class ProductSale : TenantEntity
 }
 public sealed class AcademyNotice : TenantEntity
 {
+    public string? AudienceRole { get; set; }
+    public string? TargetKind { get; set; }
+    public Guid? TargetId { get; set; }
     public DateTimeOffset? UrgentUntilUtc { get; set; }
     public Guid? MatchId { get; set; }
     public Guid UserId { get; set; }

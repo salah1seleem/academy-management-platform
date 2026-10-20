@@ -30,7 +30,7 @@ public static class Slice2DashboardEndpoints
         people.MapPut("/guardians/{guardianId:guid}", UpdateGuardian).AddEndpointFilter<CsrfFilter>();
     }
 
-    private static async Task<IResult> ListStructure(string kind, Guid? branchId, CurrentTenant tenant, FoundationDbContext db, TimeProvider time)
+    private static async Task<IResult> ListStructure(string kind, Guid? branchId, DateOnly? from, DateOnly? to, CurrentTenant tenant, FoundationDbContext db, TimeProvider time)
     {
         var current = (await tenant.ResolveAsync())!;
         var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, time);
@@ -54,15 +54,28 @@ public static class Slice2DashboardEndpoints
             "branches" => await db.Branches.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
             "sports" => await db.Sports.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.EnglishName, x.IsActive }).ToListAsync(),
             "categories" => await db.AgeCategories.AsNoTracking().Where(x => x.AcademyId == current.AcademyId).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.ArabicName, x.MinimumBirthYear, x.MaximumBirthYear, x.IsActive }).ToListAsync(),
-            "coaches" => await db.AcademyMemberships.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Role == Infrastructure.Tenancy.AcademyRole.Coach && (!branchId.HasValue || db.StaffGroupAssignments.Any(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive && a.TrainingGroup.BranchId == branchId))).OrderBy(x => x.User.DisplayName).Select(x => new
-            {
-                id = x.Id, arabicName = x.User.DisplayName, x.IsActive,
-                assignedGroups = db.StaffGroupAssignments.Count(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive),
-                groups = db.StaffGroupAssignments.Where(a => a.AcademyId == current.AcademyId && a.AcademyMembershipId == x.Id && a.IsActive && a.TrainingGroup.IsActive).OrderBy(a => a.TrainingGroup.ArabicName).Select(a => new { id = a.TrainingGroupId, name = a.TrainingGroup.ArabicName, branch = a.TrainingGroup.Branch.ArabicName }).ToList()
-            }).ToListAsync(),
+            "coaches" => await CoachesByRating(current.AcademyId,branchId,from??groupDate.AddMonths(-1),to??groupDate,db),
             _ => null
         };
         return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+
+
+    private static async Task<object> CoachesByRating(Guid academy,Guid? branch,DateOnly from,DateOnly to,FoundationDbContext db)
+    {
+        if(from>to||to.DayNumber-from.DayNumber>366)return Array.Empty<object>();
+        var zone=await db.Academies.Where(a=>a.Id==academy).Select(a=>a.TimeZone).SingleAsync();
+        var bounds=Academy.Api.Slice8.ReportingEndpoints.UtcRange(from,to,zone);
+        var ratings=db.GuardianFeedbacks.Where(f=>f.AcademyId==academy&&f.IsActive&&f.Kind=="Rating"&&f.Score>=1&&f.Score<=5&&f.CreatedAtUtc>=bounds.Start&&f.CreatedAtUtc<bounds.EndExclusive&&(!branch.HasValue||f.BranchId==branch));
+        var items=await db.AcademyMemberships.AsNoTracking().Where(m=>m.AcademyId==academy&&m.Role==Infrastructure.Tenancy.AcademyRole.Coach&&(!branch.HasValue||db.StaffGroupAssignments.Any(a=>a.AcademyId==academy&&a.AcademyMembershipId==m.Id&&a.IsActive&&a.TrainingGroup.IsActive&&a.TrainingGroup.BranchId==branch)))
+            .Select(m=>new{id=m.Id,arabicName=m.User.DisplayName,m.IsActive,
+                photoReference=db.Employees.Where(e=>e.AcademyId==academy&&e.MembershipId==m.Id).Select(e=>e.PhotoAssetId.HasValue?"/api/v1/assets/"+e.PhotoAssetId:e.DemoPortraitReference).FirstOrDefault(),
+                parentRating=ratings.Where(f=>f.CoachMembershipId==m.Id).Average(f=>(decimal?)f.Score),
+                parentRatingCount=ratings.Count(f=>f.CoachMembershipId==m.Id),
+                assignedGroups=db.StaffGroupAssignments.Count(a=>a.AcademyId==academy&&a.AcademyMembershipId==m.Id&&a.IsActive&&a.TrainingGroup.IsActive&&(!branch.HasValue||a.TrainingGroup.BranchId==branch)),
+                groups=db.StaffGroupAssignments.Where(a=>a.AcademyId==academy&&a.AcademyMembershipId==m.Id&&a.IsActive&&a.TrainingGroup.IsActive&&(!branch.HasValue||a.TrainingGroup.BranchId==branch)).OrderBy(a=>a.TrainingGroup.ArabicName).Select(a=>new{id=a.TrainingGroupId,name=a.TrainingGroup.ArabicName,branch=a.TrainingGroup.Branch.ArabicName}).ToArray()
+            }).OrderByDescending(m=>m.IsActive).ThenByDescending(m=>m.parentRating.HasValue).ThenByDescending(m=>m.parentRating).ThenBy(m=>m.arabicName).ToArrayAsync();
+        return items.Select(m=>new{m.id,m.arabicName,m.IsActive,m.photoReference,m.assignedGroups,m.groups,parentRating=m.parentRating.HasValue?Math.Round(m.parentRating.Value,1):(decimal?)null,m.parentRatingCount});
     }
 
     private static async Task<IResult> GetStructure(string kind, Guid id, CurrentTenant tenant, FoundationDbContext db)

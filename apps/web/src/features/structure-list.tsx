@@ -8,7 +8,7 @@ import { IdentityMark } from "../components/sports-ui";
 import { StatusBadge } from "../components/dashboard-shell";
 
 type Kind = "branches" | "sports" | "categories" | "groups" | "coaches";
-type Item = { id: string; arabicName: string; englishName?: string; isActive: boolean; branchName?: string; sportName?: string; categoryName?: string; assignedGroups?: number; playerCount?: number; coaches?: string[]; groups?: { id: string; name: string; branch: string }[]; schedules?: { dayOfWeek: string; startTime: string; endTime: string }[] };
+type Item = { parentRating?:number|null;parentRatingCount?:number;photoReference?:string;id: string; arabicName: string; englishName?: string; isActive: boolean; branchName?: string; sportName?: string; categoryName?: string; assignedGroups?: number; playerCount?: number; coaches?: string[]; groups?: { id: string; name: string; branch: string }[]; schedules?: { dayOfWeek: string; startTime: string; endTime: string }[] };
 const dayNames: Record<string, string> = { Sunday: "الأحد", Monday: "الاثنين", Tuesday: "الثلاثاء", Wednesday: "الأربعاء", Thursday: "الخميس", Friday: "الجمعة", Saturday: "السبت" };
 const config: Record<Kind, { title: string; create: string }> = {
   branches: { title: "الفروع", create: "إضافة فرع" }, sports: { title: "الرياضات", create: "إضافة رياضة" },
@@ -17,8 +17,8 @@ const config: Record<Kind, { title: string; create: string }> = {
 };
 
 export function StructureList({ kind }: { kind: Kind }) {
-  const branch = useSearchParams().get("branchId");
-  const listUrl = `/api/v1/manage/structure/${kind}${kind === "coaches" && branch ? `?branchId=${encodeURIComponent(branch)}` : ""}`;
+  const incoming=useSearchParams(),branch=incoming.get("branchId"),from=incoming.get("from"),to=incoming.get("to");
+  const listUrl = `/api/v1/manage/structure/${kind}${kind === "coaches" ? `?${new URLSearchParams({...branch?{branchId:branch}:{},...from?{from}:{},...to?{to}:{}})}` : ""}`;
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ export function StructureList({ kind }: { kind: Kind }) {
       <ListSearch value={search} onChange={setSearch} label={`بحث ${config[kind].title}`} />
       {success && <p className="success-message" role="status">{success}</p>}
       {error && <ErrorState message={error} />}
-      {loading ? <LoadingState /> : filtered.length === 0 ? <EmptyState /> : <div className={kind === "groups" || kind === "coaches" ? "sports-structure-list" : "data-list"}>{filtered.map(item => <article className={`${kind === "groups" || kind === "coaches" ? "sports-structure-card" : ""} ${!item.isActive ? "inactive-record" : ""}`} key={item.id}><div><IdentityMark name={item.arabicName} detail={kind === "groups" ? item.categoryName : kind === "coaches" ? `${item.assignedGroups ?? 0} مجموعة مسندة` : undefined} /><div className="team-chips">{item.branchName && <span className="team-chip">{item.branchName}</span>}{item.sportName && <span className="team-chip">{item.sportName}</span>}<StatusBadge status={item.isActive ? "Active" : "Inactive"} /></div>{kind === "groups" && <div className="structure-context"><span>المدرب: {item.coaches?.join("، ") || "لا يوجد إسناد فعال"}</span>{item.playerCount != null && <span>{item.playerCount} لاعب مسجل</span>}{item.schedules?.length ? item.schedules.map((schedule, i) => <small key={i}>{dayNames[schedule.dayOfWeek] ?? schedule.dayOfWeek} · {schedule.startTime.slice(0, 5)}–{schedule.endTime.slice(0, 5)}</small>) : <small>لا توجد مواعيد دورية مسجلة</small>}</div>}{kind === "coaches" && item.groups?.map(group => <p className="structure-group" key={group.id}>{group.name}<small>{group.branch}</small></p>)}</div><RowActions actions={kind === "coaches" ? [
+      {loading ? <LoadingState /> : filtered.length === 0 ? <EmptyState /> : <div className={kind === "groups" || kind === "coaches" ? "sports-structure-list" : "data-list"}>{filtered.map(item => <article className={`${kind === "groups" || kind === "coaches" ? "sports-structure-card" : ""} ${!item.isActive ? "inactive-record" : ""}`} key={item.id}><div><IdentityMark name={item.arabicName} detail={kind === "groups" ? item.categoryName : kind === "coaches" ? `${item.assignedGroups ?? 0} مجموعة مسندة · ${item.parentRating==null?"لم يُقيّم بعد":`${item.parentRating} ★ · ${item.parentRatingCount} تقييمات`}` : undefined} /><div className="team-chips">{item.branchName && <span className="team-chip">{item.branchName}</span>}{item.sportName && <span className="team-chip">{item.sportName}</span>}<StatusBadge status={item.isActive ? "Active" : "Inactive"} /></div>{kind === "groups" && <div className="structure-context"><span>المدرب: {item.coaches?.join("، ") || "لا يوجد إسناد فعال"}</span>{item.playerCount != null && <span>{item.playerCount} لاعب مسجل</span>}{item.schedules?.length ? item.schedules.map((schedule, i) => <small key={i}>{dayNames[schedule.dayOfWeek] ?? schedule.dayOfWeek} · {schedule.startTime.slice(0, 5)}–{schedule.endTime.slice(0, 5)}</small>) : <small>لا توجد مواعيد دورية مسجلة</small>}</div>}{kind === "coaches" && item.groups?.map(group => <p className="structure-group" key={group.id}>{group.name}<small>{group.branch}</small></p>)}</div><RowActions actions={kind === "coaches" ? [
           { label: "عرض المجموعات", href: `/dashboard/academy/coaches/${item.id}` }, { label: "إسناد مجموعة", href: `/dashboard/academy/coaches/new?coachId=${item.id}` },
           { label: item.isActive ? "إيقاف" : "تفعيل", onClick: () => setTarget(item), tone: item.isActive ? "danger" : "normal" },
         ] : [

@@ -1,0 +1,36 @@
+"use client";
+import Link from "next/link";
+import {useSearchParams} from "next/navigation";
+import {useCallback,useEffect,useState} from "react";
+import {ErrorState,LoadingState,PageHeader,SectionCard} from "../components/dashboard-shell";
+import {formatMoneyAr} from "../lib/formatters";
+import {csrfRequest} from "./dashboard-api";
+type Notice={id:string;message:string;isRead:boolean;createdAtUtc:string;matchId?:string;reward:boolean};
+type Inbox={items:Notice[];unread:number;total:number};
+type Recipient={id:string;name:string;amount:number|null;currency:string;children:{id:string;name:string;amount:number|null}[]};
+type Audience={items:Recipient[];total:number;shown:number;template:string};
+type Preview={count:number;previewHash:string;messages:{id:string;message:string}[]};
+async function get<T>(url:string):Promise<T>{const r=await fetch(url,{cache:"no-store"});if(!r.ok)throw Error("تعذر تحميل البيانات أو لا توجد صلاحية.");return r.json();}
+export function NotificationInbox(){
+  const [data,setData]=useState<Inbox|null>(null),[page,setPage]=useState(1),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  const load=useCallback(()=>get<Inbox>(`/api/v1/notifications?page=${page}`).then(d=>{setData(d);setError("");}).catch(e=>setError(e.message)),[page]);
+  useEffect(()=>{void load();},[load]);
+  async function toggle(n:Notice){setBusy(true);try{await csrfRequest(`/api/v1/notifications/${n.id}/read`,"PUT",{isRead:!n.isRead},{},{announce:false});await load();}catch(e){setError(e instanceof Error?e.message:"تعذر التحديث.");}finally{setBusy(false);}}
+  return <><PageHeader title="التنبيهات" context="حسابك"/>{error&&<ErrorState message={error}/>}<Link href="/dashboard">← العودة للرئيسية</Link>{!data?<LoadingState/>:<SectionCard title={`${data.unread} غير مقروءة`}>{!data.items.length&&<p>لا توجد تنبيهات.</p>}{data.items.map(n=><article className="detail-card" key={n.id}><strong>{n.message}</strong><small>{n.createdAtUtc.slice(0,10)}</small><div className="row-actions"><button disabled={busy} onClick={()=>void toggle(n)}>{n.isRead?"تحديد كغير مقروء":"تمت القراءة"}</button>{n.matchId&&<Link href="/dashboard/matches">عرض المباراة</Link>}{n.reward&&<Link href="/guardian/rewards">عرض المكافأة</Link>}</div></article>)}<nav className="row-actions"><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>السابق</button><span>{page}</span><button disabled={page*25>=data.total} onClick={()=>setPage(p=>p+1)}>التالي</button></nav></SectionCard>}</>;
+}
+export function CollectionReminders(){
+  const incoming=useSearchParams(),kind=incoming.get("kind")==="Renewal"?"Renewal":"Overdue",branchId=incoming.get("branchId")??"";
+  const [data,setData]=useState<Audience|null>(null),[selected,setSelected]=useState<string[]>([]),[message,setMessage]=useState(""),[preview,setPreview]=useState<Preview|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[sent,setSent]=useState<number|null>(null);
+  const [requestId]=useState(()=>crypto.randomUUID());
+  useEffect(()=>{let live=true;get<Audience>(`/api/v1/manage/notifications/recipients?${new URLSearchParams({kind,...branchId?{branchId}:{}})}`).then(d=>{if(live){setData(d);setMessage(d.template);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[kind,branchId]);
+  const body={kind,branchId:branchId||null,recipients:selected,message,requestId,previewHash:preview?.previewHash};
+  async function action(send:boolean){if(busy)return;setBusy(true);setError("");try{const response=await csrfRequest(`/api/v1/manage/notifications/${send?"send":"preview"}`,"POST",body,{},{announce:false});const result=await response.json();if(send){setSent(result.sent);setPreview(null);}else setPreview(result);}catch(e){setError(e instanceof Error?e.message:"تعذر تنفيذ الإجراء.");}finally{setBusy(false);}}
+  return <><PageHeader title={kind==="Overdue"?"تذكيرات التحصيل":"خطة متابعة التجديد"} context="مركز القرارات"/><Link href="/dashboard">← العودة للرئيسية</Link>{error&&<ErrorState message={error}/>}<p>التنبيه داخل التطبيق فقط للأسر المحددة. {kind==="Renewal"?"قيم التجديد المعروضة ليست ديونًا قائمة.":"المبالغ من المطالبات المتأخرة المحفوظة."}</p>{sent!=null?<SectionCard title="تم الإرسال"><p role="status">تم حفظ {sent} تنبيه في صناديق المستلمين.</p></SectionCard>:!data?<LoadingState/>:<SectionCard title={`${data.total} ولي أمر · المعروض ${data.shown}`}><label className="policy-switch"><input type="checkbox" disabled={busy} checked={data.items.length>0&&selected.length===data.items.length} onChange={e=>{setSelected(e.target.checked?data.items.map(r=>r.id):[]);setPreview(null);}}/>تحديد كل المعروض ({data.items.length})</label>{data.items.map(r=><label className="placement-choice" key={r.id}><input type="checkbox" disabled={busy} checked={selected.includes(r.id)} onChange={e=>{setSelected(s=>e.target.checked?[...s,r.id]:s.filter(x=>x!==r.id));setPreview(null);}}/><span><strong>{r.name}</strong><small>{r.children.map(c=>c.name).join("، ")} · {r.amount==null?"القيمة تحتاج مراجعة":formatMoneyAr(r.amount,r.currency)}</small></span></label>)}<label className="form-shell">نص التنبيه<textarea maxLength={1000} disabled={busy} value={message} onChange={e=>{setMessage(e.target.value);setPreview(null);}}/></label><button className="secondary-button" disabled={busy||!selected.length} onClick={()=>void action(false)}>معاينة {selected.length} تنبيه</button>{preview&&<section aria-label="معاينة التنبيهات"><h3>معاينة {preview.count} رسالة</h3>{preview.messages.map(m=><article className="detail-card" key={m.id}>{m.message}</article>)}<button className="primary-button" disabled={busy} onClick={()=>void action(true)}>تأكيد إرسال {preview.count} تنبيه</button></section>}</SectionCard>}</>;
+}
+const templateNames:Record<string,string>={Overdue:"مستحقات متأخرة",Renewal:"متابعة تجديد",Expiring:"قرب الانتهاء",Expired:"اشتراك منتهٍ",Absence:"غياب متكرر",Evaluation:"تقييم منشور",Star:"نجمة شهرية",Match:"تحديث مباراة",Payment:"طلب دفع",VipReward:"مكافأة عضو مميز"};
+export function NotificationTemplates(){
+  const [items,setItems]=useState<{key:string;message:string}[]|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  useEffect(()=>{get<{key:string;message:string}[]>("/api/v1/manage/notifications/templates").then(setItems).catch(e=>setError(e.message));},[]);
+  async function save(key:string,message:string){setBusy(true);try{await csrfRequest(`/api/v1/manage/notifications/templates/${key}`,"PUT",{message});setError("");}catch(e){setError(e instanceof Error?e.message:"تعذر حفظ القالب.");}finally{setBusy(false);}}
+  return <section id="notification-templates" className="detail-card"><h2>قوالب التنبيهات</h2>{error&&<ErrorState message={error}/>}<p className="muted">يمكن استخدام {"{guardian}"} و{"{children}"} و{"{amount}"}. لا يرسل حفظ القالب أي رسالة. مكافأة العضو لا تصدر من القالب؛ تصدر من إدارة المكافآت.</p>{items?.map(t=><form className="form-shell" key={t.key} onSubmit={e=>{e.preventDefault();void save(t.key,t.message);}}><label>{templateNames[t.key]}<textarea required maxLength={1000} value={t.message} onChange={e=>setItems(s=>s!.map(x=>x.key===t.key?{...x,message:e.target.value}:x))}/></label><button disabled={busy}>حفظ القالب</button></form>)}</section>;
+}

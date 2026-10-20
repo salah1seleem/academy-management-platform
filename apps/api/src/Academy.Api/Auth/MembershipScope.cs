@@ -6,6 +6,11 @@ namespace Academy.Api.Auth;
 
 public static class MembershipScope
 {
+    // Account-owned inbox and static page guidance do not inherit staff CRUD grants.
+    // Exact methods/routes only; every endpoint still authenticates the live tenant/user.
+    public static bool IsOwnExperiencePath(string path,string method) =>
+        method=="GET"&&(path is "/api/v1/academy/calendar" or "/api/v1/academy/experience" or "/api/v1/notifications" || path.StartsWith("/api/v1/page-help/",StringComparison.Ordinal)&&Academy.Api.Help.PageHelpEndpoints.Screens.Contains(path["/api/v1/page-help/".Length..]))
+        ||method=="PUT"&&path.StartsWith("/api/v1/notifications/",StringComparison.Ordinal)&&path.Split('/') is ["","api","v1","notifications",var id,"read"]&&Guid.TryParseExact(id,"D",out _);
     public static async Task<Guid[]?> Sports(FoundationDbContext db, TenantMembership t, CancellationToken ct = default)
     {
         if (t.Role != AcademyRole.AcademyAdmin || await db.AcademyMemberships.AsNoTracking().Where(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId).Select(m => m.AllSports).SingleAsync(ct)) return null;
@@ -17,6 +22,7 @@ public static class MembershipScope
     // a module checkbox must never override this resource boundary.
     public static bool AllowsNarrowSportPath(string path, string method)
     {
+        if (IsOwnExperiencePath(path,method)) return true;
         if (Academy.Api.Help.HelpEndpoints.IsReadPath(path, method)) return true;
         if (path is "/api/v1/me" or "/api/v1/my-permissions" or "/api/v1/my-access" or "/api/v1/academy/features" or "/api/v1/academy/branding/logo") return true;
         if (IsAssetRead(path, method)) return true; // Download rechecks purpose-specific permission.

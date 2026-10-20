@@ -21,6 +21,7 @@ public static class Slice5Endpoints
         evaluations.MapPut("/criteria/{id:guid}", UpdateCriterion).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage).AddEndpointFilter<CsrfFilter>();
         evaluations.MapPut("/criteria/{id:guid}/status", SetCriterionStatus).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage).AddEndpointFilter<CsrfFilter>();
         evaluations.MapGet("/options", Options);
+        api.MapGet("/people/roster", Options).RequireAuthorization(AcademyPermissions.PeopleManage);
         evaluations.MapGet("/", ListEvaluations);
         evaluations.MapPost("/", CreateEvaluation).RequireAuthorization(AcademyPermissions.EvaluationManage).AddEndpointFilter<CsrfFilter>();
         evaluations.MapGet("/{id:guid}", GetEvaluation);
@@ -88,7 +89,15 @@ public static class Slice5Endpoints
         var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var enrollments = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) && a.AcademyMembership.UserId == user && a.IsActive));
-        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, photoReference = x.Player.PhotoReference, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة" }).ToListAsync();
+        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, photoReference = x.Player.PhotoReference, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة",
+            trainingSafetyNote=x.TrainingSafetyNote,
+            subscription=db.SubscriptionPeriods.Where(p=>p.AcademyId==t.AcademyId&&p.SportEnrollmentId==x.Id&&p.IsActive&&p.Status!=Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Cancelled&&p.StartDate<=day)
+                .OrderByDescending(p=>p.StartDate).ThenByDescending(p=>p.CreatedAtUtc).ThenBy(p=>p.Id)
+                .Select(p=>new{p.RemainingSessions,
+                    expired=p.Status!=Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Frozen&&(p.EndDate<day||((p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)!=Academy.Infrastructure.Subscriptions.SubscriptionPlanType.Duration&&p.RemainingSessions<=0)),
+                    sessionBased=(p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)!=Academy.Infrastructure.Subscriptions.SubscriptionPlanType.Duration,
+                    frozen=p.Status==Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Frozen}).FirstOrDefault()
+            }).ToListAsync();
         var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
         var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
@@ -168,6 +177,10 @@ public static class Slice5Endpoints
         if (entity.Status != EvaluationStatus.Draft) return Results.Conflict(new { message = "يمكن نشر المسودة فقط." });
         if (!entity.Scores.Any(x => x.Score.HasValue)) return Validation("scores", "أدخل درجة واحدة على الأقل قبل النشر.");
         db.Entry(entity).Property(x => x.Version).OriginalValue = request.Version; entity.Status = EvaluationStatus.Published; entity.PublishedAtUtc = clock.GetUtcNow(); entity.PublishedByUserId = UserId(principal); entity.UpdatedAtUtc = clock.GetUtcNow();
+        var player=await db.SportEnrollments.Where(e=>e.Id==entity.SportEnrollmentId).Select(e=>new{e.PlayerId,e.Player.ArabicName}).SingleAsync();
+        var users=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==t.AcademyId&&l.PlayerId==player.PlayerId&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.User.IsActive).Select(l=>l.Guardian.UserId).Distinct().ToArrayAsync();
+        var notice=await Academy.Api.Operations.NoticeText.Render(db,t.AcademyId,"Evaluation",$"نشر المدرب تقييمًا جديدًا لـ{player.ArabicName}. افتحوا التقييمات لمتابعة التقدم.",player.ArabicName);
+        foreach(var user in users)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=user,AudienceRole="Guardian",TargetKind="Evaluation",TargetId=entity.Id,Message=notice,CreatedAtUtc=clock.GetUtcNow(),UpdatedAtUtc=clock.GetUtcNow()});
         try { await db.SaveChangesAsync(); } catch (DbUpdateConcurrencyException) { return ConflictReload(); }
         return Results.Ok(new { entity.Id, status = entity.Status.ToString(), entity.PublishedAtUtc });
     }

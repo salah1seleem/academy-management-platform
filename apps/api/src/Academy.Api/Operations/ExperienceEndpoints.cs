@@ -17,6 +17,12 @@ public static partial class ExperienceEndpoints
     {
         var api = app.MapGroup("/api/v1").RequireAuthorization(AcademyPermissions.TenantAccess);
         api.MapGet("/academy/experience", Get);
+        api.MapGet("/academy/calendar", async (CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, HttpResponse response) => {
+            var t = (await tenant.ResolveAsync())!;
+            response.Headers.CacheControl = "private, no-store";
+            var today = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
+            return Results.Ok(new { today, trailingMonthFrom = today.AddMonths(-1), timeZone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync() });
+        });
         api.MapGet("/academy/branding/logo", Logo);
         api.MapPut("/manage/academy/experience", Policy).RequireAuthorization(AcademyPermissions.AcademySettingsManage).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/manage/academy/policy-audit", PolicyHistory).RequireAuthorization(AcademyPermissions.AcademySettingsManage);

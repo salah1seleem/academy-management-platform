@@ -79,7 +79,7 @@ public sealed class CoachOverrideService(FoundationDbContext db, GroupPlacementS
         await db.SaveChangesAsync();
         var actualName=await db.AcademyMemberships.Where(m=>m.Id==body.ActualCoachId).Select(m=>m.User.DisplayName).SingleAsync();
         var guardians=await db.GuardianPlayerLinks.Where(l=>l.IsActive&&l.Guardian.IsActive&&db.SportEnrollments.Any(e=>e.PlayerId==l.PlayerId&&e.IsActive&&FoundationDbContext.IsSessionAssigned(e.AcademyId,e.Id,id))).Select(l=>l.Guardian.UserId).Distinct().ToArrayAsync();
-        foreach(var guardian in guardians) db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=guardian,Message=$"تحديث حصة {s.TrainingGroup.ArabicName} يوم {s.SessionDate:yyyy-MM-dd} الساعة {s.StartTime:HH:mm}: المدرب الفعلي {actualName}. بقية مواعيد المجموعة لم تتغير.",CreatedAtUtc=now,UpdatedAtUtc=now});
+        foreach(var guardian in guardians) db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=guardian,AudienceRole="Guardian",TargetKind="Schedule",Message=$"تحديث حصة {s.TrainingGroup.ArabicName} يوم {s.SessionDate:yyyy-MM-dd} الساعة {s.StartTime:HH:mm}: المدرب الفعلي {actualName}. بقية مواعيد المجموعة لم تتغير.",CreatedAtUtc=now,UpdatedAtUtc=now});
         await db.SaveChangesAsync(); await tx.CommitAsync(); return new{row.Id,row.Sequence};
     }
 }

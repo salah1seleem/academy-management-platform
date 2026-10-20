@@ -4920,6 +4920,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AcademyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AudienceRole")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -4934,6 +4937,12 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Message")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetKind")
                         .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
@@ -6005,6 +6014,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)");
 
+                    b.Property<string>("DemoPortraitReference")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -6664,6 +6676,165 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.ToTable("MatchTeamPlayers", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.MonthlyPlayerStar", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CoachMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("Month")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Slot")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "PlayerId");
+
+                    b.HasIndex("AcademyId", "TeamId");
+
+                    b.HasIndex("AcademyId", "CoachMembershipId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("AcademyId", "CoachMembershipId", "TeamId", "Month", "Slot")
+                        .IsUnique();
+
+                    b.ToTable("MonthlyPlayerStars", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MonthlyPlayerStar_Budget", "\"IsActive\" AND \"Slot\" BETWEEN 1 AND 3 AND EXTRACT(DAY FROM \"Month\")=1");
+                        });
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.NoticeDispatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("RecipientCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "ActorMembershipId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("NoticeDispatchs", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.NoticeTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("NoticeTemplates", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUp", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6847,6 +7018,60 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("OwnerFollowUpChanges", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PageHelpVideo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AcademyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Screen")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AcademyId", "Id");
+
+                    b.HasIndex("AcademyId", "Role", "Screen")
+                        .IsUnique();
+
+                    b.ToTable("PageHelpVideos", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Infrastructure.Operations.PaymentProof", b =>
@@ -10102,6 +10327,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PhotoReference")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -10606,6 +10834,9 @@ namespace Academy.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("TrainingLevelId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TrainingSafetyNote")
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -16926,6 +17157,61 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Academy.Infrastructure.Operations.MonthlyPlayerStar", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "CoachMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.People.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "PlayerId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Operations.MatchTeam", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "TeamId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.NoticeDispatch", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Academy.Infrastructure.Tenancy.AcademyMembership", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId", "ActorMembershipId")
+                        .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.NoticeTemplate", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Academy.Infrastructure.Operations.OwnerFollowUp", b =>
                 {
                     b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
@@ -16985,6 +17271,15 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AcademyId", "FollowUpId")
                         .HasPrincipalKey("AcademyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Academy.Infrastructure.Operations.PageHelpVideo", b =>
+                {
+                    b.HasOne("Academy.Infrastructure.Tenancy.Academy", null)
+                        .WithMany()
+                        .HasForeignKey("AcademyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

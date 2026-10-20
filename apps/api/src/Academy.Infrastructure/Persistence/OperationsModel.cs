@@ -32,6 +32,8 @@ public sealed partial class FoundationDbContext
 
     private static void ConfigureOperations(ModelBuilder b)
     {
+        ConfigureNoticeDispatch(b);
+        ConfigureMonthlyPlayerStars(b);
         ConfigureOwnerFollowUps(b);
         ConfigureFeedbackCases(b);
         ConfigureCommunityCampaigns(b);

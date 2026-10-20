@@ -16,6 +16,8 @@ import '../shared/academy_news.dart';
 import '../shared/staff_amounts.dart';
 import '../shared/native_staff_attendance.dart';
 import 'session_context.dart';
+import '../shared/player_roster_status.dart';
+import '../shared/experience_ui.dart';
 
 class CoachHome extends StatefulWidget {
   final AuthController auth;
@@ -103,7 +105,8 @@ class _CoachHomeState extends State<CoachHome> {
     ),
   );
   @override
-  Widget build(BuildContext context) => AppScaffold(
+  Widget build(BuildContext context) => GuardianPage(
+    showAppBar: false,
     title: localized(context, 'الرئيسية · المدرب', 'Coach home'),
     actions: [
       IconButton(
@@ -166,38 +169,11 @@ class _CoachHomeState extends State<CoachHome> {
             padding: const EdgeInsets.all(18),
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        UiText(
-                          localized(
-                            context,
-                            'أهلًا، ${widget.auth.session?.displayName ?? ''}',
-                            'Welcome, ${widget.auth.session?.displayName ?? ''}',
-                          ),
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 6),
-                        UiText(
-                          localized(
-                            context,
-                            'حصص واضحة، وتطور تتابعه خطوة بخطوة',
-                            'Your sessions and player development, in focus.',
-                          ),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.sports_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 32,
-                  ),
-                ],
+              ExperienceHeader(
+                auth: widget.auth,
+                subtitle: 'لوحة المدرب',
+                lesson: 'coach-development',
+                account: widget.accountPage,
               ),
               const SizedBox(height: 18),
               if (sessions.isNotEmpty)
@@ -721,6 +697,7 @@ class _CoachGroupState extends State<CoachGroup> {
                                   ),
                                   if (player['sport'] != null)
                                     UiText(textOf(player['sport'])),
+                                  PlayerRosterStatus(player: player),
                                 ],
                               ),
                             ),

@@ -9,6 +9,7 @@ import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'private_media.dart';
 import 'matches.dart';
+import 'content_editor.dart';
 
 String? _identity(AuthController auth) => auth.session?.selected == null
     ? null
@@ -707,7 +708,12 @@ class _GuardianSponsorDetailState extends State<GuardianSponsorDetail>
 
 class OwnerCommunityCampaigns extends StatefulWidget {
   final AuthController auth;
-  const OwnerCommunityCampaigns({super.key, required this.auth});
+  final String? campaignId;
+  const OwnerCommunityCampaigns({
+    super.key,
+    required this.auth,
+    this.campaignId,
+  });
   @override
   State<OwnerCommunityCampaigns> createState() =>
       _OwnerCommunityCampaignsState();
@@ -800,18 +806,64 @@ class _OwnerCommunityCampaignsState extends State<OwnerCommunityCampaigns> {
         identity == null || identity != _identity(widget.auth)
         ? const SizedBox.shrink()
         : GuardianPage(
-            title: 'المحتوى برعاية',
+            title: 'الإعلانات',
             child: gList([
-              const UiText(
-                'إدارة التصميم وإنشاء نسخه من الداشبورد. هنا معاينة النسخة واعتماد كل فرع أو سحب موافقته وإيقاف العرض.',
-              ),
+              if (widget.campaignId == null)
+                FilledButton.icon(
+                  onPressed: busy || options?['licensed'] != true
+                      ? null
+                      : () async {
+                          final saved = await openPage<bool>(
+                            context,
+                            AcademyContentEditor(auth: widget.auth, ad: true),
+                          );
+                          if (saved == true && mounted) await load();
+                        },
+                  icon: const Icon(Icons.add),
+                  label: const UiText('إضافة إعلان'),
+                ),
               if (message.isNotEmpty) UiText(message),
               TextButton(onPressed: load, child: const UiText('تحديث')),
-              if (options != null) UiText(textOf(options!['measurement'])),
+              if (options != null)
+                ExpansionTile(
+                  title: const UiText('كيف نقيس ظهور الإعلان؟'),
+                  leading: const Icon(Icons.info_outline),
+                  childrenPadding: const EdgeInsets.all(16),
+                  children: [UiText(textOf(options!['measurement']))],
+                ),
               if (data != null && rows(data!['items']).isEmpty)
                 const UiText('لا توجد حملات بعد.'),
               if (data != null)
-                for (final c in rows(data!['items'])) _campaign(c),
+                if (widget.campaignId != null) ...[
+                  for (final c in rows(
+                    data!['items'],
+                  ).where((c) => c['id'] == widget.campaignId))
+                    _campaign(c),
+                ] else
+                  for (final c in rows(data!['items']))
+                    GCard(
+                      onTap: () async {
+                        await openPage(
+                          context,
+                          OwnerCommunityCampaigns(
+                            auth: widget.auth,
+                            campaignId: textOf(c['id']),
+                          ),
+                        );
+                        if (mounted) await load();
+                      },
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: UiText(textOf(c['internalName'])),
+                        subtitle: UiText(
+                          _states[rows(c['versions']).firstWhere(
+                                (r) => r['revision'] == c['currentRevision'],
+                              )['state']] ??
+                              'مسودة',
+                        ),
+                        trailing: const Icon(Icons.chevron_left),
+                      ),
+                    ),
             ]),
           ),
   );

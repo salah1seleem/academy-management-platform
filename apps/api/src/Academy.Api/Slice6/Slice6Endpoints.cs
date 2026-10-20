@@ -56,12 +56,14 @@ public static class Slice6Endpoints
         var nextSessions=await GuardianNextSessionReadModel.Read(db,t.AcademyId,metadata.Select(e=>e.Id).ToArray(),trainingToday,trainingTime);
         var enrollments=metadata.Select(e=>new{e.Id,e.PlayerId,e.SportId,e.sport,e.registrationFormat,e.group,e.branch,nextSession=nextSessions.GetValueOrDefault(e.Id),e.period}).ToList();
         var published = await db.PlayerEvaluations.AsNoTracking().Include(x => x.Scores).Include(x => x.Sport).Where(x => x.AcademyId == t.AcademyId && linkedIds.Contains(x.SportEnrollment.PlayerId) && x.Status == EvaluationStatus.Published).OrderByDescending(x => x.EvaluationDate).ThenByDescending(x => x.PublishedAtUtc).ThenBy(x => x.Id).Select(x => new { playerId = x.SportEnrollment.PlayerId, evaluation = x }).ToListAsync();
+        var starMonth=new DateOnly(trainingToday.Year,trainingToday.Month,1);
+        var monthlyStars=await db.MonthlyPlayerStars.Where(s=>s.AcademyId==t.AcademyId&&s.Month==starMonth&&linkedIds.Contains(s.PlayerId)).GroupBy(s=>s.PlayerId).Select(g=>new{id=g.Key,count=g.Count()}).ToDictionaryAsync(g=>g.id,g=>g.count);
         var children = players.Select(p =>
         {
             var latest = published.FirstOrDefault(e => e.playerId == p.Id)?.evaluation;
             var evaluation = published.FirstOrDefault(e => e.playerId == p.Id && (e.evaluation.Sport.EnglishName == "Football" || e.evaluation.Sport.ArabicName == "كرة القدم"))?.evaluation;
             var report = evaluation is null ? null : calculator.Calculate(evaluation.Scores);
-            return new { p.Id, p.ArabicName, p.DateOfBirth, p.PhotoReference,
+            return new { p.Id, p.ArabicName, p.DateOfBirth, p.PhotoReference,monthlyStars=monthlyStars.GetValueOrDefault(p.Id),starMonth,
                 power = report is null ? null : new { evaluationId = evaluation!.Id, report.OverallScore, axes = report.Axes.Select(a => new { axis = a.Axis.ToString(), a.Value }) },
                 latestEvaluation = latest is null ? null : new { latest.Id, sport = latest.Sport.ArabicName, latest.EvaluationDate, latest.ReportingPeriod, calculator.Calculate(latest.Scores).OverallScore },
                 sports = enrollments.Where(e => e.PlayerId == p.Id).ToList() };
@@ -185,7 +187,7 @@ public static class Slice6Endpoints
         var t = (await tenant.ResolveAsync())!; var entity = await db.NewEnrollmentRequests.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (entity is null) return Results.NotFound();
         if (entity.Status is not (NewEnrollmentRequestStatus.Pending or NewEnrollmentRequestStatus.UnderReview)) return Results.Conflict(new { message = "تم إنهاء هذا الطلب بالفعل." });
         entity.Status = NewEnrollmentRequestStatus.Rejected; entity.GuardianVisibleReason = Clean(request.GuardianVisibleReason); entity.AdminNotes = Clean(request.AdminNotes); entity.ReviewedByUserId = UserId(principal); entity.ReviewedAtUtc = clock.UtcNow; entity.UpdatedAtUtc = clock.UtcNow;
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, Message = "لم يُقبل طلب الاشتراك الجديد. " + (entity.GuardianVisibleReason ?? "تواصل مع إدارة الأكاديمية للتوضيح."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, AudienceRole="Guardian",TargetKind="Enrollment",TargetId=entity.Id, Message = "لم يُقبل طلب الاشتراك الجديد. " + (entity.GuardianVisibleReason ?? "تواصل مع إدارة الأكاديمية للتوضيح."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { status = entity.Status.ToString() });
     }
 
@@ -242,7 +244,7 @@ public static class Slice6Endpoints
                 var capturedPlan = await db.SubscriptionPlans.TrainingOnly().SingleAsync(x => x.AcademyId == t.AcademyId && x.Id == entity.SubscriptionPlanId);
                 entity.PaymentRequestId = await collections.CreateCashAsync(t.AcademyId, UserId(principal), enrollment.Id, entity.SubscriptionPlanId.Value, "enroll-" + id.ToString("N"), "Online", entity.RequestedByGuardianUserId, snapshot, fixedTerms: PlanTerms.From(entity, capturedPlan),vipEnrollmentSource:id);
                 if (group.RegistrationFormat != TrainingRegistrationFormat.Group) await placement.FinishSpecialAdmission(group, enrollment);
-                db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, Message = "تم قبول طلب الاشتراك وتفعيل الباقة. مواعيد المجموعة والإيصال متاحة في ملف الطفل.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+                db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = entity.RequestedByGuardianUserId, AudienceRole="Guardian",TargetKind="Enrollment",TargetId=entity.Id, Message = "تم قبول طلب الاشتراك وتفعيل الباقة. مواعيد المجموعة والإيصال متاحة في ملف الطفل.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
                 await db.SaveChangesAsync();
             }
             await tx.CommitAsync();

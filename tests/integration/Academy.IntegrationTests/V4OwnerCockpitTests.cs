@@ -14,7 +14,8 @@ public sealed partial class BrandingMatchesTests
     [Fact] public async Task V4_cockpit_uses_the_financial_source_eligible_attendance_and_audited_owner_target()
     {
         using var owner=await Staff();using var admin=await Staff(DemoSeed.AdminEmail);using var coach=await Mobile(AcademyRole.Coach);using var other=await Staff(DemoSeed.FutureOwnerEmail);
-        const string range="from=2026-09-01&to=2026-09-28";
+        var today=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")).DateTime);
+        var range=$"from={new DateOnly(today.Year,today.Month,1):yyyy-MM-dd}&to={today:yyyy-MM-dd}";
         var d=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-cockpit?"+range);
         var s=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/operating-statement?"+range);
         Assert.Equal(s.GetProperty("totalIncome").GetDecimal(),d.GetProperty("collections").GetProperty("net").GetDecimal());

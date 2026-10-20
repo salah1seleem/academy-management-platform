@@ -16,6 +16,7 @@ public static class MemberSubscriptionValues
     public sealed class PeriodValue { public Guid PlayerId {get;init;} public decimal? MonthlyValue {get;init;} }
     public sealed class GuardianValue {
         public Guid Id {get;init;} public required string DisplayName {get;init;} public string? ContactPhone {get;init;}
+        public string? PhotoReference {get;init;}
         public int LinkedChildren {get;init;} public decimal MonthlySubscriptionValue {get;init;}
         public int UnpricedSubscriptions {get;init;} public required string Currency {get;init;}
     }
@@ -55,7 +56,7 @@ public static class MemberSubscriptionValues
         return db.GuardianProfiles.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive
             && (string.IsNullOrEmpty(term) || g.DisplayName.Contains(term) || phone != null && g.ContactPhone == phone)
             && (!branch.HasValue && !sport.HasValue || links.Any(l => l.GuardianId == g.Id)))
-            .Select(g => new GuardianValue {Id=g.Id, DisplayName=g.DisplayName, ContactPhone=g.ContactPhone,
+            .Select(g => new GuardianValue {Id=g.Id, DisplayName=g.DisplayName, ContactPhone=g.ContactPhone, PhotoReference=g.PhotoReference,
                 LinkedChildren=links.Count(l => l.GuardianId == g.Id),
                 MonthlySubscriptionValue=Math.Round(values.Where(v => links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)).Sum(v => v.MonthlyValue) ?? 0, 2),
                 UnpricedSubscriptions=values.Count(v => v.MonthlyValue == null && links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)), Currency=currency});
@@ -85,7 +86,7 @@ public static class MemberSubscriptionValues
             var currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(); var date = asOf ?? clock.Today;
             var items = await Guardians(db, t.AcademyId, date, currency, branchId, sportId).Where(g => g.UnpricedSubscriptions == 0 && g.MonthlySubscriptionValue > 0)
                 .OrderByDescending(g => g.MonthlySubscriptionValue).ThenBy(g => g.DisplayName).ThenBy(g => g.Id).Take(10)
-                .Select(g => new { g.Id, g.DisplayName, g.MonthlySubscriptionValue, g.Currency }).ToArrayAsync();
+                .Select(g => new { g.Id, g.DisplayName, g.MonthlySubscriptionValue, g.Currency, g.PhotoReference }).ToArrayAsync();
             return Results.Ok(new { items, currency, asOf = date, basis = Basis });
         }).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
 }

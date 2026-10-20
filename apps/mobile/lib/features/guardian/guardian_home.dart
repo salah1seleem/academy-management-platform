@@ -9,6 +9,7 @@ import 'guardian_payments.dart';
 import 'guardian_report.dart';
 import 'daily_nutrition.dart';
 import '../shared/vip_rewards.dart';
+import '../shared/experience_ui.dart';
 import 'enrollment_requests.dart';
 import '../shared/academy_news.dart';
 import '../shared/community_ads.dart';
@@ -34,6 +35,7 @@ class GuardianHome extends StatefulWidget {
 
 class _GuardianHomeState extends State<GuardianHome> {
   String? selectedPlayer, identity;
+  int section = 0;
   String? get currentIdentity => widget.auth.session?.selected == null
       ? null
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
@@ -73,6 +75,7 @@ class _GuardianHomeState extends State<GuardianHome> {
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'الرئيسية', 'Home'),
+    showAppBar: false,
     actions: [
       IconButton(
         tooltip: localized(context, 'الحساب', 'Account'),
@@ -90,41 +93,21 @@ class _GuardianHomeState extends State<GuardianHome> {
               final home = obj(value), allChildren = rows(home['children']);
               final selected = allChildren.any((c) => c['id'] == selectedPlayer)
                   ? selectedPlayer
-                  : null;
+                  : allChildren.isEmpty
+                  ? null
+                  : textOf(allChildren.first['id']);
               final children = allChildren
-                  .where((c) => selected == null || c['id'] == selected)
+                  .where((c) => c['id'] == selected)
                   .toList();
               final nutritionToday = textOf(
                 home['trainingToday'] ?? home['today'],
               );
               return gList([
-                Row(
-                  children: [
-                    const AcademyCrest(size: 44),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          UiText(
-                            textOf(home['academyName']),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          UiText(
-                            localized(
-                              context,
-                              'أهلًا، ${home['guardianName']}',
-                              'Welcome, ${home['guardianName']}',
-                            ),
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                ExperienceHeader(
+                  auth: widget.auth,
+                  subtitle: 'أهلًا، ${home['guardianName']}',
+                  lesson: 'family-progress',
+                  account: widget.accountPage,
                 ),
                 GuardianUrgentMatchAlerts(
                   auth: widget.auth,
@@ -132,102 +115,167 @@ class _GuardianHomeState extends State<GuardianHome> {
                 ),
                 GuardianSponsoredCard(auth: widget.auth),
                 Heading(localized(context, 'أبنائي', 'My children')),
-                if (allChildren.length > 1) ...[
-                  DropdownButtonFormField<String>(
-                    key: ValueKey(
-                      'guardian-child-selector-${selected ?? 'all'}',
-                    ),
-                    initialValue: selected ?? '',
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: localized(
-                        context,
-                        'متابعة طفل',
-                        'Focus on a child',
-                      ),
-                      prefixIcon: const Icon(Icons.family_restroom_outlined),
-                    ),
-                    items: [
-                      DropdownMenuItem(
-                        value: '',
-                        child: UiText(
-                          localized(context, 'كل الأبناء', 'All children'),
-                        ),
-                      ),
-                      for (final c in allChildren)
-                        DropdownMenuItem(
-                          value: textOf(c['id']),
-                          child: UiText(
-                            textOf(c['arabicName']),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                if (allChildren.isNotEmpty)
+                  SizedBox(
+                    height: 124,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: allChildren.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, i) {
+                        final c = allChildren[i];
+                        final active = c['id'] == selected;
+                        return SizedBox(
+                          width: 98,
+                          child: InkWell(
+                            key: ValueKey('select-child-${c['id']}'),
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () => setState(
+                              () => selectedPlayer = textOf(c['id']),
+                            ),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                color: active
+                                    ? Theme.of(context).colorScheme.primary
+                                          .withValues(alpha: .13)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: active
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  PlayerAvatar(
+                                    textOf(c['arabicName']),
+                                    auth: widget.auth,
+                                    reference: c['photoReference'],
+                                    size: 56,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  UiText(
+                                    textOf(c['arabicName']),
+                                    maxLines: 2,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                    ],
-                    onChanged: (v) => setState(() {
-                      selectedPlayer = v == '' ? null : v;
-                    }),
+                        );
+                      },
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                ],
+                const SizedBox(height: 14),
+                if (children.isNotEmpty)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final item in [
+                          (0, 'الاشتراك'),
+                          (1, 'الجدول والحصص'),
+                          (2, 'التقييمات'),
+                          (3, 'التغذية والصحة'),
+                        ])
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 8),
+                            child: ChoiceChip(
+                              label: UiText(
+                                item.$2,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              selected: section == item.$1,
+                              showCheckmark: false,
+                              onSelected: (_) =>
+                                  setState(() => section = item.$1),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 14),
                 if (children.isEmpty)
                   const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
-                for (final child in children) ...[
-                  PremiumChildCard(
-                    auth: widget.auth,
-                    childData: child,
-                    today: textOf(home['today']),
-                    showSubscription: false,
-                    onTap: () => open(
-                      ChildProfile(
-                        auth: widget.auth,
-                        environment: widget.environment,
-                        playerId: child['id'],
-                        today: home['today'],
-                      ),
-                    ),
-                  ),
-                  for (final sport in rows(child['sports']))
-                    if (sport['nextSession'] is Map)
-                      NextSessionCard(
-                        childName: textOf(child['arabicName']),
-                        sport: sport,
-                        onTap: () => open(
-                          ProfileRecords(
-                            auth: widget.auth,
-                            playerId: child['id'],
-                            section: 'schedule',
+                for (final child in children)
+                  KeyedSubtree(
+                    key: ValueKey('child-workspace-${child['id']}'),
+                    child: Column(
+                      children: [
+                        PremiumChildCard(
+                          auth: widget.auth,
+                          childData: child,
+                          today: textOf(home['today']),
+                          showSubscription: false,
+                          onTap: () => open(
+                            ChildProfile(
+                              auth: widget.auth,
+                              environment: widget.environment,
+                              playerId: child['id'],
+                              today: home['today'],
+                            ),
                           ),
                         ),
-                      ),
-                  if (!rows(child['sports'])
-                      .any((s) => s['nextSession'] is Map))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: UiText(
-                        localized(
-                          context,
-                          'لا يوجد موعد تدريب قادم منشور لهذا الطفل.',
-                          'No upcoming training session published for this child.',
-                        ),
-                        style: const TextStyle(fontSize: 14),
-                      ),
+                        if (section == 1)
+                          for (final sport in rows(child['sports']))
+                            if (sport['nextSession'] is Map)
+                              NextSessionCard(
+                                childName: textOf(child['arabicName']),
+                                sport: sport,
+                                onTap: () => open(
+                                  ProfileRecords(
+                                    auth: widget.auth,
+                                    playerId: child['id'],
+                                    section: 'schedule',
+                                  ),
+                                ),
+                              ),
+                        if (section == 1 &&
+                            !rows(child['sports'])
+                                .any((s) => s['nextSession'] is Map))
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: UiText(
+                              localized(
+                                context,
+                                'لا يوجد موعد تدريب قادم منشور لهذا الطفل.',
+                                'No upcoming training session published for this child.',
+                              ),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        if (section == 0)
+                          GuardianSubscriptionSummary(
+                            auth: widget.auth,
+                            environment: widget.environment,
+                            childData: child,
+                          ),
+                        if (section == 2)
+                          GuardianLatestProgress(
+                            auth: widget.auth,
+                            childData: child,
+                          ),
+                        if (section == 3)
+                          DailyNutritionCard(
+                            key: ValueKey('home-nutrition-${child['id']}'),
+                            auth: widget.auth,
+                            playerId: child['id'],
+                            playerName: child['arabicName'],
+                            today: nutritionToday,
+                          ),
+                        const SizedBox(height: 18),
+                      ],
                     ),
-                  GuardianSubscriptionSummary(
-                    auth: widget.auth,
-                    environment: widget.environment,
-                    childData: child,
                   ),
-                  GuardianLatestProgress(auth: widget.auth, childData: child),
-                  DailyNutritionCard(
-                    key: ValueKey('home-nutrition-${child['id']}'),
-                    auth: widget.auth,
-                    playerId: child['id'],
-                    playerName: child['arabicName'],
-                    today: nutritionToday,
-                  ),
-                  const SizedBox(height: 18),
-                ],
                 Heading(localized(context, 'خدمات الأسرة', 'Family services')),
                 TextButton.icon(
                   onPressed: () => open(NativeVipRewards(auth: widget.auth)),
@@ -649,6 +697,14 @@ class PremiumChildCard extends StatelessWidget {
                           ),
                           style: const TextStyle(fontSize: 14),
                         ),
+                        if ((c['monthlyStars'] as num? ?? 0) > 0)
+                          UiText(
+                            '${c['monthlyStars']} ★ نجوم هذا الشهر',
+                            style: const TextStyle(
+                              color: Color(0xFFF3D083),
+                              fontSize: 12,
+                            ),
+                          ),
                         if (c['power'] is Map)
                           UiText(
                             (c['power']['overallScore'] as num?)

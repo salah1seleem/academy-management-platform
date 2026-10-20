@@ -12,6 +12,7 @@ public static class ConfigurationEndpoints
     {
         var api = app.MapGroup("/api/v1/manage/configuration").RequireAuthorization(AcademyPermissions.AcademySettingsManage);
         api.MapGet("/", List);
+        api.MapPut("/collection-target", CollectionTarget).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/drafts", Draft).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/{id:guid}/transition", Change).AddEndpointFilter<CsrfFilter>();
         app.MapGet("/api/v1/academy/features", async (CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config) =>
@@ -83,5 +84,19 @@ public static class ConfigurationEndpoints
         await service.Transition(row, body.Target, user); await tx.CommitAsync(); return Results.NoContent();
     }
     private static Task<int> Lock(FoundationDbContext db, Guid id) => db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + id}, 0))");
+    public sealed record TargetWrite(decimal? Amount,int ExpectedRevision);
+    private static async Task<IResult> CollectionTarget(TargetWrite body,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,AcademyConfigurationService service,TimeProvider clock)
+    {
+        var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
+        if(body.Amount is <=0 or >1_000_000_000||body.Amount.HasValue&&decimal.Round(body.Amount.Value,2)!=body.Amount)return Results.UnprocessableEntity(new{message="أدخل هدفًا موجبًا بدقتين عشريتين أو اتركه فارغًا."});
+        await using var tx=await db.Database.BeginTransactionAsync();await Lock(db,t.AcademyId);service.DiscardRequestCache(t.AcademyId);
+        var active=await db.AcademyConfigurationVersions.SingleOrDefaultAsync(v=>v.AcademyId==t.AcademyId&&v.State==ConfigurationState.Active);
+        if(active==null||active.Revision!=body.ExpectedRevision)return Results.Conflict(new{message="تغيرت الإعدادات؛ حدّث الصفحة قبل حفظ الهدف."});
+        var settings=AcademyRuntimeSettings.Read(active.Payload);if(settings.MonthlyCollectionTarget==body.Amount)return Results.Ok(new{revision=active.Revision});
+        var user=Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!);var draft=await service.CreateDraft(t.AcademyId,user,settings with{MonthlyCollectionTarget=body.Amount});
+        var errors=await service.Validate(draft);if(errors.Length>0)return Results.UnprocessableEntity(new{message="راجع إعدادات الأكاديمية قبل اعتماد الهدف.",errors});
+        await service.Transition(draft,ConfigurationState.Validated,user);draft.EffectiveAtUtc=clock.GetUtcNow();await service.Transition(draft,ConfigurationState.Staged,user);
+        await service.Transition(active,ConfigurationState.Superseded,user);await service.Transition(draft,ConfigurationState.Active,user);await tx.CommitAsync();return Results.Ok(new{revision=draft.Revision});
+    }
 }
 public sealed record ConfigurationChange(ConfigurationState Target, uint Version, DateTimeOffset? EffectiveAtUtc = null);

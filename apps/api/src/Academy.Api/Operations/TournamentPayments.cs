@@ -74,7 +74,7 @@ public static class TournamentPayments
         if (body.Accept && (!row.ProofAssetId.HasValue || !await db.SportEnrollments.AnyAsync(e => e.AcademyId == t.AcademyId && e.Id == row.EnrollmentId && e.IsActive && e.Player.IsActive))) return Results.Conflict(new { message = "يلزم إثبات دفع وتسجيل لاعب قائم لقبول رسم البطولة." });
         row.Status = wanted; row.ReviewReason = body.Reason?.Trim(); row.UpdatedAtUtc = clock.UtcNow;
         if (body.Accept) { row.ConfirmedByUserId = Actor(user); row.ConfirmedAtUtc = clock.UtcNow; row.PaymentMethod = "Online"; row.ReceiptNumber = $"TRN-{clock.Today:yyyyMMdd}-{row.Id.ToString("N")[..12].ToUpperInvariant()}"; }
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = row.RequestedByUserId, Message = body.Accept ? $"تم قبول رسم {row.TournamentName}. الإيصال متاح في طلب البطولة؛ اشتراك التدريب لم يتغير." : $"رُفض إثبات رسم {row.TournamentName}. {body.Reason?.Trim() ?? "راجع الإدارة."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = row.RequestedByUserId, AudienceRole="Guardian",TargetKind="Tournament",TargetId=row.Id, Message = body.Accept ? $"تم قبول رسم {row.TournamentName}. الإيصال متاح في طلب البطولة؛ اشتراك التدريب لم يتغير." : $"رُفض إثبات رسم {row.TournamentName}. {body.Reason?.Trim() ?? "راجع الإدارة."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Id, row.ReceiptNumber });
     }
 }

@@ -14,6 +14,7 @@ public sealed class GuardianProfile : TenantEntity
     public Guid UserId { get; set; }
     public required string DisplayName { get; set; }
     public string? ContactPhone { get; set; }
+    public string? PhotoReference { get; set; }
     public ApplicationUser User { get; set; } = null!;
 }
 
@@ -44,6 +45,8 @@ public sealed class GuardianPlayerLink : TenantEntity
 
 public sealed class SportEnrollment : TenantEntity
 {
+    // Explicitly published training precaution; not a medical chart or staff notes.
+    public string? TrainingSafetyNote { get; set; }
     public TrainingRegistrationFormat RegistrationFormat { get; set; } = TrainingRegistrationFormat.Group;
     public Guid? TrainingLevelId { get; set; }
     public Guid? LevelReviewedByUserId { get; set; }

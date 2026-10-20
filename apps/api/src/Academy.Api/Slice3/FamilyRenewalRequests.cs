@@ -139,7 +139,9 @@ public sealed class FamilyRequestService(FoundationDbContext db, CurrentTenant t
         if (r.ProofAssetId == body.AssetId) return await View(r, false);
         if (r.Revision != body.Revision || r.ProofAssetId.HasValue) throw new CashRejected("وصل إثبات لهذا الطلب بالفعل. حدّث الصفحة لمراجعته.", 409);
         if (!await db.PrivateAssets.AnyAsync(a => a.AcademyId == t.AcademyId && a.Id == body.AssetId && a.IsActive && a.Purpose == "Proof" && a.UploadedByUserId == user)) throw new CashRejected("الإثبات غير متاح لهذا الحساب.", 404);
-        r.ProofAssetId = body.AssetId; r.Revision++; r.UpdatedAtUtc = clock.UtcNow; await db.SaveChangesAsync(); await tx.CommitAsync(); return await View(r, false);
+        r.ProofAssetId = body.AssetId; r.Revision++; r.UpdatedAtUtc = clock.UtcNow;
+        await Academy.Api.Operations.NoticeText.PaymentProof(db,t.AcademyId,id,"تجديد اشتراكات الأسرة",clock.UtcNow);
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return await View(r, false);
     }
     public async Task<object> Cancel(Guid id, int revision)
     {
@@ -182,7 +184,7 @@ public sealed class FamilyRequestService(FoundationDbContext db, CurrentTenant t
             }
         }
         r.Status = desired; r.DecidedByUserId = user; r.DecidedAtUtc = clock.UtcNow; r.DecisionReason = body.Reason?.Trim(); r.Revision++; r.UpdatedAtUtc = clock.UtcNow;
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = r.RequestedByUserId, Message = body.Accept ? "تم قبول إثبات الأسرة وتجديد كل التسجيلات بنجاح. راجع إيصالات أبنائك ومواعيدهم." : $"لم يُقبل طلب تجديد الأسرة. {r.DecisionReason ?? "تواصل مع إدارة الأكاديمية للتوضيح."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = r.RequestedByUserId, AudienceRole="Guardian",TargetKind="FamilyRenewal",TargetId=r.Id, Message = body.Accept ? "تم قبول إثبات الأسرة وتجديد كل التسجيلات بنجاح. راجع إيصالات أبنائك ومواعيدهم." : $"لم يُقبل طلب تجديد الأسرة. {r.DecisionReason ?? "تواصل مع إدارة الأكاديمية للتوضيح."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return await View(r, true);
     }
 }

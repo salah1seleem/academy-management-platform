@@ -48,6 +48,12 @@ public static class CommunityAdEndpoints
     {
         await using var tx=await db.Database.BeginTransactionAsync();if(!await Authority(db,tenant,h,true))return Results.Forbid();var t=(await tenant.ResolveAsync())!;
         if(!await config.Enabled(t.AcademyId,"community_ads"))return Results.Forbid();
+        if(body.LocalStartsOn.HasValue||body.LocalEndsOn.HasValue) {
+            if(!body.LocalStartsOn.HasValue||!body.LocalEndsOn.HasValue||body.LocalStartsOn>body.LocalEndsOn||body.LocalStartsOn.Value.Year is <2000 or >9998||body.LocalEndsOn.Value.Year is <2000 or >9998)return Invalid("راجع تاريخ بداية الإعلان ونهايته.");
+            var zone=await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.TimeZone).SingleAsync();
+            var bounds=Academy.Api.Slice8.ReportingEndpoints.UtcRange(body.LocalStartsOn.Value,body.LocalEndsOn.Value,zone);
+            body=body with{StartsAtUtc=bounds.Start,EndsAtUtc=bounds.EndExclusive};
+        }
         if(body.RequestId==Guid.Empty||string.IsNullOrWhiteSpace(body.InternalName)||body.InternalName.Length>120||string.IsNullOrWhiteSpace(body.Advertiser)||body.Advertiser.Length>120||string.IsNullOrWhiteSpace(body.Title)||body.Title.Length>100||string.IsNullOrWhiteSpace(body.Body)||body.Body.Length>1000||string.IsNullOrWhiteSpace(body.ButtonText)||body.ButtonText.Length>40||body.ImageAlt?.Length>200||body.ImageAssetId.HasValue&&string.IsNullOrWhiteSpace(body.ImageAlt)||body.StartsAtUtc>=body.EndsAtUtc||body.Priority is <0 or >10||body.BranchIds is null||body.BranchIds.Length is <1 or >100||body.BranchIds.Distinct().Count()!=body.BranchIds.Length||body.DestinationUrl is not null)return Invalid("راجع بيانات المحتوى والفترة والفروع. الوجهة الحالية صفحة تفاصيل داخل التطبيق فقط، ولا يوجد دفع أو رابط خارجي في هذه الشريحة.");
         var hash=Hash(body);await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"community-save:{t.AcademyId}:{t.MembershipId}:{body.RequestId}"},0))");
         var prior=await db.CommunityCampaignRevisions.SingleOrDefaultAsync(r=>r.CreatedByMembershipId==t.MembershipId&&r.RequestId==body.RequestId);if(prior!=null)return prior.RequestHash==hash?Results.Ok(new{id=prior.CampaignId,revisionId=prior.Id,replay=true}):Results.Conflict(new{message="استُخدم مفتاح المحاولة لمحتوى آخر."});
@@ -123,7 +129,7 @@ public static class CommunityAdEndpoints
         var now=clock.GetUtcNow();db.CommunityAdEvents.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,RevisionId=id,BranchId=target.BranchId,UserId=user,ViewDate=today,Kind=body.Kind,CreatedAtUtc=now,UpdatedAtUtc=now});await db.SaveChangesAsync();await tx.CommitAsync();return Results.NoContent();
     }
 }
-public sealed record CommunityCampaignWrite(string InternalName,string Advertiser,string Title,string Body,string ButtonText,string? ImageAlt,DateTimeOffset StartsAtUtc,DateTimeOffset EndsAtUtc,int Priority,Guid[] BranchIds,Guid RequestId,Guid? CampaignId=null,uint Version=0,Guid? ImageAssetId=null,string? DestinationUrl=null);
+public sealed record CommunityCampaignWrite(string InternalName,string Advertiser,string Title,string Body,string ButtonText,string? ImageAlt,DateTimeOffset StartsAtUtc,DateTimeOffset EndsAtUtc,int Priority,Guid[] BranchIds,Guid RequestId,Guid? CampaignId=null,uint Version=0,Guid? ImageAssetId=null,string? DestinationUrl=null,DateOnly? LocalStartsOn=null,DateOnly? LocalEndsOn=null);
 public sealed record CommunityCampaignReviewWrite(string Action,uint Version,Guid RequestId,Guid? BranchId=null,string? Note=null);
 public sealed record CommunityAdPreferenceWrite(bool InAppOptIn,bool AdultDeclared);
 public sealed record CommunityAdEventWrite(string Kind);

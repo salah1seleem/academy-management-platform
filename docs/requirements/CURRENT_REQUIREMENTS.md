@@ -2,7 +2,7 @@
 
 Project: Academy Management Platform
 Repository: salah1seleem/academy-management-platform
-Business baseline: ACADEMY_REQUIREMENTS_BASELINE_AR_v4.0.md
+Business baseline: ACADEMY_REQUIREMENTS_BASELINE_AR_v4.1.md
 Owner approval: APPROVAL_2026-09-28.md
 
 أولوية التنفيذ الحالية: V4 بتوجيه صلاح الصريح في19أكتوبر2026. أوقفت متابعة V2/V3 المستقلة؛ تعاد استخدام وظائفهما وضوابطهما الصحيحة وتُحل فقط المتطلبات السابقة التي تعوق V4. انظر إصدار المتطلباتV4 وسجله؛ لا يُعد توقف الأولوية إقرارًا باكتمال V2/V3.

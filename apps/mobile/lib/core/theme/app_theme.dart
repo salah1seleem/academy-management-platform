@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 abstract final class AcademyTheme {
-  static const teal = Color(0xFFD71935), gold = Color(0xFFD71935);
+  static const teal = Color(0xFF49D6A0), gold = Color(0xFFF3D083);
   static const night = Color(0xFF101118),
       card = Color(0xFF20222C),
       red = Color(0xFFD71935);

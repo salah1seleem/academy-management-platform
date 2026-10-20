@@ -4,6 +4,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/vip_rewards.dart';
+import '../shared/experience_ui.dart';
 
 class OwnerVipMembers extends StatelessWidget {
   const OwnerVipMembers({
@@ -22,65 +23,95 @@ class OwnerVipMembers extends StatelessWidget {
         if (asOf.isNotEmpty) 'asOf': asOf,
       },
     ).query;
-    return GCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Expanded(child: Heading('أعضاء مميزون')),
-              TextButton(
-                onPressed: () => openPage(
-                  context,
-                  OwnerGuardianValues(auth: auth, branch: branch, asOf: asOf),
-                ),
-                child: const UiText('عرض الكل'),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ExperienceSection(
+          'أعضاء مميزون',
+          Icons.workspace_premium_rounded,
+          color: ExperienceColors.gold,
+          action: () => openPage(
+            context,
+            OwnerGuardianValues(auth: auth, branch: branch, asOf: asOf),
           ),
-          const UiText('قيمة شهرية مرتبطة بالأبناء، وليست مدفوعات ولي الأمر.'),
-          TextButton.icon(
-            onPressed: () =>
-                openPage(context, NativeVipRewards(auth: auth, owner: true)),
-            icon: const Icon(Icons.card_giftcard_rounded),
-            label: const UiText('إدارة مكافآت الأعضاء المميزين'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () =>
+              openPage(context, NativeVipRewards(auth: auth, owner: true)),
+          icon: const Icon(Icons.card_giftcard_rounded, size: 18),
+          label: const UiText(
+            'إدارة مكافآت الأعضاء المميزين',
+            style: TextStyle(fontSize: 12),
           ),
-          RemoteBody(
-            auth: auth,
-            path: '/api/v1/reports/vip-members?$q',
-            builder: (context, value) {
-              final items = rows(obj(value)['items']);
-              return Column(
-                children: [
-                  if (items.isEmpty)
-                    const UiText(
-                      'لا توجد اشتراكات سارية ذات قيمة شهرية مكتملة.',
-                    ),
-                  for (final row in items)
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: UiText(textOf(obj(row)['displayName'])),
-                      trailing: UiText(
-                        money(
-                          obj(row)['monthlySubscriptionValue'],
-                          obj(row)['currency'],
-                        ),
-                      ),
+        ),
+        const SizedBox(height: 12),
+        RemoteBody(
+          auth: auth,
+          path: '/api/v1/reports/vip-members?$q',
+          builder: (context, value) {
+            final items = rows(obj(value)['items']).take(5).toList();
+            if (items.isEmpty) {
+              return const EmptyMessage(
+                'لا توجد اشتراكات سارية ذات قيمة شهرية مكتملة.',
+              );
+            }
+            return SizedBox(
+              height: 218,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: items.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final r = items[i];
+                  return SizedBox(
+                    width: 152,
+                    child: GCard(
                       onTap: () => openPage(
                         context,
-                        MemberGuardianDetail(
-                          auth: auth,
-                          id: textOf(obj(row)['id']),
-                        ),
+                        MemberGuardianDetail(auth: auth, id: textOf(r['id'])),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          PlayerAvatar(
+                            textOf(r['displayName']),
+                            auth: auth,
+                            adult: true,
+                            reference: r['photoReference'],
+                            size: 64,
+                          ),
+                          const SizedBox(height: 10),
+                          UiText(
+                            textOf(r['displayName']),
+                            maxLines: 2,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const Spacer(),
+                          UiText(
+                            money(r['monthlySubscriptionValue'], r['currency']),
+                            style: const TextStyle(
+                              color: ExperienceColors.gold,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const UiText(
+                            'قيمة الاشتراكات الشهرية',
+                            style: TextStyle(fontSize: 9),
+                          ),
+                        ],
                       ),
                     ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

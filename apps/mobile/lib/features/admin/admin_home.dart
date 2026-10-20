@@ -9,11 +9,13 @@ import '../coach/coach_attendance.dart';
 import '../coach/coach_home.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/role_navigation.dart';
+import '../shared/experience_ui.dart';
 
 /// Operational reads retain the existing server permissions and branch/sport scope.
 class AdminHome extends StatefulWidget {
   final AuthController auth;
-  const AdminHome({super.key, required this.auth});
+  final Widget? accountPage;
+  const AdminHome({super.key, required this.auth, this.accountPage});
   @override
   State<AdminHome> createState() => _AdminHomeState();
 }
@@ -105,6 +107,7 @@ class _AdminHomeState extends State<AdminHome> {
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'يوم الأكاديمية', 'Academy day'),
+    showAppBar: false,
     child: FutureBuilder<Json>(
       future: request,
       builder: (context, snapshot) {
@@ -146,32 +149,22 @@ class _AdminHomeState extends State<AdminHome> {
         return RefreshIndicator(
           onRefresh: refresh,
           child: gList([
-            Row(
-              children: [
-                const AcademyCrest(size: 44),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      UiText(
-                        widget.auth.session!.selected!.academyName,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      UiText(
-                        localized(
-                          context,
-                          'أهلًا، ${widget.auth.session!.displayName}',
-                          'Welcome, ${widget.auth.session!.displayName}',
-                        ),
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            ExperienceHeader(
+              auth: widget.auth,
+              account: widget.accountPage,
+              subtitle: 'يوم الأكاديمية',
+              lesson: 'player-attendance',
             ),
             const SizedBox(height: 16),
+            if (permissions.contains('people.manage'))
+              GLink(
+                'اللاعبون',
+                Icons.groups_outlined,
+                () => openPage(
+                  context,
+                  CoachPlayers(auth: widget.auth, admin: true),
+                ),
+              ),
             if (permissions.contains('attendance.read')) ...[
               GLink(
                 localized(context, 'حضور اللاعبين', 'Player attendance'),

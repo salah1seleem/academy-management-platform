@@ -9,6 +9,7 @@ TestResults/
 node_modules/
 .next/
 .next-e2e/
+.next-refinement*/
 out/
 coverage/
 *.tsbuildinfo

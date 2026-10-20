@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
+import 'match_experience.dart';
+import 'page_video.dart';
 import '../guardian/guardian_ui.dart';
 
 class NextMatchStrip extends StatelessWidget {
@@ -95,8 +97,13 @@ class NextMatchStrip extends StatelessWidget {
 
 class MatchSchedule extends StatefulWidget {
   final AuthController auth;
-  final String? playerId;
-  const MatchSchedule({super.key, required this.auth, this.playerId});
+  final String? playerId, matchId;
+  const MatchSchedule({
+    super.key,
+    required this.auth,
+    this.playerId,
+    this.matchId,
+  });
   @override
   State<MatchSchedule> createState() => _MatchScheduleState();
 }
@@ -109,6 +116,7 @@ class _MatchScheduleState extends State<MatchSchedule> {
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'المباريات', 'Matches'),
+    actions: [PageVideoButton(auth: widget.auth, screen: 'matches')],
     child: ListenableBuilder(
       listenable: widget.auth,
       builder: (context, _) => identity == null || identity != contextKey()
@@ -117,49 +125,12 @@ class _MatchScheduleState extends State<MatchSchedule> {
               auth: widget.auth,
               path:
                   '/api/v1/my-matches${widget.playerId == null ? '' : '?playerId=${Uri.encodeQueryComponent(widget.playerId!)}'}',
-              builder: (context, v) => gList([
-                if (rows(v).isEmpty)
-                  const EmptyMessage('لا توجد مباريات منشورة تخصك حاليًا.'),
-                for (final m in rows(v))
-                  GCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Heading('${m['team']} × ${m['opponent']}'),
-                        if (m['status'] != null)
-                          UiText(
-                            m['status'] == 'Cancelled'
-                                ? 'ملغاة'
-                                : m['status'] == 'Completed'
-                                ? 'منتهية بنتيجة'
-                                : 'منشورة',
-                          ),
-                        if (m['participation'] != null)
-                          UiText(
-                            m['participation'] == 'Bench'
-                                ? 'المشاركة: بديل'
-                                : 'المشاركة: لاعب',
-                          ),
-                        if (m['coachAssignmentSource'] == 'LegacyCurrentTeam')
-                          const UiText(
-                            'إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.',
-                          ),
-                        if (m['coachAssignmentSource'] == 'Confirmed' &&
-                            m['coachName'] != null)
-                          UiText('مدرب المباراة: ${m['coachName']}'),
-                        UiText(
-                          '${m['tournament']} · ${day(m['matchDate'])} · ${m['startTime']}',
-                        ),
-                        UiText(textOf(m['venue'])),
-                        if (m['notes'] != null) UiText(textOf(m['notes'])),
-                        if (m['ourScore'] != null)
-                          UiText(
-                            '${localized(context, 'النتيجة', 'Result')}: ${m['ourScore']} — ${m['opponentScore']}',
-                          ),
-                      ],
-                    ),
-                  ),
-              ]),
+              builder: (context, v) => MatchExperience(
+                auth: widget.auth,
+                items: widget.matchId == null
+                    ? rows(v)
+                    : rows(v).where((m) => m['id'] == widget.matchId).toList(),
+              ),
             ),
     ),
   );

@@ -141,42 +141,50 @@ class _SessionNavigationState extends State<SessionNavigation> {
   Widget build(BuildContext context) {
     final role = widget.auth.session!.selected?.role;
     final guardian = role == 'Guardian';
-    return NavigatorPopHandler<Object?>(
-      onPopWithResult: (result) => navigator.currentState!.pop(result),
-      child: Navigator(
-        key: navigator,
-        onGenerateRoute: (_) => MaterialPageRoute<void>(
-          builder: (_) => role == null
-              ? RoleFoundation(auth: widget.auth)
-              : RoleIntroGate(
-                  auth: widget.auth,
-                  appearance: AppearanceScope.of(context) ?? fallbackAppearance,
-                  child: NativeRoleTabs(
+    // Scope transient UI messages to this authenticated membership navigator.
+    // Switching roles disposes the messenger as well as private routes.
+    return ScaffoldMessenger(
+      child: NavigatorPopHandler<Object?>(
+        onPopWithResult: (result) => navigator.currentState!.pop(result),
+        child: Navigator(
+          key: navigator,
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => role == null
+                ? RoleFoundation(auth: widget.auth)
+                : RoleIntroGate(
                     auth: widget.auth,
-                    role: role,
-                    environment: widget.environment,
-                    account: RoleFoundation(auth: widget.auth),
-                    home: guardian
-                        ? GuardianHome(
-                            auth: widget.auth,
-                            environment: widget.environment,
-                            accountPage: RoleFoundation(auth: widget.auth),
-                          )
-                        : role == 'Coach'
-                        ? CoachHome(
-                            auth: widget.auth,
-                            accountPage: RoleFoundation(auth: widget.auth),
-                          )
-                        : role == 'AcademyOwner'
-                        ? OwnerDashboard(
-                            auth: widget.auth,
-                            accountPage: RoleFoundation(auth: widget.auth),
-                          )
-                        : role == 'AcademyAdmin'
-                        ? AdminHome(auth: widget.auth)
-                        : RoleFoundation(auth: widget.auth),
+                    appearance:
+                        AppearanceScope.of(context) ?? fallbackAppearance,
+                    child: NativeRoleTabs(
+                      auth: widget.auth,
+                      role: role,
+                      environment: widget.environment,
+                      account: RoleFoundation(auth: widget.auth),
+                      home: guardian
+                          ? GuardianHome(
+                              auth: widget.auth,
+                              environment: widget.environment,
+                              accountPage: RoleFoundation(auth: widget.auth),
+                            )
+                          : role == 'Coach'
+                          ? CoachHome(
+                              auth: widget.auth,
+                              accountPage: RoleFoundation(auth: widget.auth),
+                            )
+                          : role == 'AcademyOwner'
+                          ? OwnerDashboard(
+                              auth: widget.auth,
+                              accountPage: RoleFoundation(auth: widget.auth),
+                            )
+                          : role == 'AcademyAdmin'
+                          ? AdminHome(
+                              auth: widget.auth,
+                              accountPage: RoleFoundation(auth: widget.auth),
+                            )
+                          : RoleFoundation(auth: widget.auth),
+                    ),
                   ),
-                ),
+          ),
         ),
       ),
     );

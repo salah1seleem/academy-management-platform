@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
-import '../../core/theme/academy_brand.dart';
+import 'page_video.dart';
 import '../guardian/guardian_ui.dart';
 import '../guardian/guardian_content.dart';
 import '../guardian/guardian_profile.dart';
@@ -11,9 +11,10 @@ import '../guardian/guardian_report.dart';
 import '../guardian/family_renewal_request.dart';
 import '../coach/coach_home.dart';
 import '../coach/coach_player.dart';
+import '../coach/monthly_stars.dart';
 import '../admin/admin_home.dart';
 import '../owner/owner_reports.dart';
-import '../owner/owner_operations.dart';
+import '../owner/home_destinations.dart';
 import 'academy_news.dart';
 import 'community_ads.dart';
 import 'matches.dart';
@@ -27,6 +28,8 @@ import 'facility_board.dart';
 import 'role_agenda.dart';
 import 'help_center.dart';
 import 'assigned_followups.dart';
+import 'player_roster_status.dart';
+import 'content_editor.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
@@ -62,8 +65,8 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
         : owner
         ? [
             ('الرئيسية', 'Home', Icons.home_outlined),
-            ('القرارات', 'Decisions', Icons.task_alt_outlined),
-            ('المالية', 'Finance', Icons.account_balance_wallet_outlined),
+            ('المباريات', 'Matches', Icons.sports_soccer_rounded),
+            ('التقارير', 'Reports', Icons.analytics_outlined),
             ('المزيد', 'More', Icons.grid_view_outlined),
           ]
         : admin
@@ -77,6 +80,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
             ('الرئيسية', 'Home', Icons.home_outlined),
             ('جدولي', 'Schedule', Icons.calendar_month_outlined),
             ('اللاعبون', 'Players', Icons.groups_outlined),
+            ('المباريات', 'Matches', Icons.sports_soccer_rounded),
             ('المزيد', 'More', Icons.grid_view_outlined),
           ];
     final Widget page = selected == 0
@@ -98,7 +102,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
                 )
         : owner
         ? selected == 1
-              ? OwnerDecisionsPage(auth: widget.auth)
+              ? MatchSchedule(auth: widget.auth)
               : OwnerReports(auth: widget.auth)
         : admin
         ? selected == 1
@@ -106,6 +110,8 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
               : NativePaymentRequests(auth: widget.auth)
         : selected == 1
         ? RoleAgenda(auth: widget.auth, guardian: false)
+        : selected == 3
+        ? MatchSchedule(auth: widget.auth)
         : CoachPlayers(auth: widget.auth);
     return Scaffold(
       body: KeyedSubtree(
@@ -114,13 +120,25 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
       ),
       bottomNavigationBar: NavigationBar(
         height: 72,
+        indicatorColor: owner && selected == 1 ? const Color(0x2449D6A0) : null,
         selectedIndex: selected,
         onDestinationSelected: (i) => setState(() => selected = i),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: [
           for (final d in destinations)
             NavigationDestination(
-              icon: Icon(d.$3),
+              icon: Icon(
+                d.$3,
+                color: owner && d.$1 == 'المباريات'
+                    ? const Color(0xFF49D6A0)
+                    : null,
+              ),
+              selectedIcon: Icon(
+                d.$3,
+                color: owner && d.$1 == 'المباريات'
+                    ? const Color(0xFF49D6A0)
+                    : Colors.white,
+              ),
               label: localized(context, d.$1, d.$2),
             ),
         ],
@@ -146,25 +164,9 @@ class NativeMore extends StatelessWidget {
     child: gList([
       HelpEntry(auth: auth),
       GLink(
-        localized(context, 'ابدأ من هنا', 'Start here'),
-        Icons.help_outline,
-        () async {
-          final brand = BrandScope.maybeOf(context);
-          if (brand?.loading == true) return;
-          await brand?.refresh(force: true);
-          if (!context.mounted) return;
-          openPage(
-            context,
-            AcademyOnboarding(
-              role: role,
-              sportTheme: brand?.sportTheme ?? 'general',
-              features: brand?.features ?? [],
-              onComplete: () async {
-                Navigator.of(context).pop();
-              },
-            ),
-          );
-        },
+        'فيديوهات شرح الصفحات',
+        Icons.play_circle_outline_rounded,
+        () => openPage(context, PageVideoLibrary(auth: auth)),
       ),
       if (role == 'Guardian') ...[
         GLink(
@@ -197,9 +199,15 @@ class NativeMore extends StatelessWidget {
       if (role == 'Guardian') SponsorPreferenceEntry(auth: auth),
       if (role == 'AcademyOwner')
         GLink(
-          'المحتوى برعاية وموافقات الفروع',
+          'الإعلانات',
           Icons.campaign_outlined,
           () => openPage(context, OwnerCommunityCampaigns(auth: auth)),
+        ),
+      if (role == 'Coach')
+        GLink(
+          'نجوم فريقي الشهرية',
+          Icons.star_outline_rounded,
+          () => openPage(context, CoachMonthlyStars(auth: auth)),
         ),
       if (role == 'Coach')
         GLink(
@@ -232,7 +240,7 @@ class NativeMore extends StatelessWidget {
           Icons.fact_check_outlined,
           () => openPage(context, StaffAttendanceExceptionPage(auth: auth)),
         ),
-      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
+      if (role == 'AcademyAdmin')
         RemoteBody(
           auth: auth,
           path: '/api/v1/my-permissions',
@@ -271,20 +279,26 @@ class NativeMore extends StatelessWidget {
       GLink(
         localized(context, 'الأخبار', 'News'),
         Icons.newspaper_outlined,
-        () => openPage(context, AcademyNewsPage(auth: auth)),
+        () => openPage(
+          context,
+          role == 'AcademyOwner'
+              ? AcademyNewsManagement(auth: auth)
+              : AcademyNewsPage(auth: auth),
+        ),
       ),
-      GLink(
-        localized(context, 'الحساب والإعدادات', 'Account & settings'),
-        Icons.settings_outlined,
-        () => openPage(context, account),
-      ),
-      if (role != 'Guardian')
+      if (role != 'AcademyOwner')
+        GLink(
+          localized(context, 'الحساب والإعدادات', 'Account & settings'),
+          Icons.settings_outlined,
+          () => openPage(context, account),
+        ),
+      if (role == 'Coach' || role == 'AcademyAdmin')
         GLink(
           'حضوري وانصرافي',
           Icons.fingerprint,
           () => openPage(context, NativeStaffAttendancePage(auth: auth)),
         ),
-      if (role != 'Guardian')
+      if (role == 'Coach' || role == 'AcademyAdmin')
         GLink(
           localized(
             context,
@@ -300,26 +314,47 @@ class NativeMore extends StatelessWidget {
 
 class CoachPlayers extends StatelessWidget {
   final AuthController auth;
-  const CoachPlayers({super.key, required this.auth});
+  final bool admin;
+  const CoachPlayers({super.key, required this.auth, this.admin = false});
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'لاعبو مجموعاتي', 'My groups’ players'),
+    title: admin
+        ? 'اللاعبون'
+        : localized(context, 'لاعبو مجموعاتي', 'My groups’ players'),
     child: RemoteBody(
       auth: auth,
-      path: '/api/v1/evaluations/options',
+      path: admin ? '/api/v1/people/roster' : '/api/v1/evaluations/options',
       builder: (context, value) {
         final players = rows(obj(value)['enrollments']);
         return gList([
           for (final p in players)
-            GLink(
-              '${p['player']} · ${p['group'] ?? p['sport'] ?? ""}',
-              Icons.person_outline,
-              () => openPage(
-                context,
-                CoachPlayerPage(
+            GCard(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: PlayerAvatar(
+                  textOf(p['player']),
                   auth: auth,
-                  enrollmentId: textOf(p['id']),
-                  groupId: textOf(p['groupId']),
+                  reference: p['photoReference'],
+                  size: 48,
+                ),
+                title: UiText(textOf(p['player'])),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(textOf(p['group'] ?? p['sport'])),
+                    PlayerRosterStatus(player: p),
+                  ],
+                ),
+                trailing: const Icon(Icons.chevron_left),
+                onTap: () => openPage(
+                  context,
+                  admin
+                      ? StaffPlayerRead(auth: auth, id: textOf(p['playerId']))
+                      : CoachPlayerPage(
+                          auth: auth,
+                          enrollmentId: textOf(p['id']),
+                          groupId: textOf(p['groupId']),
+                        ),
                 ),
               ),
             ),

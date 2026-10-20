@@ -1,572 +1,373 @@
-import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
-import '../shared/matches.dart';
-
 import '../../core/auth/auth_controller.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/theme/academy_brand.dart';
-import '../../core/theme/appearance.dart';
+import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
-import '../shared/academy_news.dart';
+import '../shared/experience_ui.dart';
 import '../shared/role_navigation.dart';
 import 'owner_reports.dart';
 import 'owner_operations.dart';
-import 'member_values.dart';
-import 'coach_rating_leaders.dart';
 import 'owner_cockpit.dart';
+import 'member_values.dart';
+import 'refined_home_panels.dart';
+import 'home_destinations.dart';
+import 'featured_players.dart';
+import 'collection_reminders.dart';
+import 'collection_target.dart';
+import 'owner_followups.dart';
 
 class OwnerDashboard extends StatefulWidget {
-  final AuthController auth;
-  final Widget accountPage;
   const OwnerDashboard({
     super.key,
     required this.auth,
     required this.accountPage,
   });
+  final AuthController auth;
+  final Widget accountPage;
   @override
   State<OwnerDashboard> createState() => _OwnerDashboardState();
 }
 
 class _OwnerDashboardState extends State<OwnerDashboard> {
   String from = '', to = '', branch = '';
-  int revision = 0;
   bool cleared = false;
   String? identity;
-  String? get currentIdentity => widget.auth.session?.selected == null
+  late Future<List<Object?>> data;
+  String? get contextKey => widget.auth.session?.selected == null
       ? null
-      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+      : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   @override
   void initState() {
     super.initState();
-    identity = currentIdentity;
-    widget.auth.addListener(contextChanged);
+    identity = contextKey;
+    widget.auth.addListener(authChanged);
+    data = load();
   }
 
-  void contextChanged() {
-    if (!mounted || identity == currentIdentity) return;
+  void authChanged() {
+    if (!mounted || identity == contextKey) return;
     setState(() {
-      identity = currentIdentity;
+      identity = contextKey;
       from = '';
       to = '';
       branch = '';
       cleared = false;
-      revision++;
+      data = load();
     });
   }
 
   @override
-  void didUpdateWidget(OwnerDashboard old) {
-    super.didUpdateWidget(old);
-    if (old.auth != widget.auth) {
-      old.auth.removeListener(contextChanged);
-      widget.auth.addListener(contextChanged);
-      identity = currentIdentity;
-      from = '';
-      to = '';
-      branch = '';
-      cleared = false;
-      revision++;
-    }
-  }
-
-  @override
   void dispose() {
-    widget.auth.removeListener(contextChanged);
+    widget.auth.removeListener(authChanged);
     super.dispose();
   }
 
-  Future<void> chooseRange() async {
-    final chosen = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-      initialDateRange: from.isEmpty || to.isEmpty
-          ? null
-          : DateTimeRange(start: DateTime.parse(from), end: DateTime.parse(to)),
-    );
-    if (chosen != null && mounted) {
-      setState(() {
-        from = day(chosen.start.toIso8601String());
-        to = day(chosen.end.toIso8601String());
-        cleared = false;
-        revision++;
-      });
+  Map<String, String> get filters => {
+    if (from.isNotEmpty) 'from': from,
+    if (to.isNotEmpty) 'to': to,
+    if (branch.isNotEmpty) 'branchId': branch,
+    if (cleared) 'allDates': 'true',
+  };
+  Future<List<Object?>> load() async {
+    final expected = contextKey;
+    if (!cleared && from.isEmpty && to.isEmpty) {
+      final calendar = obj(
+        await widget.auth.request('GET', '/api/v1/academy/calendar'),
+      );
+      if (expected != contextKey) throw StateError('context');
+      from = textOf(calendar['trailingMonthFrom']);
+      to = textOf(calendar['today']);
     }
+    final query = Uri(queryParameters: filters).query;
+    final result = await Future.wait([
+      widget.auth.request('GET', '/api/v1/reports/owner-summary?$query'),
+      widget.auth.request('GET', '/api/v1/reports/owner-cockpit?$query'),
+      widget.auth.request('GET', '/api/v1/reports/operating-statement?$query'),
+      widget.auth.request('GET', '/api/v1/manage/structure/options'),
+    ]);
+    if (expected != contextKey) throw StateError('context');
+    return result;
   }
 
+  void refresh() => setState(() => data = load());
+  void report(String name) => openPage(
+    context,
+    OwnerReports(
+      auth: widget.auth,
+      initialReport: name,
+      initialFilters: {
+        ...filters,
+        if (name == 'receivables') 'state': 'overdue',
+      },
+    ),
+  );
   @override
-  Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'لوحة المالك', 'Owner dashboard'),
-    actions: [
-      IconButton(
-        tooltip: localized(context, 'الحساب', 'Account'),
-        onPressed: () => openPage(context, widget.accountPage),
-        icon: const Icon(Icons.person_outline),
-      ),
-    ],
-    child: currentIdentity == null
-        ? const SizedBox.shrink()
-        : RemoteBody(
-            key: ValueKey(revision),
-            auth: widget.auth,
-            path:
-                '/api/v1/reports/owner-summary?${Uri(queryParameters: {if (from.isNotEmpty) 'from': from, if (to.isNotEmpty) 'to': to, if (cleared) 'allDates': 'true', if (branch.isNotEmpty) 'branchId': branch}).query}',
-            builder: (context, value) {
-              final d = obj(value),
-                  c = obj(d['collections']),
-                  s = obj(d['subscriptions']),
-                  p = d['paymentRequests'] is Map
-                      ? obj(d['paymentRequests'])
-                      : <String, dynamic>{
-                          'total': d['payments']?['pending'],
-                          'newEnrollments': null,
-                          'renewals': null,
-                          'products': null,
-                        };
-              final currency = d['currency'];
-              final operations = d['operations'] is Map
-                  ? obj(d['operations'])
-                  : <String, dynamic>{};
-              void requests([String type = '']) => openPage(
-                context,
-                NativePaymentRequests(
-                  auth: widget.auth,
-                  filters: {
-                    if (type.isNotEmpty) 'type': type,
-                    if (d['from'] != null) 'from': textOf(d['from']),
-                    if (d['to'] != null) 'to': textOf(d['to']),
-                    if (branch.isNotEmpty) 'branchId': branch,
-                  },
-                ),
-              );
-              void financial(String method, {bool daily = false}) => openPage(
-                context,
-                OwnerReports(
-                  auth: widget.auth,
-                  initialFilters: {
-                    'from': daily
-                        ? textOf(d['to'] ?? d['asOfDate'])
-                        : textOf(
-                            d['from'] ??
-                                '${d['asOfDate'].toString().substring(0, 8)}01',
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: identity == null
+              ? const SizedBox.shrink()
+              : FutureBuilder<List<Object?>>(
+                  future: data,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const UiText('تعذر تحميل الرئيسية.'),
+                              TextButton(
+                                onPressed: refresh,
+                                child: const UiText('إعادة المحاولة'),
+                              ),
+                            ],
                           ),
-                    'to': textOf(d['to'] ?? d['asOfDate']),
-                    if (branch.isNotEmpty) 'branchId': branch,
-                    if (method.isNotEmpty) 'provider': method,
-                  },
-                ),
-              );
-              return gList([
-                Row(
-                  children: [
-                    const AcademyCrest(size: 44),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          UiText(
-                            BrandScope.maybeOf(context)?.name ??
-                                widget.auth.session!.selected!.academyName,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          UiText(
-                            localized(
+                        );
+                      }
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final summary = obj(snapshot.data![0]),
+                        cockpit = obj(snapshot.data![1]),
+                        statement = obj(snapshot.data![2]),
+                        options = obj(snapshot.data![3]);
+                    final requests = obj(summary['paymentRequests']),
+                        collections = obj(summary['collections']),
+                        scope = {...filters};
+                    void queue([String type = '']) => openPage(
+                      context,
+                      NativePaymentRequests(
+                        auth: widget.auth,
+                        filters: {...scope, if (type.isNotEmpty) 'type': type},
+                      ),
+                    );
+                    void collection(bool daily, String method) {
+                      final end = textOf(summary['collectionDay']);
+                      openPage(
+                        context,
+                        OwnerReports(
+                          auth: widget.auth,
+                          initialFilters: {
+                            'from': daily
+                                ? end
+                                : textOf(summary['collectionMonthFrom']),
+                            'to': end,
+                            if (branch.isNotEmpty) 'branchId': branch,
+                            if (method.isNotEmpty) 'provider': method,
+                          },
+                        ),
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        refresh();
+                        await data;
+                      },
+                      child: gList([
+                        ExperienceHeader(
+                          auth: widget.auth,
+                          subtitle: 'لوحة المالك',
+                          lesson: 'owner-dashboard',
+                          account: widget.accountPage,
+                        ),
+                        ScopeDateTiles(
+                          from: from,
+                          to: to,
+                          onChanged: (a, b) {
+                            setState(() {
+                              from = a;
+                              to = b;
+                              cleared = false;
+                              data = load();
+                            });
+                          },
+                          onClear: () {
+                            setState(() {
+                              from = '';
+                              to = '';
+                              branch = '';
+                              cleared = true;
+                              data = load();
+                            });
+                          },
+                        ),
+                        ScopeBranchTabs(
+                          items: rows(options['branches']),
+                          selected: branch,
+                          onSelected: (v) {
+                            setState(() {
+                              branch = v;
+                              data = load();
+                            });
+                          },
+                        ),
+                        AcademySummaryPanel(
+                          data: cockpit,
+                          onTarget: () async {
+                            final saved = await openPage<bool>(
                               context,
-                              'مرجع التحليل: ${day(d['asOfDate'])}',
-                              'Analysis reference: ${day(d['asOfDate'])}',
+                              CollectionTargetPage(auth: widget.auth),
+                            );
+                            if (saved == true && mounted) {
+                              final calendar = obj(
+                                await widget.auth.request(
+                                  'GET',
+                                  '/api/v1/academy/calendar',
+                                ),
+                              );
+                              if (!mounted) return;
+                              setState(() {
+                                to = textOf(calendar['today']);
+                                from = '${to.substring(0, 7)}-01';
+                                branch = '';
+                                cleared = false;
+                                data = load();
+                              });
+                            }
+                          },
+                          onReport: report,
+                          onCapacity: () => openPage(
+                            context,
+                            OwnerCapacityPage(
+                              auth: widget.auth,
+                              filters: scope,
                             ),
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: chooseRange,
-                        icon: const Icon(Icons.date_range, size: 18),
-                        label: UiText(
-                          '${d['from'] ?? from} — ${d['to'] ?? to}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() {
-                        from = '';
-                        to = '';
-                        branch = '';
-                        cleared = true;
-                        revision++;
-                      }),
-                      child: UiText(localized(context, 'مسح', 'Clear')),
-                    ),
-                  ],
-                ),
-                RemoteBody(
-                  auth: widget.auth,
-                  path: '/api/v1/manage/structure/options',
-                  builder: (context, options) => Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: DropdownButtonFormField<String>(
-                      initialValue: branch,
-                      decoration: InputDecoration(
-                        labelText: localized(context, 'الفرع', 'Branch'),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: '',
-                          child: UiText(
-                            localized(context, 'كل الفروع', 'All branches'),
                           ),
                         ),
-                        for (final b in rows(obj(options)['branches']))
-                          DropdownMenuItem(
-                            value: b['id'],
-                            child: UiText(textOf(b['arabicName'])),
+                        HomeSubscriptions(
+                          data: obj(summary['subscriptions']),
+                          onOpen: (state) => openPage(
+                            context,
+                            HomeSubscriptionPlayers(
+                              auth: widget.auth,
+                              filters: {...scope, 'to': textOf(summary['to'])},
+                              state: state,
+                            ),
                           ),
-                      ],
-                      onChanged: (v) => setState(() {
-                        branch = v ?? '';
-                        revision++;
-                      }),
-                    ),
-                  ),
-                ),
-                OwnerCockpit(
-                  auth: widget.auth,
-                  filters: {
-                    if (!cleared) 'from': textOf(d['from']),
-                    if (!cleared) 'to': textOf(d['to']),
-                    if (cleared) 'allDates': 'true',
-                    if (branch.isNotEmpty) 'branchId': branch,
+                        ),
+                        HomeCollectionCards(
+                          data: collections,
+                          currency: summary['currency'],
+                          referenceDay: textOf(summary['collectionDay']),
+                          onOpen: collection,
+                        ),
+                        HomeOperatingStatement(
+                          data: statement,
+                          onOpen: () => report('operating'),
+                        ),
+                        ExperienceSection(
+                          'طلبات الدفع',
+                          Icons.receipt_long_outlined,
+                          action: () => queue(),
+                        ),
+                        GCard(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final item in [
+                                (
+                                  'اشتراكات جديدة',
+                                  'Enrollment',
+                                  requests['newEnrollments'],
+                                ),
+                                (
+                                  'تجديد الاشتراك',
+                                  'Renewal',
+                                  requests['renewals'],
+                                ),
+                                (
+                                  'منتجات رياضية',
+                                  'Product',
+                                  requests['products'],
+                                ),
+                                if ((requests['tournaments'] as num? ?? 0) > 0)
+                                  (
+                                    'بطولات',
+                                    'Tournament',
+                                    requests['tournaments'],
+                                  ),
+                              ])
+                                ActionChip(
+                                  label: UiText(
+                                    '${item.$1} · ${item.$3}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  onPressed: () => queue(item.$2),
+                                ),
+                            ],
+                          ),
+                        ),
+                        ExperienceSection(
+                          'مركز القرارات الذكية',
+                          Icons.bolt_rounded,
+                          actionLabel: 'كل القرارات',
+                          action: () => openPage(
+                            context,
+                            OwnerDecisionsPage(auth: widget.auth),
+                          ),
+                        ),
+                        HomeDecisionCards(
+                          data: {
+                            ...cockpit,
+                            'groupAttention':
+                                summary['operations']['groupAttention'],
+                          },
+                          onGroup: (group) => openPage(
+                            context,
+                            OwnerGroupOperations(
+                              auth: widget.auth,
+                              id: textOf(group['id']),
+                            ),
+                          ),
+                          onFollowUps: () => openPage(
+                            context,
+                            OwnerFollowUpsPage(auth: widget.auth),
+                          ),
+                          onReminders: (kind) => openPage(
+                            context,
+                            CollectionReminders(
+                              auth: widget.auth,
+                              branch: branch,
+                              kind: kind,
+                            ),
+                          ),
+                          onReport: report,
+                          onCapacity: () => openPage(
+                            context,
+                            OwnerCapacityPage(
+                              auth: widget.auth,
+                              filters: scope,
+                            ),
+                          ),
+                        ),
+                        HomeCoaches(
+                          auth: widget.auth,
+                          items: rows(
+                            obj(summary['operations'])['coachPerformance'],
+                          ),
+                          branches: rows(options['branches']),
+                          filters: scope,
+                        ),
+                        OwnerVipMembers(
+                          auth: widget.auth,
+                          branch: branch,
+                          asOf: textOf(summary['to']),
+                        ),
+                        FeaturedPlayers(
+                          auth: widget.auth,
+                          branch: branch,
+                          asOf: textOf(summary['to']),
+                        ),
+                      ]),
+                    );
                   },
                 ),
-                GCard(
-                  onTap: requests,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: UiText(
-                              localized(
-                                context,
-                                'طلبات الدفع',
-                                'Payment requests',
-                              ),
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AcademyTheme.red,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: UiText(
-                              textOf(p['total']),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          for (final x in [
-                            (
-                              'اشتراكات جديدة',
-                              'New',
-                              p['newEnrollments'],
-                              'Enrollment',
-                            ),
-                            ('تجديد', 'Renewals', p['renewals'], 'Renewal'),
-                            ('منتجات', 'Products', p['products'], 'Product'),
-                            if (p['tournaments'] != null &&
-                                p['tournaments'] != 0)
-                              (
-                                'بطولات',
-                                'Tournaments',
-                                p['tournaments'],
-                                'Tournament',
-                              ),
-                          ])
-                            Expanded(
-                              child: InkWell(
-                                key: ValueKey('owner-request-${x.$4}'),
-                                onTap: () => requests(x.$4),
-                                child: Column(
-                                  children: [
-                                    UiText(
-                                      textOf(x.$3),
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    UiText(
-                                      localized(context, x.$1, x.$2),
-                                      style: const TextStyle(fontSize: 11),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (operations.isNotEmpty)
-                  OwnerDecisionsPanel(
-                    auth: widget.auth,
-                    operations: operations,
-                    branchId: branch,
-                    onReturn: () {
-                      if (mounted && currentIdentity != null) {
-                        setState(() {
-                          revision++;
-                        });
-                      }
-                    },
-                  ),
-                for (final x in [
-                  (
-                    'تحصيل اليوم',
-                    'Today’s collections',
-                    c['today'],
-                    c['todayCash'],
-                    c['todayOnline'],
-                    true,
-                    c['todayUnspecified'],
-                  ),
-                  (
-                    'تحصيل الشهر',
-                    'Period collections',
-                    c['month'],
-                    c['monthCash'],
-                    c['monthOnline'],
-                    false,
-                    c['monthUnspecified'],
-                  ),
-                ])
-                  GCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        UiText(
-                          localized(context, x.$1, x.$2),
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        InkWell(
-                          onTap: () => financial('', daily: x.$6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: UiText(
-                              money(x.$3, currency),
-                              style: TextStyle(
-                                fontSize: 30,
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                onPressed: () => financial('Cash', daily: x.$6),
-                                child: UiText(
-                                  '${localized(context, 'نقدي', 'Cash')}\n${x.$4 == null ? '—' : money(x.$4, currency)}',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                onPressed: () =>
-                                    financial('Online', daily: x.$6),
-                                child: UiText(
-                                  '${localized(context, 'إلكتروني', 'Online')}\n${x.$5 == null ? '—' : money(x.$5, currency)}',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (x.$7 != null &&
-                            !RegExp(r'^-?0+(\.0+)?$').hasMatch(textOf(x.$7)))
-                          TextButton(
-                            onPressed: () =>
-                                financial('Unspecified', daily: x.$6),
-                            child: UiText(
-                              '${localized(context, 'طريقة صرف قديمة غير موثقة', 'Historical payout method unrecorded')}: ${money(x.$7, currency)}',
-                            ),
-                          ),
-                        UiText(
-                          localized(
-                            context,
-                            'صافي التحصيل بعد الاسترداد',
-                            'Net collections after refunds',
-                          ),
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                GCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          children: [
-                            UiText(
-                              localized(
-                                context,
-                                'الاشتراكات الفعالة',
-                                'Active subscriptions',
-                              ),
-                            ),
-                            UiText(
-                              textOf(s['active']),
-                              style: const TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            UiText(
-                              localized(
-                                context,
-                                'تنتهي قريبًا',
-                                'Expiring soon',
-                              ),
-                            ),
-                            UiText(
-                              textOf(s['expiring']),
-                              style: TextStyle(
-                                fontSize: 30,
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final x in [
-                      (
-                        'اللاعبون النشطون',
-                        'Active players',
-                        d['activePlayers'],
-                      ),
-                      ('المدربون', 'Coaches', d['coaches']),
-                      (
-                        'اشتراكات جديدة',
-                        'New subscriptions',
-                        d['newSubscriptions'],
-                      ),
-                    ])
-                      Chip(
-                        label: UiText(
-                          '${localized(context, x.$1, x.$2)} · ${textOf(x.$3)}',
-                        ),
-                      ),
-                  ],
-                ),
-                if (operations.isNotEmpty) ...[
-                  OwnerOperationsPanel(
-                    auth: widget.auth,
-                    onReturn: () {
-                      if (mounted && currentIdentity != null) {
-                        setState(() {
-                          revision++;
-                        });
-                      }
-                    },
-                    operations: operations,
-                    filters: {
-                      if (d['from'] != null) 'from': textOf(d['from']),
-                      if (d['to'] != null) 'to': textOf(d['to']),
-                      if (branch.isNotEmpty) 'branchId': branch,
-                    },
-                  ),
-                  GCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const UiText('مصروفات معتمدة لم تُرحّل بعد'),
-                        for (final expense in rows(
-                          operations['pendingExpenses'],
-                        ))
-                          UiText(
-                            '${expense['count']} قيد · ${money(expense['amount'], expense['currency'])}',
-                          ),
-                        if (rows(operations['pendingExpenses']).isEmpty)
-                          const UiText('لا توجد مصروفات معلقة.'),
-                      ],
-                    ),
-                  ),
-                ],
-                OwnerVipMembers(auth: widget.auth, branch: branch, asOf: to),
-                OwnerCoachRatingLeaders(
-                  auth: widget.auth,
-                  branch: branch,
-                  from: from,
-                  to: to,
-                ),
-                NewsStrip(auth: widget.auth),
-                NextMatchStrip(auth: widget.auth),
-                FilledButton.icon(
-                  onPressed: () =>
-                      openPage(context, OwnerReports(auth: widget.auth)),
-                  icon: const Icon(Icons.analytics_outlined),
-                  label: UiText(localized(context, 'التقارير', 'Reports')),
-                ),
-              ]);
-            },
-          ),
+        ),
+      ),
+    ),
   );
 }

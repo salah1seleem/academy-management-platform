@@ -30,7 +30,7 @@ public static class ManualPayments
         api.MapPost("/guardian/enrollment-requests/{id:guid}/proof", EnrollmentProof).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/guardian/enrollment-requests/{id:guid}/payment", EnrollmentPayment).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
         api.MapGet("/manage/enrollment-requests/{id:guid}/payment", EnrollmentPaymentStaff).RequireAuthorization(AcademyPermissions.PaymentRead);
-        api.MapGet("/notices", async (CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var user = Actor(principal); return Results.Ok(await db.AcademyNotices.Where(x => x.AcademyId == t.AcademyId && x.UserId == user).OrderByDescending(x => x.CreatedAtUtc).Take(50).Select(x => new { x.Id, x.Message, x.IsRead, x.CreatedAtUtc }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.TenantAccess);
+        api.MapGet("/notices", async (CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db) => { var t = (await tenant.ResolveAsync())!; var user = Actor(principal); return Results.Ok(await NoticeEndpoints.OwnNotices(db,t.AcademyId,user,t.Role).OrderByDescending(x => x.CreatedAtUtc).Take(50).Select(x => new { x.Id, x.Message, x.IsRead, x.CreatedAtUtc }).ToListAsync()); }).RequireAuthorization(AcademyPermissions.TenantAccess);
         api.MapGet("/people/players/{id:guid}/refunds", Refunds).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage);
         api.MapPost("/people/players/{id:guid}/refunds", Refund).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/people/players/{id:guid}/refunds/quote", async (Guid id, RefundWrite body, CashRegisterService cash) => {
@@ -107,7 +107,9 @@ public static class ManualPayments
         var row = await db.NewEnrollmentRequests.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.RequestedByGuardianUserId == user);
         if (row is null || !await db.PrivateAssets.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.AssetId && x.UploadedByUserId == user && x.Purpose == "Proof")) return Results.NotFound();
         if (!row.SubscriptionPlanId.HasValue || row.Status is not (NewEnrollmentRequestStatus.Pending or NewEnrollmentRequestStatus.UnderReview)) return Results.Conflict();
-        row.ProofAssetId = body.AssetId; row.UpdatedAtUtc = clock.UtcNow; await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { message = "وصل إثبات الدفع للإدارة. يتم تفعيل الاشتراك بعد قبوله وإسناد المجموعة." });
+        row.ProofAssetId = body.AssetId; row.UpdatedAtUtc = clock.UtcNow;
+        await NoticeText.PaymentProof(db,t.AcademyId,id,"اشتراك جديد",clock.UtcNow);
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { message = "وصل إثبات الدفع للإدارة. يتم تفعيل الاشتراك بعد قبوله وإسناد المجموعة." });
     }
     private static Task<IResult> EnrollmentPayment(Guid id, CurrentTenant t, ClaimsPrincipal p, FoundationDbContext db) => EnrollmentPaymentCore(id, t, db, Actor(p));
     private static Task<IResult> EnrollmentPaymentStaff(Guid id, CurrentTenant t, FoundationDbContext db) => EnrollmentPaymentCore(id, t, db, null);
@@ -134,6 +136,7 @@ public static class ManualPayments
         else if (proof.Status != "Pending") return Results.Conflict();
         proof.AssetId = body.AssetId; proof.UpdatedAtUtc = clock.UtcNow;
         payment.Provider = "Manual"; payment.ProviderEnvironment = "Manual"; payment.UpdatedAtUtc = clock.UtcNow;
+        await NoticeText.PaymentProof(db,t.AcademyId,id,"تجديد الاشتراك",clock.UtcNow);
         await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { proof.Id, message = "وصل إثبات الدفع إلى الإدارة. يبدأ الاشتراك بعد الموافقة." });
     }
     private static async Task<IResult> GetProof(Guid id, CurrentTenant tenant, FoundationDbContext db)
@@ -172,7 +175,8 @@ public static class ManualPayments
         }
         else { payment.Status = PaymentRequestStatus.Cancelled; payment.RenewalRequest.Status = RenewalRequestStatus.Cancelled; }
         proof.Status = body.Accept ? "Accepted" : "Rejected"; proof.ReviewReason = body.Reason?.Trim(); proof.ReviewedByUserId = user; proof.ReviewedAtUtc = clock.UtcNow; proof.UpdatedAtUtc = clock.UtcNow;
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = payment.RenewalRequest.RequestedByUserId, Message = body.Accept ? "تم قبول إثبات الدفع وتفعيل الاشتراك بنجاح. يمكنك مراجعة الإيصال ومواعيد التدريب." : $"لم يتم قبول طلب الدفع. {body.Reason?.Trim() ?? "تواصل مع إدارة الأكاديمية للتوضيح."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = payment.RenewalRequest.RequestedByUserId, AudienceRole="Guardian",TargetKind="Payment",TargetId=id,
+            Message = await NoticeText.Render(db,t.AcademyId,"Payment","تحديث طلب الدفع.")+"\n"+(body.Accept ? "تم قبول إثبات الدفع وتفعيل الاشتراك بنجاح. يمكنك مراجعة الإيصال ومواعيد التدريب." : $"لم يتم قبول طلب الدفع. {body.Reason?.Trim() ?? "تواصل مع إدارة الأكاديمية للتوضيح."}"), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { receiptId = receipt, proof.Status });
     }
     private static async Task<IResult> Refunds(Guid id, CurrentTenant tenant, FoundationDbContext db, CashRegisterService cash)

@@ -75,7 +75,7 @@ public static class MatchEndpoints
         team = db.MatchTeams.Where(t => t.AcademyId == a && t.Id == x.TeamId).Select(t => t.Name).Single(),
         players = db.MatchParticipants.Where(p => p.AcademyId == a && p.MatchId == x.Id && p.IsActive).Select(p => new { p.PlayerId, p.IsBench }).ToList()
     });
-    private static async Task<IResult> Mine(Guid? playerId, bool? upcomingOnly, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock, HttpResponse response,TimeProvider time)
+    private static async Task<IResult> Mine(Guid? playerId, bool? upcomingOnly, Guid? branchId, Guid? teamId, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock, HttpResponse response,TimeProvider time)
     {
         response.Headers.CacheControl="no-store";
         var t = (await tenant.ResolveAsync())!; var u = Actor(user); var q = Query(t.AcademyId, db).Where(x => x.PublishedAtUtc != null);
@@ -85,7 +85,13 @@ public static class MatchEndpoints
         else if (t.Role == AcademyRole.Coach)
             q = MatchCoachAssignments.ForCoach(q,db,t.MembershipId,true);
         else if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        var today=clock.Today;
+        if(from.HasValue&&to.HasValue&&from>to)return Results.UnprocessableEntity(new{message="اختر فترة صحيحة للمباريات."});
+        if(t.Role==AcademyRole.Coach&&branchId.HasValue)return Results.UnprocessableEntity(new{message="عرض المدرب محدد بفرقه فقط."});
+        if(branchId.HasValue)q=q.Where(m=>db.MatchTeams.Any(team=>team.Id==m.TeamId&&team.BranchId==branchId));
+        if(teamId.HasValue)q=q.Where(m=>m.TeamId==teamId);
+        if(from.HasValue)q=q.Where(m=>m.MatchDate>=from);
+        if(to.HasValue)q=q.Where(m=>m.MatchDate<=to);
+        var today=await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
         if(upcomingOnly==true)
         {
             var zone=await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.TimeZone).SingleAsync();
@@ -93,8 +99,10 @@ public static class MatchEndpoints
             q=q.Where(x=>x.IsActive&&x.OurScore==null&&(x.MatchDate>today||x.MatchDate==today&&x.StartTime>=start));
         }
         // No roster names/IDs in the role feed: only the caller's linked child IDs.
-        return Results.Ok(await q.OrderBy(x => x.MatchDate >= today ? 0 : 1).ThenBy(x => x.MatchDate >= today ? x.MatchDate : DateOnly.MaxValue).ThenByDescending(x => x.MatchDate).ThenBy(x => x.StartTime).Take(100).Select(x => new {
-            x.Id, x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore,
+        return Results.Ok(await q.OrderBy(x => x.MatchDate >= today ? 0 : 1).ThenBy(x => x.MatchDate >= today ? x.MatchDate : DateOnly.MaxValue).ThenByDescending(x => x.MatchDate).ThenBy(x => x.StartTime).Select(x => new {
+            x.Id, x.TeamId, branchId=db.MatchTeams.Where(team=>team.AcademyId==t.AcademyId&&team.Id==x.TeamId).Select(team=>team.BranchId).Single(),
+            branch=db.MatchTeams.Where(team=>team.AcademyId==t.AcademyId&&team.Id==x.TeamId).Select(team=>db.Branches.Where(b=>b.Id==team.BranchId).Select(b=>b.ArabicName).Single()).Single(),
+            x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore,
             team = db.MatchTeams.Where(team => team.AcademyId == t.AcademyId && team.Id == x.TeamId).Select(team => team.Name).Single(),
             tournament = db.AcademyTournaments.Where(c => c.AcademyId == t.AcademyId && c.Id == x.TournamentId).Select(c => c.Name).Single(),
             status=!x.IsActive?"Cancelled":x.OurScore!=null?"Completed":"Published",
@@ -188,9 +196,9 @@ public static class MatchEndpoints
             if(previousCoach.HasValue&&currentCoach!=previousCoach)
             {
                 var removed=await db.AcademyMemberships.Where(m=>m.Id==previousCoach&&m.IsActive&&m.User.IsActive).Select(m=>(Guid?)m.UserId).SingleOrDefaultAsync();
-                if(removed.HasValue)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=a,UserId=removed.Value,Message="تم تعديل إسناد إحدى مبارياتك؛ راجع مواعيدك الحالية أو إدارة الأكاديمية.",CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
+                if(removed.HasValue)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=a,UserId=removed.Value,AudienceRole="Coach",TargetKind="Matches",Message="تم تعديل إسناد إحدى مبارياتك؛ راجع مواعيدك الحالية أو إدارة الأكاديمية.",CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
             }
-            foreach (var u in users.Distinct()) db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = a, UserId = u, MatchId=row.Id, UrgentUntilUtc=urgentNotice?time.GetUtcNow().AddDays(7):null, Message = row.IsActive ? $"مباراة {team.Name} أمام {row.Opponent} يوم {row.MatchDate:yyyy-MM-dd} الساعة {row.StartTime:HH:mm} في {row.Venue}. راجع المواعيد داخل التطبيق." : $"تم إلغاء مباراة {team.Name} أمام {row.Opponent}. راجع إدارة الأكاديمية.", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+            foreach (var u in users.Distinct()) db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = a, UserId = u, AudienceRole=coachUser==u?"Coach":"Guardian",TargetKind="Matches",TargetId=row.Id, MatchId=row.Id, UrgentUntilUtc=urgentNotice?time.GetUtcNow().AddDays(7):null, Message = (await NoticeText.Render(db,a,"Match","تحديث مباراة.",team.Name))+"\n"+(row.IsActive ? $"مباراة {team.Name} أمام {row.Opponent} يوم {row.MatchDate:yyyy-MM-dd} الساعة {row.StartTime:HH:mm} في {row.Venue}. راجع المواعيد داخل التطبيق." : $"تم إلغاء مباراة {team.Name} أمام {row.Opponent}. راجع إدارة الأكاديمية."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         }
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Id });
     }

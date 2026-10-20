@@ -17,8 +17,19 @@ List<Json> rows(Object? value) => (value as List).cast<Json>();
 String textOf(Object? value) => value?.toString() ?? 'غير متاح';
 String day(Object? value) =>
     value == null ? 'غير محدد' : value.toString().split('T').first;
+String amountText(Object? value) {
+  final number = value is num ? value : num.tryParse('$value');
+  if (number == null || !number.isFinite) return textOf(value);
+  final parts = number.toStringAsFixed(2).split('.');
+  final whole = parts.first.replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+    (m) => '${m[1]},',
+  );
+  return parts.last == '00' ? whole : '$whole.${parts.last}';
+}
+
 String money(Object? value, Object? currency) =>
-    '${textOf(value)} ${currency == 'EGP' ? 'ج.م' : textOf(currency)}';
+    '${amountText(value)} ${currency == 'EGP' ? 'ج.م' : textOf(currency)}';
 String label(Object? value) =>
     const <String, String>{
       'Active': 'فعال',
@@ -115,7 +126,23 @@ ThemeData guardianTheme({
   cardTheme: CardThemeData(
     color: AcademyTheme.card,
     elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(22),
+      side: const BorderSide(color: Color(0xFF30333E), width: .7),
+    ),
+  ),
+  navigationBarTheme: NavigationBarThemeData(
+    backgroundColor: const Color(0xFF181A23),
+    indicatorColor: primary.withValues(alpha: .18),
+    labelTextStyle: WidgetStateProperty.resolveWith(
+      (s) => TextStyle(
+        fontFamily: 'Cairo',
+        fontSize: 10,
+        fontWeight: s.contains(WidgetState.selected)
+            ? FontWeight.w800
+            : FontWeight.w500,
+      ),
+    ),
   ),
 );
 
@@ -124,31 +151,35 @@ class GuardianPage extends StatelessWidget {
   final Widget child;
   final Widget? bottom;
   final List<Widget>? actions;
+  final bool showAppBar;
   const GuardianPage({
     super.key,
     required this.title,
     required this.child,
     this.bottom,
     this.actions,
+    this.showAppBar = true,
   });
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const AcademyCrest(size: 30),
-          const SizedBox(width: 10),
-          Flexible(
-            child: UiText(
-              title,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    appBar: !showAppBar
+        ? null
+        : AppBar(
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AcademyCrest(size: 30),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: UiText(
+                    title,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
+            actions: actions,
           ),
-        ],
-      ),
-      actions: actions,
-    ),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -254,16 +285,18 @@ class PlayerAvatar extends StatelessWidget {
   final double size;
   final AuthController? auth;
   final Object? reference;
+  final bool adult;
   const PlayerAvatar(
     this.name, {
     super.key,
     this.size = 64,
     this.auth,
     this.reference,
+    this.adult = false,
   });
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'صورة رمزية للاعب',
+    label: adult ? 'صورة العضو' : 'صورة اللاعب',
     child: Container(
       width: size,
       height: size,
@@ -278,14 +311,18 @@ class PlayerAvatar extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: auth != null && isPrivateAsset(reference)
           ? PrivateImage(auth: auth!, path: reference.toString(), height: size)
+          : RegExp(
+              r'^/demo-assets/portraits/(child|coach|guardian)-0[12]\.jpg$',
+            ).hasMatch('$reference')
+          ? Image.asset(
+              'assets/demo/portraits/${reference.toString().split('/').last}',
+              fit: BoxFit.cover,
+            )
           : Center(
-              child: UiText(
-                name.isEmpty ? '⚽' : name.characters.first,
-                style: TextStyle(
-                  fontSize: size * .4,
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Icon(
+                adult ? Icons.person_rounded : Icons.child_care_rounded,
+                size: size * .56,
+                color: Colors.white54,
               ),
             ),
     ),

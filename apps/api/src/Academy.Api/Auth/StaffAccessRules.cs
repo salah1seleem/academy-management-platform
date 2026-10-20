@@ -26,6 +26,7 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        if(path == "/api/v1/academy/experience") return null; // Shared identity, not the protected /manage/academy/experience write.
         if (path == "/api/v1/my-followups" || path.StartsWith("/api/v1/my-followups/", StringComparison.Ordinal)) return "followups";
         // Lesson IDs are not product endpoint names (e.g. player-attendance).
         // Help reads authorize each lesson against ForPermission instead.

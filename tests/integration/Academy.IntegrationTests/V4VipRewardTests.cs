@@ -88,12 +88,31 @@ public sealed partial class SubscriptionPaymentTests
         await using var f=await NewFamily();var plan=await QualifyVip(f);using var owner=await InboxStaff(DemoSeed.OwnerEmail);var reward=await IssueVip(owner,await VipBody(owner,f.Guardian,30));
         var created=await Post(f.Client,"/api/v1/guardian/enrollment-requests",new{requestType=2,newChildArabicName="طفل مكافأة اصطناعي "+Guid.NewGuid().ToString("N")[..6],newChildDateOfBirth="2016-01-01",sportId=Slice2DemoSeed.FootballId,preferredBranchId=Slice2DemoSeed.CityBranchId,subscriptionPlanId=plan},await Csrf(f.Client),Guid.NewGuid().ToString("N"));Assert.True(created.IsSuccessStatusCode,await created.Content.ReadAsStringAsync());var request=(await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         using var upload=new MultipartFormDataContent();var file=new ByteArrayContent([137,80,78,71,13,10,26,10,0,0,0,0]);file.Headers.ContentType=new("image/png");upload.Add(file,"file","synthetic-vip-proof.png");upload.Add(new StringContent("Proof"),"purpose");using var send=new HttpRequestMessage(HttpMethod.Post,"/api/v1/assets/upload"){Content=upload};send.Headers.Add("X-CSRF-TOKEN",await Csrf(f.Client));var saved=await f.Client.SendAsync(send);saved.EnsureSuccessStatusCode();var asset=(await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();(await Post(f.Client,$"/api/v1/guardian/enrollment-requests/{request}/proof",new{assetId=asset},await Csrf(f.Client))).EnsureSuccessStatusCode();
-        var approval=await Post(owner,$"/api/v1/enrollment-requests/{request}/approve",new{trainingGroupId=Slice2DemoSeed.FootballGroupId},await Csrf(owner));Assert.True(approval.IsSuccessStatusCode,await approval.Content.ReadAsStringAsync());(await Post(owner,$"/api/v1/enrollment-requests/{request}/approve",new{trainingGroupId=Slice2DemoSeed.FootballGroupId},await Csrf(owner))).EnsureSuccessStatusCode();
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var enrollment=await db.NewEnrollmentRequests.Where(e=>e.Id==request).Select(e=>e.CreatedSportEnrollmentId).SingleAsync();var receipt=await db.Receipts.SingleAsync(r=>r.SportEnrollmentId==enrollment);Assert.Equal((1000m,300m,700m),(receipt.OriginalAmount,receipt.DiscountAmount,receipt.Amount));Assert.Single(await db.VipRewardUses.Where(u=>u.RewardId==reward&&u.SourceKind=="Enrollment"&&u.SourceId==request&&u.UsedAtUtc!=null).ToArrayAsync());
+        // An independently owned fixture group keeps capacity enforcement real
+        // and prevents other scenarios/reruns from filling this shared seed group.
+        var approvalGroup=Guid.NewGuid();
+        await using(var fixture=factory.Services.CreateAsyncScope()){
+            var data=fixture.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var source=await data.TrainingGroups.AsNoTracking().SingleAsync(g=>g.Id==Slice2DemoSeed.FootballGroupId);
+            data.TrainingGroups.Add(new(){Id=approvalGroup,AcademyId=source.AcademyId,ArabicName="مجموعة قبول مكافأة مستقلة",SportId=source.SportId,BranchId=source.BranchId,AgeCategoryId=source.AgeCategoryId,Capacity=10});
+            var assigned=await data.StaffGroupAssignments.Where(g=>g.TrainingGroupId==source.Id&&g.IsActive).Select(g=>g.AcademyMembershipId).FirstAsync();
+            data.StaffGroupAssignments.Add(new(){Id=Guid.NewGuid(),AcademyId=source.AcademyId,TrainingGroupId=approvalGroup,AcademyMembershipId=assigned});await data.SaveChangesAsync();
+        }
+        var approval=await Post(owner,$"/api/v1/enrollment-requests/{request}/approve",new{trainingGroupId=approvalGroup},await Csrf(owner));Assert.True(approval.IsSuccessStatusCode,await approval.Content.ReadAsStringAsync());(await Post(owner,$"/api/v1/enrollment-requests/{request}/approve",new{trainingGroupId=approvalGroup},await Csrf(owner))).EnsureSuccessStatusCode();
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var enrollment=await db.NewEnrollmentRequests.Where(e=>e.Id==request).Select(e=>e.CreatedSportEnrollmentId).SingleAsync();Assert.Equal(approvalGroup,await db.SportEnrollments.Where(e=>e.Id==enrollment).Select(e=>e.TrainingGroupId).SingleAsync());var receipt=await db.Receipts.SingleAsync(r=>r.SportEnrollmentId==enrollment);Assert.Equal((1000m,300m,700m),(receipt.OriginalAmount,receipt.DiscountAmount,receipt.Amount));Assert.Single(await db.VipRewardUses.Where(u=>u.RewardId==reward&&u.SourceKind=="Enrollment"&&u.SourceId==request&&u.UsedAtUtc!=null).ToArrayAsync());
     }
     [Fact] public async Task V4_VIP_concurrent_different_child_checkouts_cannot_reserve_one_reward_twice()
     {
-        await using var f=await NewFamily();var plan=await QualifyVip(f);using var owner=await InboxStaff(DemoSeed.OwnerEmail);var id=await IssueVip(owner,await VipBody(owner,f.Guardian,30));var token=await Csrf(f.Client);
+        await using var f=await NewFamily();var plan=await QualifyVip(f);using var owner=await InboxStaff(DemoSeed.OwnerEmail);// Both children must actually qualify for sibling renewal pricing. QualifyVip
+        // paid only the first child; if that child's checkout loses the VIP race,
+        // its sibling is still unpaid and correctly does not confer a discount.
+        await using(var setup=factory.Services.CreateAsyncScope()){
+            var data=setup.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var actor=await data.AcademyMemberships.Where(m=>m.AcademyId==DemoSeed.NogoomAcademyId&&m.Role==AcademyRole.AcademyOwner&&m.IsActive).Select(m=>m.UserId).FirstAsync();
+            await using var tx=await data.Database.BeginTransactionAsync();
+            await setup.ServiceProvider.GetRequiredService<CollectionService>().CreateCashAsync(DemoSeed.NogoomAcademyId,actor,f.Choices[1].SportEnrollmentId,plan,"vip-race-sibling-"+f.Guardian,"Online");await tx.CommitAsync();
+        }
+        var id=await IssueVip(owner,await VipBody(owner,f.Guardian,30));var token=await Csrf(f.Client);
         var results=await Task.WhenAll(f.Choices.Select(c=>Post(f.Client,"/api/v1/guardian/subscriptions/renewals",new{sportEnrollmentId=c.SportEnrollmentId,subscriptionPlanId=plan},token,Guid.NewGuid().ToString("N"))));Assert.All(results,r=>r.EnsureSuccessStatusCode());
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Single(await db.VipRewardUses.Where(u=>u.RewardId==id&&u.ReleasedAtUtc==null).ToArrayAsync());var ids=new List<Guid>();foreach(var r in results)ids.Add((await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("paymentId").GetGuid());Assert.Equal(new[]{700m,800m},await db.PaymentRequests.Where(p=>ids.Contains(p.Id)).OrderBy(p=>p.Amount).Select(p=>p.Amount).ToArrayAsync());
     }

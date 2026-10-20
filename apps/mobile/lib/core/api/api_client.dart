@@ -137,7 +137,15 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
 
   @override
   Future<Uint8List> asset(String path, String token) async {
-    if (path != '/api/v1/academy/branding/logo' &&
+    final reportPath = Uri.parse(path).path;
+    final reportExport =
+        path.startsWith('/api/v1/reports/') &&
+        const [
+          '/api/v1/reports/financial/export',
+          '/api/v1/reports/attendance/export',
+        ].contains(reportPath);
+    if (!reportExport &&
+        path != '/api/v1/academy/branding/logo' &&
         !RegExp(
           r'^/api/v1/help/lessons/[a-z0-9-]+/media/[a-fA-F0-9-]{36}/(video|thumbnail)$',
         ).hasMatch(path) &&

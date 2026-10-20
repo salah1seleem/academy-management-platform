@@ -15,6 +15,11 @@ public static class ProductSales
     {
         app.MapPost("/api/v1/guardian/product-sales", CreateGuardian).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal).AddEndpointFilter<CsrfFilter>();
         app.MapGet("/api/v1/guardian/product-sales", OwnSales).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
+        app.MapGet("/api/v1/guardian/product-sales/{id:guid}", async(Guid id,CurrentTenant tenant,ClaimsPrincipal principal,FoundationDbContext db)=>{
+            var t=(await tenant.ResolveAsync())!;var user=Actor(principal);
+            var row=await db.ProductSales.Where(s=>s.AcademyId==t.AcademyId&&s.Id==id&&s.RequestedByUserId==user).Select(s=>new{s.Id,s.ProductName,s.Quantity,s.Amount,s.Currency,s.Status,s.ReviewReason,s.ConfirmedAtUtc}).SingleOrDefaultAsync();
+            return row==null?Results.NotFound():Results.Ok(row);
+        }).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
         app.MapPost("/api/v1/guardian/product-sales/{id:guid}/proof", Proof).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal).AddEndpointFilter<CsrfFilter>();
         app.MapPost("/api/v1/manage/product-sales", CreateStaff).RequireAuthorization(AcademyPermissions.SportCatalogManage).AddEndpointFilter<CsrfFilter>();
         app.MapGet("/api/v1/manage/product-sales/options", async (CashRegisterService cash) => {
@@ -83,7 +88,7 @@ public static class ProductSales
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"product-review:{t.AcademyId}:{id}"}, 0))");
         var sale = await db.ProductSales.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.RequestedByUserId == user);
         if (sale is null || !await db.PrivateAssets.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.AssetId && x.UploadedByUserId == user && x.Purpose == "Proof")) return Results.NotFound();
-        if (sale.Status != "Pending") return Results.Conflict(); sale.ProofAssetId = body.AssetId; sale.UpdatedAtUtc = clock.UtcNow; await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { message = "وصل إثبات الدفع. ستُراجع الإدارة الطلب وتؤكد توافر المنتج." });
+        if (sale.Status != "Pending") return Results.Conflict(); sale.ProofAssetId = body.AssetId; sale.UpdatedAtUtc = clock.UtcNow; await NoticeText.PaymentProof(db,t.AcademyId,id,"شراء منتج رياضي",clock.UtcNow); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { message = "وصل إثبات الدفع. ستُراجع الإدارة الطلب وتؤكد توافر المنتج." });
     }
     private static async Task<IResult> Details(Guid id, CurrentTenant tenant, FoundationDbContext db)
     { var t = (await tenant.ResolveAsync())!; var row = await db.ProductSales.Where(x => x.AcademyId == t.AcademyId && x.Id == id).Select(x => new { x.Id, x.ProductName, x.Quantity, x.UnitPrice, x.Amount, x.Currency, x.Status, x.ReviewReason, proofUrl = x.ProofAssetId == null ? null : "/api/v1/assets/" + x.ProofAssetId }).SingleOrDefaultAsync(); return row is null ? Results.NotFound() : Results.Ok(row); }
@@ -103,7 +108,7 @@ public static class ProductSales
             product.StockQuantity -= sale.Quantity; product.UpdatedAtUtc = clock.UtcNow; sale.PaymentMethod = "Online"; sale.ConfirmedAtUtc = clock.UtcNow; sale.ConfirmedByUserId = user;
         }
         sale.Status = body.Accept ? "Confirmed" : "Rejected"; sale.ReviewReason = body.Reason?.Trim(); sale.UpdatedAtUtc = clock.UtcNow;
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = sale.RequestedByUserId, Message = body.Accept ? "تم قبول دفع المنتج الرياضي. تواصل مع الأكاديمية للاستلام." : "لم يُقبل طلب المنتج. " + (body.Reason?.Trim() ?? "تواصل مع الأكاديمية للتوضيح."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = sale.RequestedByUserId, AudienceRole="Guardian",TargetKind="Product",TargetId=sale.Id, Message = body.Accept ? "تم قبول دفع المنتج الرياضي. تواصل مع الأكاديمية للاستلام." : "لم يُقبل طلب المنتج. " + (body.Reason?.Trim() ?? "تواصل مع الأكاديمية للتوضيح."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { sale.Status });
     }
 }

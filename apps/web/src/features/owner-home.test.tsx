@@ -2,83 +2,60 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { DonutChart, PremiumOwnerDashboard } from "./owner-home";
 import { AcademySettings } from "./academy-settings";
-import { DateFilterDefaults } from "../components/date-filter-defaults";
-// These independently fetched panels have their own source/interaction suites.
-vi.mock("./owner-cockpit",()=>({OwnerCockpit:()=>null}));
-vi.mock("./operating-statement",()=>({OperatingStatementSnapshot:()=>null}));
 const incoming=new URLSearchParams();
 vi.mock("next/navigation",()=>({useSearchParams:()=>incoming}));
 afterEach(()=>{cleanup();for(const key of [...incoming.keys()])incoming.delete(key);});
-it("incoming date and branch scope is reflected by the controls and actual source requests",async()=>{
-  incoming.set("from","2026-09-01");incoming.set("to","2026-09-28");incoming.set("branchId","b1");
-  const fetcher=vi.fn((input)=>String(input).endsWith("/me")?response({role:"AcademyOwner"}):String(input).includes("options")?response({branches:[{id:"b1",arabicName:"فرع اصطناعي"}]}):response(summary));global.fetch=fetcher as typeof fetch;
-  render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-19"}}><PremiumOwnerDashboard/></DateFilterDefaults>);
-  expect(await screen.findByLabelText("من تاريخ")).toHaveValue("2026-09-01");expect(screen.getByLabelText("إلى تاريخ")).toHaveValue("2026-09-28");
-  await waitFor(()=>expect(fetcher.mock.calls.some(([p])=>String(p).includes("owner-summary?from=2026-09-01&to=2026-09-28&branchId=b1"))).toBe(true));
+const response=(v:unknown)=>Promise.resolve(new Response(JSON.stringify(v),{headers:{"Content-Type":"application/json"}}));
+const summary={from:"2026-09-20",to:"2026-10-20",localToday:"2026-10-20",collectionDay:"2026-10-20",collectionMonthFrom:"2026-10-01",currency:"EGP",collections:{today:1800,month:5600,todayCash:800,todayOnline:1000,monthCash:1600,monthOnline:4000,todayUnspecified:0,monthUnspecified:0},subscriptions:{total:30,active:20,expiring:5,expired:10},paymentRequests:{total:4,newEnrollments:1,renewals:1,products:1,tournaments:1},operations:{coachPerformance:[],groupAttention:[],openSafetyFeedback:0}};
+const cockpit={currency:"EGP",collections:{net:5600,changePercentage:12},target:{amount:null,achievement:null},overdue:{amount:43000,families:32},risk:{players:10},attendance:{percentage:80},capacity:{seats:90},followups:{overdue:0,unassigned:0}};
+const statement={currency:"EGP",surplus:3500,income:[{key:"subscription",label:"الاشتراكات",amount:5600,sourceUrl:"/dashboard/reports/financial?collectionType=Subscription"}],expenses:[{key:"Rent",label:"إيجار المنشأة",amount:2100,sourceUrl:"/dashboard/finance/operating-expenses"}],totalIncome:5600,totalExpenses:2100};
+function source(s:unknown=summary,c:unknown=cockpit){const fn=vi.fn((url:unknown)=>{const path=String(url);
+ if(path.endsWith("/me"))return response({role:"AcademyOwner"});
+ if(path.includes("/academy/experience"))return response({displayName:"أكاديميتي",logoUrl:null});
+ if(path.includes("/academy/calendar"))return response({today:"2026-10-20",trailingMonthFrom:"2026-09-20"});
+ if(path.includes("/structure/options"))return response({branches:[{id:"b1",arabicName:"فرع اصطناعي"}]});
+ if(path.includes("owner-summary"))return response(s);
+ if(path.includes("owner-cockpit"))return response(c);
+ if(path.includes("operating-statement"))return response(statement);
+ if(path.includes("vip-members")||path.includes("featured-players"))return response({items:[]});
+ if(path.includes("/notifications"))return response({items:[],unread:1,total:1});
+ throw Error("Unexpected source "+path);
+ });global.fetch=fn as typeof fetch;return fn;}
+it("incoming date/branch scope initializes compact controls and actual source requests",async()=>{
+ incoming.set("from","2026-09-01");incoming.set("to","2026-09-28");incoming.set("branchId","b1");const fetcher=source();render(<PremiumOwnerDashboard/>);
+ expect(await screen.findByLabelText("من تاريخ")).toHaveValue("2026-09-01");expect(screen.getByLabelText("إلى تاريخ")).toHaveValue("2026-09-28");
+ await waitFor(()=>expect(fetcher.mock.calls.some(([p])=>String(p).includes("owner-summary?from=2026-09-01&to=2026-09-28&branchId=b1"))).toBe(true));
 });
-it("requests have their own actionable owner drill-down, not a complaint score", async () => {
-  const data={...summary,operations:{coachPerformance:[],groupAttention:[],pendingExpenses:[],unpaidExpenses:[],receivables:[],accessChanges:0,openRequests:2,openComplaints:0,openSuggestions:0}};
-  global.fetch=vi.fn(input=>String(input).endsWith("/me")?response({role:"AcademyOwner"}):String(input).includes("options")?response({branches:[{id:"b1",arabicName:"فرع اصطناعي"}]}):response(data)) as typeof fetch;
-  render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-19"}}><PremiumOwnerDashboard/></DateFilterDefaults>);
-  expect(await screen.findByRole("link",{name:/راجع طلبات الأسر/})).toHaveAttribute("href","/dashboard/feedback?kind=Request&status=Unresolved&allDates=true");
-  fireEvent.click(screen.getByRole("button",{name:/الفترة والفرع/}));fireEvent.change(screen.getByLabelText("الفرع"),{target:{value:"b1"}});
-  await waitFor(()=>expect(screen.getByRole("link",{name:/راجع طلبات الأسر/})).toHaveAttribute("href","/dashboard/feedback?kind=Request&status=Unresolved&branchId=b1&allDates=true"));
+it("payment request categories and real reminder recipients remain distinct actions",async()=>{
+ source();render(<PremiumOwnerDashboard/>);const renewal=await screen.findByRole("link",{name:/تجديد الاشتراك/});expect(renewal).toHaveAttribute("href",expect.stringContaining("type=Renewal"));
+ expect(screen.getByRole("link",{name:/تحضير تذكيرات التحصيل/})).toHaveAttribute("href",expect.stringContaining("kind=Overdue"));
+ expect(screen.getByRole("link",{name:/عرض خطة الاحتفاظ بهم/})).toHaveAttribute("href",expect.stringContaining("kind=Renewal"));
+ expect(screen.queryByText(/أولوية 1/)).not.toBeInTheDocument();expect(screen.getAllByRole("heading",{level:3}).length).toBeGreaterThan(0);
 });
-const response = (v: unknown) => Promise.resolve(new Response(JSON.stringify(v), { headers: { "Content-Type": "application/json" } }));
-const summary = { from: "2026-09-01", to: "2026-09-28", currency: "EGP", collections: { today: 1800, month: 5600 }, subscriptions: { total: 30, active: 20, expiring: 5, expired: 7 }, payments: { pending: 4 }, paymentRequests: { total: 4, newEnrollments: 1, renewals: 1, products: 1, tournaments: 1 }, attendance: { present: 10, absent: 2, notRecorded: 1 }, byBranch: [{ id: "b1", name: "فرع تجريبي", amount: 1800 }], activePlayers: 20, coaches: 3, newSubscriptions: 2 };
-it("drills down from a real post-contract payable without presenting it as monthly base salary",async()=>{
-  const data={...summary,payroll:{month:"2026-10-01",employeeCount:3,expiringContracts:0,baseDue:9000,deductions:0,additions:0,netDue:9000,unpaid:0,postContract:[{currency:"EGP",remaining:30,count:1}],postContractEmployees:[{employeeId:"ended",name:"مدرب عقد منتهٍ",currency:"EGP",remaining:30}]}};global.fetch=vi.fn(url=>String(url).endsWith("/me")?response({role:"AcademyOwner"}):String(url).includes("options")?response({branches:[]}):response(data)) as typeof fetch;
-  render(<DateFilterDefaults range={{from:"2026-10-01",to:"2026-10-15"}}><PremiumOwnerDashboard/></DateFilterDefaults>);const link=await screen.findByRole("link",{name:/مدرب عقد منتهٍ/});expect(link).toHaveAttribute("href","/dashboard/payroll/ended/account");expect(link).toHaveTextContent("30 جنيه");expect(screen.getByText(/مستقل عن شهر الرسم/)).toBeVisible();
+it("monthly target is displayed only when the canonical source qualifies its scope",async()=>{
+ source(summary,{...cockpit,target:{amount:50000,achievement:11.2}});render(<PremiumOwnerDashboard/>);expect(await screen.findByLabelText("تحقيق هدف التحصيل")).toHaveAttribute("value","11.2");
+ expect(screen.getByRole("link",{name:/ضبط هدف التحصيل/})).toHaveAttribute("href","/dashboard/settings#collection-target");
 });
-it("has no welcome/latest blocks and every total/category retains matching drill-down", async () => {
-  global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [{ id: "b1", arabicName: "فرع تجريبي" }] }) : response(summary)) as typeof fetch;
-  render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
-  const mobileFilters = await screen.findByRole("button", { name: /الفترة والفرع/ });
-  expect(mobileFilters).toHaveAttribute("aria-expanded", "false");
-  fireEvent.click(mobileFilters);
-  expect(mobileFilters).toHaveAttribute("aria-expanded", "true");
-  expect(await screen.findByRole("link", { name: "إجمالي الاشتراكات: 30" })).toHaveAttribute("href", expect.stringContaining("subscriptionState=subscribed"));
-  expect(screen.getByRole("img", { name: /فعالة — لا تنتهي قريبًا/ })).toHaveAttribute("aria-label", "فعالة — لا تنتهي قريبًا: 15، تنتهي قريبًا: 5، منتهية: 7، مجمدة / لم تبدأ: 3");
-  expect(screen.queryByText("أحدث التحصيلات")).not.toBeInTheDocument(); expect(screen.queryByText(/أهلًا/)).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /بطولات/ })).toHaveAttribute("href", expect.stringContaining("type=Tournament"));
-  fireEvent.change(screen.getByLabelText("الفرع"), { target: { value: "b1" } });
-  await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("branchId=b1")));
-  expect(screen.getByRole("link", { name: "غائب2" })).toHaveAttribute("href", expect.stringContaining("status=Absent"));
+it("new home has no duplicated welcome/latest/payroll blocks and keeps subscription/report drilldowns",async()=>{
+ source();render(<PremiumOwnerDashboard/>);expect(await screen.findByRole("heading",{name:/^الاشتراكات$/})).toBeVisible();
+ expect(screen.getByRole("link",{name:/اشتراكات فعالة/})).toHaveAttribute("href",expect.stringContaining("/players/subscriptions?state=active"));
+ expect(screen.getByRole("link",{name:/بطولات/})).toHaveAttribute("href",expect.stringContaining("type=Tournament"));
+ expect(screen.queryByText("أحدث التحصيلات")).not.toBeInTheDocument();expect(screen.queryByText(/أهلًا/)).not.toBeInTheDocument();expect(screen.queryByText("مرجع التحليل")).not.toBeInTheDocument();
+ expect(screen.queryByLabelText("تحقيق هدف التحصيل")).not.toBeInTheDocument();expect(screen.queryByText(/لم يحدد هدف/)).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"مسح الفلاتر"}));expect(screen.getByLabelText("من تاريخ")).toHaveValue("");expect(screen.getByLabelText("إلى تاريخ")).toHaveValue("");
 });
-it("does not invent a pie when there are no stored records", () => {
-  render(<DonutChart center="0" caption="لاعبًا" rows={[{ name: "فعال", value: 0, href: "/players" }]} />);
-  expect(screen.queryByRole("img")).not.toBeInTheDocument(); expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
+it("does not invent a pie when there are no stored records",()=>{
+ render(<DonutChart center="0" caption="لاعبًا" rows={[{name:"فعال",value:0,href:"/players"}]}/>);expect(screen.queryByRole("img")).not.toBeInTheDocument();expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
 });
-it("shows stored coach ratings and actionable family feedback without inventing an AI score", async () => {
-  const operational = { ...summary, paymentRequests: { total: 0, newEnrollments: 0, renewals: 0, products: 0 }, operations: { coachPerformance: [{ id: "coach-1", name: "مدرب تجريبي", groupCount: 2, sessionCount: 7, publishedEvaluations: 3, parentRating: 4.5, parentRatingCount: 2, complaintCount: 1 }], groupAttention: [{ id: "group-1", name: "مجموعة تجربة", hasCoach: false, sessions: 1, absent: 0, notRecorded: 0 }], pendingExpenses: [{ currency: "EGP", count: 1, amount: 200 }], unpaidExpenses: [{ currency: "EGP", count: 2, amount: 450 }], receivables: [{ currency: "EGP", outstanding: 1740, overdue: 1240, openCount: 3 }], accessChanges: 2, pendingPaymentBacklog: 7, openComplaints: 1, openSuggestions: 1, overdueFeedback: 1, attentionRule: "غياب متكرر" } };
-  global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(operational)) as typeof fetch;
-  render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
-  expect(await screen.findByText(/4\.5 \/ 5 · 2 تقييمات/)).toBeVisible();
-  expect(screen.getByRole("heading",{name:"ملخص المدربين"})).toBeVisible();
-  expect(screen.getByRole("link", { name: /طلبات دفع تحتاج قرارًا/ })).toHaveTextContent("7 طلب · كل الفترات");
-  expect(screen.getByRole("link", { name: /طلبات دفع تحتاج قرارًا/ })).toHaveAttribute("href", expect.stringContaining("allDates=true"));
-  expect(screen.getByRole("link", { name: /مجموعة تجربة/ })).toHaveAttribute("href", "/dashboard/academy/groups/group-1?tab=performance");
-  expect(screen.getByRole("link", { name: /شكاوى تحتاج إغلاقًا/ })).toHaveAttribute("href", "/dashboard/feedback?kind=Complaint&status=Unresolved&allDates=true");
-  expect(screen.getByRole("link", { name: /ملاحظات تجاوزت موعد المتابعة/ })).toHaveAttribute("href", expect.stringContaining("overdue=true"));
-  expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveTextContent("200 جنيه");
-  expect(screen.getByRole("link", { name: /مصروفات معتمدة غير مرحّلة/ })).toHaveAttribute("href", expect.stringContaining("status=Approved"));
-  expect(screen.getByRole("link", { name: /مصروفات تشغيلية غير مسددة/ })).toHaveAttribute("href", expect.stringContaining("unpaid=true"));
-  expect(screen.getByRole("link", { name: /مصروفات تشغيلية غير مسددة/ })).toHaveTextContent("450 جنيه");
-  expect(screen.getByRole("link", { name: /رصيد قائم حتى الآن/ })).toHaveTextContent("1,740 جنيه");
-  expect(screen.getByRole("link", { name: /رصيد قائم حتى الآن/ })).toHaveAttribute("href", expect.stringContaining("state=open"));
-  expect(screen.getByRole("link", { name: /منه متأخر/ })).toHaveTextContent("1,240 جنيه");
-  expect(screen.getByRole("link", { name: /منه متأخر/ })).toHaveAttribute("href", expect.stringContaining("state=overdue"));
-  fireEvent.click(screen.getByRole("button", { name: "مسح" }));
-  await waitFor(() => expect(screen.getByRole("link", { name: /مدرب تجريبي/ })).toHaveAttribute("href", expect.stringContaining("allDates=true")));
-  expect(screen.queryByText(/ذكاء اصطناعي يحلل/)).not.toBeInTheDocument();
+it("shows real coach ratings and groups requiring intervention without inventing AI scores",async()=>{
+ source({...summary,operations:{...summary.operations,coachPerformance:[{id:"c1",name:"محمود سليمان",branches:["b1"],sports:["كرة القدم"],groupCount:2,sessionCount:7,parentRating:4.5,parentRatingCount:2}],groupAttention:[{id:"g1",name:"مجموعة تحتاج متابعة"}]}});
+ render(<PremiumOwnerDashboard/>);expect(await screen.findByText("4.5 ★ · 2 تقييمات")).toBeVisible();expect(screen.getByRole("link",{name:/محمود سليمان/})).toHaveAttribute("href",expect.stringContaining("/academy/coaches/c1"));
+ expect(screen.getByRole("link",{name:/مراجعة المجموعة وفتح متابعة/})).toHaveAttribute("href",expect.stringContaining("/academy/groups/g1"));
+ expect(screen.queryByText(/مؤشر AI/)).not.toBeInTheDocument();expect(screen.queryByRole("heading",{name:"المدربون وتقييم الأسر"})).not.toBeInTheDocument();
 });
-it("does not pretend historical refunds have a documented electronic method", async () => {
-  const historic = { ...summary, collections: { today: -40, month: 5600, todayCash: 0, todayOnline: 0, todayUnspecified: -40, monthUnspecified: 0 } };
-  global.fetch = vi.fn(input => String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(input).includes("options") ? response({ branches: [] }) : response(historic)) as typeof fetch;
-  render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PremiumOwnerDashboard /></DateFilterDefaults>);
-  const link = await screen.findByRole("link", { name: /طريقة صرف قديمة غير موثقة/ });
-  expect(link).toHaveAttribute("href", expect.stringContaining("provider=Unspecified"));
-  expect(link).toHaveTextContent("-40 جنيه");
+it("does not relabel an undocumented historical refund as cash or online",async()=>{
+ source({...summary,collections:{...summary.collections,today:-40,todayCash:0,todayOnline:0,todayUnspecified:-40}});render(<PremiumOwnerDashboard/>);
+ const link=await screen.findByRole("link",{name:/طريقة صرف قديمة غير موثقة/});expect(link).toHaveAttribute("href",expect.stringContaining("provider=Unspecified"));expect(link).toHaveTextContent("-40");
 });
 it("an owner manages attendance/transfers without receiving platform branding controls", async () => {
   global.fetch = vi.fn(input => String(input).includes("experience") ? response({ displayName: "أكاديمية اختبار", platformBrandOperator: false, coachAttendanceEnabled: true }) : String(input).includes("my-permissions") ? response(["academy.settings.manage"]) : String(input).endsWith("/me") ? response({ role: "AcademyOwner" }) : response({ configured: false })) as typeof fetch;
