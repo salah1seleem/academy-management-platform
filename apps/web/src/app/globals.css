@@ -105,10 +105,12 @@
 .sport-kind-form { display: grid; gap: .8rem; margin-block-start: 1rem; padding-block-start: 1rem; border-block-start: 1px solid var(--border); }
 .sport-kind-form p { font-size: .9rem; line-height: 1.8; margin: 0; }
 .sport-kind-form > button { justify-self: start; }
-.access-branches { border: 1px solid var(--border); border-radius: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; }
+.access-branches { min-inline-size: 0; max-inline-size: 100%; border: 1px solid var(--border); border-radius: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; }
 .access-branches label, .access-branch-options label { display: flex; gap: .6rem; align-items: center; min-height: 44px; }
 .access-branches input { width: 1.2rem; height: 1.2rem; accent-color: var(--primary); }
-.access-branch-options { display: flex; flex-wrap: wrap; gap: .75rem; flex-basis: 100%; max-block-size: 16rem; overflow-y: auto; padding: .3rem; }
+.access-branches input:is([type="checkbox"],[type="radio"]):not([role="switch"]) { flex: 0 0 1.2rem; }
+.access-branch-options { display: flex; flex-wrap: wrap; gap: .75rem; flex-basis: 100%; min-inline-size: 0; max-inline-size: 100%; max-block-size: 16rem; overflow-y: auto; padding: .3rem; }
+.access-branch-options label { min-inline-size: 0; max-inline-size: 100%; overflow-wrap: anywhere; }
 .access-branch-search { display: grid !important; flex-basis: 100%; gap: .4rem; }
 .access-table-scroll { overflow-x: auto; margin-block: 1rem; border: 1px solid var(--border); border-radius: 1rem; }
 .access-table { width: 100%; border-collapse: collapse; text-align: start; }

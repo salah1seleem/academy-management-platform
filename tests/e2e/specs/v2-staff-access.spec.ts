@@ -13,6 +13,7 @@ test("Owner sets an explicit branch and read-only module matrix; Admin cannot wr
   await page.goto("/dashboard/staff");
   await selectStaffAccess(page, member);
   await page.getByRole("radio", { name: "فروع محددة" }).check();
+  expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(page.viewportSize()!.width+1);
   await page.getByRole("group",{name:"نطاق الفروع",exact:true}).getByRole("checkbox").first().check();
   await page.getByRole("switch", { name: "قراءة اللاعبون وأولياء الأمور", exact: true }).check();
   await page.getByRole("switch",{name:"عرض اللاعبين وأولياء الأمور",exact:true}).check();

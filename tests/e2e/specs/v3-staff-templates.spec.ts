@@ -15,6 +15,7 @@ test("Owner applies a branch/sport scoped template and Admin scope stays live on
   await page.getByRole("combobox", { name: "قالب الصلاحيات" }).selectOption("branch-operator");
   await expect(page.getByRole("radio", { name: "فروع محددة" })).toBeChecked();
   await expect(page.getByRole("button", { name: "اعتماد الصلاحيات", exact: true })).toBeDisabled();
+  expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(page.viewportSize()!.width+1);
   await page.getByRole("group",{name:"نطاق الفروع",exact:true}).getByRole("checkbox").first().check();
   await page.getByRole("radio", { name: "رياضات محددة", exact: true }).check();
   await expect(page.getByRole("button", { name: "اعتماد الصلاحيات", exact: true })).toBeDisabled();
