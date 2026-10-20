@@ -7,7 +7,7 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
 }
 
 test("Admin creates, saves and publishes a player's evaluation", async ({ page }) => {
-  await staffLogin(page); await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("button", { name: "الفريق والتطوير" }).click(); await page.getByRole("link", { name: "تقييمات اللاعبين" }).click();
+  await staffLogin(page); await page.getByRole("button", { name: "فتح القائمة" }).click(); await page.getByRole("button", { name: "الأعضاء والاشتراكات" }).click(); await page.getByRole("link", { name: "تقييمات اللاعبين" }).click();
   await page.getByRole("link", { name: "تقييم جديد" }).click(); await page.getByRole("combobox", { name: "اللاعب", exact: true }).selectOption({ label: "عمر أحمد محمود — كرة القدم — ناشئين 2016 — مجموعة أ" }); await page.getByRole("button", { name: "إنشاء المسودة" }).click();
   const scoreInputs = page.getByRole("spinbutton"); await scoreInputs.nth(0).fill("82"); await scoreInputs.nth(1).fill("79"); await scoreInputs.nth(2).fill("88"); await page.getByRole("button", { name: "حفظ المسودة" }).click(); await expect(page.getByRole("button", { name: "حفظ المسودة" })).toBeEnabled();
   await page.getByRole("button", { name: "نشر التقييم" }).click(); await page.getByRole("button", { name: "تأكيد النشر" }).click(); await expect(page.getByRole("heading", { name: "تقرير اللاعب" })).toBeVisible(); await expect(page.getByText("التقييم الإجمالي")).toBeVisible();

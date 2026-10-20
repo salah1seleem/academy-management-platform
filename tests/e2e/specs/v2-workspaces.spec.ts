@@ -11,10 +11,11 @@ for (const width of [360, 390, 430, 768, 1440]) {
     const menu = page.getByRole("button", { name: "فتح القائمة" });
     if (await menu.isVisible()) await menu.click();
     const nav = page.getByRole("navigation", { name: "مساحة الإدارة" });
-    await expect(nav.getByRole("link", { name: "الأعضاء والاشتراكات", exact: true })).toBeVisible();
-    await expect(nav.getByRole("button", { name: "التشغيل اليومي", exact: true })).toBeVisible();
-    await expect(nav.getByRole("button", { name: "الإعدادات والمساعدة", exact: true })).toBeVisible();
-    await nav.getByRole("link", { name: "الأعضاء والاشتراكات", exact: true }).click();
+    await expect(nav.getByRole("button", { name: "الأعضاء والاشتراكات", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "عمليات الأكاديمية", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "إدارة الأكاديمية", exact: true })).toBeVisible();
+    await nav.getByRole("button", { name: "الأعضاء والاشتراكات", exact: true }).click();
+    await nav.getByRole("link", { name: "اللاعبون", exact: true }).click();
     await expect(page.getByRole("heading", { name: "قائمة اللاعبين", exact: true })).toBeVisible();
     await expect(page.getByLabel("صفوف الصفحة")).toHaveValue("25");
     const player = page.getByRole("link", { name: "عرض", exact: true }).first();

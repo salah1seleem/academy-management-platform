@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 const webPort = process.env.ACADEMY_E2E_WEB_PORT ?? "3000";
 const apiPort = process.env.ACADEMY_E2E_API_PORT ?? "5080";
+const webDist = process.env.ACADEMY_E2E_DIST_DIR ?? ".next-e2e";
+const localBuiltApi = !process.env.CI && process.env.ACADEMY_E2E_API_NO_BUILD === "true" ? " --no-build" : "";
 const webUrl = `http://127.0.0.1:${webPort}`;
 const apiUrl = `http://127.0.0.1:${apiPort}`;
 const demoProfile = process.env.ACADEMY_E2E_DEMO_PROFILE === "Football" ? "Football" : "LegacyRegression";
@@ -45,13 +47,13 @@ export default defineConfig({
   webServer: [
     {
       command:
-        `${localConnectionFallback}ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=${demoProfile} Demo__SeedEnabled=true ${regressionSeeds} Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile`,
+        `${localConnectionFallback}ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=${demoProfile} Demo__SeedEnabled=true ${regressionSeeds} Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile${localBuiltApi}`,
       url: `${apiUrl}/health/live`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
-      command: `API_INTERNAL_URL=${apiUrl} ACADEMY_WEB_DIST_DIR=.next-e2e npm run build --prefix ../../apps/web && API_INTERNAL_URL=${apiUrl} ACADEMY_WEB_DIST_DIR=.next-e2e npm run start --prefix ../../apps/web -- --hostname 127.0.0.1 --port ${webPort}`,
+      command: `API_INTERNAL_URL=${apiUrl} ACADEMY_WEB_DIST_DIR=${webDist} npm run build --prefix ../../apps/web && API_INTERNAL_URL=${apiUrl} ACADEMY_WEB_DIST_DIR=${webDist} npm run start --prefix ../../apps/web -- --hostname 127.0.0.1 --port ${webPort}`,
       url: webUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 240_000,

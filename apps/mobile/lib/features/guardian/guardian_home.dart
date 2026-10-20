@@ -117,7 +117,7 @@ class _GuardianHomeState extends State<GuardianHome> {
                 Heading(localized(context, 'أبنائي', 'My children')),
                 if (allChildren.isNotEmpty)
                   SizedBox(
-                    height: 124,
+                    height: 100 + MediaQuery.textScalerOf(context).scale(32),
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: allChildren.length,
@@ -190,6 +190,7 @@ class _GuardianHomeState extends State<GuardianHome> {
                           Padding(
                             padding: const EdgeInsetsDirectional.only(end: 8),
                             child: ChoiceChip(
+                              key: ValueKey('child-section-${item.$1}'),
                               label: UiText(
                                 item.$2,
                                 style: const TextStyle(fontSize: 11),

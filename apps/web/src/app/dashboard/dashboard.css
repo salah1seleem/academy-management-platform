@@ -49,12 +49,15 @@
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 /* Shell and navigation */
+/* Exclude the closed mobile drawer from hit testing and overflow calculations;
+   desktop retains its fixed visible rail. Home carousels also constrain their
+   grid minimums so Chromium's mobile layout viewport stays device-sized. */
 .dashboard-shell .sidebar {
   position: fixed;
   z-index: 40;
   inset-block: 0;
   inset-inline-start: 0;
-  display: flex;
+  display: none;
   width: 276px;
   padding: 20px 14px 14px;
   overflow: hidden;
@@ -66,7 +69,7 @@
   transition: transform 180ms ease;
   flex-direction: column;
 }
-.dashboard-shell .sidebar.open { transform: translateX(0); }
+.dashboard-shell .sidebar.open { display: flex; transform: translateX(0); }
 .dashboard-shell .sidebar:focus { outline: none; }
 .sidebar-brand { display: flex; align-items: center; gap: 11px; min-height: 54px; padding: 0 8px 16px; border-block-end: 1px solid rgb(255 255 255 / 9%); }
 .brand-mark { display: grid; flex: 0 0 40px; width: 40px; height: 40px; color: var(--staff-primary-950); background: #c8ede8; border-radius: 11px; place-items: center; }
@@ -98,7 +101,7 @@
 .dashboard-shell .submodule-list a.active { position: relative; color: white; background: var(--staff-primary-800); font-weight: 600; }
 .dashboard-shell .submodule-list a.active::before { position: absolute; inset-block: 8px; inset-inline-start: -18px; width: 3px; background: #6ed6cb; border-radius: 99px; content: ""; }
 .dashboard-shell .submodule-list a.active svg { opacity: 1; }
-.sidebar-account-bottom { margin-block-start: 10px; padding: 11px 8px 0; border-block-start: 1px solid rgb(255 255 255 / 9%); }
+.sidebar-account-bottom { position: relative; z-index: 1; flex-shrink: 0; margin-block-start: 10px; padding: 11px 8px 0; border-block-start: 1px solid rgb(255 255 255 / 9%); }
 .sidebar-account-copy { flex: 1; min-width: 0; }
 .sidebar-account-copy small { display: block; color: #8fb2af; font-size: 11px; }
 .dashboard-shell .sidebar-logout { display: grid; flex: 0 0 36px; width: 36px; height: 36px; padding: 0; color: #b9d0ce; background: transparent; border: 1px solid rgb(255 255 255 / 12%); border-radius: 9px; cursor: pointer; place-items: center; }
@@ -382,7 +385,7 @@
 .dashboard-shell .score-card h3 { font-size: 15px; font-weight: 600; }
 
 @media (min-width: 72rem) {
-  .dashboard-shell .sidebar { transform: none; }
+  .dashboard-shell .sidebar { display: flex; transform: none; }
   .dashboard-shell .nav-toggle,
   .dashboard-shell .nav-backdrop { display: none; }
   .dashboard-shell .dashboard-content { width: auto; max-width: none; margin-inline-start: 276px; padding: 32px clamp(24px, 3vw, 42px) 48px; }

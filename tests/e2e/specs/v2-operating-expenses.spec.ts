@@ -9,6 +9,7 @@ test("Owner sees a stored group cost share without treating it as a collection",
   await page.goto("/dashboard/finance/operating-expenses");
   await expect(page.getByRole("heading", { name: "المصروفات التشغيلية" })).toBeVisible();
   await page.getByRole("button", { name: "مسح الفلاتر" }).click();
+  await page.getByText("أنصبة المجموعات المرحّلة", { exact: true }).click();
   await expect(page.getByRole("table", { name: "أنصبة تكلفة المجموعات" })).toContainText("200");
   await expect(page.getByRole("table", { name: "أنصبة تكلفة المجموعات" })).toContainText("مجموعة");
   await page.setViewportSize({ width: 390, height: 900 });
@@ -23,6 +24,7 @@ test("Owner can prepare a shared branch cost without selecting a fake group", as
   await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.waitForURL("**/dashboard");
   await page.goto("/dashboard/finance/operating-expenses");
+  await page.getByRole("button", { name: "تسجيل مصروف", exact: true }).click();
   await expect(page.getByRole("heading", { name: "تسجيل مصروف" })).toBeVisible();
   const form = page.locator("form.form-shell");
   await form.locator("select").nth(0).selectOption({ index: 1 });

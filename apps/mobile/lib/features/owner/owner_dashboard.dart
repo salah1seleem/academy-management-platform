@@ -52,7 +52,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       to = '';
       branch = '';
       cleared = false;
-      data = load();
+      data = identity == null ? Future.value(<Object?>[]) : load();
     });
   }
 
@@ -89,7 +89,13 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     return result;
   }
 
-  void refresh() => setState(() => data = load());
+  void refresh() {
+    if (!mounted || contextKey == null) return;
+    setState(() {
+      data = load();
+    });
+  }
+
   void report(String name) => openPage(
     context,
     OwnerReports(
@@ -110,6 +116,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           child: identity == null
               ? const SizedBox.shrink()
               : FutureBuilder<List<Object?>>(
+                  key: ValueKey(identity),
                   future: data,
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
@@ -149,6 +156,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         context,
                         OwnerReports(
                           auth: widget.auth,
+                          initialReport: 'financial',
                           initialFilters: {
                             'from': daily
                                 ? end
@@ -292,6 +300,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                                   ),
                               ])
                                 ActionChip(
+                                  key: ValueKey('owner-request-${item.$2}'),
                                   label: UiText(
                                     '${item.$1} · ${item.$3}',
                                     style: const TextStyle(fontSize: 11),
@@ -305,10 +314,14 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                           'مركز القرارات الذكية',
                           Icons.bolt_rounded,
                           actionLabel: 'كل القرارات',
-                          action: () => openPage(
-                            context,
-                            OwnerDecisionsPage(auth: widget.auth),
-                          ),
+                          action: () async {
+                            final expected = contextKey;
+                            await openPage(
+                              context,
+                              OwnerDecisionsPage(auth: widget.auth),
+                            );
+                            if (mounted && contextKey == expected) refresh();
+                          },
                         ),
                         HomeDecisionCards(
                           data: {

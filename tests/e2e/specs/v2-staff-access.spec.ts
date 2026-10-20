@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { selectStaffAccess } from "../support/staff-access";
 
 test("Owner sets an explicit branch and read-only module matrix; Admin cannot write or self-grant", async ({ page, browser }, info) => {
   await page.goto("/login");
@@ -10,14 +11,15 @@ test("Owner sets an explicit branch and read-only module matrix; Admin cannot wr
   const created = await page.request.post("/api/v1/manage/staff/", { headers: { "X-CSRF-TOKEN": token }, data: { name, email, phone: `010${String(stamp).slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "اختبار اصطناعي" } });
   expect(created.ok()).toBeTruthy(); const member = (await created.json()).id;
   await page.goto("/dashboard/staff");
-  await page.locator("article").filter({ hasText: name }).getByRole("button", { name: "الصلاحيات", exact: true }).click();
+  await selectStaffAccess(page, member);
   await page.getByRole("radio", { name: "فروع محددة" }).check();
-  await page.locator(".access-branch-options input").first().check();
+  await page.getByRole("group",{name:"نطاق الفروع",exact:true}).getByRole("checkbox").first().check();
   await page.getByRole("switch", { name: "قراءة اللاعبون وأولياء الأمور", exact: true }).check();
+  await page.getByRole("switch",{name:"عرض اللاعبين وأولياء الأمور",exact:true}).check();
   await page.getByRole("button", { name: "اعتماد الصلاحيات", exact: true }).click();
   await page.getByRole("button", { name: "تأكيد الاعتماد", exact: true }).click();
   await expect(page.getByRole("heading", { name: `صلاحيات ${name}`, exact: true })).not.toBeVisible();
-  await page.locator("article").filter({ hasText: name }).getByRole("button", { name: "الصلاحيات", exact: true }).click();
+  await selectStaffAccess(page, member);
   await expect(page.getByRole("switch", { name: "قراءة اللاعبون وأولياء الأمور", exact: true })).toBeChecked();
   await expect(page.getByRole("switch", { name: "إضافة اللاعبون وأولياء الأمور", exact: true })).not.toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });

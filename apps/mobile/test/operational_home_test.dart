@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'owner_test.dart' show owner, shell, summary;
+import 'owner_test.dart' show owner, homeOwner, shell, summary;
 import 'v2_role_workspaces_test.dart' show authenticate;
 
 Json session(int id) => {
@@ -120,7 +120,11 @@ void main() {
       });
       await tester.pumpWidget(shell(AdminHome(auth: auth)));
       await tester.pumpAndSettle();
-      expect(calls, ['/api/v1/my-permissions', '/api/v1/attendance/sessions']);
+      expect(calls, [
+        '/api/v1/my-permissions',
+        '/api/v1/attendance/sessions',
+        '/api/v1/notifications',
+      ]);
       expect(find.text('جدول اليوم · 4 حصة'), findsOneWidget);
       expect(
         tester
@@ -288,7 +292,7 @@ void main() {
       var open = true;
       var reads = 0;
       Json? body;
-      final auth = await owner((m, p, b, t) async {
+      final auth = await homeOwner((m, p, b, t) async {
         if (p.contains('/structure/options')) return {'branches': []};
         if (p.endsWith('/news') || p.endsWith('/my-matches')) return [];
         if (m == 'POST') {
@@ -329,6 +333,9 @@ void main() {
         shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())),
       );
       await tester.pumpAndSettle();
+      await reach(tester, find.text('كل القرارات'));
+      await tester.tap(find.text('كل القرارات'));
+      await tester.pumpAndSettle();
       await reach(tester, find.text('شكاوى تحتاج متابعة'));
       await tester.tap(find.text('شكاوى تحتاج متابعة'));
       await tester.pumpAndSettle();
@@ -344,12 +351,15 @@ void main() {
       expect(body, {'response': 'رد اصطناعي بعد مراجعة الموعد'});
       await tester.tap(find.byType(BackButton).last);
       await tester.pumpAndSettle();
-      expect(reads, 2);
+      expect(reads, 3);
       await reach(
         tester,
         find.text('لا توجد أولويات معلقة حسب القواعد الحالية.'),
       );
       expect(find.text('شكاوى تحتاج متابعة'), findsNothing);
+      await tester.tap(find.byType(BackButton).last);
+      await tester.pumpAndSettle();
+      expect(reads, 4);
       await auth.logout();
       await tester.pumpAndSettle();
       expect(find.text('تحصيل اليوم'), findsNothing);

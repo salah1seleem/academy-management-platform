@@ -13,7 +13,7 @@ async function login(page: Page, role: "admin" | "owner") {
 
 test("Admin has no financial dashboard or report without an explicit grant", async ({ page }) => {
   await login(page, "admin");
-  await expect(page.getByRole("heading", { name: "الرئيسية" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" })).toBeVisible();
   await expect(page.getByText("تحصيل اليوم", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" }).getByRole("link", { name: "التقرير المالي" })).toHaveCount(0);
   expect((await page.request.get("/api/v1/reports/financial")).status()).toBe(403);
@@ -22,10 +22,11 @@ test("Admin has no financial dashboard or report without an explicit grant", asy
 
 test("Owner payment-priority card opens the matching request type with month-to-date filters", async ({ page }) => {
   await login(page, "owner");
-  await page.locator(".requests-card").getByRole("link", { name: /منتجات/ }).click();
+  const calendar = await (await page.request.get("/api/v1/academy/calendar")).json();
+  await page.getByRole("link", { name: /منتجات رياضية/ }).click();
   await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
   await expect(page.getByLabel("نوع الطلب")).toHaveValue("Product");
-  const range = cairoDateRange();
+  const range = { from: calendar.trailingMonthFrom, to: calendar.today };
   await expect(page.getByLabel("من تاريخ")).toHaveValue(range.from);
   await expect(page.getByLabel("إلى تاريخ")).toHaveValue(range.to);
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
@@ -34,21 +35,22 @@ test("Owner payment-priority card opens the matching request type with month-to-
 test("A real news image stays private in draft, then becomes visible to a tenant guardian on publish", async ({ page }) => {
   await login(page, "owner");
   await page.goto("/dashboard/news");
+  await page.getByRole("button", { name: "إنشاء خبر", exact: true }).click();
   const title = `خبر اختبار مراجعة ${Date.now()}`;
   await page.getByLabel("عنوان الخبر").fill(title);
   await page.getByLabel("تفاصيل الخبر").fill("خبر مصطنع لا يتضمن بيانات شخصية.");
   await page.getByLabel("صورة الخبر").setInputFiles(resolve(__dirname, "../../../apps/mobile/assets/demo/nutrition/breakfast-1.jpg"));
   await page.getByRole("button", { name: "حفظ كمسودة" }).click();
-  const item = page.locator("article").filter({ hasText: title });
+  const item = page.getByRole("table",{name:"أخبار الأكاديمية",exact:true}).getByRole("row").filter({ hasText: title });
   await expect(item).toContainText("مسودة");
   const draft = (await page.request.get("/api/v1/content/news/").then(r => r.json())).find((x: { title: string }) => x.title === title);
   await guardianLogin(page);
   expect(await page.request.get(draft.imageUrl).then(r => r.status())).toBe(404);
   expect(await page.request.get("/api/v1/news").then(r => r.text())).not.toContain(title);
   await page.context().clearCookies(); await login(page, "owner"); await page.goto("/dashboard/news");
-  await page.locator("article").filter({ hasText: title }).getByRole("button", { name: "تعديل" }).click();
+  await page.getByRole("table",{name:"أخبار الأكاديمية",exact:true}).getByRole("row").filter({ hasText: title }).getByRole("button", { name: "عرض / تعديل",exact:true }).click();
   await page.getByRole("button", { name: "نشر", exact: true }).click();
-  await expect(page.locator("article").filter({ hasText: title })).toContainText("منشور");
+  await expect(page.getByRole("table",{name:"أخبار الأكاديمية",exact:true}).getByRole("row").filter({ hasText: title })).toContainText("منشور");
   await guardianLogin(page);
   expect(await page.request.get("/api/v1/news").then(r => r.text())).toContain(title);
   const image = await page.request.get(draft.imageUrl);

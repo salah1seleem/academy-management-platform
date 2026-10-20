@@ -13,8 +13,8 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
 async function openTodayFootballRoster(page: Page) {
   const session = await todaySession(page, "5a000000-0000-0000-0000-000000000130", "04:00", "04:15");
   await page.getByRole("button", { name: "فتح القائمة" }).click();
-  await page.getByRole("button", { name: "التشغيل اليومي", exact: true }).click();
-  await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "حضور اللاعبين" }).click();
+  await page.getByRole("button", { name: "عمليات الأكاديمية", exact: true }).click();
+  await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "تسجيل حضور اللاعبين", exact: true }).click();
   await page.locator(`a[href='/dashboard/attendance/sessions/${session}/players']`).click();
   await expect(page.getByRole("heading", { name: "حضور اللاعبين" })).toBeVisible();
   return `/api/v1/attendance/sessions/${session}/players`;

@@ -74,9 +74,11 @@ class _OwnerReportsState extends State<OwnerReports> {
       widget.auth.request('GET', '/api/v1/manage/structure/options'),
     ]);
     final calendar = obj(result[0]);
-    if (from.isEmpty && to.isEmpty && !all) {
-      from = textOf(calendar['trailingMonthFrom']);
-      to = textOf(calendar['today']);
+    if (mounted && from.isEmpty && to.isEmpty && !all) {
+      setState(() {
+        from = textOf(calendar['trailingMonthFrom']);
+        to = textOf(calendar['today']);
+      });
     }
     return obj(result[1]);
   }
@@ -105,7 +107,7 @@ class _OwnerReportsState extends State<OwnerReports> {
         ReportExportButton(
           auth: widget.auth,
           path:
-              '/api/v1/reports/${report == 'financial' ? 'financial' : 'attendance'}/export?${Uri(queryParameters: {...filters, if (report != 'financial') 'subject': report == 'staff-attendance' ? 'staff' : 'players'}).query}',
+              '/api/v1/reports/${report == 'financial' ? 'financial' : 'attendance'}/export?${Uri(queryParameters: {...Map.fromEntries(filters.entries.where((e) => e.value.isNotEmpty)), if (report != 'financial') 'subject': report == 'staff-attendance' ? 'staff' : 'players'}).query}',
         ),
       PageVideoButton(auth: widget.auth, screen: 'reports'),
     ],
@@ -351,7 +353,11 @@ class _OwnerReportsState extends State<OwnerReports> {
                 ),
                 subtitle: UiText(
                   financial
-                      ? '${row['branch']}\n${row['receiptNumber']}'
+                      ? '${row['collectionType'] == 'Void'
+                            ? 'عكس إيصال نقدي · الفترة ملغاة · '
+                            : row['collectionType'] == 'Refund'
+                            ? 'استرداد اشتراك · بتاريخ الصرف · '
+                            : ''}${row['branch']}\n${row['receiptNumber']}'
                       : '${row['group'] ?? row['category'] ?? ''} · ${day(row['date'] ?? row['periodFrom'])}',
                   style: const TextStyle(fontSize: 10),
                 ),

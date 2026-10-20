@@ -68,6 +68,9 @@ class _MatchExperienceState extends State<MatchExperience> {
       );
     int sum(String key) =>
         completed.fold(0, (v, m) => v + (m[key] as num).toInt());
+    if (widget.items.isEmpty) {
+      return gList([const EmptyMessage('لا توجد مباريات منشورة تخصك حاليًا.')]);
+    }
     return gList([
       if (owner)
         ScopeBranchTabs(
@@ -243,6 +246,18 @@ class MatchResultCard extends StatelessWidget {
         ),
         if (data['status'] == 'Cancelled')
           const UiText('ملغاة', style: TextStyle(color: ExperienceColors.red)),
+        if (data['participation'] != null)
+          UiText(
+            data['participation'] == 'Bench'
+                ? 'المشاركة: بديل'
+                : 'المشاركة: لاعب',
+          ),
+        if (data['coachAssignmentSource'] == 'LegacyCurrentTeam')
+          const UiText('إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.'),
+        if (data['coachAssignmentSource'] == 'Confirmed' &&
+            data['coachName'] != null)
+          UiText('مدرب المباراة: ${data['coachName']}'),
+        if (data['notes'] != null) UiText(textOf(data['notes'])),
       ],
     ),
   );

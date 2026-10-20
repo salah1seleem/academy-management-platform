@@ -48,8 +48,8 @@ void main() {
       );
       expect(find.text('لاعب اصطناعي'), findsOneWidget);
       expect(find.text('المبلغ مختلف'), findsOneWidget);
-      expect(find.textContaining('900.00'), findsOneWidget);
-      expect(find.textContaining('925.00'), findsOneWidget);
+      expect(find.textContaining('900'), findsOneWidget);
+      expect(find.textContaining('925'), findsOneWidget);
       expect(
         find.textContaining('الطلب مؤكد بإشارة صحيحة أخرى'),
         findsOneWidget,

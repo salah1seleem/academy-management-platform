@@ -15,6 +15,7 @@ import 'package:academy_mobile/features/shared/content_editor.dart';
 import 'package:academy_mobile/features/shared/role_navigation.dart';
 import 'package:academy_mobile/features/shared/notification_inbox.dart';
 import 'package:academy_mobile/features/shared/matches.dart';
+import 'package:academy_mobile/features/shared/report_export.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,8 +42,19 @@ void main() {
           SecureRefreshStore('v41.$phone'),
         );
         await a.restore();
-        final challenge = await a.requestOtp(phone);
-        await a.verify(phone, challenge, '246810');
+        var restored = false;
+        if (a.session?.selected != null) {
+          try {
+            await a.request('GET', '/api/v1/me');
+            restored = true;
+          } catch (_) {
+            /* use the ordinary OTP flow */
+          }
+        }
+        if (!restored) {
+          final challenge = await a.requestOtp(phone);
+          await a.verify(phone, challenge, '246810');
+        }
         expect(
           a.session!.selected!.academyId,
           '30000000-0000-0000-0000-000000000003',
@@ -140,6 +152,30 @@ void main() {
         await shot('owner-scroll-$i');
       }
       expect(find.text('أبرز اللاعبين'), findsWidgets);
+      if (const bool.fromEnvironment('EXTENDED_ACCEPTANCE')) {
+        await mount(
+          owner,
+          OwnerDashboard(
+            auth: owner,
+            accountPage: RoleFoundation(auth: owner),
+          ),
+        );
+        await waitFor(find.text('ملخص الأكاديمية'));
+        await tester.scrollUntilVisible(
+          find.text('التحصيل اليومي'),
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('التحصيل اليومي'));
+        await waitFor(find.textContaining('صافي التحصيل:'));
+        final export = tester.widget<ReportExportButton>(
+          find.byType(ReportExportButton),
+        );
+        final period = Uri.parse(export.path).queryParameters;
+        expect(period['from'], calendar['today']);
+        expect(period['to'], calendar['today']);
+        expect(period.containsKey('branchId'), isFalse);
+      }
 
       final coach = await login('01099900020');
       await mount(
@@ -262,6 +298,15 @@ void main() {
       await shot('guardian-selected-child');
       await mount(guardian, NotificationInbox(auth: guardian));
       await waitFor(find.textContaining('غير مقروءة'));
+      // The real ListView builds lazily; a stored notice may be below the fold.
+      for (
+        var scroll = 0;
+        scroll < 60 && find.textContaining('نجمة').evaluate().isEmpty;
+        scroll++
+      ) {
+        await tester.drag(find.byType(ListView).first, const Offset(0, -240));
+        await tester.pump(const Duration(milliseconds: 150));
+      }
       expect(find.textContaining('نجمة'), findsWidgets);
       await shot('guardian-notifications');
 
@@ -319,9 +364,15 @@ void main() {
         await tester.tap(find.text('التحصيلات'));
         await waitFor(find.textContaining('صافي التحصيل:'));
         await shot('collections-report');
-        final csv = await owner.asset(
-          '/api/v1/reports/financial/export?from=${calendar['trailingMonthFrom']}&to=${calendar['today']}',
+        final export = tester.widget<ReportExportButton>(
+          find.byType(ReportExportButton),
         );
+        expect(
+          Uri.parse(export.path).queryParameters['from'],
+          calendar['trailingMonthFrom'],
+        );
+        expect(Uri.parse(export.path).queryParameters['to'], calendar['today']);
+        final csv = await owner.asset(export.path);
         expect(csv.length, greaterThan(100));
         await mount(owner, AcademyNewsManagement(auth: owner));
         await waitFor(find.text('إضافة خبر'));

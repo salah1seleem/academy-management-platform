@@ -76,7 +76,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('شهر · 1000.00 ج.م').last);
+      await tester.tap(find.text('شهر · 1,000 ج.م').last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('مراجعة إجمالي 1 تسجيل'));
       await tester.tap(find.text('مراجعة إجمالي 1 تسجيل'));
@@ -146,7 +146,7 @@ void main() {
         shell(NativeFamilyRenewalRequest(auth: auth, id: 'family')),
       );
       await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('إلغاء طلب التجديد'), 300);
+      await tester.scrollUntilVisible(find.text('إلغاء طلب التجديد'), 300);
       await tester.tap(find.text('إلغاء طلب التجديد'));
       await tester.pumpAndSettle();
       expect(sent, isNull);

@@ -61,7 +61,9 @@ void main() {
                 ],
               },
       );
-      await tester.pumpWidget(owner.shell(OwnerReports(auth: auth)));
+      await tester.pumpWidget(
+        owner.shell(OwnerReports(auth: auth, initialReport: 'financial')),
+      );
       await tester.pumpAndSettle();
       expect(
         find.textContaining('عكس إيصال نقدي · الفترة ملغاة'),

@@ -171,7 +171,8 @@ class _CoachHomeState extends State<CoachHome> {
             children: [
               ExperienceHeader(
                 auth: widget.auth,
-                subtitle: 'لوحة المدرب',
+                subtitle:
+                    'أهلًا، ${widget.auth.session?.displayName ?? 'مدربنا'}',
                 lesson: 'coach-development',
                 account: widget.accountPage,
               ),

@@ -48,10 +48,10 @@ void main() {
           ),
         ),
       );
-      expect(find.text('1740.00 ج.م'), findsOneWidget);
-      expect(find.text('1240.00 ج.م'), findsOneWidget);
+      expect(find.text('1,740 ج.م'), findsOneWidget);
+      expect(find.text('1,240 ج.م'), findsOneWidget);
       expect(find.text('تسوية برصيد دائن'), findsOneWidget);
-      expect(find.text('60.00 ج.م'), findsOneWidget);
+      expect(find.text('60 ج.م'), findsOneWidget);
       expect(find.text('رصيد دائن مستخدم'), findsNothing);
       expect(
         find.text(

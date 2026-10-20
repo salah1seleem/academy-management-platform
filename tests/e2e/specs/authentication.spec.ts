@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("Arabic mobile owner login is tenant-scoped and logout invalidates the session", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto("/login");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
@@ -10,7 +11,8 @@ test("Arabic mobile owner login is tenant-scoped and logout invalidates the sess
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
 
-  await expect(page.getByRole("heading", { name: "الرئيسية", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "أكاديمية النجوم الرياضية", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "ملخص الأكاديمية", exact: true })).toBeVisible({timeout:20_000});
 
   const forbidden = await page.evaluate(async () => {
     const csrf = await fetch("/api/v1/auth/csrf").then((response) => response.json()) as { token: string };

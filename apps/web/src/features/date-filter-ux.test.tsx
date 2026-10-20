@@ -11,6 +11,7 @@ import { GroupSessions } from "./group-sessions";
 import { MatchesWorkspace } from "./matches";
 import { ContentList } from "./admin-content";
 import { AdminEnrollmentRequests } from "./guardian-core";
+import {v41HomeFixture} from './testing/v41-home-fixture';
 
 const incoming = new URLSearchParams();
 vi.mock("next/navigation", () => ({ useSearchParams: () => incoming, useRouter: () => ({ push: vi.fn() }) }));
@@ -21,6 +22,8 @@ beforeEach(() => {
   global.fetch = vi.fn(input => {
     const u = String(input);
     if (u.endsWith("/me")) return response({ role: "AcademyOwner" });
+    if (u.includes("academy/calendar")) return response({today:range.to,trailingMonthFrom:"2026-09-08"});
+    const home=v41HomeFixture(u);if(home!==undefined)return response(home);
     if (u.includes("owner-summary")) return response({ from: "2026-09-01", to: "2026-09-28", currency: "EGP", collections: { today: 0, month: 0 }, payments: { pending: 0 }, subscriptions: { active: 0, expiring: 0, expired: 0 }, activePlayers: 0, coaches: 0, attendance: { present: 0, absent: 0, notRecorded: 0 }, byBranch: [] });
     if (u.includes("sessions/options")) return response({ groups: [], coaches: [], players: [], guardians: [], branches: [], sports: [] });
     if (u.includes("matches/options")) return response({ tournaments: [], teams: [], players: [], coaches: [] });
@@ -36,7 +39,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it.each([
   ["الحصص", <GroupSessions key="sessions" initialDate="2026-10-08" />, "مسح الفلاتر"],
-  ["الرئيسية", <PremiumOwnerDashboard key="home" />, "مسح"],
+  ["الرئيسية", <PremiumOwnerDashboard key="home" />, "مسح الفلاتر"],
   ["المالية", <FinancialReport key="financial" />, "مسح"],
   ["حضور اللاعبين", <AttendanceReport key="attendance" />, "مسح"],
   ["حضور المدربين", <DailyStaffReport key="staff" onPlayers={() => {}} />, "مسح"],
@@ -45,11 +48,11 @@ it.each([
   ["المباريات", <MatchesWorkspace key="matches" />, "مسح"],
   ["السجلات الطبية", <ContentList key="medical" kind="medical" />, "إعادة الضبط"],
   ["طلبات التسجيل القديمة", <AdminEnrollmentRequests key="enrollments" />, "إعادة الضبط"],
-] as const)("%s: starts month-to-date and clear remains blank after async responses", async (_name, content, reset) => {
+] as const)("%s: uses its approved period and clear remains blank after async responses", async (_name, content, reset) => {
   render(<DateFilterDefaults range={range}>{content}</DateFilterDefaults>);
   if(_name==="المباريات")fireEvent.click(screen.getByRole("button",{name:"المباريات"}));
   const from = await screen.findByLabelText("من تاريخ"), to = screen.getByLabelText("إلى تاريخ");
-  expect(from).toHaveValue(_name === "قائمة الحضور" ? range.to : range.from); expect(to).toHaveValue(range.to);
+  await waitFor(()=>expect(from).toHaveValue(_name === "المباريات" ? "" : _name === "قائمة الحضور" ? range.to : _name === "الرئيسية" ? "2026-09-08" : range.from)); expect(to).toHaveValue(_name === "المباريات" ? "" : range.to);
   fireEvent.click(await screen.findByRole("button", { name: reset }));
   await waitFor(() => { expect(from).toHaveValue(""); expect(to).toHaveValue(""); });
   await Promise.resolve(); await Promise.resolve();

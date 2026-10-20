@@ -56,7 +56,7 @@ test("Owner sees approved and rejected payment requests and confirmed collection
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.waitForURL("**/dashboard");
   await page.getByRole("button", { name: "فتح القائمة" }).click();
-  await page.getByRole("button", { name: "خيارات اللاعبين" }).click();
+  await page.getByRole("button", { name: "المتابعات والطلبات" }).click();
   await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "طلبات الدفع", exact: true }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
   await page.getByRole("button", { name: "مسح", exact: true }).click(); await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue("");
   await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Approved"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مقبول" }).first()).toBeVisible(); await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Rejected"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مرفوض" }).first()).toBeVisible();

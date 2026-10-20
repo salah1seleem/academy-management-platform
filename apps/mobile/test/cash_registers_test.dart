@@ -51,7 +51,7 @@ void main() {
         );
         expect(find.text('150.25 ج.م'), findsOneWidget);
         expect(find.text('النقدي متوقف'), findsOneWidget);
-        expect(find.text('الفعلي: 90.00 ج.م'), findsOneWidget);
+        expect(find.text('الفعلي: 90 ج.م'), findsOneWidget);
         expect(find.byType(ElevatedButton), findsNothing);
         expect(tester.takeException(), isNull);
       },

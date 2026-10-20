@@ -109,20 +109,33 @@ void main() {
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('لينا طفلة العرض').last);
+      await tester.tap(find.byKey(const ValueKey('select-child-a')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('child-a')), findsOneWidget);
       expect(find.byKey(const ValueKey('child-b')), findsNothing);
       expect(find.text('الحصة القادمة · آدم طفل العرض'), findsNothing);
+      await tester.tap(find.text('التقييمات'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('تطور لينا طفلة العرض'),
         180,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('0'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(GuardianLatestProgress),
+          matching: find.text('0'),
+        ),
+        findsOneWidget,
+      );
       expect(paths.where((p) => p == '/api/v1/guardian/home').length, 1);
+      await tester.scrollUntilVisible(
+        find.text('الاشتراك'),
+        -180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('الاشتراك'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-renew-enrollment-a')),
         180,
@@ -156,6 +169,8 @@ void main() {
         return response(p);
       });
       await tester.pumpWidget(app(auth));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('التقييمات'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('تطور لينا طفلة العرض'),
@@ -249,6 +264,16 @@ void main() {
             );
             await tester.pumpAndSettle();
             expect(find.byKey(const ValueKey('child-a')), findsOneWidget);
+            await tester.scrollUntilVisible(
+              find.byKey(const ValueKey('child-section-3')),
+              180,
+              scrollable: find.byType(Scrollable).first,
+            );
+            await tester.ensureVisible(
+              find.byKey(const ValueKey('child-section-3')),
+            );
+            await tester.tap(find.byKey(const ValueKey('child-section-3')));
+            await tester.pumpAndSettle();
             for (final action in [
               'اشتراك جديد',
               'تجديد الاشتراك',

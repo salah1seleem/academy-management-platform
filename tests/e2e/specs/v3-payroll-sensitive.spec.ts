@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { selectStaffAccess } from "../support/staff-access";
 
 test("Owner independently delegates review and payment; employee requests only a reason and the scoped payroll settles once", async ({ page, browser }, info) => {
   test.setTimeout(90_000);
@@ -27,7 +28,7 @@ test("Owner independently delegates review and payment; employee requests only a
     await login(review, reviewer.email); await review.goto("/dashboard/payroll/requests"); await expect(review.getByText(employee.name, { exact: true })).toBeVisible();
     await expect(review.getByRole("button", { name: "مراجعة", exact: true })).toHaveCount(0);
     async function openAccess() {
-      await page.goto("/dashboard/staff"); await page.locator("article").filter({ hasText: reviewer.name }).getByRole("button", { name: "الصلاحيات", exact: true }).click();
+      await page.goto("/dashboard/staff"); await selectStaffAccess(page, reviewer.id);
       await expect(page.getByRole("switch", { name: "تسجيل صرف الرواتب", exact: true })).toBeVisible();
     }
     async function saveAccess() {

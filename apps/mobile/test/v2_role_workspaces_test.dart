@@ -48,14 +48,14 @@ Widget app(Widget page, {double scale = 1}) => MaterialApp(
 void main() {
   const expected = {
     'Guardian': ['الرئيسية', 'أبنائي', 'التقويم', 'المزيد'],
-    'Coach': ['الرئيسية', 'جدولي', 'اللاعبون', 'المزيد'],
-    'AcademyOwner': ['الرئيسية', 'القرارات', 'المالية', 'المزيد'],
+    'Coach': ['الرئيسية', 'جدولي', 'اللاعبون', 'المباريات', 'المزيد'],
+    'AcademyOwner': ['الرئيسية', 'المباريات', 'التقارير', 'المزيد'],
     'AcademyAdmin': ['الرئيسية', 'الحضور', 'الطلبات', 'المزيد'],
   };
   for (final role in expected.keys) {
     for (final width in [360.0, 390.0, 430.0]) {
       testWidgets(
-        '$role has four role-specific destinations at $width with 200% text',
+        '$role has its approved role-specific destinations at $width with 200% text',
         (tester) async {
           tester.view.physicalSize = Size(width, 900);
           tester.view.devicePixelRatio = 1;
@@ -84,12 +84,18 @@ void main() {
           expect(tester.takeException(), isNull);
           await tester.tap(find.text('المزيد'));
           await tester.pumpAndSettle();
-          await tester.scrollUntilVisible(
-            find.text('الحساب والإعدادات'),
-            200,
-            scrollable: find.byType(Scrollable).first,
-          );
-          expect(find.text('الحساب والإعدادات'), findsOneWidget);
+          expect(find.text('فيديوهات شرح الصفحات'), findsOneWidget);
+          if (role == 'AcademyOwner') {
+            expect(find.text('الحساب والإعدادات'), findsNothing);
+            expect(find.text('حضوري وانصرافي'), findsNothing);
+          } else {
+            await tester.scrollUntilVisible(
+              find.text('الحساب والإعدادات'),
+              200,
+              scrollable: find.byType(Scrollable).first,
+            );
+            expect(find.text('الحساب والإعدادات'), findsOneWidget);
+          }
           expect(tester.takeException(), isNull);
           auth.dispose();
         },
@@ -113,6 +119,7 @@ void main() {
       expect(calls, [
         '/api/v1/my-permissions',
         '/api/v1/manage/payment-requests?status=Pending&allDates=true',
+        '/api/v1/notifications',
       ]);
       expect(
         calls.any((p) => p.contains('/attendance/') || p.contains('/reports/')),

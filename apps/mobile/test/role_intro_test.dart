@@ -207,7 +207,7 @@ void main() {
     reopened.dispose();
   });
   testWidgets(
-    'authenticated role gate skips once, reopens normally and offers help replay without resetting completion',
+    'authenticated role gate skips once and page video help never replays onboarding or resets completion',
     (t) async {
       final calls = <String>[];
       final replayMetadata = Completer<Object?>();
@@ -223,6 +223,9 @@ void main() {
               'features': ['training'],
             },
           };
+        }
+        if (p.startsWith('/api/v1/page-help/')) {
+          return {'available': false, 'url': null};
         }
         return [];
       });
@@ -257,19 +260,23 @@ void main() {
       expect(find.byType(AcademyOnboarding), findsNothing);
       await t.tap(find.text('المزيد'));
       await t.pumpAndSettle();
-      await t.tap(find.text('ابدأ من هنا'));
-      await t.pump();
-      expect(
-        find.byType(NativeMore),
-        findsOneWidget,
-      ); // Slow metadata refresh must not dispose the invoking route.
+      await t.tap(find.text('فيديوهات شرح الصفحات'));
+      await t.pumpAndSettle();
+      expect(find.text('فيديوهات شرح الصفحات'), findsOneWidget);
+      expect(find.byType(AcademyOnboarding), findsNothing);
       replayMetadata.complete({
         'onboarding': {'sportTheme': 'football', 'features': []},
       });
       await t.pumpAndSettle();
-      expect(find.text('أكاديميتك في مكان واحد'), findsOneWidget);
+      expect(calls.where((p) => p == '/api/v1/academy/experience').length, 1);
       expect(find.text('مواعيد ابنك قدامك'), findsNothing);
-      await t.tap(find.text('تخطي'));
+      await t.tap(find.byTooltip('شرح الصفحة بالفيديو').first);
+      await t.pumpAndSettle();
+      expect(
+        find.text('لم تضف الأكاديمية فيديو لهذه الصفحة بعد.'),
+        findsOneWidget,
+      );
+      await t.tap(find.text('حسنًا'));
       await t.pumpAndSettle();
       expect(find.byType(AcademyOnboarding), findsNothing);
       expect(await prefs.hasRoleIntro('Guardian', 'football'), isTrue);

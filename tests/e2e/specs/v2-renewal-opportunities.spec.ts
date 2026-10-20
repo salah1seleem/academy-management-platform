@@ -4,11 +4,11 @@ test("FIN-01 forecast drills down to 20 expired paid players and exports 12700 w
   test.setTimeout(90_000);
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
   const branch = "a2030100-0001-0000-0000-000000000001";
-  const ownerFilters = page.getByRole("button", { name: /الفترة والفرع/ });
-  await expect(ownerFilters).toBeVisible(); await ownerFilters.click();
   const summary = page.waitForResponse(r => r.url().includes("/reports/owner-summary?") && r.url().includes(branch));
-  await page.getByRole("combobox", { name: "الفرع", exact: true }).selectOption(branch); expect((await summary).status()).toBe(200);
-  const card = page.getByRole("region", { name: "فرص التجديد الحالية" }); await expect(card.getByRole("link")).toHaveAttribute("href", `/dashboard/finance/renewals?branchId=${branch}`); await expect(card).toContainText("12,700"); await card.getByRole("link").click();
+  const options=await (await page.request.get("/api/v1/manage/structure/options")).json();
+  await page.getByRole("navigation",{name:"الفروع",exact:true}).getByRole("button",{name:options.branches.find((b:{id:string})=>b.id===branch).arabicName,exact:true}).click(); expect((await summary).status()).toBe(200);
+  const card = page.getByRole("region", { name: "مؤشرات الأكاديمية" }).getByRole("link",{name:/أعضاء يحتاجون متابعة/}); await expect(card).toHaveAttribute("href",new RegExp(`/dashboard/finance/renewals\\?.*branchId=${branch}`)); await expect(card).toContainText("20");
+  await card.click();
   await expect(page.getByRole("heading", { name: "فرص التجديد", exact: true })).toBeVisible(); await expect(page.getByText("20", { exact: true }).first()).toBeVisible(); await expect(page.getByText("12,700 جنيه", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "ملف اللاعب والتجديد" })).toHaveCount(20);
   const csvLink = page.getByRole("link", { name: /تصدير CSV/ }); const csv = await page.request.get((await csvLink.getAttribute("href"))!); expect(csv.status()).toBe(200); expect((await csv.text()).split('\n')).toHaveLength(21);

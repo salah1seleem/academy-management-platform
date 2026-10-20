@@ -43,7 +43,7 @@ void main() {
             ),
           ),
         );
-        expect(find.text('12700.00 ج.م'), findsOneWidget);
+        expect(find.text('12,700 ج.م'), findsOneWidget);
         expect(find.text('تحتاج اختيار باقة'), findsOneWidget);
         expect(
           find.text(

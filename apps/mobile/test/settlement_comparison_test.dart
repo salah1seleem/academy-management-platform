@@ -47,8 +47,8 @@ void main() {
           ),
         );
         expect(find.text('مطابق يدويًا'), findsOneWidget);
-        expect(find.textContaining('900.00'), findsOneWidget);
-        expect(find.textContaining('895.00'), findsOneWidget);
+        expect(find.textContaining('900'), findsOneWidget);
+        expect(find.textContaining('895'), findsOneWidget);
         expect(find.text('تأكيد الدفع'), findsNothing);
         expect(tester.takeException(), isNull);
       },

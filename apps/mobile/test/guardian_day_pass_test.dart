@@ -92,7 +92,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(DropdownButtonFormField<String>).at(2));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('زيارة يومية · 125.00').last);
+      await tester.tap(find.textContaining('زيارة يومية · 125').last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('مراجعة السعر والموعد'));
       await tester.tap(find.text('مراجعة السعر والموعد'));

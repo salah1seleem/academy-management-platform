@@ -23,6 +23,11 @@ void main() {
                 'today': '2026-09-28',
                 'children': [],
               }
+            : path.endsWith('/academy/experience')
+            ? {
+                'displayName': 'أكاديمية العرض',
+                'onboarding': {'sportTheme': 'general', 'features': []},
+              }
             : path.endsWith('/catalog')
             ? []
             : credentials(),
@@ -50,7 +55,7 @@ void main() {
         Directionality.of(tester.element(find.byType(GuardianHome))),
         TextDirection.rtl,
       );
-      await tester.tap(find.byTooltip('الحساب'));
+      await tester.tap(find.byTooltip('حسابي'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('تسجيل الخروج'));
       await tester.pumpAndSettle();

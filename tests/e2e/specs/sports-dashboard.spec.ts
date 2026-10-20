@@ -24,8 +24,11 @@ for (const role of ["owner", "admin"] as const) for (const size of sizes) {
       await page.screenshot({ path: image, scale: "css", animations: "disabled" });
       await info.attach(path, { path: image, contentType: "image/png" });
       if (path === "/dashboard" && role === "owner") {
+        // Comparing scrollWidth with an already-inflated mobile innerWidth
+        // misses RTL min-content overflow and displaced tap coordinates.
+        expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(size.width+1);
         const widgets = info.outputPath(`${role}-${size.width}-widgets.png`);
-        await page.locator(".owner-chart-grid").filter({ has: page.getByText("حالة الاشتراكات", { exact: true }) }).screenshot({ path: widgets, scale: "css", animations: "disabled" });
+        await page.getByRole("region", { name: "مؤشرات الأكاديمية", exact: true }).screenshot({ path: widgets, scale: "css", animations: "disabled" });
         await info.attach("real-data widgets", { path: widgets, contentType: "image/png" });
       }
     }
@@ -40,7 +43,7 @@ for (const role of ["owner", "admin"] as const) for (const size of sizes) {
       await info.attach("roster", { path: image, contentType: "image/png" });
     }
     await page.emulateMedia({ reducedMotion: "reduce" });
-    expect(await page.locator(".dashboard-content > header").evaluate(element => Number.parseFloat(getComputedStyle(element).animationDuration))).toBeLessThanOrEqual(.001);
+    expect(await page.locator("main header").first().evaluate(element => Number.parseFloat(getComputedStyle(element).animationDuration))).toBeLessThanOrEqual(.001);
     expect(errors).toEqual([]);
   });
 }

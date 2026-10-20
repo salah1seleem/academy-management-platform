@@ -128,7 +128,11 @@ class ScopeDateTiles extends StatelessWidget {
                   vertical: 12,
                   horizontal: 14,
                 ),
-                child: Row(
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 8,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,7 +148,6 @@ class ScopeDateTiles extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const Spacer(),
                     Column(
                       children: [
                         UiText(

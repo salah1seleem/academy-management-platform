@@ -1,6 +1,5 @@
 "use client";
 import {MatchCopyDialog,MatchEditor,MatchEditValue} from "./match-editor";
-import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdminDataTable, ErrorState, LoadingState, PageHeader, StatusBadge } from "../components/dashboard-shell";
@@ -17,9 +16,8 @@ export function MatchesWorkspace() {
   const [tab,setTab]=useState(["tournaments","teams","matches"].includes(incoming.get("tab")??"")?incoming.get("tab")!:"tournaments");
   const [editor,setEditor]=useState<"tournament"|"team"|"match"|null>(null);
   const [scope,setScope]=useState({sport:"",age:"",group:"",status:"",search:""});
-  const defaults = useDateFilterDefaults();
   const [options, setOptions] = useState<Options | null>(null); const [structure, setStructure] = useState<{ sports: Option[]; branches: Option[]; ageCategories?: Option[]; categories?: Option[]; groups: Option[] }>({ sports: [], branches: [], categories: [], groups: [] });
-  const [items, setItems] = useState<Match[]>([]); const [team, setTeam] = useState<Team>(initialTeam); const [tournament, setTournament] = useState<Tournament | null>(null); const [match, setMatch] = useState<Match | null>(null); const [filters, setFilters] = useState({ tournamentId: incoming.get("tournamentId")??"", teamId: incoming.get("teamId")??"", from:incoming.get("from")??defaults.from,to:incoming.get("to")??defaults.to }); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
+  const [items, setItems] = useState<Match[]>([]); const [team, setTeam] = useState<Team>(initialTeam); const [tournament, setTournament] = useState<Tournament | null>(null); const [match, setMatch] = useState<Match | null>(null); const [filters, setFilters] = useState({ tournamentId: incoming.get("tournamentId")??"", teamId: incoming.get("teamId")??"", from:incoming.get("from")??"",to:incoming.get("to")??"" }); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
   const [copyId,setCopyId]=useState<string|null>(null),[editorRevision,setEditorRevision]=useState(0),[template,setTemplate]=useState<{tournamentId:string;teamId:string;venue:string}|null>(null);
   async function copied(id:string){const r=await fetch(`/api/v1/manage/matches/${id}`,{cache:"no-store"});if(!r.ok)throw new Error();setMatch(await r.json());setTab("matches");setEditor("match");setTemplate(null);setEditorRevision(v=>v+1);setCopyId(null);setMessage("تم إنشاء مسودة مستقلة دون نشر أو إشعار. راجع الموعد والمشاركين قبل النشر.");setFilters({tournamentId:"",teamId:"",from:"",to:""});requestAnimationFrame(()=>document.getElementById("match-editor")?.scrollIntoView({behavior:"smooth"}));}
   const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();

@@ -68,7 +68,7 @@ void main() {
           await tester.tap(plan);
           await tester.pumpAndSettle();
           await tester.tap(
-            find.text('باقة ${i == 0 ? 'قدم' : 'سباحة'} · 1000.00 ج.م').last,
+            find.text('باقة ${i == 0 ? 'قدم' : 'سباحة'} · 1,000 ج.م').last,
           );
           await tester.pumpAndSettle();
         }
@@ -166,7 +166,7 @@ void main() {
       await tester.ensureVisible(plan);
       await tester.tap(plan);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('باقة قدم · 1000.00 ج.م').last);
+      await tester.tap(find.text('باقة قدم · 1,000 ج.م').last);
       await tester.pumpAndSettle();
       final button = find.widgetWithText(FilledButton, 'مراجعة إجمالي 1 تسجيل');
       await tester.ensureVisible(button);

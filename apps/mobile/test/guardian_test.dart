@@ -220,7 +220,7 @@ void main() {
     const Size(412, 915),
   ]) {
     testWidgets(
-      'Guardian home exactly three actions and unique siblings at $size',
+      'Guardian home selects one sibling workspace and preserves three enrollment actions at $size',
       (tester) async {
         await tester.binding.setSurfaceSize(size);
         addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -234,17 +234,21 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('child-ب')),
-          120,
-        );
+        await tester.tap(find.byKey(const ValueKey('select-child-ب')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('child-workspace-أ')), findsNothing);
+        expect(find.byKey(const ValueKey('child-workspace-ب')), findsOneWidget);
         expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
         for (final title in [
           'اشتراك جديد',
           'تجديد الاشتراك',
           'تجديد اشتراك لغيره',
         ]) {
-          await tester.scrollUntilVisible(find.text(title), 100);
+          await tester.scrollUntilVisible(
+            find.text(title),
+            100,
+            scrollable: find.byType(Scrollable).first,
+          );
           expect(find.text(title), findsOneWidget);
         }
         expect(tester.takeException(), isNull);
@@ -310,7 +314,13 @@ void main() {
     fail = false;
     await tester.tap(find.text('إعادة المحاولة'));
     await tester.pumpAndSettle();
-    expect(find.text('لاعب أ'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('child-أ')),
+        matching: find.text('لاعب أ'),
+      ),
+      findsOneWidget,
+    );
   });
   testWidgets(
     'Report preserves server score zero, position, missing values and every criterion',

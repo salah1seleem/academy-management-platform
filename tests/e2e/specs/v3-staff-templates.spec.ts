@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { selectStaffAccess } from "../support/staff-access";
 
 test("Owner applies a branch/sport scoped template and Admin scope stays live on revocation", async ({ page, browser }, info) => {
   await page.goto("/login");
@@ -10,11 +11,11 @@ test("Owner applies a branch/sport scoped template and Admin scope stays live on
   const created = await page.request.post("/api/v1/manage/staff/", { headers: { "X-CSRF-TOKEN": token }, data: { name, email: `v3.template.${stamp}@example.test`, phone: `011${String(stamp).slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "تجربة قالب فقط" } });
   expect(created.status()).toBe(200); const member = (await created.json()).id;
   await page.goto("/dashboard/staff");
-  await page.locator("article").filter({ hasText: name }).getByRole("button", { name: "الصلاحيات", exact: true }).click();
+  await selectStaffAccess(page, member);
   await page.getByRole("combobox", { name: "قالب الصلاحيات" }).selectOption("branch-operator");
   await expect(page.getByRole("radio", { name: "فروع محددة" })).toBeChecked();
   await expect(page.getByRole("button", { name: "اعتماد الصلاحيات", exact: true })).toBeDisabled();
-  await page.locator(".access-branch-options input").first().check();
+  await page.getByRole("group",{name:"نطاق الفروع",exact:true}).getByRole("checkbox").first().check();
   await page.getByRole("radio", { name: "رياضات محددة", exact: true }).check();
   await expect(page.getByRole("button", { name: "اعتماد الصلاحيات", exact: true })).toBeDisabled();
   const sportOptions = page.getByRole("group", { name: "نطاق الرياضات", exact: true }).getByRole("checkbox");
@@ -30,7 +31,8 @@ test("Owner applies a branch/sport scoped template and Admin scope stays live on
   }
   await page.getByRole("button", { name: "اعتماد الصلاحيات", exact: true }).click();
   await page.getByRole("button", { name: "تأكيد الاعتماد", exact: true }).click();
-  await page.locator("article").filter({ hasText: name }).getByRole("button", { name: "الصلاحيات", exact: true }).click();
+  await expect(page.locator(".access-editor")).toHaveCount(0);
+  await selectStaffAccess(page, member);
   await expect(page.getByRole("switch", { name: "إضافة الحضور", exact: true })).toBeChecked();
   await expect(page.getByRole("switch", { name: "قراءة الموظفون والرواتب", exact: true })).not.toBeChecked();
   const saved = await (await page.request.get(`/api/v1/manage/staff/${member}/access`)).json();
