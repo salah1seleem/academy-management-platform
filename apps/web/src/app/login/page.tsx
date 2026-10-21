@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { operationReturnPath } from "../../lib/operation-return";
 
 async function csrf() {
   const response = await fetch("/api/v1/auth/csrf");
@@ -26,7 +27,8 @@ export default function LoginPage() {
       if (response.status === 409) throw new Error("توجد جلسة دخول نشطة. سجّل الخروج أولًا قبل الدخول بحساب آخر.");
       if (!response.ok) throw new Error("بيانات الدخول غير صحيحة.");
       const result = await response.json();
-      router.replace(result.requiresContextSelection ? "/dashboard/context" : "/dashboard");
+      const next = operationReturnPath(new URLSearchParams(window.location.search).get("returnTo"));
+      router.replace(result.requiresContextSelection ? `/dashboard/context${next ? `?returnTo=${encodeURIComponent(next)}` : ""}` : next ?? "/dashboard");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تسجيل الدخول."); setBusy(false); }
   }
 

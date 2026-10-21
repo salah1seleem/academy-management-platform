@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { DonutChart, PremiumOwnerDashboard } from "./owner-home";
 import { AcademySettings } from "./academy-settings";
@@ -38,7 +38,7 @@ it("monthly target is displayed only when the canonical source qualifies its sco
 });
 it("new home has no duplicated welcome/latest/payroll blocks and keeps subscription/report drilldowns",async()=>{
  source();render(<PremiumOwnerDashboard/>);expect(await screen.findByRole("heading",{name:/^الاشتراكات$/})).toBeVisible();
- expect(screen.getByRole("link",{name:/اشتراكات فعالة/})).toHaveAttribute("href",expect.stringContaining("/players/subscriptions?state=active"));
+ expect(screen.getByRole("heading",{name:"اشتراكات فعالة"}).closest("a")).toHaveAttribute("href",expect.stringContaining("/players/subscriptions?state=active"));
  expect(screen.getByRole("link",{name:/بطولات/})).toHaveAttribute("href",expect.stringContaining("type=Tournament"));
  expect(screen.queryByText("أحدث التحصيلات")).not.toBeInTheDocument();expect(screen.queryByText(/أهلًا/)).not.toBeInTheDocument();expect(screen.queryByText("مرجع التحليل")).not.toBeInTheDocument();
  expect(screen.queryByLabelText("تحقيق هدف التحصيل")).not.toBeInTheDocument();expect(screen.queryByText(/لم يحدد هدف/)).not.toBeInTheDocument();
@@ -46,6 +46,26 @@ it("new home has no duplicated welcome/latest/payroll blocks and keeps subscript
 });
 it("does not invent a pie when there are no stored records",()=>{
  render(<DonutChart center="0" caption="لاعبًا" rows={[{name:"فعال",value:0,href:"/players"}]}/>);expect(screen.queryByRole("img")).not.toBeInTheDocument();expect(screen.getByText("لا توجد سجلات ضمن الفلاتر الحالية.")).toBeVisible();
+});
+it("keeps quick actions and pies while ranking actual assignments independently of ratings",async()=>{
+ const coaches=[
+  {id:"c1",name:"مدرب التقييم الأعلى",branches:["b1"],sports:["كرة القدم"],groupCount:1,sessionCount:9,parentRating:5,parentRatingCount:2},
+  {id:"c2",name:"مدرب المجموعات الأكثر",branches:["b1"],sports:["كرة القدم"],groupCount:4,sessionCount:6,parentRating:null,parentRatingCount:0},
+  {id:"c3",name:"مدرب بلا إسناد",branches:[],sports:[],groupCount:0,sessionCount:0,parentRating:null,parentRatingCount:0},
+ ];
+ source({...summary,operations:{...summary.operations,coachPerformance:coaches}});render(<PremiumOwnerDashboard/>);
+ const table=await screen.findByRole("table",{name:"ترتيب المدربين حسب عدد المجموعات المسندة"});
+ const records=within(table).getAllByRole("row").slice(1);
+ expect(records.map(r=>within(r).getByRole("rowheader").textContent)).toEqual([expect.stringContaining("مدرب المجموعات الأكثر"),expect.stringContaining("مدرب التقييم الأعلى"),expect.stringContaining("مدرب بلا إسناد")]);
+ expect(within(records[0]).getByText("4")).toBeVisible();
+ expect(within(records[0]).getByRole("link",{name:/ملف المدرب/})).toHaveAttribute("href",expect.stringContaining("/academy/coaches/c2?from=2026-09-20&to=2026-10-20"));
+ expect(coaches.map(c=>c.id)).toEqual(["c1","c2","c3"]);
+ const shortcuts=screen.getByRole("navigation",{name:"الإجراءات التشغيلية السريعة"});
+ expect(within(shortcuts).getByRole("link",{name:/تسجيل لاعب/})).toHaveAttribute("href","/dashboard/players/new");
+ expect(within(shortcuts).getByRole("link",{name:/تجديد اشتراك/})).toHaveAttribute("href","/dashboard/subscriptions/renew/new");
+ const pies=screen.getByRole("region",{name:"الرسوم الدائرية"});
+ expect(within(pies).getAllByRole("img")).toHaveLength(2);
+ expect(within(pies).getByRole("img",{name:/فعالة: 20، منتهية: 10/})).toBeVisible();
 });
 it("shows real coach ratings and groups requiring intervention without inventing AI scores",async()=>{
  source({...summary,operations:{...summary.operations,coachPerformance:[{id:"c1",name:"محمود سليمان",branches:["b1"],sports:["كرة القدم"],groupCount:2,sessionCount:7,parentRating:4.5,parentRatingCount:2}],groupAttention:[{id:"g1",name:"مجموعة تحتاج متابعة"}]}});

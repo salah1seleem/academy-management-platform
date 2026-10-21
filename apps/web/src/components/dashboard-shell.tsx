@@ -4,6 +4,7 @@ import { HelpEntry } from "./help-entry";
 import Link from "next/link";
 import Image from "next/image";
 import { WorkContextLink } from "../features/work-context-link";
+import { operationLoginPath } from "../lib/operation-return";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle, ArrowRight, Building2, Check, ChevronDown, ChevronLeft,
@@ -149,14 +150,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     fetch("/api/v1/me").then(async response => {
       if (!response.ok) {
         if (path === "/dashboard/context" && response.status === 403) { setIdentity({ name: "اختر سياق العمل", role: "PendingContext", academyName: "", contextName: "" }); return; }
-        return router.replace("/login");
+        return router.replace(operationLoginPath(path));
       }
       const me = await response.json() as { displayName: string; role: string; academyName?: string; contextName?: string };
       if (!["AcademyOwner", "AcademyAdmin"].includes(me.role)) return router.replace("/");
       setIdentity({ name: me.displayName, role: me.role, academyName: me.academyName ?? "الأكاديمية", contextName: me.contextName ?? "" });
       fetch("/api/v1/academy/experience").then(r => r.ok ? r.json() : {}).then(setBrand).catch(() => setBrand({}));
       fetch("/api/v1/my-permissions").then(r => r.ok ? r.json() : []).then(p => setPermissions(Array.isArray(p) ? p : [])).catch(() => setPermissions([]));
-    }).catch(() => router.replace("/login"));
+    }).catch(() => router.replace(operationLoginPath(path)));
   }, [path, router]);
 
   useEffect(() => {

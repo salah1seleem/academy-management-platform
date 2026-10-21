@@ -14,6 +14,7 @@ import '../coach/coach_player.dart';
 import '../coach/monthly_stars.dart';
 import '../admin/admin_home.dart';
 import '../owner/owner_reports.dart';
+import '../owner/owner_quick_operations.dart';
 import '../owner/home_destinations.dart';
 import 'academy_news.dart';
 import 'community_ads.dart';
@@ -65,6 +66,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
         : owner
         ? [
             ('الرئيسية', 'Home', Icons.home_outlined),
+            ('العمليات', 'Operations', Icons.bolt_outlined),
             ('المباريات', 'Matches', Icons.sports_soccer_rounded),
             ('التقارير', 'Reports', Icons.analytics_outlined),
             ('المزيد', 'More', Icons.grid_view_outlined),
@@ -102,6 +104,11 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
                 )
         : owner
         ? selected == 1
+              ? OwnerQuickOperations(
+                  auth: widget.auth,
+                  environment: widget.environment,
+                )
+              : selected == 2
               ? MatchSchedule(auth: widget.auth)
               : OwnerReports(auth: widget.auth)
         : admin
@@ -120,7 +127,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
       ),
       bottomNavigationBar: NavigationBar(
         height: 72,
-        indicatorColor: owner && selected == 1 ? const Color(0x2449D6A0) : null,
+        indicatorColor: owner && selected == 2 ? const Color(0x2449D6A0) : null,
         selectedIndex: selected,
         onDestinationSelected: (i) => setState(() => selected = i),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

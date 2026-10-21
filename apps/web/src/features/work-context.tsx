@@ -2,10 +2,11 @@
 import { useEffect, useState } from "react";
 import { Button, ErrorState } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
+import { operationReturnPath } from "../lib/operation-return";
 type Context = { membershipId: string; academyId: string; academyName: string; role: string; contextName?: string; allBranches: boolean; allSports: boolean; branchNames: string[]; sportNames: string[] };
 const label = (item: Context) => item.contextName || (item.role === "AcademyOwner" ? "مالك الأكاديمية" : "الإدارة الأساسية");
 // A full same-origin navigation drops all previous context-scoped React state.
-export function WorkContextChooser({ navigate = () => window.location.replace(new URL("/dashboard", window.location.origin).toString()) }: { navigate?: () => void }) {
+export function WorkContextChooser({ navigate = () => window.location.replace(new URL(operationReturnPath(new URLSearchParams(window.location.search).get("returnTo")) ?? "/dashboard", window.location.origin).toString()) }: { navigate?: () => void }) {
   const [items, setItems] = useState<Context[]>([]); const [selected, setSelected] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   useEffect(() => { const controller = new AbortController(); void fetch("/api/v1/my-academies", { cache: "no-store", signal: controller.signal }).then(async r => { if (!r.ok) throw new Error("تعذر تحميل سياقات الدخول؛ سجل الدخول مجددًا."); return r.json(); }).then(data => setItems(data.filter((c: Context) => ["AcademyOwner", "AcademyAdmin"].includes(c.role)))).catch(e => { if (!controller.signal.aborted) setError(e.message); }); return () => controller.abort(); }, []);
   const chosen = items.find(i => i.membershipId === selected);
