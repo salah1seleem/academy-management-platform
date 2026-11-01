@@ -45,6 +45,8 @@ jobs:
     env:
       ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_test;Username=academy;Password=academy_ci_only
       ACADEMY_TEST_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=academy_test;Username=academy;Password=academy_ci_only
+      Media__PrivateRoot: /tmp/iacademy-backend-media
+      DataProtection__KeyPath: /tmp/iacademy-backend-keys
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5

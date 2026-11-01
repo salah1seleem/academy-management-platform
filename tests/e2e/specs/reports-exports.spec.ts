@@ -33,7 +33,7 @@ test.describe("Slice 8A operational reporting journeys", () => {
   test("Journey B — financial filters and real CSV download", async ({ page }) => {
     await staffLogin(page, "owner.nogoom@example.test"); await page.goto("/dashboard/reports/financial");
     await expect(page.getByText("إجمالي التحصيل المؤكد", { exact: true })).toBeVisible();
-    await page.getByLabel("من تاريخ").fill("2026-09-01"); await page.getByLabel("إلى تاريخ").fill("2026-09-30"); await page.getByText("فلاتر إضافية", {exact:true}).click(); await page.getByLabel("الرياضة").selectOption({ label: "كرة القدم" }); await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
+    await page.getByLabel("من تاريخ").fill("2026-09-01"); await page.getByLabel("إلى تاريخ").fill("2026-09-30"); await page.getByText("فلاتر إضافية", {exact:true}).click(); await page.getByLabel("الرياضة", {exact:true}).selectOption({ label: "كرة القدم" }); await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
     await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
     const download = page.waitForEvent("download"); await page.getByRole("link", { name: "تصدير CSV" }).click(); expect((await download).suggestedFilename()).toMatch(/^financial-collections-2026-09\.csv$/);
   });
@@ -43,7 +43,7 @@ test.describe("Slice 8A operational reporting journeys", () => {
     const stored=await (await page.request.get("/api/v1/reports/attendance?subject=players&allDates=true&birthYear=2019")).json();
     const record=stored.items.find((r:{player:string})=>r.player==="يوسف خالد سمير"); expect(record).toBeTruthy();
     const month=record.date.slice(0,7);
-    await page.getByLabel("من تاريخ").fill(`${month}-01`); await page.getByLabel("إلى تاريخ").fill(record.date); await page.getByLabel("سنة الميلاد").fill("2019"); await page.getByLabel("الرياضة").selectOption({ label: "كرة القدم" }); await page.getByLabel("المجموعة").selectOption({ label: "ناشئين 2016 — مجموعة أ" }); await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
+    await page.getByLabel("من تاريخ").fill(`${month}-01`); await page.getByLabel("إلى تاريخ").fill(record.date); await page.getByLabel("سنة الميلاد").fill("2019"); await page.getByLabel("الرياضة", {exact:true}).selectOption({ label: "كرة القدم" }); await page.getByLabel("المجموعة", {exact:true}).selectOption({ label: "ناشئين 2016 — مجموعة أ" }); await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
     await expect(page.getByText(/يوسف خالد سمير/).first()).toBeVisible();
     const download = page.waitForEvent("download"); await page.getByRole("link", { name: "تصدير CSV" }).click(); expect((await download).suggestedFilename()).toBe(`attendance-players-${month}.csv`);
   });

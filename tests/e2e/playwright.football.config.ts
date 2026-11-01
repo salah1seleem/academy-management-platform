@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import {tmpdir} from "node:os";
 
 // Separate deterministic tenant/profile; never reuse a developer's running API or demo DB implicitly.
 if (!process.env.ConnectionStrings__Default) throw new Error("Explicit isolated Demo connection required.");
@@ -21,6 +22,10 @@ export default defineConfig({
   webServer: [
     {
       command: `ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__SkillCurriculumSeedEnabled=true Demo__FeedbackFollowUpSeedEnabled=true Demo__OwnerFollowUpSeedEnabled=true Demo__CommunityCampaignSeedEnabled=true Demo__PrivateServiceSeedEnabled=true Demo__PostContractPrivateSeedEnabled=true Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile --configuration ${process.env.ACADEMY_E2E_API_CONFIGURATION ?? "Debug"} --no-build`,
+      env: {
+        Media__PrivateRoot: process.env.ACADEMY_E2E_MEDIA_ROOT ?? join(tmpdir(), `iacademy-football-${process.env.ACADEMY_E2E_API_PORT ?? "5190"}`, "media"),
+        DataProtection__KeyPath: process.env.ACADEMY_E2E_KEYS_ROOT ?? join(tmpdir(), `iacademy-football-${process.env.ACADEMY_E2E_API_PORT ?? "5190"}`, "keys"),
+      },
       url: `${apiUrl}/health/ready`, reuseExistingServer: false, timeout: 120_000,
     },
     {

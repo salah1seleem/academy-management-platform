@@ -3,7 +3,7 @@ WORKDIR /src
 COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY apps/api/src/ apps/api/src/
 RUN dotnet restore apps/api/src/Academy.Api/Academy.Api.csproj
-RUN dotnet publish apps/api/src/Academy.Api/Academy.Api.csproj -c Release --no-restore -o /out
+RUN dotnet publish apps/api/src/Academy.Api/Academy.Api.csproj -c Release --no-restore -m:1 -o /out
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 USER root

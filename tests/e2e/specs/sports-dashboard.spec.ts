@@ -28,7 +28,7 @@ for (const role of ["owner", "admin"] as const) for (const size of sizes) {
         // misses RTL min-content overflow and displaced tap coordinates.
         expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(size.width+1);
         const widgets = info.outputPath(`${role}-${size.width}-widgets.png`);
-        await page.getByRole("region", { name: "مؤشرات الأكاديمية", exact: true }).screenshot({ path: widgets, scale: "css", animations: "disabled" });
+        await page.locator('[aria-label="مؤشرات الأكاديمية"]').screenshot({ path: widgets, scale: "css", animations: "disabled" });
         await info.attach("real-data widgets", { path: widgets, contentType: "image/png" });
       }
     }

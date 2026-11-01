@@ -82,7 +82,7 @@ services:
 networks:
   app:
     ipam:
-      config: [{subnet: 172.29.81.0/24}]
+      config: [{subnet: 172.29.81.0/24, ip_range: 172.29.81.128/25}]
 volumes:
   postgres:
   media:

@@ -13,9 +13,9 @@ async function login(page: Page, role: "admin" | "owner") {
 
 test("Admin has no financial dashboard or report without an explicit grant", async ({ page }) => {
   await login(page, "admin");
-  await expect(page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "إجراءات نطاقك" })).toBeVisible();
   await expect(page.getByText("تحصيل اليوم", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" }).getByRole("link", { name: "التقرير المالي" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "إجراءات نطاقك" }).getByRole("link", { name: "التقرير المالي" })).toHaveCount(0);
   expect((await page.request.get("/api/v1/reports/financial")).status()).toBe(403);
   expect((await page.request.get("/api/v1/reports/owner-summary")).status()).toBe(403);
 });
@@ -50,7 +50,7 @@ test("A real news image stays private in draft, then becomes visible to a tenant
   await page.context().clearCookies(); await login(page, "owner"); await page.goto("/dashboard/news");
   await page.getByRole("table",{name:"أخبار الأكاديمية",exact:true}).getByRole("row").filter({ hasText: title }).getByRole("button", { name: "عرض / تعديل",exact:true }).click();
   await page.getByRole("button", { name: "نشر", exact: true }).click();
-  await expect(page.getByRole("table",{name:"أخبار الأكاديمية",exact:true}).getByRole("row").filter({ hasText: title })).toContainText("منشور");
+  await expect(page.getByRole("table",{name:"أخبار الأكاديمية",exact:true}).getByRole("row").filter({ hasText: title })).toContainText("معروض الآن");
   await guardianLogin(page);
   expect(await page.request.get("/api/v1/news").then(r => r.text())).toContain(title);
   const image = await page.request.get(draft.imageUrl);

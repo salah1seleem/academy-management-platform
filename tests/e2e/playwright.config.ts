@@ -1,4 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const webPort = process.env.ACADEMY_E2E_WEB_PORT ?? "3000";
 const apiPort = process.env.ACADEMY_E2E_API_PORT ?? "5080";
@@ -49,7 +51,11 @@ export default defineConfig({
     {
       command:
         `${localConnectionFallback}ASPNETCORE_ENVIRONMENT=Demo Demo__SeedProfile=${demoProfile} Demo__SeedEnabled=true ${regressionSeeds} Demo__FixedOtpEnabled=true Demo__FixedOtp=246810 Demo__StaffPassword='Demo-Only-123!' Demo__ReferenceDate=2026-09-28 Payments__InternalTest__Enabled=true Payments__InternalTest__SigningKey='Demo-Test-Signing-Key-Only-123456' ASPNETCORE_URLS=${apiUrl} dotnet run --project ../../apps/api/src/Academy.Api --no-launch-profile --configuration ${apiConfiguration}${localBuiltApi}`,
-      url: `${apiUrl}/health/live`,
+      env: {
+        Media__PrivateRoot: process.env.ACADEMY_E2E_MEDIA_ROOT ?? join(tmpdir(), `iacademy-e2e-${apiPort}`, "media"),
+        DataProtection__KeyPath: process.env.ACADEMY_E2E_KEYS_ROOT ?? join(tmpdir(), `iacademy-e2e-${apiPort}`, "keys"),
+      },
+      url: `${apiUrl}/health/ready`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
