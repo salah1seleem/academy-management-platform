@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PlayersPage from "../app/dashboard/players/page";
 import { PlayerDetails } from "./player-record";
@@ -47,9 +47,9 @@ describe("sports read-model presentation", () => {
     expect(screen.getByRole("link", { name: "تسجيل الحضور" })).toHaveAttribute("href", "/dashboard/attendance/sessions?groupId=group-1&playerId=p1");
     expect(screen.getByRole("link", { name: "تقييم جديد" })).toHaveAttribute("href", "/dashboard/evaluations/new?enrollmentId=e1");
   });
-  it("renders stored coach, schedule and player count on group cards", async () => {
+  it("renders stored coach, schedule and player count in separate group columns", async () => {
     global.fetch = vi.fn(() => response([{ id: "g1", arabicName: "براعم أ", isActive: true, playerCount: 7, coaches: ["كريم حسن"], branchName: "فرع مدينة نصر", categoryName: "تحت 10", schedules: [{ dayOfWeek: "Monday", startTime: "18:00:00", endTime: "19:00:00" }] }]));
     render(<StructureList kind="groups" />);
-    expect(await screen.findByText("براعم أ")).toBeVisible(); expect(screen.getByText("7 لاعب مسجل")).toBeVisible(); expect(screen.getByText(/المدرب: كريم حسن/)).toBeVisible(); expect(screen.getByText(/الاثنين · 18:00–19:00/)).toBeVisible();
+    expect(await screen.findByText("براعم أ")).toBeVisible(); const table=screen.getByRole("table",{name:"قائمة المجموعات"}); expect(within(table).getByRole("cell",{name:"7"})).toBeVisible(); expect(within(table).getByRole("cell",{name:"كريم حسن"})).toBeVisible(); expect(within(table).getByRole("cell",{name:/الاثنين.*18:00.*19:00/})).toBeVisible();
   });
 });

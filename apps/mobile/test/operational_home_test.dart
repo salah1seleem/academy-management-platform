@@ -1,6 +1,7 @@
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/admin/admin_home.dart';
+import 'package:academy_mobile/features/admin/admin_home_overview.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:academy_mobile/features/owner/owner_dashboard.dart';
@@ -103,6 +104,11 @@ void main() {
       final auth = await authenticate('AcademyAdmin', (m, p, b, t) async {
         calls.add(p);
         if (p.endsWith('/my-permissions')) return ['attendance.read'];
+        if (p.endsWith('/news')) return [];
+        if (p.endsWith('/my-access')) return <String, dynamic>{};
+        if (p.endsWith('/passkeys/attendance')) {
+          return {'branches': [], 'hasOpenAttendance': false};
+        }
         if (p.endsWith('/s0/players')) {
           return {
             'canManageAttendance': false,
@@ -120,12 +126,18 @@ void main() {
       });
       await tester.pumpWidget(shell(AdminHome(auth: auth)));
       await tester.pumpAndSettle();
-      expect(calls, [
+      final allowed = {
         '/api/v1/my-permissions',
+        '/api/v1/my-access',
         '/api/v1/attendance/sessions',
-        '/api/v1/notifications',
-      ]);
+        '/api/v1/staff/passkeys/attendance',
+        '/api/v1/news',
+      };
+      expect(calls.every(allowed.contains), isTrue);
+      expect(calls, contains('/api/v1/attendance/sessions'));
+      await reach(tester, find.text('جدول اليوم · 4 حصة'));
       expect(find.text('جدول اليوم · 4 حصة'), findsOneWidget);
+      await reach(tester, find.byType(CoachSessionCard).first);
       expect(
         tester
             .widget<CoachSessionCard>(find.byType(CoachSessionCard).first)
@@ -154,6 +166,7 @@ void main() {
         if (p.endsWith('/my-permissions')) {
           return ['attendance.read', 'payment.read'];
         }
+        if (p.endsWith('/my-access')) return <String, dynamic>{};
         if (p.contains('/payment-requests')) {
           if (fail) throw const ApiFailure(503, 'تعذر عرض الطلبات.');
           return {'pending': 4, 'items': []};
@@ -163,16 +176,31 @@ void main() {
       await tester.pumpWidget(shell(AdminHome(auth: auth)));
       await tester.pumpAndSettle();
       await reach(tester, find.text('تعذر عرض الطلبات.'));
-      expect(find.text('0 طلب بانتظار المراجعة'), findsNothing);
+      final paymentTask = find.byKey(
+        const ValueKey('admin-home-payments-task'),
+      );
+      await tester.scrollUntilVisible(
+        paymentTask,
+        -220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<AdminHomeTask>(paymentTask).count, isNull);
       fail = false;
       await reach(tester, find.text('إعادة المحاولة'));
       await tester.tap(find.text('إعادة المحاولة'));
       await tester.pumpAndSettle();
-      await reach(tester, find.text('4 طلب بانتظار المراجعة'));
+      await tester.scrollUntilVisible(
+        paymentTask,
+        -220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<AdminHomeTask>(paymentTask).count, 4);
       final before = gets;
       await auth.logout();
       await tester.pumpAndSettle();
-      expect(find.text('4 طلب بانتظار المراجعة'), findsNothing);
+      expect(paymentTask, findsNothing);
       expect(gets, before);
       expect(tester.takeException(), isNull);
     },
@@ -278,10 +306,9 @@ void main() {
       await tester.tap(find.textContaining('مجموعة المصدر ·'));
       await tester.pumpAndSettle();
       expect(calls.last, '/api/v1/manage/groups/g1/details');
-      await reach(tester, find.textContaining('2026-10-16 ·'));
-      await tester.tap(find.textContaining('2026-10-16 ·'));
-      await tester.pumpAndSettle();
-      expect(calls.last, '/api/v1/attendance/sessions/real/players');
+      expect(find.textContaining('2026-10-16 ·'), findsNothing);
+      expect(find.text('مواعيد المجموعة'), findsOneWidget);
+      expect(find.text('اللاعبون'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -377,7 +404,13 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         final admin = await authenticate(
           'AcademyAdmin',
-          (m, p, b, t) async => p.endsWith('/my-permissions')
+          (m, p, b, t) async => p.endsWith('/news')
+              ? []
+              : p.endsWith('/passkeys/attendance')
+              ? {'branches': [], 'hasOpenAttendance': false}
+              : p.endsWith('/my-access')
+              ? <String, dynamic>{}
+              : p.endsWith('/my-permissions')
               ? ['attendance.read', 'payment.read']
               : p.contains('/payment-requests')
               ? {'pending': 2, 'items': []}

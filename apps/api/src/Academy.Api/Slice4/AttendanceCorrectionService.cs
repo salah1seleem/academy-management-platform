@@ -65,12 +65,44 @@ public sealed class AttendanceCorrectionService(FoundationDbContext db, CurrentT
         await Past(s);var snapshot=await Snapshot(s,body.Kind,body.Items);if(snapshot.All(i=>i.Before==i.After))throw new FacilityRejected("لم تختر تغييرًا في الحضور.",422);
         var now=clock.GetUtcNow();var row=new AttendanceCorrection{Id=Guid.NewGuid(),AcademyId=t.AcademyId,TrainingSessionId=id,TrainingSessionVersion=s.Version,TrainingGroupId=s.TrainingGroupId,BranchId=s.BranchId,SessionDate=s.SessionDate,Kind=body.Kind,Payload=JsonSerializer.Serialize(snapshot),Reason=body.Reason.Trim(),RequestedByUserId=db.RequestUserId,RequestedByMembershipId=t.MembershipId,RequestKey=key,RequestHash=hash,ExpiresAtUtc=now.AddDays(7),CreatedAtUtc=now,UpdatedAtUtc=now};db.AttendanceCorrections.Add(row);await db.SaveChangesAsync();await tx.CommitAsync();return new{row.Id,state=row.State.ToString()};
     }
-    public async Task<object> Read(Guid? id=null)
+    public async Task<object> Read(Guid? id = null, int? page = null)
     {
-        var t=await Authority(false);var query=db.AttendanceCorrections.AsNoTracking().Where(c=>(t.Role==AcademyRole.AcademyOwner||c.RequestedByUserId==db.RequestUserId)&&(!id.HasValue||c.Id==id));
-        var requests=await query.OrderByDescending(c=>c.CreatedAtUtc).Take(id.HasValue?1:100).ToArrayAsync();if(id.HasValue&&requests.Length==0)throw new FacilityRejected("الطلب غير متاح.",404);
-        var result=new List<object>();foreach(var row in requests){var items=JsonSerializer.Deserialize<AttendanceCorrectionSnapshot[]>(row.Payload)!;var ids=items.Select(i=>i.SubjectId).ToArray();var names=row.Kind==AttendanceCorrectionKind.Players?await db.SportEnrollments.Where(e=>ids.Contains(e.Id)).Select(e=>new{e.Id,name=e.Player.ArabicName}).ToDictionaryAsync(e=>e.Id,e=>e.name):await db.AcademyMemberships.Where(m=>ids.Contains(m.Id)).Select(m=>new{m.Id,name=m.User.DisplayName}).ToDictionaryAsync(m=>m.Id,m=>m.name);var group=await db.TrainingGroups.Where(g=>g.Id==row.TrainingGroupId).Select(g=>g.ArabicName).SingleAsync();result.Add(new{row.Id,row.Version,row.TrainingSessionId,row.SessionDate,group,kind=row.Kind.ToString(),state=row.State.ToString(),row.Reason,row.DecisionReason,row.CreatedAtUtc,row.DecidedAtUtc,requester=await db.Users.Where(u=>u.Id==row.RequestedByUserId).Select(u=>u.DisplayName).FirstOrDefaultAsync(),reviewer=await db.Users.Where(u=>u.Id==row.DecidedByUserId).Select(u=>u.DisplayName).FirstOrDefaultAsync(),row.AppliedAtUtc,row.ExpiresAtUtc,canApprove=t.Role==AcademyRole.AcademyOwner&&row.State==AttendanceCorrectionState.Pending&&row.ExpiresAtUtc>clock.GetUtcNow(),items=items.Select(i=>new{i.SubjectId,name=names.GetValueOrDefault(i.SubjectId,"عضو مسجل سابقًا"),before=i.Before.ToString(),after=i.After.ToString(),version=i.Version})});}
-        return id.HasValue?result.Single():result;
+        var t = await Authority(false);
+        if (page is < 1 or > 100000) throw new FacilityRejected("رقم صفحة الطلبات غير صالح.", 400);
+        var query = db.AttendanceCorrections.AsNoTracking().Where(c =>
+            (t.Role == AcademyRole.AcademyOwner || c.RequestedByUserId == db.RequestUserId) &&
+            (!id.HasValue || c.Id == id));
+        const int pageSize = 25;
+        var total = page.HasValue ? await query.CountAsync() : 0;
+        var requests = await query.OrderByDescending(c => c.CreatedAtUtc).ThenByDescending(c => c.Id)
+            .Skip(page.HasValue ? (page.Value - 1) * pageSize : 0)
+            .Take(id.HasValue ? 1 : page.HasValue ? pageSize : 100).ToArrayAsync();
+        if (id.HasValue && requests.Length == 0) throw new FacilityRejected("الطلب غير متاح.", 404);
+        // Resolve only this authorized page's references in batches, never once per card.
+        var snapshots = requests.ToDictionary(r => r.Id, r => JsonSerializer.Deserialize<AttendanceCorrectionSnapshot[]>(r.Payload)!);
+        var enrollmentIds = requests.Where(r => r.Kind == AttendanceCorrectionKind.Players).SelectMany(r => snapshots[r.Id]).Select(i => i.SubjectId).Distinct().ToArray();
+        var memberIds = requests.Where(r => r.Kind == AttendanceCorrectionKind.Staff).SelectMany(r => snapshots[r.Id]).Select(i => i.SubjectId).Distinct().ToArray();
+        var names = await db.SportEnrollments.Where(e => enrollmentIds.Contains(e.Id)).Select(e => new { e.Id, name = e.Player.ArabicName }).ToDictionaryAsync(e => e.Id, e => e.name);
+        var staffNames = await db.AcademyMemberships.Where(m => memberIds.Contains(m.Id)).Select(m => new { m.Id, name = m.User.DisplayName }).ToDictionaryAsync(m => m.Id, m => m.name);
+        var groupIds = requests.Select(r => r.TrainingGroupId).Distinct().ToArray();
+        var groups = await db.TrainingGroups.Where(g => groupIds.Contains(g.Id)).ToDictionaryAsync(g => g.Id, g => g.ArabicName);
+        var userIds = requests.SelectMany(r => new Guid?[] { r.RequestedByUserId, r.DecidedByUserId }).Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
+        var users = await db.Users.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName);
+        var result = requests.Select(row => (object)new {
+            row.Id, row.Version, row.TrainingSessionId, row.SessionDate,
+            group = groups.GetValueOrDefault(row.TrainingGroupId, "مجموعة مسجلة سابقًا"),
+            kind = row.Kind.ToString(), state = row.State.ToString(), row.Reason, row.DecisionReason,
+            row.CreatedAtUtc, row.DecidedAtUtc,
+            requester = users.GetValueOrDefault(row.RequestedByUserId),
+            reviewer = row.DecidedByUserId.HasValue ? users.GetValueOrDefault(row.DecidedByUserId.Value) : null,
+            row.AppliedAtUtc, row.ExpiresAtUtc,
+            canApprove = t.Role == AcademyRole.AcademyOwner && row.State == AttendanceCorrectionState.Pending && row.ExpiresAtUtc > clock.GetUtcNow(),
+            items = snapshots[row.Id].Select(i => new {
+                i.SubjectId, name = (row.Kind == AttendanceCorrectionKind.Players ? names : staffNames).GetValueOrDefault(i.SubjectId, "عضو مسجل سابقًا"),
+                before = i.Before.ToString(), after = i.After.ToString(), version = i.Version
+            })
+        }).ToArray();
+        return id.HasValue ? result.Single() : page.HasValue ? new { page = page.Value, pageSize, total, items = result } : result;
     }
     public async Task<object> Decide(Guid id,AttendanceCorrectionDecision body,bool approve)
     {
@@ -80,6 +112,7 @@ public sealed class AttendanceCorrectionService(FoundationDbContext db, CurrentT
         var s=await Session(row.TrainingSessionId);await Past(s);if(s.Version!=row.TrainingSessionVersion||s.SessionDate!=row.SessionDate)throw new FacilityRejected("تغيرت الحصة بعد طلب التصحيح؛ أنشئ طلبًا جديدًا من كشف محدث.");
         var now=clock.GetUtcNow();row.State=approve?AttendanceCorrectionState.Applying:AttendanceCorrectionState.Rejected;row.DecidedByUserId=db.RequestUserId;row.DecidedByMembershipId=t.MembershipId;row.DecidedAtUtc=now;row.DecisionReason=body.Reason?.Trim();row.UpdatedAtUtc=now;
         if(approve){var snapshot=JsonSerializer.Deserialize<AttendanceCorrectionSnapshot[]>(row.Payload)!;await Snapshot(s,row.Kind,snapshot.Select(i=>new AttendanceCorrectionItem(i.SubjectId,i.After,i.Version)).ToArray());await db.SaveChangesAsync();if(row.Kind==AttendanceCorrectionKind.Players)await attendance.SavePlayersAsync(t.AcademyId,s.Id,db.RequestUserId,snapshot.Select(i=>new PlayerAttendanceChange(i.SubjectId,i.After,i.Version)).ToArray(),approvedCorrectionId:row.Id);else await attendance.SaveStaffAsync(t.AcademyId,s.Id,db.RequestUserId,snapshot.Select(i=>new StaffAttendanceChange(i.SubjectId,i.After,i.Version)).ToArray(),approvedCorrectionId:row.Id);row.State=AttendanceCorrectionState.Approved;row.AppliedAtUtc=clock.GetUtcNow();row.UpdatedAtUtc=clock.GetUtcNow();}
-        db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=row.RequestedByUserId,Message=approve?"اعتمد المالك تصحيح حضور اليوم السابق وتم تطبيقه على الكشف.":"لم يعتمد المالك طلب تصحيح الحضور. راجع الطلب للتفاصيل.",CreatedAtUtc=now,UpdatedAtUtc=now});await db.SaveChangesAsync();await tx.CommitAsync();return new{row.Id,state=row.State.ToString()};
+        var requesterRole=await db.AcademyMemberships.Where(m=>m.AcademyId==t.AcademyId&&m.Id==row.RequestedByMembershipId&&m.UserId==row.RequestedByUserId).Select(m=>(AcademyRole?)m.Role).SingleOrDefaultAsync();
+        db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=row.RequestedByUserId,AudienceRole=requesterRole?.ToString(),TargetKind="AttendanceCorrection",TargetId=row.Id,Message=approve?"اعتمد المالك تصحيح حضور اليوم السابق وتم تطبيقه على الكشف.":"لم يعتمد المالك طلب تصحيح الحضور. راجع الطلب للتفاصيل.",CreatedAtUtc=now,UpdatedAtUtc=now});await db.SaveChangesAsync();await tx.CommitAsync();return new{row.Id,state=row.State.ToString()};
     }
 }

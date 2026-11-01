@@ -6,6 +6,39 @@ import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('News images use the news permission route without changing media upload authority', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var count = 0;
+    final listener = server.listen((r) async {
+      count++;
+      expect(r.uri.path, '/api/v1/content/news/image');
+      expect(
+        r.headers.value(HttpHeaders.authorizationHeader),
+        'Bearer synthetic-test-token',
+      );
+      final body = await utf8.decoder.bind(r).join();
+      expect(body, contains('News'));
+      r.response.statusCode = 201;
+      r.response.headers.contentType = ContentType.json;
+      r.response.write(
+        jsonEncode({'id': 'news-image', 'url': '/api/v1/assets/news-image'}),
+      );
+      await r.response.close();
+    });
+    final api = HttpApiTransport(
+      AppConfig('Demo', 'http://127.0.0.1:${server.port}'),
+    );
+    try {
+      await api.upload(Uint8List(20), 'image/png', {
+        'purpose': 'News',
+      }, 'synthetic-test-token');
+      expect(count, 1);
+    } finally {
+      api.close();
+      await listener.cancel();
+      await server.close(force: true);
+    }
+  });
   for (final status in [400, 503]) {
     test(
       'Content inspection failure $status never becomes a successful upload',

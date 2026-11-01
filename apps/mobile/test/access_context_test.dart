@@ -74,7 +74,7 @@ void main() {
       )..restoring = false;
       await auth.verify('phone', 'challenge', 'otp');
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
-      expect(find.text('اختر الأكاديمية والدور'), findsOneWidget);
+      expect(find.text('اختيار الأكاديمية'), findsOneWidget);
       expect(
         find.textContaining('تشغيل كرة القدم\nمدينة نصر · كرة القدم'),
         findsOneWidget,

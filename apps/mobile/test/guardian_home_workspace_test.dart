@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/visibility.dart';
+
 import 'guardian_test.dart' show logged;
 import 'premium_home_test.dart' show shell;
 
@@ -68,6 +70,12 @@ Object? response(String path) {
       'reportingPeriod': 'متابعة منشورة',
       'evaluationDate': '2026-10-12',
       'overallScore': 0,
+      'performanceMean': {
+        'value': 0,
+        'scoredCriteria': 1,
+        'applicableCriteria': 2,
+        'coveragePercent': 50,
+      },
       'isFootballReport': false,
       'criteria': <Object>[],
     };
@@ -86,7 +94,9 @@ Widget app(
   localizationsDelegates: GlobalMaterialLocalizations.delegates,
   theme: dark ? guardianTheme() : AcademyTheme.light(),
   builder: (context, child) => MediaQuery(
-    data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+    data: MediaQuery.of(
+      context,
+    ).copyWith(textScaler: TextScaler.linear(scale), disableAnimations: true),
     child: child!,
   ),
   home: GuardianHome(
@@ -109,17 +119,40 @@ void main() {
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
+      await expandChildDetails(tester);
       await tester.tap(find.byKey(const ValueKey('select-child-a')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('child-a')), findsOneWidget);
-      expect(find.byKey(const ValueKey('child-b')), findsNothing);
-      expect(find.text('الحصة القادمة · آدم طفل العرض'), findsNothing);
-      await tester.tap(find.text('التقييمات'));
+      expect(
+        find.byKey(const ValueKey('child-b')),
+        findsOneWidget,
+      ); // next authorized sibling peeks into the carousel
+      // The active detail workspace is isolated; the family agenda may show every linked child.
+      await tester.scrollUntilVisible(
+        find.text('التقييمات'),
+        180,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('child-section-2')));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('تطور لينا طفلة العرض'),
         180,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       expect(
         find.descendant(
@@ -132,14 +165,24 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('الاشتراك'),
         -180,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.tap(find.text('الاشتراك'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-renew-enrollment-a')),
         180,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.tap(find.byKey(const ValueKey('home-renew-enrollment-a')));
       await tester.pumpAndSettle();
@@ -170,12 +213,32 @@ void main() {
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('التقييمات'));
+      await expandChildDetails(tester);
+      await tester.scrollUntilVisible(
+        find.text('التقييمات'),
+        180,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('child-section-2')));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('تطور لينا طفلة العرض'),
         180,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('تطور لينا طفلة العرض'));
@@ -263,32 +326,67 @@ void main() {
               app(auth, dark: dark, locale: locale, scale: 2),
             );
             await tester.pumpAndSettle();
+            await expandChildDetails(tester);
             expect(find.byKey(const ValueKey('child-a')), findsOneWidget);
             await tester.scrollUntilVisible(
               find.byKey(const ValueKey('child-section-3')),
               180,
-              scrollable: find.byType(Scrollable).first,
+              scrollable: find
+                  .descendant(
+                    of: find.byKey(const ValueKey('guardian-home-scroll')),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
             );
             await tester.ensureVisible(
               find.byKey(const ValueKey('child-section-3')),
             );
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(
+              find.byKey(const ValueKey('child-section-3')),
+            );
+            await tester.pumpAndSettle();
             await tester.tap(find.byKey(const ValueKey('child-section-3')));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('guardian-home-scroll')),
+              findsOneWidget,
+              reason: find
+                  .byType(Text)
+                  .evaluate()
+                  .map((e) => (e.widget as Text).data)
+                  .join(' | '),
+            );
+            final vertical = tester.state<ScrollableState>(
+              find
+                  .descendant(
+                    of: find.byKey(const ValueKey('guardian-home-scroll')),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            );
+            vertical.position.jumpTo(0);
+            await tester.pumpAndSettle();
+            await tester.scrollUntilVisible(
+              find.byKey(const ValueKey('owner-action-rail')),
+              180,
+              scrollable: find
+                  .descendant(
+                    of: find.byKey(const ValueKey('guardian-home-scroll')),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            );
             await tester.pumpAndSettle();
             for (final action in [
               'اشتراك جديد',
               'تجديد الاشتراك',
               'تجديد اشتراك لغيره',
-              'الباقات',
-              'المتجر',
-              'البطولات',
-              'زيارة يومية',
+              'تقييم المدربين',
+              'شكوى أو اقتراح',
             ]) {
               final key = find.byKey(ValueKey('guardian-action-$action'));
-              await tester.scrollUntilVisible(
-                key,
-                250,
-                scrollable: find.byType(Scrollable).first,
-              );
+              await revealTestTarget(tester, key);
               expect(key, findsOneWidget);
             }
             expect(

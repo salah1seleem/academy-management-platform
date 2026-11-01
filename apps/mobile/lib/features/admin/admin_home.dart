@@ -1,3 +1,14 @@
+import '../shared/modern_home.dart';
+import '../shared/subscription_home.dart';
+import '../owner/owner_quick_operations.dart';
+import '../../core/widgets/home_skeleton.dart';
+import '../shared/staff_home_action.dart';
+import '../shared/academy_news.dart';
+import '../shared/assigned_followups.dart';
+import '../shared/experience_ui.dart';
+import '../owner/owner_followups.dart';
+import 'admin_home_overview.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
@@ -9,7 +20,6 @@ import '../coach/coach_attendance.dart';
 import '../coach/coach_home.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/role_navigation.dart';
-import '../shared/experience_ui.dart';
 
 /// Operational reads retain the existing server permissions and branch/sport scope.
 class AdminHome extends StatefulWidget {
@@ -22,10 +32,13 @@ class AdminHome extends StatefulWidget {
 
 class _AdminHomeState extends State<AdminHome> {
   String? identity;
-  String? get currentIdentity => widget.auth.session?.selected == null
+  String? get currentIdentity =>
+      widget.auth.session?.selected?.role != 'AcademyAdmin'
       ? null
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late Future<Json> request;
+  Json? partial;
+  int generation = 0;
   @override
   void initState() {
     super.initState();
@@ -38,7 +51,7 @@ class _AdminHomeState extends State<AdminHome> {
     if (!mounted || identity == currentIdentity) return;
     setState(() {
       identity = currentIdentity;
-      request = load();
+      request = identity == null ? Future.value(<String, dynamic>{}) : load();
     });
   }
 
@@ -49,7 +62,7 @@ class _AdminHomeState extends State<AdminHome> {
       old.auth.removeListener(contextChanged);
       widget.auth.addListener(contextChanged);
       identity = currentIdentity;
-      request = load();
+      request = identity == null ? Future.value(<String, dynamic>{}) : load();
     }
   }
 
@@ -60,27 +73,51 @@ class _AdminHomeState extends State<AdminHome> {
   }
 
   Future<Json> load() async {
-    if (currentIdentity == null) return {};
+    final scope = currentIdentity, attempt = ++generation;
+    partial = null;
+    if (scope == null) return {};
     final permissions = (await widget.auth.request(
       'GET',
       '/api/v1/my-permissions',
     ) as List).cast<String>();
+    if (scope != currentIdentity || attempt != generation) return {};
     final result = <String, dynamic>{'permissions': permissions};
-    for (final item in [
+    final sources = [
       ('attendance.read', 'sessions', '/api/v1/attendance/sessions'),
       (
         'payment.read',
         'payments',
         '/api/v1/manage/payment-requests?status=Pending&allDates=true',
       ),
-    ]) {
-      if (!permissions.contains(item.$1)) continue;
-      try {
-        result[item.$2] = await widget.auth.request('GET', item.$3);
-      } on ApiFailure catch (e) {
-        result['${item.$2}Error'] = e.message;
-      }
+      (
+        'followups.read',
+        'followups',
+        '/api/v1/my-followups?state=Open&allDates=true',
+      ),
+    ].where((s) => permissions.contains(s.$1)).toList();
+    for (final source in sources) {
+      result['${source.$2}Pending'] = true;
     }
+    if (mounted) setState(() => partial = result);
+    await Future.wait(
+      sources.map((source) async {
+        try {
+          final value = await widget.auth.request('GET', source.$3);
+          if (scope != currentIdentity || attempt != generation) return;
+          result[source.$2] = value;
+        } catch (e) {
+          if (scope != currentIdentity || attempt != generation) return;
+          result['${source.$2}Error'] = e is ApiFailure
+              ? e.message
+              : 'تعذر تحميل هذا القسم. أعد المحاولة.';
+        }
+        if (scope != currentIdentity || attempt != generation || !mounted) {
+          return;
+        }
+        result['${source.$2}Pending'] = false;
+        setState(() => partial = Map<String, dynamic>.from(result));
+      }),
+    );
     return result;
   }
 
@@ -112,10 +149,11 @@ class _AdminHomeState extends State<AdminHome> {
       future: request,
       builder: (context, snapshot) {
         if (currentIdentity == null) return const SizedBox.shrink();
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+        if (partial == null &&
+            snapshot.connectionState != ConnectionState.done) {
+          return const HomeSkeleton(role: 'AcademyAdmin');
         }
-        if (snapshot.hasError) {
+        if (snapshot.hasError && partial == null) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -138,24 +176,154 @@ class _AdminHomeState extends State<AdminHome> {
             ),
           );
         }
-        final d = snapshot.data!,
+        final d = partial ?? snapshot.data!,
             permissions = (d['permissions'] as List).cast<String>();
         final sessions = d['sessions'] is List
             ? todaySessions(d['sessions'])
             : <Json>[];
+        final followups = d['followups'] is Map
+            ? obj(d['followups'])
+            : <String, dynamic>{};
+        final assigned = followups['items'] is List
+            ? rows(followups['items'])
+            : <Json>[];
+        final pendingSessions = sessions
+            .where(
+              (s) =>
+                  (s['playerCount'] as num? ?? 0) >
+                  (s['recorded'] as num? ?? 0),
+            )
+            .length;
         final payment = d['payments'] is Map
             ? obj(d['payments'])
             : <String, dynamic>{};
         return RefreshIndicator(
           onRefresh: refresh,
           child: gList([
-            ExperienceHeader(
-              auth: widget.auth,
-              account: widget.accountPage,
-              subtitle: 'يوم الأكاديمية',
-              lesson: 'player-attendance',
+            const RoleHomeIntro(
+              title: 'يوم الأكاديمية',
+              subtitle: 'المهام والحصص التي تحتاج متابعتك',
             ),
-            const SizedBox(height: 16),
+
+            if (permissions.contains('subscription.read'))
+              SubscriptionHomePanel(
+                key: ValueKey('admin-subscriptions-$identity'),
+                auth: widget.auth,
+              ),
+            StaffHomeAttendanceAction(auth: widget.auth),
+            if (d['sessionsPending'] == true)
+              const PendingHomeSection(label: 'جارٍ تحميل حصص اليوم'),
+            if (permissions.contains('attendance.read') &&
+                d['sessionsError'] == null &&
+                d['sessionsPending'] != true &&
+                sessions.isNotEmpty)
+              AdminAttendanceOverview(sessions: sessions),
+            const ExperienceSection('مهامي اليوم', Icons.task_alt_outlined),
+            if (permissions.contains('attendance.read') &&
+                d['sessionsPending'] != true)
+              AdminHomeTask(
+                key: const ValueKey('admin-home-attendance-task'),
+                title: 'حضور اللاعبين',
+                detail: 'حصص اليوم التي تحتاج استكمال تسجيل اللاعبين',
+                count: d['sessionsError'] == null ? pendingSessions : null,
+                action: 'عرض الحصص',
+                onOpen: () =>
+                    openPage(context, NativeSessions(auth: widget.auth)),
+              ),
+            if (d['paymentsPending'] == true)
+              const PendingHomeSection(label: 'جارٍ تحميل طلبات الدفع'),
+            if (permissions.contains('payment.read') &&
+                d['paymentsPending'] != true)
+              AdminHomeTask(
+                key: const ValueKey('admin-home-payments-task'),
+                title: 'طلبات الدفع',
+                detail: 'كل الطلبات المعلقة، بما فيها الأقدم من اليوم',
+                count: d['paymentsError'] == null && payment['pending'] is num
+                    ? (payment['pending'] as num).toInt()
+                    : null,
+                action: 'مراجعة الطلبات',
+                onOpen: () =>
+                    openPage(context, NativePaymentRequests(auth: widget.auth)),
+              ),
+            NativeOperationActions(
+              key: ValueKey('admin-rail-$identity'),
+              auth: widget.auth,
+              compact: true,
+              carousel: true,
+            ),
+            if (d['followupsPending'] == true)
+              const PendingHomeSection(label: 'جارٍ تحميل المتابعات المسندة'),
+            if (permissions.contains('followups.read') &&
+                d['followupsPending'] != true) ...[
+              if (d['followupsError'] != null)
+                ErrorNotice(textOf(d['followupsError'])),
+              if (assigned.isNotEmpty) ...[
+                const ExperienceSection(
+                  'متابعات مسندة إليّ',
+                  Icons.assignment_outlined,
+                ),
+                for (final item in assigned.take(3))
+                  GCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        UiText(
+                          item['source'] is Map
+                              ? textOf(
+                                  obj(item['source'])['name'] ?? 'متابعة سجل',
+                                )
+                              : 'متابعة سجل',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        UiText(
+                          followUpConditions[item['condition']] ??
+                              'متابعة مسندة',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        UiText(
+                          'الحالة: ${followUpStates[item['state']] ?? 'متابعة'} · الموعد: ${day(item['dueOn'])}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        OutlinedButton(
+                          key: ValueKey('admin-home-followup-${item['id']}'),
+                          onPressed: () async {
+                            await openPage(
+                              context,
+                              AssignedFollowUpsPage(
+                                auth: widget.auth,
+                                id: textOf(item['id']),
+                              ),
+                            );
+                            if (mounted && currentIdentity == identity) {
+                              await refresh();
+                            }
+                          },
+                          child: const UiText('عرض المتابعة'),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              GLink(
+                'متابعاتي المسندة',
+                Icons.assignment_ind_outlined,
+                () async {
+                  await openPage(
+                    context,
+                    AssignedFollowUpsPage(auth: widget.auth),
+                  );
+                  if (mounted && currentIdentity == identity) await refresh();
+                },
+              ),
+              if (followups['hasMore'] == true)
+                const UiText(
+                  'المعاينة محدودة؛ افتح المتابعات لتصفية السجل.',
+                  style: TextStyle(fontSize: 11),
+                ),
+            ],
             if (permissions.contains('people.manage'))
               GLink(
                 'اللاعبون',
@@ -166,11 +334,6 @@ class _AdminHomeState extends State<AdminHome> {
                 ),
               ),
             if (permissions.contains('attendance.read')) ...[
-              GLink(
-                localized(context, 'حضور اللاعبين', 'Player attendance'),
-                Icons.fact_check_outlined,
-                () => openPage(context, NativeSessions(auth: widget.auth)),
-              ),
               if (d['sessionsError'] != null)
                 ErrorNotice(textOf(d['sessionsError']))
               else ...[
@@ -207,45 +370,18 @@ class _AdminHomeState extends State<AdminHome> {
                   ),
               ],
             ],
-            if (permissions.contains('payment.read')) ...[
-              const SizedBox(height: 12),
-              GLink(
-                localized(context, 'طلبات الدفع', 'Payment requests'),
-                Icons.receipt_long_outlined,
-                () =>
-                    openPage(context, NativePaymentRequests(auth: widget.auth)),
-              ),
-              if (d['paymentsError'] != null)
-                ErrorNotice(textOf(d['paymentsError']))
-              else
-                GCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      UiText(
-                        localized(
-                          context,
-                          '${payment['pending'] ?? '—'} طلب بانتظار المراجعة',
-                          '${payment['pending'] ?? '—'} requests awaiting review',
-                        ),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      UiText(
-                        localized(
-                          context,
-                          'كل الطلبات المعلقة، دون إخفاء الأقدم بفلتر اليوم',
-                          'All pending requests, including older ones',
-                        ),
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+            if (permissions.contains('payment.read') &&
+                d['paymentsError'] != null)
+              ErrorNotice(textOf(d['paymentsError'])),
             if (!permissions.contains('attendance.read') &&
-                !permissions.contains('payment.read'))
+                !permissions.contains('payment.read') &&
+                !permissions.contains('people.manage') &&
+                !permissions.contains('followups.read'))
               const EmptyMessage('لا توجد مهام متاحة بصلاحيات هذا الحساب.'),
-            if (d['sessionsError'] != null || d['paymentsError'] != null)
+            NewsStrip(auth: widget.auth),
+            if (d['sessionsError'] != null ||
+                d['paymentsError'] != null ||
+                d['followupsError'] != null)
               OutlinedButton.icon(
                 onPressed: refresh,
                 icon: const Icon(Icons.refresh),
@@ -290,11 +426,18 @@ class NativeSessions extends StatelessWidget {
               child: ListTile(
                 leading: const Icon(Icons.schedule_outlined),
                 title: UiText(textOf(s['group'])),
-                subtitle: UiText(
-                  '${day(s['sessionDate'])} · ${s['startTime']} — ${s['endTime']}\n${s['branch']} · ${s['sport']}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(
+                      '${sessionDateLabel(s['sessionDate'])} · ${trainingTimeRange(s['startTime'], s['endTime'])}',
+                      textDirection: TextDirection.rtl,
+                    ),
+                    UiText('${s['branch']} · ${s['sport']}'),
+                  ],
                 ),
                 isThreeLine: true,
-                trailing: const Icon(Icons.chevron_left),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () => openPage(
                   context,
                   CoachAttendance(auth: auth, sessionId: textOf(s['id'])),

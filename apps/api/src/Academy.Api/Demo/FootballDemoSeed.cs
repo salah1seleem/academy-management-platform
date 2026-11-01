@@ -308,7 +308,9 @@ public static class FootballDemoSeed
         // The database trigger additionally verifies the one reserved synthetic tenant and its marker.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('academy.reset_demo_tenant', {AcademyId.ToString()}, true)", ct);
         await db.UserSessions.Where(s => s.ActiveAcademyId == AcademyId).ExecuteDeleteAsync(ct);
-        await db.MobileSessions.Where(s => s.MembershipId != null && db.AcademyMemberships.Any(m => m.Id == s.MembershipId && m.AcademyId == AcademyId)).ExecuteDeleteAsync(ct);
+        var resetSessions=db.MobileSessions.Where(s=>s.MembershipId!=null&&db.AcademyMemberships.Any(m=>m.Id==s.MembershipId&&m.AcademyId==AcademyId));
+        await db.MobilePushDevices.Where(d=>resetSessions.Any(s=>s.Id==d.MobileSessionId)).ExecuteUpdateAsync(s=>s.SetProperty(d=>d.IsActive,false),ct);
+        await resetSessions.ExecuteUpdateAsync(s=>s.SetProperty(x=>x.RevokedAtUtc,DateTimeOffset.UtcNow).SetProperty(x=>x.MembershipId,(Guid?)null),ct);
         // Child-first FK order, including future tenant tables. Never delete global users or Academy itself.
         var pending = db.Model.GetEntityTypes().Where(e => e.FindProperty("AcademyId") is not null).ToHashSet();
         while (pending.Count > 0)

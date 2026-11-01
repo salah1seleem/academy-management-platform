@@ -17,43 +17,49 @@ public static class MatchEndpoints
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     public static void MapMatches(this WebApplication app)
     {
-        var manage = app.MapGroup("/api/v1/manage/matches").RequireAuthorization(AcademyPermissions.StructureManage);
+        var manage = app.MapGroup("/api/v1/manage/matches").RequireAuthorization(AcademyPermissions.MatchesManage);
         manage.MapGet("/options", Options);
         manage.MapGet("/", List);
-        manage.MapGet("/{id:guid}", async(Guid id,CurrentTenant tenant,FoundationDbContext db,HttpResponse response)=>{response.Headers.CacheControl="no-store";var t=(await tenant.ResolveAsync())!;var row=await Rows(Query(t.AcademyId,db).Where(x=>x.Id==id),db,t.AcademyId).SingleOrDefaultAsync();return row is null?Results.NotFound():Results.Ok(row);});
-        manage.MapGet("/{id:guid}/copy-preview",MatchDrafts.Preview);
-        manage.MapPost("/{id:guid}/copy",MatchDrafts.Copy).AddEndpointFilter<CsrfFilter>();
+        manage.MapGet("/{id:guid}", async(Guid id,CurrentTenant tenant,FoundationDbContext db,HttpResponse response)=>{response.Headers.CacheControl="no-store";var t=(await tenant.ResolveAsync())!;var row=await Rows(ScopedQuery(t,db).Where(x=>x.Id==id),db,t.AcademyId).SingleOrDefaultAsync();return row is null?Results.NotFound():Results.Ok(row);});
+        manage.MapGet("/{id:guid}/copy-preview",MatchDrafts.Preview).RequireAuthorization(AcademyPermissions.StructureManage);
+        manage.MapPost("/{id:guid}/copy",MatchDrafts.Copy).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
         manage.MapGet("/teams/{id:guid}/roster",MatchDrafts.RosterPreview);
         manage.MapGet("/{id:guid}/coach-history",async(Guid id,CurrentTenant tenant,FoundationDbContext db,HttpResponse response)=>{
-            response.Headers.CacheControl="no-store";var t=(await tenant.ResolveAsync())!;if(!await db.AcademyMatches.AnyAsync(m=>m.AcademyId==t.AcademyId&&m.Id==id))return Results.NotFound();
+            response.Headers.CacheControl="no-store";var t=(await tenant.ResolveAsync())!;if(!await ScopedQuery(t,db).AnyAsync(m=>m.Id==id))return Results.NotFound();
             return Results.Ok(await db.MatchCoachAssignments.Where(a=>a.MatchId==id).OrderByDescending(a=>a.Sequence).Select(a=>new{a.Id,version=a.Sequence,a.CoachMembershipId,a.Source,a.Note,a.CreatedAtUtc,coach=db.AcademyMemberships.Where(m=>m.Id==a.CoachMembershipId).Select(m=>m.User.DisplayName).Single(),reviewer=db.AcademyMemberships.Where(m=>m.Id==a.AssignedByMembershipId).Select(m=>m.User.DisplayName).Single()}).ToArrayAsync());
         });
-        manage.MapPost("/tournaments", Tournament).AddEndpointFilter<CsrfFilter>();
-        manage.MapPut("/tournaments/{id:guid}", Tournament).AddEndpointFilter<CsrfFilter>();
-        manage.MapPost("/teams", Team).AddEndpointFilter<CsrfFilter>();
-        manage.MapPut("/teams/{id:guid}", Team).AddEndpointFilter<CsrfFilter>();
+        manage.MapPost("/tournaments", Tournament).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
+        manage.MapPut("/tournaments/{id:guid}", Tournament).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
+        manage.MapPost("/teams", Team).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
+        manage.MapPut("/teams/{id:guid}", Team).RequireAuthorization(AcademyPermissions.StructureManage).AddEndpointFilter<CsrfFilter>();
         manage.MapPost("/", Save).AddEndpointFilter<CsrfFilter>();
         manage.MapPut("/{id:guid}", Save).AddEndpointFilter<CsrfFilter>();
+        app.MapGet("/api/v1/my-match-access", async(CurrentTenant tenant,FoundationDbContext db,HttpResponse response)=>{response.Headers.CacheControl="no-store";var t=(await tenant.ResolveAsync())!;return Results.Ok(new{canRead=await MatchAccess.Read(db,t),canAdd=await MatchAccess.Write(db,t,false),canEdit=await MatchAccess.Write(db,t,true)});}).RequireAuthorization(AcademyPermissions.TenantAccess);
         app.MapGet("/api/v1/my-matches", Mine).RequireAuthorization(AcademyPermissions.TenantAccess);
     }
     private static async Task<IResult> Options(CurrentTenant tenant, FoundationDbContext db, TimeProvider time)
     {
         var t = (await tenant.ResolveAsync())!; var a = t.AcademyId;
         var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(a, db, time);
+        var ownedTeams=db.MatchTeams.Where(team=>team.AcademyId==a&&(t.Role!=AcademyRole.Coach||team.CoachCanManageMatches&&team.CoachMembershipId==t.MembershipId));
+        var teamIds=ownedTeams.Select(team=>team.Id);
+        var teams=db.MatchTeams.Where(team=>team.AcademyId==a&&(t.Role!=AcademyRole.Coach||teamIds.Contains(team.Id)||ScopedQuery(t,db).Any(m=>m.TeamId==team.Id)));
         return Results.Ok(new {
             coachHistoryEnabled=true,
+            canAdd=await MatchAccess.Write(db,t,false),canEdit=await MatchAccess.Write(db,t,true),
             canCopy=t.Role==AcademyRole.AcademyOwner||t.Role==AcademyRole.AcademyAdmin&&await db.AcademyMemberships.Where(m=>m.Id==t.MembershipId&&m.IsActive).Select(m=>m.UseActionGrants?db.StaffActionGrants.Any(g=>g.MembershipId==m.Id&&g.IsActive&&g.Module=="matches"&&g.Read&&g.Add):db.StaffGrants.Any(g=>g.MembershipId==m.Id&&g.IsActive&&g.Permission==AcademyPermissions.StructureManage&&g.Allowed)).SingleAsync(),
-            tournaments = await db.AcademyTournaments.Where(x => x.AcademyId == a).OrderBy(x => x.Name).ToListAsync(),
-            teams = await db.MatchTeams.Where(x => x.AcademyId == a).OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.SportId, x.BranchId, x.AgeCategoryId, x.CoachMembershipId, x.IsActive, enrollmentIds = db.MatchTeamPlayers.Where(p => p.AcademyId == a && p.TeamId == x.Id && p.IsActive).Select(p => p.EnrollmentId).ToList() }).ToListAsync(),
-            players = await db.SportEnrollments.Where(x => x.AcademyId == a && x.IsActive && x.Player.IsActive && x.Sport.IsActive && x.Branch.IsActive).OrderBy(x => x.Player.ArabicName).Take(1000).Select(x => new { x.Id, playerId = x.PlayerId, name = x.Player.ArabicName, birthYear = x.Player.DateOfBirth.Year, x.SportId, x.BranchId, trainingGroupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, groupDate) }).ToListAsync(),
-            coaches = await db.AcademyMemberships.Where(x => x.AcademyId == a && x.IsActive && x.Role == AcademyRole.Coach && x.User.IsActive).Select(x => new { x.Id, name = x.User.DisplayName,x.AllBranches,x.AllSports,branchIds=db.MembershipBranchAccesses.Where(g=>g.MembershipId==x.Id&&g.IsActive).Select(g=>g.BranchId).ToArray(),sportIds=db.MembershipSportAccesses.Where(g=>g.MembershipId==x.Id&&g.IsActive).Select(g=>g.SportId).ToArray() }).ToListAsync()
+            tournaments = await db.AcademyTournaments.Where(x => x.AcademyId == a&&(t.Role!=AcademyRole.Coach||teams.Any(team=>team.SportId==x.SportId))).OrderBy(x => x.Name).ToListAsync(),
+            teams = await teams.OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.SportId, x.BranchId, x.AgeCategoryId, x.CoachMembershipId, x.IsActive,x.CoachCanManageMatches,sportKind=db.Sports.Where(s=>s.Id==x.SportId).Select(s=>s.Kind.ToString()).Single(), enrollmentIds = db.MatchTeamPlayers.Where(p => p.AcademyId == a && p.TeamId == x.Id && p.IsActive&&(t.Role!=AcademyRole.Coach||x.CoachMembershipId==t.MembershipId)).Select(p => p.EnrollmentId).ToList() }).ToListAsync(),
+            players = await db.SportEnrollments.Where(x => x.AcademyId == a && x.IsActive && x.Player.IsActive && x.Sport.IsActive && x.Branch.IsActive&&(t.Role!=AcademyRole.Coach||db.MatchTeamPlayers.Any(p=>p.EnrollmentId==x.Id&&teamIds.Contains(p.TeamId)&&p.IsActive))).OrderBy(x => x.Player.ArabicName).Take(1000).Select(x => new { x.Id, playerId = x.PlayerId, name = x.Player.ArabicName, birthYear = x.Player.DateOfBirth.Year, x.SportId, x.BranchId, trainingGroupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, groupDate) }).ToListAsync(),
+            coaches = await db.AcademyMemberships.Where(x => x.AcademyId == a && x.IsActive && x.Role == AcademyRole.Coach && x.User.IsActive&&(t.Role!=AcademyRole.Coach||x.Id==t.MembershipId)).Select(x => new { x.Id, name = x.User.DisplayName,x.AllBranches,x.AllSports,branchIds=db.MembershipBranchAccesses.Where(g=>g.MembershipId==x.Id&&g.IsActive).Select(g=>g.BranchId).ToArray(),sportIds=db.MembershipSportAccesses.Where(g=>g.MembershipId==x.Id&&g.IsActive).Select(g=>g.SportId).ToArray() }).ToListAsync()
         });
     }
+    internal static IQueryable<AcademyMatch> ScopedQuery(TenantMembership t,FoundationDbContext db){var q=Query(t.AcademyId,db);return t.Role==AcademyRole.Coach?MatchCoachAssignments.ForCoach(q,db,t.MembershipId).Where(m=>db.MatchTeams.Any(team=>team.Id==m.TeamId&&team.CoachCanManageMatches)):q;}
     private static IQueryable<AcademyMatch> Query(Guid academy, FoundationDbContext db) => db.AcademyMatches.AsNoTracking().Where(x => x.AcademyId == academy);
     private static async Task<IResult> List(Guid? tournamentId, Guid? teamId, Guid? playerId, Guid? coachMembershipId, DateOnly? from, DateOnly? to, CurrentTenant tenant, FoundationDbContext db, HttpResponse response)
     {
         response.Headers.CacheControl="no-store";
-        var t = (await tenant.ResolveAsync())!; var q = Query(t.AcademyId, db);
+        var t = (await tenant.ResolveAsync())!; var q = ScopedQuery(t, db);
         if(playerId.HasValue&&!await db.Players.AnyAsync(p=>p.Id==playerId&&p.AcademyId==t.AcademyId))return Results.NotFound();
         if(coachMembershipId.HasValue&&!await db.AcademyMemberships.AnyAsync(m=>m.Id==coachMembershipId&&m.AcademyId==t.AcademyId&&m.Role==AcademyRole.Coach))return Results.NotFound();
         if(playerId.HasValue)q=q.Where(x=>db.MatchParticipants.Any(p=>p.MatchId==x.Id&&p.PlayerId==playerId&&p.IsActive));
@@ -65,15 +71,16 @@ public static class MatchEndpoints
         return Results.Ok(await Rows(q.OrderByDescending(x => x.MatchDate).Take(200), db, t.AcademyId).ToListAsync());
     }
     private static IQueryable<object> Rows(IQueryable<AcademyMatch> q, FoundationDbContext db, Guid a) => q.Select(x => (object)new {
-        x.Id, x.TournamentId, x.TeamId, x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore, x.PublishedAtUtc, x.IsActive,x.CopiedFromMatchId,
-        status=!x.IsActive?"Cancelled":x.PublishedAtUtc==null?"Draft":x.OurScore!=null?"Completed":"Published",
+        x.Id, x.TournamentId, x.TeamId, x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore, x.PublishedAtUtc, x.IsActive,x.CopiedFromMatchId,x.ResultFinalized,x.ResultPublishedAtUtc,x.ResultRevision,
+        goalSlots=db.MatchGoalSlots.Where(g=>g.MatchId==x.Id).OrderBy(g=>g.Ordinal).Select(g=>new{g.Ordinal,g.Kind,g.PlayerId}).ToArray(),
+        status=!x.IsActive?"Cancelled":x.PublishedAtUtc==null?"Draft":x.OurScore!=null?(x.ResultFinalized?"Completed":"ResultDraft"):"Published",
         coachAssignmentSource=db.MatchCoachAssignments.Any(a=>a.MatchId==x.Id)?"Confirmed":"LegacyCurrentTeam",
         assignedCoachMembershipId=db.MatchCoachAssignments.Where(a=>a.MatchId==x.Id).OrderByDescending(a=>a.Sequence).Select(a=>(Guid?)a.CoachMembershipId).FirstOrDefault(),
         coachAssignmentVersion=db.MatchCoachAssignments.Where(a=>a.MatchId==x.Id).Max(a=>(int?)a.Sequence)??0,
         coachName=db.MatchCoachAssignments.Where(a=>a.MatchId==x.Id).OrderByDescending(a=>a.Sequence).Select(a=>db.AcademyMemberships.Where(m=>m.Id==a.CoachMembershipId).Select(m=>m.User.DisplayName).Single()).FirstOrDefault(),
         tournament = db.AcademyTournaments.Where(t => t.AcademyId == a && t.Id == x.TournamentId).Select(t => t.Name).Single(),
         team = db.MatchTeams.Where(t => t.AcademyId == a && t.Id == x.TeamId).Select(t => t.Name).Single(),
-        players = db.MatchParticipants.Where(p => p.AcademyId == a && p.MatchId == x.Id && p.IsActive).Select(p => new { p.PlayerId, p.IsBench }).ToList()
+        players = db.MatchParticipants.Where(p => p.AcademyId == a && p.MatchId == x.Id && p.IsActive).Select(p => new { p.PlayerId, p.IsBench,name=db.Players.Where(player=>player.Id==p.PlayerId).Select(player=>player.ArabicName).Single() }).ToList()
     });
     private static async Task<IResult> Mine(Guid? playerId, bool? upcomingOnly, Guid? branchId, Guid? teamId, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock, HttpResponse response,TimeProvider time)
     {
@@ -102,10 +109,10 @@ public static class MatchEndpoints
         return Results.Ok(await q.OrderBy(x => x.MatchDate >= today ? 0 : 1).ThenBy(x => x.MatchDate >= today ? x.MatchDate : DateOnly.MaxValue).ThenByDescending(x => x.MatchDate).ThenBy(x => x.StartTime).Select(x => new {
             x.Id, x.TeamId, branchId=db.MatchTeams.Where(team=>team.AcademyId==t.AcademyId&&team.Id==x.TeamId).Select(team=>team.BranchId).Single(),
             branch=db.MatchTeams.Where(team=>team.AcademyId==t.AcademyId&&team.Id==x.TeamId).Select(team=>db.Branches.Where(b=>b.Id==team.BranchId).Select(b=>b.ArabicName).Single()).Single(),
-            x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore,
+            x.Opponent, x.MatchDate, x.StartTime, x.Venue, x.Notes, x.OurScore, x.OpponentScore,x.ResultFinalized,x.ResultPublishedAtUtc,
             team = db.MatchTeams.Where(team => team.AcademyId == t.AcademyId && team.Id == x.TeamId).Select(team => team.Name).Single(),
             tournament = db.AcademyTournaments.Where(c => c.AcademyId == t.AcademyId && c.Id == x.TournamentId).Select(c => c.Name).Single(),
-            status=!x.IsActive?"Cancelled":x.OurScore!=null?"Completed":"Published",
+            status=!x.IsActive?"Cancelled":x.OurScore!=null?(x.ResultFinalized?"Completed":"ResultDraft"):"Published",
             participation=playerId.HasValue?db.MatchParticipants.Where(p=>p.MatchId==x.Id&&p.PlayerId==playerId&&p.IsActive).Select(p=>p.IsBench?"Bench":"Player").FirstOrDefault():null,
             coachAssignmentSource=db.MatchCoachAssignments.Any(a=>a.MatchId==x.Id)?"Confirmed":"LegacyCurrentTeam",
             coachName=db.MatchCoachAssignments.Where(a=>a.MatchId==x.Id).OrderByDescending(a=>a.Sequence).Select(a=>db.AcademyMemberships.Where(m=>m.Id==a.CoachMembershipId).Select(m=>m.User.DisplayName).Single()).FirstOrDefault(),
@@ -137,6 +144,8 @@ public static class MatchEndpoints
         if (!id.HasValue) db.MatchTeams.Add(row);
         else if (await db.AcademyMatches.AnyAsync(x => x.AcademyId == a && x.TeamId == id) && (row.SportId != body.SportId || row.AgeCategoryId != body.AgeCategoryId || row.BranchId != body.BranchId)) return Results.Conflict(new { message = "أنشئ فريقًا جديدًا لتغيير فرع أو رياضة أو فئة فريق له مباريات محفوظة." });
         row.Name = body.Name.Trim(); row.SportId = body.SportId; row.BranchId = body.BranchId; row.AgeCategoryId = body.AgeCategoryId; row.CoachMembershipId = body.CoachMembershipId; row.IsActive = body.IsActive; row.UpdatedAtUtc = clock.UtcNow;
+        if(body.CoachCanManageMatches.HasValue&&row.CoachCanManageMatches!=body.CoachCanManageMatches.Value)db.MatchTeamPermissionAudits.Add(new(){Id=Guid.NewGuid(),AcademyId=a,TeamId=row.Id,ActorMembershipId=t.MembershipId,Before=row.CoachCanManageMatches,After=body.CoachCanManageMatches!.Value,CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
+        row.CoachCanManageMatches=body.CoachCanManageMatches??row.CoachCanManageMatches;
         var existing = await db.MatchTeamPlayers.Where(x => x.AcademyId == a && x.TeamId == row.Id).ToListAsync();
         foreach (var p in existing) { p.IsActive = body.EnrollmentIds.Contains(p.EnrollmentId); p.UpdatedAtUtc = clock.UtcNow; }
         foreach (var e in body.EnrollmentIds.Where(e => !existing.Any(x => x.EnrollmentId == e))) db.MatchTeamPlayers.Add(new MatchTeamPlayer { Id = Guid.NewGuid(), AcademyId = a, TeamId = row.Id, EnrollmentId = e, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
@@ -146,18 +155,27 @@ public static class MatchEndpoints
     {
         var t = (await tenant.ResolveAsync())!; var a = t.AcademyId;
         if(body.CoachAssignmentNote?.Length>300||body.CoachAssignmentVersion<0)return Results.UnprocessableEntity(new{message="راجع ملاحظة ونسخة إسناد المدرب."});
-        if (id.HasValue && !await db.AcademyMatches.AnyAsync(x => x.AcademyId == a && x.Id == id)) return Results.NotFound();
+        if (id.HasValue && !await ScopedQuery(t,db).AnyAsync(x => x.Id == id)) return Results.NotFound();
         var team = await db.MatchTeams.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == a && x.Id == body.TeamId && x.IsActive);
         if (team == null || !await db.AcademyTournaments.AnyAsync(x => x.AcademyId == a && x.Id == body.TournamentId && x.SportId == team.SportId && x.IsActive) || string.IsNullOrWhiteSpace(body.Opponent) || body.Opponent.Length > 120 || string.IsNullOrWhiteSpace(body.Venue) || body.Venue.Length > 200 || body.Notes?.Length > 500 || body.MatchDate.Year is < 2000 or > 2100 || body.OurScore is < 0 or > 100 || body.OpponentScore is < 0 or > 100 || body.OurScore.HasValue != body.OpponentScore.HasValue || body.OurScore.HasValue && body.MatchDate > clock.Today || body.BenchPlayerIds?.Length > 200) return Results.UnprocessableEntity(new { message = "راجع البطولة والفريق والموعد والملعب والنتيجة (للمباريات الماضية فقط)." });
         await using var tx = await db.Database.BeginTransactionAsync();
-        var targetCoach=body.CoachMembershipId??team.CoachMembershipId;
+        if(t.Role==AcademyRole.Coach&&(!team.CoachCanManageMatches||!id.HasValue&&team.CoachMembershipId!=t.MembershipId||body.CoachMembershipId.HasValue&&body.CoachMembershipId!=t.MembershipId))return Results.Forbid();
+        var targetCoach=t.Role==AcademyRole.Coach?t.MembershipId:body.CoachMembershipId??team.CoachMembershipId;
         foreach(var member in new[]{t.MembershipId,targetCoach}.Distinct().Order())await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{a}:{member}"},0))");
-        if(!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.AcademyId==a&&m.IsActive&&m.Role==t.Role&&m.User.IsActive)||!(await http.RequestServices.GetRequiredService<IAuthorizationService>().AuthorizeAsync(http.User,http,AcademyPermissions.StructureManage)).Succeeded)return Results.Forbid();
+        if(!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.AcademyId==a&&m.IsActive&&m.Role==t.Role&&m.User.IsActive)||!await MatchAccess.Write(db,t,id.HasValue))return Results.Forbid();
         await MatchDrafts.TeamLock(db,a,body.TeamId);
         if (id.HasValue) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"match:{a}:{id}"}, 0))");
         team=await db.MatchTeams.AsNoTracking().SingleOrDefaultAsync(x=>x.AcademyId==a&&x.Id==body.TeamId&&x.IsActive);if(team is null)return Results.Conflict();
         var row = id.HasValue ? await db.AcademyMatches.SingleOrDefaultAsync(x => x.AcademyId == a && x.Id == id) : new AcademyMatch { Id = Guid.NewGuid(), AcademyId = a, Opponent = body.Opponent.Trim(), Venue = body.Venue.Trim(), CreatedAtUtc = clock.UtcNow };
         if (row == null) return Results.NotFound();
+        if(t.Role==AcademyRole.Coach&&(!team.CoachCanManageMatches||!row.PublishedAtUtc.HasValue&&team.CoachMembershipId!=t.MembershipId||id.HasValue&&!await ScopedQuery(t,db).AnyAsync(m=>m.Id==id)))return Results.Forbid();
+        if(!id.HasValue&&body.RequestId.HasValue){
+            if(body.RequestId==Guid.Empty)return Results.UnprocessableEntity(new{message="مرجع إنشاء المباراة غير صالح."});
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"match-create:{a}:{t.MembershipId}:{body.RequestId}"},0))");
+            var creationHash=MatchDrafts.Hash(body);var replay=await db.AcademyMatches.SingleOrDefaultAsync(m=>m.CreatedByMembershipId==t.MembershipId&&m.CreationRequestId==body.RequestId);
+            if(replay!=null)return replay.CreationHash==creationHash?Results.Ok(new{replay.Id,replay=true}):Results.Conflict(new{message="مرجع الإنشاء مستخدم لمباراة مختلفة."});
+            row.CreationRequestId=body.RequestId;row.CreatedByMembershipId=t.MembershipId;row.CreationHash=creationHash;
+        }
         if(t.Role!=AcademyRole.AcademyOwner&&!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&(m.AllBranches||db.MembershipBranchAccesses.Any(g=>g.MembershipId==m.Id&&g.IsActive&&g.BranchId==team.BranchId))&&(m.AllSports||db.MembershipSportAccesses.Any(g=>g.MembershipId==m.Id&&g.IsActive&&g.SportId==team.SportId))))return Results.Forbid();
         if (row.PublishedAtUtc != null && (row.TeamId != body.TeamId || row.TournamentId != body.TournamentId)) return Results.Conflict(new { message = "الفريق والبطولة ثابتان بعد النشر؛ أنشئ مباراة مستقلة." });
         if (!id.HasValue) db.AcademyMatches.Add(row);
@@ -170,23 +188,29 @@ public static class MatchEndpoints
             var assignmentError=await MatchCoachAssignments.Apply(db,row,targetCoach,body.CoachAssignmentVersion??(!body.CoachMembershipId.HasValue||!id.HasValue?0:null),t.MembershipId,time.GetUtcNow(),body.CoachAssignmentNote,body.Publish);
             if(assignmentError!=null)return Results.Conflict(new{message=assignmentError});
         }
+        var beforeResult=await MatchResults.Capture(db,row);
+        var resultRoster=new List<Guid>();
         var audience = await db.MatchParticipants.Where(x => x.AcademyId == a && x.MatchId == row.Id && x.IsActive).ToListAsync();
+        var previousBench=audience.Where(p=>p.IsBench).Select(p=>p.PlayerId).Order().ToArray();
+        var previousContent=MatchDrafts.Hash(new{row.Opponent,row.MatchDate,row.StartTime,row.Venue,row.Notes,row.IsActive,coach=previousCoach,bench=previousBench});
         var urgentNotice=row.PublishedAtUtc.HasValue&&(row.MatchDate!=body.MatchDate||row.StartTime!=body.StartTime||row.Venue!=body.Venue||row.IsActive&&!body.IsActive);
         if (row.PublishedAtUtc == null)
         {
-            var reviewedRoster=await MatchDrafts.Roster(db,team);
+            var reviewedRoster=await MatchDrafts.Roster(db,team,body.TournamentId);
             if(body.Publish&&(row.CopiedFromMatchId.HasValue||body.RosterQuoteHash is not null)&&body.RosterQuoteHash!=MatchDrafts.RosterHash(team,reviewedRoster))return Results.Problem(statusCode:409,title:"راجع قائمة المشاركين الحالية قبل نشر المباراة المنسوخة؛ قد تغير الفريق.");
-            var roster = reviewedRoster.Select(p=>p.PlayerId).Distinct().ToList();
+            var roster = reviewedRoster.Select(p=>p.PlayerId).Distinct().ToList();resultRoster=roster;
             if (body.Publish && roster.Count == 0 || body.BenchPlayerIds?.Any(p => !roster.Contains(p)) == true) return Results.UnprocessableEntity(new { message = "قائمة الفريق فارغة أو البدلاء ليسوا من الفريق." });
             if (body.Publish) foreach (var player in roster) { var p = new MatchParticipant { Id = Guid.NewGuid(), AcademyId = a, MatchId = row.Id, PlayerId = player, IsBench = body.BenchPlayerIds?.Contains(player) == true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; audience.Add(p); db.MatchParticipants.Add(p); }
         }
         else { if (body.BenchPlayerIds?.Any(p => !audience.Any(x => x.PlayerId == p)) == true) return Results.UnprocessableEntity(); foreach (var p in audience) p.IsBench = body.BenchPlayerIds?.Contains(p.PlayerId) == true; }
+        if(row.PublishedAtUtc!=null)resultRoster=audience.Select(p=>p.PlayerId).Distinct().ToList();
+        var resultError=await MatchResults.Apply(db,row,team,body,t.MembershipId,resultRoster,beforeResult,clock.UtcNow);if(resultError!=null)return Results.UnprocessableEntity(new{message=resultError});
         row.TeamId = body.TeamId; row.TournamentId = body.TournamentId; row.Opponent = body.Opponent.Trim(); row.MatchDate = body.MatchDate; row.StartTime = body.StartTime; row.Venue = body.Venue.Trim(); row.Notes = body.Notes?.Trim(); row.OurScore = body.OurScore; row.OpponentScore = body.OpponentScore; row.IsActive = body.IsActive; row.UpdatedAtUtc = clock.UtcNow;
         var currentCoach=assign?targetCoach:previousCoach;
         var bench=audience.Where(x=>x.IsBench).Select(x=>x.PlayerId).Order().ToArray();
-        object payload=currentCoach.HasValue?new{row.Opponent,row.MatchDate,row.StartTime,row.Venue,row.Notes,row.OurScore,row.OpponentScore,row.IsActive,coach=currentCoach,bench}:new{row.Opponent,row.MatchDate,row.StartTime,row.Venue,row.Notes,row.OurScore,row.OpponentScore,row.IsActive,bench};
+        object payload=new{row.Opponent,row.MatchDate,row.StartTime,row.Venue,row.Notes,row.IsActive,coach=currentCoach,bench};
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload))));
-        if ((body.Publish || row.PublishedAtUtc != null) && row.PublishedFingerprint != fingerprint)
+        if ((body.Publish && row.PublishedAtUtc == null || row.PublishedAtUtc != null && previousContent != fingerprint))
         {
             row.PublishedAtUtc ??= clock.UtcNow; row.PublishedFingerprint = fingerprint;
             var players = audience.Select(x => x.PlayerId).ToArray();
@@ -196,13 +220,14 @@ public static class MatchEndpoints
             if(previousCoach.HasValue&&currentCoach!=previousCoach)
             {
                 var removed=await db.AcademyMemberships.Where(m=>m.Id==previousCoach&&m.IsActive&&m.User.IsActive).Select(m=>(Guid?)m.UserId).SingleOrDefaultAsync();
-                if(removed.HasValue)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=a,UserId=removed.Value,AudienceRole="Coach",TargetKind="Matches",Message="تم تعديل إسناد إحدى مبارياتك؛ راجع مواعيدك الحالية أو إدارة الأكاديمية.",CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
+                if(removed.HasValue)db.AcademyNotices.Add(new(){EventKey="Match",Id=Guid.NewGuid(),AcademyId=a,UserId=removed.Value,AudienceRole="Coach",TargetKind="Matches",Message="تم تعديل إسناد إحدى مبارياتك؛ راجع مواعيدك الحالية أو إدارة الأكاديمية.",CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
             }
-            foreach (var u in users.Distinct()) db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = a, UserId = u, AudienceRole=coachUser==u?"Coach":"Guardian",TargetKind="Matches",TargetId=row.Id, MatchId=row.Id, UrgentUntilUtc=urgentNotice?time.GetUtcNow().AddDays(7):null, Message = (await NoticeText.Render(db,a,"Match","تحديث مباراة.",team.Name))+"\n"+(row.IsActive ? $"مباراة {team.Name} أمام {row.Opponent} يوم {row.MatchDate:yyyy-MM-dd} الساعة {row.StartTime:HH:mm} في {row.Venue}. راجع المواعيد داخل التطبيق." : $"تم إلغاء مباراة {team.Name} أمام {row.Opponent}. راجع إدارة الأكاديمية."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+            var goalRecipients=db.ChangeTracker.Entries<AcademyNotice>().Where(e=>e.State==EntityState.Added&&e.Entity.EventKey=="MatchGoals"&&e.Entity.MatchId==row.Id&&e.Entity.IsActive).Select(e=>e.Entity.UserId).ToHashSet();
+            foreach (var u in users.Distinct().Where(u=>!goalRecipients.Contains(u)||coachUser==u)) db.AcademyNotices.Add(new AcademyNotice { EventKey="Match", Id = Guid.NewGuid(), AcademyId = a, UserId = u, AudienceRole=coachUser==u?"Coach":"Guardian",TargetKind="Matches",TargetId=row.Id, MatchId=row.Id, UrgentUntilUtc=urgentNotice?time.GetUtcNow().AddDays(7):null, Message = (await NoticeText.Render(db,a,"Match",NoticeEndpoints.Defaults["Match"],team.Name))+"\n"+(row.IsActive ? $"مباراة {team.Name} أمام {row.Opponent} يوم {row.MatchDate:yyyy-MM-dd} الساعة {row.StartTime:HH:mm} في {row.Venue}. راجع المواعيد داخل التطبيق." : $"تم إلغاء مباراة {team.Name} أمام {row.Opponent}. راجع إدارة الأكاديمية."), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         }
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Id });
     }
 }
 public sealed record TournamentWrite(string Name, Guid SportId, decimal Fee, string Currency, bool IsActive);
-public sealed record TeamWrite(string Name, Guid SportId, Guid BranchId, Guid AgeCategoryId, Guid CoachMembershipId, Guid[] EnrollmentIds, bool IsActive);
-public sealed record MatchWrite(Guid TournamentId, Guid TeamId, string Opponent, DateOnly MatchDate, TimeOnly StartTime, string Venue, string? Notes, int? OurScore, int? OpponentScore, Guid[]? BenchPlayerIds, bool Publish, bool IsActive,string? RosterQuoteHash=null,Guid? CoachMembershipId=null,int? CoachAssignmentVersion=null,string? CoachAssignmentNote=null);
+public sealed record TeamWrite(string Name, Guid SportId, Guid BranchId, Guid AgeCategoryId, Guid CoachMembershipId, Guid[] EnrollmentIds, bool IsActive,bool? CoachCanManageMatches=null);
+public sealed record MatchWrite(Guid TournamentId, Guid TeamId, string Opponent, DateOnly MatchDate, TimeOnly StartTime, string Venue, string? Notes, int? OurScore, int? OpponentScore, Guid[]? BenchPlayerIds, bool Publish, bool IsActive,string? RosterQuoteHash=null,Guid? CoachMembershipId=null,int? CoachAssignmentVersion=null,string? CoachAssignmentNote=null,MatchGoalInput[]? GoalSlots=null,bool? ResultFinalized=null,int? ResultVersion=null,Guid? RequestId=null);

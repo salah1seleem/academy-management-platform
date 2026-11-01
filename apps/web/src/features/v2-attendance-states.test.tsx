@@ -16,28 +16,28 @@ function mockPlayer(conflict = false, reloadFails = false) {
 it("sends the loaded version, supports five states and reloads the confirmed snapshot", async () => {
   mockPlayer(); render(<PlayerAttendance sessionId="s" />); await screen.findByText(row.arabicName);
   expect(screen.getByText(/آخر مزامنة مؤكدة/)).toBeVisible();
-  for (const name of ["حاضر", "متأخر", "غائب", "معتذر", "لم يُسجل"]) expect(screen.getByRole("button", { name })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "متأخر" })); fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" }));
+  for (const name of ["حاضر", "متأخر", "غائب", "معتذر", "لم يُسجل"]) expect(screen.getByRole("option", { name })).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox",{name:/^حضور /}),{target:{value:"Late"}}); fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" }));
   await screen.findByText("تم حفظ الحضور بنجاح.");
   const write = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT"); expect(JSON.parse(String(write?.[1]?.body)).items).toEqual([{ sportEnrollmentId: "e", status: 4, expectedVersion: 41 }]);
-  expect(screen.getByRole("button", { name: "متأخر" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("combobox",{name:/^حضور /})).toHaveValue("Late");
 });
 it("keeps a conflicting draft without reporting successful synchronization", async () => {
   mockPlayer(true); render(<PlayerAttendance sessionId="s" />); await screen.findByText(row.arabicName);
-  fireEvent.click(screen.getByRole("button", { name: "معتذر" })); fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" }));
+  fireEvent.change(screen.getByRole("combobox",{name:/^حضور /}),{target:{value:"Excused"}}); fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" }));
   await screen.findByText("تغير السجل؛ راجع الكشف قبل الحفظ."); expect(screen.queryByText("تم حفظ الحضور بنجاح.")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "معتذر" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("combobox",{name:/^حضور /})).toHaveValue("Excused");
 });
 it("does not claim a refreshed snapshot when the post-save reload fails", async () => {
   mockPlayer(false, true); render(<PlayerAttendance sessionId="s" />); await screen.findByText(row.arabicName);
-  fireEvent.click(screen.getByRole("button", { name: "متأخر" }));
+  fireEvent.change(screen.getByRole("combobox",{name:/^حضور /}),{target:{value:"Late"}});
   fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" })); await screen.findByText(/تعذر تحديث الكشف/); expect(screen.queryByText("تم حفظ الحضور بنجاح.")).not.toBeInTheDocument();
 });
 for (const manage of [false, true]) it(`staff attendance uses server permissions (${manage}) and row versions`, async () => {
   global.fetch = vi.fn(async (url, init) => ({ ok: true, json: async () => String(url).endsWith("/correction-context") ? {canManageAttendance:manage,canRequestCorrection:false} : String(url).endsWith("/my-permissions") ? manage ? ["attendance.manage"] : ["attendance.read"] : String(url).endsWith("/csrf") ? { token: "test" } : init?.method === "PUT" ? {} : [{ academyMembershipId: "c", name: "مدرب اصطناعي", role: "Coach", attendanceStatus: "Late", version: 73 }] })) as unknown as typeof fetch;
   render(<StaffAttendance sessionId="s" />); await screen.findByText("مدرب اصطناعي");
   if (!manage) { expect(screen.queryByRole("button", { name: "حفظ حضور المدربين" })).not.toBeInTheDocument(); expect(screen.getByText("متأخر")).toBeVisible(); return; }
-  fireEvent.click(screen.getByRole("button", { name: "معتذر" })); fireEvent.click(screen.getByRole("button", { name: "حفظ حضور المدربين" }));
+  fireEvent.change(screen.getByRole("combobox",{name:/^حضور /}),{target:{value:"Excused"}}); fireEvent.click(screen.getByRole("button", { name: "حفظ حضور المدربين" }));
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "PUT")).toBe(true)); await screen.findByText("تم حفظ حضور الجهاز الفني.");
   const write = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT"); expect(JSON.parse(String(write?.[1]?.body)).items).toEqual([{ academyMembershipId: "c", status: 5, expectedVersion: 73 }]);
 });

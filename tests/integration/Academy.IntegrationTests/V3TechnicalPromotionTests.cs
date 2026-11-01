@@ -23,9 +23,16 @@ public sealed partial class BrandingMatchesTests
         // payment is real application setup, before the no-financial-change check.
         var day=f.Today.AddDays(240);while(await db.TrainingSessions.AnyAsync(s=>s.SessionDate==day&&FoundationDbContext.IsSessionStaffAssigned(source.AcademyId,coachId,s.Id)))day=day.AddDays(1);
         db.TrainingSessions.Add(new(){Id=Guid.NewGuid(),AcademyId=source.AcademyId,TrainingGroupId=target,BranchId=source.BranchId,SportId=source.SportId,AgeCategoryId=source.AgeCategoryId,SessionDate=day,StartTime=new(7,0),EndTime=new(8,0),CreatedByUserId=actor});
-        var plan=await db.SubscriptionPlans.FirstAsync(p=>p.SportId==source.SportId&&p.IsActive&&p.ServiceKind==AcademyServiceKind.Training&&p.PlanType==SubscriptionPlanType.Duration);
+        // This fixture moves to a session240 days ahead. Give the child a real
+        // paid entitlement that covers that date and is published to its branch;
+        // an arbitrary existing monthly plan cannot establish that precondition.
+        var registration=await db.SportEnrollments.Where(e=>e.Id==f.Enrollment).Select(e=>e.RegistrationFormat).SingleAsync();
+        var format=registration switch{Academy.Infrastructure.People.TrainingRegistrationFormat.Private=>TrainingFormat.Private,Academy.Infrastructure.People.TrainingRegistrationFormat.SemiPrivate=>TrainingFormat.SemiPrivate,_=>TrainingFormat.Group};
+        var plan=new SubscriptionPlan{Id=Guid.NewGuid(),AcademyId=source.AcademyId,SportId=source.SportId,ArabicName="باقة تجهيز تقدم اصطناعية "+target.ToString("N")[..8],PlanType=SubscriptionPlanType.Duration,DurationMonths=12,Price=1200,Currency=await db.Academies.Where(a=>a.Id==source.AcademyId).Select(a=>a.DefaultCurrency).SingleAsync(),AllBranches=false,TrainingFormat=format,ServiceKind=AcademyServiceKind.Training,IsActive=true};
+        plan.BranchPublications.Add(new(){Id=Guid.NewGuid(),AcademyId=source.AcademyId,SubscriptionPlanId=plan.Id,BranchId=source.BranchId});db.SubscriptionPlans.Add(plan);
         await db.SaveChangesAsync();
         await using(var paid=factory.Services.CreateAsyncScope()){var paidDb=paid.ServiceProvider.GetRequiredService<FoundationDbContext>();await using var tx=await paidDb.Database.BeginTransactionAsync();await paid.ServiceProvider.GetRequiredService<CollectionService>().CreateCashAsync(source.AcademyId,actor,f.Enrollment,plan.Id,"promotion-fixture-"+Guid.NewGuid(),"Cash");await tx.CommitAsync();}
+        plan.IsActive=false;await db.SaveChangesAsync(); // Retain its paid snapshot, not an unrelated future catalog choice.
         return(f,rid,target);
     }
     private static async Task<TechnicalPromotionWrite> PromotionBody(HttpClient owner,Guid request,Guid group)

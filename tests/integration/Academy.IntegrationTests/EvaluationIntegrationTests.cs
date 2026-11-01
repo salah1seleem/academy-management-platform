@@ -14,7 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class EvaluationIntegrationTests : IAsyncLifetime
+public sealed partial class EvaluationIntegrationTests : IAsyncLifetime
 {
     private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
     private Factory factory = null!;
@@ -108,7 +108,22 @@ public sealed class EvaluationIntegrationTests : IAsyncLifetime
     { using var client = await Staff(DemoSeed.AdminEmail); var response = await Put(client, $"/api/v1/evaluations/{Slice5DemoSeed.CurrentFootballEvaluationId}", new { reportingPeriod = "ممنوع", version = 1, scores = Array.Empty<object>() }); Assert.Equal(HttpStatusCode.Conflict, response.StatusCode); }
 
     [Fact] public async Task Admin_evaluation_list_player_context_returns_only_that_player()
-    { using var client = await Staff(DemoSeed.AdminEmail); var rows = await client.GetFromJsonAsync<JsonElement>($"/api/v1/evaluations?playerId={Slice2DemoSeed.OmarPlayerId}"); Assert.NotEmpty(rows.EnumerateArray()); Assert.All(rows.EnumerateArray(), row => Assert.Equal("عمر أحمد محمود", row.GetProperty("player").GetString())); }
+    {
+        using var client = await Staff(DemoSeed.AdminEmail);
+        var rows = await client.GetFromJsonAsync<JsonElement>($"/api/v1/evaluations?playerId={Slice2DemoSeed.OmarPlayerId}");
+        Assert.NotEmpty(rows.EnumerateArray());
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        foreach (var row in rows.EnumerateArray())
+        {
+            Assert.Equal("عمر أحمد محمود", row.GetProperty("player").GetString());
+            var stored = await db.PlayerEvaluations.AsNoTracking().SingleAsync(e => e.Id == row.GetProperty("id").GetGuid());
+            Assert.Equal(stored.SportEnrollmentId, row.GetProperty("sportEnrollmentId").GetGuid());
+            Assert.Equal(stored.SportId, row.GetProperty("sportId").GetGuid());
+            Assert.Equal(stored.TrainingGroupId, row.GetProperty("trainingGroupId").GetGuid());
+            Assert.Equal(DemoSeed.NogoomAcademyId, stored.AcademyId);
+        }
+    }
 
     [Fact] public async Task Stale_draft_update_is_rejected()
     { using var client = await Staff(DemoSeed.AdminEmail); var draft = await CreateDraft(client); var details = await GetDetails(client, draft); (await Put(client, $"/api/v1/evaluations/{draft}", new { reportingPeriod = "أول حفظ", version = details.Version, scores = Array.Empty<object>() })).EnsureSuccessStatusCode(); Assert.Equal(HttpStatusCode.Conflict, (await Put(client, $"/api/v1/evaluations/{draft}", new { reportingPeriod = "حفظ قديم", version = details.Version, scores = Array.Empty<object>() })).StatusCode); }

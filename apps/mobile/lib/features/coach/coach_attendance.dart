@@ -286,10 +286,13 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                           ),
                         ),
                       ),
-                      UiText(day(session['sessionDate'])),
+                      UiText(sessionDateLabel(session['sessionDate'])),
                       UiText(
-                        '${textOf(session['startTime']).split(':').take(2).join(':')} — ${textOf(session['endTime'] ?? '—').split(':').take(2).join(':')}',
-                        textDirection: TextDirection.ltr,
+                        trainingTimeRange(
+                          session['startTime'],
+                          session['endTime'],
+                        ),
+                        textDirection: TextDirection.rtl,
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,

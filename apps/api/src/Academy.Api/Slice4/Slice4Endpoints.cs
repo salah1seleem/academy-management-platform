@@ -33,27 +33,33 @@ public static class Slice4Endpoints
         api.MapGet("/guardian/children/{playerId:guid}/attendance", GuardianAttendance).RequireAuthorization(AcademyPermissions.GuardianAttendanceRead);
     }
 
-    private static async Task<IResult> ListSessions(DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId, Guid? sportId, Guid? groupId, string? status, bool? upcomingOnly, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> ListSessions(DateOnly? from, DateOnly? to, bool? allDates, Guid? branchId, Guid? sportId, Guid? groupId, string? status, bool? upcomingOnly, bool? nearestOnly, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
     {
-        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
+        var t = (await tenant.ResolveAsync())!; return await ReadSessionsForMembership(t,db,clock,from,to,allDates,branchId,sportId,groupId,status,upcomingOnly,nearestOnly);
+    }
+    internal static async Task<IResult> ReadSessionsForMembership(TenantMembership t,FoundationDbContext db,TimeProvider clock,DateOnly? from=null,DateOnly? to=null,bool? allDates=null,Guid? branchId=null,Guid? sportId=null,Guid? groupId=null,string? status=null,bool? upcomingOnly=null,bool? nearestOnly=null)
+    {
+        if(t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin or AcademyRole.Coach))return Results.Forbid();
+        var today = await AttendanceCalendar.TodayAsync(t.AcademyId, db, clock);
         var unfiltered = allDates == true && from is null && to is null;
         var start = from ?? today; var end = to ?? today;
         if (!unfiltered && (end < start || end.DayNumber - start.DayNumber > 366)) return Validation("range", "نطاق التاريخ يجب ألا يتجاوز سنة.");
         var query = db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
-        if (upcomingOnly == true)
+        if (upcomingOnly == true || nearestOnly == true)
         {
-            if (from.HasValue || to.HasValue || allDates == true)
+            if (from.HasValue || to.HasValue || allDates == true || upcomingOnly == true && nearestOnly == true)
                 return Validation("range", "الحصص القادمة لها نطاق مستقل؛ لا تجمعها مع فلتر تاريخ آخر.");
             var zoneId = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
             var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(zoneId));
             var now = TimeOnly.FromDateTime(local.DateTime);
             var horizon = today.AddDays(14);
-            query = query.Where(x => x.Status == TrainingSessionStatus.Scheduled && x.SessionDate >= today && x.SessionDate <= horizon && (x.SessionDate > today || x.EndTime > now));
+            query = query.Where(x => x.Status == TrainingSessionStatus.Scheduled && x.SessionDate >= today && (nearestOnly == true || x.SessionDate <= horizon) && (x.SessionDate > today || x.EndTime > now));
         }
         else if (!unfiltered) query = query.Where(x => x.SessionDate >= start && x.SessionDate <= end);
         if (t.Role == AcademyRole.Coach) query = ForCoach(query,t,db);
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId); if (sportId.HasValue) query = query.Where(x => x.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<TrainingSessionStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed);
+        if(nearestOnly==true)query=query.OrderBy(x=>x.SessionDate).ThenBy(x=>x.StartTime).ThenBy(x=>x.Id).Take(1);
         return await SessionRows(query, t.AcademyId, db);
     }
 
@@ -128,7 +134,7 @@ public static class Slice4Endpoints
         var rows = await query.OrderBy(x => x.SessionDate).ThenBy(x => x.StartTime).Select(x => new
         {
             x.Id, x.SessionDate, x.StartTime, x.EndTime, status = x.Status.ToString(), source = x.Source.ToString(), x.TrainingGroupId,
-            group = x.TrainingGroup.ArabicName, sport = x.Sport.ArabicName, branch = x.Branch.ArabicName
+            group = x.TrainingGroup.ArabicName, sport = x.Sport.ArabicName, sportKind = x.Sport.Kind.ToString(), branch = x.Branch.ArabicName
         }).ToListAsync();
         if(rows.Count==0)return Results.Ok(Array.Empty<object>());
         var ids=rows.Select(s=>s.Id).ToArray();var groups=rows.Select(s=>s.TrainingGroupId).Distinct().ToArray();
@@ -141,7 +147,7 @@ public static class Slice4Endpoints
         foreach(var row in rows){
             var staff=assignedStaff[row.Id];records.TryGetValue(row.Id,out var counts);
             var display=presentation[row.Id];
-            result.Add(new{row.Id,row.SessionDate,row.StartTime,row.EndTime,row.status,row.source,row.TrainingGroupId,row.group,row.sport,row.branch,display.TrainingFormat,display.TrainingFormatSource,display.IsSubstitute,resource=resources.FirstOrDefault(r=>r.session==row.Id)?.resource,coaches=staff.Where(m=>m.Role==AcademyRole.Coach).Select(m=>m.Name).ToArray(),playerCount=roster.Sessions.GetValueOrDefault(row.Id),recorded=counts?.recorded??0,present=counts?.present??0,late=counts?.late??0,excused=counts?.excused??0,absent=counts?.absent??0,staff=staff.Select(m=>new{id=m.Id,name=m.Name,attendanceStatus=staffAttendance.GetValueOrDefault((row.Id,m.Id))?.Status.ToString()??"NotRecorded"}).ToArray()});
+            result.Add(new{row.Id,row.SessionDate,row.StartTime,row.EndTime,row.status,row.source,row.TrainingGroupId,row.group,row.sport,row.sportKind,row.branch,display.TrainingFormat,display.TrainingFormatSource,display.IsSubstitute,resource=resources.FirstOrDefault(r=>r.session==row.Id)?.resource,coaches=staff.Where(m=>m.Role==AcademyRole.Coach).Select(m=>m.Name).ToArray(),playerCount=roster.Sessions.GetValueOrDefault(row.Id),recorded=counts?.recorded??0,present=counts?.present??0,late=counts?.late??0,excused=counts?.excused??0,absent=counts?.absent??0,staff=staff.Select(m=>new{id=m.Id,name=m.Name,role=m.Role.ToString(),attendanceStatus=staffAttendance.GetValueOrDefault((row.Id,m.Id))?.Status.ToString()??"NotRecorded"}).ToArray()});
         }
         return Results.Ok(result);
     }
@@ -212,9 +218,9 @@ public static class Slice4Endpoints
             return new { sportEnrollmentId = e.Id, playerId = e.PlayerId, e.Player.PlayerCode, e.Player.ArabicName, e.Player.PhotoReference, attendanceStatus = (record?.Status ?? AttendanceStatus.NotRecorded).ToString(), version = record?.Version ?? 0, subscriptionPlan = period?.SubscriptionPlan.ArabicName, subscriptionType = type?.ToString(), remainingSessions = type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined ? period?.RemainingSessions : null, sessionConsumed = record?.ConsumedSubscriptionPeriodId is not null, compensatory = compensation.Contains(e.Id), warning = compensation.Contains(e.Id) ? "حصة تعويضية معتمدة؛ لا خصم من الرصيد الأصلي" : period is null ? "لا يوجد اشتراك مؤهل" : type is SubscriptionPlanType.Sessions or SubscriptionPlanType.Combined && period.RemainingSessions == 0 ? "الرصيد غير كافٍ" : null };
         });
         var context = await corrections.Context(id);
-        var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
+        var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/evaluations","POST",default));
         var display = (await SessionPresentationReadModel.Read(db, t.AcademyId, [id]))[id];
-        return Results.Ok(new { canManageAttendance=context.CanManageAttendance, canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName, display.TrainingFormat, display.TrainingFormatSource, display.IsSubstitute }, players = rows });
+        return Results.Ok(new { canManageAttendance=context.CanManageAttendance && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/attendance/sessions/check/players","PUT",default)), canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName, display.TrainingFormat, display.TrainingFormatSource, display.IsSubstitute }, players = rows });
     }
 
     private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service, AttendanceDraftGuard drafts)

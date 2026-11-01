@@ -167,6 +167,10 @@ public sealed partial class FoundationDbContext
             || ProductSales.Any(s => s.ProofAssetId == x.Id) || TournamentPayments.Any(p => p.ProofAssetId == x.Id) || DayPassTickets.Any(p => p.ProofAssetId == x.Id));
         BranchFilter<AcademyMatch>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         BranchFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
+        BranchFilter<ImportedHistoricalMatch>(b,x=>AcademyMatches.Any(m=>m.Id==x.MatchId));
+        BranchFilter<MatchGoalSlot>(b,x=>AcademyMatches.Any(m=>m.Id==x.MatchId));
+        BranchFilter<MatchResultChange>(b,x=>AcademyMatches.Any(m=>m.Id==x.MatchId));
+        BranchFilter<MatchTeamPermissionAudit>(b,x=>MatchTeams.Any(t=>t.Id==x.TeamId));
         BranchFilter<MatchParticipant>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         BranchFilter<MatchCoachAssignment>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         BranchFilter<OwnerFollowUp>(b, x => x.SourceKind=="Group"?TrainingGroups.Any(g=>g.Id==x.TrainingGroupId):x.SourceBranchId.HasValue&&RequestBranchIds.Contains(x.SourceBranchId.Value));
@@ -174,6 +178,7 @@ public sealed partial class FoundationDbContext
         BranchFilter<CommunityCampaignTarget>(b, x => RequestBranchIds.Contains(x.BranchId));
         BranchFilter<CommunityCampaignReview>(b, x => !x.BranchId.HasValue || RequestBranchIds.Contains(x.BranchId.Value));
         BranchFilter<CommunityAdEvent>(b, x => RequestBranchIds.Contains(x.BranchId));
+        BranchFilter<TournamentRegistration>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         BranchFilter<TournamentPayment>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         BranchFilter<PayrollAdditionRequest>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
         BranchFilter<PayrollAdjustment>(b, x => Employees.Any(e => e.Id == x.EmployeeId));
@@ -207,6 +212,7 @@ public sealed partial class FoundationDbContext
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         using var scopeTransaction = (SportScopeRestricted || AdditionalContextScope) && Database.CurrentTransaction is null ? Database.BeginTransaction() : null;
+        ApplyNoticePolicies(CancellationToken.None).GetAwaiter().GetResult();
         GuardWrites(CancellationToken.None).GetAwaiter().GetResult();
         var saved = base.SaveChanges(acceptAllChangesOnSuccess);
         scopeTransaction?.Commit(); return saved;
@@ -214,15 +220,34 @@ public sealed partial class FoundationDbContext
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         await using var scopeTransaction = (SportScopeRestricted || AdditionalContextScope) && Database.CurrentTransaction is null ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        await ApplyNoticePolicies(cancellationToken);
         await GuardWrites(cancellationToken);
         var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         if (scopeTransaction is not null) await scopeTransaction.CommitAsync(cancellationToken);
         return saved;
     }
+    // One policy lookup per academy for newly tagged notices, within the business
+    // write. Disabled events remain immutable snapshots but are absent from inboxes.
+    // This never sends or grants access; the recipient/role still comes from the event.
+    private async Task ApplyNoticePolicies(CancellationToken token)
+    {
+        var pending=ChangeTracker.Entries<AcademyNotice>().Where(e=>e.State==EntityState.Added&&e.Entity.EventKey!=null).Select(e=>e.Entity).ToArray();
+        foreach(var academy in pending.GroupBy(n=>n.AcademyId)){
+            var keys=academy.Select(n=>n.EventKey=="MatchGoals"?"Match":n.EventKey!).Distinct().ToArray();
+            var disabled=await NoticeTemplates.AsNoTracking().Where(t=>t.AcademyId==academy.Key&&keys.Contains(t.Key)&&!t.IsActive).Select(t=>t.Key).ToArrayAsync(token);
+            foreach(var notice in academy.Where(n=>disabled.Contains(n.EventKey=="MatchGoals"?"Match":n.EventKey!)))notice.IsActive=false;
+        }
+    }
     private async Task GuardWrites(CancellationToken token)
     {
         ChangeTracker.DetectChanges();
+        await GuardNewsTargets(token);
         GuardVipRewards();
+        if (ChangeTracker.Entries<SubscriptionAdjustment>().Any(e => e.State is EntityState.Modified or EntityState.Deleted &&
+            (e.Entity.AdjustmentType == SubscriptionAdjustmentType.SessionsAdded || e.OriginalValues.GetValue<SubscriptionAdjustmentType>(nameof(SubscriptionAdjustment.AdjustmentType)) == SubscriptionAdjustmentType.SessionsAdded)))
+            throw new InvalidOperationException("سجل إضافة الحصص محفوظ؛ لا تعدّل الرصيد أو التاريخ داخل سجل التدقيق.");
+        foreach(var e in ChangeTracker.Entries<ProductSale>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
+            if(e.State==EntityState.Deleted||new[]{nameof(ProductSale.VariantId),nameof(ProductSale.SportEnrollmentId),nameof(ProductSale.SizeSnapshot),nameof(ProductSale.ColorSnapshot),nameof(ProductSale.ShirtNumberSnapshot)}.Any(p=>e.Property(p).IsModified))throw new InvalidOperationException("اختيار المقاس والرقم وسياق طلب المنتج محفوظ؛ لا تستبدل طلب ولي الأمر بعد إنشائه.");
         GuardPlayerGoalHistory();
         if(ChangeTracker.Entries().Any(e=>e.Entity is IBadgeRecord&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("قاعدة الشارة ومنحها وسحبها محفوظة؛ لا تكتب فوق التاريخ.");
         if(ChangeTracker.Entries().Any(e=>e.Entity is PlayerAchievementCertificate or PlayerCertificateWithdrawal && e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("الشهادة وسجل سحبها محفوظان؛ لا تكتب فوق المصدر.");
@@ -256,6 +281,7 @@ public sealed partial class FoundationDbContext
             if(e.State==EntityState.Deleted||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(OwnerFollowUp.State) or nameof(OwnerFollowUp.AssignedToMembershipId) or nameof(OwnerFollowUp.DueOn) or nameof(OwnerFollowUp.Note) or nameof(OwnerFollowUp.ResolutionReason) or nameof(OwnerFollowUp.UpdatedAtUtc))))throw new InvalidOperationException("مصدر المتابعة ودليل إنشائها ثابتان.");
         if(ChangeTracker.Entries<MatchCoachAssignment>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("إسناد مدرب المباراة محفوظ؛ أضف مراجعة جديدة دون تعديل التاريخ أو حذفه.");
         GuardCashPaymentPurpose();
+        if(ChangeTracker.Entries().Any(e=>e.Entity is MatchResultChange or MatchTeamPermissionAudit or ImportedHistoricalMatch&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("سجل النتيجة وتفويض الفريق ثابتان؛ أضف مراجعة جديدة دون مسح الدليل.");
         if(ChangeTracker.Entries().Any(e=>e.Entity is ExternalAgreementReceipt or ExternalAgreementBooking or CashExternalReceiptPosting&&e.State is EntityState.Modified or EntityState.Deleted))throw new InvalidOperationException("تحصيل الاتفاق وحجوزه ثابتان؛ لا يعدل أو يحذف السجل المالي.");
         foreach(var e in ChangeTracker.Entries<ExternalAgreement>().Where(e=>e.State is EntityState.Modified or EntityState.Deleted))
             if(e.State==EntityState.Deleted||e.OriginalValues.GetValue<DateTimeOffset?>(nameof(ExternalAgreement.CancelledAtUtc))!=null||e.Entity.CancelledAtUtc==null||e.Properties.Any(p=>p.IsModified&&p.Metadata.Name is not(nameof(ExternalAgreement.CancelledAtUtc) or nameof(ExternalAgreement.CancelledByUserId) or nameof(ExternalAgreement.CancellationReason) or nameof(ExternalAgreement.UpdatedAtUtc))))throw new InvalidOperationException("الاتفاق المالي ثابت؛ المتاح إلغاء غير المحصل فقط دون مسح التاريخ.");
@@ -271,7 +297,7 @@ public sealed partial class FoundationDbContext
             if (e.State == EntityState.Deleted || e.OriginalValues.GetValue<string>(nameof(StaffAttendanceException.Status)) != "Pending" || e.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(StaffAttendanceException.Status) or nameof(StaffAttendanceException.ReviewedByUserId) or nameof(StaffAttendanceException.ReviewedByMembershipId) or nameof(StaffAttendanceException.ReviewedAtUtc) or nameof(StaffAttendanceException.ReviewNote) or nameof(StaffAttendanceException.ReviewKey) or nameof(StaffAttendanceException.ReviewHash) or nameof(StaffAttendanceException.AttendanceId) or nameof(StaffAttendanceException.AppliedWorkPeriodId) or nameof(StaffAttendanceException.BeforeSnapshot) or nameof(StaffAttendanceException.AfterSnapshot) or nameof(StaffAttendanceException.UpdatedAtUtc))))
                 throw new InvalidOperationException("طلب إثبات الحضور وأصله وقراره النهائي ثابتة ولا تحذف.");
         foreach(var e in ChangeTracker.Entries<AcademyMatch>().Where(e=>e.State==EntityState.Modified))
-            if(new[]{nameof(AcademyMatch.CopiedFromMatchId),nameof(AcademyMatch.CopiedByMembershipId),nameof(AcademyMatch.CopyRequestKey),nameof(AcademyMatch.CopyRequestHash)}.Any(p=>e.Property(p).IsModified))throw new InvalidOperationException("مصدر نسخ المباراة ثابت؛ عدّل الموعد والمحتوى دون تغيير أصل النسخة.");
+            if(new[]{nameof(AcademyMatch.CopiedFromMatchId),nameof(AcademyMatch.CopiedByMembershipId),nameof(AcademyMatch.CopyRequestKey),nameof(AcademyMatch.CopyRequestHash),nameof(AcademyMatch.CreationRequestId),nameof(AcademyMatch.CreatedByMembershipId),nameof(AcademyMatch.CreationHash)}.Any(p=>e.Property(p).IsModified))throw new InvalidOperationException("مصدر نسخ المباراة ثابت؛ عدّل الموعد والمحتوى دون تغيير أصل النسخة.");
         if (ChangeTracker.Entries<PayrollStatement>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PayrollPayableCorrection>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<PayrollAdvance>().Any(e=>e.State is EntityState.Modified or EntityState.Deleted)
@@ -311,7 +337,7 @@ public sealed partial class FoundationDbContext
         foreach (var entry in ChangeTracker.Entries<EntryVisit>().Where(e => e.State is EntityState.Modified or EntityState.Deleted))
             if (entry.State == EntityState.Deleted || entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(EntryVisit.ExitedAtUtc)).HasValue || !entry.Entity.ExitedAtUtc.HasValue || entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(EntryVisit.ExitedAtUtc) or nameof(EntryVisit.ExitedByUserId) or nameof(EntryVisit.ExitKey) or nameof(EntryVisit.ExitHash) or nameof(EntryVisit.UpdatedAtUtc))))
                 throw new InvalidOperationException("سجل الدخول ثابت؛ يسمح بتسجيل الخروج مرة واحدة فقط.");
-        if (ChangeTracker.Entries().Any(e => e.Entity is SessionCoachOverride or AccessEntitlement or ResourceObservation or ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
+        if (ChangeTracker.Entries().Any(e => e.Entity is SessionCoachOverride or AccessEntitlement or ResourceObservation or ReceivableDocument or ReceivableMovement or PlanPriceVersion or DiscountRuleVersion or ImportedEnrollment or ImportedHousehold or ImportedHistoricalPayment or TournamentRegistration or TrainingScheduleRevision or GroupPlacementRevision or EnrollmentGroupTransfer or EnrollmentSessionMove or CompensationGrant or CompensationMovement && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("السجل المالي مثبت؛ التصحيح بحركة جديدة وليس بتعديل التاريخ أو حذفه.");
         if (ChangeTracker.Entries().Any(e => e.Entity is CashRegister or CashTransfer or CashMovement or CashReceiptPosting or CashProductPosting or CashRefundPosting or CashReceiptVoid or ProviderEventQuarantine or SettlementComparison && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("سجل الصندوق مثبت ولا يعدل أو يحذف.");
@@ -360,6 +386,14 @@ public sealed partial class FoundationDbContext
                 var key = fk.PrincipalKey.Properties.Select((p, i) => (p.Name, Value: entry.Property(fk.Properties[i].Name).CurrentValue)).SingleOrDefault(x => x.Name == "Id");
                 if (key.Value is not Guid id) continue;
                 var type = fk.PrincipalEntityType.ClrType;
+                // A delegated period adjustment retains its immutable import provenance.
+                // The owner's import job remains hidden; retaining this same FK is not authority to read or edit it.
+                if (entry.Entity is SubscriptionPeriod && entry.State == EntityState.Modified && type == typeof(AcademyImportJob) &&
+                    fk.Properties.Any(p => p.Name == nameof(SubscriptionPeriod.ImportJobId)) &&
+                    !entry.Property(nameof(SubscriptionPeriod.ImportJobId)).IsModified &&
+                    entry.OriginalValues.GetValue<SubscriptionOrigin>(nameof(SubscriptionPeriod.Origin)) == SubscriptionOrigin.ImportedHistorical &&
+                    entry.OriginalValues.GetValue<Guid?>(nameof(SubscriptionPeriod.ImportJobId)) == id &&
+                    await AcademyImportJobs.IgnoreQueryFilters().AnyAsync(j => j.Id == id && j.AcademyId == RequestAcademyId, token)) continue;
                 if (entries.Any(e => e.Metadata.ClrType == type && e.State == EntityState.Added && Equals(e.Property("Id").CurrentValue, id))) continue;
                 var method = typeof(FoundationDbContext).GetMethod(nameof(Visible), BindingFlags.Instance | BindingFlags.NonPublic)!.MakeGenericMethod(type);
                 if (!await (Task<bool>)method.Invoke(this, [id, token])!) throw new ResourceScopeException();

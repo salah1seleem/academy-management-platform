@@ -1,4 +1,5 @@
 "use client";
+import {FilePicker} from "../components/file-picker";
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
@@ -52,7 +53,7 @@ export function EmployeeForm({ id }: { id?: string }) {
       <label>الوظيفة<input name="job" required maxLength={100} defaultValue={employee?.jobTitle} placeholder="مدرب، إداري، عامل…" /></label>
       <label>الفرع<select name="branch" required defaultValue={employee?.branchId ?? ""}><option value="">اختر الفرع</option>{options.branches.map(b => <option value={b.id} key={b.id}>{b.name}</option>)}</select></label>
       <label>الراتب الشهري<input aria-label="الراتب الشهري" name="salary" type="number" required readOnly={Boolean(id)} min="0" max="100000000" step="0.01" defaultValue={employee?.monthlySalary ?? 0} />{id&&<Link href={`/dashboard/staff/employees/${id}/salary`}>تغيير الراتب من السجل المؤرخ</Link>}</label>
-      <label>الصورة (اختياري)<input type="file" name="photo" accept="image/png,image/jpeg,image/webp" /></label>
+      <label>الصورة (اختياري)<FilePicker aria-label="الصورة (اختياري)"  name="photo" accept="image/png,image/jpeg,image/webp" /></label>
       {id && <Link href={`/dashboard/staff/employees/${id}/contract`}>تغيير مدة العقد من السجل المؤرخ</Link>}
       <fieldset className="contract-choice" disabled={employee?.hasContractHistory}><legend>نوع العقد</legend><label><input type="radio" name="contract" checked={!fixed} onChange={() => setFixed(false)} />دائم</label><label><input type="radio" name="contract" checked={fixed} onChange={() => setFixed(true)} />محدد المدة</label></fieldset>
       <label>تاريخ الانضمام<input name="start" type="date" required readOnly={employee?.hasContractHistory} defaultValue={employee?.contractStart ?? defaults.to} /></label>

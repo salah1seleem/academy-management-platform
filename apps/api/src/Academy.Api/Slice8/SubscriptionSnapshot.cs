@@ -15,15 +15,9 @@ public static partial class ReportingEndpoints
         var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
         if(page is <1 or >100000||state is not(null or "" or "all" or "subscribed" or "active" or "expiring" or "expired"))return Results.UnprocessableEntity(new{message="اختر حالة اشتراك وصفحة صحيحة."});
         var date=asOf??await AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
-        var total=db.SubscriptionPeriods.Where(p=>p.AcademyId==t.AcademyId&&p.SportEnrollment.IsActive&&p.SportEnrollment.Player.IsActive&&(!branchId.HasValue||p.SportEnrollment.BranchId==branchId)&&p.Status!=SubscriptionPeriodStatus.Cancelled&&p.StartDate<=date);
-        var periods=total.Where(p=>p.Status!=SubscriptionPeriodStatus.Frozen);
-        var active=periods.Where(p=>(p.EndDate==null||p.EndDate>=date)&&((p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)==SubscriptionPlanType.Duration||p.RemainingSessions>0));
-        var selected=state switch{
-            "active"=>active,
-            "expiring"=>active.Where(p=>p.EndDate<=date.AddDays(7)),
-            "expired"=>periods.Where(p=>(p.EndDate<date||(p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)!=SubscriptionPlanType.Duration&&p.RemainingSessions<=0)&&!active.Any(a=>a.SportEnrollmentId==p.SportEnrollmentId)&&!total.Any(f=>f.SportEnrollmentId==p.SportEnrollmentId&&f.Status==SubscriptionPeriodStatus.Frozen)),
-            _=>total
-        };
+        var total=SubscriptionHomeEndpoints.Periods(db,t.AcademyId,date,branchId);
+        var active=SubscriptionHomeEndpoints.Active(total,date);
+        var selected=SubscriptionHomeEndpoints.Select(total,date,state);
         var ids=selected.Select(p=>p.SportEnrollmentId).Distinct();
         var q=db.SportEnrollments.Where(e=>e.AcademyId==t.AcademyId&&ids.Contains(e.Id));
         var items=await q.OrderBy(e=>e.Player.ArabicName).ThenBy(e=>e.Id).Skip(((page??1)-1)*50).Take(50).Select(e=>new{e.Id,e.PlayerId,name=e.Player.ArabicName,e.Player.PhotoReference,sport=e.Sport.ArabicName,branch=e.Branch.ArabicName,group=e.TrainingGroup==null?null:e.TrainingGroup.ArabicName,

@@ -21,8 +21,9 @@ public sealed partial class BrandingMatchesTests
             foreach(var client in new[]{owner,admin,guardian,coach})
             {
                 var http=await client.GetAsync("/api/v1/academy/experience");http.EnsureSuccessStatusCode();Assert.True(http.Headers.CacheControl!.NoStore);var response=await http.Content.ReadFromJsonAsync<JsonElement>();var intro=response.GetProperty("onboarding");
-                Assert.Equal(1,intro.GetProperty("templateVersion").GetInt32());Assert.Contains(intro.GetProperty("sportTheme").GetString(),new[]{"general","football","swimming"});
-                Assert.DoesNotContain(intro.GetProperty("features").EnumerateArray(),f=>f.GetString()=="nutrition");Assert.False(response.GetProperty("platformBrandOperator").GetBoolean());Assert.False(intro.TryGetProperty("players",out _));
+                Assert.Equal(2,intro.GetProperty("templateVersion").GetInt32());Assert.Contains(intro.GetProperty("sportTheme").GetString(),new[]{"general","football","swimming"});
+                // Nutrition is the approved always-present informational library.
+                Assert.Contains(intro.GetProperty("features").EnumerateArray(),f=>f.GetString()=="nutrition");Assert.False(response.GetProperty("platformBrandOperator").GetBoolean());Assert.False(intro.TryGetProperty("players",out _));
             }
             Assert.Contains((await other.GetFromJsonAsync<JsonElement>("/api/v1/academy/experience")).GetProperty("onboarding").GetProperty("features").EnumerateArray(),f=>f.GetString()=="nutrition");
             license.Enabled=enabled;await db.SaveChangesAsync();

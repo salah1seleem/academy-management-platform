@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/app_theme.dart';
+import '../shared/experience_ui.dart';
 import 'guardian_ui.dart';
 
 class ReportHistory extends StatelessWidget {
@@ -28,7 +29,10 @@ class ReportHistory extends StatelessWidget {
             Icons.insights,
             () => openPage(context, PlayerReport(auth: auth, id: r['id'])),
             subtitle:
-                'التقييم ${textOf(r['overallScore'])} · ${r['evaluator']}',
+                r['performanceMean'] is Map &&
+                    obj(r['performanceMean'])['value'] is num
+                ? 'متوسط الأداء ${performanceScoreText(obj(r['performanceMean'])['value'] as num)} · ${r['evaluator']}'
+                : 'تقييم منشور · ${r['evaluator']}',
           ),
       ]),
     ),
@@ -80,18 +84,27 @@ class PlayerReport extends StatelessWidget {
                       if (d['isFootballReport'] == true)
                         UiText(
                           textOf(d['footballPosition']),
-                          style: const TextStyle(color: Colors.greenAccent),
+                          style: TextStyle(
+                            color: ExperienceColors.positive(context),
+                          ),
                         ),
                       UiText(
-                        textOf(d['overallScore']),
+                        d['performanceMean'] is Map &&
+                                obj(d['performanceMean'])['value'] is num
+                            ? performanceScoreText(
+                                obj(d['performanceMean'])['value'] as num,
+                              )
+                            : '—',
                         style: const TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const UiText(
-                        'التقييم العام',
-                        style: TextStyle(color: Colors.white60),
+                      UiText(
+                        'متوسط الأداء',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -104,6 +117,19 @@ class PlayerReport extends StatelessWidget {
               ],
             ),
           ),
+          if (d['performanceMean'] is Map)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: UiText(
+                '${obj(d['performanceMean'])['scoredCriteria']} من ${obj(d['performanceMean'])['applicableCriteria']} معايير منشورة · غير المقيم لا يدخل بصفر',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+          if (d['overallScore'] is num)
+            UiText(
+              'التقييم المركب · ${performanceScoreText(d['overallScore'] as num)}',
+              style: const TextStyle(fontSize: 12),
+            ),
           if (d['isFootballReport'] == true) ...[
             Wrap(
               spacing: 12,
@@ -125,7 +151,10 @@ class PlayerReport extends StatelessWidget {
           ]),
           UiText(
             'اكتمال التقييم ${textOf(d['completenessPercentage'])}% · القيم غير المسجلة ليست صفرًا',
-            style: const TextStyle(fontSize: 12, color: Colors.white60),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const Heading('المعايير التفصيلية'),
           for (final c in rows(
@@ -143,7 +172,7 @@ class PlayerReport extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 23,
                           fontWeight: FontWeight.bold,
-                          color: scoreColor(c['score']),
+                          color: scoreColor(c['score'], context: context),
                         ),
                       ),
                     ],
@@ -156,7 +185,9 @@ class PlayerReport extends StatelessWidget {
           UiText(d['generalNotes'] ?? 'لا توجد ملاحظات منشورة.'),
           UiText(
             'المدرب: ${d['evaluator']}',
-            style: const TextStyle(color: Colors.white60),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ]);
       },
@@ -164,7 +195,16 @@ class PlayerReport extends StatelessWidget {
   );
 }
 
-Color scoreColor(Object? score) => score == null
+Color scoreColor(Object? score, {BuildContext? context}) =>
+    context != null && Theme.of(context).brightness == Brightness.light
+    ? score == null
+          ? Theme.of(context).colorScheme.onSurfaceVariant
+          : (score as num) >= 90
+          ? ExperienceColors.positive(context)
+          : score >= 60
+          ? ExperienceColors.warning(context)
+          : ExperienceColors.negative(context)
+    : score == null
     ? Colors.white54
     : (score as num) >= 90
     ? Colors.greenAccent
@@ -177,113 +217,143 @@ Color scoreColor(Object? score) => score == null
 bool validAssessment(dynamic value) =>
     value is num && value.isFinite && value >= 0 && value <= 100;
 
+String radarAxisName(Object? value) {
+  final raw = textOf(value);
+  return RegExp('[ء-ي]').hasMatch(raw) ? raw : label(raw);
+}
+
 class RadarChart extends StatelessWidget {
   final List<Json> axes;
   final bool compact;
-  const RadarChart(this.axes, {super.key, this.compact = false});
+  final Color? accentColor;
+  const RadarChart(
+    this.axes, {
+    super.key,
+    this.compact = false,
+    this.accentColor,
+  });
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'رسم المحاور الستة؛ القيم موضحة نصيًا أسفله',
-    child: SizedBox(
-      height: compact ? 140 : 210,
-      child: CustomPaint(
-        painter: _RadarPainter(
-          axes,
-          compact,
-          Theme.of(context).colorScheme.onSurface,
+  Widget build(BuildContext context) {
+    final assessed = axes.where((a) => validAssessment(a['value'])).toList();
+    if (assessed.isEmpty) return const SizedBox.shrink();
+    if (assessed.length < 3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final a in assessed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  UiText(
+                    '${radarAxisName(a['axis'])} · ${a['value']}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  LinearProgressIndicator(
+                    value: (a['value'] as num).toDouble() / 100,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      label: assessed
+          .map((a) => '${radarAxisName(a['axis'])}: ${a['value']}')
+          .join('، '),
+      child: SizedBox(
+        height: compact ? 140 : 210,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _RadarPainter(
+            assessed,
+            compact,
+            colors.onSurface,
+            accentColor ?? colors.primary,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _RadarPainter extends CustomPainter {
   final List<Json> axes;
   final bool compact;
-  final Color textColor;
-  _RadarPainter(this.axes, this.compact, this.textColor);
-  static const names = [
-    'Passing',
-    'Shooting',
-    'Physical',
-    'Defending',
-    'Speed',
-    'Dribbling',
-  ];
+  final Color textColor, accent;
+  _RadarPainter(this.axes, this.compact, this.textColor, this.accent);
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2),
-        radius = math.min(
-          size.width / 2 - (compact ? 25 : 55),
-          size.height / 2 - 28,
+        radius = math.max(
+          1.0,
+          math.min(size.width / 2 - (compact ? 28 : 52), size.height / 2 - 28),
         );
     Offset point(int i, double scale) =>
         center +
         Offset(
-              math.cos(-math.pi / 2 + i * math.pi / 3),
-              math.sin(-math.pi / 2 + i * math.pi / 3),
+              math.cos(-math.pi / 2 + i * math.pi * 2 / axes.length),
+              math.sin(-math.pi / 2 + i * math.pi * 2 / axes.length),
             ) *
             radius *
             scale;
     final grid = Paint()
-      ..color = Colors.white24
+      ..color = textColor.withValues(alpha: .18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    canvas.drawCircle(center, radius, grid);
-    final values = names
-        .map(
-          (n) =>
-              axes.where((a) => a['axis'] == n).firstOrNull?['value'] as num?,
-        )
-        .toList();
-    // Missing axes stay missing: no zero-filling or alternative scoring formula.
-    if (values.every((x) => x != null)) {
+    for (final level in [.25, .5, .75, 1.0]) {
       canvas.drawPath(
         Path()..addPolygon(
-          List.generate(6, (i) => point(i, values[i]!.toDouble() / 100)),
+          List.generate(axes.length, (i) => point(i, level)),
           true,
         ),
-        Paint()..color = Colors.cyan.withValues(alpha: .24),
-      );
-      canvas.drawPath(
-        Path()..addPolygon(
-          List.generate(6, (i) => point(i, values[i]!.toDouble() / 100)),
-          true,
-        ),
-        Paint()
-          ..color = Colors.cyan
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+        grid,
       );
     }
-    for (var i = 0; i < 6; i++) {
-      if (values[i] != null) {
-        canvas.drawCircle(
-          point(i, values[i]!.toDouble() / 100),
-          3,
-          Paint()..color = Colors.cyanAccent,
-        );
-      }
-      final t = TextPainter(
+    final values = List.generate(
+      axes.length,
+      (i) => point(i, (axes[i]['value'] as num).toDouble() / 100),
+    );
+    canvas.drawPath(
+      Path()..addPolygon(values, true),
+      Paint()..color = accent.withValues(alpha: .22),
+    );
+    canvas.drawPath(
+      Path()..addPolygon(values, true),
+      Paint()
+        ..color = accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    for (var i = 0; i < axes.length; i++) {
+      canvas.drawCircle(values[i], 3, Paint()..color = accent);
+      final name = radarAxisName(axes[i]['axis']);
+      final text = TextPainter(
         text: TextSpan(
-          text: compact
-              ? const ['PAS', 'SHT', 'PHY', 'DEF', 'SPD', 'DRI'][i]
-              : label(names[i]),
-          style: TextStyle(color: textColor, fontFamily: 'Cairo', fontSize: 11),
+          text: '$name\n${axes[i]['value']}',
+          style: TextStyle(
+            color: textColor,
+            fontFamily: 'AcademyArabic',
+            fontSize: compact ? 8 : 10,
+          ),
         ),
+        textAlign: TextAlign.center,
         textDirection: TextDirection.rtl,
-      )..layout();
-      canvas.save();
-      canvas.translate(
-        point(i, 1.19).dx - t.width / 2,
-        point(i, 1.19).dy - t.height / 2,
+      )..layout(maxWidth: compact ? 48 : 80);
+      text.paint(
+        canvas,
+        point(i, 1.24) - Offset(text.width / 2, text.height / 2),
       );
-      t.paint(canvas, Offset.zero);
-      canvas.restore();
     }
   }
 
   @override
   bool shouldRepaint(covariant _RadarPainter old) =>
-      old.axes != axes || old.textColor != textColor || old.compact != compact;
+      old.axes != axes ||
+      old.textColor != textColor ||
+      old.accent != accent ||
+      old.compact != compact;
 }

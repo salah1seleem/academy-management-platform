@@ -5,6 +5,7 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../coach/coach_attendance.dart';
 import '../guardian/guardian_profile.dart';
+import '../guardian/family_child_filter.dart';
 import '../guardian/guardian_ui.dart';
 import 'matches.dart';
 
@@ -23,7 +24,7 @@ class _RoleAgendaState extends State<RoleAgenda> {
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final openedIdentity = identity();
   List<Json> children = [], sessions = [], matches = [];
-  String? playerId;
+  String? playerId = '';
   String filter = 'all';
   bool loading = true,
       homeError = false,
@@ -57,7 +58,7 @@ class _RoleAgendaState extends State<RoleAgenda> {
         );
         if (!current(attempt)) return;
         children = rows(data['children']);
-        if (!children.any((c) => c['id'] == playerId)) {
+        if (playerId != '' && !children.any((c) => c['id'] == playerId)) {
           playerId = children.isEmpty ? null : children.first['id'] as String;
         }
       } catch (_) {
@@ -96,22 +97,38 @@ class _RoleAgendaState extends State<RoleAgenda> {
             false,
           );
         }
-        final data = obj(
-          await widget.auth.request(
-            'GET',
-            '/api/v1/guardian/children/${Uri.encodeComponent(selected!)}/profile',
-          ),
-        );
-        if (obj(data['player'])['id'] != selected) throw StateError('scope');
         final unique = <String, Json>{};
-        for (final e in rows(data['enrollments'])) {
-          for (final s in rows(e['upcoming'])) {
-            unique[textOf(s['id'])] = {
-              ...s,
-              'group': s['group'] ?? e['group'],
-              'sport': e['sport'],
-              'branch': e['branch'],
-            };
+        final eligible = children.where(
+          (c) => selected == '' || c['id'] == selected,
+        );
+        for (final child in eligible) {
+          final id = textOf(child['id']);
+          final data = obj(
+            await widget.auth.request(
+              'GET',
+              '/api/v1/guardian/children/${Uri.encodeComponent(id)}/profile',
+            ),
+          );
+          if (obj(data['player'])['id'] != id) throw StateError('scope');
+          for (final e in rows(data['enrollments'])) {
+            for (final s in rows(e['upcoming'])) {
+              final key = textOf(s['id']), previous = unique[key];
+              unique[key] = {
+                ...s,
+                'group': s['group'] ?? e['group'],
+                'sport': e['sport'],
+                'branch': e['branch'],
+                'childrenNames': <String>{
+                  ...((previous?['childrenNames'] as List?)?.cast<String>() ??
+                      []),
+                  textOf(child['arabicName']),
+                }.toList(),
+                'childIds': <String>{
+                  ...((previous?['childIds'] as List?)?.cast<String>() ?? []),
+                  id,
+                }.toList(),
+              };
+            }
           }
         }
         return (unique.values.toList(), false);
@@ -125,7 +142,7 @@ class _RoleAgendaState extends State<RoleAgenda> {
         final data = rows(
           await widget.auth.request(
             'GET',
-            '/api/v1/my-matches?upcomingOnly=true${widget.guardian ? '&playerId=${Uri.encodeComponent(selected!)}' : ''}',
+            '/api/v1/my-matches?upcomingOnly=true${widget.guardian && selected != '' ? '&playerId=${Uri.encodeComponent(selected!)}' : ''}',
           ),
         );
         if (data.any((m) => m['scheduleWindow'] != 'Upcoming')) {
@@ -135,7 +152,11 @@ class _RoleAgendaState extends State<RoleAgenda> {
             data.any(
               (m) =>
                   m['children'] is! List ||
-                  !(m['children'] as List).contains(selected),
+                  !(m['children'] as List).any(
+                    (id) => selected == ''
+                        ? children.any((c) => c['id'] == id)
+                        : id == selected,
+                  ),
             )) {
           throw StateError('scope');
         }
@@ -216,27 +237,11 @@ class _RoleAgendaState extends State<RoleAgenda> {
             ],
           ),
           if (widget.guardian && children.isNotEmpty)
-            DropdownButtonFormField<String>(
-              key: ValueKey(playerId),
-              initialValue: playerId,
-              isExpanded: true,
-              itemHeight: null,
-              decoration: InputDecoration(
-                labelText: localized(context, 'اختر الابن', 'Choose child'),
-              ),
-              items: children
-                  .map(
-                    (c) => DropdownMenuItem(
-                      value: c['id'] as String,
-                      child: UiText(textOf(c['arabicName'])),
-                    ),
-                  )
-                  .toList(),
-              onChanged: loading
-                  ? null
-                  : (id) {
-                      if (id != null) load(child: id);
-                    },
+            FamilyChildFilter(
+              children: children,
+              selected: playerId ?? '',
+              enabled: !loading,
+              onSelected: (id) => load(child: id),
             ),
           const SizedBox(height: 12),
           Wrap(
@@ -295,7 +300,9 @@ class _RoleAgendaState extends State<RoleAgenda> {
               const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
             for (var i = 0; i < events.length; i++) ...[
               if (i == 0 || eventDate(events[i]) != eventDate(events[i - 1]))
-                Heading(eventDate(events[i])),
+                widget.guardian
+                    ? GuardianAgendaDay(date: eventDate(events[i]))
+                    : Heading(eventDate(events[i])),
               eventCard(context, events[i]),
             ],
             if (events.isEmpty &&
@@ -326,11 +333,13 @@ class _RoleAgendaState extends State<RoleAgenda> {
                 () => open(
                   MatchSchedule(
                     auth: widget.auth,
-                    playerId: widget.guardian ? playerId : null,
+                    playerId: widget.guardian && playerId != ''
+                        ? playerId
+                        : null,
                   ),
                 ),
               ),
-            if (widget.guardian && playerId != null)
+            if (widget.guardian && playerId != null && playerId != '')
               GLink(
                 localized(
                   context,
@@ -357,21 +366,40 @@ class _RoleAgendaState extends State<RoleAgenda> {
 
   Widget eventCard(BuildContext context, ({bool match, Json data}) event) {
     final d = event.data;
+    Future<void> onTap() => open(
+      event.match
+          ? MatchSchedule(
+              auth: widget.auth,
+              playerId: widget.guardian && playerId != '' ? playerId : null,
+              matchId: textOf(d['id']),
+            )
+          : widget.guardian
+          ? ProfileRecords(
+              auth: widget.auth,
+              playerId: playerId == ''
+                  ? (d['childIds'] as List).first as String
+                  : playerId!,
+              section: 'schedule',
+            )
+          : CoachAttendance(auth: widget.auth, sessionId: textOf(d['id'])),
+    );
+    if (widget.guardian) {
+      final names = event.match
+          ? children
+                .where((c) => (d['children'] as List).contains(c['id']))
+                .map((c) => textOf(c['arabicName']))
+                .toList()
+          : (d['childrenNames'] as List?)?.cast<String>() ?? <String>[];
+      return GuardianAgendaCard(
+        key: ValueKey('guardian-agenda-${d['id']}'),
+        data: d,
+        isMatch: event.match,
+        childNames: names,
+        onTap: onTap,
+      );
+    }
     return GCard(
-      onTap: () => open(
-        event.match
-            ? MatchSchedule(
-                auth: widget.auth,
-                playerId: widget.guardian ? playerId : null,
-              )
-            : widget.guardian
-            ? ProfileRecords(
-                auth: widget.auth,
-                playerId: playerId!,
-                section: 'schedule',
-              )
-            : CoachAttendance(auth: widget.auth, sessionId: textOf(d['id'])),
-      ),
+      onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -399,9 +427,11 @@ class _RoleAgendaState extends State<RoleAgenda> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Directionality(
-                  textDirection: TextDirection.ltr,
+                  textDirection: TextDirection.rtl,
                   child: UiText(
-                    '${textOf(d['startTime']).split(':').take(2).join(':')}${!event.match ? ' — ${textOf(d['endTime']).split(':').take(2).join(':')}' : ''}',
+                    event.match
+                        ? trainingTimeOf(d['startTime'])
+                        : trainingTimeRange(d['startTime'], d['endTime']),
                   ),
                 ),
                 UiText(
@@ -409,6 +439,11 @@ class _RoleAgendaState extends State<RoleAgenda> {
                       ? '${d['tournament']} · ${d['venue']}'
                       : '${d['sport']} · ${d['branch']}',
                 ),
+                if (!event.match && d['childrenNames'] is List)
+                  UiText(
+                    (d['childrenNames'] as List).join('، '),
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 if (event.match && d['coachName'] != null)
                   UiText('مدرب المباراة: ${d['coachName']}'),
                 if (event.match &&
@@ -417,8 +452,155 @@ class _RoleAgendaState extends State<RoleAgenda> {
               ],
             ),
           ),
-          const Icon(Icons.chevron_left, size: 18),
+          const Icon(Icons.chevron_right, size: 18),
         ],
+      ),
+    );
+  }
+}
+
+class GuardianAgendaDay extends StatelessWidget {
+  const GuardianAgendaDay({super.key, required this.date});
+  final String date;
+  @override
+  Widget build(BuildContext context) {
+    final parsed = DateTime.tryParse(date);
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: ValueKey('agenda-date-$date'),
+      margin: const EdgeInsets.only(top: 10, bottom: 6),
+      padding: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: UiText(
+        parsed == null
+            ? 'تاريخ غير محدد'
+            : MaterialLocalizations.of(context).formatFullDate(parsed),
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: colors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class GuardianAgendaCard extends StatelessWidget {
+  const GuardianAgendaCard({
+    super.key,
+    required this.data,
+    required this.isMatch,
+    required this.childNames,
+    required this.onTap,
+  });
+  final Json data;
+  final bool isMatch;
+  final List<String> childNames;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Semantics(
+        button: true,
+        child: Material(
+          color: colors.surface,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: 4,
+                      child: ColoredBox(color: colors.primary),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: MediaQuery.textScalerOf(context).scale(54),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          UiText(
+                            trainingTimeOf(data['startTime']),
+                            textDirection: TextDirection.ltr,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (!isMatch)
+                            UiText(
+                              trainingTimeOf(data['endTime']),
+                              textDirection: TextDirection.ltr,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          UiText(
+                            isMatch
+                                ? '${data['team']} × ${data['opponent']}'
+                                : textOf(data['group']),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          UiText(
+                            childNames.join('، '),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                          UiText(
+                            isMatch
+                                ? '${data['tournament']} · ${data['venue']}'
+                                : '${data['sport']} · ${data['branch']}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                          if (isMatch && data['coachName'] != null)
+                            UiText(
+                              'مدرب المباراة: ${data['coachName']}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          if (isMatch &&
+                              data['coachAssignmentSource'] ==
+                                  'LegacyCurrentTeam')
+                            const UiText(
+                              'إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.',
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

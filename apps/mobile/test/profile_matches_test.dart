@@ -17,6 +17,13 @@ void main() {
         final calls = <String>[];
         final auth = await logged((m, p, b, token) async {
           calls.add(p);
+          if (p == '/api/v1/guardian/home') {
+            return {
+              'children': [
+                {'id': 'child-1', 'arabicName': 'طفل اصطناعي'},
+              ],
+            };
+          }
           return [
             <String, dynamic>{
               'id': 'match',
@@ -47,7 +54,10 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        expect(calls, ['/api/v1/my-matches?playerId=child-1']);
+        expect(calls, [
+          '/api/v1/guardian/home',
+          '/api/v1/my-matches?playerId=child-1',
+        ]);
         expect(find.text('ملغاة'), findsOneWidget);
         expect(find.text('المشاركة: بديل'), findsOneWidget);
         expect(find.text('مدرب المباراة: مدرب مباراة اصطناعي'), findsOneWidget);
@@ -64,6 +74,13 @@ void main() {
       var fail = true;
       final auth = await logged((m, p, b, token) async {
         calls.add(p);
+        if (p == '/api/v1/guardian/home') {
+          return {
+            'children': [
+              {'id': 'child-2', 'arabicName': 'طفل ثان اصطناعي'},
+            ],
+          };
+        }
         if (fail) throw Exception('synthetic failure');
         return <Map<String, dynamic>>[];
       });
@@ -75,7 +92,9 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('لا توجد مباريات منشورة تخصك حاليًا.'), findsOneWidget);
       expect(
-        calls.every((p) => p == '/api/v1/my-matches?playerId=child-2'),
+        calls
+            .where((p) => p != '/api/v1/guardian/home')
+            .every((p) => p == '/api/v1/my-matches?playerId=child-2'),
         isTrue,
       );
       await t.pumpWidget(const SizedBox());

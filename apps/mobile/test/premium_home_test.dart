@@ -19,14 +19,34 @@ Widget shell(Widget child) => MaterialApp(
 );
 
 void main() {
-  testWidgets('Next session shows only its own resource context without a lane roster', (tester) async {
-    await tester.pumpWidget(shell(NextSessionCard(childName: 'لاعب تجريبي', sport: {'group': 'براعم', 'branch': 'فرع الاختبار', 'nextSession': {'sessionDate': '2026-10-24', 'startTime': '17:00', 'endTime': '18:00', 'resource': 'المسبح · A'}}, onTap: () {})));
-    expect(find.text('المسبح · A'), findsOneWidget);
-    expect(find.textContaining('لاعب تجريبي'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
   testWidgets(
-    'Child card keeps the published score, compact FIFA summary and subscription dates',
+    'Next session shows only its own resource context without a lane roster',
+    (tester) async {
+      await tester.pumpWidget(
+        shell(
+          NextSessionCard(
+            childName: 'لاعب تجريبي',
+            sport: {
+              'group': 'براعم',
+              'branch': 'فرع الاختبار',
+              'nextSession': {
+                'sessionDate': '2026-10-24',
+                'startTime': '17:00',
+                'endTime': '18:00',
+                'resource': 'المسبح · A',
+              },
+            },
+            onTap: () {},
+          ),
+        ),
+      );
+      expect(find.text('المسبح · A'), findsOneWidget);
+      expect(find.textContaining('لاعب تجريبي'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'Child card preserves the composite score without relabelling it as a mean and keeps dates',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -61,14 +81,19 @@ void main() {
           ),
         ),
       );
-      expect(find.text('77'), findsOneWidget);
-      expect(find.text('آخر تقييم منشور'), findsOneWidget);
+      expect(find.textContaining('77.1 · التقييم المركب'), findsOneWidget);
+      expect(find.text('متوسط التقييم'), findsOneWidget);
+      expect(
+        find.text('بيانات الأداء غير كافية لحساب المتوسط'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('التقييم المركب'), findsOneWidget);
       expect(find.textContaining('2026-09-30'), findsOneWidget);
       expect(
         tester.getSize(find.byKey(const ValueKey('child-p1'))).height,
-        lessThan(250),
+        greaterThan(350),
       );
-      await tester.tap(find.text('عرض الملف'));
+      await tester.tap(find.textContaining('والتقرير'));
       expect(opened, isTrue);
       expect(tester.takeException(), isNull);
       auth.dispose();
@@ -112,7 +137,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('اقتراحات اليوم'), findsOneWidget);
+      expect(find.text('اقتراح نظام غذائي ليوم 2026-09-28'), findsOneWidget);
       expect(find.text('قبل التدريب · موز وزبادي'), findsOneWidget);
       expect(find.text('بعد التدريب · حليب وفاكهة'), findsOneWidget);
       expect(find.textContaining('خطة علاجية'), findsNothing);

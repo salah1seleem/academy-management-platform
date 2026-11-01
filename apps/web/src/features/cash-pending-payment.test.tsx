@@ -6,6 +6,16 @@ const response = (body: unknown, status = 200) => new Response(JSON.stringify(bo
 const options = { amount: "1234.56", currency: "EGP", sessions: [{ id: "shift", name: "صندوق التدريب", branch: "الفرع الاصطناعي" }] };
 beforeEach(() => { vi.spyOn(window, "confirm").mockReturnValue(true); global.fetch = vi.fn(async () => response(options)); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it("shows disabled cash without a collection form or request", async () => {
+  global.fetch = vi.fn(async () => response({ ...options, cashEnabled: false, sessions: [] }));
+  render(<CashPendingPayment id="payment" onCollected={vi.fn()} />);
+  await screen.findByText(/التحصيل النقدي غير مفعّل/);
+  expect(screen.getByRole("status")).toHaveTextContent("التحصيل النقدي غير مفعّل");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "تأكيد التحصيل النقدي وإصدار الإيصال" })).not.toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
 it("requires an authorized open shift and submits the exact server amount", async () => {
   const saved = vi.fn().mockResolvedValue(undefined); let payload: unknown;
   global.fetch = vi.fn(async (url, init) => {

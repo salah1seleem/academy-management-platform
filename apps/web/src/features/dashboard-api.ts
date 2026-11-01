@@ -28,7 +28,7 @@ export async function uploadAsset(file: File, purpose: "Photo" | "Media" | "Proo
   const { token } = await csrf.json() as { token: string };
   const data = new FormData(); data.set("file", file); data.set("purpose", purpose);
   Object.entries(target).forEach(([key, value]) => { if (value) data.set(key, value); });
-  const response = await fetch("/api/v1/assets/upload", { method: "POST", headers: { "X-CSRF-TOKEN": token }, body: data });
+  const response = await fetch(purpose === "News" ? "/api/v1/content/news/image" : "/api/v1/assets/upload", { method: "POST", headers: { "X-CSRF-TOKEN": token }, body: data });
   if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.message ?? "تعذر رفع الملف."); }
   return response.json() as Promise<{ id: string; url: string; contentType: string }>;
 }

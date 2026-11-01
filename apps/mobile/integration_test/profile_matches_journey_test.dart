@@ -94,7 +94,10 @@ void main() {
         120,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('مدرب المباراة: ${selected['coachName']}'), findsWidgets);
+      expect(
+        find.text('مدرب المباراة: ${selected['coachName']}'),
+        findsWidgets,
+      );
       if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
         await t.pumpAndSettle();
         await binding.takeScreenshot('phase-profile-child-matches');

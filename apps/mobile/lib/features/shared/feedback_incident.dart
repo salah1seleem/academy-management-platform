@@ -45,7 +45,7 @@ class FeedbackIncidentPicker extends StatelessWidget {
                 DropdownMenuItem(
                   value: textOf(s['id']),
                   child: UiText(
-                    '${s['groupName']} · ${textOf(s['startTime']).substring(0, 5)}–${textOf(s['endTime']).substring(0, 5)}',
+                    '${s['groupName']} · ${trainingTimeRange(s['startTime'], s['endTime'])}',
                   ),
                 ),
             ],
@@ -81,10 +81,7 @@ class FeedbackIncidentEvidence extends StatelessWidget {
           children: [
             const Heading('الحصة المرتبطة وقت تقديم الملاحظة'),
             UiText('${s['groupName']} · ${s['date']}'),
-            UiText(
-              '${textOf(s['startTime']).split(':').take(2).join(':')}–${textOf(s['endTime']).split(':').take(2).join(':')}',
-              textDirection: TextDirection.ltr,
-            ),
+            UiText(trainingTimeRange(s['startTime'], s['endTime'])),
             for (final c in rows(s['coaches']))
               UiText(
                 '${c['name']} · ${c['source'] == 'OccurrenceDecision' ? 'قرار مدرب للحصة' : 'سجل حضور الحصة'}${s['selectedCoachId'] == c['id'] ? ' · اختاره مقدم الملاحظة' : ''}',

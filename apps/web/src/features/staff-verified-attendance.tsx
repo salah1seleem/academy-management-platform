@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { ContextHelp, ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { browserPasskey } from "./staff-passkeys";
 
@@ -32,9 +32,9 @@ export function StaffVerifiedAttendance(){
   }
   async function refresh(){if(busy)return;setBusy(true);setError("");try{await load();setPending(null);}catch{setError("تعذر تحديث الحالة؛ احتفظ بالطلب وأعد المحاولة.");}finally{setBusy(false);}}
   const ready=state?.configured&&state.hasCredential&&!state.profileMissing;
-  const selected=state?.branches.find(b=>b.id===branch);
+  const selected=state?.branches?.find(b=>b.id===branch);
   return <><PageHeader title="حضوري وانصرافي" context="حسابي / الحضور الوظيفي" action={{label:"وسائل التحقق",href:"/dashboard/account/verification"}}/>
-    <section className="detail-card staff-verified-attendance"><h2>خطوة واضحة، ووقت مؤكد</h2><p>التقط موقعك عند التسجيل فقط ثم أكد وسيلة التحقق، وفق سياسة الفرع المحفوظة. التوقيع لا يضمن سلامة GPS أو أن الوسيلة هاتف مادي وحيد.</p><p>هذا حضورك الوظيفي فقط؛ لا يسجل حضور اللاعبين ولا خصمًا أو راتبًا تلقائيًا.</p>
+    <section className="detail-card staff-verified-attendance"><h2>تسجيل الحضور والانصراف</h2><div className="workspace-help"><ContextHelp title="طريقة التسجيل والخصوصية"><p>التقط موقعك عند التسجيل فقط ثم أكد وسيلة التحقق، وفق سياسة الفرع المحفوظة. التوقيع لا يضمن سلامة GPS أو أن الوسيلة هاتف مادي وحيد.</p><p>هذا حضورك الوظيفي فقط؛ لا يسجل حضور اللاعبين ولا خصمًا أو راتبًا تلقائيًا.</p></ContextHelp></div>
       {error&&<ErrorState message={error}/>} {message&&<p role="status">{message}</p>} {!state&&!error&&<LoadingState/>}
       {state?.profileMissing&&<p>لا يوجد ملف موظف مرتبط بحسابك؛ تواصل مع الإدارة.</p>}
       {state&&!state.configured&&<p>يلزم إعداد التحقق الآمن من المسؤول؛ مسار المراجعة الإداري متاح.</p>}

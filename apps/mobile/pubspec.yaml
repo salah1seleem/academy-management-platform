@@ -13,6 +13,7 @@ dependencies:
     sdk: flutter
   flutter_secure_storage: 11.2.0
   flutter_svg: 2.3.0
+  intl: 0.20.3
   file_picker: 13.1.0
   video_player: 2.14.1
   local_auth: 3.0.2
@@ -23,14 +24,21 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_driver:
+    sdk: flutter
   integration_test:
     sdk: flutter
   flutter_lints: 6.0.0
+  video_player_platform_interface: 6.9.0
 
 flutter:
   uses-material-design: true
   assets:
+    - assets/fonts/AcademyArabic-OFL.txt
+    - assets/home/
+    - assets/avatars/
     - assets/branding/
+    - assets/onboarding/
     - assets/demo/
     - assets/demo/nutrition/
     - assets/demo/portraits/
@@ -38,3 +46,15 @@ flutter:
     - family: Cairo
       fonts:
         - asset: assets/fonts/Cairo.ttf
+    - family: AcademyArabic
+      fonts:
+        - asset: assets/fonts/AcademyArabic-300.ttf
+          weight: 300
+        - asset: assets/fonts/AcademyArabic-400.ttf
+          weight: 400
+        - asset: assets/fonts/AcademyArabic-500.ttf
+          weight: 500
+        - asset: assets/fonts/AcademyArabic-600.ttf
+          weight: 600
+        - asset: assets/fonts/AcademyArabic-700.ttf
+          weight: 700

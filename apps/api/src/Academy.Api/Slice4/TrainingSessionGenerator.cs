@@ -7,14 +7,15 @@ namespace Academy.Api.Slice4;
 
 public sealed class TrainingSessionGenerator(FoundationDbContext db, TimeProvider clock, ResourceSessionCoordinator resources)
 {
-    public async Task<int> GenerateAsync(Guid academyId, Guid actorId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    public async Task<int> GenerateAsync(Guid academyId, Guid actorId, DateOnly from, DateOnly to, CancellationToken ct = default, Guid[]? groupIds = null, Guid? platformImportJob = null)
     {
         if (to < from || to.DayNumber - from.DayNumber > 30) throw new ArgumentOutOfRangeException(nameof(to));
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await resources.LockCalendar(academyId, []);
+        await using var tx = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
+        if (platformImportJob.HasValue && groupIds is null) throw new Academy.Api.Importing.ImportRejected("authority");
+        await resources.LockCalendar(academyId, [], platformImportJob: platformImportJob);
         var schedules = await db.RecurringSchedules.AsNoTracking().Include(x => x.TrainingGroup)
-            .Where(x => x.AcademyId == academyId && x.IsActive && x.TrainingGroup.IsActive && (!x.ValidFrom.HasValue || x.ValidFrom <= to) && (!x.ValidTo.HasValue || x.ValidTo >= from)).ToListAsync(ct);
-        await resources.LockCalendar(academyId, schedules.Select(x => x.TrainingGroupId));
+            .Where(x => x.AcademyId == academyId && x.IsActive && x.TrainingGroup.IsActive && (groupIds == null || groupIds.Contains(x.TrainingGroupId)) && (!x.ValidFrom.HasValue || x.ValidFrom <= to) && (!x.ValidTo.HasValue || x.ValidTo >= from)).ToListAsync(ct);
+        await resources.LockCalendar(academyId, schedules.Select(x => x.TrainingGroupId), platformImportJob: platformImportJob);
         var existing = await db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == academyId && x.SessionDate >= from && x.SessionDate <= to)
             .Select(x => new { x.TrainingGroupId, x.SessionDate, x.StartTime }).ToListAsync(ct);
         var keys = existing.Select(x => (x.TrainingGroupId, x.SessionDate, x.StartTime)).ToHashSet();
@@ -37,8 +38,8 @@ public sealed class TrainingSessionGenerator(FoundationDbContext db, TimeProvide
             }
         }
         await db.SaveChangesAsync(ct);
-        foreach (var session in sessions) await resources.Reserve(session, actorId);
-        await tx.CommitAsync(ct);
+        foreach (var session in sessions) await resources.Reserve(session, actorId, platformImportJob);
+        if (tx is not null) await tx.CommitAsync(ct);
         return created;
     }
 }

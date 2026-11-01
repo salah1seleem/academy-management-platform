@@ -6,6 +6,14 @@ const state={configured:true,hasCredential:true,hasOpenAttendance:false,requires
 const response=(x:unknown,status=200)=>Promise.resolve(new Response(JSON.stringify(x),{status}));
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function location(fail=false){vi.stubGlobal("isSecureContext",true);vi.stubGlobal("navigator",{geolocation:{getCurrentPosition:vi.fn((ok:(v:unknown)=>void,bad:()=>void)=>fail?bad():ok({timestamp:Date.now(),coords:{latitude:30.05,longitude:31.3,accuracy:5}}))}});}
+it("renders the unconfigured response without optional branch arrays and never offers a confirmation",async()=>{
+  global.fetch=vi.fn(()=>response({configured:false})) as typeof fetch;
+  render(<StaffVerifiedAttendance/>);
+  expect(await screen.findByText("يلزم إعداد التحقق الآمن من المسؤول؛ مسار المراجعة الإداري متاح.")).toBeVisible();
+  expect(screen.getByRole("heading",{name:"حضوري وانصرافي"})).toBeVisible();
+  expect(screen.queryByRole("button",{name:"تسجيل حضوري"})).not.toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.every(([,options])=>!options?.method)).toBe(true);
+});
 it("confirms server attendance only after location, operation-bound options and signed complete; no client biometric boolean",async()=>{
   location();let done=false;global.fetch=vi.fn(p=>String(p).includes("csrf")?response({token:"t"}):String(p).endsWith("/options")?response({purpose:"CheckIn",challengeId:"one",options:{challenge:"AQ"}}):String(p).endsWith("/complete")?(done=true,response({attendanceRecorded:true,attendanceId:"day",workPeriodId:"period",operation:"CheckIn"})):response({...state,hasOpenAttendance:done})) as typeof fetch;
   render(<StaffVerifiedAttendance/>);await screen.findByRole("option",{name:"فرع عرض اصطناعي"});fireEvent.change(screen.getByLabelText("فرع الحضور"),{target:{value:"site"}});fireEvent.click(screen.getByRole("button",{name:"تسجيل حضوري"}));expect(await screen.findByText("تم تسجيل حضورك بوقت الخادم المؤكد.")).toBeVisible();

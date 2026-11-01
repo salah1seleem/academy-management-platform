@@ -22,9 +22,9 @@ function setup() {
 }
 async function pending() {
   render(<PlayerAttendance sessionId="s" />); await screen.findByText(row.arabicName);
-  fireEvent.click(screen.getByRole("button", { name: "حاضر" })); fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" }));
+  fireEvent.change(screen.getByRole("combobox", { name: /^حضور / }),{target:{value:"Present"}}); fireEvent.click(screen.getByRole("button", { name: "حفظ الحضور" }));
   await screen.findByText("بانتظار المزامنة");
-  expect(screen.getByRole("button", { name: "حاضر" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: /^حضور / })).toBeDisabled();
   expect(screen.queryByText("تم حفظ الحضور بنجاح.")).not.toBeInTheDocument();
 }
 const retry = () => fireEvent.click(screen.getByRole("button", { name: "مراجعة وإعادة المزامنة" }));
@@ -56,7 +56,7 @@ for (const scenario of ["account", "permission", "expiry"] as const) it(`discard
 it("discard reloads remote status and does not retain a queue on remount", async () => {
   const api = setup(); await pending(); api.remote("Excused", 8);
   fireEvent.click(screen.getByRole("button", { name: "تجاهل المسودة وفتح كشف محدث" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "معتذر" })).toHaveAttribute("aria-pressed", "true"));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: /^حضور / })).toHaveValue("Excused"));
   cleanup(); render(<PlayerAttendance sessionId="s" />); await screen.findByText(row.arabicName); expect(screen.queryByText("بانتظار المزامنة")).not.toBeInTheDocument(); expect(api.count).toBe(1);
 });
 it("scrubs the roster and draft when navigation retains the page in browser history", async () => {
@@ -71,6 +71,6 @@ it("staff drafts use the same refresh-before-retry protection", async () => {
     return { ok: true, status: 200, json: async () => String(url).endsWith("/csrf") ? { token: "c" } : String(url).endsWith("/my-permissions") ? ["attendance.manage"] : String(url).endsWith("/correction-context") ? { canManageAttendance: true, draftScope: "scope", draftLease: "lease" } : [{ academyMembershipId: "coach", name: "مدرب مسودة اصطناعي", attendanceStatus: writes > 1 ? "Present" : "NotRecorded", version: writes > 1 ? 10 : 0 }] };
   }) as unknown as typeof fetch;
   render(<StaffAttendance sessionId="s" />); await screen.findByText("مدرب مسودة اصطناعي");
-  fireEvent.click(screen.getByRole("button", { name: "حاضر" })); fireEvent.click(screen.getByRole("button", { name: "حفظ حضور المدربين" }));
+  fireEvent.change(screen.getByRole("combobox", { name: /^حضور / }),{target:{value:"Present"}}); fireEvent.click(screen.getByRole("button", { name: "حفظ حضور المدربين" }));
   await screen.findByText("بانتظار المزامنة"); fail = false; retry(); await screen.findByText("تم حفظ حضور الجهاز الفني."); expect(writes).toBe(2);
 });

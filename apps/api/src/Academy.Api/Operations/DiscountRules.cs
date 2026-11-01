@@ -61,12 +61,18 @@ public static class DiscountRuleEndpoints
         });
         app.MapPost("/api/v1/people/registration-quote", async (RegistrationQuote body, CurrentTenant tenant, FoundationDbContext db, DiscountRules rules, ClaimsPrincipal principal) => {
             var t = (await tenant.ResolveAsync())!;
+            if (body.ExceptionalDiscount is not null && !await ManualEnrollmentDiscount.Allowed(db, t)) return Results.Forbid();
             var plan = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.PlanId && x.IsActive);
             if (plan is null || body.DiscountRuleId.HasValue && !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer && !db.VipRewards.Any(v=>v.DiscountRuleId==x.Id))) return Results.NotFound();
             if (body.BranchId.HasValue && (!await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.BranchId && x.IsActive) || !await db.SubscriptionPlans.TrainingOnly().ForBranch(body.BranchId.Value).AnyAsync(x => x.Id == plan.Id))) return Results.UnprocessableEntity(new { message = "الباقة غير منشورة لهذا الفرع." });
             var phone = EgyptPhoneNormalizer.Normalize(body.GuardianPhone);
             var guardian = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.ContactPhone == phone).Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
             var price = await rules.CalculateAsync(t.AcademyId, Guid.Empty, plan.Price, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), guardian, body.DiscountRuleId, plan, body.BranchId);
+            if (body.ExceptionalDiscount is not null) {
+                try { price = ManualEnrollmentDiscount.Apply(price, body.ExceptionalDiscount, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), DateTimeOffset.UtcNow); }
+                catch (Academy.Api.Finance.CashRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); }
+                if (price.FinalAmount == 0 && t.Role != AcademyRole.AcademyOwner) return Results.Problem(statusCode: 403, title: "الإعفاء الكامل من السداد يحتاج صلاحية المالك وفق السياسة الحالية.");
+            }
             static string Money(decimal value) => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
             return Results.Ok(new { originalAmount = Money(price.OriginalAmount), discountAmount = Money(price.DiscountAmount), finalAmount = Money(price.FinalAmount), price.DiscountReason, plan.Currency });
         }).RequireAuthorization(AcademyPermissions.PeopleManage).AddEndpointFilter<CsrfFilter>();
@@ -89,4 +95,4 @@ public sealed record RuleWrite(string ArabicName,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal? MaximumAmount = null,
     Guid? BranchId = null, Guid? SportId = null, Guid? SubscriptionPlanId = null, DateOnly? StartsOn = null, DateOnly? EndsOn = null, int Priority = 0, int? ExpectedRevision = null);
 public sealed record PlayerRuleWrite(Guid DiscountRuleId, bool IsActive);
-public sealed record RegistrationQuote(Guid PlanId, string? GuardianPhone, Guid? DiscountRuleId, Guid? BranchId = null);
+public sealed record RegistrationQuote(Guid PlanId, string? GuardianPhone, Guid? DiscountRuleId, Guid? BranchId = null, ExceptionalEnrollmentDiscount? ExceptionalDiscount = null);

@@ -78,7 +78,7 @@ class _NativeExternalAgreementsState extends State<NativeExternalAgreements> {
               subtitle: UiText(
                 '${a['counterpartyName']} · ${a['branch']}\nالمتبقي ${money(a['remaining'], a['currency'])}',
               ),
-              trailing: const Icon(Icons.chevron_left),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () => openPage(
                 context,
                 NativeExternalAgreementDetail(
@@ -88,22 +88,7 @@ class _NativeExternalAgreementsState extends State<NativeExternalAgreements> {
               ),
             ),
           ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton(
-              onPressed: page > 1 ? () => setState(() => page--) : null,
-              child: const UiText('السابق'),
-            ),
-            UiText('صفحة $page · ${d['count']} اتفاقات'),
-            TextButton(
-              onPressed: page * 25 < (d['count'] as num? ?? 0)
-                  ? () => setState(() => page++)
-                  : null,
-              child: const UiText('التالي'),
-            ),
-          ],
-        ),
+        const SizedBox.shrink(),
       ]);
     },
   );
@@ -159,7 +144,7 @@ class NativeExternalAgreementDetail extends StatelessWidget {
           for (final b in rows(d['bookings']))
             GCard(
               child: UiText(
-                '${b['resource']} · ${day(b['date'])}\n${textOf(b['startTime']).substring(0, 5)} — ${textOf(b['endTime']).substring(0, 5)} · ${b['state'] == 'Cancelled' ? 'ملغى' : 'محجوز'}',
+                '${b['resource']} · ${day(b['date'])}\n${trainingTimeRange(b['startTime'], b['endTime'])} · ${b['state'] == 'Cancelled' ? 'ملغى' : 'محجوز'}',
               ),
             ),
           const UiText(

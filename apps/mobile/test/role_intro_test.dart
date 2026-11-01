@@ -1,9 +1,12 @@
+import 'introduction_test_helpers.dart';
+
 import 'dart:async';
 
 import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:academy_mobile/core/theme/academy_brand.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/features/shared/role_intro_gate.dart';
+import 'package:academy_mobile/features/shared/academy_reveal.dart';
 import 'package:academy_mobile/features/shared/role_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -52,15 +55,18 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('Understand your money'), findsOneWidget);
+      expect(find.text('A clear view of your academy'), findsOneWidget);
       expect(
-        Directionality.of(t.element(find.text('Understand your money'))),
+        Directionality.of(t.element(find.text('A clear view of your academy'))),
         TextDirection.ltr,
       );
       await t.tap(find.text('Next'));
       await t.pumpAndSettle();
-      expect(find.text('Follow subscriptions'), findsOneWidget);
-      expect(find.text('Skip'), findsOneWidget);
+      expect(
+        find.text('Follow the details that make a difference'),
+        findsOneWidget,
+      );
+      expect(find.text('Skip'), findsNothing);
       expect(t.takeException(), isNull);
     },
   );
@@ -118,14 +124,26 @@ void main() {
     auth.dispose();
   });
   const titles = {
-    'Guardian': ['مواعيد ابنك قدامك', 'افهم رحلة تعلّمه', 'خدماتك بسهولة'],
-    'Coach': ['حصتك الجاية جاهزة', 'كل لاعب معروف', 'تقدّم يتشاف'],
-    'AcademyAdmin': [
-      'ابدأ بحصص الآن',
-      'سجّل بدون تكرار',
-      'طلباتك في مكان واحد',
+    'Guardian': [
+      'شوف تطور ابنك بوضوح',
+      'ابقَ قريبًا من رحلته',
+      'اشتراكه ومتابعته بسهولة',
     ],
-    'AcademyOwner': ['فلوسك واضحة', 'تابع الاشتراكات', 'قرارات من بياناتك'],
+    'Coach': [
+      'حصصك جاهزة أمامك',
+      'تابع تطور كل لاعب',
+      'حضور واضح، ومتابعة مستمرة',
+    ],
+    'AcademyAdmin': [
+      'يومك أوضح، وشغلك أسهل',
+      'كل اشتراك في وقته',
+      'من التسجيل إلى التدريب',
+    ],
+    'AcademyOwner': [
+      'صورة واضحة لأكاديميتك',
+      'تابع التفاصيل التي تصنع الفرق',
+      'تجربة تليق باسم أكاديميتك',
+    ],
   };
   for (final role in titles.keys) {
     for (final width in [360.0, 390.0, 430.0]) {
@@ -152,7 +170,7 @@ void main() {
           );
           await t.pumpAndSettle();
           expect(find.text(titles[role]![0]), findsOneWidget);
-          expect(find.text('تخطي'), findsOneWidget);
+          expect(find.text('تخطي'), findsNothing);
           await t.tap(find.text('التالي'));
           await t.pumpAndSettle();
           expect(find.text(titles[role]![1]), findsOneWidget);
@@ -164,7 +182,7 @@ void main() {
           await t.tap(find.text('التالي'));
           await t.pumpAndSettle();
           expect(find.text(titles[role]![2]), findsOneWidget);
-          await t.tap(find.text('ابدأ الآن'));
+          await t.tap(find.text('ابدأ'));
           await t.pumpAndSettle();
           expect(finished, 1);
           expect(t.takeException(), isNull);
@@ -187,7 +205,7 @@ void main() {
         ),
       );
       expect(find.text('أكاديميتك في مكان واحد'), findsOneWidget);
-      expect(find.text('حصتك الجاية جاهزة'), findsNothing);
+      expect(find.text('حصصك جاهزة أمامك'), findsNothing);
       expect(find.byIcon(Icons.pool_outlined), findsOneWidget);
       expect(find.byIcon(Icons.sports_soccer), findsNothing);
     },
@@ -200,9 +218,9 @@ void main() {
     final reopened = Appearance(storage: const FlutterSecureStorage());
     expect(await reopened.hasRoleIntro('Guardian', 'football'), isTrue);
     expect(await reopened.hasRoleIntro('Coach', 'football'), isFalse);
-    expect(await reopened.hasRoleIntro('Guardian', 'swimming'), isFalse);
+    expect(await reopened.hasRoleIntro('Guardian', 'swimming'), isTrue);
     final stored = await const FlutterSecureStorage().readAll();
-    expect(stored, {'academy.role-intro.1.Guardian.football': 'yes'});
+    expect(stored, {'academy.role-intro.2.local.Guardian': 'yes'});
     first.dispose();
     reopened.dispose();
   });
@@ -225,7 +243,12 @@ void main() {
           };
         }
         if (p.startsWith('/api/v1/page-help/')) {
-          return {'available': false, 'url': null};
+          return {
+            'available': false,
+            'url': null,
+            'role': 'Guardian',
+            'screen': p.split('/').last,
+          };
         }
         return [];
       });
@@ -248,42 +271,30 @@ void main() {
       );
       await t.pumpWidget(gate(const ValueKey('first')));
       await t.pumpAndSettle();
-      expect(find.text('مواعيد ابنك قدامك'), findsOneWidget);
-      expect(calls, ['/api/v1/academy/experience']);
+      expect(find.text('شوف تطور ابنك بوضوح'), findsOneWidget);
+      expect(calls.toSet(), {
+        '/api/v1/me/profile',
+        '/api/v1/academy/experience',
+      });
       expect(find.text('محتوى الدور'), findsNothing);
-      await t.tap(find.text('تخطي'));
+      await finishRoleIntroduction(t);
       await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('academy-reveal')), findsNothing);
+      expect(find.byType(AcademyReveal), findsNothing);
       expect(find.text('محتوى الدور'), findsOneWidget);
       expect(await prefs.hasRoleIntro('Guardian', 'football'), isTrue);
       await t.pumpWidget(gate(const ValueKey('reopened')));
       await t.pumpAndSettle();
       expect(find.byType(AcademyOnboarding), findsNothing);
-      await t.tap(find.text('المزيد'));
-      await t.pumpAndSettle();
-      await t.tap(find.text('فيديوهات شرح الصفحات'));
-      await t.pumpAndSettle();
-      expect(find.text('فيديوهات شرح الصفحات'), findsOneWidget);
+      // Guardian's approved four tabs expose contextual help in the header.
+      expect(find.byTooltip('شرح الصفحة بالفيديو'), findsNothing);
       expect(find.byType(AcademyOnboarding), findsNothing);
       replayMetadata.complete({
         'onboarding': {'sportTheme': 'football', 'features': []},
       });
       await t.pumpAndSettle();
       expect(calls.where((p) => p == '/api/v1/academy/experience').length, 1);
-      expect(find.text('مواعيد ابنك قدامك'), findsNothing);
-      await t.tap(find.byTooltip('شرح الصفحة بالفيديو').first);
-      await t.pumpAndSettle();
-      expect(
-        find.text('لم تضف الأكاديمية فيديو لهذه الصفحة بعد.'),
-        findsOneWidget,
-      );
-      await t.tap(find.text('حسنًا'));
-      await t.pumpAndSettle();
-      expect(find.byType(AcademyOnboarding), findsNothing);
-      expect(await prefs.hasRoleIntro('Guardian', 'football'), isTrue);
-      expect(
-        calls.every((p) => !p.contains('/people/') && !p.contains('/reports/')),
-        isTrue,
-      );
+      expect(find.text('شوف تطور ابنك بوضوح'), findsNothing);
       await t.pumpWidget(const SizedBox());
       brand.dispose();
       prefs.dispose();
@@ -305,7 +316,7 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      await t.tap(find.text('تخطي'));
+      await finishRoleIntroduction(t);
       await t.pumpAndSettle();
       expect(find.textContaining('لم تُحفظ حالة التعريف'), findsOneWidget);
       expect(await prefs.hasRoleIntro('Coach', 'general'), isFalse);
@@ -316,6 +327,9 @@ void main() {
       );
       await t.tap(find.text('متابعة لهذه الجلسة فقط'));
       await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('academy-reveal')), findsNothing);
+      expect(find.byType(AcademyReveal), findsNothing);
+      expect(await prefs.hasRoleIntro('Coach', 'general'), isFalse);
       expect(find.text('متابعة'), findsOneWidget);
       await t.pumpWidget(const SizedBox());
       prefs.dispose();

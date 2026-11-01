@@ -112,20 +112,7 @@ class ProviderQuarantineContent extends StatelessWidget {
           ],
         ),
       ),
-    Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        TextButton(
-          onPressed: previous,
-          child: UiText(localized(context, 'السابق', 'Previous')),
-        ),
-        UiText('${_count(data['page'])}'),
-        TextButton(
-          onPressed: next,
-          child: UiText(localized(context, 'التالي', 'Next')),
-        ),
-      ],
-    ),
+    const SizedBox.shrink(),
   ]);
   String _reason(BuildContext context, String code) {
     final labels = <String, List<String>>{

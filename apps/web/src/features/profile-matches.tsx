@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { MatchResultCard } from "../components/match-result-card";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
-import { ErrorState, LoadingState, StatusBadge } from "../components/dashboard-shell";
+import { ErrorState, LoadingState } from "../components/dashboard-shell";
 
 type Match = { id: string; team: string; opponent: string; tournament: string; matchDate: string; startTime: string; venue: string; status: string; ourScore: number | null; opponentScore: number | null; coachAssignmentSource?:string;coachName?:string };
 
@@ -44,9 +45,6 @@ export function ProfileMatches({ playerId, coachMembershipId }: { playerId: stri
       <label>الحالة<select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}><option value="">كل الحالات</option><option value="Published">منشورة</option><option value="Completed">منتهية بنتيجة</option><option value="Cancelled">ملغاة</option>{coachMembershipId && <option value="Draft">مسودة</option>}</select></label>
       <button type="button" onClick={() => setFilters({ from: "", to: "", status: "" })}>مسح الفلاتر · كل المواعيد</button>
     </div>
-    {result?.key === key && result.error ? <><ErrorState message={result.error} /><button type="button" onClick={() => setRevision(v => v + 1)}>إعادة المحاولة</button></> : !items ? <LoadingState /> : items.length ? items.map(m => <article key={m.id} className="payment-queue-row">
-      <div><strong>{m.team} × {m.opponent}</strong><small>{m.tournament} · {m.matchDate} · {m.startTime.slice(0, 5)}</small><small>{m.venue}</small>{m.coachAssignmentSource==="Confirmed"?<small>مدرب المباراة: {m.coachName}</small>:<small>إسناد قديم غير موثق — من الفريق الحالي لحين المراجعة</small>}{m.ourScore != null && <small>النتيجة {m.ourScore} — {m.opponentScore}</small>}</div>
-      <StatusBadge status={m.status} /><Link href={`/dashboard/matches?matchId=${encodeURIComponent(m.id)}`}>عرض المباراة</Link>
-    </article>) : <p>لا توجد مباريات تخص هذا الملف ضمن الفلاتر.</p>}
+    {result?.key === key && result.error ? <><ErrorState message={result.error} /><button type="button" onClick={() => setRevision(v => v + 1)}>إعادة المحاولة</button></> : !items ? <LoadingState /> : items.length ? items.map(m => <MatchResultCard key={m.id} match={m}>{m.coachAssignmentSource==="Confirmed"?<span>{m.coachName}</span>:<span>{"\u0625\u0633\u0646\u0627\u062f \u0642\u062f\u064a\u0645 \u063a\u064a\u0631 \u0645\u0648\u062b\u0642 \u2014 \u0645\u0646 \u0627\u0644\u0641\u0631\u064a\u0642 \u0627\u0644\u062d\u0627\u0644\u064a \u0644\u062d\u064a\u0646 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629"}</span>}<Link href={`/dashboard/matches?matchId=${encodeURIComponent(m.id)}`}>{"\u0639\u0631\u0636 \u0627\u0644\u0645\u0628\u0627\u0631\u0627\u0629"}</Link></MatchResultCard>) : <p>لا توجد مباريات تخص هذا الملف ضمن الفلاتر.</p>}
   </section>;
 }

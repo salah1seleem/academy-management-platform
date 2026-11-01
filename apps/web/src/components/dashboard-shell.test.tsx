@@ -1,22 +1,66 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminDataTable, DashboardShell, FilterToolbar, PageHeader, RowActions, SearchInput, StatusBadge } from "./dashboard-shell";
 
-const replace = vi.fn();
+const replace = vi.fn(), push = vi.fn();
 let currentPath = "/dashboard/players";
-vi.mock("next/navigation", () => ({ usePathname: () => currentPath, useRouter: () => ({ replace }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => currentPath, useRouter: () => ({ replace, push }) }));
 
 beforeEach(() => { currentPath = "/dashboard/players"; replace.mockReset(); global.fetch = vi.fn(input => Promise.resolve(new Response(JSON.stringify(String(input).includes("my-permissions") ? ["people.manage", "structure.manage", "payment.read", "subscription.plan.manage", "evaluation.read", "evaluation.criteria.manage"] : { displayName: "منى السيد", role: "AcademyAdmin", academyName: "أكاديمية النجوم" }), { status: 200 }))) as typeof fetch; });
 afterEach(cleanup);
 
 describe("dashboard navigation governance", () => {
+  it("identifies personal account screens and does not mark Home as the active destination", async () => {
+    currentPath="/dashboard/account/attendance";
+    render(<DashboardShell><PageHeader title="حضوري وانصرافي" context="الحساب"/></DashboardShell>);
+    await screen.findAllByText("منى السيد");
+    const sidebar=screen.getByRole("complementary",{name:"التنقل الرئيسي"});
+    expect(within(sidebar).getByRole("link",{name:"الرئيسية"})).not.toHaveAttribute("aria-current");
+    expect(within(sidebar).getByRole("link",{name:"حضوري الوظيفي"})).toHaveAttribute("aria-current","page");
+    expect(sidebar.querySelector(".sidebar-security-link")).toHaveAttribute("open");
+  });
+  it("keeps optional page guidance behind an explicit disclosure while errors remain visible", () => {
+    render(<><PageHeader title="مراجعة ملف" context="الأعضاء" description="شرح اختياري للصفحة"/><p role="alert">راجع القيمة قبل الاعتماد</p></>);
+    expect(screen.getByText("شرح اختياري للصفحة")).not.toBeVisible();
+    fireEvent.click(screen.getByText("إرشادات الصفحة"));
+    expect(screen.getByText("شرح اختياري للصفحة")).toBeVisible();
+    expect(screen.getByRole("alert")).toBeVisible();
+  });
+  it("offers only permitted destinations in direct navigation and follows the chosen route", async () => {
+    render(<DashboardShell><PageHeader title="اللاعبون" context="الأعضاء"/></DashboardShell>);
+    await screen.findAllByText("منى السيد");
+    const jump=screen.getByRole("combobox",{name:"انتقل مباشرة إلى"});
+    expect(within(jump).queryByRole("option",{name:"الحسابات والماليات"})).not.toBeInTheDocument();
+    expect(within(jump).queryByRole("option",{name:"الصلاحيات"})).not.toBeInTheDocument();
+    expect(within(jump).getByRole("option",{name:"اللاعبون"})).toHaveValue("/dashboard/players");
+    fireEvent.change(jump,{target:{value:"/dashboard/guardians"}});
+    expect(push).toHaveBeenCalledWith("/dashboard/guardians");
+    expect(screen.getByRole("link",{name:"العودة إلى الرئيسية"})).toHaveAttribute("href","/dashboard");
+  });
+
+  it("keeps a directly opened financial report inside its finance workspace", async () => {
+    currentPath="/dashboard/reports/financial";
+    global.fetch=vi.fn(async()=>Response.json({displayName:"مالك عرض",role:"AcademyOwner"}));
+    render(<DashboardShell><div>تقرير التحصيل</div></DashboardShell>);
+    const rail=screen.getByRole("complementary",{name:"التنقل الرئيسي"});
+    expect(rail).toHaveAttribute("data-workspace","finance");
+    await screen.findAllByText("مالك عرض");
+    expect(within(rail).getByRole("link",{name:"الرئيسية"})).not.toHaveAttribute("aria-current");
+  });
+  it("keeps the shared inbox discoverable without granting template management", async () => {
+    currentPath="/dashboard/notifications";
+    render(<DashboardShell><div>الوارد المصرح به</div></DashboardShell>);
+    expect(await screen.findByRole("link",{name:"التنبيهات"})).toHaveAttribute("href","/dashboard/notifications");
+    expect(screen.getByRole("link",{name:"التنبيهات"})).toHaveAttribute("aria-current","page");
+  });
+
   it("highlights the authorized help entry rather than Home and closes the mobile drawer", async () => {
     currentPath = "/dashboard/help/packages";
     global.fetch = vi.fn(async input => Response.json(String(input).includes("help/availability") ? { available: true } : String(input).includes("my-permissions") ? [] : { displayName: "مالك اختبار", role: "AcademyOwner" }));
     render(<DashboardShell><div>دليل الباقة</div></DashboardShell>);
     const link = await screen.findByRole("link", { name: "دليل الاستخدام" });
     expect(link).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "الرئيسية" })).not.toHaveAttribute("aria-current");
+    expect(within(screen.getByRole("complementary", {name:"التنقل الرئيسي"})).getByRole("link", { name: "الرئيسية" })).not.toHaveAttribute("aria-current");
     fireEvent.click(screen.getByRole("button", { name: "فتح القائمة" }));
     link.addEventListener("click", e => e.preventDefault()); fireEvent.click(link);
     expect(screen.getByRole("button", { name: "فتح القائمة" })).toBeVisible();
@@ -32,6 +76,31 @@ describe("dashboard navigation governance", () => {
     expect(players).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(screen.getByRole("button", { name: "عمليات الأكاديمية" }));
     expect(screen.getByRole("button", { name: "عمليات الأكاديمية" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opens a lower module without collapsing the section above it or reordering headings", async () => {
+    global.fetch = vi.fn(async () => Response.json({ displayName: "مالك تمرير", role: "AcademyOwner" }));
+    render(<DashboardShell><div>المحتوى</div></DashboardShell>);
+    await screen.findAllByText("مالك تمرير");
+    const players = await screen.findByRole("button", { name: "الأعضاء والاشتراكات" });
+    const followups = screen.getByRole("button", { name: "المتابعات والطلبات" });
+    const before = screen.getAllByRole("button").map(button => button.textContent);
+    fireEvent.click(followups);
+    expect(players).toHaveAttribute("aria-expanded", "true");
+    expect(followups).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(before);
+    fireEvent.click(followups);
+    expect(players).toHaveAttribute("aria-expanded", "true");
+    expect(followups).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("removes renewal opportunities from academic operations and the quick jump", async () => {
+    global.fetch = vi.fn(async () => Response.json({ displayName: "مالك اختبار", role: "AcademyOwner" }));
+    render(<DashboardShell><div>المحتوى</div></DashboardShell>);
+    await screen.findAllByText("مالك اختبار");
+    fireEvent.click(screen.getByRole("button", { name: "عمليات الأكاديمية" }));
+    expect(screen.queryByText("فرص التجديد")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "تجديد اشتراك" })).toHaveAttribute("href", "/dashboard/subscriptions/renew/new");
   });
 
   it("keeps the create action visible and row actions execute real links or callbacks", () => {

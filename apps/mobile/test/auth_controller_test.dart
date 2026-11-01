@@ -69,6 +69,63 @@ Map<String, dynamic> credentials({String suffix = 'one', bool multi = false}) =>
     };
 
 void main() {
+  test(
+    'Arabic and Persian OTP digits preserve the six-digit server contract',
+    () async {
+      for (final code in ['٢٤٦٨١٠', '۲۴۶۸۱۰', '246810']) {
+        final api = FakeApi((m, p, b, t) async {
+          expect((b as Map)['code'], '246810');
+          return credentials();
+        });
+        final auth = AuthController(api, MemoryStore());
+        await auth.verify('01000003130', 'challenge', code);
+        expect(auth.session?.selected?.role, 'Guardian');
+        auth.dispose();
+      }
+    },
+  );
+
+  test('new role is announced only when the selected session can immediately read its own Home', () async {
+    final auth = AuthController(
+      FakeApi((m, p, b, t) async {
+        if (p.endsWith('/select-role')) {
+          return {
+            ...credentials(suffix: 'owner', multi: true),
+            'membershipId': 'owner',
+          };
+        }
+        if (p == '/owner-home') return {'scope': 'another'};
+        return credentials(multi: true);
+      }),
+      MemoryStore(),
+    );
+    await auth.verify('phone', 'challenge', 'code');
+    Object? failure, value;
+    Future<void>? read;
+    var announcedBusy = false;
+    auth.addListener(() {
+      if (auth.session?.membershipId == 'owner' && read == null) {
+        announcedBusy = auth.busy;
+        read = auth
+            .request('GET', '/owner-home')
+            .then<void>(
+              (v) {
+                value = v;
+              },
+              onError: (Object e) {
+                failure = e;
+              },
+            );
+      }
+    });
+    await auth.selectRole('owner');
+    await read;
+    expect(announcedBusy, false);
+    expect(failure, isNull);
+    expect(value, {'scope': 'another'});
+    auth.dispose();
+  });
+
   test('A late data response cannot leak across logout', () async {
     final response = Completer<Object?>();
     final auth = AuthController(

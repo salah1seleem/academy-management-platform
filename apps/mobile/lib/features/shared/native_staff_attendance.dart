@@ -302,10 +302,14 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
             selected = sites.where((s) => s['id'] == branch).firstOrNull;
         return gList([
           const GCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: ExpansionTile(
+              title: UiText('كيف يُثبت حضورك؟'),
+              childrenPadding: EdgeInsetsDirectional.only(
+                start: 16,
+                end: 16,
+                bottom: 16,
+              ),
               children: [
-                Heading('حضور وظيفي، بوقت مؤكد'),
                 UiText(
                   'الموقع عند الضغط فقط، ثم توقيع يتحقق منه الخادم. لا نخزن بصمات أو صور وجوه؛ قد يستخدم الجهاز بصمة أو رمزًا. لا يضمن التوقيع سلامة GPS أو هاتفًا ماديًا وحيدًا.',
                 ),
@@ -319,7 +323,7 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
               d?['nativeIosOriginConfigured'] != true ||
               d?['rpId'] != flow.provider.rpId)
             const EmptyMessage(
-              'يلزم إعداد نطاق HTTPS مرتبط بهذا التطبيق ووسيلة تحقق. الإعداد المحلي الحالي لا يكفي للتوقيع الأصلي؛ المراجعة الإدارية متاحة.',
+              'إعداد الحضور الآمن غير مكتمل. يمكنك طلب إثبات حضور للمراجعة أو الرجوع للإدارة.',
             ),
           if (d?['profileMissing'] == true)
             const EmptyMessage('يلزم ربط ملف موظف فعال بحسابك.'),
@@ -410,7 +414,7 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
             label: const UiText('تحديث حالة الحضور'),
           ),
           GLink(
-            'فترات عملي',
+            'سجل الحضور',
             Icons.history,
             () => openPage(context, StaffWorkPeriodsPage(auth: widget.auth)),
           ),

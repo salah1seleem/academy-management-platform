@@ -12,7 +12,7 @@ import 'package:integration_test/integration_test.dart';
 import 'support/role_intro.dart';
 
 void main() {
-  final binding=IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
     'V4 owner home and real external receipt use the same isolated authorized API',
     (tester) async {
@@ -62,7 +62,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ملخص الأكاديمية'), findsWidgets);
       expect(tester.takeException(), isNull);
-      if(const bool.fromEnvironment('CAPTURE_VISUALS'))await binding.takeScreenshot('phase-vfour-home');
+      if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+        await binding.takeScreenshot('phase-vfour-home');
+      }
       final contracts = obj(
         await auth.request(
           'GET',
@@ -105,7 +107,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('لا يخصم من راتب الموظف'), findsOneWidget);
       expect(tester.takeException(), isNull);
-      if(const bool.fromEnvironment('CAPTURE_VISUALS'))await binding.takeScreenshot('phase-vfour-agreement');
+      if (const bool.fromEnvironment('CAPTURE_VISUALS')) {
+        await binding.takeScreenshot('phase-vfour-agreement');
+      }
     },
   );
 }

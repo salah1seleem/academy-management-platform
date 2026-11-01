@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'experience_ui.dart';
+import 'operation_design.dart';
 
 class MatchExperience extends StatefulWidget {
   const MatchExperience({super.key, required this.auth, required this.items});
@@ -18,6 +20,7 @@ class _MatchExperienceState extends State<MatchExperience> {
   @override
   Widget build(BuildContext context) {
     final owner = widget.auth.session?.selected?.role == 'AcademyOwner';
+    final guardian = widget.auth.session?.selected?.role == 'Guardian';
     final branches = <String, Json>{};
     for (final m in widget.items) {
       if (m['branchId'] != null) {
@@ -81,31 +84,59 @@ class _MatchExperienceState extends State<MatchExperience> {
             team = '';
           }),
         ),
-      ScopeBranchTabs(
-        items: teams.values.toList(),
-        selected: team,
-        allLabel: 'كل الفرق',
-        onSelected: (v) => setState(() => team = v),
-      ),
-      ScopeDateTiles(
-        from: from,
-        to: to,
-        onChanged: (a, b) => setState(() {
-          from = a;
-          to = b;
-        }),
-        onClear: () => setState(() {
-          from = '';
-          to = '';
-          branch = '';
-          team = '';
-        }),
-      ),
+      if (guardian)
+        ExpansionTile(
+          title: const UiText('تصفية المباريات'),
+          leading: const Icon(Icons.tune_rounded),
+          children: [
+            ScopeBranchTabs(
+              items: teams.values.toList(),
+              selected: team,
+              allLabel: 'كل الفرق',
+              onSelected: (v) => setState(() => team = v),
+            ),
+            ScopeDateTiles(
+              from: from,
+              to: to,
+              onChanged: (a, b) => setState(() {
+                from = a;
+                to = b;
+              }),
+              onClear: () => setState(() {
+                from = '';
+                to = '';
+                team = '';
+              }),
+            ),
+          ],
+        ),
+      if (!guardian)
+        ScopeBranchTabs(
+          items: teams.values.toList(),
+          selected: team,
+          allLabel: 'كل الفرق',
+          onSelected: (v) => setState(() => team = v),
+        ),
+      if (!guardian)
+        ScopeDateTiles(
+          from: from,
+          to: to,
+          onChanged: (a, b) => setState(() {
+            from = a;
+            to = b;
+          }),
+          onClear: () => setState(() {
+            from = '';
+            to = '';
+            branch = '';
+            team = '';
+          }),
+        ),
       if (team.isNotEmpty) ...[
         ExperienceSection(
           textOf(teams[team]?['arabicName']),
           Icons.shield_outlined,
-          color: ExperienceColors.green,
+          color: ExperienceColors.positive(context),
         ),
         GCard(
           child: Wrap(
@@ -149,10 +180,10 @@ class _MatchExperienceState extends State<MatchExperience> {
                     children: [
                       UiText(
                         '${s.$2}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
-                          color: ExperienceColors.green,
+                          color: ExperienceColors.positive(context),
                         ),
                       ),
                       UiText(s.$1, style: const TextStyle(fontSize: 10)),
@@ -163,10 +194,10 @@ class _MatchExperienceState extends State<MatchExperience> {
           ),
         ),
       ],
-      const ExperienceSection(
+      ExperienceSection(
         'المباريات القادمة',
         Icons.event_available_rounded,
-        color: ExperienceColors.green,
+        color: ExperienceColors.positive(context),
       ),
       if (upcoming.isEmpty)
         const EmptyMessage('لا توجد مباريات قادمة في النطاق المختار.'),
@@ -186,79 +217,227 @@ class MatchResultCard extends StatelessWidget {
   const MatchResultCard({super.key, required this.data});
   final Json data;
   @override
-  Widget build(BuildContext context) => GCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        UiText(
-          textOf(data['tournament']),
-          style: const TextStyle(fontSize: 10, color: ExperienceColors.blue),
-        ),
-        const SizedBox(height: 10),
-        Row(
+  Widget build(BuildContext context) {
+    final date = DateTime.tryParse(day(data['matchDate']));
+    final our = data['ourScore'], opponent = data['opponentScore'];
+    final completed =
+        data['status'] == 'Completed' && our is num && opponent is num;
+    final cancelled = data['status'] == 'Cancelled';
+    final state = cancelled
+        ? 'ملغاة'
+        : completed
+        ? (our > opponent
+              ? 'فوز'
+              : our < opponent
+              ? 'خسارة'
+              : 'تعادل')
+        : data['status'] == 'ResultDraft'
+        ? 'النتيجة قيد المراجعة'
+        : 'قادمة';
+    final icon = cancelled
+        ? Icons.cancel_outlined
+        : completed
+        ? (our > opponent
+              ? Icons.check_circle_outline
+              : our < opponent
+              ? Icons.arrow_downward
+              : Icons.remove)
+        : Icons.schedule;
+    final colors = Theme.of(context).colorScheme;
+    final accent = cancelled || completed && our < opponent
+        ? colors.error
+        : completed && our > opponent
+        ? ExperienceColors.positive(context)
+        : completed
+        ? ExperienceColors.warning(context)
+        : colors.onSurfaceVariant;
+    final time = textOf(data['startTime']);
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    Widget team(String name, {bool ours = false}) => Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              if (ours)
+                const AcademyCrest(size: 40)
+              else
+                Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: colors.outlineVariant),
+                  ),
+                  child: UiText(
+                    name.isEmpty ? 'ف' : name.characters.take(2).toString(),
+                    style: const TextStyle(fontSize: 9),
+                  ),
+                ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Tooltip(
+                  message: name,
+                  child: UiText(
+                    name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    semanticsLabel: name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: UiText(
+              '${(ours ? our : opponent) ?? '—'}',
+              textDirection: TextDirection.ltr,
+              semanticsLabel:
+                  '$name: ${(ours ? our : opponent) ?? 'لم تسجل نتيجة'}',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: accent,
+              ),
+              maxLines: 1,
+              softWrap: false,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Theme(
+      data: operationTheme(context),
+      child: GCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: UiText(
-                textOf(data['team']),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 60,
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  color: colors.primary.withValues(alpha: .12),
+                  child: Column(
+                    children: [
+                      UiText(
+                        date == null ? '—' : '${date.day}',
+                        style: const TextStyle(
+                          fontSize: 23,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      UiText(
+                        date == null ? '' : months[date.month - 1],
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      UiText(
+                        time.length >= 5 ? time.substring(0, 5) : time,
+                        textDirection: TextDirection.ltr,
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      UiText(
+                        textOf(data['tournament']),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      UiText(
+                        '${data['venue']} · ${data['branch'] ?? ''}',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      if (data['coachAssignmentSource'] == 'Confirmed' &&
+                          data['coachName'] != null)
+                        UiText(
+                          'مدرب المباراة: ${data['coachName']}',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: accent.withValues(alpha: .5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, color: accent, size: 12),
+                      const SizedBox(width: 3),
+                      UiText(
+                        state,
+                        style: TextStyle(fontSize: 10, color: accent),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  team(textOf(data['team']), ours: true),
+                  const SizedBox(width: 24, child: Center(child: UiText('×'))),
+                  team(textOf(data['opponent'])),
+                ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: ExperienceColors.green.withValues(alpha: .1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: UiText(
-                data['status'] == 'Completed'
-                    ? '${data['ourScore']} — ${data['opponentScore']}'
-                    : '×',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: ExperienceColors.green,
+            if (data['participation'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: UiText(
+                  data['participation'] == 'Bench'
+                      ? 'المشاركة: بديل'
+                      : 'المشاركة: لاعب',
+                  style: const TextStyle(fontSize: 11),
                 ),
               ),
-            ),
-            Expanded(
-              child: UiText(
-                textOf(data['opponent']),
-                textAlign: TextAlign.end,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
+            if (data['coachAssignmentSource'] == 'LegacyCurrentTeam')
+              const UiText(
+                'إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.',
+                style: TextStyle(fontSize: 10),
               ),
-            ),
+            if (data['notes'] != null)
+              UiText(
+                textOf(data['notes']),
+                style: const TextStyle(fontSize: 11),
+              ),
           ],
         ),
-        const SizedBox(height: 12),
-        UiText(
-          '${day(data['matchDate'])} · ${textOf(data['startTime']).substring(0, 5)}',
-          style: const TextStyle(fontSize: 11),
-        ),
-        UiText(
-          '${data['venue']} · ${data['branch'] ?? ''}',
-          style: const TextStyle(fontSize: 10),
-        ),
-        if (data['status'] == 'Cancelled')
-          const UiText('ملغاة', style: TextStyle(color: ExperienceColors.red)),
-        if (data['participation'] != null)
-          UiText(
-            data['participation'] == 'Bench'
-                ? 'المشاركة: بديل'
-                : 'المشاركة: لاعب',
-          ),
-        if (data['coachAssignmentSource'] == 'LegacyCurrentTeam')
-          const UiText('إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.'),
-        if (data['coachAssignmentSource'] == 'Confirmed' &&
-            data['coachName'] != null)
-          UiText('مدرب المباراة: ${data['coachName']}'),
-        if (data['notes'] != null) UiText(textOf(data['notes'])),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

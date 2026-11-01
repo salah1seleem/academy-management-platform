@@ -6,7 +6,8 @@ import 'dart:typed_data';
 class ApiFailure implements Exception {
   final int status;
   final String message;
-  const ApiFailure(this.status, this.message);
+  final String? code;
+  const ApiFailure(this.status, this.message, {this.code});
   @override
   String toString() => message; // Never include response bodies, credentials or URLs.
 }
@@ -66,7 +67,18 @@ abstract interface class AssetTransport {
   );
 }
 
-class HttpApiTransport implements ApiTransport, AssetTransport {
+abstract interface class WorkbookTransport {
+  Future<Object?> importWorkbook(
+    Uint8List bytes,
+    bool commit,
+    Map<String, String> fields,
+    String token, {
+    String? idempotencyKey,
+  });
+}
+
+class HttpApiTransport
+    implements ApiTransport, AssetTransport, WorkbookTransport {
   final AppConfig config;
   final HttpClient _client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 12);
@@ -112,7 +124,12 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
           400 => 'راجع البيانات المدخلة وحاول مجددًا.',
           401 => 'انتهت الجلسة أو تعذر التحقق من بيانات الدخول.',
           403 => 'ليس لديك صلاحية لهذا الإجراء.',
-          409 => 'تغيرت البيانات. حدّث الصفحة قبل المحاولة.',
+          409 =>
+            evaluationConflictMessage(raw) ??
+                'تغيرت البيانات. حدّث الصفحة قبل المحاولة.',
+          422 =>
+            registrationValidationMessage(path, raw) ??
+                'راجع القيم وشروط الإجراء لهذا السجل قبل المحاولة.',
           429 => 'محاولات كثيرة. انتظر قليلًا قبل المحاولة.',
           501 => 'خدمة رسائل التحقق الحقيقية غير مفعلة بعد.',
           _ => 'تعذر تنفيذ الطلب الآن. حاول لاحقًا.',
@@ -144,7 +161,13 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
           '/api/v1/reports/financial/export',
           '/api/v1/reports/attendance/export',
         ].contains(reportPath);
+    final workbook = const [
+      '/api/v1/people/import/connected-template',
+      '/api/v1/people/import/connected-sample',
+      '/api/v1/people/import/template',
+    ].contains(path);
     if (!reportExport &&
+        !workbook &&
         path != '/api/v1/academy/branding/logo' &&
         !RegExp(
           r'^/api/v1/help/lessons/[a-z0-9-]+/media/[a-fA-F0-9-]{36}/(video|thumbnail)$',
@@ -245,7 +268,15 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
     final boundary = 'academy-${DateTime.now().microsecondsSinceEpoch}';
     try {
       final request = await _client
-          .postUrl(config.api.resolve('/api/v1/assets/upload'))
+          .postUrl(
+            config.api.resolve(
+              fields['purpose'] == 'News'
+                  ? '/api/v1/content/news/image'
+                  : fields['purpose'] == 'SelfPhoto'
+                  ? '/api/v1/me/profile/photo'
+                  : '/api/v1/assets/upload',
+            ),
+          )
           .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
@@ -296,5 +327,157 @@ class HttpApiTransport implements ApiTransport, AssetTransport {
         'انتهت مهلة رفع الملف. حدّث الطلب قبل المحاولة.',
       );
     }
+  }
+
+  @override
+  Future<Object?> importWorkbook(
+    Uint8List bytes,
+    bool commit,
+    Map<String, String> fields,
+    String token, {
+    String? idempotencyKey,
+  }) async {
+    const allowed = {
+      'ExpectedFileHash',
+      'ExpectedReferenceStamp',
+      'GuardianLinksApproved',
+      'OpeningBalancesApproved',
+      'AcceptFinancialReview',
+      'GuardianResolutions',
+    };
+    if (bytes.isEmpty ||
+        bytes.length > 5 * 1024 * 1024 ||
+        fields.keys.any((key) => !allowed.contains(key)) ||
+        fields.values.any((value) => value.length > 256 * 1024) ||
+        commit &&
+            (idempotencyKey == null ||
+                !RegExp(r'^[a-zA-Z0-9_-]{8,100}$').hasMatch(idempotencyKey))) {
+      throw const ApiFailure(
+        422,
+        'راجع ملف XLSX ضمن5ميجابايت والموافقة على المعاينة.',
+      );
+    }
+    final boundary = 'academy-xlsx-${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      final request = await _client
+          .postUrl(
+            config.api.resolve(
+              '/api/v1/people/import/${commit ? 'commit' : 'preview'}',
+            ),
+          )
+          .timeout(const Duration(seconds: 20));
+      request.followRedirects = false;
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'multipart/form-data; boundary=$boundary',
+      );
+      if (idempotencyKey != null) {
+        request.headers.set('Idempotency-Key', idempotencyKey);
+      }
+      for (final field in fields.entries) {
+        request.add(
+          utf8.encode(
+            '--$boundary\r\nContent-Disposition: form-data; name="${field.key}"\r\n\r\n${field.value}\r\n',
+          ),
+        );
+      }
+      request.add(
+        utf8.encode(
+          '--$boundary\r\nContent-Disposition: form-data; name="file"; filename="academy-import.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n',
+        ),
+      );
+      request.add(bytes);
+      request.add(utf8.encode('\r\n--$boundary--\r\n'));
+      final response = await request.close().timeout(
+        const Duration(seconds: 90),
+      );
+      final body = BytesBuilder();
+      await for (final chunk in response.timeout(const Duration(seconds: 30))) {
+        body.add(chunk);
+        if (body.length > 8 * 1024 * 1024) {
+          throw const ApiFailure(
+            413,
+            'نتيجة الملف أكبر من المسموح. راجع حجم الدفعة.',
+          );
+        }
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiFailure(response.statusCode, switch (response.statusCode) {
+          401 => 'انتهت الجلسة. سجل الدخول وراجع الدفعة قبل إعادة التأكيد.',
+          403 => 'ليست لديك صلاحية استيراد هذه البيانات ضمن نطاقك.',
+          409 => 'تغيرت المعاينة أو الروابط. راجع الدفعة والملف قبل المحاولة.',
+          413 => 'ارفع ملف XLSX ضمن5ميجابايت.',
+          422 => 'راجع القالب والموافقات والبيانات المطلوبة قبل الاعتماد.',
+          429 => 'محاولات كثيرة. انتظر قليلًا ثم راجع حالة الدفعة.',
+          _ => 'تعذر تأكيد نتيجة الاستيراد. راجع الدفعات قبل إعادة المحاولة.',
+        });
+      }
+      return jsonDecode(utf8.decode(body.takeBytes()));
+    } on SocketException {
+      throw const ApiFailure(0, 'تعذر الاتصال. لم يُعَد الاستيراد تلقائيًا.');
+    } on TimeoutException {
+      throw const ApiFailure(
+        0,
+        'انتهت مهلة الاستيراد. راجع الدفعة أو أعد تأكيد الطلب نفسه.',
+      );
+    } on FormatException {
+      throw const ApiFailure(
+        0,
+        'لم نتأكد من نتيجة الملف. راجع الدفعة قبل المحاولة.',
+      );
+    } on HttpException {
+      throw const ApiFailure(
+        0,
+        'تعذر إكمال رفع الملف. راجع الدفعة قبل المحاولة.',
+      );
+    }
+  }
+}
+
+/// Only this first-party registration allowlist can replace the generic error.
+/// Never display arbitrary HTTP bodies, HTML, exception text or hidden metadata.
+String? registrationValidationMessage(String path, String raw) {
+  if (path != '/api/v1/people/registrations' &&
+      path != '/api/v1/people/registration-quote') {
+    return null;
+  }
+  try {
+    final v = jsonDecode(raw);
+    if (v is! Map<String, dynamic>) return null;
+    final message = v['message'] ?? v['title'];
+    const safe = {
+      'عمر اللاعب غير مناسب للمجموعة.': 'تاريخ ميلاد اللاعب لا يناسب المجموعة المختارة. اختر مجموعة مناسبة أو أكمل دون مجموعة.',
+      'تاريخ الميلاد لا يمكن أن يكون في المستقبل.':
+          'اختر تاريخ ميلاد صحيحًا لا يتجاوز اليوم.',
+      'المجموعة لا تطابق الفرع والرياضة المختارين.':
+          'اختر مجموعة من نفس الفرع والرياضة أو أكمل دون مجموعة.',
+      'اختر باقة فعالة مطابقة للرياضة والفرع.': 'اختر باقة فعالة مطابقة للفرع والرياضة ونوع التدريب. الخاص وشبه الخاص يحتاجان مجموعة مناسبة.',
+      'راجع نوع الخصم وقيمته وسببه؛ النسبة حتى 100 والمبلغ لا يتجاوز السعر الأصلي.':
+          'راجع قيمة الخصم: النسبة حتى 100% والمبلغ لا يتجاوز السعر الأصلي.',
+    };
+    return safe[message];
+  } catch (_) {
+    return null;
+  }
+}
+
+String? evaluationConflictMessage(String raw) {
+  try {
+    final value = jsonDecode(raw);
+    if (value is! Map) return null;
+    return switch (value['code']) {
+      'structure_name_exists' => 'الاسم مستخدم بالفعل. اختر اسمًا آخر.',
+      'evaluation_criteria_missing' =>
+        'جهّز معايير تقييم الرياضة أولًا، ثم ابدأ تقييم اللاعب.',
+      'evaluation_criteria_inactive' =>
+        'معايير الرياضة متوقفة. راجع إعداداتها قبل إنشاء تقييم.',
+      'evaluation_group_required' =>
+        'أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم.',
+      _ => null,
+    };
+  } catch (_) {
+    return null;
   }
 }

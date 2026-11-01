@@ -19,6 +19,9 @@ public sealed partial class FoundationDbContext
         b.Entity<NoticeTemplate>().HasIndex(x=>new{x.AcademyId,x.Key}).IsUnique();
         b.Entity<NoticeTemplate>().Property(x=>x.Key).HasMaxLength(40);
         b.Entity<NoticeTemplate>().Property(x=>x.Message).HasMaxLength(1000);
+        b.Entity<NoticeTemplate>().ToTable(t=>t.HasCheckConstraint("CK_NoticeTemplate_TimingDays","\"TimingDays\" IS NULL OR (\"TimingDays\" >= 1 AND \"TimingDays\" <= 30)"));
+        b.Entity<AcademyNotice>().Property(x=>x.EventKey).HasMaxLength(40);
+        b.Entity<AcademyNotice>().HasIndex(x=>new{x.AcademyId,x.EventKey,x.CreatedAtUtc});
         b.Entity<NoticeDispatch>().HasIndex(x=>new{x.AcademyId,x.ActorMembershipId,x.RequestId}).IsUnique();
         b.Entity<NoticeDispatch>().Property(x=>x.RequestHash).HasMaxLength(64);
         b.Entity<NoticeDispatch>().Property(x=>x.Kind).HasMaxLength(40);

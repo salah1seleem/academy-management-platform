@@ -17,10 +17,10 @@ class PlayerRosterStatus extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (s['expired'] == true)
-          const UiText(
+          UiText(
             'الاشتراك انتهى',
             style: TextStyle(
-              color: ExperienceColors.red,
+              color: ExperienceColors.negative(context),
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -32,8 +32,8 @@ class PlayerRosterStatus extends StatelessWidget {
                 : left == 1
                 ? 'حصة واحدة متبقية'
                 : 'لا توجد حصص متبقية',
-            style: const TextStyle(
-              color: ExperienceColors.red,
+            style: TextStyle(
+              color: ExperienceColors.negative(context),
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -45,13 +45,13 @@ class PlayerRosterStatus extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
-                color: ExperienceColors.amber.withValues(alpha: .12),
+                color: ExperienceColors.warning(context).withValues(alpha: .12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: UiText(
                 'ملحوظة: ${player['trainingSafetyNote']}',
-                style: const TextStyle(
-                  color: ExperienceColors.amber,
+                style: TextStyle(
+                  color: ExperienceColors.warning(context),
                   fontSize: 11,
                 ),
               ),

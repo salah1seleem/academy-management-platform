@@ -1,3 +1,4 @@
+import '../../core/widgets/guided_form.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -243,7 +244,7 @@ class _PlayerGoalsPageState extends State<PlayerGoalsPage>
                 _goalCard(goal),
               ],
               if (canEdit && (widget.create || goal['state'] == 'Draft'))
-                Form(
+                GuidedForm(
                   key: form,
                   child: GCard(
                     child: Column(

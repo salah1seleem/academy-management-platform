@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Slice3;
 
 public sealed record FamilyRenewalChoice(Guid SportEnrollmentId, Guid SubscriptionPlanId);
-public sealed record FamilyRenewalWrite(IReadOnlyList<FamilyRenewalChoice>? Lines);
+public sealed record FamilyRenewalWrite(IReadOnlyList<FamilyRenewalChoice>? Lines, bool SharedPlanOnly = false);
 
 public static class FamilyRenewalEndpoints
 {
@@ -87,7 +87,7 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
         var enrollmentIds=enrollments.Select(e=>e.Id).ToArray();
         var openIds=(await db.RenewalRequests.Where(r=>r.AcademyId==t.AcademyId&&enrollmentIds.Contains(r.SportEnrollmentId)&&(r.Status==RenewalRequestStatus.PendingPayment||r.Status==RenewalRequestStatus.PaymentInProgress)&&db.PaymentRequests.Any(p=>p.Id==r.PaymentRequestId&&(p.Status==PaymentRequestStatus.Created||p.Status==PaymentRequestStatus.Pending))).Select(r=>r.SportEnrollmentId).ToArrayAsync()).Concat(await db.FamilyRenewalLines.Where(l=>l.AcademyId==t.AcademyId&&enrollmentIds.Contains(l.SportEnrollmentId)&&l.Request.Status==FamilyRenewalStatus.Pending).Select(l=>l.SportEnrollmentId).ToArrayAsync()).ToHashSet();
         var plans = await Available(t.AcademyId).Where(p => sports.Contains(p.SportId)).Include(p => p.BranchPublications).ThenInclude(p => p.Branch).OrderBy(p => p.DisplayOrder).ThenBy(p => p.ArabicName).ToListAsync();
-        return new { items = enrollments.Select(e => new { id = e.Id,hasOpenRequest=openIds.Contains(e.Id), e.PlayerId, player = e.Player.ArabicName, sport = e.Sport.ArabicName, branch = e.Branch.ArabicName, plans = plans.Where(p => p.SportId == e.SportId && PlanCatalog.FormatMatches(e.RegistrationFormat, p.TrainingFormat) && (p.AllBranches || p.BranchPublications.Any(b => b.BranchId == e.BranchId && b.IsActive && b.Branch.IsActive))).Select(p => new { p.Id, name = p.ArabicName, amount = CashRegisterService.Money(p.Price), p.Currency, p.Revision }).ToArray() }).ToArray() };
+        return new { items = enrollments.Select(e => new { id = e.Id,hasOpenRequest=openIds.Contains(e.Id), e.PlayerId, e.SportId, player = e.Player.ArabicName, sport = e.Sport.ArabicName, branch = e.Branch.ArabicName, plans = plans.Where(p => p.SportId == e.SportId && PlanCatalog.FormatMatches(e.RegistrationFormat, p.TrainingFormat) && (p.AllBranches || p.BranchPublications.Any(b => b.BranchId == e.BranchId && b.IsActive && b.Branch.IsActive))).Select(p => new { p.Id, name = p.ArabicName, amount = CashRegisterService.Money(p.Price), p.Currency, p.Revision }).ToArray() }).ToArray() };
     }
     public async Task<object> Quote(FamilyRenewalWrite body)
     {
@@ -106,6 +106,8 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
         var ids = choices.Select(x => x.SportEnrollmentId).ToArray();
         var enrollments = await Own(t.AcademyId, guardian).Where(e => ids.Contains(e.Id)).Include(e => e.Player).Include(e => e.Sport).Include(e => e.Branch).ToDictionaryAsync(e => e.Id);
         if (enrollments.Count != ids.Length) throw new CashRejected("أحد التسجيلات غير متاح لأبنائك. حدّث القائمة قبل المتابعة.", 404);
+        if (body.SharedPlanOnly && (choices.Count < 2 || enrollments.Values.Select(e => e.SportId).Distinct().Count() != 1 || enrollments.Values.Select(e => e.PlayerId).Distinct().Count() != choices.Count || choices.Select(c => c.SubscriptionPlanId).Distinct().Count() != 1))
+            throw new CashRejected("التجديد المشترك يحتاج ابنين مختلفين على الأقل في الرياضة نفسها وباقة مشتركة مؤهلة. جدد الرياضات المختلفة لكل ابن على حدة.", 422);
         var planIds = choices.Select(x => x.SubscriptionPlanId).Distinct().ToArray();
         var plans = await Available(t.AcademyId).Where(p => planIds.Contains(p.Id)).Include(p => p.BranchPublications).ThenInclude(p => p.Branch).ToDictionaryAsync(p => p.Id);
         List<DiscountRules.PricingLine> pricing = [];
@@ -121,7 +123,8 @@ public sealed class FamilyRenewalQuoteService(FoundationDbContext db, CurrentTen
         if (total > 999999999m) throw new CashRejected("إجمالي الطلب كبير جدًا. قسّم التسجيلات إلى طلبات أصغر.", 422);
         var currency = pricing[0].Plan.Currency;
         var hash = StatementComparisonRules.Hash(new { academy = t.AcademyId, user, guardian, day = clock.Today, currency, lines = pricing.Select(x => new { x.EnrollmentId, x.PlayerId, x.BranchId, enrollments[x.EnrollmentId].RegistrationFormat, x.Plan.Id, x.Plan.Revision, x.Plan.Currency, terms = PlanTerms.From(x.Plan), quotes[x.EnrollmentId].OriginalAmount, quotes[x.EnrollmentId].DiscountType, quotes[x.EnrollmentId].DiscountValue, quotes[x.EnrollmentId].DiscountAmount, quotes[x.EnrollmentId].FinalAmount, quotes[x.EnrollmentId].DiscountRuleId, quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() });
-        object view = new { quoteHash = hash, pricingDate = clock.Today, currency, originalAmount = CashRegisterService.Money(original), discountAmount = CashRegisterService.Money(discount), totalAmount = CashRegisterService.Money(total), items = pricing.Select(x => new { sportEnrollmentId = x.EnrollmentId, subscriptionPlanId = x.Plan.Id, player = enrollments[x.EnrollmentId].Player.ArabicName, sport = enrollments[x.EnrollmentId].Sport.ArabicName, branch = enrollments[x.EnrollmentId].Branch.ArabicName, plan = x.Plan.ArabicName, originalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].OriginalAmount), discountAmount = CashRegisterService.Money(quotes[x.EnrollmentId].DiscountAmount), finalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].FinalAmount), discountReason = quotes[x.EnrollmentId].DiscountReason, x.Plan.Currency, planRevision = x.Plan.Revision, discountRuleRevision = quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() };
+        if (body.SharedPlanOnly) hash = StatementComparisonRules.Hash(new { policy = "SharedSportPlan", quoteHash = hash });
+        object view = new { quoteHash = hash, sharedPlanOnly = body.SharedPlanOnly, pricingDate = clock.Today, currency, originalAmount = CashRegisterService.Money(original), discountAmount = CashRegisterService.Money(discount), totalAmount = CashRegisterService.Money(total), items = pricing.Select(x => new { sportEnrollmentId = x.EnrollmentId, subscriptionPlanId = x.Plan.Id, player = enrollments[x.EnrollmentId].Player.ArabicName, sport = enrollments[x.EnrollmentId].Sport.ArabicName, branch = enrollments[x.EnrollmentId].Branch.ArabicName, plan = x.Plan.ArabicName, originalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].OriginalAmount), discountAmount = CashRegisterService.Money(quotes[x.EnrollmentId].DiscountAmount), finalAmount = CashRegisterService.Money(quotes[x.EnrollmentId].FinalAmount), discountReason = quotes[x.EnrollmentId].DiscountReason, x.Plan.Currency, planRevision = x.Plan.Revision, discountRuleRevision = quotes[x.EnrollmentId].DiscountRuleRevision }).ToArray() };
         return (view, hash, pricing, quotes, guardian, user);
     }
 }

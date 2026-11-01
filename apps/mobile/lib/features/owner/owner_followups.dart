@@ -88,9 +88,9 @@ Widget coverageSummary(Json source) {
       ),
       for (final s in gaps.take(3))
         Directionality(
-          textDirection: TextDirection.ltr,
+          textDirection: TextDirection.rtl,
           child: UiText(
-            '${s['sessionDate']} · ${textOf(s['startTime']).substring(0, 5)}–${textOf(s['endTime']).substring(0, 5)}',
+            '${sessionDateLabel(s['sessionDate'])} · ${trainingTimeRange(s['startTime'], s['endTime'])}',
           ),
         ),
       const UiText(
@@ -100,10 +100,18 @@ Widget coverageSummary(Json source) {
   );
 }
 
-Widget followUpList(List<Widget> children) => gList([
-  for (final child in children)
-    Padding(padding: const EdgeInsets.only(bottom: 14), child: child),
-]);
+Widget followUpList(
+  List<Widget> children, {
+  ScrollController? controller,
+  VoidCallback? onNearEnd,
+}) => gList(
+  [
+    for (final child in children)
+      Padding(padding: const EdgeInsets.only(bottom: 14), child: child),
+  ],
+  controller: controller,
+  onNearEnd: onNearEnd,
+);
 String followUpRequestId() {
   final h = commandKey().substring(0, 32);
   return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
@@ -319,87 +327,128 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
         return const SizedBox.shrink();
       }
       return GuardianPage(
-        title: 'المتابعات واتخاذ القرار',
+        title: 'المتابعات',
         child: followUpList([
-          const UiText(
-            'متابعة بشرية مرتبطة بالمصدر، وليست تسوية مالية. يسندها المالك لمسؤول مخول داخل نطاق المجموعة.',
-          ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              OutlinedButton(
-                onPressed: () => dateFilter(true),
-                child: UiText('من: ${from ?? 'كل التواريخ'}'),
-              ),
-              OutlinedButton(
-                onPressed: () => dateFilter(false),
-                child: UiText('إلى: ${to ?? 'كل التواريخ'}'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    from = null;
-                    to = null;
-                    state = '';
-                    branch = '';
-                  });
-                  load();
-                },
-                child: const UiText('مسح'),
+              const Expanded(
+                child: UiText(
+                  'الحالات التي تحتاج متابعة',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
               IconButton(
-                onPressed: load,
-                tooltip: 'تحديث',
-                icon: const Icon(Icons.refresh),
+                tooltip: 'عن المتابعات',
+                icon: const Icon(Icons.info_outline_rounded),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const UiText('عن المتابعات'),
+                    content: const UiText(
+                      'متابعة مرتبطة بالسجل الأصلي، يسندها المالك لمسؤول من الفريق. تحديث المتابعة أو إغلاقها لا يعدل الحضور أو الاشتراك أو الماليات.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c),
+                        child: const UiText('فهمت'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
-          DropdownButtonFormField<String>(
-            initialValue: state,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'الحالة'),
-            items: [
-              const DropdownMenuItem(value: '', child: UiText('كل الحالات')),
-              const DropdownMenuItem(
-                value: 'Open',
-                child: UiText('المتابعات المفتوحة'),
+          GCard(
+            child: ExpansionTile(
+              title: const UiText('تصفية المتابعات'),
+              subtitle: UiText(
+                '${state == 'Open' ? 'المفتوحة' : followUpStates[state] ?? 'كل الحالات'} · ${branch.isEmpty ? 'كل الفروع' : 'الفرع المحدد'}',
               ),
-              for (final e in followUpStates.entries)
-                DropdownMenuItem(value: e.key, child: UiText(e.value)),
-            ],
-            onChanged: (v) {
-              setState(() => state = v ?? '');
-              load();
-            },
-            key: ValueKey('state:$state'),
-          ),
-          if (options != null)
-            DropdownButtonFormField<String>(
-              initialValue: branch,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'الفرع'),
-              items: [
-                const DropdownMenuItem(value: '', child: UiText('كل الفروع')),
-                for (final b in rows(options!['branches']))
-                  DropdownMenuItem(
-                    value: textOf(b['id']),
-                    child: UiText(textOf(b['name'])),
+              childrenPadding: const EdgeInsets.only(top: 8, bottom: 12),
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => dateFilter(true),
+                      child: UiText('من: ${from ?? 'كل التواريخ'}'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => dateFilter(false),
+                      child: UiText('إلى: ${to ?? 'كل التواريخ'}'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          from = null;
+                          to = null;
+                          state = '';
+                          branch = '';
+                        });
+                        load();
+                      },
+                      child: const UiText('مسح'),
+                    ),
+                    IconButton(
+                      onPressed: load,
+                      tooltip: 'تحديث',
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue: state,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'الحالة'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: UiText('كل الحالات'),
+                    ),
+                    const DropdownMenuItem(
+                      value: 'Open',
+                      child: UiText('المتابعات المفتوحة'),
+                    ),
+                    for (final e in followUpStates.entries)
+                      DropdownMenuItem(value: e.key, child: UiText(e.value)),
+                  ],
+                  onChanged: (v) {
+                    setState(() => state = v ?? '');
+                    load();
+                  },
+                  key: ValueKey('state:$state'),
+                ),
+                const SizedBox(height: 14),
+                if (options != null)
+                  DropdownButtonFormField<String>(
+                    initialValue: branch,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'الفرع'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: UiText('كل الفروع'),
+                      ),
+                      for (final b in rows(options!['branches']))
+                        DropdownMenuItem(
+                          value: textOf(b['id']),
+                          child: UiText(textOf(b['name'])),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      setState(() => branch = v ?? '');
+                      load();
+                    },
+                    key: ValueKey('branch:$branch'),
                   ),
               ],
-              onChanged: (v) {
-                setState(() => branch = v ?? '');
-                load();
-              },
-              key: ValueKey('branch:$branch'),
             ),
+          ),
           if (error.isNotEmpty) UiText(error),
           if (loading) const Center(child: CircularProgressIndicator()),
           if (!loading && data != null) ...[
-            const UiText(
-              'المتابعات واتخاذ القرار',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-            ),
             if (rows(data!['items']).isEmpty)
               const UiText('لا توجد متابعات ضمن الفلتر'),
             for (final f in rows(data!['items']))
@@ -409,21 +458,62 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      UiText(followUpConditions[f['condition']] ?? 'متابعة'),
-                      UiText(
-                        textOf(obj(f['source'] ?? <String, dynamic>{})['name']),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            f['condition'] == 'GroupRecordedAbsences'
+                                ? Icons.event_busy_rounded
+                                : Icons.task_alt_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                UiText(
+                                  textOf(
+                                    obj(
+                                      f['source'] ?? <String, dynamic>{},
+                                    )['name'],
+                                  ),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                UiText(
+                                  followUpConditions[f['condition']] ??
+                                      'متابعة',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Chip(
+                            label: UiText(
+                              '${followUpStates[f['state']]}${f['overdue'] == true ? ' · متأخرة' : ''}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ],
                       ),
-                      UiText(
-                        '${followUpStates[f['state']]}${f['overdue'] == true ? ' · متأخرة' : ''}',
-                      ),
-                      UiText(
-                        f['conditionActive'] == true
-                            ? 'الحالة الأصلية ما زالت قائمة'
-                            : 'الحالة لم تعد تنطبق أو غير متاحة',
-                      ),
-                      FilledButton(
-                        onPressed: () => open(textOf(f['id'])),
-                        child: const UiText('إدارة المتابعة وسجلها'),
+                      if (f['conditionActive'] != true)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: UiText('الحالة الأصلية تحتاج إعادة فحص'),
+                        ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: TextButton.icon(
+                          onPressed: () => open(textOf(f['id'])),
+                          icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                          label: const UiText('إدارة المتابعة وسجلها'),
+                        ),
                       ),
                     ],
                   ),

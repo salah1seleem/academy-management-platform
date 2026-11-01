@@ -18,8 +18,8 @@ public sealed class IdentityCookieOptions(DatabaseTicketStore ticketStore, IHost
         options.Cookie.SecurePolicy = environment.IsDevelopment() || environment.IsEnvironment("Demo")
             ? CookieSecurePolicy.SameAsRequest
             : CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(name == PlatformIdentity.Scheme ? 15 : 30);
-        options.SlidingExpiration = name != PlatformIdentity.Scheme;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(name == PlatformIdentity.Scheme ? 60 : 30);
+        options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

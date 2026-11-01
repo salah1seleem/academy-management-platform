@@ -70,6 +70,11 @@ class _CoachMonthlyStarsState extends State<CoachMonthlyStars> {
     }
   }
 
+  Color starColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.light
+      ? ExperienceColors.warning(context)
+      : ExperienceColors.gold;
+
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: 'نجوم فريقي الشهرية',
@@ -91,7 +96,7 @@ class _CoachMonthlyStarsState extends State<CoachMonthlyStars> {
             ExperienceSection(
               '${team['name']} · ${team['remaining']} نجوم متبقية',
               Icons.star_rounded,
-              color: ExperienceColors.gold,
+              color: starColor(context),
             ),
             if (rows(team['players']).isEmpty)
               const EmptyMessage(
@@ -113,10 +118,7 @@ class _CoachMonthlyStarsState extends State<CoachMonthlyStars> {
                   ),
                   subtitle: UiText(
                     '${player['stars']} ★ هذا الشهر',
-                    style: const TextStyle(
-                      color: ExperienceColors.gold,
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: starColor(context), fontSize: 11),
                   ),
                   trailing: IconButton(
                     key: ValueKey('star-${team['id']}-${player['id']}'),
@@ -124,9 +126,9 @@ class _CoachMonthlyStarsState extends State<CoachMonthlyStars> {
                     onPressed: busy || (team['remaining'] as num) <= 0
                         ? null
                         : () => grant(team, player),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.star_border_rounded,
-                      color: ExperienceColors.gold,
+                      color: starColor(context),
                     ),
                   ),
                 ),

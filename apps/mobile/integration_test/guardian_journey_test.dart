@@ -70,7 +70,7 @@ void main() {
       await tester.pumpAndSettle();
       // Dedicated synthetic guardian avoids coupling this journey to auth_smoke's rate window.
       await tester.enterText(find.byType(TextFormField).first, guardianPhone);
-      await tap('إرسال رمز التحقق');
+      await tap('متابعة');
       await waitFor(find.text('رمز التحقق'));
       await tester.enterText(find.byType(TextFormField).last, '246810');
       await tap('تأكيد الدخول');

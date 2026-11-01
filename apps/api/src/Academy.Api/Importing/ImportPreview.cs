@@ -9,19 +9,29 @@ namespace Academy.Api.Importing;
 
 public sealed record ImportIssue(string Sheet, int Row, string Column, string Message)
 {
-    public string SheetLabel => Sheet switch { "Enrollments" => "التسجيلات", "Metadata" => "إعداد الملف", "OpenBalances" => "الأرصدة الافتتاحية", _ => "القالب" };
+    public string SheetLabel => Sheet switch { "Enrollments" => "التسجيلات", "Metadata" => "إعداد الملف", "OpenBalances" => "الأرصدة الافتتاحية", _ => (ConnectedImportSchema.Names.Contains(Sheet) || FriendlyImportSchema.Names.Contains(Sheet)) ? Sheet : "القالب" };
     public string ColumnLabel => ImportSchema.Enrollments.Concat(ImportSchema.OpenBalances).FirstOrDefault(c => c.Key == Column)?.Label
-        ?? (Column switch { "SourceSystem" => "كود المصدر", "CutoffDate" => "تاريخ القطع", "ReferenceStamp" => "نسخة المراجع", "AcademyCode" => "الأكاديمية", "SchemaVersion" => "نسخة القالب", _ => "بنية الملف" });
+        ?? ((ConnectedImportSchema.Names.Contains(Sheet) || FriendlyImportSchema.Names.Contains(Sheet)) ? Column : Column switch { "SourceSystem" => "كود المصدر", "CutoffDate" => "تاريخ القطع", "ReferenceStamp" => "نسخة المراجع", "AcademyCode" => "الأكاديمية", "SchemaVersion" => "نسخة القالب", _ => "بنية الملف" });
 }
 public sealed record ImportPreviewRow(int Row, string LegacyPlayerId, string LegacyEnrollmentId, string PlayerName, string GuardianName,
     string GuardianPhone, string? HouseholdRef, DateOnly BirthDate, Guid BranchId, Guid SportId, Guid GroupId, Guid ProductId,
     int PriceRevision, DateOnly Start, DateOnly? End, int? EntitledSessions, int? RemainingSessions, string? PricingMode,
     string? BasePrice, string? Discount, string? AgreedNet, string Currency, string ExistingNew, string? Notes);
+public sealed record ImportAccountLink(string Role, string Name, string Phone);
 public sealed record ImportPreviewResult(string SchemaVersion, string FileHash, string ReferenceStamp, string? SourceSystem, DateOnly? CutoffDate,
     int RowCount, int PlayerCount, int HouseholdCount, int FinanciallyIncomplete, bool CanApprove,
     IReadOnlyList<ImportIssue> Errors, IReadOnlyList<ImportPreviewRow> Rows)
 {
+    public ImportHistorySummary? Historical {get;init;}
+    public int? GuardianCount {get;init;}
+    public int? GuardianRelationships {get;init;}
+    public int HistoricalPayments {get;init;}
+    public decimal HistoricalPaymentTotal {get;init;}
+    public ImportAccountLink[] AccountLinks { get; init; } = [];
     public ImportGuardianMatch[] GuardianMatches { get; init; } = [];
+    public ImportEffect[] Effects { get; init; } = [];
+    public int CoachAssignments { get; init; }
+    public int TournamentParticipations { get; init; }
 }
 
 public static class ImportPreview

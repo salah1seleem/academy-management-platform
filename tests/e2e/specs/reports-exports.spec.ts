@@ -10,9 +10,15 @@ test.describe("Slice 8A operational reporting journeys", () => {
     await staffLogin(page, "owner.nogoom@example.test");
     await expect(page.getByRole("region", { name: "ملخص الأكاديمية", exact: true })).toBeVisible();
     for (const label of ["التحصيل اليومي", "التحصيل الشهري"]) await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /اشتراكات فعالة/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /تنتهي قريبًا/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /اشتراكات منتهية/ })).toBeVisible();
+    const subscriptions = page.getByRole("region", {name:"اشتراكات الأكاديمية", exact:true});
+    const calendarForCounts = await (await page.request.get("/api/v1/academy/calendar")).json();
+    const stored = await (await page.request.get(`/api/v1/subscriptions/home?asOf=${calendarForCounts.today}`)).json();
+    for (const state of ["active", "expiring", "expired"] as const) {
+      const link = subscriptions.locator(`a[data-state="${state}"]`);
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("href", new RegExp(`state=${state}`));
+      await expect(link.locator("b")).toHaveText(new Intl.NumberFormat("ar-EG").format(stored[state]));
+    }
     const requests=page.locator("section").filter({has:page.getByRole("heading",{name:"طلبات الدفع",exact:true})});
     await expect(requests.getByRole("link",{name:"عرض الكل",exact:true})).toHaveAttribute("href",/subscriptions\/payments/);
     const calendar=await (await page.request.get("/api/v1/academy/calendar")).json();
@@ -21,13 +27,13 @@ test.describe("Slice 8A operational reporting journeys", () => {
     await totalLink.scrollIntoViewIfNeeded();
     expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(page.viewportSize()!.width+1);
     await totalLink.click();
-    await expect(page.getByRole("heading", { name: "التقارير المالية" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "الإيرادات والتحصيلات" })).toBeVisible();
   });
 
   test("Journey B — financial filters and real CSV download", async ({ page }) => {
     await staffLogin(page, "owner.nogoom@example.test"); await page.goto("/dashboard/reports/financial");
     await expect(page.getByText("إجمالي التحصيل المؤكد", { exact: true })).toBeVisible();
-    await page.getByLabel("من تاريخ").fill("2026-09-01"); await page.getByLabel("إلى تاريخ").fill("2026-09-30"); await page.getByLabel("الرياضة").selectOption({ label: "كرة القدم" }); await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
+    await page.getByLabel("من تاريخ").fill("2026-09-01"); await page.getByLabel("إلى تاريخ").fill("2026-09-30"); await page.getByText("فلاتر إضافية", {exact:true}).click(); await page.getByLabel("الرياضة").selectOption({ label: "كرة القدم" }); await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
     await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
     const download = page.waitForEvent("download"); await page.getByRole("link", { name: "تصدير CSV" }).click(); expect((await download).suggestedFilename()).toMatch(/^financial-collections-2026-09\.csv$/);
   });

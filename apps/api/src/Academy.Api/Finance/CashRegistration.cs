@@ -2,6 +2,7 @@ using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Finance;
@@ -15,11 +16,13 @@ public sealed partial class CashRegisterService
 
     public async Task<object> RegistrationOptions(Guid branchId, Guid planId)
     {
-        var (t, _) = await Context(write: true); await CollectionPermissions(t, true); await Enabled(t.AcademyId);
+        var (t, _) = await Context(write: true); await CollectionPermissions(t, true);
         var plan = await db.SubscriptionPlans.TrainingOnly().ForBranch(branchId)
             .Where(p => p.Id == planId && p.IsActive && p.Sport.IsActive).Select(p => new { p.Currency }).SingleOrDefaultAsync();
         if (plan is null || !await db.Branches.AnyAsync(b => b.Id == branchId && b.IsActive))
             throw new CashRejected("الباقة أو الفرع غير متاحين للتحصيل.", 404);
+        if ((await config.Active(t.AcademyId))?.CashEnabled != true)
+            return new { cashEnabled = false, canPrepare = t.Role == AcademyRole.AcademyOwner, sessions = Array.Empty<object>() };
         var sessions = await (from s in db.CashSessions.AsNoTracking()
                               join r in db.CashRegisters on s.RegisterId equals r.Id
                               join b in db.Branches on s.BranchId equals b.Id
@@ -28,7 +31,7 @@ public sealed partial class CashRegisterService
                                   db.CashierAssignments.Any(a => a.RegisterId == r.Id && a.MembershipId == t.MembershipId && a.IsActive)
                               orderby r.Name
                               select new { s.Id, name = r.Name, branch = b.ArabicName }).ToArrayAsync();
-        return new { sessions };
+        return new { cashEnabled = true, canPrepare = t.Role == AcademyRole.AcademyOwner, sessions };
     }
 
     // Registration owns the transaction and takes the plan lock first. Keep the

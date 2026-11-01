@@ -211,10 +211,17 @@ void main() {
         find.textContaining('ليست غيابًا مسجلًا أو خصمًا'),
         findsOneWidget,
       );
-      expect(find.text('2026-10-18 · 17:00–18:00'), findsOneWidget);
       expect(
-        Directionality.of(t.element(find.text('2026-10-18 · 17:00–18:00'))),
-        TextDirection.ltr,
+        find.text('الأحد 18 أكتوبر 2026 · من 5:00 مساءً إلى 6:00 مساءً'),
+        findsOneWidget,
+      );
+      expect(
+        Directionality.of(
+          t.element(
+            find.text('الأحد 18 أكتوبر 2026 · من 5:00 مساءً إلى 6:00 مساءً'),
+          ),
+        ),
+        TextDirection.rtl,
       );
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
@@ -253,7 +260,11 @@ void main() {
           ),
           isTrue,
         );
+        expect(find.text('المتابعات'), findsOneWidget);
+        await tester.tap(find.text('تصفية المتابعات'));
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('مسح'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('مسح'));
         await tester.pumpAndSettle();
         expect(

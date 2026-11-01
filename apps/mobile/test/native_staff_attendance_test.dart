@@ -351,7 +351,7 @@ void main() {
         );
         await t.pumpAndSettle();
         expect(
-          find.textContaining('الإعداد المحلي الحالي لا يكفي'),
+          find.textContaining('إعداد الحضور الآمن غير مكتمل'),
           findsOneWidget,
         );
         expect(find.text('تسجيل حضوري'), findsNothing);

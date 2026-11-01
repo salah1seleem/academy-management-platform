@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { PageHeader } from "../components/dashboard-shell";
 import { useEffect, useRef, useState } from "react";
 import type { Enrollment, Quote } from "./family-renewal-quote";
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
@@ -53,10 +54,9 @@ export function StaffFamilyRenewal({ cashSessionId }: { cashSessionId?: string }
     finally { setBusy(false); }
   }
   const count = Object.keys(selection).length;
-  if (cashSessionId && pending) return <section className={styles.page}><header><span className="eyebrow">تجديد الأسرة</span><h1>متابعة محاولة تحصيل سابقة</h1></header><CashFamilyConfirmation sessionId={cashSessionId} body={pending.body} amount="" currency="EGP" onLocked={() => setLocked(true)} onUnlocked={() => { setPending(null); setLocked(false); setQuote(null); }} /></section>;
+  if (cashSessionId && pending) return <section className={styles.page}><PageHeader title="متابعة محاولة تحصيل سابقة" context="تجديد الأسرة"/><CashFamilyConfirmation sessionId={cashSessionId} body={pending.body} amount="" currency="EGP" onLocked={() => setLocked(true)} onUnlocked={() => { setPending(null); setLocked(false); setQuote(null); }} /></section>;
   return <section className={styles.page}>
-    <Link href="/dashboard/subscriptions/renew/new">تجديد لاعب منفرد</Link>
-    <header><span className="eyebrow">تجديد الأسرة</span><h1>راجع تجديد عدة أبناء معًا</h1><p>ابحث عن ولي الأمر، ثم اختر التسجيلات وباقة كل رياضة. تظهر بيانات الفروع المصرح بها فقط.</p></header>
+    <PageHeader title="تجديد عدة أبناء معًا" context="تجديد الأسرة" secondaryActions={[{label:"تجديد لاعب منفرد",href:"/dashboard/subscriptions/renew/new"}]}/>
     {cashSessionId && <Link href={`/dashboard/finance/cash-registers/sessions/${cashSessionId}`}>العودة للوردية النقدية</Link>}
     {cashSessionId && canCross && !locked && <label className={styles.choice}><input type="checkbox" checked={cross} onChange={e => { searchAbort.current?.abort(); setCross(e.target.checked); setFamilies(null); setFamily(null); setOptions(null); setSelection({}); setQuote(null); setError(""); }} />تحصيل أسرة لديها أبناء في فروع أخرى</label>}
     <form className="form-shell" onSubmit={e => { e.preventDefault(); if (!locked) void find(); }}><label>اسم ولي الأمر أو رقم هاتفه<input value={search} maxLength={100} disabled={busy || locked} onChange={e => setSearch(e.target.value)} placeholder="اسم من 3 أحرف أو رقم هاتف كامل" /></label><button className="primary-button" disabled={locked || busy || searching || search.trim().length < 3}>البحث عن الأسرة</button></form>

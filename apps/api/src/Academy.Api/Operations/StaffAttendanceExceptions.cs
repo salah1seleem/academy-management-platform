@@ -122,6 +122,7 @@ public static class StaffAttendanceExceptions
         var m = await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(m => m.Id == t.MembershipId && m.AcademyId == t.AcademyId && m.IsActive && m.User.IsActive);
         if (m is null || m.Role != t.Role) return false;
         if (t.Role == AcademyRole.AcademyOwner) return true;
+        if (edit && !await StaffWorkflowAccess.Allows(db, t.MembershipId, ManagePath + "/request/review", "POST")) return false;
         if (!m.AllSports || m.PrimaryMembershipId.HasValue || await db.StaffGrants.AnyAsync(g => g.MembershipId == m.Id && g.Permission == AcademyPermissions.StaffProvision && g.IsActive && !g.Allowed)) return false;
         return !m.UseActionGrants || await db.StaffActionGrants.AnyAsync(g => g.MembershipId == m.Id && g.IsActive && g.Module == "staff" && g.Read && (!edit || g.Edit));
     }

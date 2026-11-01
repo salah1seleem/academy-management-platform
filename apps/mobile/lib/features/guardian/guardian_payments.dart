@@ -19,6 +19,7 @@ class RenewalPicker extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'تجديد الاشتراك',
     child: RemoteBody(
       auth: auth,
@@ -76,6 +77,7 @@ class PlanPicker extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'اختيار الباقة',
     child: plans != null
         ? content(context, plans!)
@@ -96,8 +98,28 @@ class PlanPicker extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Heading(textOf(p['arabicName'])),
-            UiText(money(p['price'], p['currency'])),
+            Row(
+              children: [
+                Expanded(
+                  child: UiText(
+                    textOf(p['arabicName']),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                UiText(
+                  money(p['price'], p['currency']),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             if (p['durationDays'] != null) UiText('${p['durationDays']} يومًا'),
             if (p['sessionCount'] != null) UiText('${p['sessionCount']} حصة'),
             const SizedBox(height: 12),
@@ -219,6 +241,7 @@ class _ExternalRenewalState extends State<ExternalRenewal> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'تجديد اشتراك لغيره',
     child: gList([
       const Heading('هدية تدعم رحلة لاعب'),
@@ -322,6 +345,7 @@ class _RenewalReviewState extends State<RenewalReview> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'مراجعة التجديد',
     child: gList([
       Heading(widget.childName),
@@ -342,7 +366,7 @@ class _RenewalReviewState extends State<RenewalReview> {
         ),
       ),
       const UiText(
-        'لن يتم تحصيل المبلغ أو تفعيل الاشتراك قبل تأكيد الدفع. تاريخ التفعيل والحصص يحددهما الخادم.',
+        'يبدأ الاشتراك بعد مراجعة الأكاديمية لإثبات الدفع وتأكيد الطلب.',
       ),
       if (widget.reference != null)
         const UiText('هذا الطلب لا ينشئ علاقة ولي أمر باللاعب.'),
@@ -415,6 +439,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'الدفع',
     child: RemoteBody(
       key: ValueKey(revision),
@@ -423,6 +448,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       builder: (context, value) {
         final d = obj(value);
         final pending = d['status'] == 'Pending';
+        final awaitingReview = pending && d['proofStatus'] == 'Pending';
         return gList([
           Heading(textOf(d['player'])),
           UiText('${d['sport']} · ${d['plan']}'),
@@ -470,7 +496,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
               child: const UiText('عرض الإيصال'),
             ),
-          if (pending && d['isCurrent'] == true) ...[
+          if (awaitingReview)
+            const GCard(
+              child: UiText(
+                'وصل إثبات الدفع. تنتظر العملية مراجعة الإدارة؛ لا تحتاج إلى الدفع مرة أخرى.',
+              ),
+            ),
+          if (pending && !awaitingReview && d['isCurrent'] == true) ...[
             TransferPayment(
               auth: widget.auth,
               proofPath: '/api/v1/guardian/payments/${widget.id}/proof',
@@ -511,6 +543,7 @@ class ReceiptsPage extends StatelessWidget {
   const ReceiptsPage({super.key, required this.auth});
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'إيصالاتي',
     child: RemoteBody(
       auth: auth,
@@ -536,13 +569,22 @@ class ReceiptsPage extends StatelessWidget {
 class ReceiptPage extends StatelessWidget {
   final AuthController auth;
   final String id;
-  const ReceiptPage({super.key, required this.auth, required this.id});
+  final bool staff;
+  const ReceiptPage({
+    super.key,
+    required this.auth,
+    required this.id,
+    this.staff = false,
+  });
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'إيصال التحصيل',
     child: RemoteBody(
       auth: auth,
-      path: '/api/v1/guardian/subscriptions/receipts/$id',
+      path: staff
+          ? '/api/v1/subscriptions/receipts/$id'
+          : '/api/v1/guardian/subscriptions/receipts/$id',
       builder: (context, value) {
         final d = obj(value);
         return gList([

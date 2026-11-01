@@ -27,7 +27,7 @@ class _RoleIntroGateState extends State<RoleIntroGate> {
   String? introKey;
   bool checking = true, seen = false, saving = false;
   String? error;
-  int generation = 0;
+  int generation = 0, resumePage = 0;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -35,6 +35,7 @@ class _RoleIntroGateState extends State<RoleIntroGate> {
     final role = widget.auth.session?.selected?.role;
     if (role == null || brand?.loading == true) return;
     final theme = brand?.sportTheme ?? 'general';
+    widget.appearance.bindIntroUser(widget.auth.session?.userId);
     final key = widget.appearance.roleIntroKey(role, theme);
     if (key == introKey) return;
     introKey = key;
@@ -46,9 +47,11 @@ class _RoleIntroGateState extends State<RoleIntroGate> {
 
   Future<void> check(String role, String theme, int attempt) async {
     bool value = false;
+    var page = 0;
     String? failure;
     try {
       value = await widget.appearance.hasRoleIntro(role, theme);
+      if (!value) page = await widget.appearance.roleIntroPage(role, theme);
     } catch (_) {
       failure = 'تعذر قراءة حالة التعريف؛ يمكنك المتابعة لهذه الجلسة.';
     }
@@ -56,6 +59,7 @@ class _RoleIntroGateState extends State<RoleIntroGate> {
     setState(() {
       checking = false;
       seen = value;
+      resumePage = page;
       error = failure;
     });
   }
@@ -105,6 +109,19 @@ class _RoleIntroGateState extends State<RoleIntroGate> {
       }
       final theme = brand?.sportTheme ?? 'general';
       return AcademyOnboarding(
+        initialPage: resumePage,
+        onPageChanged: (page) {
+          widget.appearance.saveRoleIntroPage(role, theme, page).catchError((
+            Object _,
+          ) {
+            if (mounted && identity() == opened) {
+              setState(
+                () => error =
+                    'لم يُحفظ تقدم التعريف؛ يمكنك إكمال الصفحات والمتابعة.',
+              );
+            }
+          });
+        },
         role: role,
         sportTheme: theme,
         features: brand?.features ?? [],
@@ -113,8 +130,77 @@ class _RoleIntroGateState extends State<RoleIntroGate> {
         onComplete: () => complete(role, theme),
         onContinueOnce: error == null
             ? null
-            : () => setState(() => seen = true),
+            : () => setState(() {
+                seen = true;
+              }),
       );
     },
   );
+}
+
+/// Replay uses the trusted role and never changes the persisted completion flag.
+class RoleIntroReplay extends StatefulWidget {
+  const RoleIntroReplay({super.key, required this.auth});
+  final AuthController auth;
+  @override
+  State<RoleIntroReplay> createState() => _RoleIntroReplayState();
+}
+
+class _RoleIntroReplayState extends State<RoleIntroReplay> {
+  String? identity() {
+    final member = widget.auth.session?.selected;
+    return member == null
+        ? null
+        : '${member.academyId}:${member.id}:${member.role}:${member.contextRevision}';
+  }
+
+  late final opened = identity();
+  bool invalidated = false;
+  @override
+  void initState() {
+    super.initState();
+    widget.auth.addListener(changed);
+  }
+
+  void changed() {
+    if (opened != identity()) {
+      invalidated = true;
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(RoleIntroReplay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.auth != widget.auth) {
+      oldWidget.auth.removeListener(changed);
+      widget.auth.addListener(changed);
+      invalidated = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.auth.removeListener(changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (invalidated || opened == null || opened != identity()) {
+      return const SizedBox.shrink();
+    }
+    final brand = BrandScope.maybeOf(context);
+    return AcademyOnboarding(
+      role: widget.auth.session!.selected!.role,
+      sportTheme: brand?.sportTheme ?? 'general',
+      features: brand?.features ?? [],
+      canPop: true,
+      onComplete: () async {
+        if (mounted && !invalidated && opened == identity()) {
+          await Navigator.of(context).maybePop();
+        }
+      },
+    );
+  }
 }

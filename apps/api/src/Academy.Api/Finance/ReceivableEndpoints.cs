@@ -29,9 +29,11 @@ public static class ReceivableEndpoints
             var t = (await tenant.ResolveAsync())!;
             var row = await db.ReceivableDocuments.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
             if (row is null) return Results.NotFound();
-            var balance = await Rows(db, t.AcademyId, clock.UtcNow, clock.Today, null, null, null).SingleOrDefaultAsync(x => x.Id == id);
+            var instant = clock.UtcNow;
+            var accounting = await AccountingContext(db, t.AcademyId, instant);
+            var balance = await Rows(db, t.AcademyId, instant, accounting.Day, null, null, null).SingleOrDefaultAsync(x => x.Id == id);
             if (balance is null) return Results.NotFound();
-            return Results.Ok(new { document = row, balance, canUseCredit = t.Role == AcademyRole.AcademyOwner && balance.Outstanding < 0, movements = await db.ReceivableMovements.AsNoTracking().Where(x => x.DocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync(), creditApplications = await db.ReceivableCreditApplications.AsNoTracking().Where(x => x.SourceDocumentId == id || x.TargetDocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync() });
+            return Results.Ok(new { asOf = instant, document = row, balance, canUseCredit = t.Role == AcademyRole.AcademyOwner && balance.Outstanding < 0, movements = await db.ReceivableMovements.AsNoTracking().Where(x => x.DocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync(), creditApplications = await db.ReceivableCreditApplications.AsNoTracking().Where(x => x.SourceDocumentId == id || x.TargetDocumentId == id).OrderBy(x => x.CreatedAtUtc).ToListAsync() });
         });
         api.MapGet("/{id:guid}/collections", async (Guid id, CurrentTenant tenant, FoundationDbContext db) => {
             var t = (await tenant.ResolveAsync())!; var doc = await db.ReceivableDocuments.SingleOrDefaultAsync(x => x.Id == id);

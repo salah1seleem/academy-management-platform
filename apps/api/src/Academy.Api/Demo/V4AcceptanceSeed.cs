@@ -49,6 +49,19 @@ public static class V4AcceptanceSeed
         }
         await db.SaveChangesAsync();
         await V4RefinementSeed.Add(db,today,now);
+        // Additive deterministic coach tasks; never reopen or overwrite an edited task.
+        foreach (var kind in new[] { "Attendance", "Evaluation" }) {
+            var taskId = FootballDemoSeed.Id("v46/coach-task/" + kind);
+            var coachId = FootballDemoSeed.Id("member/coach1");
+            var assignment = await db.StaffGroupAssignments.Where(a => a.AcademyId == academy && a.AcademyMembershipId == coachId && a.IsActive).OrderBy(a => a.TrainingGroupId).FirstOrDefaultAsync();
+            var condition = "Coach" + kind + "Task";
+            if (assignment is null || await db.OwnerFollowUps.AnyAsync(f => f.Id == taskId || f.TrainingGroupId == assignment.TrainingGroupId && f.Condition == condition && f.State != "Closed" && f.State != "Rejected")) continue;
+            var note = kind == "Attendance" ? "مراجعة حضور المجموعة التجريبية من الحصص الفعلية." : "مراجعة تقييمات المجموعة التجريبية من ملفات اللاعبين.";
+            var row = new OwnerFollowUp { Id = taskId, AcademyId = academy, TrainingGroupId = assignment.TrainingGroupId, Condition = condition, State = "Assigned", AssignedToMembershipId = coachId, CreatedByMembershipId = owner, CreatedOn = today, DueOn = today, Note = note, RequestId = FootballDemoSeed.Id("v46/coach-task/request/" + kind), RequestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("V46 synthetic coach task " + kind))), EvidenceJson = JsonSerializer.Serialize(new { synthetic = true, kind }), CreatedAtUtc = now, UpdatedAtUtc = now };
+            db.OwnerFollowUps.Add(row);
+            db.OwnerFollowUpChanges.Add(new() { Id = FootballDemoSeed.Id("v46/coach-task/history/" + kind), AcademyId = academy, FollowUpId = taskId, ActorMembershipId = owner, RequestId = row.RequestId, RequestHash = row.RequestHash, BeforeJson = "{}", AfterJson = JsonSerializer.Serialize(new { row.State, row.AssignedToMembershipId, row.DueOn, row.Note, row.ResolutionReason }), CreatedAtUtc = now, UpdatedAtUtc = now });
+            await db.SaveChangesAsync();
+        }
         await tx.CommitAsync();
     }
 }

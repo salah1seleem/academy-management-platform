@@ -11,11 +11,13 @@ class GroupMediaConsentCard extends StatefulWidget {
   final AuthController auth;
   final String playerId;
   final VoidCallback? onSaved;
+  final bool compact;
   const GroupMediaConsentCard({
     super.key,
     required this.auth,
     required this.playerId,
     this.onSaved,
+    this.compact = false,
   });
   @override
   State<GroupMediaConsentCard> createState() => _ConsentState();
@@ -137,42 +139,67 @@ class _ConsentState extends State<GroupMediaConsentCard>
         path: path,
         builder: (context, v) {
           final d = obj(v);
-          return GCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          final content = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!widget.compact) ...[
                 const Icon(Icons.verified_user_outlined),
                 Text(
                   l('خصوصية صور المجموعة', 'Group media privacy'),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                Text(textOf(d['notice'])),
-                const SizedBox(height: 12),
-                Text(
-                  '${d['player']} · ${l(d['allowed'] == true ? 'المشاركة مسموحة باختيارك' : 'المشاركة غير مسموحة', d['allowed'] == true ? 'Sharing allowed by your choice' : 'Sharing not allowed')}',
-                ),
-                Text(
-                  l(
-                    'إعادة السماح لا تعيد نشر النسخ القديمة تلقائيًا، ولا يؤثر الرفض على الاشتراك أو صورة طفلك الخاصة.',
-                    'Allowing again never republishes old copies automatically. Refusal does not affect subscriptions or your child-only photos.',
-                  ),
-                ),
-                if (error != null) Text(error!),
-                FilledButton(
-                  onPressed: busy ? null : () => save(d),
-                  child: Text(
-                    l(
-                      d['allowed'] == true
-                          ? 'سحب موافقة المشاركة'
-                          : 'السماح بالمشاركة داخل المجموعة',
-                      d['allowed'] == true
-                          ? 'Withdraw sharing consent'
-                          : 'Allow sharing within the group',
-                    ),
-                  ),
-                ),
               ],
-            ),
+              Text(textOf(d['notice'])),
+              const SizedBox(height: 12),
+              Text(
+                '${d['player']} · ${l(d['allowed'] == true ? 'المشاركة مسموحة باختيارك' : 'المشاركة غير مسموحة', d['allowed'] == true ? 'Sharing allowed by your choice' : 'Sharing not allowed')}',
+              ),
+              Text(
+                l(
+                  'إعادة السماح لا تعيد نشر النسخ القديمة تلقائيًا، ولا يؤثر الرفض على الاشتراك أو صورة طفلك الخاصة.',
+                  'Allowing again never republishes old copies automatically. Refusal does not affect subscriptions or your child-only photos.',
+                ),
+              ),
+              if (error != null) Text(error!),
+              FilledButton(
+                onPressed: busy ? null : () => save(d),
+                child: Text(
+                  l(
+                    d['allowed'] == true
+                        ? 'سحب موافقة المشاركة'
+                        : 'السماح بالمشاركة داخل المجموعة',
+                    d['allowed'] == true
+                        ? 'Withdraw sharing consent'
+                        : 'Allow sharing within the group',
+                  ),
+                ),
+              ),
+            ],
+          );
+          return GCard(
+            child: widget.compact
+                ? ExpansionTile(
+                    title: Text(
+                      l('خصوصية صور المجموعة', 'Group media privacy'),
+                    ),
+                    subtitle: Text(
+                      l(
+                        d['allowed'] == true
+                            ? 'المشاركة مسموحة باختيارك'
+                            : 'المشاركة غير مسموحة',
+                        d['allowed'] == true
+                            ? 'Sharing allowed by your choice'
+                            : 'Sharing not allowed',
+                      ),
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        child: content,
+                      ),
+                    ],
+                  )
+                : content,
           );
         },
       );

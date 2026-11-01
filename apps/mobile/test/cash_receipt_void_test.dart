@@ -65,11 +65,12 @@ void main() {
         owner.shell(OwnerReports(auth: auth, initialReport: 'financial')),
       );
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('عكس إيصال نقدي · الفترة ملغاة'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('عكس إيصال نقدي'), findsOneWidget);
       expect(find.textContaining('-800'), findsWidgets);
+      expect(
+        find.textContaining('الفترة ملغاة'),
+        findsNothing,
+      ); // A void row alone does not prove period cancellation.
     },
   );
 }

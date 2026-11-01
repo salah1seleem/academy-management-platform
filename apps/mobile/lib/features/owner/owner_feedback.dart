@@ -24,8 +24,14 @@ class OwnerFeedbackInbox extends StatefulWidget {
 class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
   late String kind = widget.initialFilters['kind'] ?? '';
   late bool safetyOnly = widget.initialFilters['safetyOnly'] == 'true';
-  String subject = '', urgency = '';
-  bool cleared = false;
+  late String subject = widget.initialFilters['subject'] ?? '';
+  late String urgency = widget.initialFilters['urgency'] ?? '';
+  bool cleared = false, filtersExpanded = false, busy = false;
+  String? get contextKey => widget.auth.session?.selected == null
+      ? null
+      : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  late final identity = contextKey;
+  bool get current => mounted && identity != null && identity == contextKey;
   String message = '';
   int revision = 0;
   Map<String, String> get filters => {
@@ -39,30 +45,35 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
     if (urgency.isNotEmpty) 'urgency': urgency,
   };
   Future<void> review(String id) async {
+    if (busy || !current) return;
+    setState(() => busy = true);
     try {
       await widget.auth.request(
         'POST',
         '/api/v1/manage/feedback/$id/review',
         body: {},
       );
-      if (mounted) {
+      if (current) {
         setState(() {
           message = 'تم تسجيل مراجعة الملاحظة.';
           revision++;
         });
       }
     } catch (error) {
-      if (mounted) {
+      if (current) {
         setState(
           () => message = error is ApiFailure
               ? error.message
               : 'تعذر تحديث الملاحظة.',
         );
       }
+    } finally {
+      if (current) setState(() => busy = false);
     }
   }
 
   Future<void> resolve(String id) async {
+    if (busy || !current) return;
     var draft = '';
     final response = await showDialog<String>(
       context: context,
@@ -86,33 +97,36 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
         ],
       ),
     );
-    if (response == null) return;
+    if (response == null || !current || busy) return;
     if (response.length < 5) {
       if (mounted) {
         setState(() => message = 'اكتب ردًا من خمسة أحرف على الأقل.');
       }
       return;
     }
+    setState(() => busy = true);
     try {
       await widget.auth.request(
         'POST',
         '/api/v1/manage/feedback/$id/resolve',
         body: {'response': response},
       );
-      if (mounted) {
+      if (current) {
         setState(() {
           message = 'أُرسل الرد لولي الأمر وحُلّت الملاحظة.';
           revision++;
         });
       }
     } catch (error) {
-      if (mounted) {
+      if (current) {
         setState(
           () => message = error is ApiFailure
               ? error.message
               : 'تعذر إرسال الرد.',
         );
       }
+    } finally {
+      if (current) setState(() => busy = false);
     }
   }
 
@@ -126,7 +140,7 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
           '/api/v1/manage/feedback${filters.isEmpty ? '' : '?${Uri(queryParameters: filters).query}'}',
       builder: (context, value) => gList([
         if (message.isNotEmpty) UiText(message),
-        if (widget.initialFilters['status'] == 'Unresolved')
+        if (!cleared && widget.initialFilters['status'] == 'Unresolved')
           UiText(
             localized(
               context,
@@ -138,65 +152,104 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                   : 'Open notes only',
             ),
           ),
-        DropdownButtonFormField<String>(
-          initialValue: kind,
-          decoration: const InputDecoration(labelText: 'نوع الملاحظة'),
-          items: const [
-            DropdownMenuItem(value: '', child: UiText('الكل')),
-            DropdownMenuItem(
-              value: 'Rating',
-              child: UiText('تقييمات المدربين'),
+        if (safetyOnly)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: UiText('المعروض: بلاغات السلامة فقط'),
+          ),
+        GCard(
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(top: 12),
+            initiallyExpanded: filtersExpanded,
+            onExpansionChanged: (value) => filtersExpanded = value,
+            leading: const Icon(Icons.tune_rounded),
+            title: UiText(
+              filters.isEmpty
+                  ? 'تصفية الملاحظات'
+                  : 'تصفية الملاحظات · ${filters.length}',
             ),
-            DropdownMenuItem(value: 'Complaint', child: UiText('الشكاوى')),
-            DropdownMenuItem(value: 'Suggestion', child: UiText('الاقتراحات')),
-            DropdownMenuItem(value: 'Request', child: UiText('طلبات الإدارة')),
-          ],
-          onChanged: (value) => setState(() => kind = value ?? ''),
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: kind,
+                decoration: const InputDecoration(labelText: 'نوع الملاحظة'),
+                items: const [
+                  DropdownMenuItem(value: '', child: UiText('الكل')),
+                  DropdownMenuItem(
+                    value: 'Rating',
+                    child: UiText('تقييمات المدربين'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Complaint',
+                    child: UiText('الشكاوى'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Suggestion',
+                    child: UiText('الاقتراحات'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Request',
+                    child: UiText('طلبات الإدارة'),
+                  ),
+                ],
+                onChanged: (value) => setState(() => kind = value ?? ''),
+              ),
+              const SizedBox(height: 14),
+              SwitchListTile(
+                title: const UiText('بلاغات السلامة الأصلية أو المراجعة'),
+                value: safetyOnly,
+                onChanged: (v) => setState(() => safetyOnly = v),
+              ),
+              DropdownButtonFormField<String>(
+                key: ValueKey('subject-$subject'),
+                initialValue: subject,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'الموضوع'),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: UiText('كل الموضوعات'),
+                  ),
+                  ...feedbackSubjects.entries.map(
+                    (e) =>
+                        DropdownMenuItem(value: e.key, child: UiText(e.value)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => subject = v ?? ''),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey('urgency-$urgency'),
+                initialValue: urgency,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'الاستعجال'),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: UiText('كل الدرجات'),
+                  ),
+                  ...feedbackUrgencies.entries.map(
+                    (e) =>
+                        DropdownMenuItem(value: e.key, child: UiText(e.value)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => urgency = v ?? ''),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 14),
-        SwitchListTile(
-          title: const UiText('بلاغات السلامة الأصلية أو المراجعة'),
-          value: safetyOnly,
-          onChanged: (v) => setState(() => safetyOnly = v),
-        ),
-        DropdownButtonFormField<String>(
-          key: ValueKey('subject-$subject'),
-          initialValue: subject,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'الموضوع'),
-          items: [
-            const DropdownMenuItem(value: '', child: UiText('كل الموضوعات')),
-            ...feedbackSubjects.entries.map(
-              (e) => DropdownMenuItem(value: e.key, child: UiText(e.value)),
-            ),
-          ],
-          onChanged: (v) => setState(() => subject = v ?? ''),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          key: ValueKey('urgency-$urgency'),
-          initialValue: urgency,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'الاستعجال'),
-          items: [
-            const DropdownMenuItem(value: '', child: UiText('كل الدرجات')),
-            ...feedbackUrgencies.entries.map(
-              (e) => DropdownMenuItem(value: e.key, child: UiText(e.value)),
-            ),
-          ],
-          onChanged: (v) => setState(() => urgency = v ?? ''),
-        ),
-        TextButton(
-          onPressed: () => setState(() {
-            cleared = true;
-            kind = '';
-            subject = '';
-            urgency = '';
-            safetyOnly = false;
-            revision++;
-          }),
-          child: const UiText('مسح الفلاتر'),
-        ),
+        if (filters.isNotEmpty)
+          TextButton(
+            onPressed: () => setState(() {
+              cleared = true;
+              kind = '';
+              subject = '';
+              urgency = '';
+              safetyOnly = false;
+              revision++;
+            }),
+            child: const UiText('مسح الفلاتر'),
+          ),
         if (rows(value).isEmpty)
           const EmptyMessage('لا توجد ملاحظات في هذا القسم.'),
         for (final item in rows(value))
@@ -228,13 +281,18 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                         : 'بلاغ سلامة — متابعة بشرية',
                   ),
                 TextButton(
-                  onPressed: () => openPage(
-                    context,
-                    OwnerFeedbackDetail(
-                      auth: widget.auth,
-                      id: textOf(item['id']),
-                    ),
-                  ),
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          await openPage(
+                            context,
+                            OwnerFeedbackDetail(
+                              auth: widget.auth,
+                              id: textOf(item['id']),
+                            ),
+                          );
+                          if (current) setState(() => revision++);
+                        },
                   child: const UiText('فتح الملاحظة'),
                 ),
                 if (textOf(item['message']).isNotEmpty)
@@ -244,7 +302,7 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                   UiText('رد الإدارة: ${item['ownerResponse']}'),
                 if (item['status'] == 'Open')
                   TextButton(
-                    onPressed: () => review(textOf(item['id'])),
+                    onPressed: busy ? null : () => review(textOf(item['id'])),
                     child: const UiText('تسجيل المراجعة'),
                   ),
                 if (item['status'] != 'Resolved' &&
@@ -252,7 +310,7 @@ class _OwnerFeedbackInboxState extends State<OwnerFeedbackInbox> {
                     (item['safety'] != true || item['triagedAtUtc'] != null) &&
                     item['kind'] != 'Rating')
                   TextButton(
-                    onPressed: () => resolve(textOf(item['id'])),
+                    onPressed: busy ? null : () => resolve(textOf(item['id'])),
                     child: const UiText('الرد والحل'),
                   ),
                 UiText(feedbackStates[item['status']] ?? 'غير متاحة'),

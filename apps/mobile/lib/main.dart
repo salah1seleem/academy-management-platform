@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'app/app.dart';
 import 'core/api/api_client.dart';
@@ -10,6 +12,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'Academy Arabic',
+    ], await rootBundle.loadString('assets/fonts/AcademyArabic-OFL.txt'));
+  });
   try {
     final config = AppConfig(
       const String.fromEnvironment('APP_ENV', defaultValue: 'Production'),
@@ -28,7 +35,8 @@ Future<void> main() async {
         appearance: appearance,
       ),
     );
-    auth.restore();
+    // Mount the entry animation before a fast local session restore can finish.
+    WidgetsBinding.instance.addPostFrameCallback((_) => auth.restore());
   } catch (_) {
     runApp(
       const MaterialApp(
@@ -40,7 +48,7 @@ Future<void> main() async {
                 child: Padding(
                   padding: EdgeInsets.all(24),
                   child: Text(
-                    'يلزم إعداد APP_ENV وAPI_BASE_URL صالحين لتشغيل التطبيق.',
+                    'تعذر تشغيل التطبيق. راجع إعدادات الاتصال أو تواصل مع الدعم.',
                   ),
                 ),
               ),

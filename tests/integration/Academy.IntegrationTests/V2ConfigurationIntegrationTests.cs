@@ -25,10 +25,10 @@ public sealed class V2ConfigurationIntegrationTests : IAsyncLifetime
         using var owner = await Staff(DemoSeed.OwnerEmail); using var other = await Staff(DemoSeed.FutureOwnerEmail);
         var original = await Current();
         var settings = AcademyRuntimeSettings.Read(original.Payload);
-        var changed = settings with { Features = new(settings.Features), ConsecutiveAbsenceAlert = 4 }; changed.Features["nutrition"] = false;
+        var changed = settings with { Features = new(settings.Features), ConsecutiveAbsenceAlert = 4 }; changed.Features["catalog"] = false;
         var id = await Draft(owner, changed);
         Assert.Equal(id, await Draft(owner, changed)); // repeat submit is one draft
-        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/content/nutrition")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/content/catalog")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Change(other, id, ConfigurationState.Validated)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Change(owner, id, ConfigurationState.Active)).StatusCode);
         try
@@ -45,16 +45,16 @@ public sealed class V2ConfigurationIntegrationTests : IAsyncLifetime
                 row.EffectiveAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1); await db.SaveChangesAsync();
             }
             (await Change(owner, id, ConfigurationState.Active)).EnsureSuccessStatusCode();
-            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/nutrition")).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await Write(owner, "/api/v1/content/nutrition", new { arabicName = "لا يكتب" })).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await other.GetAsync("/api/v1/content/nutrition")).StatusCode);
-            var features = await owner.GetFromJsonAsync<JsonElement>("/api/v1/academy/features"); Assert.DoesNotContain("nutrition", features.GetProperty("features").EnumerateArray().Select(x => x.GetString()));
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/catalog")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Write(owner, "/api/v1/content/catalog", new { arabicName = "لا يكتب" })).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await other.GetAsync("/api/v1/content/catalog")).StatusCode);
+            var features = await owner.GetFromJsonAsync<JsonElement>("/api/v1/academy/features"); Assert.DoesNotContain("catalog", features.GetProperty("features").EnumerateArray().Select(x => x.GetString()));
             var history = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/configuration/");
             Assert.Contains(history.GetProperty("versions").EnumerateArray(), x => x.GetProperty("id").GetGuid() == original.Id && x.GetProperty("state").GetString() == "Superseded");
             Assert.Contains(history.GetProperty("history").EnumerateArray(), x => x.GetProperty("configurationId").GetGuid() == id && x.GetProperty("to").GetString() == "Active");
         }
         finally { await Activate(owner, await Draft(owner, settings)); }
-        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/content/nutrition")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/content/catalog")).StatusCode);
     }
 
     [Fact]
@@ -75,17 +75,17 @@ public sealed class V2ConfigurationIntegrationTests : IAsyncLifetime
     {
         using var owner = await Staff(DemoSeed.OwnerEmail);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var license = await db.AcademyFeatureEntitlements.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Feature == "nutrition");
+        var license = await db.AcademyFeatureEntitlements.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Feature == "catalog");
         var active = await db.AcademyConfigurationVersions.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.State == ConfigurationState.Active);
         var meals = await db.NutritionItems.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId);
         try
         {
             license.Enabled = false; await db.SaveChangesAsync();
-            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/nutrition")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/catalog")).StatusCode);
             license.Enabled = true; active.State = ConfigurationState.Suspended; await db.SaveChangesAsync();
             await AcademyConfigurationService.SeedDemo(db, [DemoSeed.NogoomAcademyId]);
             Assert.False(await db.AcademyConfigurationVersions.AnyAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.State == ConfigurationState.Active));
-            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/nutrition")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/catalog")).StatusCode);
             Assert.Equal(meals, await db.NutritionItems.CountAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId));
             Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/manage/configuration/")).StatusCode);
         }

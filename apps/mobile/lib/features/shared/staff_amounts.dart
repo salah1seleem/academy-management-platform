@@ -1,3 +1,4 @@
+import '../../core/widgets/guided_form.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
@@ -5,6 +6,8 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import '../owner/payroll_requests.dart'
+    show payrollAmount, payrollRequestStatus;
 import 'salary_history.dart';
 import 'payroll_statements.dart';
 
@@ -18,6 +21,8 @@ class StaffAmounts extends StatefulWidget {
 class _StaffAmountsState extends State<StaffAmounts> {
   final form = GlobalKey<FormState>();
   final otherReason = TextEditingController();
+  final amount = TextEditingController();
+  bool advance = false;
   String? reason;
   bool isOther = false;
   String operationKey = commandKey(), message = '';
@@ -26,6 +31,7 @@ class _StaffAmountsState extends State<StaffAmounts> {
   @override
   void dispose() {
     otherReason.dispose();
+    amount.dispose();
     super.dispose();
   }
 
@@ -41,6 +47,10 @@ class _StaffAmountsState extends State<StaffAmounts> {
         '/api/v1/staff/payroll/requests',
         body: {
           'reasonId': reason,
+          if (advance) ...{
+            'kind': 'Advance',
+            'requestedAmount': payrollAmount(amount.text),
+          },
           if (isOther) 'otherReason': otherReason.text.trim(),
         },
         idempotencyKey: operationKey,
@@ -49,6 +59,7 @@ class _StaffAmountsState extends State<StaffAmounts> {
         setState(() {
           operationKey = commandKey();
           otherReason.clear();
+          amount.clear();
           reason = null;
           isOther = false;
           revision++;
@@ -78,7 +89,11 @@ class _StaffAmountsState extends State<StaffAmounts> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'المبالغ الإضافية', 'Additional amounts'),
+    title: localized(
+      context,
+      'السلف والمبالغ الإضافية',
+      'Staff amount requests',
+    ),
     child: RemoteBody(
       key: ValueKey(revision),
       auth: widget.auth,
@@ -104,17 +119,32 @@ class _StaffAmountsState extends State<StaffAmounts> {
           ),
           if (message.isNotEmpty) UiText(message),
           GCard(
-            child: Form(
+            child: GuidedForm(
               key: form,
               child: Column(
                 children: [
-                  UiText(
-                    localized(
-                      context,
-                      'طلب مبلغ إضافي — الإدارة تحدد القيمة',
-                      'Additional amount request — management sets the amount',
-                    ),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: UiText('مبلغ إضافي')),
+                      ButtonSegment(value: true, label: UiText('سلفة')),
+                    ],
+                    selected: {advance},
+                    onSelectionChanged: busy
+                        ? null
+                        : (v) => setState(() {
+                            advance = v.single;
+                            operationKey = commandKey();
+                          }),
                   ),
+                  const SizedBox(height: 16),
+                  if (!advance)
+                    UiText(
+                      localized(
+                        context,
+                        'طلب مبلغ إضافي — الإدارة تحدد القيمة',
+                        'Additional amount request — management sets the amount',
+                      ),
+                    ),
                   DropdownButtonFormField<String>(
                     initialValue: reason,
                     decoration: InputDecoration(
@@ -146,6 +176,24 @@ class _StaffAmountsState extends State<StaffAmounts> {
                           )
                         : null,
                   ),
+                  if (advance) ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: amount,
+                      enabled: !busy,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText:
+                            'قيمة السلفة (${obj(data['employee'])['currency'] ?? ''})',
+                      ),
+                      onChanged: (_) => operationKey = commandKey(),
+                      validator: (v) => payrollAmount(v ?? '') == null
+                          ? 'أدخل قيمة السلفة.'
+                          : null,
+                    ),
+                  ],
                   if (isOther) ...[
                     const SizedBox(height: 12),
                     TextFormField(
@@ -189,18 +237,10 @@ class _StaffAmountsState extends State<StaffAmounts> {
             GCard(
               child: ListTile(
                 title: UiText(
-                  '${r['reasonName']}${r['status'] == 'Approved' ? ' · ${r['amount']} ${r['currency']}' : ''}',
+                  '${r['kind'] == 'Advance' ? 'سلفة' : 'مبلغ إضافي'} · ${r['reasonName']}',
                 ),
                 subtitle: UiText(
-                  '${localized(context, switch (r['status']) {
-                    'Approved' => 'مقبول',
-                    'Rejected' => 'مرفوض',
-                    _ => 'بانتظار المراجعة',
-                  }, switch (r['status']) {
-                    'Approved' => 'Approved',
-                    'Rejected' => 'Rejected',
-                    _ => 'Awaiting review',
-                  })}${r['reviewNote'] == null ? '' : '\n${r['reviewNote']}'}',
+                  '${payrollRequestStatus(r)}${r['amount'] != null || r['requestedAmount'] != null ? ' · ${r['amount'] ?? r['requestedAmount']} ${r['currency']}' : ''}\n${r['reviewNote'] ?? ''}',
                 ),
                 trailing: Icon(
                   r['status'] == 'Approved'

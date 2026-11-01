@@ -20,6 +20,7 @@ public sealed class GuardianProfile : TenantEntity
 
 public sealed class Player : TenantEntity
 {
+    public DateOnly? RegisteredOn {get;set;}
     public required string PlayerCode { get; set; }
     public required string ArabicName { get; set; }
     public string? EnglishName { get; set; }
@@ -45,6 +46,7 @@ public sealed class GuardianPlayerLink : TenantEntity
 
 public sealed class SportEnrollment : TenantEntity
 {
+    public int? ShirtNumber { get; set; }
     // Explicitly published training precaution; not a medical chart or staff notes.
     public string? TrainingSafetyNote { get; set; }
     public TrainingRegistrationFormat RegistrationFormat { get; set; } = TrainingRegistrationFormat.Group;

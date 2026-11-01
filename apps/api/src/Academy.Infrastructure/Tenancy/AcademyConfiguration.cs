@@ -42,7 +42,7 @@ public sealed record AcademyRuntimeSettings(
     string Currency, string TimeZone, Dictionary<string, bool> Features,
     bool CashEnabled = false, int ConsecutiveAbsenceAlert = 3, bool TenantMarketingOptIn = false,
     Dictionary<string, string[]>? HelpAudiences = null, MediaRetentionPolicy? MediaRetention = null,
-    int? FeedbackFollowUpDays = null,decimal? MonthlyCollectionTarget=null)
+    int? FeedbackFollowUpDays = null,decimal? MonthlyCollectionTarget=null, OwnerHomeSettings? OwnerHome=null)
 {
     public static AcademyRuntimeSettings Initial(string currency, string zone, bool preserveExisting = false) =>
         new(currency, zone, AcademyFeatures.All.ToDictionary(f => f, f => preserveExisting && AcademyFeatures.Existing.Contains(f)), preserveExisting);
@@ -50,6 +50,7 @@ public sealed record AcademyRuntimeSettings(
     public string[] Validate(IReadOnlyDictionary<string, bool> entitlements, string existingCurrency, string existingTimeZone)
     {
         var errors = new List<string>();
+        errors.AddRange(OwnerHome?.Validate() ?? []);
         if(MonthlyCollectionTarget.HasValue&&(MonthlyCollectionTarget<=0||MonthlyCollectionTarget>1_000_000_000||Math.Round(MonthlyCollectionTarget.Value,2)!=MonthlyCollectionTarget))errors.Add("هدف التحصيل الشهري مبلغ موجب حتى مليار وبدقتين عشريتين، أو اتركه دون هدف.");
         if (FeedbackFollowUpDays is < 1 or > 30) errors.Add("مهلة متابعة الملاحظات بين يوم و30 يومًا، أو اتركها دون مهلة تلقائية.");
         if (MediaRetention is { Days: < 1 or > 3650 }) errors.Add("مدة الاحتفاظ بالوسائط بين يوم و3650 يومًا، أو اتركها دون حذف آلي.");
@@ -65,6 +66,7 @@ public sealed record AcademyRuntimeSettings(
     }
     public string Serialize() => JsonSerializer.Serialize(this with
     {
+        OwnerHome = OwnerHome is null ? null : OwnerHome with { Targets = OwnerHome.OrderedTargets() },
         Features = Features.OrderBy(f => f.Key, StringComparer.Ordinal).ToDictionary(f => f.Key, f => f.Value),
         HelpAudiences = HelpAudiences?.OrderBy(a => a.Key, StringComparer.Ordinal).ToDictionary(a => a.Key, a => a.Value is null ? null! : a.Value.OrderBy(r => r, StringComparer.Ordinal).ToArray())
     });

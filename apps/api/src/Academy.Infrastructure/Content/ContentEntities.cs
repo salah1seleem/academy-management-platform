@@ -13,6 +13,10 @@ public enum PlayerMediaType { Image = 1, Video = 2 }
 
 public sealed class SportCatalogItem : TenantEntity
 {
+    public bool UsesVariants { get; set; }
+    public bool NumberedUniform { get; set; }
+    public int StockRevision { get; set; }
+    public ICollection<ProductStockVariant> Variants { get; set; } = [];
     public int StockQuantity { get; set; }
     public Guid SportId { get; set; }
     public required string ArabicName { get; set; }
@@ -24,6 +28,17 @@ public sealed class SportCatalogItem : TenantEntity
     public decimal? DiscountPercentage { get; set; }
     public int DisplayOrder { get; set; }
     public Sport Sport { get; set; } = null!;
+}
+
+// One stock balance per color/size/number, never a serial number per garment.
+public sealed class ProductStockVariant : TenantEntity
+{
+    public Guid ProductId { get; set; }
+    public required string Size { get; set; }
+    public string Color { get; set; } = "";
+    public int? ShirtNumber { get; set; }
+    public int Quantity { get; set; }
+    public SportCatalogItem Product { get; set; } = null!;
 }
 
 public sealed class NutritionItem : TenantEntity

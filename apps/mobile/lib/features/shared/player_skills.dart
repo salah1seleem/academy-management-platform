@@ -1,3 +1,4 @@
+import '../../core/widgets/guided_form.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -293,7 +294,7 @@ class _PlayerSkillsState extends State<PlayerSkillsPage>
                   subtitle: Text(
                     '${p['assignedOn']} · ${map(p['curriculum'])['revisionNumber']}',
                   ),
-                  trailing: const Icon(Icons.chevron_left),
+                  trailing: const Icon(Icons.chevron_right),
                   onTap: () => openPlan(textOf(p['id'])),
                 ),
             ],
@@ -435,7 +436,7 @@ class _PlayerSkillsState extends State<PlayerSkillsPage>
         ),
       ),
       if (widget.playerId == null && d['canReview'] == true)
-        Form(
+        GuidedForm(
           key: form,
           child: GCard(
             child: Column(

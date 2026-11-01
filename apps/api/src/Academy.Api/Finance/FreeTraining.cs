@@ -87,10 +87,19 @@ public sealed class FreeTrainingService(FoundationDbContext db, CurrentTenant te
         var q = await Prepare(t, actor, new(body.SportEnrollmentId, body.SubscriptionPlanId, body.Reason));
         if (q.Hash != body.QuoteHash) throw new CashRejected("تغير السعر أو الاشتراك أو الأهلية. حدّث المراجعة قبل الاعتماد.");
         var now = clock.UtcNow;
-        var approval = new FreeTrainingApproval { Id = Guid.NewGuid(), AcademyId = t.AcademyId, BranchId = q.Enrollment.BranchId, SportEnrollmentId = q.Enrollment.Id, SubscriptionPlanId = q.Plan.Id, ActorUserId = actor, ActorMembershipId = t.MembershipId, WaivedAmount = q.Plan.Price, Currency = q.Plan.Currency, Reason = q.Reason, IdempotencyKey = key, RequestHash = payload, QuoteHash = q.Hash, StartDate = q.Start, EndDate = q.End, InitialSessions = q.Terms.Sessions, PlanTermsJson = JsonSerializer.Serialize(q.Terms, SourceJson), CreatedAtUtc = now, UpdatedAtUtc = now };
+        var (approval,period) = Record(db,t,actor,q.Enrollment,q.Plan,q.Terms,q.Start,clock.Today,q.Reason,key,payload,q.Hash,now);
+        await db.SaveChangesAsync();
+        var firstPeriod = !await db.SubscriptionPeriods.AnyAsync(p=>p.AcademyId==t.AcademyId&&p.SportEnrollmentId==period.SportEnrollmentId&&p.Id!=period.Id);
+        await Academy.Api.Operations.GuardianLifecycleNotice.Add(db,t.AcademyId,period.SportEnrollmentId,firstPeriod?"Enrollment":"SingleRenewal",period.Id,"SubscriptionPeriod",period.Id,now);
+        await db.SaveChangesAsync(); await tx.CommitAsync(); return new { approval.Id, periodId = period.Id, replay = false, source = "ApprovedWaiver" };
+    }
+    internal static (FreeTrainingApproval Approval, SubscriptionPeriod Period) Record(FoundationDbContext db, TenantMembership t, Guid actor, SportEnrollment enrollment, SubscriptionPlan plan, PlanTerms terms, DateOnly start, DateOnly today, string reason, string key, string payload, string hash, DateTimeOffset now)
+    {
+        var approval = new FreeTrainingApproval { Id = Guid.NewGuid(), AcademyId = t.AcademyId, BranchId = enrollment.BranchId, SportEnrollmentId = enrollment.Id, SubscriptionPlanId = plan.Id, ActorUserId = actor, ActorMembershipId = t.MembershipId, WaivedAmount = plan.Price, Currency = plan.Currency, Reason = reason, IdempotencyKey = key, RequestHash = payload, QuoteHash = hash, StartDate = start, EndDate = terms.EndDate(start), InitialSessions = terms.Sessions, PlanTermsJson = JsonSerializer.Serialize(terms, SourceJson), CreatedAtUtc = now, UpdatedAtUtc = now };
         db.FreeTrainingApprovals.Add(approval);
-        var period = new SubscriptionPeriod { Id = Guid.NewGuid(), AcademyId = t.AcademyId, SportEnrollmentId = q.Enrollment.Id, SportId = q.Enrollment.SportId, SubscriptionPlanId = q.Plan.Id, Origin = SubscriptionOrigin.ApprovedWaiver, FreeTrainingApproval = approval, StartDate = q.Start, EndDate = q.End, InitialSessions = q.Terms.Sessions, RemainingSessions = q.Terms.Sessions, Status = q.Start > clock.Today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active, PriceSnapshot = 0, CurrencySnapshot = q.Plan.Currency, CreatedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now };
-        q.Terms.Capture(period); db.SubscriptionPeriods.Add(period); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { approval.Id, periodId = period.Id, replay = false, source = "ApprovedWaiver" };
+        var period = new SubscriptionPeriod { Id = Guid.NewGuid(), AcademyId = t.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, SubscriptionPlanId = plan.Id, Origin = SubscriptionOrigin.ApprovedWaiver, FreeTrainingApproval = approval, StartDate = start, EndDate = terms.EndDate(start), InitialSessions = terms.Sessions, RemainingSessions = terms.Sessions, Status = start > today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active, PriceSnapshot = 0, CurrencySnapshot = plan.Currency, CreatedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now };
+        terms.Capture(period); db.SubscriptionPeriods.Add(period);
+        return (approval,period);
     }
     private async Task<object> Result(FreeTrainingApproval source, bool replay) => new { source.Id, periodId = await db.SubscriptionPeriods.Where(p => p.FreeTrainingApprovalId == source.Id).Select(p => p.Id).SingleAsync(), replay, source = "ApprovedWaiver" };
 }

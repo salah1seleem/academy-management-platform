@@ -28,3 +28,8 @@
 .receipts { display: grid; gap: .65rem; }
 .receiptLink { display: block; padding: .7rem 1rem; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; color: var(--primary, #0d7772); text-decoration: underline; text-underline-offset: .2rem; overflow-wrap: anywhere; }
 @media (max-width: 380px) { .totals { grid-template-columns: 1fr; } .line { flex-wrap: wrap; } }
+
+:global(.dashboard-shell[data-workspace-design="v5"]) .page { color: var(--staff-text); }
+:global(.dashboard-shell[data-workspace-design="v5"]) .page :global(.page-header) { display:flex; background:transparent; border:0; border-bottom:1px solid var(--staff-border); border-radius:0; padding:0 0 18px; }
+:global(.dashboard-shell[data-workspace-design="v5"]) :is(.card,.summary,.notice,.totals>div,.plan select,.card textarea,.receiptLink) { border-radius:4px; }
+:global(.dashboard-shell[data-workspace-design="v5"]) .options { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); }

@@ -19,7 +19,7 @@ public sealed partial class BrandingMatchesTests
         return await owner.GetFromJsonAsync<JsonElement>(path);
     }
     [Fact] public async Task Feedback_investigation_private_brief_findings_replay_audit_and_cancel_do_not_publish_or_change_money() => await DelegateFixture(async (owner, admin, db, group, member) => {
-        var notes = await OverdueFamilyNotes(db, group); var f = notes[0]; var path = $"/api/v1/manage/feedback/{f.Id}";
+        var notes = await OverdueFamilyNotes(db, group,scopedPlayer:true); var f = notes[0]; var path = $"/api/v1/manage/feedback/{f.Id}";
         var report = await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28"); var notices = await db.AcademyNotices.CountAsync();
         var options = await owner.GetFromJsonAsync<JsonElement>(path + "/investigators"); Assert.Contains(options.GetProperty("items").EnumerateArray(), m => m.GetProperty("id").GetGuid() == member);
         var before = await owner.GetFromJsonAsync<JsonElement>(path);
@@ -33,7 +33,7 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal(assignment.Brief, detail.GetProperty("brief").GetString()); Assert.True(detail.GetProperty("canEdit").GetBoolean());
         foreach (var secret in new[] { f.Id.ToString(), f.PlayerId.ToString(), f.GuardianUserId.ToString(), group.Id.ToString(), "playerName", "guardian", "message", "ownerResponse", "history", "نص أسرة خاص" }) Assert.DoesNotContain(secret, System.Text.RegularExpressions.Regex.Unescape(raw));
         var findings = new FeedbackFindingsWrite("نتيجة داخلية اصطناعية للمالك فقط؛ اقترح تعديل توزيع الوقت", detail.GetProperty("version").GetUInt32(), Guid.NewGuid());
-        Assert.All(await Task.WhenAll(Send(admin, delegatePath + "/transition", findings), Send(admin, delegatePath + "/transition", findings)), r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        foreach(var result in await Task.WhenAll(Send(admin, delegatePath + "/transition", findings), Send(admin, delegatePath + "/transition", findings)))Assert.True(result.StatusCode==HttpStatusCode.OK,await result.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.Conflict, (await Send(admin, delegatePath + "/transition", findings with { Note = "نتيجة أخرى" })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Send(admin, delegatePath + "/transition", findings with { RequestId = Guid.NewGuid() })).StatusCode);
         var updated = await owner.GetFromJsonAsync<JsonElement>(path); Assert.Equal("Open", updated.GetProperty("status").GetString()); Assert.Equal(JsonValueKind.Null, updated.GetProperty("ownerResponse").ValueKind); Assert.Equal(2, updated.GetProperty("history").GetArrayLength());
@@ -51,7 +51,7 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/v1/my-followups/investigations/{newId}")).StatusCode);
     });
     [Fact] public async Task Feedback_investigation_rechecks_read_edit_scope_subject_user_and_immutable_findings() => await DelegateFixture(async (owner, admin, db, group, member) => {
-        var f = (await OverdueFamilyNotes(db, group))[0]; var sourcePath = $"/api/v1/manage/feedback/{f.Id}"; var source = await AssignCase(owner, f.Id, member); var id = source.GetProperty("investigationId").GetGuid(); var path = $"/api/v1/my-followups/investigations/{id}";
+        var f = (await OverdueFamilyNotes(db, group,scopedPlayer:true))[0]; var sourcePath = $"/api/v1/manage/feedback/{f.Id}"; var source = await AssignCase(owner, f.Id, member); var id = source.GetProperty("investigationId").GetGuid(); var path = $"/api/v1/my-followups/investigations/{id}";
         var row = await admin.GetFromJsonAsync<JsonElement>(path); var b = new FeedbackFindingsWrite("نتيجة اختبار صلاحية حية", row.GetProperty("version").GetUInt32(), Guid.NewGuid());
         var grant = await db.StaffActionGrants.SingleAsync(g => g.MembershipId == member && g.Module == "followups"); grant.Edit = false; await db.SaveChangesAsync(); Assert.False((await admin.GetFromJsonAsync<JsonElement>(path)).GetProperty("canEdit").GetBoolean()); Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, path + "/transition", b)).StatusCode);
         grant.Read = false; await db.SaveChangesAsync(); Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(path)).StatusCode); grant.Read = true; grant.Edit = true; await db.SaveChangesAsync();

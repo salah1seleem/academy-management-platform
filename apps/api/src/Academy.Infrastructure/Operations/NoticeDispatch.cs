@@ -4,6 +4,7 @@ public sealed class NoticeTemplate : TenantEntity
 {
     public required string Key { get; set; }
     public required string Message { get; set; }
+    public int? TimingDays { get; set; }
 }
 public sealed class NoticeDispatch : TenantEntity
 {

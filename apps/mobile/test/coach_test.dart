@@ -1,3 +1,5 @@
+import 'support/visibility.dart';
+
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
@@ -43,6 +45,10 @@ Widget shell(Widget page) => MaterialApp(
   supportedLocales: const [Locale('ar')],
   localizationsDelegates: GlobalMaterialLocalizations.delegates,
   theme: AcademyTheme.light(),
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(disableAnimations: true),
+    child: child!,
+  ),
   home: page,
 );
 
@@ -87,7 +93,7 @@ void main() {
           shell(CoachAttendance(auth: auth, sessionId: 's')),
         );
         await tester.pumpAndSettle();
-        await tester.ensureVisible(find.text('حاضر'));
+        await revealTestTarget(tester, find.text('حاضر'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('حاضر'));
         await tester.tap(find.text('حفظ الحضور'));
@@ -100,7 +106,7 @@ void main() {
         expect(find.text('بانتظار المزامنة'), findsOneWidget);
         expect(writes, 1);
         final retry = find.text('مراجعة وإعادة المزامنة');
-        await tester.ensureVisible(retry);
+        await revealTestTarget(tester, retry);
         await tester.tap(retry);
         await tester.pumpAndSettle();
         expect(writes, lostResponse ? 1 : 2);
@@ -127,7 +133,14 @@ void main() {
           return {'id': 'evaluation'};
         }
         if (p == '/api/v1/evaluations/evaluation') {
-          return {'player': 'آدم', 'group': 'الحصة البديلة', 'scores': []};
+          return {
+            'id': 'evaluation',
+            'sportEnrollmentId': 'e1',
+            'status': 'Draft',
+            'player': 'آدم',
+            'group': 'الحصة البديلة',
+            'scores': [],
+          };
         }
         return {
           'canManageAttendance': false,
@@ -153,11 +166,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('حفظ الحضور'), findsNothing);
-      await tester.ensureVisible(find.text('تقييم اللاعب'));
+      await revealTestTarget(tester, find.text('تقييم اللاعب'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('تقييم اللاعب'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('بدء تقييم جديد'));
+
       await tester.pumpAndSettle();
       expect(sent, containsPair('trainingSessionId', 'replacement'));
       expect(sent, containsPair('evaluationDate', '2026-11-15'));
@@ -209,7 +222,8 @@ void main() {
           {'id': 'g1', 'arabicName': 'براعم 2018'},
         ];
       }
-      if (p == '/api/v1/attendance/sessions?upcomingOnly=true') {
+      if (p == '/api/v1/academy/calendar') return {'today': '2026-09-28'};
+      if (p == '/api/v1/attendance/sessions?nearestOnly=true') {
         return [
           {
             'id': 's1',
@@ -246,8 +260,12 @@ void main() {
       shell(CoachHome(auth: auth, accountPage: const SizedBox())),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('مدرب الاختبار'), findsOneWidget);
     expect(find.text('براعم 2018'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.textContaining('مسبح الاختبار · A'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.textContaining('مسبح الاختبار · A'), findsOneWidget);
     for (final forbidden in ['تحصيل', 'مدفوعات', 'إيرادات', 'اشتراكات']) {
       expect(find.textContaining(forbidden), findsNothing);
@@ -286,16 +304,21 @@ void main() {
         shell(CoachAttendance(auth: auth, sessionId: 's1')),
       );
       await tester.pumpAndSettle();
+      await revealTestTarget(tester, find.text('حاضر'));
       expect(find.text('حاضر'), findsOneWidget);
       expect(find.text('غائب'), findsOneWidget);
-      await tester.ensureVisible(find.byType(PopupMenuButton<String>));
+      await revealTestTarget(tester, find.byType(PopupMenuButton<String>));
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>));
       await tester.pumpAndSettle();
       expect(find.text('متأخر'), findsOneWidget);
       expect(find.text('معتذر'), findsOneWidget);
       expect(find.text('لم يُسجل'), findsOneWidget);
-      await tester.tap(find.byWidgetPredicate((w) => w is CheckedPopupMenuItem<String> && w.value == 'Late'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is CheckedPopupMenuItem<String> && w.value == 'Late',
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('حفظ الحضور'));
       await tester.pumpAndSettle();

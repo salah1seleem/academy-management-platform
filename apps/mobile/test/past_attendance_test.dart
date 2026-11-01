@@ -55,9 +55,15 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('طلب تصحيح يوم سابق'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('طلب تصحيح يوم سابق'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+      await tester.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('غائب').last);
@@ -65,11 +71,13 @@ void main() {
       await tester.ensureVisible(find.byType(TextField));
       await tester.enterText(find.byType(TextField), 'مراجعة ورقية اصطناعية');
       await tester.pumpAndSettle();
+      tester.testTextInput.hide();
       await tester.scrollUntilVisible(
         find.text('إرسال الطلب للمالك'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('إرسال الطلب للمالك'));
       await tester.pumpAndSettle();
       expect(find.text('تعذر الاتصال مؤقتًا؛ الطلب لم يؤكد.'), findsOneWidget);
@@ -80,6 +88,7 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('إرسال الطلب للمالك'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(

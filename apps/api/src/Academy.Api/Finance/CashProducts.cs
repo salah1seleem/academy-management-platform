@@ -28,7 +28,7 @@ public sealed partial class CashRegisterService
         return new { branches = await db.Branches.AsNoTracking().Where(b => b.IsActive).OrderBy(b => b.ArabicName).Select(b => new { b.Id, b.ArabicName }).ToArrayAsync() };
     }
 
-    public async Task<object> ProductQuote(Guid productId, Guid branchId, int quantity, Guid? playerId)
+    public async Task<object> ProductQuote(Guid productId, Guid branchId, int quantity, Guid? playerId, Guid? variantId = null)
     {
         await AuthorizeProductSale(playerId.HasValue); var (t, _) = await Context(write: true);
         if (quantity is < 1 or > 100) throw new CashRejected("اختر كمية من 1 إلى 100.", 422);
@@ -36,7 +36,12 @@ public sealed partial class CashRegisterService
             throw new CashRejected("الفرع أو اللاعب غير متاحين.", 404);
         var product = await db.SportCatalogItems.AsNoTracking().SingleOrDefaultAsync(p => p.Id == productId && p.IsActive && p.Sport.IsActive);
         if (product?.DisplayPrice is null || string.IsNullOrWhiteSpace(product.Currency)) throw new CashRejected("المنتج غير متاح للبيع.", 404);
-        if (product.StockQuantity < quantity) throw new CashRejected("الكمية المطلوبة غير متاحة حاليًا.");
+        var available=product.StockQuantity;
+        if(product.UsesVariants){if(!variantId.HasValue)throw new CashRejected("اختر المقاس والرقم أولًا.",422);
+            var variant=await db.ProductStockVariants.AsNoTracking().SingleOrDefaultAsync(v=>v.Id==variantId&&v.ProductId==productId&&v.IsActive);
+            if(variant is null)throw new CashRejected("المقاس والرقم غير متاحين.",404);available=variant.Quantity;
+        }else if(variantId.HasValue)throw new CashRejected("هذا المنتج بلا مقاسات مخزون.",422);
+        if (available < quantity) throw new CashRejected("الكمية المطلوبة غير متاحة حاليًا.");
         var unit = decimal.Round(product.DisplayPrice.Value * (100 - (product.DiscountPercentage ?? 0)) / 100, 2, MidpointRounding.AwayFromZero);
         Amount(unit * quantity, zero: false);
         var enabled = (await config.Active(t.AcademyId))?.CashEnabled == true;
@@ -45,7 +50,7 @@ public sealed partial class CashRegisterService
                               where enabled && s.ClosedAtUtc == null && s.BranchId == branchId && s.OpenedByMembershipId == t.MembershipId && r.IsActive && r.Currency == product.Currency &&
                                   db.CashierAssignments.Any(a => a.RegisterId == r.Id && a.MembershipId == t.MembershipId && a.IsActive)
                               orderby r.Name select new { s.Id, name = r.Name }).ToArrayAsync();
-        return new { unitPrice = Money(unit), amount = Money(unit * quantity), product.Currency, product.StockQuantity, cashEnabled = enabled, sessions };
+        return new { unitPrice = Money(unit), amount = Money(unit * quantity), product.Currency, stockQuantity=available, cashEnabled = enabled, sessions };
     }
 
     private async Task<(CashSession Session, CashRegister Register)> ProductSession(Guid id)

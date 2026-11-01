@@ -93,20 +93,7 @@ class SettlementComparisonContent extends StatelessWidget {
           ],
         ),
       ),
-    Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        TextButton(
-          onPressed: previous,
-          child: UiText(localized(context, 'السابق', 'Previous')),
-        ),
-        UiText(textOf(data['page'])),
-        TextButton(
-          onPressed: next,
-          child: UiText(localized(context, 'التالي', 'Next')),
-        ),
-      ],
-    ),
+    const SizedBox.shrink(),
   ]);
   String _result(BuildContext context, String code) {
     final pair =

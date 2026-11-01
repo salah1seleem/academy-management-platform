@@ -1,4 +1,5 @@
 using Academy.Infrastructure.Identity;
+using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Attendance;
 using Academy.Infrastructure.Content;
 using Academy.Infrastructure.Evaluations;
@@ -49,6 +50,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
     public DbSet<EvaluationCriterion> EvaluationCriteria => Set<EvaluationCriterion>();
     public DbSet<PlayerEvaluation> PlayerEvaluations => Set<PlayerEvaluation>();
     public DbSet<EvaluationScore> EvaluationScores => Set<EvaluationScore>();
+    public DbSet<ProductStockVariant> ProductStockVariants => Set<ProductStockVariant>();
     public DbSet<SportCatalogItem> SportCatalogItems => Set<SportCatalogItem>();
     public DbSet<NutritionItem> NutritionItems => Set<NutritionItem>();
     public DbSet<NutritionCategoryLink> NutritionCategoryLinks => Set<NutritionCategoryLink>();
@@ -59,6 +61,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
     {
         base.OnModelCreating(builder);
         ConfigurePlatformIdentity(builder);
+        ConfigurePlatformProfiles(builder);
         ConfigureStaffAccess(builder);
         ConfigureSwimming(builder);
         ConfigureReceivables(builder);
@@ -354,9 +357,10 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.PerformedByUserId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t =>
             {
-                t.HasCheckConstraint("CK_SubscriptionAdjustments_Type", "\"AdjustmentType\" IN ('FreezeStarted', 'FreezeEnded', 'DaysAdded', 'DaysDeducted', 'Cancelled')");
-                t.HasCheckConstraint("CK_SubscriptionAdjustments_DaysDelta", "(\"AdjustmentType\" = 'DaysAdded' AND \"DaysDelta\" > 0) OR (\"AdjustmentType\" = 'DaysDeducted' AND \"DaysDelta\" < 0) OR (\"AdjustmentType\" = 'FreezeEnded' AND \"DaysDelta\" > 0) OR (\"AdjustmentType\" IN ('FreezeStarted', 'Cancelled') AND \"DaysDelta\" IS NULL)");
-                t.HasCheckConstraint("CK_SubscriptionAdjustments_EndDates", "(\"AdjustmentType\" IN ('FreezeEnded', 'DaysAdded', 'DaysDeducted') AND \"OldEndDate\" IS NOT NULL AND \"NewEndDate\" IS NOT NULL) OR (\"AdjustmentType\" IN ('FreezeStarted', 'Cancelled') AND \"NewEndDate\" IS NULL)");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_Type", "\"AdjustmentType\" IN ('FreezeStarted', 'FreezeEnded', 'DaysAdded', 'DaysDeducted', 'Cancelled', 'SessionsAdded')");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_DaysDelta", "(\"AdjustmentType\" = 'DaysAdded' AND \"DaysDelta\" > 0) OR (\"AdjustmentType\" = 'DaysDeducted' AND \"DaysDelta\" < 0) OR (\"AdjustmentType\" = 'FreezeEnded' AND \"DaysDelta\" > 0) OR (\"AdjustmentType\" IN ('FreezeStarted', 'Cancelled', 'SessionsAdded') AND \"DaysDelta\" IS NULL)");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_EndDates", "(\"AdjustmentType\" IN ('FreezeEnded', 'DaysAdded', 'DaysDeducted') AND \"OldEndDate\" IS NOT NULL AND \"NewEndDate\" IS NOT NULL) OR (\"AdjustmentType\" = 'SessionsAdded' AND \"NewEndDate\" IS NOT NULL) OR (\"AdjustmentType\" IN ('FreezeStarted', 'Cancelled') AND \"NewEndDate\" IS NULL)");
+                t.HasCheckConstraint("CK_SubscriptionAdjustments_Sessions", "(\"AdjustmentType\" = 'SessionsAdded' AND \"SessionsDelta\" IS NOT NULL AND \"SessionsDelta\" BETWEEN 1 AND 10000 AND \"OldRemainingSessions\" IS NOT NULL AND \"NewRemainingSessions\" IS NOT NULL AND \"OldRemainingSessions\" >= 0 AND \"NewRemainingSessions\" = \"OldRemainingSessions\" + \"SessionsDelta\") OR (\"AdjustmentType\" <> 'SessionsAdded' AND \"SessionsDelta\" IS NULL AND \"OldRemainingSessions\" IS NULL AND \"NewRemainingSessions\" IS NULL)");
                 t.HasCheckConstraint("CK_SubscriptionAdjustments_FreezeLink", "(\"AdjustmentType\" = 'FreezeEnded' AND \"RelatedAdjustmentId\" IS NOT NULL) OR (\"AdjustmentType\" <> 'FreezeEnded' AND \"RelatedAdjustmentId\" IS NULL)");
             });
         });
@@ -545,7 +549,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.HasOne(x => x.EvaluatedByUser).WithMany().HasForeignKey(x => x.EvaluatedByUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PublishedByUser).WithMany().HasForeignKey(x => x.PublishedByUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ReplacesEvaluation).WithMany().HasForeignKey(x => new { x.AcademyId, x.ReplacesEvaluationId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
-            entity.ToTable(t => t.HasCheckConstraint("CK_PlayerEvaluations_Status", "\"Status\" IN ('Draft','Published','Superseded')"));
+            entity.ToTable(t => t.HasCheckConstraint("CK_PlayerEvaluations_Status", "\"Status\" IN ('Draft','Published','Superseded','PublishedInternal')"));
         });
 
         ConfigureTenantEntity<EvaluationScore>(builder, "EvaluationScores");
@@ -576,6 +580,22 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
             entity.HasOne(x => x.Sport).WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t => t.HasCheckConstraint("CK_SportCatalogItems_Display", "(\"DisplayPrice\" IS NULL OR \"DisplayPrice\" >= 0) AND (\"DiscountPercentage\" IS NULL OR (\"DiscountPercentage\" >= 0 AND \"DiscountPercentage\" <= 100))"));
         });
+
+        ConfigureTenantEntity<ProductStockVariant>(builder, "ProductStockVariants");
+        builder.Entity<ProductStockVariant>(entity => {
+            entity.Property(x=>x.Size).HasMaxLength(30);
+            entity.Property(x=>x.Color).HasMaxLength(40).HasDefaultValue("");
+            entity.HasAlternateKey(x=>new{x.AcademyId,x.Id,x.ProductId});
+            entity.HasIndex(x=>new{x.AcademyId,x.ProductId,x.Color,x.Size,x.ShirtNumber}).IsUnique().HasFilter("\"ShirtNumber\" IS NOT NULL");
+            entity.HasIndex(x=>new{x.AcademyId,x.ProductId,x.Color,x.Size}).IsUnique().HasFilter("\"ShirtNumber\" IS NULL");
+            entity.HasOne(x=>x.Product).WithMany(x=>x.Variants).HasForeignKey(x=>new{x.AcademyId,x.ProductId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t=>t.HasCheckConstraint("CK_ProductStockVariant_Values","\"Quantity\" >= 0 AND (\"ShirtNumber\" IS NULL OR \"ShirtNumber\" BETWEEN 0 AND 999) AND length(btrim(\"Size\")) > 0"));
+        });
+        builder.Entity<SportEnrollment>().ToTable(t=>t.HasCheckConstraint("CK_SportEnrollment_ShirtNumber","\"ShirtNumber\" IS NULL OR \"ShirtNumber\" BETWEEN 0 AND 999"));
+        builder.Entity<ProductSale>().Property(x=>x.SizeSnapshot).HasMaxLength(30);
+        builder.Entity<ProductSale>().Property(x=>x.ColorSnapshot).HasMaxLength(40);
+        builder.Entity<ProductSale>().HasOne<ProductStockVariant>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.VariantId,x.ProductId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.ProductId}).OnDelete(DeleteBehavior.Restrict);
+        builder.Entity<ProductSale>().HasOne<SportEnrollment>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.SportEnrollmentId,x.SportId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id,x.SportId}).OnDelete(DeleteBehavior.Restrict);
 
         ConfigureTenantEntity<NutritionItem>(builder, "NutritionItems");
         builder.Entity<NutritionItem>(entity =>

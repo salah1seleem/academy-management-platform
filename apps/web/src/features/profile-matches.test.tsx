@@ -11,7 +11,7 @@ const playerReply=()=>new Response(JSON.stringify([match]),{headers:{"X-Match-Pl
 test("month defaults and clear keep the player's fixed scope, status and deep match link", async () => {
   const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => playerReply()); vi.stubGlobal("fetch", fetcher);
   render(<DateFilterDefaults range={{ from: "2026-10-01", to: "2026-10-17" }}><ProfileMatches playerId="player-1" /></DateFilterDefaults>);
-  expect(await screen.findByText("منتخب اصطناعي × الفريق الآخر")).toBeVisible();
+  expect(await screen.findByText("منتخب اصطناعي")).toBeVisible();
   expect(fetcher.mock.calls[0][0]).toContain("playerId=player-1&from=2026-10-01&to=2026-10-17");
   expect(screen.getByRole("link", { name: "عرض المباراة" })).toHaveAttribute("href", "/dashboard/matches?matchId=match-1");
   fireEvent.click(screen.getByRole("button", { name: /مسح الفلاتر/ }));
@@ -28,7 +28,7 @@ test("coach scope is explicit; denial is not an empty success and retry reads ag
   expect(fetcher.mock.calls[0][0]).toContain("coachMembershipId=coach-1");
   expect(screen.getByText(/الإسناد المحفوظ للمباراة مستقل/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "إعادة المحاولة" }));
-  expect(await screen.findByText("منتخب اصطناعي × الفريق الآخر")).toBeVisible();
+  expect(await screen.findByText("منتخب اصطناعي")).toBeVisible();
 });
 test("changing record does not show a late response from the previous player", async () => {
   let finish!: (r: Response) => void;
@@ -37,11 +37,11 @@ test("changing record does not show a late response from the previous player", a
   view.rerender(<ProfileMatches playerId="player-2" />);
   expect(await screen.findByText("لا توجد مباريات تخص هذا الملف ضمن الفلاتر.")).toBeVisible();
   finish(playerReply());
-  await waitFor(() => expect(screen.queryByText("منتخب اصطناعي × الفريق الآخر")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("منتخب اصطناعي")).not.toBeInTheDocument());
 });
 test("an old API that ignores the profile filter cannot display an unscoped success",async()=>{
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify([match]))));
   render(<ProfileMatches playerId="player-1"/>);
   expect(await screen.findByText("الخدمة الحالية لا تؤكد نطاق الملف؛ يلزم تحديثها قبل عرض المباريات.")).toBeVisible();
-  expect(screen.queryByText("منتخب اصطناعي × الفريق الآخر")).not.toBeInTheDocument();
+  expect(screen.queryByText("منتخب اصطناعي")).not.toBeInTheDocument();
 });

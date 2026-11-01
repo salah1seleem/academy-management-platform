@@ -1,0 +1,40 @@
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { SubscriptionSnapshot } from './subscription-snapshot';
+let query = new URLSearchParams('branchId=b1&asOf=2026-09-30');
+vi.mock('next/navigation', () => ({ useSearchParams: () => query }));
+afterEach(() => { cleanup(); vi.restoreAllMocks(); query = new URLSearchParams('branchId=b1&asOf=2026-09-30'); });
+const row = (name: string) => ({ id: name, playerId: 'p1', name, photoReference: null, sport: 'كرة القدم', branch: 'فرع اصطناعي', group: 'مجموعة اختبار', active: true, endDate: '2026-10-30' });
+const response = (name: string, asOf = '2026-09-30') => new Response(JSON.stringify({ items: [row(name)], total: 60, asOf }));
+it('shows server snapshot date, hides prior-page results while pending and resets pagination for a new scope', async () => {
+  let finishPage: (value: Response) => void = () => {};
+  let finishScope: (value: Response) => void = () => {};
+  const fetcher = vi.fn((url: unknown) => {
+    const value = String(url);
+    if (value.includes('b2')) return new Promise<Response>(r => { finishScope = r; });
+    if (value.includes('page=2')) return new Promise<Response>(r => { finishPage = r; });
+    return Promise.resolve(response('طفل سبتمبر الاصطناعي'));
+  }); global.fetch = fetcher as typeof fetch;
+  const view = render(<SubscriptionSnapshot />);
+  expect(await screen.findByText('طفل سبتمبر الاصطناعي')).toBeInTheDocument();
+  expect(screen.getByText('2026-09-30')).toHaveAttribute('datetime', '2026-09-30');
+  fireEvent.click(screen.getByRole('button', { name: 'التالي' }));
+  expect(screen.queryByText('طفل سبتمبر الاصطناعي')).not.toBeInTheDocument();
+  await act(async () => finishPage(response('طفل الصفحة الثانية الاصطناعي')));
+  expect(await screen.findByText('طفل الصفحة الثانية الاصطناعي')).toBeInTheDocument();
+  query = new URLSearchParams('branchId=b2&asOf=2026-08-31'); view.rerender(<SubscriptionSnapshot />);
+  expect(screen.queryByText('طفل الصفحة الثانية الاصطناعي')).not.toBeInTheDocument();
+  expect(fetcher).toHaveBeenLastCalledWith('/api/v1/subscriptions/home/items?branchId=b2&asOf=2026-08-31&page=1', expect.anything());
+  await act(async () => finishScope(response('طفل أغسطس الاصطناعي', '2026-08-31')));
+  expect(await screen.findByText('طفل أغسطس الاصطناعي')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'السابق' })).toBeDisabled();
+});
+it('ignores a late response from the previous branch and shows an Arabic rejection for the current scope', async () => {
+  let late: (value: Response) => void = () => {};
+  global.fetch = vi.fn((url: unknown) => String(url).includes('b1') ? new Promise<Response>(r => { late = r; }) : Promise.resolve(new Response('{}', { status: 403 }))) as typeof fetch;
+  const view = render(<SubscriptionSnapshot />);
+  query = new URLSearchParams('branchId=b2'); view.rerender(<SubscriptionSnapshot />);
+  expect(await screen.findByText('تعذر تحميل الاشتراكات.')).toBeInTheDocument();
+  await act(async () => late(response('اسم فرع سابق')));
+  expect(screen.queryByText('اسم فرع سابق')).not.toBeInTheDocument();
+});

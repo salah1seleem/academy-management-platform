@@ -61,8 +61,44 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
     [Fact] public async Task Demo_success_confirms_payment() { var created = await Created(); await Simulate(created.PaymentId, "Success"); await using var scope = Scope(); Assert.Equal(PaymentRequestStatus.Confirmed, await Db(scope).PaymentRequests.Where(x => x.Id == created.PaymentId).Select(x => x.Status).SingleAsync()); }
     [Fact] public async Task Demo_success_creates_one_collection() { var created = await Created(); await Simulate(created.PaymentId, "Success"); Assert.Equal(1, await Count<PaymentCollection>(x => x.PaymentRequestId == created.PaymentId)); }
     [Fact] public async Task Demo_success_creates_one_receipt() { var created = await Created(); await Simulate(created.PaymentId, "Success"); Assert.Equal(1, await Count<Receipt>(x => x.Collection.PaymentRequestId == created.PaymentId)); }
-    [Fact] public async Task Demo_success_creates_one_period() { var created = await Created(); await Simulate(created.PaymentId, "Success"); Assert.Equal(1, await Count<SubscriptionPeriod>(x => x.Collection.PaymentRequestId == created.PaymentId)); }
+    [Fact] public async Task Demo_success_creates_one_period()
+    {
+        var created=await Created();using var owner=await Staff(DemoSeed.OwnerEmail);
+        var pending=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/payments/{created.PaymentId}");
+        Assert.Equal(await Enrollment(),pending.GetProperty("sportEnrollmentId").GetGuid());Assert.Equal(Slice3DemoSeed.FootballMonthlyId,pending.GetProperty("subscriptionPlanId").GetGuid());
+        Assert.Equal(JsonValueKind.Null,pending.GetProperty("periodId").ValueKind);Assert.Equal(JsonValueKind.Null,pending.GetProperty("receiptId").ValueKind);
+        await Simulate(created.PaymentId,"Success");Assert.Equal(1,await Count<SubscriptionPeriod>(p=>p.Collection.PaymentRequestId==created.PaymentId));
+        var saved=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/payments/{created.PaymentId}");
+        var period=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/periods/{saved.GetProperty("periodId").GetGuid()}");
+        Assert.Equal(saved.GetProperty("sportEnrollmentId").GetGuid(),period.GetProperty("sportEnrollmentId").GetGuid());
+        Assert.Equal(saved.GetProperty("subscriptionPlanId").GetGuid(),period.GetProperty("subscriptionPlanId").GetGuid());
+        Assert.Equal(saved.GetProperty("receiptId").GetGuid(),period.GetProperty("receiptId").GetGuid());
+        var receipt=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/receipts/{saved.GetProperty("receiptId").GetGuid()}");Assert.Equal(saved.GetProperty("finalAmount").GetDecimal(),receipt.GetProperty("amount").GetDecimal());
+        using var foreign=await Staff(DemoSeed.FutureOwnerEmail);Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync($"/api/v1/subscriptions/payments/{created.PaymentId}")).StatusCode);
+    }
     [Fact] public async Task Demo_failure_creates_no_collection() { var created = await Created(); await Simulate(created.PaymentId, "Failed"); Assert.Equal(0, await Count<PaymentCollection>(x => x.PaymentRequestId == created.PaymentId)); }
+    [Fact] public async Task Approved_manual_renewal_uses_exact_decimal_string_and_refuses_changed_amount_before_collection()
+    {
+        var created=await Created();using var owner=await Staff(DemoSeed.OwnerEmail);using var foreign=await Staff(DemoSeed.FutureOwnerEmail);
+        var pending=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/payments/{created.PaymentId}");
+        var amount=pending.GetProperty("finalAmount").GetDecimal();var url=$"/api/v1/manage/payments/{created.PaymentId}/collect";
+        var changed=(amount+1).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,url,new{paymentMethod="Online",expectedAmount=changed},null)).StatusCode);
+        Assert.Equal(0,await Count<PaymentCollection>(c=>c.PaymentRequestId==created.PaymentId));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Post(owner,url,new{paymentMethod="Online",expectedAmount="1,000"},null)).StatusCode);
+        var body=new{paymentMethod="Online",expectedAmount=amount.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)};
+        Assert.Equal(HttpStatusCode.NotFound,(await Post(foreign,url,body,null)).StatusCode);
+        var first=await Post(owner,url,body,null);first.EnsureSuccessStatusCode();
+        var replay=await Post(owner,url,body,null);replay.EnsureSuccessStatusCode();
+        var saved=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/payments/{created.PaymentId}");
+        var period=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/periods/{saved.GetProperty("periodId").GetGuid()}");
+        var receipt=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/receipts/{saved.GetProperty("receiptId").GetGuid()}");
+        Assert.Equal(amount,receipt.GetProperty("amount").GetDecimal());
+        Assert.Equal("Online",receipt.GetProperty("paymentMethod").GetString());
+        Assert.Equal(saved.GetProperty("receiptId").GetGuid(),period.GetProperty("receiptId").GetGuid());
+        Assert.Equal(1,await Count<PaymentCollection>(c=>c.PaymentRequestId==created.PaymentId));
+        Assert.Equal(1,await Count<SubscriptionPeriod>(p=>p.Collection.PaymentRequestId==created.PaymentId));
+    }
     [Fact] public async Task Coach_cannot_list_admin_renewals() { using var c = await Staff(DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/v1/subscriptions/admin-renewals/enrollments")).StatusCode); }
     [Fact] public async Task Coach_cannot_create_admin_renewal() { using var c = await Staff(DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.Forbidden, (await Create(c)).StatusCode); }
     [Fact] public async Task Guardian_cannot_list_admin_renewals() { using var c = await Guardian(); Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/v1/subscriptions/admin-renewals/enrollments")).StatusCode); }

@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Help;
 public static class PageHelpEndpoints
 {
-    public static readonly string[] Screens=["home","reports","matches","players","attendance","nutrition","evaluations"];
+    public static readonly string[] Screens=["home","operations","more","reports","matches","players","attendance","nutrition","evaluations","staff","import"];
     public static readonly string[] Roles=["AcademyOwner","AcademyAdmin","Coach","Guardian"];
     public static void MapPageHelp(this WebApplication app)
     {

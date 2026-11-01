@@ -5,6 +5,7 @@ import { Button, ErrorState, LoadingState, PageHeader, SectionCard } from "../co
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { feedbackStates, feedbackTransitions } from "./feedback-state";
 import styles from "./feedback-case.module.css";
+import { RecordTabs } from "../components/record-tabs";
 import { FeedbackAssignment } from "./feedback-investigations";
 import { FeedbackTriage, feedbackSubjects, feedbackUrgencies } from "./feedback-triage";
 import { FeedbackIncidentEvidence } from "./feedback-incident";
@@ -52,21 +53,31 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
     } catch (e) { setError(e instanceof DashboardRequestError ? e.message : "تعذر الحفظ؛ لم نسجل نجاحًا."); }
     finally { setBusy(false); }
   }
-  return <><PageHeader title="متابعة ملاحظة الأسرة" context="ملاحظات أولياء الأمور"/><Link className="button button-secondary" href="/dashboard/feedback">العودة للملاحظات</Link>
+  return <><PageHeader title="متابعة ملاحظة الأسرة" context="ملاحظات أولياء الأمور"/>
     {error && <ErrorState message={error}/>} {message && <p role="status">{message}</p>}
     {!item ? !error && <LoadingState/> : <>
-      <SectionCard title={kinds[item.kind] ?? "ملاحظة"}>
-        <p>{item.playerName ?? "اللاعب غير متاح"} · {item.groupName} · {item.branchName}</p><p>المدرب المذكور: {item.coachName ?? "لم يحدد"}</p>
-        <p>{item.score ? `${item.score}/5 · ` : ""}{item.message || "لا يوجد نص إضافي"}</p>
+      <RecordTabs label="أقسام ملاحظة الأسرة" keepMounted tabs={[
+        {id:"overview",label:"الملاحظة",content:<>      <SectionCard title={kinds[item.kind] ?? "ملاحظة"}>
+        <div className="feedback-case-identity"><strong>{item.playerName ?? "اللاعب غير متاح"}</strong><span>{item.groupName} · {item.branchName}</span></div>
+        <blockquote className="feedback-case-message">{item.score ? <strong>{item.score}/5 · </strong> : null}{item.message || "لا يوجد نص إضافي"}</blockquote>
+        <dl className="detail-grid">
+          <div><dt>الحالة</dt><dd><strong>{feedbackStates[item.status] ?? "غير متاحة"}</strong></dd></div>
+          <div><dt>موعد المتابعة</dt><dd><bdi>{item.dueOn ?? "لم يحدد"}</bdi>{item.overdue ? " · متأخرة" : ""}</dd></div>
+          <div><dt>المدرب المذكور</dt><dd>{item.coachName ?? "لم يحدد"}</dd></div>
+          {item.kind !== "Rating" && <>
+            <div><dt>تصنيف الأسرة</dt><dd>{feedbackSubjects[item.reportedSubject ?? ""] ?? "لم يصنف"} · {feedbackUrgencies[item.reportedUrgency ?? ""] ?? "لم يحدد الاستعجال"}</dd></div>
+            <div><dt>تصنيف الإدارة</dt><dd>{feedbackSubjects[item.subject ?? ""] ?? "لم يصنف بعد"} · {feedbackUrgencies[item.urgency ?? ""] ?? "لم يحدد الاستعجال"}</dd></div>
+            <div><dt>تاريخ الواقعة</dt><dd><bdi>{item.incidentOn ?? "غير محدد"}</bdi></dd></div>
+          </>}
+        </dl>
         <FeedbackIncidentEvidence evidence={item.incidentSessionEvidence}/>
-        {item.kind !== "Rating" && <><p>عند التقديم: {feedbackSubjects[item.reportedSubject ?? ""] ?? "لم يصنف وقتها"} · {feedbackUrgencies[item.reportedUrgency ?? ""] ?? "لم يحدد"} · الواقعة: <bdi>{item.incidentOn ?? "غير محددة"}</bdi></p><p>مراجعة الإدارة: {feedbackSubjects[item.subject ?? ""] ?? "لم تصنف بعد"} · {feedbackUrgencies[item.urgency ?? ""] ?? "لم تحدد"}</p>{item.safety && <p role="note">بلاغ سلامة يحتاج متابعة بشرية، وليس إثبات خطأ أو حكمًا آليًا.{!item.triagedAtUtc && " لم يؤكد الفرز البشري بعد."}</p>}</>}
-        <p>الحالة: <strong>{feedbackStates[item.status] ?? "غير متاحة"}</strong></p>
-        <p>موعد المتابعة: <bdi>{item.dueOn ?? "لم يحدد"}</bdi>{item.overdue ? " · تجاوزت الموعد المحدد" : ""}</p>
+        {item.safety && <p role="note" className="compact-notice">بلاغ سلامة يحتاج متابعة بشرية، وليس إثبات خطأ أو حكمًا آليًا.{!item.triagedAtUtc && " لم يؤكد الفرز البشري بعد."}</p>}
         <FeedbackDeadlineEvidence evidence={item.followUpPolicyEvidence}/>
         <p><Link href={`/dashboard/feedback?groupId=${item.trainingGroupId}`}>ملاحظات المجموعة نفسها</Link> · <Link href={`/dashboard/players/${item.playerId}`}>ملف اللاعب نفسه</Link></p>
         {item.ownerResponse && <blockquote>رد الإدارة: {item.ownerResponse}</blockquote>}
       </SectionCard>
-      {item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="إجراء على الملاحظة نفسها">
+</>},
+        {id:"actions",label:"الرد والمتابعة",content:<>      {item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="إجراء على الملاحظة نفسها">
         {item.status === "Open" && <Button variant="secondary" disabled={busy} onClick={() => void save("review")}>تسجيل المراجعة</Button>}
         {item.kind !== "Rating" && !item.dueOn && <form onSubmit={e => { e.preventDefault(); void save("due"); }} className="feedback-reply">
           <label>موعد متابعة الملاحظة<input type="date" required value={due} disabled={busy} onChange={e => setDue(e.target.value)}/></label><Button type="submit" disabled={busy}>حفظ الموعد</Button>
@@ -77,7 +88,6 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
           <Button type="submit" disabled={busy || item.safety && !item.triagedAtUtc}>إرسال الرد وحل الملاحظة</Button>
         </form>}
       </SectionCard>}
-      {item.kind !== "Rating" && !!item.version && item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="تصنيف الملاحظة والاستعجال"><FeedbackTriage key={`triage:${item.version}`} id={id} version={item.version} subject={item.subject} urgency={item.urgency} safety={item.safety} saved={() => { setMessage("تم تأكيد الفرز البشري وحفظ تصنيف الإدارة دون تغيير بلاغ الأسرة الأصلي."); setRevision(n => n + 1); }}/></SectionCard>}
       {item.kind !== "Rating" && !!item.version && <SectionCard title="مسار المعالجة الخاص">
         <p className={styles.hint}>هذا السجل للمالك فقط. الملاحظة الداخلية اختيارية ولا تُرسل للأسرة أو المدرب. استخدم الرد أعلاه لإبلاغ الأسرة بالحل.</p>
         <form className={styles.form} onSubmit={e => { e.preventDefault(); void save("transition"); }}>
@@ -87,11 +97,14 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
         </form>
         {item.status === "Reopened" && item.ownerResponse && <p>الرد السابق محفوظ. إعادة الفتح تعيد الملاحظة للمتابعة ولا ترسل إشعارًا تلقائيًا.</p>}
       </SectionCard>}
+</>},
+        {id:"triage",label:"التصنيف والتكليف",content:<>      {item.kind !== "Rating" && !!item.version && item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="تصنيف الملاحظة والاستعجال"><FeedbackTriage key={`triage:${item.version}`} id={id} version={item.version} subject={item.subject} urgency={item.urgency} safety={item.safety} saved={() => { setMessage("تم تأكيد الفرز البشري وحفظ تصنيف الإدارة دون تغيير بلاغ الأسرة الأصلي."); setRevision(n => n + 1); }}/></SectionCard>}
       {item.kind !== "Rating" && !!item.version && item.status !== "Resolved" && item.status !== "Closed" && <SectionCard title="مسؤول التحقيق">
         <p>المسؤول الحالي: {item.investigatorName ?? "لم يسند"}</p>
         <FeedbackAssignment key={`${id}:${item.version}`} id={id} version={item.version} current={item.investigatorMembershipId} brief={item.investigationBrief} saved={() => { setMessage("تم حفظ تكليف التحقيق؛ لم يُرسل شيء للأسرة."); setRevision(n => n + 1); }}/>
       </SectionCard>}
-      <SectionCard title="سجل الملاحظة الخاص">
+</>},
+        {id:"history",label:"السجل",content:<>      <SectionCard title="سجل الملاحظة الخاص">
         <p className={styles.hint}>التاريخ السابق لهذه الإضافة لا يُعاد اختلاقه. الأحدث أولًا، حتى 50 تحديثًا.</p>
         {item.historyHasMore && <p>توجد تحديثات أقدم غير معروضة؛ لم تُحذف.</p>}
         {!item.history?.length ? <p>لم تُسجل تحديثات بعد.</p> : <ol className={styles.history}>{item.history.map(c => <li key={c.id}>
@@ -102,6 +115,8 @@ export function GuardianFeedbackDetail({ id }: { id: string }) {
           {c.action === "Triage" && <p>{feedbackSubjects[c.beforeSubject ?? ""] ?? "غير مصنف"} · {feedbackUrgencies[c.beforeUrgency ?? ""] ?? "غير محددة"} ← {feedbackSubjects[c.afterSubject ?? ""] ?? "غير مصنف"} · {feedbackUrgencies[c.afterUrgency ?? ""] ?? "غير محددة"}. هذا فرز بشري وليس ردًا للأسرة.</p>}
         </li>)}</ol>}
       </SectionCard>
+</>},
+      ]}/>
     </>}
   </>;
 }

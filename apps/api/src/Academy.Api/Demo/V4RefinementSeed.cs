@@ -1,6 +1,7 @@
 using Academy.Api.Slice3;
 using Academy.Api.Slice5;
 using Academy.Infrastructure.Evaluations;
+using Academy.Infrastructure.Content;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
@@ -15,6 +16,18 @@ internal static class V4RefinementSeed
     {
         var academy=FootballDemoSeed.AcademyId;
         Guid Id(string key)=>FootballDemoSeed.Id("v41/"+key);
+        // Additive examples for the approved native content workspace. Re-running
+        // the isolated seed never republishes or overwrites an edited item.
+        foreach(var item in new[]{("News","خبر المدربين الاصطناعي",new[]{"Coach"},0),
+            ("Event","فعالية تدريب قادمة",new[]{"Coach","AcademyAdmin","Guardian"},1),
+            ("Announcement","إعلان الأكاديمية التجريبي",new[]{"Guardian","AcademyAdmin"},0)}) {
+            var id=Id("content/"+item.Item1);
+            if(await db.AcademyNews.AnyAsync(n=>n.Id==id))continue;
+            db.AcademyNews.Add(new(){Id=id,AcademyId=academy,Kind=item.Item1,Title=item.Item2,
+                Body="بيانات عرض اصطناعية لمراجعة الجمهور والفروع وفترة الظهور؛ لا تضم أسماء أطفال أو رسائل خارجية.",
+                AudienceRoles=item.Item3,TargetBranchIds=[FootballDemoSeed.Id("branch/0")],VisibleDays=7,
+                StartsAtUtc=now.AddDays(item.Item4),EndsAtUtc=now.AddDays(7),PublishedAtUtc=now,CreatedAtUtc=now,UpdatedAtUtc=now});
+        }
         // Real confirmed financial graphs in the previous comparison period.
         // No fake percentage, dashboard fixture total, or payment-provider call.
         for(var i=0;i<6;i++){
@@ -22,6 +35,16 @@ internal static class V4RefinementSeed
             var start=today.AddMonths(-2).AddDays(3+i);
             var paid=new DateTimeOffset(today.AddMonths(-1).AddDays(-10+i).ToDateTime(new(9,0)),TimeSpan.Zero);
             await Slice3DemoSeed.Confirmed(db,Id($"previous-collection/{i}"),enrollment,FootballDemoSeed.Id("plan/month"),FootballDemoSeed.Id("user/owner"),start,start.AddDays(29),paid,now,default);
+        }
+        // Complete the linked historical cohort additively: 27 prior paid
+        // monthly enrollments (24,300) against the existing 27,300 cohort.
+        // The dashboard calculates 12.3%; no display total or percentage is seeded.
+        // This method is guarded by V4AcceptanceSeed's isolated synthetic database.
+        for(var i=6;i<27;i++){
+            var enrollment=await db.SportEnrollments.SingleAsync(e=>e.Id==FootballDemoSeed.Id($"enrollment/{i}"));
+            var start=today.AddMonths(-2);var end=today.AddMonths(-1).AddDays(-1);
+            var paid=new DateTimeOffset(start.AddDays(2+(i-6)%10).ToDateTime(new(9,0)),TimeSpan.Zero);
+            await Slice3DemoSeed.Confirmed(db,Id($"approved-previous-collection/{i}"),enrollment,FootballDemoSeed.Id("plan/month"),FootballDemoSeed.Id("user/owner"),start,end,paid,now,default);
         }
         // Two genuinely unspent sessions, not a fabricated remaining-session counter.
         var shortPlan=Id("two-session-plan");
@@ -49,6 +72,13 @@ internal static class V4RefinementSeed
                 db.MatchCoachAssignments.Add(new(){Id=Id($"match-coach/{b}/{m}"),AcademyId=academy,MatchId=match,CoachMembershipId=coach,AssignedByMembershipId=FootballDemoSeed.Id("member/owner"),Sequence=1,Source="DemoFixture",CreatedAtUtc=now,UpdatedAtUtc=now});
                 for(var p=0;p<4;p++)db.MatchParticipants.Add(new(){Id=Id($"match-participant/{b}/{m}/{p}"),AcademyId=academy,MatchId=match,PlayerId=FootballDemoSeed.Id($"player/{b*10+p}"),IsBench=p==3,CreatedAtUtc=now,UpdatedAtUtc=now});
             }
+        }
+        var uniform=Id("numbered-uniform");
+        if(!await db.SportCatalogItems.AnyAsync(p=>p.Id==uniform)){
+            db.SportCatalogItems.Add(new(){Id=uniform,AcademyId=academy,SportId=FootballDemoSeed.Id("sport"),ArabicName="زي تدريب مرقم تجريبي",ArabicDescription="رصيد اصطناعي لتجربة المقاس ورقم القميص.",ImageReference="/demo-assets/catalog-football.svg",DisplayPrice=450,Currency="EGP",StockQuantity=5,UsesVariants=true,NumberedUniform=true,StockRevision=1,CreatedAtUtc=now,UpdatedAtUtc=now});
+            foreach(var item in new[]{("M",7,1),("M",8,2),("S",7,2)})db.ProductStockVariants.Add(new(){Id=Id($"uniform/{item.Item1}/{item.Item2}"),AcademyId=academy,ProductId=uniform,Size=item.Item1,ShirtNumber=item.Item2,Quantity=item.Item3,CreatedAtUtc=now,UpdatedAtUtc=now});
+            // Seed the optional registration number once, never reset an edited number.
+            if(child.ShirtNumber is null)child.ShirtNumber=7;
         }
         await db.SaveChangesAsync();
     }

@@ -47,6 +47,42 @@ class PixelApi extends FakeApi implements AssetTransport {
 
 void main() {
   testWidgets(
+    'compact privacy disclosure preserves status and requires the existing explicit confirmation',
+    (t) async {
+      final writes = <Object?>[];
+      final auth = await f.owner((m, p, b, k) async {
+        if (m == 'POST') writes.add(b);
+        return choice(false);
+      });
+      await t.pumpWidget(
+        f.shell(
+          page(GroupMediaConsentCard(auth: auth, playerId: 'p', compact: true)),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('المشاركة غير مسموحة'), findsOneWidget);
+      expect(find.text('السماح بالمشاركة داخل المجموعة'), findsNothing);
+      expect(writes, isEmpty);
+      await t.tap(find.text('خصوصية صور المجموعة'));
+      await t.pumpAndSettle();
+      final allow = find.widgetWithText(
+        FilledButton,
+        'السماح بالمشاركة داخل المجموعة',
+      );
+      await t.ensureVisible(allow);
+      await t.tap(allow);
+      await t.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text(choice(false)['notice'] as String), findsWidgets);
+      await t.tap(find.text('رجوع'));
+      await t.pumpAndSettle();
+      expect(writes, isEmpty);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets(
     'Own choice is off by default; confirmation and cancel are explicit; save failure retries one intent',
     (t) async {
       final writes = <Map>[];

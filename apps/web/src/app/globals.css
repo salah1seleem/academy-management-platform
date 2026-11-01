@@ -521,7 +521,7 @@ footer {
 .match-draft-form > h2,.match-draft-form > p,.match-draft-form > .match-roster-review,.match-draft-form > .form-actions,.match-draft-form > .form-grid,.match-draft-form > .match-review-check { grid-column:1 / -1; }
 .match-draft-form > label { display:flex;flex-direction:column;gap:.5rem;min-width:0; }
 .match-roster-review { border:1px solid #dce4e8;border-radius:1rem;padding:1rem;display:flex;gap:.6rem;flex-wrap:wrap; }
-.match-roster-review > span { padding:.4rem .7rem;border-radius:.7rem;background:#f1f4f8; }
+.match-roster-review > span { padding:.4rem .7rem;border-radius:.7rem;background:#f1f4f8;color:#17243b; }
 .match-draft-form .match-review-check { display:flex;flex-direction:row;align-items:center;gap:.7rem;min-height:44px; }
 .match-roster-review .match-review-check { width:100%; }
 .match-review-check input[type="checkbox"] { width:20px;height:20px;flex-shrink:0; }
@@ -880,3 +880,12 @@ footer {
 .rating-stars span.selected { color: #a66e00 !important; }
 .rating-stars input:focus-visible + span { outline: 2px solid #315de6; outline-offset: 2px; border-radius: .4rem; }
 .statement-snapshot {display:grid;gap:.6rem}.statement-snapshot .command-value {display:block;font-size:clamp(1.65rem,3vw,2.2rem);line-height:1.4;font-variant-numeric:tabular-nums}.statement-snapshot[data-negative=true] .command-value{color:#b11e43}.statement-snapshot small{display:block;color:#607087}.statement-snapshot p{margin:.2rem 0}
+
+/* Explicit contact action; all recipients come from a scoped server read. */
+.guardian-contact{margin-block:12px}.guardian-contact .guardian-contact-button{color:#146c43;border-color:#219b61;display:inline-flex;gap:8px;align-items:center;width:auto}.guardian-contact section{margin-top:12px;border:1px solid #dce5e1;border-radius:14px;padding:16px;background:#f3faf6;color:#163e2a}.guardian-contact ul{list-style:none;padding:0;display:grid;gap:12px}.guardian-contact li{display:grid;gap:6px}.guardian-contact-recipient{display:flex;flex-wrap:wrap;gap:12px;align-items:center;color:#145638;padding:12px;border:1px solid #b9d8c8;border-radius:10px;text-decoration:none}.guardian-contact-recipient span:last-child{margin-inline-start:auto;font-weight:700}
+
+.academy-match-card{border:1px solid var(--border,#cbd5e1);border-radius:18px;padding:20px;margin-block:14px;background:var(--surface,#fff);border-inline-start-width:4px}.academy-match-heading,.academy-match-score,.academy-match-chips{display:flex;justify-content:space-between;gap:12px;align-items:center}.academy-match-heading{font-size:.85rem;opacity:.85}.academy-match-score{margin-block:20px;align-items:stretch}.academy-match-score>div{flex:1;display:flex;flex-direction:column;gap:10px;text-align:center;min-width:0;overflow-wrap:anywhere}.academy-match-score b{font-size:2rem;line-height:1.2;font-variant-numeric:tabular-nums}.academy-match-chips{justify-content:flex-start;flex-wrap:wrap;font-size:.8rem;margin-block-end:14px}.academy-match-chips span{padding:5px 10px;border-radius:8px;background:color-mix(in srgb,currentColor 5%,transparent)}.academy-match-card--win{border-inline-start-color:#16845a}.academy-match-card--loss{border-inline-start-color:#bd4458}.academy-match-card--draw{border-inline-start-color:#be7b21}.academy-match-card--win .academy-match-heading strong{color:#16845a}.academy-match-card--loss .academy-match-heading strong{color:#bd4458}.academy-match-card--draw .academy-match-heading strong{color:#9b5e0d}@media(max-width:420px){.academy-match-card{padding:14px}.academy-match-score{gap:8px}}
+
+.match-roster-review:has(select){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;box-sizing:border-box}.match-roster-review:has(select)>label{display:grid;gap:.5rem;min-width:0}.match-roster-review:has(select) select{width:100%;min-width:0}@media(max-width:600px){.match-roster-review:has(select){grid-template-columns:minmax(0,1fr)}}
+
+.academy-match-score>div{justify-content:space-between}.dashboard-shell .match-draft-form label.match-review-check{display:flex;flex-direction:row;align-items:center;gap:.7rem}.dashboard-shell .match-draft-form label.match-review-check input{flex:0 0 20px;margin:0}

@@ -8,7 +8,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'private_media.dart';
-import 'matches.dart';
+import 'notification_inbox.dart';
 import 'content_editor.dart';
 
 String? _identity(AuthController auth) => auth.session?.selected == null
@@ -35,57 +35,84 @@ const _states = {
 class GuardianUrgentMatchAlerts extends StatelessWidget {
   final AuthController auth;
   final List<Json> alerts;
+  final VoidCallback? onReturned;
   const GuardianUrgentMatchAlerts({
     super.key,
     required this.auth,
     required this.alerts,
+    this.onReturned,
   });
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      for (final alert in alerts)
-        Card(
-          color: Theme.of(context).colorScheme.errorContainer,
+  Widget build(BuildContext context) {
+    if (alerts.isEmpty) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        key: const Key('guardian-urgent-summary'),
+        child: InkWell(
+          onTap: () async {
+            final opened = _identity(auth);
+            await openPage(
+              context,
+              NotificationInbox(auth: auth, urgentMatchesOnly: true),
+            );
+            if (context.mounted &&
+                opened != null &&
+                opened == _identity(auth)) {
+              onReturned?.call();
+            }
+          },
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.notification_important_outlined,
-                      color: Theme.of(context).colorScheme.onErrorContainer,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: UiText(
-                        'تحديث عاجل يخص المواعيد',
+                Icon(
+                  Icons.notification_important_outlined,
+                  color: colors.error,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const UiText(
+                        'تحديثات عاجلة للمباريات',
                         style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                UiText(
-                  textOf(alert['message']),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
+                      const SizedBox(height: 4),
+                      UiText(
+                        textOf(alerts.first['message']),
+                        maxLines:
+                            MediaQuery.textScalerOf(context).scale(12) > 18
+                            ? 1
+                            : 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      UiText(
+                        'عرض التحديثات والمواعيد',
+                        style: TextStyle(fontSize: 12, color: colors.primary),
+                      ),
+                    ],
                   ),
                 ),
-                TextButton(
-                  onPressed: () => openPage(context, MatchSchedule(auth: auth)),
-                  child: const UiText('مراجعة المباريات والمواعيد'),
-                ),
+                const Icon(Icons.chevron_right, size: 20),
               ],
             ),
           ),
         ),
-    ],
-  );
+      ),
+    );
+  }
 }
 
 class GuardianSponsoredCard extends StatefulWidget {
@@ -861,7 +888,7 @@ class _OwnerCommunityCampaignsState extends State<OwnerCommunityCampaigns> {
                               )['state']] ??
                               'مسودة',
                         ),
-                        trailing: const Icon(Icons.chevron_left),
+                        trailing: const Icon(Icons.chevron_right),
                       ),
                     ),
             ]),

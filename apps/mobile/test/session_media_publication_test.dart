@@ -128,7 +128,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byType(DropdownButtonFormField<String>));
       await t.pumpAndSettle();
-      await t.tap(find.text('15:00 — 16:00').last);
+      await t.tap(find.text('من 3:00 مساءً إلى 4:00 مساءً').last);
       await t.pumpAndSettle();
       await t.scrollUntilVisible(
         find.widgetWithText(CheckboxListTile, 'ضيف الحصة'),

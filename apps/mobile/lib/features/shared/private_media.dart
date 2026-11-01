@@ -22,6 +22,7 @@ class PrivateImage extends StatefulWidget {
   final String path;
   final double height;
   final BoxFit fit;
+  final AlignmentGeometry alignment;
   final Widget? fallback;
   const PrivateImage({
     super.key,
@@ -29,6 +30,7 @@ class PrivateImage extends StatefulWidget {
     required this.path,
     this.height = 150,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.fallback,
   });
   @override
@@ -107,6 +109,7 @@ class _PrivateImageState extends State<PrivateImage>
                 ? Image.memory(
                     data.data!,
                     fit: widget.fit,
+                    alignment: widget.alignment,
                     gaplessPlayback: false,
                     errorBuilder: (_, error, stack) =>
                         widget.fallback ??
@@ -127,31 +130,57 @@ Future<Json?> pickAndUpload(
   Map<String, String> fields, {
   bool imageOnly = false,
 }) async {
-  final file = await FilePicker.pickFile(
-    type: FileType.custom,
-    allowedExtensions: imageOnly
-        ? ['jpg', 'jpeg', 'png', 'webp']
-        : ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov'],
-  );
-  if (file == null) return null;
-  final type = const {
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'webp': 'image/webp',
-    'mp4': 'video/mp4',
-    'mov': 'video/quicktime',
-  }[file.name.split('.').last.toLowerCase()];
-  if (type == null) throw const ApiFailure(400, 'هذا النوع غير مدعوم.');
-  final max = type.startsWith('image/') ? 8 * 1024 * 1024 : 50 * 1024 * 1024;
-  final length = await file.length();
-  if (length == null || length > max) {
-    throw const ApiFailure(
-      413,
-      'الصورة حتى 8 ميجابايت والفيديو حتى 50 ميجابايت.',
-    );
+  final original = _mediaIdentity(auth);
+  final reviewedFields = Map<String, String>.unmodifiable(fields);
+  var invalidated = original == null;
+  void authorityChanged() {
+    if (_mediaIdentity(auth) != original) invalidated = true;
   }
-  return obj(await auth.upload(await file.readAsBytes(), type, fields));
+
+  void requireOriginalAuthority() {
+    authorityChanged();
+    if (invalidated) {
+      throw const ApiFailure(
+        409,
+        'تغيرت الجلسة أو الصلاحية. أعد فتح الصفحة ومراجعة الملف.',
+      );
+    }
+  }
+
+  auth.addListener(authorityChanged);
+  try {
+    requireOriginalAuthority();
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: imageOnly
+          ? ['jpg', 'jpeg', 'png', 'webp']
+          : ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov'],
+    );
+    if (file == null) return null;
+    requireOriginalAuthority();
+    final type = const {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'webp': 'image/webp',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+    }[file.name.split('.').last.toLowerCase()];
+    if (type == null) throw const ApiFailure(400, 'هذا النوع غير مدعوم.');
+    final max = type.startsWith('image/') ? 8 * 1024 * 1024 : 50 * 1024 * 1024;
+    final length = await file.length();
+    if (length == null || length > max) {
+      throw const ApiFailure(
+        413,
+        'الصورة حتى 8 ميجابايت والفيديو حتى 50 ميجابايت.',
+      );
+    }
+    final bytes = await file.readAsBytes();
+    requireOriginalAuthority();
+    return obj(await auth.upload(bytes, type, reviewedFields));
+  } finally {
+    auth.removeListener(authorityChanged);
+  }
 }
 
 class UploadSessionMedia extends StatefulWidget {
@@ -336,7 +365,7 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                     DropdownMenuItem(
                       value: textOf(s['id']),
                       child: Text(
-                        '${textOf(s['startTime']).substring(0, 5)} — ${textOf(s['endTime']).substring(0, 5)}',
+                        trainingTimeRange(s['startTime'], s['endTime']),
                       ),
                     ),
                 ],

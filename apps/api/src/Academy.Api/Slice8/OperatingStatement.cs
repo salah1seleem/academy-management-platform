@@ -13,14 +13,16 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Slice8;
 
 public sealed record OperatingStatementLine(string Key,string Label,decimal Amount,string SourceUrl);
+public sealed record OperatingStatementMonth(DateOnly From, DateOnly To, decimal Income, decimal Expenses, decimal Surplus);
 public sealed record OperatingStatementData(DateOnly From,DateOnly To,string Currency,string Basis,
     OperatingStatementLine[] Income,OperatingStatementLine[] Expenses,decimal TotalIncome,decimal TotalExpenses,decimal Surplus,
     decimal Refunds,decimal Discounts,decimal Receivables,decimal ApprovedPayrollPayable,decimal UnpaidOperatingExpenses,
-    decimal AdvanceCashOut,decimal AdvanceApplied,decimal? EarnedRevenue,string[] Warnings,decimal ExternalReceivables=0);
+    decimal AdvanceCashOut,decimal AdvanceApplied,decimal? EarnedRevenue,string[] Warnings,decimal ExternalReceivables=0,
+    OperatingStatementMonth[]? Monthly=null);
 
 public static partial class ReportingEndpoints
 {
-    private static async Task<IResult> OperatingStatement(DateOnly? from,DateOnly? to,bool? allDates,Guid? branchId,Guid? sportId,string? format,
+    private static async Task<IResult> OperatingStatement(DateOnly? from,DateOnly? to,bool? allDates,Guid? branchId,Guid? sportId,string? format,bool? includeMonthly,
         CurrentTenant tenant,FoundationDbContext db,ISubscriptionClock clock,HttpResponse response)
     {
         var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
@@ -30,6 +32,32 @@ public static partial class ReportingEndpoints
         if(branchId.HasValue&&!await db.Branches.AnyAsync(b=>b.Id==branchId&&b.AcademyId==t.AcademyId))return Results.NotFound();
         if(sportId.HasValue&&!await db.Sports.AnyAsync(s=>s.Id==sportId&&s.AcademyId==t.AcademyId))return Results.NotFound();
         var d=await BuildOperatingStatement(t.AcademyId,range,branchId,sportId,db,clock);
+        if (includeMonthly == true && format is null)
+        {
+            // At most three actual month intersections, with the exact canonical cash projection.
+            // The aggregate remains the whole requested range. No extra reads for ordinary/CSV callers.
+            var months = new List<OperatingStatementMonth>();
+            var month = new DateOnly(range.To.Year, range.To.Month, 1);
+            for (var i = 0; i < 3; i++)
+            {
+                var monthEnd = new DateOnly(month.Year, month.Month, DateTime.DaysInMonth(month.Year, month.Month));
+                var start = range.From > month ? range.From : month;
+                var end = range.To < monthEnd ? range.To : monthEnd;
+                if (start <= end)
+                {
+                    var partRange = await FinancialRange(t.AcademyId, start, end, db, clock);
+                    if (partRange.Error is not null) return partRange.Error;
+                    var part = partRange.StartUtc == range.StartUtc && partRange.EndUtcExclusive == range.EndUtcExclusive
+                        ? d
+                        : await BuildOperatingStatement(t.AcademyId, partRange, branchId, sportId, db, clock);
+                    months.Add(new(start, end, part.TotalIncome, part.TotalExpenses, part.Surplus));
+                }
+                if (month == DateOnly.MinValue || month <= range.From) break;
+                month = month.AddMonths(-1);
+            }
+            months.Reverse();
+            d = d with { Monthly = months.ToArray() };
+        }
         if(format!="csv")return Results.Ok(d);
         var rows=new List<string[]>{new[]{"قائمة تشغيلية بالأساس النقدي","من",d.From.ToString("yyyy-MM-dd"),"إلى",d.To.ToString("yyyy-MM-dd"),d.Currency},new[]{"القسم","البند","المبلغ"}};
         rows.AddRange(d.Income.Select(x=>new[]{"مقبوضات",x.Label,x.Amount.ToString("0.00",CultureInfo.InvariantCulture)}));
@@ -79,8 +107,8 @@ public static partial class ReportingEndpoints
             payrollCash+=legacy;
             advanceCash=await db.PayrollAdvances.Where(a=>a.AcademyId==academy&&a.Currency==r.Currency&&a.CreatedAtUtc>=r.StartUtc&&a.CreatedAtUtc<r.EndUtcExclusive&&(!branch.HasValue||a.BranchId==branch)).SumAsync(a=>(decimal?)a.Amount)??0;
             payable=await db.PayrollStatements.Where(s=>s.AcademyId==academy&&s.Currency==r.Currency&&s.CreatedAtUtc<r.EndUtcExclusive&&(!branch.HasValue||s.BranchId==branch)).SumAsync(s=>(decimal?)(s.NetDue-db.PayrollDisbursements.Where(p=>p.StatementId==s.Id&&p.CreatedAtUtc<r.EndUtcExclusive).Sum(p=>p.Amount)))??0;
-            expenses.Add(new("salary","رواتب وإضافات مسددة — دون عمولة الخاص المفصلة",payrollCash-privateCash,"/dashboard/payroll"));
-            expenses.Add(new("commission","عمولات خاص ضمن الصرف المسجل",privateCash,"/dashboard/academy/coaches"));
+            expenses.Add(new("salary","رواتب وإضافات مسددة",payrollCash-privateCash,"/dashboard/payroll"));
+            expenses.Add(new("commission","عمولات التدريب الخاص",privateCash,"/dashboard/academy/coaches"));
             warnings.Add("تقسيم الصرف الجزئي بين العمولة وبقية الراتب نسبي من بنود الكشف المعتمد، لا تكلفة إضافية. صرف السلف منفصل، وتخصيصها ليس خروج مال جديدًا.");
         }
         else warnings.Add("فلتر الرياضة يستبعد الرواتب المشتركة ومصروفات الفرع أو المرفق غير المنسوبة لرياضة؛ النتيجة جزئية وليست ربحية الرياضة الكاملة.");

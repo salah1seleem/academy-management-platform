@@ -46,8 +46,8 @@ public sealed partial class SubscriptionPaymentTests
         var client = factory.CreateClient(); var csrf = await Csrf(client); var challenge = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = phone }, csrf); challenge.EnsureSuccessStatusCode(); (await Post(client, "/api/v1/auth/guardian/otp/verify", new { phoneNumber = phone, challengeId = (await challenge.Content.ReadFromJsonAsync<Challenge>())!.ChallengeId, code = "246810" }, csrf)).EnsureSuccessStatusCode();
         return new(client, userId, guardian, choices, async () => { await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var row = await db.AcademyTransferSettings.SingleAsync(x => x.Id == settingsId); row.IsActive = original.Active; row.InstaPayAddress = original.Insta; row.WalletNumber = original.Wallet; row.RecipientName = original.Name; await db.SaveChangesAsync(); });
     }
-    private async Task<FamilyRequestWrite> FamilyBody(FamilyFixture f)
-    { var response = await Post(f.Client, FamilyQuotes + "/quote", new FamilyRenewalWrite(f.Choices), await Csrf(f.Client)); response.EnsureSuccessStatusCode(); return new(f.Choices, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("quoteHash").GetString()!, Guid.NewGuid().ToString("N")); }
+    private async Task<FamilyRequestWrite> FamilyBody(FamilyFixture f, bool sharedPlanOnly = false)
+    { var response = await Post(f.Client, FamilyQuotes + "/quote", new FamilyRenewalWrite(f.Choices, sharedPlanOnly), await Csrf(f.Client)); response.EnsureSuccessStatusCode(); return new(f.Choices, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("quoteHash").GetString()!, Guid.NewGuid().ToString("N"), sharedPlanOnly); }
     private async Task<JsonElement> CreateFamily(FamilyFixture f, FamilyRequestWrite? body = null)
     { var response = await Post(f.Client, FamilyRequests, body ?? await FamilyBody(f), await Csrf(f.Client)); response.EnsureSuccessStatusCode(); return await response.Content.ReadFromJsonAsync<JsonElement>(); }
     private async Task<JsonElement> FamilyProof(FamilyFixture f, JsonElement request)
@@ -55,10 +55,12 @@ public sealed partial class SubscriptionPaymentTests
         using var form = new MultipartFormDataContent(); var file = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]); file.Headers.ContentType = new("image/png"); form.Add(file, "file", "synthetic-family-proof.png"); form.Add(new StringContent("Proof"), "purpose"); using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = form }; upload.Headers.Add("X-CSRF-TOKEN", await Csrf(f.Client)); var saved = await f.Client.SendAsync(upload); saved.EnsureSuccessStatusCode(); var asset = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); var proof = await Post(f.Client, $"{FamilyRequests}/{request.GetProperty("id").GetGuid()}/proof", new FamilyProofWrite(asset, request.GetProperty("revision").GetInt32()), await Csrf(f.Client)); proof.EnsureSuccessStatusCode(); return await proof.Content.ReadFromJsonAsync<JsonElement>();
     }
     private static FamilyReviewWrite FamilyApproval(JsonElement request, bool accept = true) => new(accept, request.GetProperty("revision").GetInt32(), null, request.GetProperty("items").EnumerateArray().Select(l => new FamilyPlacement(l.GetProperty("id").GetGuid(), Slice2DemoSeed.FootballGroupId)).ToArray());
-    [Fact]
-    public async Task Family_request_has_one_proof_and_approves_all_lines_once_with_frozen_terms_and_currency()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Family_request_has_one_proof_and_approves_all_lines_once_with_frozen_terms_and_currency(bool sharedPlanOnly)
     {
-        await using var f = await NewFamily(); var body = await FamilyBody(f); var pending = await CreateFamily(f, body); var id = pending.GetProperty("id").GetGuid();
+        await using var f = await NewFamily(); var body = await FamilyBody(f, sharedPlanOnly); var pending = await CreateFamily(f, body); var id = pending.GetProperty("id").GetGuid();
         Assert.Equal("Pending", pending.GetProperty("status").GetString()); Assert.Equal(pending.GetProperty("id").GetGuid(), (await CreateFamily(f, body with { Lines = body.Lines!.Reverse().ToArray() })).GetProperty("id").GetGuid());
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var ids = f.Choices.Select(c => c.SportEnrollmentId).ToArray(); Assert.False(await db.RenewalRequests.AnyAsync(r => ids.Contains(r.SportEnrollmentId))); Assert.False(await db.SubscriptionPeriods.AnyAsync(p => ids.Contains(p.SportEnrollmentId)));
         pending = await FamilyProof(f, pending); using var owner = await InboxStaff(DemoSeed.OwnerEmail); var plan = await db.SubscriptionPlans.SingleAsync(p => p.Id == Slice3DemoSeed.FootballMonthlyId); var old = (plan.Price, plan.Currency, plan.DurationDays, plan.ArabicName, plan.IsActive);

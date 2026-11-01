@@ -57,6 +57,14 @@ void main() {
         find.text(
           'انتهاء الاشتراك ليس دينًا. هذه أرصدة مستندات مثبتة وليست طلبات دفع معلقة.',
         ),
+        findsNothing,
+      );
+      await tester.tap(find.text('كيف تُحسب المستحقات؟'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'انتهاء الاشتراك ليس دينًا. هذه أرصدة مستندات مثبتة وليست طلبات دفع معلقة.',
+        ),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);

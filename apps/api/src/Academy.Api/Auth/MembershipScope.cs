@@ -9,7 +9,11 @@ public static class MembershipScope
     // Account-owned inbox and static page guidance do not inherit staff CRUD grants.
     // Exact methods/routes only; every endpoint still authenticates the live tenant/user.
     public static bool IsOwnExperiencePath(string path,string method) =>
-        method=="GET"&&(path is "/api/v1/academy/calendar" or "/api/v1/academy/experience" or "/api/v1/notifications" || path.StartsWith("/api/v1/page-help/",StringComparison.Ordinal)&&Academy.Api.Help.PageHelpEndpoints.Screens.Contains(path["/api/v1/page-help/".Length..]))
+        (path=="/api/v1/me/profile"&&method is "GET" or "PUT") || (path=="/api/v1/me/profile/photo"&&method=="POST") ||
+        (method=="GET"&&path.StartsWith("/api/v1/mobile-push/notices/",StringComparison.Ordinal)&&Guid.TryParse(path.Split('/').Last(),out _))
+        ||(path=="/api/v1/mobile-push/status"&&method=="GET"||path=="/api/v1/mobile-push/device"&&(method=="PUT"||method=="DELETE"))
+        ||method=="GET"&&path.StartsWith("/api/v1/communication/announcements/",StringComparison.Ordinal)&&Guid.TryParse(path.Split('/').Last(),out _)
+        ||method=="GET"&&(path is "/api/v1/my-match-access" or "/api/v1/academy/launcher-icon" or "/api/v1/academy/calendar" or "/api/v1/academy/experience" or "/api/v1/notifications" or "/api/v1/news" || path.StartsWith("/api/v1/page-help/",StringComparison.Ordinal)&&Academy.Api.Help.PageHelpEndpoints.Screens.Contains(path["/api/v1/page-help/".Length..]))
         ||method=="PUT"&&path.StartsWith("/api/v1/notifications/",StringComparison.Ordinal)&&path.Split('/') is ["","api","v1","notifications",var id,"read"]&&Guid.TryParseExact(id,"D",out _);
     public static async Task<Guid[]?> Sports(FoundationDbContext db, TenantMembership t, CancellationToken ct = default)
     {

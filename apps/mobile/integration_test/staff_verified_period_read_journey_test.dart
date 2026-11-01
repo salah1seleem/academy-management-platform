@@ -66,11 +66,11 @@ void main() {
       await t.tap(find.text('المزيد'));
       await t.pumpAndSettle();
       await t.scrollUntilVisible(
-        find.text('فترات عملي'),
+        find.text('سجل الحضور'),
         180,
         scrollable: find.byType(Scrollable).first,
       );
-      await t.tap(find.text('فترات عملي'));
+      await t.tap(find.text('سجل الحضور'));
       await wait(find.text('اختيار يوم'));
       // A preserved browser receipt may be from yesterday; use the actual UI date filter.
       if (own['today'] != receipt['workDate']) {

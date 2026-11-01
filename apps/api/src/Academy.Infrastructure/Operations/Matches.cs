@@ -11,6 +11,7 @@ public sealed class AcademyTournament : TenantEntity
 }
 public sealed class MatchTeam : TenantEntity
 {
+    public bool CoachCanManageMatches {get;set;}
     public required string Name { get; set; }
     public Guid SportId { get; set; }
     public Guid BranchId { get; set; }
@@ -24,6 +25,14 @@ public sealed class MatchTeamPlayer : TenantEntity
 }
 public sealed class AcademyMatch : TenantEntity
 {
+    public bool ResultFinalized {get;set;}
+    public DateTimeOffset? ResultPublishedAtUtc {get;set;}
+    public int ResultRevision {get;set;}
+    public string? ResultFingerprint {get;set;}
+    public Guid? CreationRequestId {get;set;}
+    public Guid? CreatedByMembershipId {get;set;}
+    public string? CreationHash {get;set;}
+
     public Guid? CopiedFromMatchId { get; set; }
     public Guid? CopiedByMembershipId { get; set; }
     public string? CopyRequestKey { get; set; }
@@ -73,4 +82,36 @@ public sealed class TournamentPayment : TenantEntity
     public DateTimeOffset? ConfirmedAtUtc { get; set; }
     public string? ReceiptNumber { get; set; }
     public string? PaymentMethod { get; set; }
+}
+
+// Sporting membership independent of fee requests and immutable published match audiences.
+public sealed class TournamentRegistration : TenantEntity
+{
+    public Guid TournamentId { get; set; }
+    public Guid EnrollmentId { get; set; }
+    public Guid TeamId { get; set; }
+    public Guid ImportJobId { get; set; }
+}
+
+public sealed class MatchGoalSlot : TenantEntity
+{
+    public Guid MatchId {get;set;}
+    public int Ordinal {get;set;}
+    public Guid? PlayerId {get;set;}
+    public string Kind {get;set;}="Unknown";
+}
+public sealed class MatchResultChange : TenantEntity
+{
+    public Guid MatchId {get;set;}
+    public Guid ActorMembershipId {get;set;}
+    public int Revision {get;set;}
+    public required string Before {get;set;}
+    public required string After {get;set;}
+}
+public sealed class MatchTeamPermissionAudit : TenantEntity
+{
+    public Guid TeamId {get;set;}
+    public Guid ActorMembershipId {get;set;}
+    public bool Before {get;set;}
+    public bool After {get;set;}
 }

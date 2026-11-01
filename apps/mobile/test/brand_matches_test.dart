@@ -42,7 +42,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(brand.signedIn, false);
       expect(brand.logo, isNull);
-      expect(brand.name, 'The Professional Academy');
+      expect(brand.name, 'iAcademy One');
       expect(brand.coachAttendance, false);
       brand.dispose();
       auth.dispose();

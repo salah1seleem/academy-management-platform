@@ -17,6 +17,7 @@ public static partial class AssetEndpoints
         var api = app.MapGroup("/api/v1/assets").RequireAuthorization(AcademyPermissions.TenantAccess);
         api.MapPost("/upload", Upload).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/{id:guid}", Download);
+        app.MapPost("/api/v1/me/profile/photo",UploadSelfPhoto).RequireAuthorization(AcademyPermissions.TenantAccess).AddEndpointFilter<CsrfFilter>();
         api.MapGet("/gallery", Gallery);
         api.MapGet("/memories", Memories).WithMetadata(new AcademyFeatureMetadata("media"));
     }
@@ -24,6 +25,22 @@ public static partial class AssetEndpoints
     private static Guid Actor(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static Task<bool> Linked(FoundationDbContext db, Guid academy, Guid user, Guid player) => db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == academy && x.Guardian.UserId == user && x.PlayerId == player && x.IsActive && x.Guardian.IsActive && x.Player.IsActive);
     private static Task<bool> Assigned(FoundationDbContext db, Guid academy, Guid user, Guid group) => db.StaffGroupAssignments.AnyAsync(x => x.AcademyId == academy && x.AcademyMembership.UserId == user && x.TrainingGroupId == group && x.IsActive && x.AcademyMembership.IsActive && x.TrainingGroup.IsActive);
+
+    internal static async Task<IResult> UploadNews(HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, TimeProvider time)
+    {
+        if(!context.Request.HasFormContentType)return Results.BadRequest();
+        var form=await context.Request.ReadFormAsync();
+        if(form["purpose"]!="News")return Results.BadRequest();
+        return await Upload(context,tenant,db,authorization,config,env,clock,time);
+    }
+
+    internal static async Task<IResult> UploadSelfPhoto(HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, TimeProvider time)
+    {
+        if(!context.Request.HasFormContentType)return Results.BadRequest();
+        var form=await context.Request.ReadFormAsync();
+        if(form["purpose"]!="SelfPhoto")return Results.BadRequest();
+        return await Upload(context,tenant,db,authorization,config,env,clock,time);
+    }
 
     private static async Task<IResult> Upload(HttpContext context, CurrentTenant tenant, FoundationDbContext db, IAuthorizationService authorization, IConfiguration config, IWebHostEnvironment env, ISubscriptionClock clock, TimeProvider time)
     {
@@ -37,21 +54,26 @@ public static partial class AssetEndpoints
         Guid? groupId = Guid.TryParse(form["groupId"], out var group) ? group : null;
         if (file is null || file.Length < 12 || file.Length > 50 * 1024 * 1024 || form.Files.Count != 1 || form["caption"].ToString().Length > 300)
             return Results.BadRequest(new { message = "ارفع ملفًا واحدًا لا يتجاوز 50 ميجابايت." });
-        if (purpose is not ("Photo" or "Media" or "Proof" or "News" or "StaffPhoto" or "Campaign")) return Results.BadRequest();
+        if (purpose is not ("Photo" or "Media" or "Proof" or "News" or "StaffPhoto" or "Campaign" or "SelfPhoto")) return Results.BadRequest();
         if(purpose=="Media"&&!await context.RequestServices.GetRequiredService<AcademyConfigurationService>().Enabled(t.AcademyId,"media"))return Results.Forbid();
         if(purpose=="Campaign"&&(!await CommunityAds.FullOwner(db,t)||!await context.RequestServices.GetRequiredService<AcademyConfigurationService>().Enabled(t.AcademyId,"community_ads")||playerId.HasValue||groupId.HasValue||file.Length>10*1024*1024))return Results.Forbid();
-        if (purpose == "Proof")
+        if (purpose == "SelfPhoto")
+        {
+            if (playerId.HasValue || groupId.HasValue) return Results.BadRequest();
+        }
+        else if (purpose == "Proof")
         {
             if (t.Role != AcademyRole.Guardian || playerId.HasValue || groupId.HasValue) return Results.Forbid();
         }
         else
         {
             var permission = purpose == "StaffPhoto" ? AcademyPermissions.PayrollManage : purpose == "Photo" ? AcademyPermissions.PeopleManage : AcademyPermissions.PlayerMediaManage;
-            var staffAllowed = purpose=="Campaign" || (await authorization.AuthorizeAsync(context.User, permission)).Succeeded;
+            var staffAllowed = purpose=="Campaign" || (purpose=="News" ? await NewsAudience.ManageAllowed(db,t,"Add") : (await authorization.AuthorizeAsync(context.User, permission)).Succeeded);
             if (!staffAllowed && !(purpose == "Media" && t.Role == AcademyRole.Coach && groupId.HasValue && !playerId.HasValue && await Assigned(db, t.AcademyId, actor, groupId.Value))) return Results.Forbid();
             if (purpose == "News" && (playerId.HasValue || groupId.HasValue)) return Results.BadRequest();
             if (purpose == "StaffPhoto" && (playerId.HasValue || groupId.HasValue)) return Results.BadRequest();
             if (purpose == "Photo" && (!playerId.HasValue || groupId.HasValue)) return Results.BadRequest();
+            if (purpose == "Photo" && t.Role != AcademyRole.AcademyOwner && !await StaffWorkflowAccess.Allows(db, t.MembershipId, "/api/v1/people/players/photo", "PUT")) return Results.Forbid();
             if (purpose == "Media" && playerId.HasValue == groupId.HasValue) return Results.BadRequest(new { message = "اختر لاعبًا أو مجموعة واحدة." });
             if (playerId.HasValue && !await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId)) return Results.NotFound();
             if (groupId.HasValue && !await db.TrainingGroups.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == groupId && x.IsActive)) return Results.NotFound();
@@ -59,7 +81,7 @@ public static partial class AssetEndpoints
         await using var source = file.OpenReadStream();
         var header = new byte[12]; await source.ReadExactlyAsync(header, context.RequestAborted);
         var detected = DetectType(header);
-        if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto" or "Campaign") && !detected.StartsWith("image/")))
+        if (detected is null || detected != file.ContentType || ((purpose is "Photo" or "Proof" or "News" or "StaffPhoto" or "Campaign" or "SelfPhoto") && !detected.StartsWith("image/")))
             return Results.BadRequest(new { message = "الأنواع المدعومة: JPEG وPNG وWebP، وMP4 وMOV." });
         if (detected.StartsWith("image/") && file.Length > 8 * 1024 * 1024) return Results.BadRequest(new { message = "الصورة لا تتجاوز 8 ميجابايت." });
         ProcessedMedia? processed = null;
@@ -67,7 +89,7 @@ public static partial class AssetEndpoints
         {
             // Expensive decoding precedes locks. Live authority/audience are checked again below
             // before publishing; a permission or consent revoked during processing still wins.
-            if (purpose is "Media" or "Photo")
+            if (purpose is "Media" or "Photo" or "SelfPhoto")
             {
                 await using var original = file.OpenReadStream();
                 processed = await context.RequestServices.GetRequiredService<PrivateMediaProcessor>().Prepare(original, detected, Root(config, env), context.RequestAborted);
@@ -75,8 +97,8 @@ public static partial class AssetEndpoints
         }
         catch (MediaProcessingException error) { return Results.Json(new { message = error.Message }, statusCode: error.Status); }
         using var prepared = processed;
-        await using var transaction=purpose is "Media" or "Photo"?await db.Database.BeginTransactionAsync():null;
-        if(purpose is "Media" or "Photo")
+        await using var transaction=purpose is "Media" or "Photo" or "SelfPhoto"?await db.Database.BeginTransactionAsync():null;
+        if(purpose is "Media" or "Photo" or "SelfPhoto")
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"AcademyMemberships\" WHERE \"Id\"={t.MembershipId} AND \"AcademyId\"={t.AcademyId} FOR SHARE");
@@ -107,7 +129,7 @@ public static partial class AssetEndpoints
             else if(t.Role is not(AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)||!(await authorization.AuthorizeAsync(context.User,context,AcademyPermissions.PlayerMediaManage)).Succeeded)return Results.Forbid();
             await GroupMediaPrivacy.Lock(db,t.AcademyId);
         }
-        var now = purpose=="Media"?time.GetUtcNow():clock.UtcNow;
+        var now = purpose is "Media" or "SelfPhoto"?time.GetUtcNow():clock.UtcNow;
         var asset = new PrivateAsset { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UploadedByUserId = actor, ContentType = prepared?.ContentType ?? detected, StorageName = Guid.NewGuid().ToString("N"), Length = prepared?.Length ?? file.Length, Purpose = purpose, PlayerId = playerId, TrainingGroupId = groupId, Caption = form["caption"].ToString().Trim(), CreatedAtUtc = now, UpdatedAtUtc = now };
         if(purpose=="Media")
         {
@@ -144,13 +166,30 @@ public static partial class AssetEndpoints
 
     private static async Task<bool> CanRead(PrivateAsset asset, TenantMembership t, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization, ISubscriptionClock clock,TimeProvider time)
     {
-        var user = Actor(principal); var policy = asset.Purpose switch { "StaffPhoto" => AcademyPermissions.PayrollRead, "Photo" => AcademyPermissions.PeopleManage, "Proof" => AcademyPermissions.PaymentRead, _ => AcademyPermissions.PlayerMediaRead };
+        var user = Actor(principal);
+        if (asset.Purpose == "SelfPhoto") return asset.IsActive && asset.UploadedByUserId == user && asset.AcademyId == t.AcademyId;
+        var policy = asset.Purpose switch { "StaffPhoto" => AcademyPermissions.PayrollRead, "Photo" => AcademyPermissions.PeopleManage, "Proof" => AcademyPermissions.PaymentRead, _ => AcademyPermissions.PlayerMediaRead };
+        if(asset.Purpose=="News") {
+            if(!asset.IsActive)return false;
+            if(await NewsAudience.ManageAllowed(db,t,"Read")&&await NewsAudience.Managed(db,t.AcademyId).AnyAsync(n=>n.ImageAssetId==asset.Id))return true;
+            // An unattached upload is visible to its uploader for draft preview only.
+            if(asset.UploadedByUserId==user&&await NewsAudience.ManageAllowed(db,t,"Read")&&!await db.AcademyNews.AnyAsync(n=>n.ImageAssetId==asset.Id))return true;
+            return await (await NewsAudience.Feed(db,t,user,time.GetUtcNow())).AnyAsync(n=>n.ImageAssetId==asset.Id);
+        }
         if ((t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin) && (await authorization.AuthorizeAsync(principal, policy)).Succeeded) return true;
         if (!asset.IsActive||asset.Purpose=="Media"&&await db.PrivateMediaWithdrawals.AnyAsync(w=>w.AssetId==asset.Id)) return false;
         if (asset.Purpose == "StaffPhoto") return false;
         if (asset.Purpose == "Proof") return asset.UploadedByUserId == user;
+        if (asset.Purpose == "Photo" && asset.PlayerId.HasValue && t.Role == AcademyRole.Coach)
+        {
+            var today = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
+            return await db.SportEnrollments.AnyAsync(e => e.AcademyId == t.AcademyId && e.PlayerId == asset.PlayerId && e.IsActive && e.Player.IsActive && e.Branch.IsActive && e.Sport.IsActive
+                && (!db.BranchScopeRestricted || db.RequestBranchIds.Contains(e.BranchId))
+                && (!db.SportScopeRestricted || db.RequestSportIds.Contains(e.SportId))
+                && db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.AcademyMembershipId == t.MembershipId && a.IsActive && a.AcademyMembership.IsActive && a.TrainingGroup.IsActive
+                    && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, today)));
+        }
         var now = clock.UtcNow;
-        if (asset.Purpose == "News") return await db.AcademyNews.AnyAsync(x => x.AcademyId == t.AcademyId && x.ImageAssetId == asset.Id && x.IsActive && x.PublishedAtUtc <= now && x.PublishedAtUtc.Value.AddDays(x.VisibleDays) > now);
         if (asset.PlayerId.HasValue && (asset.Purpose!="Media"||asset.MediaPolicyVersion==1) && await Linked(db, t.AcademyId, user, asset.PlayerId.Value)) return true;
         if (asset.Purpose == "Media" && asset.TrainingGroupId.HasValue)
         {

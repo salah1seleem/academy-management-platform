@@ -1,3 +1,5 @@
+import 'refined_home_panels.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
@@ -79,7 +81,7 @@ class OwnerCockpitContent extends StatelessWidget {
         leading: Icon(icon),
         title: UiText(title),
         subtitle: UiText(subtitle),
-        trailing: const Icon(Icons.chevron_left),
+        trailing: const Icon(Icons.chevron_right),
         onTap: action,
       ),
     );
@@ -239,7 +241,7 @@ class OwnerCapacityPage extends StatelessWidget {
                 subtitle: UiText(
                   '${g['branch']} · ${g['sport']}\nالإشغال ${g['occupied']} / ${g['capacity']}\n${g['conditionalValue'] == null ? 'لا باقة شهرية مؤهلة' : 'قيمة مشروطة ${money(g['conditionalValue'], d['currency'])}'}',
                 ),
-                trailing: const Icon(Icons.chevron_left),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () => openPage(
                   context,
                   OwnerGroupOperations(auth: auth, id: textOf(g['groupId'])),
@@ -264,25 +266,31 @@ class NativeOperatingStatement extends StatelessWidget {
   Widget build(BuildContext context) => OwnerScopedRead(
     auth: auth,
     path:
-        '/api/v1/reports/operating-statement?${Uri(queryParameters: filters).query}',
+        '/api/v1/reports/operating-statement?${Uri(queryParameters: {...filters, 'includeMonthly': 'true'}).query}',
     builder: (context, value) {
       final d = obj(value);
       return gList([
         const Heading('الفائض والعجز التشغيلي'),
-        const UiText('أساس نقدي؛ ليس ربحًا نهائيًا على أساس الاستحقاق.'),
-        UiText('${d['from']} — ${d['to']}'),
-        Facts([
-          ('المقبوض بعد الاسترداد', money(d['totalIncome'], d['currency'])),
-          ('المدفوعات التشغيلية', money(d['totalExpenses'], d['currency'])),
-          ('الفائض / العجز النقدي', money(d['surplus'], d['currency'])),
-        ]),
-        for (final section in ['income', 'expenses']) ...[
-          Heading(section == 'income' ? 'المقبوضات' : 'المدفوعات'),
-          for (final line in rows(d[section]))
-            Facts([
-              (textOf(line['label']), money(line['amount'], d['currency'])),
-            ]),
-        ],
+        UiText('${d['from']} — ${d['to']}', textDirection: TextDirection.ltr),
+        HomeOperatingStatement(
+          data: d,
+          onOpen: null,
+          showTitle: false,
+          showBalances: false,
+          onMonth: (month) => openPage(
+            context,
+            OwnerReports(
+              auth: auth,
+              initialReport: 'operating',
+              initialFilters: {
+                ...filters,
+                'from': textOf(month['from']),
+                'to': textOf(month['to']),
+                'allDates': 'false',
+              },
+            ),
+          ),
+        ),
         const Heading('أرصدة منفصلة لا تضاف إلى المقبوض'),
         Facts([
           ('مستحقات العملاء', money(d['receivables'], d['currency'])),

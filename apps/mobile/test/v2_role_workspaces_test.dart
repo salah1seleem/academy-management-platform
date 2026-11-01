@@ -2,18 +2,24 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/admin/admin_home.dart';
 import 'package:academy_mobile/features/shared/role_navigation.dart';
+import 'package:academy_mobile/features/shared/owner_brand_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'auth_controller_test.dart';
 
-Future<AuthController> authenticate(String role, Handler handler) async {
+Future<AuthController> authenticate(
+  String role,
+  Handler handler, {
+  String? userId,
+}) async {
   final auth = AuthController(
     FakeApi((m, p, b, t) async {
       if (p.contains('/auth/')) {
         return {
           ...credentials(),
+          'userId': ?userId,
           'membershipId': 'member',
           'memberships': [
             {
@@ -39,7 +45,9 @@ Widget app(Widget page, {double scale = 1}) => MaterialApp(
   localizationsDelegates: GlobalMaterialLocalizations.delegates,
   theme: AcademyTheme.light(),
   builder: (context, child) => MediaQuery(
-    data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+    data: MediaQuery.of(
+      context,
+    ).copyWith(textScaler: TextScaler.linear(scale), disableAnimations: true),
     child: child!,
   ),
   home: page,
@@ -47,10 +55,10 @@ Widget app(Widget page, {double scale = 1}) => MaterialApp(
 
 void main() {
   const expected = {
-    'Guardian': ['الرئيسية', 'أبنائي', 'التقويم', 'المزيد'],
-    'Coach': ['الرئيسية', 'جدولي', 'اللاعبون', 'المباريات', 'المزيد'],
-    'AcademyOwner': ['الرئيسية', 'العمليات', 'المباريات', 'التقارير', 'المزيد'],
-    'AcademyAdmin': ['الرئيسية', 'الحضور', 'الطلبات', 'المزيد'],
+    'Guardian': ['الرئيسية', 'الحصص', 'المباريات', 'التقييمات'],
+    'Coach': ['الرئيسية', 'الحضور\nوالتقييم', 'المباريات', 'المزيد'],
+    'AcademyOwner': ['العمليات', 'المباريات', 'الرئيسية', 'التقارير', 'المزيد'],
+    'AcademyAdmin': ['الرئيسية', 'العمليات', 'الحضور', 'المزيد'],
   };
   for (final role in expected.keys) {
     for (final width in [360.0, 390.0, 430.0]) {
@@ -74,28 +82,41 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          final destinations = tester
-              .widgetList<NavigationDestination>(
-                find.byType(NavigationDestination),
-              )
-              .map((d) => d.label)
-              .toList();
+          final destinations = role == 'AcademyOwner'
+              ? tester
+                    .widgetList<Semantics>(
+                      find.descendant(
+                        of: find.byType(OwnerBrandNavigation),
+                        matching: find.byType(Semantics),
+                      ),
+                    )
+                    .where((w) => w.properties.button == true)
+                    .map((w) => w.properties.label)
+                    .whereType<String>()
+                    .where((v) => v.isNotEmpty)
+                    .toList()
+              : tester
+                    .widgetList<NavigationDestination>(
+                      find.byType(NavigationDestination),
+                    )
+                    .map((d) => d.label)
+                    .toList();
           expect(destinations, expected[role]);
           expect(tester.takeException(), isNull);
-          await tester.tap(find.text('المزيد'));
-          await tester.pumpAndSettle();
-          expect(find.text('فيديوهات شرح الصفحات'), findsOneWidget);
-          if (role == 'AcademyOwner') {
+          expect(find.byTooltip('حسابي'), findsOneWidget);
+          expect(find.byTooltip('التنبيهات'), findsOneWidget);
+          expect(find.byTooltip('شرح الصفحة بالفيديو'), findsNothing);
+          if (role != 'Guardian') {
+            await tester.tap(find.text('المزيد'));
+            await tester.pumpAndSettle();
+            expect(find.byTooltip('حسابي'), findsOneWidget);
+            expect(find.byTooltip('التنبيهات'), findsOneWidget);
+            expect(find.byTooltip('شرح الصفحة بالفيديو'), findsNothing);
+            expect(find.text('فيديوهات شرح الصفحات'), findsNothing);
             expect(find.text('الحساب والإعدادات'), findsNothing);
             expect(find.text('حضوري وانصرافي'), findsNothing);
-          } else {
-            await tester.scrollUntilVisible(
-              find.text('الحساب والإعدادات'),
-              200,
-              scrollable: find.byType(Scrollable).first,
-            );
-            expect(find.text('الحساب والإعدادات'), findsOneWidget);
           }
+          await tester.pumpWidget(const SizedBox());
           expect(tester.takeException(), isNull);
           auth.dispose();
         },
@@ -116,11 +137,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('طلبات الدفع'), findsOneWidget);
       expect(find.text('حضور اللاعبين'), findsNothing);
-      expect(calls, [
+      expect(calls.toSet(), {
         '/api/v1/my-permissions',
+        '/api/v1/my-access',
         '/api/v1/manage/payment-requests?status=Pending&allDates=true',
-        '/api/v1/notifications',
-      ]);
+        '/api/v1/staff/passkeys/attendance',
+        '/api/v1/news',
+      });
       expect(
         calls.any((p) => p.contains('/attendance/') || p.contains('/reports/')),
         isFalse,

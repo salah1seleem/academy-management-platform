@@ -49,12 +49,12 @@ async function renderDetail(data: object = basePeriod) { initial(data); render(<
 describe("subscription period adjustments", () => {
   it("shows only valid actions for an active duration period", async () => {
     await renderDetail();
-    expect(screen.getByRole("button", { name: "تجميد" })).toBeVisible(); expect(screen.getByRole("button", { name: "إضافة أيام" })).toBeVisible(); expect(screen.getByRole("button", { name: "خصم أيام" })).toBeVisible(); expect(screen.getByRole("button", { name: "إلغاء الاشتراك" })).toBeVisible(); expect(screen.queryByRole("button", { name: "استئناف" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "تجميد" })).toBeVisible(); expect(screen.queryByRole("button", { name: "إضافة أيام" })).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "خصم أيام" })).toBeVisible(); expect(screen.getByRole("button", { name: "إلغاء الاشتراك" })).toBeVisible(); expect(screen.queryByRole("button", { name: "استئناف" })).not.toBeInTheDocument();
   });
 
   it("shows Resume only for a frozen period while keeping timed adjustments", async () => {
     await renderDetail({ ...basePeriod, status: "Frozen", frozenFromDate: "2026-09-25" });
-    expect(screen.getByRole("button", { name: "استئناف" })).toBeVisible(); expect(screen.queryByRole("button", { name: "تجميد" })).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "إضافة أيام" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "استئناف" })).toBeVisible(); expect(screen.queryByRole("button", { name: "تجميد" })).not.toBeInTheDocument(); expect(screen.queryByRole("button", { name: "إضافة أيام" })).not.toBeInTheDocument();
   });
 
   it("hides freeze and day actions for sessions-only plans", async () => {
@@ -68,14 +68,14 @@ describe("subscription period adjustments", () => {
   });
 
   it("keeps the adjustment reason optional and the day range bounded", async () => {
-    await renderDetail(); fireEvent.click(screen.getByRole("button", { name: "إضافة أيام" }));
+    await renderDetail(); fireEvent.click(screen.getByRole("button", { name: "خصم أيام" }));
     expect(screen.getByLabelText("سبب التعديل")).not.toBeRequired(); expect(screen.getByLabelText("سبب التعديل")).toHaveAttribute("maxlength", "500"); expect(screen.getByLabelText("عدد الأيام")).toHaveAttribute("min", "1"); expect(screen.getByLabelText("عدد الأيام")).toHaveAttribute("max", "365");
   });
 
   it("submits an adjustment without a reason", async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(response(basePeriod)).mockResolvedValueOnce(response({ token: "csrf" })).mockResolvedValueOnce(response({})).mockResolvedValueOnce(response(basePeriod)) as typeof fetch;
-    render(<SubscriptionPeriodDetail id="period-1" />); await screen.findByText("عمر أحمد · NG-0001"); fireEvent.click(screen.getByRole("button", { name: "إضافة أيام" })); fireEvent.change(screen.getByLabelText("عدد الأيام"), { target: { value: "5" } }); fireEvent.click(screen.getByRole("button", { name: "متابعة" }));
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(2)); const body = JSON.parse(String((vi.mocked(fetch).mock.calls[2][1] as RequestInit).body)); expect(body.reason).toBe("");
+    render(<SubscriptionPeriodDetail id="period-1" />); await screen.findByText("عمر أحمد · NG-0001"); fireEvent.click(screen.getByRole("button", { name: "خصم أيام" })); fireEvent.change(screen.getByLabelText("عدد الأيام"), { target: { value: "5" } }); fireEvent.click(screen.getByRole("button", { name: "متابعة" }));
+    fireEvent.click(screen.getByRole("button", { name: "تأكيد الخصم" })); await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(2)); const body = JSON.parse(String((vi.mocked(fetch).mock.calls[2][1] as RequestInit).body)); expect(body.reason).toBe("");
   });
 
   it("requires freeze confirmation and explains its entitlement effect", async () => {
@@ -100,13 +100,13 @@ describe("subscription period adjustments", () => {
 
   it("renders adjusted end date and immutable audit history", async () => {
     await renderDetail({ ...basePeriod, endDate: "2026-11-05", adjustments: [{ id: "a1", type: "DaysAdded", effectiveDate: "2026-09-28", daysDelta: 5, oldEndDate: "2026-10-31", newEndDate: "2026-11-05", reason: "تعويض", performedBy: "منى السيد", performedAtUtc: "2026-09-28T10:00:00Z" }] });
-    expect(screen.getByText(/1 سبتمبر 2026 — 5 نوفمبر 2026/)).toBeVisible(); expect(screen.getAllByText("إضافة أيام")).toHaveLength(2); expect(screen.getByText("تعويض")).toBeVisible(); expect(screen.getByText("منى السيد", { exact: false })).toBeVisible();
+    expect(screen.getByText(/1 سبتمبر 2026 — 5 نوفمبر 2026/)).toBeVisible(); expect(screen.getAllByText("إضافة أيام")).toHaveLength(1); expect(screen.getByText("تعويض")).toBeVisible(); expect(screen.getByText("منى السيد", { exact: false })).toBeVisible();
   });
 
   it("sends only command fields and reports a stale conflict", async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(response(basePeriod)).mockResolvedValueOnce(response({ token: "csrf" })).mockResolvedValueOnce(response({ message: "تغير الاشتراك منذ فتح الصفحة." }, false)) as typeof fetch;
-    render(<SubscriptionPeriodDetail id="period-1" />); await screen.findByText("عمر أحمد · NG-0001"); fireEvent.click(screen.getByRole("button", { name: "إضافة أيام" })); fireEvent.change(screen.getByLabelText("عدد الأيام"), { target: { value: "5" } }); fireEvent.change(screen.getByLabelText("سبب التعديل"), { target: { value: "تعويض" } }); fireEvent.click(screen.getByRole("button", { name: "متابعة" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("تغير الاشتراك منذ فتح الصفحة"); const call = vi.mocked(fetch).mock.calls[2]; const body = JSON.parse(String((call[1] as RequestInit).body)); expect(body).toEqual({ direction: 1, days: 5, reason: "تعويض", expectedVersion: 7 }); expect(body).not.toHaveProperty("newEndDate"); expect(body).not.toHaveProperty("status");
+    render(<SubscriptionPeriodDetail id="period-1" />); await screen.findByText("عمر أحمد · NG-0001"); fireEvent.click(screen.getByRole("button", { name: "خصم أيام" })); fireEvent.change(screen.getByLabelText("عدد الأيام"), { target: { value: "5" } }); fireEvent.change(screen.getByLabelText("سبب التعديل"), { target: { value: "تعويض" } }); fireEvent.click(screen.getByRole("button", { name: "متابعة" })); fireEvent.click(screen.getByRole("button", { name: "تأكيد الخصم" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("تغير الاشتراك منذ فتح الصفحة"); const call = vi.mocked(fetch).mock.calls[2]; const body = JSON.parse(String((call[1] as RequestInit).body)); expect(body).toEqual({ direction: 2, days: 5, reason: "تعويض", expectedVersion: 7 }); expect(body).not.toHaveProperty("newEndDate"); expect(body).not.toHaveProperty("status");
   });
 
   it("shows loading and load failure states", async () => {

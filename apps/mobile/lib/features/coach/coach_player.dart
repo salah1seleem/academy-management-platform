@@ -1,3 +1,6 @@
+import '../shared/group_schedule.dart';
+import '../shared/guardian_contact.dart';
+
 import 'package:flutter/material.dart';
 
 import '../shared/help_center.dart';
@@ -77,6 +80,11 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
             final p = matches.first;
             final name = textOf(p['player'] ?? p['arabicName']);
             return gList([
+              if (p['playerId'] is String)
+                GuardianContactAction(
+                  auth: widget.auth,
+                  playerId: p['playerId'] as String,
+                ),
               HelpEntry(auth: widget.auth, lesson: 'evaluations'),
               AppCard(
                 child: Column(
@@ -97,7 +105,7 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
                     UiText(textOf(p['group'] ?? session['group'])),
                     UiText(textOf(p['sport'] ?? session['sport'])),
                     if (widget.sessionId != null) ...[
-                      UiText(day(session['sessionDate'])),
+                      UiText(sessionDateLabel(session['sessionDate'])),
                       UiText(
                         '${localized(context, 'الحالة', 'Status')}: ${label(p['attendanceStatus'])}',
                       ),
@@ -115,6 +123,8 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
                   ],
                 ),
               ),
+              if (p['recurring'] is List)
+                WeeklyGroupSchedule(schedules: rows(p['recurring'])),
               if (data['canEvaluate'] == true)
                 FilledButton.icon(
                   icon: const Icon(Icons.assessment_outlined),

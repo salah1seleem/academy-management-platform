@@ -1,5 +1,6 @@
 "use client";
 
+import { PersonPortrait } from "./person-portrait";
 import Link from "next/link";
 import Image from "next/image";
 import { Activity, ArrowUpLeft, CalendarDays, Check, CircleHelp, ClipboardList, ReceiptText, RefreshCcw, Trophy, UserPlus, X } from "lucide-react";
@@ -16,11 +17,11 @@ export function SportsHero({ name, academy, date, children }: { name: string; ac
   </section>;
 }
 
-export function IdentityMark({ name, detail, photo, large = false }: { name: string; detail?: string; photo?: string; large?: boolean }) {
+export function IdentityMark({ name, detail, photo, large = false, person, gender }: { name: string; detail?: string; photo?: string; large?: boolean; person?: "child" | "adult"; gender?: unknown }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join(" ");
   // Only packaged assets or same-origin, authorized private assets.
   const safePhoto = photo && (/^\/demo-assets\/[a-zA-Z0-9/_-]+\.(svg|png|jpe?g|webp)$/.test(photo) || /^\/api\/v1\/assets\/[a-f0-9-]{36}$/i.test(photo)) ? photo : null;
-  return <span className={`sports-identity ${large ? "sports-identity-large" : ""}`}>{safePhoto ? <Image unoptimized className="identity-monogram" src={safePhoto} width={large ? 80 : 42} height={large ? 80 : 42} alt={`صورة ${name}`} /> : <span className="identity-monogram" aria-hidden="true">{initials}</span>}<span><strong>{name}</strong>{detail && <small>{detail}</small>}</span></span>;
+  return <span className={`sports-identity ${large ? "sports-identity-large" : ""}`}>{person ? <PersonPortrait photo={photo} adult={person === "adult"} gender={gender} name={name} size={large ? 80 : 42} className="identity-monogram" /> : safePhoto ? <Image unoptimized className="identity-monogram" src={safePhoto} width={large ? 80 : 42} height={large ? 80 : 42} alt={`صورة ${name}`} /> : <span className="identity-monogram" aria-hidden="true">{initials}</span>}<span><strong>{name}</strong>{detail && <small>{detail}</small>}</span></span>;
 }
 
 export function SportsQuickActions({ coach = false, showReports = true }: { coach?: boolean; showReports?: boolean }) {

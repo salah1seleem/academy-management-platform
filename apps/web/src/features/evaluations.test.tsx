@@ -21,7 +21,7 @@ describe("evaluation experience", () => {
   });
   it("renders the criteria list with sport, axis, weight and functional actions", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [{ id: "c1", sportId: "s1", sport: "كرة القدم", arabicName: "دقة التمرير", displayOrder: 1, isActive: true, weight: 1, footballAxis: "Passing", version: 3, referenced: true }] });
-    render(<CriteriaList />); expect(await screen.findByText("دقة التمرير")).toBeVisible(); expect(screen.getByText(/التمرير · الوزن 1/)).toBeVisible(); expect(screen.getByRole("link", { name: "تعديل" })).toBeVisible(); expect(screen.getByRole("button", { name: "إيقاف" })).toBeVisible();
+    render(<CriteriaList />); expect(await screen.findByText("دقة التمرير")).toBeVisible(); expect(screen.getByRole("cell",{name:"التمرير"})).toBeVisible(); expect(screen.getByRole("columnheader",{name:"الوزن"})).toBeVisible(); expect(screen.getAllByRole("cell",{name:"1"})).toHaveLength(2); expect(screen.getByRole("link", { name: "تعديل" })).toBeVisible(); expect(screen.getByRole("button", { name: "إيقاف" })).toBeVisible();
   });
 
   it("shows a clear empty state for criteria", async () => {

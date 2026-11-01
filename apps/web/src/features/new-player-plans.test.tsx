@@ -54,3 +54,18 @@ it("explains when the chosen sport has no active packages without allowing colle
   expect(screen.getByText(/لا توجد باقات نشطة لهذه الرياضة/)).toBeVisible();
   expect(screen.getByRole("button", { name: "تسجيل وتأكيد التحصيل" })).toBeDisabled();
 });
+
+it.each([[2,'100',900],[1,'15',850],[1,'100',0]])('exceptional type %s value %s uses canonical quote and confirms the actual financial effect',async(type,value,final)=>{
+ const posts:{path:string;body:Record<string,unknown>}[]=[];vi.spyOn(window,'confirm').mockReturnValue(true);
+ global.fetch=vi.fn((input,init)=>{const path=String(input);if(init?.method==='POST'){const body=JSON.parse(String(init.body));posts.push({path,body});return Promise.resolve(Response.json(path.endsWith('registration-quote')?{originalAmount:1000,discountAmount:1000-final,finalAmount:final,currency:'EGP'}:{playerId:'synthetic-player'}));}
+ const data=path.endsWith('/me')?{role:'AcademyOwner'}:path.includes('/auth/csrf')?{token:'synthetic-csrf'}:path.includes('structure/options')?{branches:[{id:'b',arabicName:'فرع اصطناعي'}],sports:[{id:'s',arabicName:'رياضة اختبار'}],categories:[{id:'c',arabicName:'فئة اختبار'}],groups:[{id:'g',arabicName:'مجموعة اختبار',branchId:'b',sportId:'s',ageCategoryId:'c',registrationFormat:'Group'}]}:path.includes('discount-rules')?{items:[]}:[{id:'p',arabicName:'باقة اختبار',sportId:'s',price:1000,currency:'EGP',isActive:true,trainingFormat:'Group'}];return Promise.resolve(Response.json(data));}) as typeof fetch;
+ render(<NewPlayerPage/>);await screen.findByRole('checkbox',{name:'إضافة خصم استثنائي'});
+ for(const [label,entry] of [['اسم اللاعب بالعربية','طفل اصطناعي'],['تاريخ الميلاد','2016-01-01'],['اسم ولي الأمر','ولي أمر اصطناعي'],['رقم الهاتف','01000000000'],['الفرع','b'],['الرياضة','s'],['الفئة العمرية','c'],['المجموعة','g'],['الباقة','p']])fireEvent.change(screen.getByLabelText(label),{target:{value:entry}});
+ fireEvent.click(screen.getByRole('checkbox',{name:'إضافة خصم استثنائي'}));fireEvent.change(screen.getByLabelText('نوع الخصم'),{target:{value:String(type)}});fireEvent.change(screen.getByLabelText('قيمة الخصم'),{target:{value}});fireEvent.change(screen.getByLabelText('سبب الخصم'),{target:{value:'سبب اصطناعي للمراجعة'}});
+ fireEvent.click(screen.getByRole('button',{name:'حساب المبلغ المستحق'}));await screen.findByText(/المبلغ المطلوب تحصيله/);
+ if(final!==0)fireEvent.change(screen.getByRole('combobox',{name:'طريقة التحصيل'}),{target:{value:'Online'}});
+ fireEvent.click(screen.getByRole('button',{name:final===0?'اعتماد الإعفاء والتسجيل':'تسجيل وتأكيد التحصيل'}));
+ const {waitFor}=await import('@testing-library/react');await waitFor(()=>expect(posts.some(p=>p.path.endsWith('/registrations'))).toBe(true));
+ const quote=posts.find(p=>p.path.endsWith('registration-quote'))!,registration=posts.find(p=>p.path.endsWith('/registrations'))!;
+ expect(quote.body.exceptionalDiscount).toEqual({type,value,reason:'سبب اصطناعي للمراجعة',replaceExistingDiscount:false});expect(registration.body.exceptionalDiscount).toEqual(quote.body.exceptionalDiscount);expect(registration.body.expectedAmount).toBe(final);expect(registration.body.paymentMethod).toBe('Online');expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining(final===0?'دون تحصيل':'تأكيد استلام'));
+});

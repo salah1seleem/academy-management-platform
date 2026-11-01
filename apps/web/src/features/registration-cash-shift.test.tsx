@@ -3,6 +3,14 @@ import { afterEach, expect, it, vi } from "vitest";
 import { RegistrationCashShift } from "./registration-cash-shift";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it("shows disabled cash as preparation state rather than a failed load", async () => {
+  global.fetch = vi.fn(async () => Response.json({ cashEnabled: false, sessions: [] }));
+  render(<RegistrationCashShift branchId="branch" planId="plan" value="" onChange={vi.fn()} />);
+  await screen.findByText(/التحصيل النقدي غير مفعّل/);
+  expect(screen.getByRole("status")).toHaveTextContent("التحصيل النقدي غير مفعّل");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+});
 const props = { branchId: "branch", planId: "plan", value: "", onChange: vi.fn() };
 it("loads authorized shifts without automatic selection and reports the selected id", async () => {
   const changed = vi.fn(); global.fetch = vi.fn(async () => Response.json({ sessions: [{ id: "shift", name: "صندوق الفرع", branch: "فرع اصطناعي" }] }));

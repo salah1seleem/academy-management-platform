@@ -12,24 +12,26 @@ class NativeFamilyRenewalQuote extends StatelessWidget {
   const NativeFamilyRenewalQuote({super.key, required this.auth});
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: localized(context, 'مراجعة تجديد الأسرة', 'Review family renewals'),
     child: RemoteBody(
       auth: auth,
       path: '/api/v1/guardian/subscriptions/family/options',
       builder: (context, value) => FamilyRenewalChoices(
         enrollments: rows(obj(value)['items']),
+        sharedSportOnly: true,
         onQuote: (lines) async => obj(
           await auth.request(
             'POST',
             '/api/v1/guardian/subscriptions/family/quote',
-            body: {'lines': lines},
+            body: {'lines': lines, 'sharedPlanOnly': true},
           ),
         ),
         onCreate: (body) async => obj(
           await auth.request(
             'POST',
             '/api/v1/guardian/subscriptions/family/requests',
-            body: body,
+            body: {...body, 'sharedPlanOnly': true},
           ),
         ),
         onCreated: (value) => Navigator.of(context).pushReplacement(
@@ -45,6 +47,7 @@ class NativeFamilyRenewalQuote extends StatelessWidget {
 
 class FamilyRenewalChoices extends StatefulWidget {
   final List<Json> enrollments;
+  final bool sharedSportOnly;
   final Future<Json> Function(List<Json>) onQuote;
   final Future<Json> Function(Json)? onCreate;
   final void Function(Json)? onCreated;
@@ -54,6 +57,7 @@ class FamilyRenewalChoices extends StatefulWidget {
     required this.onQuote,
     this.onCreate,
     this.onCreated,
+    this.sharedSportOnly = false,
   });
   @override
   State<FamilyRenewalChoices> createState() => _FamilyRenewalChoicesState();
@@ -66,6 +70,59 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
   String? error;
   String? requestKey;
   bool uncertain = false;
+  String? selectedSport, commonPlan;
+  String sportKey(Json e) => textOf(e['sportId'] ?? e['sport']);
+  @override
+  void initState() {
+    super.initState();
+    if (widget.sharedSportOnly && widget.enrollments.isNotEmpty) {
+      selectedSport = sportKey(widget.enrollments.first);
+    }
+  }
+
+  List<Json> get commonPlans {
+    final selected = widget.enrollments
+        .where((e) => selection.containsKey(e['id']))
+        .toList();
+    if (selected.length < 2) return [];
+    return rows(selected.first['plans'])
+        .where(
+          (p) => selected.every(
+            (e) => rows(e['plans']).any(
+              (other) =>
+                  other['id'] == p['id'] && other['currency'] == p['currency'],
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  void selectShared(Json enrollment, bool checked) => setState(() {
+    quote = null;
+    error = null;
+    commonPlan = null;
+    final id = textOf(enrollment['id']);
+    if (checked &&
+        widget.enrollments.any(
+          (e) =>
+              selection.containsKey(e['id']) &&
+              e['id'] != id &&
+              (e['playerId'] ?? e['player']) ==
+                  (enrollment['playerId'] ?? enrollment['player']),
+        )) {
+      error = 'اختر تسجيلًا واحدًا لكل ابن في هذا الطلب.';
+      return;
+    }
+    if (checked) {
+      selection[id] = '';
+    } else {
+      selection.remove(id);
+    }
+    for (final key in selection.keys.toList()) {
+      selection[key] = '';
+    }
+  });
+
   String l(String ar, String en) => localized(context, ar, en);
   void change(String id, String? value) => setState(() {
     error = null;
@@ -159,8 +216,126 @@ class _FamilyRenewalChoicesState extends State<FamilyRenewalChoices> {
       ),
     ),
   );
+  Widget sharedChoices() {
+    final sports = <String, String>{
+      for (final e in widget.enrollments) sportKey(e): textOf(e['sport']),
+    };
+    final eligible = widget.enrollments
+        .where((e) => sportKey(e) == selectedSport)
+        .toList();
+    final plans = commonPlans;
+    return gList([
+      const Heading('تجديد مشترك للأبناء'),
+      const UiText(
+        'اختر أبناء في الرياضة نفسها وباقة مشتركة مناسبة. الرياضات المختلفة تُجدد لكل ابن على حدة.',
+        style: TextStyle(fontSize: 12),
+      ),
+      if (sports.isEmpty)
+        const EmptyMessage('لا توجد تسجيلات متاحة لأبنائك.')
+      else
+        DropdownButtonFormField<String>(
+          key: ValueKey('shared-sport-$selectedSport'),
+          initialValue: selectedSport,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'الرياضة'),
+          items: sports.entries
+              .map(
+                (s) => DropdownMenuItem(value: s.key, child: UiText(s.value)),
+              )
+              .toList(),
+          onChanged: busy
+              ? null
+              : (sport) => setState(() {
+                  selectedSport = sport;
+                  selection.clear();
+                  commonPlan = null;
+                  quote = null;
+                  error = null;
+                }),
+        ),
+      const SizedBox(height: 12),
+      for (final e in eligible)
+        GCard(
+          child: CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: UiText(textOf(e['player'])),
+            subtitle: UiText(
+              '${e['branch']} · ${e['hasOpenRequest'] == true
+                  ? 'يوجد طلب دفع مفتوح'
+                  : rows(e['plans']).isEmpty
+                  ? 'لا توجد باقة مناسبة'
+                  : 'اختر الابن'}',
+            ),
+            value: selection.containsKey(e['id']),
+            onChanged:
+                busy || e['hasOpenRequest'] == true || rows(e['plans']).isEmpty
+                ? null
+                : (checked) => selectShared(e, checked == true),
+          ),
+        ),
+      if (selection.length >= 2 && plans.isEmpty)
+        const GCard(
+          child: UiText(
+            'لا توجد باقة مشتركة مؤهلة لهؤلاء الأبناء. راجع الفروع أو جدد لكل ابن على حدة.',
+          ),
+        ),
+      if (plans.isNotEmpty)
+        DropdownButtonFormField<String>(
+          key: ValueKey('shared-plan-$commonPlan'),
+          initialValue: commonPlan,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'الباقة المشتركة'),
+          items: plans
+              .map(
+                (p) => DropdownMenuItem(
+                  value: textOf(p['id']),
+                  child: UiText(
+                    '${p['name']} · ${money(p['amount'], p['currency'])}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: busy
+              ? null
+              : (plan) => setState(() {
+                  commonPlan = plan;
+                  quote = null;
+                  for (final id in selection.keys.toList()) {
+                    selection[id] = plan ?? '';
+                  }
+                }),
+        ),
+      if (error != null)
+        GCard(
+          child: UiText(
+            error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+      const SizedBox(height: 14),
+      FilledButton(
+        onPressed:
+            busy ||
+                selection.length < 2 ||
+                selection.length > 20 ||
+                commonPlan == null
+            ? null
+            : review,
+        child: UiText(
+          busy
+              ? 'جارٍ مراجعة الإجمالي…'
+              : 'مراجعة إجمالي ${selection.length} أبناء',
+        ),
+      ),
+      notice(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.sharedSportOnly && quote == null) return sharedChoices();
     if (quote != null) {
       return gList([
         Heading(l('إجمالي تجديد الأسرة', 'Family renewal total')),

@@ -94,7 +94,7 @@ public sealed partial class SubscriptionPaymentTests
         await using(var fixture=factory.Services.CreateAsyncScope()){
             var data=fixture.ServiceProvider.GetRequiredService<FoundationDbContext>();
             var source=await data.TrainingGroups.AsNoTracking().SingleAsync(g=>g.Id==Slice2DemoSeed.FootballGroupId);
-            data.TrainingGroups.Add(new(){Id=approvalGroup,AcademyId=source.AcademyId,ArabicName="مجموعة قبول مكافأة مستقلة",SportId=source.SportId,BranchId=source.BranchId,AgeCategoryId=source.AgeCategoryId,Capacity=10});
+            data.TrainingGroups.Add(new(){Id=approvalGroup,AcademyId=source.AcademyId,ArabicName="مجموعة قبول مكافأة مستقلة "+approvalGroup.ToString("N")[..8],SportId=source.SportId,BranchId=source.BranchId,AgeCategoryId=source.AgeCategoryId,Capacity=10});
             var assigned=await data.StaffGroupAssignments.Where(g=>g.TrainingGroupId==source.Id&&g.IsActive).Select(g=>g.AcademyMembershipId).FirstAsync();
             data.StaffGroupAssignments.Add(new(){Id=Guid.NewGuid(),AcademyId=source.AcademyId,TrainingGroupId=approvalGroup,AcademyMembershipId=assigned});await data.SaveChangesAsync();
         }

@@ -52,6 +52,7 @@ class Membership {
 class Session {
   final String accessToken, refreshToken, displayName;
   final String? membershipId;
+  final String? userId;
   final DateTime accessExpires;
   final List<Membership> memberships;
   const Session(
@@ -60,8 +61,9 @@ class Session {
     this.displayName,
     this.membershipId,
     this.accessExpires,
-    this.memberships,
-  );
+    this.memberships, {
+    this.userId,
+  });
   factory Session.fromJson(Object? value) {
     final json = value as Map<String, dynamic>;
     return Session(
@@ -73,6 +75,7 @@ class Session {
       (json['memberships'] as List)
           .map((m) => Membership.fromJson(m as Map<String, dynamic>))
           .toList(growable: false),
+      userId: json['userId'] as String?,
     );
   }
   Membership? get selected {

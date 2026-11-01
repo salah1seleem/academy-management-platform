@@ -9,7 +9,7 @@ public enum SubscriptionPeriodStatus { Scheduled = 1, Active = 2, Expired = 3, C
 public enum RenewalRequestStatus { PendingPayment = 1, PaymentInProgress = 2, Paid = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentRequestStatus { Created = 1, Pending = 2, Confirmed = 3, Failed = 4, Cancelled = 5, Expired = 6 }
 public enum PaymentEventOutcome { Success = 1, Failed = 2, Cancelled = 3 }
-public enum SubscriptionAdjustmentType { FreezeStarted = 1, FreezeEnded = 2, DaysAdded = 3, DaysDeducted = 4, Cancelled = 5 }
+public enum SubscriptionAdjustmentType { FreezeStarted = 1, FreezeEnded = 2, DaysAdded = 3, DaysDeducted = 4, Cancelled = 5, SessionsAdded = 6 }
 public enum RenewalDiscountType { Percentage = 1, FixedAmount = 2 }
 
 public sealed class BeneficiaryRenewalReference : TenantEntity
@@ -83,6 +83,9 @@ public sealed class SubscriptionAdjustment : TenantEntity
     public SubscriptionAdjustmentType AdjustmentType { get; set; }
     public DateOnly EffectiveDate { get; set; }
     public int? DaysDelta { get; set; }
+    public int? SessionsDelta { get; set; }
+    public int? OldRemainingSessions { get; set; }
+    public int? NewRemainingSessions { get; set; }
     public DateOnly? OldEndDate { get; set; }
     public DateOnly? NewEndDate { get; set; }
     public required string Reason { get; set; }

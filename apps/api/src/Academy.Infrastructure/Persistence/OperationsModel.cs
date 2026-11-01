@@ -33,6 +33,8 @@ public sealed partial class FoundationDbContext
     private static void ConfigureOperations(ModelBuilder b)
     {
         ConfigureNoticeDispatch(b);
+        ConfigureMobilePush(b);
+        ConfigureAudienceCommunication(b);
         ConfigureMonthlyPlayerStars(b);
         ConfigureOwnerFollowUps(b);
         ConfigureFeedbackCases(b);
@@ -114,6 +116,17 @@ public sealed partial class FoundationDbContext
         b.Entity<ProductSale>().HasOne<Sport>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<ProductSale>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<AcademyNews>().HasOne<PrivateAsset>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ImageAssetId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyNews>().Property(x => x.Kind).HasMaxLength(20).HasDefaultValue("News");
+        b.Entity<AcademyNews>().Property(x => x.TargetBranchIds).HasDefaultValue(Array.Empty<Guid>());
+        b.Entity<AcademyNews>().Property(x => x.AudienceRoles).HasDefaultValue(new[] { "AcademyAdmin", "Coach", "Guardian" });
+        b.Entity<AcademyNews>().Property(x => x.CreationHash).HasMaxLength(64);
+        b.Entity<AcademyNews>().HasIndex(x => new { x.AcademyId, x.CreationRequestId }).IsUnique();
+        b.Entity<AcademyNews>().HasIndex(x => new { x.AcademyId, x.IsActive, x.PublishedAtUtc });
+        b.Entity<AcademyNews>().ToTable("AcademyNewss", t => {
+            t.HasCheckConstraint("academy_content_kind", "\"Kind\" IN ('News','Event','Announcement')");
+            t.HasCheckConstraint("academy_content_audience", "cardinality(\"AudienceRoles\") BETWEEN 1 AND 3 AND \"AudienceRoles\" <@ ARRAY['AcademyAdmin','Coach','Guardian']::text[]");
+            t.HasCheckConstraint("academy_content_dates", "(\"StartsAtUtc\" IS NULL AND \"EndsAtUtc\" IS NULL) OR (\"StartsAtUtc\" IS NOT NULL AND \"EndsAtUtc\" > \"StartsAtUtc\" AND \"EndsAtUtc\" <= \"StartsAtUtc\" + interval '90 days')");
+        });
         b.Entity<NewEnrollmentRequest>().Property(x => x.OriginalAmount).HasPrecision(18, 2); b.Entity<NewEnrollmentRequest>().Property(x => x.FinalAmount).HasPrecision(18, 2);
         b.Entity<NewEnrollmentRequest>().HasOne<SubscriptionPlan>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPlanId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Entity<NewEnrollmentRequest>().HasOne<PrivateAsset>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ProofAssetId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);

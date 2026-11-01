@@ -16,70 +16,118 @@ class NewsStrip extends StatelessWidget {
     builder: (context, value) {
       final news = rows(value);
       if (news.isEmpty) return const SizedBox.shrink();
+      final cardWidth = MediaQuery.sizeOf(context).width.clamp(300, 520) * .78;
+      final scaler = MediaQuery.textScalerOf(context);
+      final titleStyle = Theme.of(context).textTheme.bodyMedium!
+          .copyWith(fontSize: 14, fontWeight: FontWeight.w700);
+      double measure(String text, TextStyle style, int lines) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: lines,
+          ellipsis: '…',
+        )..layout(maxWidth: cardWidth - 36);
+        final height = painter.height;
+        painter.dispose();
+        return height;
+      }
+
+      final cardHeight = news
+          .map(
+            (n) =>
+                (isPrivateAsset(n['imageUrl']) ? 82.0 : 68.0) +
+                8 +
+                measure(textOf(n['title']), titleStyle, 2) +
+                6 +
+                measure(
+                  day(n['publishedAtUtc']),
+                  titleStyle.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  1,
+                ) +
+                48,
+          )
+          .fold<double>(0, (a, b) => a > b ? a : b);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Heading(localized(context, 'من الأكاديمية', 'Academy news')),
-          for (final n in news.take(3))
-            GCard(
-              onTap: () => openPage(
-                context,
-                GuardianPage(
-                  title: textOf(n['title']),
-                  child: gList([
-                    if (isPrivateAsset(n['imageUrl']))
-                      PrivateImage(
-                        auth: auth,
-                        path: n['imageUrl'],
-                        height: 210,
+          SizedBox(
+            height: cardHeight,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: news.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, i) {
+                final n = news[i];
+                return SizedBox(
+                  width: cardWidth,
+                  child: GCard(
+                    onTap: () => openPage(
+                      context,
+                      GuardianPage(
+                        title: textOf(n['title']),
+                        child: gList([
+                          if (isPrivateAsset(n['imageUrl']))
+                            PrivateImage(
+                              auth: auth,
+                              path: n['imageUrl'],
+                              height: 210,
+                            ),
+                          Heading(textOf(n['title'])),
+                          UiText(textOf(n['body'])),
+                          UiText(
+                            day(n['publishedAtUtc']),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ]),
                       ),
-                    Heading(textOf(n['title'])),
-                    UiText(textOf(n['body'])),
-                    UiText(
-                      day(n['publishedAtUtc']),
-                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ]),
-                ),
-              ),
-              child: Row(
-                children: [
-                  if (isPrivateAsset(n['imageUrl']))
-                    SizedBox(
-                      width: 68,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: PrivateImage(
-                          auth: auth,
-                          path: n['imageUrl'],
-                          height: 68,
-                        ),
-                      ),
-                    )
-                  else
-                    const AcademyCrest(size: 50),
-                  const SizedBox(width: 14),
-                  Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (isPrivateAsset(n['imageUrl']))
+                          PrivateImage(
+                            auth: auth,
+                            path: n['imageUrl'],
+                            height: 82,
+                          )
+                        else
+                          Container(
+                            height: 68,
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(alpha: .12),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.newspaper_outlined,
+                              size: 30,
+                            ),
+                          ),
+                        const SizedBox(height: 8),
                         UiText(
                           textOf(n['title']),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
+                        const SizedBox(height: 6),
                         UiText(
                           day(n['publishedAtUtc']),
-                          style: Theme.of(context).textTheme.labelSmall,
+                          style: const TextStyle(fontSize: 10),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_left),
-                ],
-              ),
+                );
+              },
             ),
+          ),
         ],
       );
     },

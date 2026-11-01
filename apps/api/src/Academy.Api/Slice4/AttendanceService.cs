@@ -125,7 +125,9 @@ public sealed partial class AttendanceService(FoundationDbContext db, TimeProvid
         var consume = await db.SubscriptionSessionMovements.Where(x => x.AcademyId == attendance.AcademyId && x.PlayerAttendanceId == attendance.Id && x.SubscriptionPeriodId == periodId && x.MovementType == SessionMovementType.AttendanceConsume && !db.SubscriptionSessionMovements.Any(r => r.AcademyId == attendance.AcademyId && r.ReversesMovementId == x.Id))
             .OrderByDescending(x => x.OccurredAtUtc).FirstOrDefaultAsync(ct) ?? throw new AttendanceConflictException("تعذر التحقق من حركة الخصم الأصلية.");
         var before = period.RemainingSessions ?? 0;
-        if (period.InitialSessions is int initial && before >= initial) throw new AttendanceConflictException("لا يمكن استعادة رصيد يتجاوز الرصيد الأصلي.");
+        var added = await db.SubscriptionAdjustments.Where(a => a.AcademyId == attendance.AcademyId && a.SubscriptionPeriodId == periodId && a.AdjustmentType == SubscriptionAdjustmentType.SessionsAdded)
+            .SumAsync(a => (long?)(a.SessionsDelta ?? 0), ct) ?? 0;
+        if (period.InitialSessions is int initial && before >= initial + added || before == int.MaxValue) throw new AttendanceConflictException("لا يمكن استعادة رصيد يتجاوز الحصص الأصلية والإضافات المعتمدة.");
         period.RemainingSessions = before + 1; period.UpdatedAtUtc = clock.GetUtcNow(); attendance.ConsumedSubscriptionPeriodId = null;
         db.SubscriptionSessionMovements.Add(new SubscriptionSessionMovement { Id = Guid.NewGuid(), AcademyId = attendance.AcademyId, SubscriptionPeriodId = period.Id, PlayerAttendanceId = attendance.Id, ReversesMovementId = consume.Id, MovementType = SessionMovementType.AttendanceRestore, Quantity = 1, BalanceBefore = before, BalanceAfter = before + 1, OccurredAtUtc = clock.GetUtcNow(), PerformedByUserId = actorId, Reason = "تصحيح حالة الحضور", CreatedAtUtc = clock.GetUtcNow(), UpdatedAtUtc = clock.GetUtcNow() });
         return before + 1;

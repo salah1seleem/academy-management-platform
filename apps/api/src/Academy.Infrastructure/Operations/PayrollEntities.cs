@@ -24,6 +24,8 @@ public sealed class PayrollReason : TenantEntity
 
 public sealed class PayrollAdditionRequest : TenantEntity
 {
+    public string Kind { get; set; } = "Addition";
+    public decimal? RequestedAmount { get; set; }
     public Guid EmployeeId { get; set; }
     public Guid ReasonId { get; set; }
     public required string ReasonName { get; set; }

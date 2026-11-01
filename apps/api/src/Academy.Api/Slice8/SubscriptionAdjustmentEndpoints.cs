@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Persistence;
@@ -16,41 +17,50 @@ public static class SubscriptionAdjustmentEndpoints
         periods.MapPost("/{id:guid}/freeze", Freeze).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
         periods.MapPost("/{id:guid}/resume", Resume).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
         periods.MapPost("/{id:guid}/days", AdjustDays).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
+        periods.MapPost("/{id:guid}/sessions", GrantSessions).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
         periods.MapPost("/{id:guid}/cancel", Cancel).RequireAuthorization(AcademyPermissions.SubscriptionAdjustmentManage).AddEndpointFilter<CsrfFilter>();
 
         app.MapGet("/api/v1/guardian/subscriptions/periods/{id:guid}/adjustments", GuardianPeriod)
             .RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
     }
 
-    private static async Task<IResult> PeriodDetails(Guid id, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> PeriodDetails(Guid id, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock,ClaimsPrincipal actor,IAuthorizationService authorization, SubscriptionAdjustmentService service)
     {
         var current = (await tenant.ResolveAsync())!;
         var period = await db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id)
             .Select(x => new
             {
-                x.Id, x.SportEnrollmentId, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version, x.Origin,
-                plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType),
+                x.Id, x.SportEnrollmentId, x.SubscriptionPlanId, x.StartDate, x.EndDate, x.FrozenFromDate, x.InitialSessions, x.RemainingSessions, x.Status, x.Version, x.Origin,
+                plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), planType = (x.PlanTypeSnapshot ?? x.SubscriptionPlan.PlanType), serviceKind = x.ServiceKindSnapshot ?? x.SubscriptionPlan.ServiceKind,
                 player = x.SportEnrollment.Player.ArabicName, playerCode = x.SportEnrollment.Player.PlayerCode,
                 sport = x.SportEnrollment.Sport.ArabicName, branch = x.SportEnrollment.Branch.ArabicName,
                 group = x.SportEnrollment.TrainingGroup == null ? "في انتظار المجموعة" : x.SportEnrollment.TrainingGroup.ArabicName, x.PriceSnapshot, x.CurrencySnapshot,
                 receiptId = db.Receipts.Where(r => r.AcademyId == current.AcademyId && r.CollectionId == x.CollectionId).Select(r => (Guid?)r.Id).SingleOrDefault()
             }).SingleOrDefaultAsync();
         if (period is null) return Results.NotFound();
+        var financial=await Academy.Api.Slice2.MemberSubscriptionValues.FinancialValuesVisible(current,actor,authorization,db)||
+            (await authorization.AuthorizeAsync(actor,null,AcademyPermissions.PaymentRead)).Succeeded&&
+            await StaffWorkflowAccess.Allows(db,current.MembershipId,"/api/v1/subscriptions/payments","GET");
         var waiver = current.Role == Academy.Infrastructure.Tenancy.AcademyRole.AcademyOwner ? await db.FreeTrainingApprovals.AsNoTracking().Where(a => a.AcademyId == current.AcademyId && db.SubscriptionPeriods.Any(p => p.Id == id && p.FreeTrainingApprovalId == a.Id)).Select(a => new { a.Id, a.Reason, a.WaivedAmount, a.Currency, a.CreatedAtUtc, approvedBy = db.Users.Where(u => u.Id == a.ActorUserId).Select(u => u.DisplayName).Single() }).SingleOrDefaultAsync() : null;
         var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, clock.Today);
         var history = await db.SubscriptionAdjustments.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.SubscriptionPeriodId == id)
             .OrderByDescending(x => x.PerformedAtUtc)
             .Select(x => new
             {
-                x.Id, type = x.AdjustmentType.ToString(), x.EffectiveDate, x.DaysDelta, x.OldEndDate, x.NewEndDate,
+                x.Id, type = x.AdjustmentType.ToString(), x.EffectiveDate, x.DaysDelta, x.SessionsDelta, x.OldRemainingSessions, x.NewRemainingSessions, x.OldEndDate, x.NewEndDate,
                 x.Reason, performedBy = db.Users.Where(u => u.Id == x.PerformedByUserId).Select(u => u.DisplayName).Single(), x.PerformedAtUtc
             }).ToListAsync();
         return Results.Ok(new
         {
-            period.Id, period.SportEnrollmentId, period.player, period.playerCode, period.sport, period.branch, period.group, period.plan,
+            period.Id, period.SportEnrollmentId, period.SubscriptionPlanId, period.player, period.playerCode, period.sport, period.branch, period.group, period.plan,
             planType = period.planType.ToString(), period.StartDate, period.EndDate, period.FrozenFromDate,
             period.InitialSessions, period.RemainingSessions, status = status.ToString(), period.Version,
-            period.PriceSnapshot, period.CurrencySnapshot, period.receiptId, origin = period.Origin.ToString(), waiver, adjustments = history
+            priceSnapshot=financial?(decimal?)period.PriceSnapshot:null,currencySnapshot=financial?period.CurrencySnapshot:null,
+            receiptId=financial?period.receiptId:null,financialValuesVisible=financial,origin = period.Origin.ToString(),
+            pricing = financial?await Academy.Api.Operations.ManualEnrollmentDiscount.PriceForPeriod(db,current.AcademyId,id):null, waiver, adjustments = history,
+            canGrantSessions = period.serviceKind == AcademyServiceKind.Training && period.planType != SubscriptionPlanType.Duration &&
+                period.InitialSessions.HasValue && period.RemainingSessions.HasValue && period.Status != SubscriptionPeriodStatus.Cancelled &&
+                await service.CanGrantSessionsAsync(current.AcademyId, UserId(actor), current.MembershipId)
         });
     }
 
@@ -65,8 +75,8 @@ public static class SubscriptionAdjustmentEndpoints
         if (period is null) return Results.NotFound();
         var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, clock.Today);
         var events = await db.SubscriptionAdjustments.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.SubscriptionPeriodId == id)
-            .OrderByDescending(x => x.PerformedAtUtc).Select(x => new { type = x.AdjustmentType.ToString(), x.EffectiveDate, x.DaysDelta, x.NewEndDate }).ToListAsync();
-        return Results.Ok(new { period.Id, period.plan, period.sport, period.StartDate, period.EndDate, period.FrozenFromDate, period.RemainingSessions, status = status.ToString(), origin = period.Origin.ToString(), adjustments = events });
+            .OrderByDescending(x => x.PerformedAtUtc).Select(x => new { type = x.AdjustmentType.ToString(), x.EffectiveDate, x.DaysDelta, x.SessionsDelta, x.OldRemainingSessions, x.NewRemainingSessions, x.NewEndDate }).ToListAsync();
+        return Results.Ok(new { period.Id, period.plan, period.sport, period.StartDate, period.EndDate, period.FrozenFromDate, period.RemainingSessions, status = status.ToString(), origin = period.Origin.ToString(), pricing = await Academy.Api.Operations.ManualEnrollmentDiscount.PriceForPeriod(db,current.AcademyId,id), adjustments = events });
     }
 
     private static Task<IResult> Freeze(Guid id, AdjustmentDateRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, SubscriptionAdjustmentService service)
@@ -85,12 +95,19 @@ public static class SubscriptionAdjustmentEndpoints
     private static Task<IResult> Cancel(Guid id, AdjustmentDateRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, SubscriptionAdjustmentService service)
         => Run(tenant, principal, http, (academy, actor, key) => service.CancelAsync(academy, actor, id, request.EffectiveDate, request.Reason, request.ExpectedVersion, key, http.RequestAborted));
 
+    private static async Task<IResult> GrantSessions(Guid id, SessionGrantRequest request, HttpContext http, CurrentTenant tenant, ClaimsPrincipal principal, SubscriptionAdjustmentService service)
+    {
+        var current = (await tenant.ResolveAsync())!;
+        return await Run(tenant, principal, http, (academy, actor, key) => service.GrantSessionsAsync(academy, actor, current.MembershipId, id, request.Sessions, request.EndDate, request.Reason, request.ExpectedVersion, key, http.RequestAborted));
+    }
+
     private static async Task<IResult> Run(CurrentTenant tenant, ClaimsPrincipal principal, HttpContext http, Func<Guid, Guid, string, Task<SubscriptionAdjustmentResult>> action)
     {
         var current = (await tenant.ResolveAsync())!;
         var key = http.Request.Headers["Idempotency-Key"].ToString();
         try { return Results.Ok(await action(current.AcademyId, UserId(principal), key)); }
         catch (AdjustmentNotFoundException) { return Results.NotFound(); }
+        catch (AdjustmentForbiddenException) { return Results.Forbid(); }
         catch (AdjustmentValidationException ex) { return Results.UnprocessableEntity(new { message = ex.Message }); }
         catch (AdjustmentConflictException ex) { return Results.Conflict(new { message = ex.Message }); }
     }
@@ -101,3 +118,4 @@ public static class SubscriptionAdjustmentEndpoints
 public enum DayAdjustmentDirection { Add = 1, Deduct = 2 }
 public sealed record AdjustmentDateRequest(DateOnly EffectiveDate, string? Reason, uint ExpectedVersion);
 public sealed record DayAdjustmentRequest(DayAdjustmentDirection Direction, int Days, string? Reason, uint ExpectedVersion);
+public sealed record SessionGrantRequest(int Sessions, DateOnly EndDate, string? Reason, uint ExpectedVersion);

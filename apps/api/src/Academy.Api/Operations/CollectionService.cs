@@ -8,7 +8,7 @@ namespace Academy.Api.Operations;
 public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock clock, DiscountRules discounts)
 {
     // Caller owns the transaction. One lock covers manual approval and repeated clicks.
-    public async Task<Guid> ConfirmAsync(Guid academyId, Guid actorId, Guid paymentId, string method)
+    public async Task<Guid> ConfirmAsync(Guid academyId, Guid actorId, Guid paymentId, string method, bool notify = true)
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"collection:{academyId}:{paymentId}"}, 0))");
         var existing = await db.Receipts.Where(x => x.AcademyId == academyId && x.Collection.PaymentRequestId == paymentId).Select(x => (Guid?)x.Id).SingleOrDefaultAsync();
@@ -30,12 +30,15 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
         var latest = await db.SubscriptionPeriods.Where(x => x.AcademyId == academyId && x.SportEnrollmentId == r.SportEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled).MaxAsync(x => x.EndDate);
         var start = latest.HasValue && latest >= clock.Today ? latest.Value.AddDays(1) : clock.Today;
         var period = new SubscriptionPeriod { Id = Guid.NewGuid(), AcademyId = academyId, SportEnrollmentId = r.SportEnrollmentId, SportId = r.SportId, SubscriptionPlanId = plan.Id, CollectionId = c.Id, StartDate = start, EndDate = terms.EndDate(start), InitialSessions = terms.Sessions, RemainingSessions = terms.Sessions, Status = start > clock.Today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active, PriceSnapshot = payment.Amount, CurrencySnapshot = payment.Currency, CreatedByUserId = actorId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+        var firstPeriod = !await db.SubscriptionPeriods.AnyAsync(x => x.AcademyId == academyId && x.SportEnrollmentId == r.SportEnrollmentId);
         terms.Capture(period); db.SubscriptionPeriods.Add(period);
         var receipt = new Receipt { Id = Guid.NewGuid(), AcademyId = academyId, CollectionId = c.Id, ReceiptNumber = $"RC-{clock.Today:yyyyMMdd}-{c.Id.ToString("N")[..8]}", PlayerId = r.SportEnrollment.PlayerId, SportEnrollmentId = r.SportEnrollmentId, SubscriptionPlanId = plan.Id, PlayerNameSnapshot = r.SportEnrollment.Player.ArabicName, SportNameSnapshot = plan.Sport.ArabicName, PlanNameSnapshot = terms.Name, OriginalAmount = r.OriginalAmount, DiscountType = r.DiscountType, DiscountValue = r.DiscountValue, DiscountAmount = r.DiscountAmount, FinalAmount = r.FinalAmount, Amount = c.Amount, Currency = c.Currency, PaidAtUtc = clock.UtcNow, PaymentMethod = method, ProviderReference = c.ProviderReference, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
         receipt.DiscountRuleIdSnapshot = r.DiscountRuleIdSnapshot;
         receipt.DiscountRuleRevisionSnapshot = r.DiscountRuleRevisionSnapshot;
         receipt.DiscountReason = r.DiscountReason;
-        db.Receipts.Add(receipt); await db.SaveChangesAsync(); return receipt.Id;
+        db.Receipts.Add(receipt);
+        if(notify)await GuardianLifecycleNotice.Add(db,academyId,r.SportEnrollmentId,firstPeriod?"Enrollment":"SingleRenewal",period.Id,"SubscriptionPeriod",period.Id,clock.UtcNow);
+        await db.SaveChangesAsync(); return receipt.Id;
     }
     public async Task<Guid> CreateCashAsync(Guid academyId, Guid actorId, Guid enrollmentId, Guid planId, string key, string method, Guid? requestedBy = null, RenewalFinancialSnapshot? fixedSnapshot = null, string? registrationPayloadHash = null, PlanTerms? fixedTerms = null, Guid? familyRequestId = null, string? fixedCurrency = null,Guid? vipEnrollmentSource=null)
     {
@@ -67,6 +70,6 @@ public sealed class CollectionService(FoundationDbContext db, ISubscriptionClock
             if(r.VipRewardUseId==null)throw new VipRewardConflict("طلب الأسرة لا يحمل حجز هذه المكافأة.");
         }else r.VipRewardUseId=await VipRewards.Reserve(db,academyId,r.DiscountRuleIdSnapshot,"Renewal",r.Id,requestedBy??actorId,clock.Today,clock.UtcNow,player:enrollment.PlayerId);
         db.RenewalRequests.Add(r); db.PaymentRequests.Add(p); await db.SaveChangesAsync();
-        await ConfirmAsync(academyId, actorId, p.Id, method); return p.Id;
+        await ConfirmAsync(academyId, actorId, p.Id, method, notify: familyRequestId is null); return p.Id;
     }
 }

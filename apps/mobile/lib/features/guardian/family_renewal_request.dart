@@ -9,6 +9,7 @@ import '../shared/help_center.dart';
 import '../shared/transfer_payment.dart';
 import 'guardian_payments.dart' show ReceiptPage;
 import 'guardian_ui.dart';
+import 'family_renewal_review.dart';
 
 class NativeFamilyRenewalRequests extends StatelessWidget {
   final AuthController auth;
@@ -68,10 +69,24 @@ class NativeFamilyRenewalRequest extends StatefulWidget {
 
 class _NativeFamilyRenewalRequestState
     extends State<NativeFamilyRenewalRequest> {
+  String? get identity => widget.auth.session?.selected == null
+      ? null
+      : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  late final String? openedIdentity;
+  bool get current =>
+      mounted && openedIdentity != null && identity == openedIdentity;
+  @override
+  void initState() {
+    super.initState();
+    openedIdentity = identity;
+  }
+
   int refresh = 0;
   bool busy = false;
   String? error;
   Future<void> cancel(Json data) async {
+    if (!current || busy) return;
+    final requestedId = widget.id;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -101,7 +116,9 @@ class _NativeFamilyRenewalRequestState
         ],
       ),
     );
-    if (confirmed != true || !mounted || busy) return;
+    if (confirmed != true || !current || busy || widget.id != requestedId) {
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -112,9 +129,9 @@ class _NativeFamilyRenewalRequestState
         '/api/v1/guardian/subscriptions/family/requests/${widget.id}/cancel',
         body: {'revision': data['revision']},
       );
-      if (mounted) setState(() => refresh++);
+      if (current) setState(() => refresh++);
     } catch (e) {
-      if (mounted) {
+      if (current) {
         setState(
           () => error = e is ApiFailure
               ? e.message
@@ -126,121 +143,142 @@ class _NativeFamilyRenewalRequestState
         );
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (current) setState(() => busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'طلب تجديد الأسرة', 'Family renewal request'),
-    child: RemoteBody(
-      key: ValueKey(refresh),
-      auth: widget.auth,
-      path:
-          '${widget.staff ? '/api/v1/manage/family-renewals' : '/api/v1/guardian/subscriptions/family/requests'}/${widget.id}',
-      builder: (context, value) {
-        final d = obj(value);
-        return gList([
-          Heading(familyStatus(context, d['status'])),
-          GCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                UiText(
-                  '${localized(context, 'قبل الخصم', 'Before discount')}: ${money(d['originalAmount'], d['currency'])}',
-                ),
-                UiText(
-                  '${localized(context, 'الخصم المؤهل', 'Eligible discount')}: ${money(d['discountAmount'], d['currency'])}',
-                ),
-                Heading(money(d['totalAmount'], d['currency'])),
-              ],
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.auth,
+    builder: (context, _) => !current
+        ? const SizedBox.shrink()
+        : GuardianPage(
+            title: localized(
+              context,
+              'طلب تجديد الأسرة',
+              'Family renewal request',
             ),
-          ),
-          for (final line in rows(d['items']))
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Heading(textOf(line['player'])),
-                  UiText(
-                    '${line['sport']} · ${line['branch']} · ${line['plan']}',
+            child: RemoteBody(
+              key: ValueKey(refresh),
+              auth: widget.auth,
+              path:
+                  '${widget.staff ? '/api/v1/manage/family-renewals' : '/api/v1/guardian/subscriptions/family/requests'}/${widget.id}',
+              builder: (context, value) {
+                final d = obj(value);
+                return gList([
+                  Heading(familyStatus(context, d['status'])),
+                  GCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        UiText(
+                          '${localized(context, 'قبل الخصم', 'Before discount')}: ${money(d['originalAmount'], d['currency'])}',
+                        ),
+                        UiText(
+                          '${localized(context, 'الخصم المؤهل', 'Eligible discount')}: ${money(d['discountAmount'], d['currency'])}',
+                        ),
+                        Heading(money(d['totalAmount'], d['currency'])),
+                      ],
+                    ),
                   ),
-                  UiText(money(line['finalAmount'], line['currency'])),
-                  if (line['discountReason'] != null)
-                    UiText(textOf(line['discountReason'])),
-                  if (!widget.staff && line['receiptId'] != null)
-                    TextButton(
-                      onPressed: () => openPage(
-                        context,
-                        ReceiptPage(
-                          auth: widget.auth,
-                          id: textOf(line['receiptId']),
+                  for (final line in rows(d['items']))
+                    GCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Heading(textOf(line['player'])),
+                          UiText(
+                            '${line['sport']} · ${line['branch']} · ${line['plan']}',
+                          ),
+                          UiText(money(line['finalAmount'], line['currency'])),
+                          if (line['discountReason'] != null)
+                            UiText(textOf(line['discountReason'])),
+                          if (line['receiptId'] != null)
+                            TextButton(
+                              onPressed: () => openPage(
+                                context,
+                                ReceiptPage(
+                                  auth: widget.auth,
+                                  id: textOf(line['receiptId']),
+                                  staff: widget.staff,
+                                ),
+                              ),
+                              child: UiText(
+                                localized(
+                                  context,
+                                  'عرض الإيصال',
+                                  'View receipt',
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (d['decisionReason'] != null)
+                    UiText(textOf(d['decisionReason'])),
+                  if (d['proofUrl'] != null)
+                    GCard(
+                      child: Column(
+                        children: [
+                          Heading(
+                            localized(context, 'إثبات الأسرة', 'Family proof'),
+                          ),
+                          PrivateImage(
+                            auth: widget.auth,
+                            path: textOf(d['proofUrl']),
+                            height: 260,
+                          ),
+                          UiText(
+                            localized(
+                              context,
+                              'وصل الإثبات؛ لا تكرر التحويل.',
+                              'Proof received; do not transfer again.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (d['status'] == 'Pending' &&
+                      !widget.staff &&
+                      d['proofUrl'] == null)
+                    TransferPayment(
+                      auth: widget.auth,
+                      proofPath:
+                          '/api/v1/guardian/subscriptions/family/requests/${widget.id}/proof',
+                      proofFields: {'revision': d['revision']},
+                      onSubmitted: () => setState(() => refresh++),
+                    ),
+                  if (widget.staff)
+                    NativeFamilyRenewalReview(
+                      key: ValueKey(
+                        'family-review-${widget.id}-${d['revision']}',
+                      ),
+                      auth: widget.auth,
+                      id: widget.id,
+                      data: d,
+                      onConfirmed: () => setState(() => refresh++),
+                    ),
+                  if (error != null)
+                    UiText(
+                      error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  if (d['status'] == 'Pending' && !widget.staff)
+                    OutlinedButton(
+                      onPressed: busy ? null : () => cancel(d),
+                      child: UiText(
+                        localized(
+                          context,
+                          'إلغاء طلب التجديد',
+                          'Cancel renewal request',
                         ),
                       ),
-                      child: UiText(
-                        localized(context, 'عرض الإيصال', 'View receipt'),
-                      ),
                     ),
-                ],
-              ),
+                ]);
+              },
             ),
-          if (d['decisionReason'] != null) UiText(textOf(d['decisionReason'])),
-          if (d['proofUrl'] != null)
-            GCard(
-              child: Column(
-                children: [
-                  Heading(localized(context, 'إثبات الأسرة', 'Family proof')),
-                  PrivateImage(
-                    auth: widget.auth,
-                    path: textOf(d['proofUrl']),
-                    height: 260,
-                  ),
-                  UiText(
-                    localized(
-                      context,
-                      'وصل الإثبات؛ لا تكرر التحويل.',
-                      'Proof received; do not transfer again.',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (d['status'] == 'Pending' &&
-              !widget.staff &&
-              d['proofUrl'] == null)
-            TransferPayment(
-              auth: widget.auth,
-              proofPath:
-                  '/api/v1/guardian/subscriptions/family/requests/${widget.id}/proof',
-              proofFields: {'revision': d['revision']},
-              onSubmitted: () => setState(() => refresh++),
-            ),
-          if (widget.staff)
-            UiText(
-              localized(
-                context,
-                'مراجعة الإثبات وإسناد المجموعات والاعتماد الجماعي متاحة من لوحة الويب.',
-                'Review proof, assign groups and approve all renewals from the web dashboard.',
-              ),
-            ),
-          if (error != null)
-            UiText(
-              error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          if (d['status'] == 'Pending' && !widget.staff)
-            OutlinedButton(
-              onPressed: busy ? null : () => cancel(d),
-              child: UiText(
-                localized(
-                  context,
-                  'إلغاء طلب التجديد',
-                  'Cancel renewal request',
-                ),
-              ),
-            ),
-        ]);
-      },
-    ),
+          ),
   );
 }

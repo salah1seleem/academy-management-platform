@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { AdminDataTable, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from "../components/dashboard-shell";
 import { formatDateTimeAr, formatMoneyAr } from "../lib/formatters";
 import { csrfRequest } from "./dashboard-api";
 
@@ -54,7 +54,15 @@ export function DiscountManagement() {
   const sibling = rules.find(r => r.isSiblingOffer) ?? { ...blank, arabicName: "عرض الإخوة", percentage: 20, isSiblingOffer: true, reason: "عرض الإخوة الافتراضي" };
   return <>{header}{error && <ErrorState message={error} />}<section className="detail-card discount-summary"><div><span className="eyebrow">خصم العائلة</span><h2>{sibling.arabicName}</h2><p>للطفل الإضافي عندما يكون لأحد إخوته اشتراك مدفوع فعال.</p></div><strong className="metric">{discountLabel(sibling)}</strong>{options.owner && <button className="secondary-button" onClick={() => setEdit(sibling)}>تعديل عرض الإخوة</button>}</section>
     <section className="detail-card"><div className="discount-toolbar"><h2>المدارس والعروض</h2><button className="primary-button" onClick={() => setEdit({ ...blank })}>إضافة خصم</button></div>
-      <div className="linked-list discount-rule-list">{rules.map(r => <article key={r.id}><div><strong>{r.arabicName} · {discountLabel(r)}</strong><small>{r.isActive ? "فعال" : "متوقف"} · {options.branches.find(b => b.id === r.branchId)?.arabicName ?? "كل الفروع"}{r.maximumAmount ? ` · بحد أقصى ${formatMoneyAr(r.maximumAmount, r.currency)}` : ""} · نسخة {r.revision ?? 0}</small></div><div className="discount-actions">{(!r.isSiblingOffer || options.owner) && (!options.restricted || !!r.branchId) && <button className="secondary-button" aria-label={`تعديل ${r.arabicName}`} onClick={() => setEdit(r)}>تعديل</button>}<button className="secondary-button" onClick={() => void showHistory(r.id)} aria-label={`سجل ${r.arabicName}`}>السجل</button></div></article>)}</div>
+      {rules.length?<AdminDataTable label="قائمة الخصومات" rows={rules} rowKey={r=>r.id} columns={[
+        {key:"name",header:"العرض",primary:true,render:r=><strong>{r.arabicName}</strong>},
+        {key:"value",header:"قيمة الخصم",render:r=><span>{discountLabel(r)}{r.maximumAmount&&<small>بحد أقصى {formatMoneyAr(r.maximumAmount,r.currency)}</small>}</span>},
+        {key:"branch",header:"الفرع",render:r=>options.branches.find(b=>b.id===r.branchId)?.arabicName??"كل الفروع"},
+        {key:"sport",header:"الرياضة",render:r=>options.sports.find(s=>s.id===r.sportId)?.arabicName??"كل الرياضات"},
+        {key:"status",header:"الحالة",render:r=><StatusBadge status={r.isActive?"Active":"Inactive"}/>},
+        {key:"revision",header:"النسخة",render:r=>r.revision??0},
+        {key:"actions",header:"الإجراءات",render:r=><div className="row-actions">{(!r.isSiblingOffer||options.owner)&&(!options.restricted||!!r.branchId)&&<button className="secondary-button" aria-label={`تعديل ${r.arabicName}`} onClick={()=>setEdit(r)}>تعديل</button>}<button className="secondary-button" onClick={()=>void showHistory(r.id)} aria-label={`سجل ${r.arabicName}`}>السجل</button></div>},
+      ]}/>:<EmptyState message="لم تضف عروض خصم بعد."/>}
     </section>{history && <section className="detail-card"><h2>سجل نسخ العرض</h2><p>نسخ محفوظة لا تتغير بأثر رجعي.</p><div className="linked-list">{history.rows.map(v => <article key={v.revision}><div><strong>نسخة {v.revision} · {v.snapshot.arabicName} · {discountLabel(v.snapshot)}</strong><small>{formatDateTimeAr(v.createdAtUtc)} · {v.snapshot.isActive ? "فعال" : "متوقف"}</small>{v.snapshot.reason && <small>{v.snapshot.reason}</small>}</div></article>)}</div><button className="secondary-button" onClick={() => setHistory(null)}>إغلاق السجل</button></section>}</>;
 }
 

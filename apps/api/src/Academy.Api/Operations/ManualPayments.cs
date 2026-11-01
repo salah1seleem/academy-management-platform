@@ -52,6 +52,11 @@ public static class ManualPayments
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"collection:{t.AcademyId}:{id}"}, 0))");
         var p = await db.PaymentRequests.Include(x => x.RenewalRequest).ThenInclude(x => x.SubscriptionPlan).Include(x => x.RenewalRequest).ThenInclude(x => x.SportEnrollment).ThenInclude(x => x.TrainingGroup).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
         if (p is null) return Results.NotFound();
+        if(body.ExpectedAmount is not null) {
+            if(!decimal.TryParse(body.ExpectedAmount,System.Globalization.NumberStyles.AllowDecimalPoint,System.Globalization.CultureInfo.InvariantCulture,out var expected)||expected<=0||decimal.Round(expected,2)!=expected)
+                return Results.UnprocessableEntity(new{message="راجع مبلغ الطلب الصحيح بحد أقصى منزلتين عشريتين."});
+            if(expected!=p.Amount)return Results.Conflict(new{message="تغير المبلغ. حدّث الطلب وراجع الإجمالي قبل التأكيد."});
+        }
         if (!await db.AcademyMemberships.AnyAsync(x => x.AcademyId == t.AcademyId && x.UserId == p.RenewalRequest.RequestedByUserId && (x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin))) return Results.Forbid();
         if (await db.PaymentProofs.AnyAsync(x => x.AcademyId == t.AcademyId && x.PaymentRequestId == id)) return Results.Conflict(new { message = "استخدم مراجعة إثبات الدفع لهذا الطلب." });
         if (p.Status == PaymentRequestStatus.Confirmed) { var existing = await db.Receipts.Where(x => x.AcademyId == t.AcademyId && x.Collection.PaymentRequestId == id).Select(x => new { x.Id, x.PaymentMethod }).SingleAsync(); return existing.PaymentMethod != body.PaymentMethod ? Results.Conflict(new { message = "طلب الدفع محصل بطريقة أخرى." }) : Results.Ok(new { receiptId = existing.Id, replay = true }); }
@@ -114,8 +119,8 @@ public static class ManualPayments
     private static Task<IResult> EnrollmentPayment(Guid id, CurrentTenant t, ClaimsPrincipal p, FoundationDbContext db) => EnrollmentPaymentCore(id, t, db, Actor(p));
     private static Task<IResult> EnrollmentPaymentStaff(Guid id, CurrentTenant t, FoundationDbContext db) => EnrollmentPaymentCore(id, t, db, null);
     private static async Task<IResult> EnrollmentPaymentCore(Guid id, CurrentTenant tenant, FoundationDbContext db, Guid? owner)
-    { var t = (await tenant.ResolveAsync())!; var row = await db.NewEnrollmentRequests.Where(x => x.AcademyId == t.AcademyId && x.Id == id && (!owner.HasValue || x.RequestedByGuardianUserId == owner)).Select(x => new { x.Id, x.SubscriptionPlanId, x.OriginalAmount,x.DiscountAmount,x.DiscountValue,x.DiscountReason,discountType=x.DiscountType==null?null:x.DiscountType.ToString(), amount = x.FinalAmount, x.Currency, status = x.Status.ToString(), x.GuardianVisibleReason, x.CreatedSportEnrollmentId, x.PaymentRequestId, proofUrl = x.ProofAssetId == null ? null : "/api/v1/assets/" + x.ProofAssetId }).SingleOrDefaultAsync(); return row is null ? Results.NotFound() : Results.Ok(row); }
-    private static async Task<IResult> Settings(CurrentTenant tenant, FoundationDbContext db) { var t = (await tenant.ResolveAsync())!; var row = await db.AcademyTransferSettings.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId); return Results.Ok(new { row?.InstaPayAddress, row?.WalletNumber, row?.RecipientName, configured = row?.IsActive == true && (!string.IsNullOrWhiteSpace(row.InstaPayAddress) || !string.IsNullOrWhiteSpace(row.WalletNumber)) }); }
+    { var t = (await tenant.ResolveAsync())!; var row = await db.NewEnrollmentRequests.Where(x => x.AcademyId == t.AcademyId && x.Id == id && (!owner.HasValue || x.RequestedByGuardianUserId == owner)).Select(x => new { x.Id, child = x.ExistingPlayer != null ? x.ExistingPlayer.ArabicName : x.NewChildArabicName, guardian = x.RequestedByGuardianUser.DisplayName, sport = x.Sport.ArabicName, branch = x.PreferredBranch.ArabicName, x.SubscriptionPlanId, x.OriginalAmount,x.DiscountAmount,x.DiscountValue,x.DiscountReason,discountType=x.DiscountType==null?null:x.DiscountType.ToString(), amount = x.FinalAmount, x.Currency, status = x.Status.ToString(), x.GuardianVisibleReason, x.CreatedSportEnrollmentId, x.PaymentRequestId, proofUrl = x.ProofAssetId == null ? null : "/api/v1/assets/" + x.ProofAssetId }).SingleOrDefaultAsync(); return row is null ? Results.NotFound() : Results.Ok(row); }
+    private static async Task<IResult> Settings(CurrentTenant tenant, FoundationDbContext db) { var t = (await tenant.ResolveAsync())!; var row = await db.AcademyTransferSettings.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId); return Results.Ok(new { row?.InstaPayAddress, row?.WalletNumber, row?.RecipientName, isActive = row?.IsActive == true, configured = row?.IsActive == true && (!string.IsNullOrWhiteSpace(row.InstaPayAddress) || !string.IsNullOrWhiteSpace(row.WalletNumber)) }); }
     private static async Task<IResult> SaveSettings(TransferWrite body, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!;
@@ -175,7 +180,7 @@ public static class ManualPayments
         }
         else { payment.Status = PaymentRequestStatus.Cancelled; payment.RenewalRequest.Status = RenewalRequestStatus.Cancelled; }
         proof.Status = body.Accept ? "Accepted" : "Rejected"; proof.ReviewReason = body.Reason?.Trim(); proof.ReviewedByUserId = user; proof.ReviewedAtUtc = clock.UtcNow; proof.UpdatedAtUtc = clock.UtcNow;
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = payment.RenewalRequest.RequestedByUserId, AudienceRole="Guardian",TargetKind="Payment",TargetId=id,
+        db.AcademyNotices.Add(new AcademyNotice { EventKey="Payment", Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = payment.RenewalRequest.RequestedByUserId, AudienceRole="Guardian",TargetKind="Payment",TargetId=id,
             Message = await NoticeText.Render(db,t.AcademyId,"Payment","تحديث طلب الدفع.")+"\n"+(body.Accept ? "تم قبول إثبات الدفع وتفعيل الاشتراك بنجاح. يمكنك مراجعة الإيصال ومواعيد التدريب." : $"لم يتم قبول طلب الدفع. {body.Reason?.Trim() ?? "تواصل مع إدارة الأكاديمية للتوضيح."}"), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.Ok(new { receiptId = receipt, proof.Status });
     }
@@ -192,7 +197,7 @@ public static class ManualPayments
             allocated = db.ReceivableMovements.IgnoreQueryFilters().Where(m => m.AcademyId == t.AcademyId && m.CollectionId == x.Id && m.Kind == ReceivableMovementKind.PaymentAllocation).Sum(m => (decimal?)m.Amount) ?? 0,
         }).ToListAsync();
         var collections = records.Select(c => new { c.Id, c.Amount, c.Currency, c.refunded, c.allocated, c.PaymentMethod, available = CollectionFunds.Available(c.Amount,c.refunded,c.allocated).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture), c.ConfirmedAtUtc });
-        return Results.Ok(new { collections, refunds = await db.CollectionRefunds.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == id).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, x.Amount, x.Currency, x.Reason, x.CreatedAtUtc, cashSessionId=db.CashRefundPostings.Where(p=>p.RefundId==x.Id).Select(p=>(Guid?)p.SessionId).SingleOrDefault() }).ToListAsync() });
+        return Results.Ok(new { collections, refunds = await db.CollectionRefunds.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == id).OrderByDescending(x => x.CreatedAtUtc).Select(x => new { x.Id, x.CollectionId, x.Amount, x.Currency, x.PayoutMethod, x.Reason, x.CreatedAtUtc, cashSessionId=db.CashRefundPostings.Where(p=>p.RefundId==x.Id).Select(p=>(Guid?)p.SessionId).SingleOrDefault() }).ToListAsync() });
     }
     private static async Task<IResult> Refund(Guid id, RefundWrite body, HttpContext context, CurrentTenant tenant, FoundationDbContext db, CashRegisterService cash, TimeProvider time)
     {

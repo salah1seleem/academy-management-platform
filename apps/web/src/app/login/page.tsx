@@ -46,7 +46,7 @@ export default function LoginPage() {
   return <main className="center-shell">
     <section className="login-card" aria-labelledby="login-title">
       <span className="eyebrow">منصة إدارة الأكاديمية</span><h1 id="login-title">تسجيل الدخول</h1>
-      <form onSubmit={(event) => void dashboardLogin(event)}>
+      <form method="post" onSubmit={(event) => void dashboardLogin(event)}>
         <label className="field">البريد الإلكتروني<input name="email" type="email" autoComplete="username" required /></label>
         <label className="field">كلمة المرور<input name="password" type="password" autoComplete="current-password" required /></label>
         <button className="primary-button" disabled={busy}>{busy ? "جارٍ الدخول…" : "دخول آمن"}</button>

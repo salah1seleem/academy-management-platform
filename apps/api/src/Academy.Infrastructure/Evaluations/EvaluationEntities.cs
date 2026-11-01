@@ -18,7 +18,8 @@ public enum EvaluationStatus
 {
     Draft = 1,
     Published = 2,
-    Superseded = 3
+    Superseded = 3,
+    PublishedInternal = 4
 }
 
 public sealed class EvaluationCriterion : TenantEntity

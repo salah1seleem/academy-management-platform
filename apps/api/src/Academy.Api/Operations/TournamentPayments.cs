@@ -14,6 +14,16 @@ public static class TournamentPayments
     {
         var guardian = app.MapGroup("/api/v1/guardian/tournament-payments").RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
         guardian.MapGet("/options", Options);
+        app.MapGet("/api/v1/guardian/tournament-memberships", async (CurrentTenant tenant, ClaimsPrincipal actor, FoundationDbContext db) => {
+            var t = (await tenant.ResolveAsync())!; var user = Actor(actor);
+            var own = db.SportEnrollments.Where(e=>e.AcademyId==t.AcademyId&&e.IsActive&&e.Player.IsActive&&db.GuardianPlayerLinks.Any(l=>l.AcademyId==t.AcademyId&&l.IsActive&&l.PlayerId==e.PlayerId&&l.Guardian.IsActive&&l.Guardian.UserId==user));
+            return Results.Ok(await (from r in db.TournamentRegistrations.Where(r=>r.AcademyId==t.AcademyId&&r.IsActive)
+                join e in own on r.EnrollmentId equals e.Id
+                join tournament in db.AcademyTournaments on r.TournamentId equals tournament.Id
+                join team in db.MatchTeams on r.TeamId equals team.Id
+                orderby tournament.Name, e.Player.ArabicName
+                select new { r.Id, r.TournamentId, tournament = tournament.Name, r.TeamId, team = team.Name, r.EnrollmentId, e.PlayerId, player = e.Player.ArabicName }).Take(1000).ToListAsync());
+        }).RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
         guardian.MapPost("/", Create).AddEndpointFilter<CsrfFilter>();
         guardian.MapGet("/{id:guid}", GuardianDetails);
         guardian.MapPost("/{id:guid}/proof", Proof).AddEndpointFilter<CsrfFilter>();
@@ -74,7 +84,7 @@ public static class TournamentPayments
         if (body.Accept && (!row.ProofAssetId.HasValue || !await db.SportEnrollments.AnyAsync(e => e.AcademyId == t.AcademyId && e.Id == row.EnrollmentId && e.IsActive && e.Player.IsActive))) return Results.Conflict(new { message = "يلزم إثبات دفع وتسجيل لاعب قائم لقبول رسم البطولة." });
         row.Status = wanted; row.ReviewReason = body.Reason?.Trim(); row.UpdatedAtUtc = clock.UtcNow;
         if (body.Accept) { row.ConfirmedByUserId = Actor(user); row.ConfirmedAtUtc = clock.UtcNow; row.PaymentMethod = "Online"; row.ReceiptNumber = $"TRN-{clock.Today:yyyyMMdd}-{row.Id.ToString("N")[..12].ToUpperInvariant()}"; }
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = row.RequestedByUserId, AudienceRole="Guardian",TargetKind="Tournament",TargetId=row.Id, Message = body.Accept ? $"تم قبول رسم {row.TournamentName}. الإيصال متاح في طلب البطولة؛ اشتراك التدريب لم يتغير." : $"رُفض إثبات رسم {row.TournamentName}. {body.Reason?.Trim() ?? "راجع الإدارة."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { EventKey="Payment", Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = row.RequestedByUserId, AudienceRole="Guardian",TargetKind="Tournament",TargetId=row.Id, Message = (await NoticeText.Render(db,t.AcademyId,"Payment","تحديث رسم البطولة."))+"\n"+(body.Accept ? $"تم قبول رسم {row.TournamentName}. الإيصال متاح في طلب البطولة؛ اشتراك التدريب لم يتغير." : $"رُفض إثبات رسم {row.TournamentName}. {body.Reason?.Trim() ?? "راجع الإدارة."}"), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Id, row.ReceiptNumber });
     }
 }

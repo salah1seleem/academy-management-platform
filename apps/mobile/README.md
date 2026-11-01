@@ -36,4 +36,6 @@ flutter drive --driver=test_driver/visual_driver.dart --target=integration_test/
 flutter drive --driver=test_driver/visual_driver.dart --target=integration_test/staff_journeys_test.dart -d <simulator-id> --dart-define=APP_ENV=Demo --dart-define=API_BASE_URL=http://127.0.0.1:5280 --dart-define=CAPTURE_VISUALS=true
 ```
 
+عند تثبيت نسخة عادية على محاكي iOS، ابنِ target=lib/main.dart بالتوقيع الافتراضي لـXcode. لا تثبّت خرج --no-codesign: قد ينجح البناء بينما تفشل قراءة الجلسة المحفوظة بخطأKeychain-34018. احتفظ بنسخةmainقبل تشغيلflutter driveوأعدها بعده؛ تحقق من استعادة الجلسة والرئيسية، فمطابقة البصمة وحدها لا تثبت التشغيل. في المحاكي لا يكفي قاموسcodesignالفارغ للحكم على الصلاحيات؛ راجع البناء الافتراضي والتشغيل الفعلي.
+
 اختبار auth integration يستخدم مفتاح Keychain منفصلًا. رحلات Guardian/Coach/Owner الحقيقية تعمل على API/PostgreSQL فعليين وتغيّر سجلات Demo فقط؛ لا تُشغّل على إنتاج. يلتقط `flutter drive` الشاشات إلى `tmp/mobile-visuals` للمراجعة البشرية، ولا تعد لقطة الشاشة نجاحًا بصريًا بذاتها. Android SDK غير متاح محليًا: لا ادعاء ببناء/اختبار Android. SMS والدفع الحقيقيان والتوقيع والمتاجر وأبواب تشغيل الإنتاج ليست جاهزة.

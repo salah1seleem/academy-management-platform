@@ -26,6 +26,11 @@ public static class StaffAccessRules
     public static string? ForPath(string path)
     {
         path = path.TrimEnd('/');
+        if(path is "/api/v1/me/profile" or "/api/v1/me/profile/photo")return null;
+        if (path.StartsWith("/api/v1/communication/groups/", StringComparison.Ordinal)) return "academy";
+        if (path.StartsWith("/api/v1/communication/teams/", StringComparison.Ordinal)) return "matches";
+        if (path.StartsWith("/api/v1/manage/coach-tasks", StringComparison.Ordinal) || path.StartsWith("/api/v1/my-coach-tasks", StringComparison.Ordinal)) return "followups";
+        if(path=="/api/v1/news")return null; // Audience-filtered own feed; no publishing access.
         if(path == "/api/v1/academy/experience") return null; // Shared identity, not the protected /manage/academy/experience write.
         if (path == "/api/v1/my-followups" || path.StartsWith("/api/v1/my-followups/", StringComparison.Ordinal)) return "followups";
         // Lesson IDs are not product endpoint names (e.g. player-attendance).
@@ -62,6 +67,12 @@ public static class StaffAccessRules
     }
     public static string Operation(string method, string path)
     {
+        if (path.StartsWith("/api/v1/communication/", StringComparison.Ordinal) && path.EndsWith("/preview", StringComparison.Ordinal)) return "Read";
+        if (path.StartsWith("/api/v1/communication/", StringComparison.Ordinal) && path.EndsWith("/send", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/subscriptions/periods/", StringComparison.Ordinal) && (path.EndsWith("/sessions", StringComparison.Ordinal) || path.EndsWith("/days", StringComparison.Ordinal))) return "Edit";
+        // Coach task assignment uses an explicit named grant within the existing
+        // follow-up Read/Edit module; generic follow-up Add remains prohibited.
+        if (method == "POST" && (path.StartsWith("/api/v1/manage/coach-tasks", StringComparison.Ordinal) || path.StartsWith("/api/v1/my-coach-tasks", StringComparison.Ordinal))) return "Edit";
         if(method=="POST"&&path.StartsWith("/api/v1/assets/",StringComparison.Ordinal)&&path.EndsWith("/withdraw",StringComparison.Ordinal))return "Edit";
         if(method=="POST"&&path.StartsWith("/api/v1/evaluations/badges/",StringComparison.Ordinal)&&(path.EndsWith("/revoke",StringComparison.Ordinal)||path.EndsWith("/retire",StringComparison.Ordinal)))return "Edit";
         if(method=="POST"&&path.StartsWith("/api/v1/evaluations/lessons/",StringComparison.Ordinal)&&path.EndsWith("/archive",StringComparison.Ordinal))return "Edit";

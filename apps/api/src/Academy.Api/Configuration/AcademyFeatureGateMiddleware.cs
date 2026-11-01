@@ -28,7 +28,7 @@ public sealed class AcademyFeatureGateMiddleware(RequestDelegate next)
         if (path.StartsWith("/api/v1/medical-records", StringComparison.Ordinal) || path.StartsWith("/api/v1/guardian/children/", StringComparison.Ordinal) && path.EndsWith("/medical", StringComparison.Ordinal)) return "medical";
         if (path.StartsWith("/api/v1/player-media", StringComparison.Ordinal) || path.EndsWith("/media", StringComparison.Ordinal) || path == "/api/v1/assets/gallery") return "media";
         if (path.StartsWith("/api/v1/content/news", StringComparison.Ordinal) || path == "/api/v1/news") return "news";
-        if (path.StartsWith("/api/v1/manage/matches", StringComparison.Ordinal) || path == "/api/v1/my-matches") return "matches";
+        if (path.StartsWith("/api/v1/manage/matches", StringComparison.Ordinal) || path is "/api/v1/my-matches" or "/api/v1/my-match-access") return "matches";
         if (path.StartsWith("/api/v1/manage/payroll", StringComparison.Ordinal) || path.StartsWith("/api/v1/manage/employees", StringComparison.Ordinal) || path.StartsWith("/api/v1/staff/payroll", StringComparison.Ordinal)) return "payroll";
         return null;
     }

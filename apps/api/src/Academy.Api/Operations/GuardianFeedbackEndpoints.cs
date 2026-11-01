@@ -110,10 +110,10 @@ public static partial class GuardianFeedbackEndpoints
             CreatedAtUtc = now, UpdatedAtUtc = now };
         await FeedbackDeadlinePolicy.Apply(db, feedback, zone, DateOnly.FromDateTime(local.DateTime));
         db.GuardianFeedbacks.Add(feedback);
-        if (urgency == "Safety")
+        if (body.Kind is "Complaint" or "Suggestion" or "Request")
         {
             var owners = await db.AcademyMemberships.Where(m => m.AcademyId == t.AcademyId && m.IsActive && m.User.IsActive && m.Role == AcademyRole.AcademyOwner).Select(m => m.UserId).Distinct().ToArrayAsync();
-            foreach (var ownerId in owners) db.AcademyNotices.Add(new AcademyNotice { Id = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"academy/feedback-safety/{feedback.Id}/{ownerId}"))[..16]), AcademyId = t.AcademyId, UserId = ownerId, AudienceRole="AcademyOwner",TargetKind="OwnerFeedback",TargetId=feedback.Id, Message = "بلاغ سلامة جديد يحتاج مراجعة بشرية. افتح ملاحظات الأسر من حساب المالك.", CreatedAtUtc = now, UpdatedAtUtc = now });
+            foreach (var ownerId in owners) db.AcademyNotices.Add(new AcademyNotice { Id = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"academy/feedback-safety/{feedback.Id}/{ownerId}"))[..16]), AcademyId = t.AcademyId, UserId = ownerId, AudienceRole="AcademyOwner",TargetKind="OwnerFeedback",TargetId=feedback.Id, Message = urgency == "Safety" ? "بلاغ سلامة جديد يحتاج مراجعة بشرية. افتح ملاحظات الأسر من حساب المالك." : body.Kind == "Suggestion" ? "اقتراح جديد من ولي أمر. افتح ملاحظات الأسر للمراجعة وإسناد المتابعة." : "طلب أو شكوى جديدة من ولي أمر. افتح ملاحظات الأسر للمراجعة وإسناد المتابعة.", CreatedAtUtc = now, UpdatedAtUtc = now });
         }
         await db.SaveChangesAsync(); await tx.CommitAsync();
         return Results.Created($"/api/v1/guardian/children/{playerId}/feedback-options", new { feedback.Id });

@@ -37,7 +37,7 @@ class _StaffWorkPeriodsPageState extends State<StaffWorkPeriodsPage> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'فترات عملي', 'My work periods'),
+    title: localized(context, 'سجل الحضور', 'Attendance history'),
     child: ListenableBuilder(
       listenable: widget.auth,
       builder: (context, _) {
@@ -61,6 +61,34 @@ class _StaffWorkPeriodsPageState extends State<StaffWorkPeriodsPage> {
             final entries = rows(d['items']);
             final total = d['totalWorkedSeconds'];
             return gList([
+              if (d['attendanceSummary'] is Map)
+                GCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Heading('سجلات الشهر المحفوظة'),
+                      UiText(
+                        '${obj(d['attendanceSummary'])['from']} — ${obj(d['attendanceSummary'])['to']}',
+                      ),
+                      Facts([
+                        (
+                          'أيام حضور مسجلة',
+                          textOf(obj(d['attendanceSummary'])['presentDays']),
+                        ),
+                        (
+                          'أيام غياب مسجلة',
+                          textOf(obj(d['attendanceSummary'])['absentDays']),
+                        ),
+                      ]),
+                      if (d['attendanceStatus'] == 'Present')
+                        const UiText('اليوم المختار: حضور مسجل')
+                      else if (d['attendanceStatus'] == 'Absent')
+                        const UiText('اليوم المختار: غياب مسجل')
+                      else if (d['attendanceStatus'] == null)
+                        const UiText('لم تسجل حالة حضور لهذا اليوم.'),
+                    ],
+                  ),
+                ),
               GCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

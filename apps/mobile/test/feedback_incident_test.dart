@@ -53,7 +53,9 @@ void main() {
       expect(selected, isNull);
       await t.tap(find.byType(DropdownButtonFormField<String>));
       await t.pumpAndSettle();
-      await t.tap(find.text('مجموعة سابقة اصطناعية · 16:00–17:00').last);
+      await t.tap(
+        find.text('مجموعة سابقة اصطناعية · من 4:00 مساءً إلى 5:00 مساءً').last,
+      );
       await t.pumpAndSettle();
       expect(selected?['id'], 's');
       expect(find.textContaining('لا يوجد دليل مدرب مؤرخ'), findsOneWidget);

@@ -3,13 +3,28 @@ import Image from "next/image";
 import Link from "next/link";
 import {useState} from "react";
 import {Images,FileDown} from "lucide-react";
-import {Button,EmptyState,ErrorState,LoadingState,PageHeader} from "../components/dashboard-shell";
+import {AdminDataTable,Button,EmptyState,ErrorState,LoadingState,PageHeader,SearchInput} from "../components/dashboard-shell";
 import {GuardianShell} from "../components/guardian-shell";
 import {useGoalData} from "./player-goals";
 import styles from "./player-monthly.module.css";
 import media from "./media-memories.module.css";
 type Item={id:string;caption:string|null;contentType:string;mediaEventOn:string;trainingSessionId:string|null;retainUntilUtc:string|null;url:string};
 type Album={month:string;from:string;to:string;asOfDate:string;page:number;total:number;images:number;videos:number;hasMore:boolean;items:Item[];notice:string};
+type Target={id:string;arabicName:string;playerCode?:string};
+export function MediaMemoriesEntry(){
+ const[scope,setScope]=useState("player"),[search,setSearch]=useState("");
+ const{data,error}=useGoalData<Target[]|{groups:Target[]}>(scope==="player"?"/api/v1/people/players":"/api/v1/manage/structure/options",0,"تعذر تحميل نطاقات الوسائط المتاحة ضمن صلاحياتك.");
+ const rows=data&&(scope==="player"?Array.isArray(data):!Array.isArray(data))?(Array.isArray(data)?data:data.groups).filter(row=>`${row.arabicName} ${row.playerCode??""}`.includes(search)):null;
+ return <><PageHeader title="ذكريات الشهر" context="معرض الوسائط"/><section className="list-card">
+  <div className="content-record-header"><h2>اختر اللاعب أو المجموعة</h2><select aria-label="نوع نطاق الذكريات" value={scope} onChange={e=>{setScope(e.target.value);setSearch("");}}><option value="player">اللاعبون</option><option value="group">المجموعات</option></select></div>
+  <div className="filter-bar"><SearchInput label="بحث نطاق الذكريات" value={search} onChange={setSearch} placeholder="الاسم أو كود اللاعب"/></div>
+  {error?<ErrorState message={error}/>:!rows?<LoadingState/>:rows.length===0?<EmptyState message="لا توجد نتائج مطابقة ضمن صلاحياتك."/>:<AdminDataTable label="نطاقات الذكريات" rows={rows} rowKey={row=>row.id} columns={[
+   {key:"name",header:scope==="player"?"اللاعب":"المجموعة",primary:true,render:row=><strong>{row.arabicName}</strong>},
+   ...(scope==="player"?[{key:"code",header:"الكود",render:(row:Target)=>row.playerCode??"—"}]:[]),
+   {key:"action",header:"الإجراء",render:row=><Link className="row-primary-action" href={`/dashboard/players/media/memories?${scope==="player"?"playerId":"groupId"}=${encodeURIComponent(row.id)}`}>عرض الذكريات</Link>},
+  ]}/>}
+ </section></>;
+}
 export function MediaMemories({playerId,groupId,family=true}:{playerId?:string;groupId?:string;family?:boolean}){
  const[month,setMonth]=useState(""),[page,setPage]=useState(0);
  const query=new URLSearchParams({page:String(page)});if(playerId)query.set("playerId",playerId);if(groupId)query.set("groupId",groupId);if(month)query.set("month",month);

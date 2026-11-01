@@ -1,3 +1,4 @@
+import '../../core/widgets/guided_form.dart';
 import 'package:flutter/material.dart';
 
 import '../shared/feedback_state.dart';
@@ -11,10 +12,15 @@ import 'guardian_ui.dart';
 class CoachFeedbackPage extends StatefulWidget {
   final AuthController auth;
   final String playerId;
+  final String initialKind;
+  final String? initialGroupId, initialCoachId;
   const CoachFeedbackPage({
     super.key,
     required this.auth,
     required this.playerId,
+    this.initialKind = 'Rating',
+    this.initialGroupId,
+    this.initialCoachId,
   });
   @override
   State<CoachFeedbackPage> createState() => _CoachFeedbackPageState();
@@ -29,8 +35,9 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
   bool foreground = true;
   final form = GlobalKey<FormState>();
   final message = TextEditingController();
-  String? groupId, coachId;
-  String kind = 'Rating', result = '', requestKey = commandKey();
+  late String? groupId = widget.initialGroupId, coachId = widget.initialCoachId;
+  late String kind = widget.initialKind;
+  String result = '', requestKey = commandKey();
   String subject = 'Other', urgency = 'Routine';
   String? incidentOn;
   Json? incidentSession;
@@ -160,7 +167,7 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
               if (groups.isEmpty)
                 const EmptyMessage('لا توجد مجموعة نشطة لهذا الطفل حاليًا.'),
               GCard(
-                child: Form(
+                child: GuidedForm(
                   key: form,
                   child: Column(
                     children: [

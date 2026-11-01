@@ -133,6 +133,8 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         if (plan.ResourceAware && b.PreviewFingerprint != preview.Fingerprint) throw new FacilityRejected("تغير الجدول أو السعة أو الأعضاء بعد المعاينة. أعد المعاينة قبل الاعتماد.");
         if (preview.Conflicts.Count > 0) throw new FacilityRejected($"توجد تعارضات في {preview.Conflicts.Count} موعد. راجع المعاينة؛ لم يحفظ أي تغيير.");
         var now = time.GetUtcNow(); var schedules = await db.RecurringSchedules.Where(x => x.TrainingGroupId == groupId).ToListAsync();
+        var activeSchedules = schedules.Where(s => s.IsActive).ToArray();
+        var scheduleChanged = activeSchedules.Length != b.Days.Length || activeSchedules.Any(s => !b.Days.Contains(s.DayOfWeek) || s.StartTime != b.StartTime || s.EndTime != b.EndTime || s.ValidFrom != b.From || s.ValidTo != b.To);
         foreach (var row in schedules) { row.IsActive = false; row.UpdatedAtUtc = now; }
         foreach (var row in inspection.Existing.Where(x => !inspection.Preserved.Contains(x.Id))) { row.Status = TrainingSessionStatus.Cancelled; row.UpdatedAtUtc = now; }
         foreach (var row in inspection.Cancelled) { row.State = ResourceBookingState.Cancelled; row.CancelledAtUtc = now; row.CancelledByUserId = actor; row.UpdatedAtUtc = now; }
@@ -161,6 +163,7 @@ public sealed class ResourceTimetableService(FoundationDbContext db, CurrentTena
         if (plan.Value is { } reservation)
             foreach (var s in created) await facilities.ReserveLocked(new(reservation.ResourceId, s.SessionDate, s.StartTime, s.EndTime, reservation.Seats, reservation.Exclusive, "Training", groupId, reservation.CoachMembershipId, s.Id), $"tt-{revisionId:N}-{s.Id:N}", t.AcademyId, actor);
         db.TrainingScheduleRevisions.Add(new() { Id = revisionId, AcademyId = t.AcademyId, BranchId = group.BranchId, TrainingGroupId = groupId, ActorUserId = actor, RequestKey = key.Length > 0 ? key : Guid.NewGuid().ToString("N"), RequestHash = hash, Snapshot = JsonSerializer.Serialize(new { request = b, before, preview, sessions = created.Select(x => x.Id), cancelledBookings = inspection.Cancelled.Select(x => x.Id) }), CreatedSessions = created.Count, PreservedSessions = preview.PreservedSessions, CreatedAtUtc = now, UpdatedAtUtc = now });
+        if (scheduleChanged) await GroupScheduleNotices.Add(db, t, group, b, revisionId, now);
         await db.SaveChangesAsync(); return new { created = created.Count, preserved = preview.PreservedSessions, replayed = false };
     }
 }

@@ -1,0 +1,89 @@
+name: ${COMPOSE_PROJECT_NAME:-iacademy-one}
+x-api: &api
+  image: iacademy-one-api:${IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: infra/vps/api.Dockerfile
+  environment: &api-env
+    ASPNETCORE_ENVIRONMENT: Production
+    ASPNETCORE_HTTP_PORTS: "8080"
+    AllowedHosts: "${PUBLIC_HOST:-localhost};127.0.0.1;api;localhost"
+    ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-iacademy};Username=iacademy_app;Password=${API_DATABASE_PASSWORD:?Set API_DATABASE_PASSWORD in a private env file}
+    DataProtection__KeyPath: /data/keys
+    Media__PrivateRoot: /data/media
+    Demo__SeedEnabled: "false"
+    Demo__FixedOtpEnabled: "false"
+    Payments__InternalTest__Enabled: "false"
+    Imports__WorkerEnabled: "true"
+    ReverseProxy__Address: 172.29.81.3
+  networks: [app]
+  security_opt: [no-new-privileges:true]
+
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-iacademy}
+      POSTGRES_USER: ${POSTGRES_USER:-iacademy_migrator}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      API_DATABASE_PASSWORD: ${API_DATABASE_PASSWORD:?Set API_DATABASE_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./infra/vps/init-db.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    networks: [app]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    <<: *api
+    command: [--migrate-only]
+    environment:
+      <<: *api-env
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-iacademy};Username=${POSTGRES_USER:-iacademy_migrator};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    <<: *api
+    volumes: [media:/data/media, keys:/data/keys]
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8080/health/ready]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+  web:
+    image: iacademy-one-web:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: infra/vps/web.Dockerfile
+      args:
+        API_INTERNAL_URL: http://api:8080
+    networks:
+      app:
+        ipv4_address: 172.29.81.3
+    ports: ["127.0.0.1:${WEB_PORT:-3000}:3000"]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+networks:
+  app:
+    ipam:
+      config: [{subnet: 172.29.81.0/24}]
+volumes:
+  postgres:
+  media:
+  keys:

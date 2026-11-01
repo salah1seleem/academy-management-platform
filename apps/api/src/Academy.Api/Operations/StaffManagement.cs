@@ -30,11 +30,14 @@ public static class StaffManagement
     private static async Task<IResult> Create(StaffWrite body, CurrentTenant tenant, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        var phone = EgyptPhoneNormalizer.Normalize(body.Phone); if (body.Role is not (AcademyRole.AcademyAdmin or AcademyRole.Coach) || string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 100 || body.JobTitle?.Length > 100 || string.IsNullOrWhiteSpace(body.Email) || body.Email.Length > 200 || !body.Email.Contains('@') || string.IsNullOrWhiteSpace(body.TemporaryPassword) || phone is null) return Results.UnprocessableEntity(new { message = "أدخل الاسم والبريد والهاتف والدور بصورة صحيحة." });
-        if (await users.FindByEmailAsync(body.Email) is not null || await db.Users.AnyAsync(x => x.PhoneNumber == phone)) return Results.Conflict(new { message = "البريد أو الهاتف مستخدم بالفعل. لا تُنشئ هوية مشتركة." });
+        var phone = EgyptPhoneNormalizer.Normalize(body.Phone);
+        var email = string.IsNullOrWhiteSpace(body.Email) ? $"staff.{Guid.NewGuid():N}@accounts.invalid" : body.Email.Trim();
+        var password = string.IsNullOrEmpty(body.TemporaryPassword) ? "A!9"+Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)) : body.TemporaryPassword;
+        if (body.Role is not (AcademyRole.AcademyAdmin or AcademyRole.Coach) || string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 100 || body.JobTitle?.Length > 100 || email.Length > 200 || !email.Contains('@') || phone is null) return Results.UnprocessableEntity(new { message = "أدخل الاسم والهاتف والدور بصورة صحيحة." });
+        if (await users.FindByEmailAsync(email) is not null || await db.Users.AnyAsync(x => x.PhoneNumber == phone)) return Results.Conflict(new { message = "البريد أو الهاتف مستخدم بالفعل. لا تُنشئ هوية مشتركة." });
         await using var tx = await db.Database.BeginTransactionAsync();
-        var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = body.Email.Trim(), Email = body.Email.Trim(), PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = body.Name.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
-        var result = await users.CreateAsync(user, body.TemporaryPassword); if (!result.Succeeded) return Results.UnprocessableEntity(new { message = "تعذر إنشاء الحساب. استخدم كلمة مرور قوية وبريدًا صحيحًا." });
+        var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = body.Name.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+        var result = await users.CreateAsync(user, password); if (!result.Succeeded) return Results.UnprocessableEntity(new { message = "تعذر إنشاء الحساب. استخدم كلمة مرور قوية وبريدًا صحيحًا." });
         var member = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = body.Role, JobTitle = body.JobTitle?.Trim(), IsActive = true, AllBranches = body.Role != AcademyRole.AcademyAdmin, UseActionGrants = body.Role == AcademyRole.AcademyAdmin, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.AcademyMemberships.Add(member); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { member.Id });
     }
     private static async Task<IResult> Grants(Guid id, GrantWrite body, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
@@ -50,6 +53,6 @@ public static class StaffManagement
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 }
-public sealed record StaffWrite(string Name, string Email, string Phone, string TemporaryPassword, AcademyRole Role, string? JobTitle);
+public sealed record StaffWrite(string Name, string? Email, string Phone, string? TemporaryPassword, AcademyRole Role, string? JobTitle);
 public sealed record GrantValue(string Permission, bool Allowed);
 public sealed record GrantWrite(GrantValue[] Grants);

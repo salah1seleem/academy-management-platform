@@ -1,4 +1,4 @@
-import {cleanup,fireEvent,render,screen} from "@testing-library/react";
+import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {afterEach,expect,it,vi} from "vitest";
 import {ExperienceTools} from "./experience-tools";
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
@@ -14,6 +14,7 @@ it("names icon-only controls independently of hidden mobile captions and keeps t
   expect(screen.getByRole("button",{name:/^شرح الصفحة$/})).toHaveFocus();
   fireEvent.click(screen.getByRole("button",{name:/^شرح الصفحة$/}));
   await screen.findByRole("dialog",{name:"شرح الصفحة"});
+  await waitFor(()=>expect(screen.getByRole("button",{name:/^إغلاق$/})).toHaveFocus());
   fireEvent.keyDown(document,{key:"Escape"});
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });

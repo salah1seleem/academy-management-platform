@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { platformRequest } from "./platform-api";
+import { platformRequest, PlatformSessionExpiredError } from "./platform-api";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("platform request boundary", () => {
@@ -24,4 +24,13 @@ describe("platform request boundary", () => {
     await expect(platformRequest("/api/v1/platform/academies", "POST", {})).rejects.toThrow("تعذر بدء الطلب الآمن للمنصة.");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+});
+
+it("recognizes an expired session even when the server returns an empty 401 body", async () => {
+ vi.stubGlobal("fetch",vi.fn().mockResolvedValueOnce(Response.json({token:"anonymous-csrf"})).mockResolvedValueOnce(new Response(null,{status:401})));
+ await expect(platformRequest("/api/v1/platform/academies","POST",{})).rejects.toBeInstanceOf(PlatformSessionExpiredError);
+});
+it("explains denied platform authority without treating it as an expired session",async()=>{
+ vi.stubGlobal("fetch",vi.fn().mockResolvedValueOnce(Response.json({token:"csrf"})).mockResolvedValueOnce(new Response(null,{status:403})));
+ await expect(platformRequest("/api/v1/platform/academies","POST",{})).rejects.toThrow("لا يملك صلاحية");
 });

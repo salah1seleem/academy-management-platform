@@ -1,7 +1,7 @@
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/appearance.dart';
+import '../../features/guardian/guardian_ui.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -66,36 +66,10 @@ class AppScaffold extends StatelessWidget {
     this.bottomBar,
   });
   @override
-  Widget build(BuildContext context) => Scaffold(
-    bottomNavigationBar: bottomBar == null
-        ? null
-        : SafeArea(
-            child: Center(
-              heightFactor: 1,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 650),
-                child: bottomBar,
-              ),
-            ),
-          ),
-    appBar: AppBar(
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const AcademyCrest(size: 30),
-          const SizedBox(width: 10),
-          Flexible(child: UiText(title)),
-        ],
-      ),
-      actions: actions,
-    ),
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 650),
-          child: child,
-        ),
-      ),
-    ),
+  Widget build(BuildContext context) => GuardianPage(
+    title: title,
+    actions: actions,
+    bottom: bottomBar,
+    child: child,
   );
 }

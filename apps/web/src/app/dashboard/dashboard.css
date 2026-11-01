@@ -82,7 +82,7 @@
 .sidebar-account b { display: block; max-width: 160px; overflow: hidden; color: white; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .role-badge { display: inline-flex !important; width: fit-content; align-items: center; gap: 4px; margin-block-start: 4px; padding: 2px 7px; color: #bce3df !important; background: rgb(255 255 255 / 7%); border-radius: 999px; font-size: 10px !important; }
 .role-badge svg { width: 11px; height: 11px; }
-.sidebar-navigation { flex: 1; min-height: 0; padding-inline: 2px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 18%) transparent; }
+.sidebar-navigation { flex: 1; min-height: 0; padding-inline: 2px; overflow-y: auto; overflow-anchor: none; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 18%) transparent; }
 .nav-group-label { margin: 16px 10px 6px; color: #739b97; font-size: 10px; font-weight: 600; letter-spacing: .06em; }
 .dashboard-shell .nav-module { margin: 2px 0; }
 .dashboard-shell .module-toggle { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; color: #b9d0ce; background: transparent; border: 0; border-radius: var(--staff-radius-sm); text-align: start; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 140ms ease, color 140ms ease; }

@@ -7,6 +7,7 @@ import '../guardian/guardian_ui.dart';
 import '../owner/owner_followups.dart';
 import 'private_media.dart';
 import 'experience_ui.dart';
+import 'native_academy_content.dart';
 
 class AcademyContentEditor extends StatefulWidget {
   const AcademyContentEditor({
@@ -157,144 +158,103 @@ class _AcademyContentEditorState extends State<AcademyContentEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => GuardianPage(
-    title: widget.ad
-        ? 'إضافة إعلان'
-        : widget.news == null
-        ? 'إضافة خبر'
-        : 'تعديل الخبر',
-    child: gList([
-      TextField(
-        controller: title,
-        maxLength: widget.ad ? 100 : 180,
-        enabled: !busy,
-        decoration: const InputDecoration(labelText: 'العنوان'),
-      ),
-      TextField(
-        controller: body,
-        maxLines: 5,
-        maxLength: widget.ad ? 1000 : 10000,
-        enabled: !busy,
-        decoration: const InputDecoration(labelText: 'التفاصيل'),
-      ),
-      const SizedBox(height: 12),
-      if (path != null)
-        PrivateImage(
-          auth: widget.auth,
-          path: path!,
-          height: 180,
-          fit: BoxFit.contain,
-        ),
-      OutlinedButton.icon(
-        onPressed: busy ? null : upload,
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        label: UiText(asset == null ? 'رفع صورة' : 'تغيير الصورة'),
-      ),
-      if (widget.ad) ...[
-        const SizedBox(height: 12),
-        ScopeDateTiles(
-          from: start,
-          to: end,
-          onChanged: (a, b) => setState(() {
-            start = a;
-            end = b;
-          }),
-        ),
-        RemoteBody(
-          auth: widget.auth,
-          path: '/api/v1/manage/community-campaigns/options',
-          builder: (context, value) => Column(
-            children: [
-              const Heading('الفروع المستهدفة'),
-              for (final b in rows(obj(value)['branches']))
-                CheckboxListTile(
-                  value: branches.contains(b['id']),
-                  title: UiText(textOf(b['name'])),
-                  onChanged: busy
-                      ? null
-                      : (v) => setState(() {
-                          v == true
-                              ? branches.add(textOf(b['id']))
-                              : branches.remove(b['id']);
-                        }),
+  Widget build(BuildContext context) => !widget.ad
+      ? NativeContentEditor(auth: widget.auth, initial: widget.news)
+      : GuardianPage(
+          title: widget.ad
+              ? 'إضافة إعلان'
+              : widget.news == null
+              ? 'إضافة خبر'
+              : 'تعديل الخبر',
+          child: gList([
+            TextField(
+              controller: title,
+              maxLength: widget.ad ? 100 : 180,
+              enabled: !busy,
+              decoration: const InputDecoration(labelText: 'العنوان'),
+            ),
+            TextField(
+              controller: body,
+              maxLines: 5,
+              maxLength: widget.ad ? 1000 : 10000,
+              enabled: !busy,
+              decoration: const InputDecoration(labelText: 'التفاصيل'),
+            ),
+            const SizedBox(height: 12),
+            if (path != null)
+              PrivateImage(
+                auth: widget.auth,
+                path: path!,
+                height: 180,
+                fit: BoxFit.contain,
+              ),
+            OutlinedButton.icon(
+              onPressed: busy ? null : upload,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: UiText(asset == null ? 'رفع صورة' : 'تغيير الصورة'),
+            ),
+            if (widget.ad) ...[
+              const SizedBox(height: 12),
+              ScopeDateTiles(
+                from: start,
+                to: end,
+                onChanged: (a, b) => setState(() {
+                  start = a;
+                  end = b;
+                }),
+              ),
+              RemoteBody(
+                auth: widget.auth,
+                path: '/api/v1/manage/community-campaigns/options',
+                builder: (context, value) => Column(
+                  children: [
+                    const Heading('الفروع المستهدفة'),
+                    for (final b in rows(obj(value)['branches']))
+                      CheckboxListTile(
+                        value: branches.contains(b['id']),
+                        title: UiText(textOf(b['name'])),
+                        onChanged: busy
+                            ? null
+                            : (v) => setState(() {
+                                v == true
+                                    ? branches.add(textOf(b['id']))
+                                    : branches.remove(b['id']);
+                              }),
+                      ),
+                  ],
                 ),
-            ],
-          ),
-        ),
-        const UiText(
-          'حفظ المسودة لا ينشر الإعلان. يلزم تقديمها للمراجعة واعتماد الفروع المختارة.',
-          style: TextStyle(fontSize: 11),
-        ),
-      ] else
-        TextField(
-          controller: days,
-          keyboardType: TextInputType.number,
-          enabled: !busy,
-          decoration: const InputDecoration(labelText: 'مدة الظهور بالأيام'),
-        ),
-      if (error != null) UiText(error!),
-      const SizedBox(height: 16),
-      FilledButton(
-        onPressed: busy ? null : () => save(false),
-        child: UiText(widget.ad ? 'حفظ مسودة الإعلان' : 'حفظ كمسودة'),
-      ),
-      if (!widget.ad)
-        TextButton(
-          onPressed: busy ? null : () => save(true),
-          child: const UiText('نشر الخبر'),
-        ),
-    ]),
-  );
+              ),
+              const UiText(
+                'حفظ المسودة لا ينشر الإعلان. يلزم تقديمها للمراجعة واعتماد الفروع المختارة.',
+                style: TextStyle(fontSize: 11),
+              ),
+            ] else
+              TextField(
+                controller: days,
+                keyboardType: TextInputType.number,
+                enabled: !busy,
+                decoration: const InputDecoration(
+                  labelText: 'مدة الظهور بالأيام',
+                ),
+              ),
+            if (error != null) UiText(error!),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: busy ? null : () => save(false),
+              child: UiText(widget.ad ? 'حفظ مسودة الإعلان' : 'حفظ كمسودة'),
+            ),
+            if (!widget.ad)
+              TextButton(
+                onPressed: busy ? null : () => save(true),
+                child: const UiText('نشر الخبر'),
+              ),
+          ]),
+        );
 }
 
-class AcademyNewsManagement extends StatefulWidget {
+class AcademyNewsManagement extends StatelessWidget {
   const AcademyNewsManagement({super.key, required this.auth});
   final AuthController auth;
   @override
-  State<AcademyNewsManagement> createState() => _AcademyNewsManagementState();
-}
-
-class _AcademyNewsManagementState extends State<AcademyNewsManagement> {
-  int revision = 0;
-  Future<void> edit([Json? item]) async {
-    final saved = await openPage<bool>(
-      context,
-      AcademyContentEditor(auth: widget.auth, news: item),
-    );
-    if (saved == true && mounted) setState(() => revision++);
-  }
-
-  @override
-  Widget build(BuildContext context) => GuardianPage(
-    title: 'الأخبار',
-    child: RemoteBody(
-      key: ValueKey(revision),
-      auth: widget.auth,
-      path: '/api/v1/content/news',
-      builder: (context, value) => gList([
-        FilledButton.icon(
-          onPressed: () => edit(),
-          icon: const Icon(Icons.add),
-          label: const UiText('إضافة خبر'),
-        ),
-        const SizedBox(height: 14),
-        if (rows(value).isEmpty) const EmptyMessage('لا توجد أخبار.'),
-        for (final n in rows(value))
-          GCard(
-            onTap: () => edit(n),
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: UiText(textOf(n['title'])),
-              subtitle: UiText(
-                n['publishedAtUtc'] == null
-                    ? 'مسودة'
-                    : 'منشور · ${day(n['publishedAtUtc'])}',
-                style: const TextStyle(fontSize: 11),
-              ),
-              trailing: const Icon(Icons.chevron_left),
-            ),
-          ),
-      ]),
-    ),
-  );
+  Widget build(BuildContext context) => NativeAcademyContent(auth: auth);
 }

@@ -72,7 +72,9 @@ void main() {
           ) async {
             calls.add('$m $p');
             if (p == '/api/v1/guardian/home') return family;
-            if (p.endsWith('/profile')) return profile('a');
+            if (p.endsWith('/profile')) {
+              return profile(p.contains('/b/') ? 'b' : 'a');
+            }
             if (p.contains('/attendance/')) return [training('a')];
             return [
               game('a'),
@@ -96,7 +98,8 @@ void main() {
                 ? [
                     'GET /api/v1/guardian/home',
                     'GET /api/v1/guardian/children/a/profile',
-                    'GET /api/v1/my-matches?upcomingOnly=true&playerId=a',
+                    'GET /api/v1/my-matches?upcomingOnly=true',
+                    'GET /api/v1/guardian/children/b/profile',
                   ]
                 : [
                     'GET /api/v1/attendance/sessions?upcomingOnly=true',
@@ -132,9 +135,7 @@ void main() {
         t.getTopLeft(find.text('مجموعة a')).dy,
         lessThan(t.getTopLeft(find.text('منتخب تجريبي × منافس a')).dy),
       );
-      await t.tap(find.byType(DropdownButtonFormField<String>));
-      await t.pumpAndSettle();
-      await t.tap(find.text('ابن ثان اصطناعي').last);
+      await t.tap(find.byKey(const ValueKey('family-filter-b')));
       await t.pumpAndSettle();
       expect(find.text('مجموعة a'), findsNothing);
       expect(find.text('مجموعة b'), findsOneWidget);
@@ -149,7 +150,12 @@ void main() {
       expect(
         calls
             .where((p) => p.contains('/my-matches'))
-            .every((p) => p.endsWith('=a') || p.endsWith('=b')),
+            .every(
+              (p) =>
+                  p.endsWith('upcomingOnly=true') ||
+                  p.endsWith('=a') ||
+                  p.endsWith('=b'),
+            ),
         isTrue,
       );
       expect(calls.every((p) => p.startsWith('GET ')), isTrue);
@@ -164,8 +170,10 @@ void main() {
       var wrongScope = true;
       final auth = await authenticate('Guardian', (m, p, b, token) async {
         if (p == '/api/v1/guardian/home') return family;
-        if (p.endsWith('/profile')) return profile('a');
-        return [game(wrongScope ? 'b' : 'a')];
+        if (p.endsWith('/profile')) {
+          return profile(p.contains('/b/') ? 'b' : 'a');
+        }
+        return [game(wrongScope ? 'foreign-child' : 'a')];
       });
       await t.pumpWidget(app(RoleAgenda(auth: auth, guardian: true)));
       await t.pumpAndSettle();
@@ -226,9 +234,14 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        await t.tap(find.text(role == 'Guardian' ? 'التقويم' : 'جدولي'));
+        await t.tap(
+          find.text(role == 'Guardian' ? 'الحصص' : 'الحضور\nوالتقييم'),
+        );
         await t.pumpAndSettle();
-        expect(find.byType(RoleAgenda), findsOneWidget);
+        expect(
+          find.byType(role == 'Guardian' ? RoleAgenda : CoachGroupsPage),
+          findsOneWidget,
+        );
         expect(
           calls.any((p) => p.contains('/reports/') || p.contains('/manage/')),
           isFalse,

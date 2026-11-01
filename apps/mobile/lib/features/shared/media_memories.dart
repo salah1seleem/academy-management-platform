@@ -219,33 +219,7 @@ class _MemoriesState extends State<MediaMemoriesPage>
                 ),
               for (final item in rows(d['items']))
                 MediaTile(auth: widget.auth, media: item),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: page == 0
-                          ? null
-                          : () => setState(() {
-                              page--;
-                              message = '';
-                            }),
-                      child: Text(l('الصفحة السابقة', 'Previous page')),
-                    ),
-                  ),
-                  Text('${page + 1}'),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: d['hasMore'] != true
-                          ? null
-                          : () => setState(() {
-                              page++;
-                              message = '';
-                            }),
-                      child: Text(l('الصفحة التالية', 'Next page')),
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox.shrink(),
               Text(
                 l(
                   'حتى25 نسخة لكل صفحة. الفهرس وصفي فقط؛ ليس ألبومًا عامًا أو إذن نشر خارجي أو نسخة احتياطية.',

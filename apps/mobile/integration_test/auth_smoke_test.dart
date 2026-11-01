@@ -46,7 +46,7 @@ void main() {
         await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextFormField).first, phone);
-        await tester.tap(find.text('إرسال رمز التحقق'));
+        await tester.tap(find.text('متابعة'));
         await tester.pumpAndSettle();
         await waitUntil(() => find.text('رمز التحقق').evaluate().isNotEmpty);
         await tester.enterText(find.byType(TextFormField).last, '246810');

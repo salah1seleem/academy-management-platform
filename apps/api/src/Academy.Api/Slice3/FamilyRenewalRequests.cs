@@ -17,7 +17,7 @@ using Npgsql;
 
 namespace Academy.Api.Slice3;
 
-public sealed record FamilyRequestWrite(IReadOnlyList<FamilyRenewalChoice>? Lines, string QuoteHash, string IdempotencyKey);
+public sealed record FamilyRequestWrite(IReadOnlyList<FamilyRenewalChoice>? Lines, string QuoteHash, string IdempotencyKey, bool SharedPlanOnly = false);
 public sealed record FamilyProofWrite(Guid AssetId, int Revision);
 public sealed record FamilyCancelWrite(int Revision);
 public sealed record FamilyPlacement(Guid LineId, Guid GroupId);
@@ -109,13 +109,14 @@ public sealed class FamilyRequestService(FoundationDbContext db, CurrentTenant t
         var (t, user) = await Context(false);
         if (body.Lines is not { Count: > 0 and <= 20 } choices || choices.Any(l => l is null || l.SportEnrollmentId == Guid.Empty || l.SubscriptionPlanId == Guid.Empty) || choices.Select(l => l.SportEnrollmentId).Distinct().Count() != choices.Count || body.QuoteHash?.Length != 64 || body.IdempotencyKey is not { Length: >= 16 and <= 80 } key || key.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_'))) throw new CashRejected("راجع تسجيلات الأسرة والمراجعة ومفتاح الطلب قبل المتابعة.", 422);
         var requestHash = StatementComparisonRules.Hash(new { body.QuoteHash, lines = choices.OrderBy(l => l.SportEnrollmentId).ToArray() });
+        if (body.SharedPlanOnly) requestHash = StatementComparisonRules.Hash(new { policy = "SharedSportPlan", requestHash });
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"family-create:{t.AcademyId}:{user}:{key}"}, 0))");
         var existing = await db.FamilyRenewalRequests.Where(r => r.AcademyId == t.AcademyId && r.RequestedByUserId == user && r.IdempotencyKey == key).Select(r => new { r.Id, r.RequestHash }).SingleOrDefaultAsync();
         if (existing is not null) { if (existing.RequestHash != requestHash) throw new CashRejected("مفتاح الطلب مستخدم باختيارات مختلفة.", 409); return await View(await Find(t.AcademyId, user, existing.Id, false), false); }
         await LockEnrollments(t.AcademyId, choices.Select(c => c.SportEnrollmentId));
         foreach (var plan in choices.Select(c => c.SubscriptionPlanId).Distinct().Order()) await PlanCatalog.LockAsync(db, t.AcademyId, plan);
-        var prepared = await quotes.Prepare(new(choices));
+        var prepared = await quotes.Prepare(new(choices, body.SharedPlanOnly));
         if (prepared.Hash != body.QuoteHash) throw new CashRejected("تغير السعر أو أهلية التجديد. راجع الإجمالي مجددًا قبل إنشاء الطلب.", 409);
         if (prepared.Prices.Values.Any(p => p.FinalAmount <= 0)) throw new CashRejected("أحد التسجيلات معفى بالكامل. تواصل مع الإدارة لاعتماد الإعفاء؛ لا ترسل تحويلًا بقيمة صفر أو ترفعه كتحصيل.", 422);
         if (!await db.AcademyTransferSettings.AnyAsync(s => s.AcademyId == t.AcademyId && s.IsActive && (s.InstaPayAddress != null && s.InstaPayAddress != "" || s.WalletNumber != null && s.WalletNumber != ""))) throw new CashRejected("لم تضبط الأكاديمية حساب التحويل أو المحفظة. تواصل مع الإدارة قبل الدفع.", 422);
@@ -184,7 +185,10 @@ public sealed class FamilyRequestService(FoundationDbContext db, CurrentTenant t
             }
         }
         r.Status = desired; r.DecidedByUserId = user; r.DecidedAtUtc = clock.UtcNow; r.DecisionReason = body.Reason?.Trim(); r.Revision++; r.UpdatedAtUtc = clock.UtcNow;
-        db.AcademyNotices.Add(new AcademyNotice { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = r.RequestedByUserId, AudienceRole="Guardian",TargetKind="FamilyRenewal",TargetId=r.Id, Message = body.Accept ? "تم قبول إثبات الأسرة وتجديد كل التسجيلات بنجاح. راجع إيصالات أبنائك ومواعيدهم." : $"لم يُقبل طلب تجديد الأسرة. {r.DecisionReason ?? "تواصل مع إدارة الأكاديمية للتوضيح."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        var renewedNames = body.Accept ? await db.SportEnrollments.Where(e=>e.AcademyId==t.AcademyId&&r.Lines.Select(l=>l.SportEnrollmentId).Contains(e.Id)).Select(e=>e.Player.ArabicName).Distinct().OrderBy(n=>n).ToArrayAsync() : [];
+        var renewedGuardian = body.Accept ? await db.Users.Where(u=>u.Id==r.RequestedByUserId).Select(u=>u.DisplayName).SingleAsync() : "";
+        var renewedMessage = body.Accept ? await Academy.Api.Operations.NoticeText.Render(db,t.AcademyId,"FamilyRenewal",Academy.Api.Operations.NoticeEndpoints.Defaults["FamilyRenewal"],string.Join("، ",renewedNames),guardian:renewedGuardian) : "";
+        db.AcademyNotices.Add(new AcademyNotice { EventKey=body.Accept?"FamilyRenewal":"Payment", Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = r.RequestedByUserId, AudienceRole="Guardian",TargetKind="FamilyRenewal",TargetId=r.Id, Message = body.Accept ? renewedMessage : $"لم يُقبل طلب تجديد الأسرة. {r.DecisionReason ?? "تواصل مع إدارة الأكاديمية للتوضيح."}", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return await View(r, true);
     }
 }

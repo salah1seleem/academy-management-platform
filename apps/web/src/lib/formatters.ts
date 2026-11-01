@@ -35,7 +35,7 @@ export const workflowStatusLabels: Record<string, string> = {
   Paid: "مدفوع",
   Failed: "فشل",
   Draft: "مسودة",
-  Published: "منشور",
+  Published: "منشور", PublishedInternal: "للاستخدام الداخلي",
   UnderReview: "قيد المراجعة",
   Approved: "مقبول",
   Rejected: "مرفوض",

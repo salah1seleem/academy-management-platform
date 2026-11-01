@@ -113,11 +113,17 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         if (member.Role == AcademyRole.AcademyAdmin && !member.AllBranches && !await db.MembershipBranchAccesses.AnyAsync(x => x.MembershipId == member.Id && x.BranchId == id && x.IsActive)) throw new FacilityRejected("الفرع خارج صلاحياتك الحالية.", 403);
     }
     private async Task<DateOnly> Today() { var academy = await db.Academies.SingleAsync(x => x.Id == db.RequestAcademyId); return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(academy.TimeZone)).DateTime); }
-    internal async Task<FacilityResource> Lock(Guid id)
+    internal async Task<FacilityResource> Lock(Guid id, Guid? platformImportJob = null)
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"facility-resource:{db.RequestAcademyId}:{id}"}, 0))");
         var r = await db.FacilityResources.FromSqlInterpolated($"SELECT *, xmin FROM \"FacilityResources\" WHERE \"Id\" = {id} FOR UPDATE").SingleOrDefaultAsync() ?? throw new FacilityRejected("المورد غير متاح.", 404);
-        await Branch(r.BranchId); return r;
+        if (platformImportJob.HasValue)
+        {
+            await Academy.Api.Importing.ImportAuthority.CheckPlatformCalendar(db, r.AcademyId, platformImportJob.Value);
+            if (!await db.AcademyFeatureEntitlements.AnyAsync(x => x.Feature == "facilities" && x.IsActive && x.Enabled)) throw new FacilityRejected("خدمة المرافق غير مرخصة لهذه الأكاديمية.",403);
+        }
+        else await Branch(r.BranchId);
+        return r;
     }
     public async Task<object> Create(FacilityWrite b)
     {
@@ -162,13 +168,13 @@ public sealed class FacilityService(FoundationDbContext db, CurrentTenant tenant
         var row = await ReserveLocked(b, key, t.AcademyId, actor);
         await tx.CommitAsync(); return row;
     }
-    internal async Task<ResourceBooking> ReserveLocked(BookingWrite b, string key, Guid academyId, Guid actor)
+    internal async Task<ResourceBooking> ReserveLocked(BookingWrite b, string key, Guid academyId, Guid actor, Guid? platformImportJob = null)
     {
         if (key.Length is < 8 or > 100) throw new FacilityRejected("تعذر تحديد عملية الحجز. حاول من نفس الصفحة.", 422);
         var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(b)));
         var prior = await db.ResourceBookings.SingleOrDefaultAsync(x => x.ActorUserId == actor && x.RequestKey == key);
         if (prior is not null) { if (prior.RequestHash != hash) throw new FacilityRejected("معرف الحجز مرتبط بتفاصيل أخرى."); return prior; }
-        var r = await Lock(b.ResourceId);
+        var r = await Lock(b.ResourceId, platformImportJob);
         if (b.CoachId.HasValue) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"facility-coach:{academyId}:{b.CoachId}"}, 0))");
         await CheckSlot(b, r, [], []);
         var row = new ResourceBooking { Id = Guid.NewGuid(), AcademyId = academyId, BranchId = r.BranchId, ResourceId = r.Id, TrainingGroupId = b.GroupId, TrainingSessionId = b.SessionId, CoachMembershipId = b.CoachId, Date = b.Date, StartTime = b.Start, EndTime = b.End, ReservedSeats = b.Seats, ApprovedCapacitySnapshot = r.Capacity, Exclusive = b.Exclusive, ServiceKind = b.ServiceKind, State = ResourceBookingState.Reserved, ActorUserId = actor, RequestKey = key, RequestHash = hash, CreatedAtUtc = time.GetUtcNow(), UpdatedAtUtc = time.GetUtcNow() };

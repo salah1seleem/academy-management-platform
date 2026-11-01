@@ -12,6 +12,6 @@ for (const allowed of [true, false, undefined]) {
     render(<PlayerAttendance sessionId="s" />);
     await screen.findByText("لاعب اختبار");
     if (allowed) { expect(screen.getByRole("button", { name: "حفظ الحضور" })).toBeVisible(); expect(screen.getByRole("button", { name: "تحديد الحاضرين" })).toBeVisible(); }
-    else { expect(screen.queryByRole("button", { name: "حفظ الحضور" })).not.toBeInTheDocument(); expect(screen.queryByRole("button", { name: "غائب" })).not.toBeInTheDocument(); expect(screen.getByRole("status")).toHaveTextContent("يتولى الإداري"); }
+    else { expect(screen.queryByRole("button", { name: "حفظ الحضور" })).not.toBeInTheDocument(); expect(screen.queryByRole("combobox", { name: /^حضور / })).not.toBeInTheDocument(); expect(screen.getByText(/الحضور للعرض فقط/)).toHaveAttribute("role","status"); }
   });
 }

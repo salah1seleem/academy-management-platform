@@ -55,3 +55,19 @@ it("keeps posted documents read-only and offers corrections, not history edits",
   global.fetch = vi.fn(async url => String(url).endsWith("/me") ? response({ role: "AcademyOwner" }) : String(url).endsWith("my-access") ? response({}) : String(url).endsWith("collections") ? response([]) : response({ document: { id: "doc", description: "مطالبة موثقة", amount: "540.00", currency: "EGP", dueDate: "2026-09-20" }, movements: [] }));
   render(<ReceivableDetail id="doc" />); await screen.findByRole("heading", { name: "إضافة حركة موثقة" }); expect(screen.getByText(/مستند مثبت لا يُعدل ولا يُحذف/)).toBeVisible(); expect(screen.queryByRole("button", { name: /حذف/ })).not.toBeInTheDocument();
 });
+it("distinguishes original charge from current credit and hides the prior document while another loads", async () => {
+  const source = { asOf: "2026-10-22T06:00:00Z", document: { id: "source", description: "مستند مصحح", amount: "200.00", currency: "EGP", dueDate: "2026-10-01" }, balance: { id: "source", outstanding: "-100.00", allocated: "200.00", credits: "100.00", currency: "EGP" }, movements: [] };
+  let finish: (r: Response) => void = () => {};
+  global.fetch = vi.fn(async url => String(url).endsWith("/me") ? response({role:"AcademyOwner"}) : String(url).endsWith("my-access") ? response({}) : String(url).endsWith("collections") ? response([]) : String(url).endsWith("/target") ? new Promise<Response>(resolve => {finish=resolve;}) : response(source));
+  const view = render(<ReceivableDetail id="source" />);
+  await screen.findByRole("heading", {name:"رصيد لصالح العميل"});
+  expect(screen.getByText(/أصل المطالبة: 200/)).toBeVisible();
+  expect(screen.getByText(/تحصيل مخصص: 200.*إشعار دائن: 100/)).toBeVisible();
+  expect(screen.getByText(/رصيد حتى/)).toBeVisible();
+  view.rerender(<ReceivableDetail id="target" />);
+  expect(screen.queryByText("مستند مصحح")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name:"تثبيت الحركة"})).not.toBeInTheDocument();
+  finish(response({...source,document:{...source.document,id:"foreign"}}));
+  await screen.findByText("لم تتأكد هوية مستند المستحقات. أعد فتحه من القائمة.");
+  expect(screen.queryByText("مستند مصحح")).not.toBeInTheDocument();
+});

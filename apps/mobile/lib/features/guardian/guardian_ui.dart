@@ -1,3 +1,12 @@
+import '../shared/role_home_navigation.dart';
+import '../shared/operation_design.dart';
+import '../../core/theme/academy_brand.dart';
+import '../shared/experience_ui.dart';
+import '../shared/self_profile.dart';
+import '../shared/profile_avatar.dart';
+import '../../core/widgets/home_skeleton.dart';
+import '../../core/widgets/page_status.dart';
+
 import 'package:academy_mobile/core/theme/ui_text.dart';
 
 import 'dart:math' as math;
@@ -8,15 +17,26 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/appearance.dart';
+import '../../core/theme/ocean_palette.dart';
 import '../shared/private_media.dart';
+import '../shared/role_shell_body.dart';
 
 typedef Json = Map<String, dynamic>;
 Json obj(Object? value) => value as Json;
 List<Json> rows(Object? value) => (value as List).cast<Json>();
+String performanceScoreText(num value) =>
+    value.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '');
 String textOf(Object? value) => value?.toString() ?? 'غير متاح';
 String day(Object? value) =>
     value == null ? 'غير محدد' : value.toString().split('T').first;
+String trainingTimeOf(Object? value) {
+  final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch('$value');
+  if (match == null) return 'غير محدد';
+  final hour = int.parse(match[1]!), minute = int.parse(match[2]!);
+  if (hour > 23 || minute > 59) return 'غير محدد';
+  return '${hour % 12 == 0 ? 12 : hour % 12}:${match[2]} ${hour < 12 ? 'صباحًا' : 'مساءً'}';
+}
+
 String amountText(Object? value) {
   final number = value is num ? value : num.tryParse('$value');
   if (number == null || !number.isFinite) return textOf(value);
@@ -30,8 +50,50 @@ String amountText(Object? value) {
 
 String money(Object? value, Object? currency) =>
     '${amountText(value)} ${currency == 'EGP' ? 'ج.م' : textOf(currency)}';
+
+/// Currency stays secondary without changing the canonical amount or rounding.
+class MoneyText extends StatelessWidget {
+  const MoneyText(
+    this.value,
+    this.currency, {
+    super.key,
+    this.size = 28,
+    this.color,
+  });
+  final Object? value, currency;
+  final double size;
+  final Color? color;
+  @override
+  Widget build(BuildContext context) => Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(
+          text: amountText(value),
+          style: TextStyle(
+            fontSize: size,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        TextSpan(
+          text: ' ${currency == 'EGP' ? 'ج.م' : textOf(currency)}',
+          style: TextStyle(
+            fontSize: size < 24 ? 10 : 12,
+            color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ),
+    semanticsLabel: money(value, currency),
+  );
+}
+
 String label(Object? value) =>
     const <String, String>{
+      'Draft': 'مسودة',
+      'Published': 'منشور لولي الأمر',
+      'PublishedInternal': 'للاستخدام الداخلي',
+      'Superseded': 'إصدار سابق',
       'Active': 'فعال',
       'Expiring': 'ينتهي قريبًا',
       'Expired': 'منتهي',
@@ -64,6 +126,11 @@ String label(Object? value) =>
       'Resume': 'استئناف',
       'AddDays': 'إضافة أيام',
       'DeductDays': 'خصم أيام',
+      'DaysAdded': 'إضافة أيام',
+      'SessionsAdded': 'إضافة حصص',
+      'DaysDeducted': 'خصم أيام',
+      'FreezeStarted': 'تجميد',
+      'FreezeEnded': 'استئناف',
       'Cancel': 'إلغاء',
       'Open': 'مفتوح',
       'Monitoring': 'متابعة',
@@ -90,6 +157,38 @@ int? ageOn(Object? birth, Object? today) {
       ((t.month < b.month || (t.month == b.month && t.day < b.day)) ? 1 : 0);
 }
 
+String trainingTimeRange(Object? start, Object? end) =>
+    'من ${trainingTimeOf(start)} إلى ${trainingTimeOf(end)}';
+
+String sessionDateLabel(Object? value) {
+  final d = DateTime.tryParse('$value');
+  if (d == null) return 'موعد غير محدد';
+  const days = [
+    'الاثنين',
+    'الثلاثاء',
+    'الأربعاء',
+    'الخميس',
+    'الجمعة',
+    'السبت',
+    'الأحد',
+  ];
+  const months = [
+    'يناير',
+    'فبراير',
+    'مارس',
+    'أبريل',
+    'مايو',
+    'يونيو',
+    'يوليو',
+    'أغسطس',
+    'سبتمبر',
+    'أكتوبر',
+    'نوفمبر',
+    'ديسمبر',
+  ];
+  return '${days[d.weekday - 1]} ${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
 String commandKey() => List.generate(
   24,
   (_) => math.Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
@@ -100,51 +199,7 @@ Future<T?> openPage<T>(BuildContext context, Widget page) =>
 ThemeData guardianTheme({
   Color primary = AcademyTheme.red,
   Color secondary = AcademyTheme.night,
-}) => ThemeData(
-  brightness: Brightness.dark,
-  useMaterial3: true,
-  fontFamily: 'Cairo',
-  colorScheme: ColorScheme.dark(
-    primary: Color.lerp(primary, Colors.white, .30)!,
-    secondary: Color.lerp(primary, Colors.white, .30)!,
-    surface: AcademyTheme.card,
-  ),
-  scaffoldBackgroundColor: secondary,
-  appBarTheme: AppBarTheme(backgroundColor: secondary, centerTitle: true),
-  inputDecorationTheme: InputDecorationTheme(
-    filled: true,
-    fillColor: AcademyTheme.card,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-  ),
-  filledButtonTheme: FilledButtonThemeData(
-    style: FilledButton.styleFrom(
-      backgroundColor: primary,
-      foregroundColor: Colors.white,
-      minimumSize: const Size.fromHeight(50),
-    ),
-  ),
-  cardTheme: CardThemeData(
-    color: AcademyTheme.card,
-    elevation: 0,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(22),
-      side: const BorderSide(color: Color(0xFF30333E), width: .7),
-    ),
-  ),
-  navigationBarTheme: NavigationBarThemeData(
-    backgroundColor: const Color(0xFF181A23),
-    indicatorColor: primary.withValues(alpha: .18),
-    labelTextStyle: WidgetStateProperty.resolveWith(
-      (s) => TextStyle(
-        fontFamily: 'Cairo',
-        fontSize: 10,
-        fontWeight: s.contains(WidgetState.selected)
-            ? FontWeight.w800
-            : FontWeight.w500,
-      ),
-    ),
-  ),
-);
+}) => AcademyTheme.dark(primary: primary);
 
 class GuardianPage extends StatelessWidget {
   final String title;
@@ -152,6 +207,7 @@ class GuardianPage extends StatelessWidget {
   final Widget? bottom;
   final List<Widget>? actions;
   final bool showAppBar;
+  final bool operation;
   const GuardianPage({
     super.key,
     required this.title,
@@ -159,58 +215,163 @@ class GuardianPage extends StatelessWidget {
     this.bottom,
     this.actions,
     this.showAppBar = true,
+    this.operation = false,
   });
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: !showAppBar
-        ? null
-        : AppBar(
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const AcademyCrest(size: 30),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: UiText(
-                    title,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            actions: actions,
-          ),
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 650),
-          child: child,
-        ),
+  Widget build(BuildContext context) {
+    final embedded = showAppBar && RoleShellBody.contains(context);
+    final content = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 650),
+        child: operation
+            ? Theme(data: operationTheme(context), child: child)
+            : child,
       ),
-    ),
-    bottomNavigationBar: bottom == null
-        ? null
-        : SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: bottom,
-            ),
+    );
+    final brand = BrandScope.maybeOf(context);
+    final role = switch (brand?.auth.session?.selected?.role) {
+      'AcademyOwner' => 'المالك',
+      'AcademyAdmin' => 'الإداري',
+      'Coach' => 'المدرب',
+      _ => 'ولي الأمر',
+    };
+    final titleSize = title.length > 26 ? 18.0 : 23.0;
+    final titleMeasure =
+        TextPainter(
+          text: TextSpan(
+            text: ui(context, title),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontSize: titleSize, fontWeight: FontWeight.w800),
           ),
-  );
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 2,
+        )..layout(
+          maxWidth: math.max(
+            80,
+            math.min(650, MediaQuery.sizeOf(context).width) -
+                96 -
+                (actions?.length ?? 0) * 48,
+          ),
+        );
+    final toolbarHeight = math.max(56.0, titleMeasure.height + 20);
+    titleMeasure.dispose();
+    final navigationBar = AppBar(
+      primary: brand?.signedIn != true,
+      toolbarHeight: toolbarHeight,
+      title: UiText(
+        title,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w800),
+      ),
+      leading:
+          brand?.auth.session?.selected?.role == 'AcademyOwner' &&
+              Navigator.canPop(context)
+          ? BackButton(
+              onPressed: () {
+                ownerHomeAction(brand!.auth)?.call();
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+            )
+          : null,
+      actions: actions,
+    );
+    return Scaffold(
+      appBar: !showAppBar || embedded
+          ? null
+          : brand?.signedIn == true
+          ? PreferredSize(
+              preferredSize: Size.fromHeight(
+                ExperienceHeader.heightFor(context, brand!.auth, role) +
+                    navigationBar.preferredSize.height,
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ExperienceHeader(
+                      auth: brand.auth,
+                      subtitle: role,
+                      lesson: '',
+                      account: GuardianPage(
+                        title: 'حسابي',
+                        child: SelfProfileCard(auth: brand.auth),
+                      ),
+                    ),
+                    navigationBar,
+                  ],
+                ),
+              ),
+            )
+          : navigationBar,
+      body: SafeArea(
+        child: embedded
+            ? Column(
+                children: [
+                  Align(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 650),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 4,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Semantics(
+                                  header: true,
+                                  child: UiText(
+                                    title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: title.length > 26 ? 18 : 23,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              ...?actions,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(child: content),
+                ],
+              )
+            : content,
+      ),
+      bottomNavigationBar: bottom == null
+          ? null
+          : PageActionBar(child: bottom!),
+    );
+  }
 }
 
 class GCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
-  const GCard({super.key, required this.child, this.onTap});
+  final EdgeInsetsGeometry padding;
+  const GCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.padding = const EdgeInsets.all(18),
+  });
   @override
   Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 14),
+    margin: const EdgeInsets.only(bottom: 12),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
       onTap: onTap,
-      child: Padding(padding: const EdgeInsets.all(16), child: child),
+      child: Padding(padding: padding, child: child),
     ),
   );
 }
@@ -220,16 +381,57 @@ class GLink extends StatelessWidget {
   final String? subtitle;
   final IconData icon;
   final VoidCallback onTap;
-  const GLink(this.title, this.icon, this.onTap, {super.key, this.subtitle});
+  final bool compact;
+  const GLink(
+    this.title,
+    this.icon,
+    this.onTap, {
+    super.key,
+    this.subtitle,
+    this.compact = false,
+  });
   @override
   Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 12),
+    margin: EdgeInsets.only(bottom: compact ? 6 : 12),
     child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      title: UiText(title),
+      dense: compact,
+      minTileHeight: compact ? 52 : 64,
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 16,
+        vertical: compact ? 0 : 5,
+      ),
+      leading: compact
+          ? null
+          : Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary
+                    .withValues(alpha: .09),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                icon,
+                size: 21,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+      title: UiText(
+        title,
+        style: TextStyle(
+          fontSize: compact ? 13 : 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       subtitle: subtitle == null ? null : UiText(subtitle!),
-      trailing: Icon(Icons.chevron_left),
+      trailing: Icon(
+        Directionality.of(context) == TextDirection.rtl
+            ? Icons.chevron_left_rounded
+            : Icons.chevron_right_rounded,
+        textDirection: TextDirection.ltr,
+        size: 24,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
       onTap: onTap,
     ),
   );
@@ -240,10 +442,13 @@ class Heading extends StatelessWidget {
   const Heading(this.text, {super.key});
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    child: UiText(
-      text,
-      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    padding: const EdgeInsets.only(top: 20, bottom: 12),
+    child: Semantics(
+      header: true,
+      child: UiText(
+        text,
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
     ),
   );
 }
@@ -254,8 +459,8 @@ class EmptyMessage extends StatelessWidget {
     : super(key: key);
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(20),
-    child: UiText(text, textAlign: TextAlign.center),
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+    child: StatusPanel(message: text),
   );
 }
 
@@ -264,66 +469,160 @@ class StatusPill extends StatelessWidget {
   final double fontSize;
   const StatusPill(this.status, {super.key, this.fontSize = 12});
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
-      borderRadius: BorderRadius.circular(18),
-    ),
-    child: UiText(
-      label(status),
-      style: TextStyle(
-        color: Theme.of(context).colorScheme.primary,
-        fontSize: fontSize,
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final value = status?.toString().toLowerCase() ?? '';
+    final good = [
+      'active',
+      'approved',
+      'accepted',
+      'paid',
+      'completed',
+      'present',
+      'published',
+      'publishedinternal',
+    ].contains(value);
+    final waiting = [
+      'pending',
+      'expiring',
+      'draft',
+      'review',
+      'pendingreview',
+      'partial',
+    ].contains(value);
+    final bad = [
+      'expired',
+      'rejected',
+      'failed',
+      'overdue',
+      'absent',
+      'suspended',
+    ].contains(value);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final ocean = OceanPalette.active(Theme.of(context));
+    final color = good
+        ? (ocean
+              ? OceanPalette.positive
+              : dark
+              ? const Color(0xFF72D6B3)
+              : const Color(0xFF18795C))
+        : waiting
+        ? (ocean
+              ? OceanPalette.warning
+              : dark
+              ? const Color(0xFFF2C76C)
+              : const Color(0xFF94600E))
+        : bad
+        ? c.error
+        : c.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(10),
       ),
-    ),
-  );
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: UiText(
+              label(status),
+              style: TextStyle(
+                color: color,
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class PlayerAvatar extends StatelessWidget {
   final String name;
   final double size;
+  final double? height;
+  final AlignmentGeometry alignment;
   final AuthController? auth;
   final Object? reference;
   final bool adult;
+  final Object? gender;
+  final bool square, border;
+  final String? avatarRole, identity;
   const PlayerAvatar(
     this.name, {
     super.key,
     this.size = 64,
+    this.height,
+    this.alignment = Alignment.center,
     this.auth,
     this.reference,
     this.adult = false,
+    this.gender,
+    this.square = false,
+    this.border = false,
+    this.avatarRole,
+    this.identity,
   });
   @override
   Widget build(BuildContext context) => Semantics(
     label: adult ? 'صورة العضو' : 'صورة اللاعب',
     child: Container(
       width: size,
-      height: size,
+      height: height ?? size,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary,
-          width: 3,
-        ),
-        color: const Color(0xFF37374A),
+        shape: square ? BoxShape.rectangle : BoxShape.circle,
+        border: square || !border
+            ? null
+            : Border.all(
+                color: Theme.of(context).colorScheme.primary,
+                width: 3,
+              ),
+        color: OceanPalette.active(Theme.of(context))
+            ? OceanPalette.raised
+            : const Color(0xFF37374A),
       ),
       clipBehavior: Clip.antiAlias,
       child: auth != null && isPrivateAsset(reference)
-          ? PrivateImage(auth: auth!, path: reference.toString(), height: size)
+          ? PrivateImage(
+              auth: auth!,
+              path: reference.toString(),
+              height: height ?? size,
+              alignment: alignment,
+              fallback: IllustratedAvatar(
+                adult: adult,
+                gender: gender,
+                identity: identity ?? name,
+                role: avatarRole,
+              ),
+            )
           : RegExp(
-              r'^/demo-assets/portraits/(child|coach|guardian)-0[12]\.jpg$',
+              r'^/demo-assets/portraits/(?:(?:child|coach|guardian)-0[12]|reference-child-0[123])\.jpg$',
             ).hasMatch('$reference')
           ? Image.asset(
               'assets/demo/portraits/${reference.toString().split('/').last}',
               fit: BoxFit.cover,
-            )
-          : Center(
-              child: Icon(
-                adult ? Icons.person_rounded : Icons.child_care_rounded,
-                size: size * .56,
-                color: Colors.white54,
+              alignment: alignment,
+              errorBuilder: (_, _, _) => IllustratedAvatar(
+                adult: adult,
+                gender: gender,
+                identity: identity ?? name,
+                role: avatarRole,
               ),
+            )
+          : IllustratedAvatar(
+              adult: adult,
+              gender: gender,
+              identity: identity ?? name,
+              role: avatarRole,
             ),
     ),
   );
@@ -333,7 +632,13 @@ class PlayerAvatar extends StatelessWidget {
 class DemoImage extends StatelessWidget {
   final Object? reference;
   final double height;
-  const DemoImage(this.reference, {super.key, this.height = 150});
+  final BorderRadius borderRadius;
+  const DemoImage(
+    this.reference, {
+    super.key,
+    this.height = 150,
+    this.borderRadius = const BorderRadius.all(Radius.circular(14)),
+  });
   static const allowed = {
     'catalog-football.svg',
     'catalog-swimming.svg',
@@ -349,11 +654,26 @@ class DemoImage extends StatelessWidget {
       r'^/demo-assets/nutrition/(breakfast|lunch|dinner)-[1-6]\.jpg$',
     ).hasMatch(path);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: borderRadius,
       child: SizedBox(
         height: height,
         width: double.infinity,
-        child: nutritionPhoto
+        child:
+            const {
+              '/demo-assets/catalog-iacademy-kit.png',
+              '/demo-assets/catalog-iacademy-ball.png',
+              '/demo-assets/catalog-iacademy-socks.png',
+              '/demo-assets/catalog-iacademy-training.png',
+              '/demo-assets/professional-kit-red.jpg',
+              '/demo-assets/professional-kit-turquoise.jpg',
+              '/demo-assets/professional-kit-black.jpg',
+            }.contains(path)
+            ? Image.asset(
+                'assets/demo/$name',
+                fit: BoxFit.contain,
+                semanticLabel: 'منتج رياضي I Academy One',
+              )
+            : nutritionPhoto
             ? Image.asset(
                 'assets/demo/nutrition/$name',
                 fit: BoxFit.cover,
@@ -365,9 +685,11 @@ class DemoImage extends StatelessWidget {
                 fit: BoxFit.cover,
                 semanticsLabel: 'رسم توضيحي تجريبي',
               )
-            : const ColoredBox(
-                color: AcademyTheme.card,
-                child: Center(
+            : ColoredBox(
+                color: OceanPalette.active(Theme.of(context))
+                    ? OceanPalette.raised
+                    : AcademyTheme.card,
+                child: const Center(
                   child: Icon(Icons.image_not_supported_outlined, size: 40),
                 ),
               ),
@@ -379,12 +701,14 @@ class DemoImage extends StatelessWidget {
 class RemoteBody extends StatefulWidget {
   final AuthController auth;
   final String path;
+  final ScrollController? pagingController;
   final Widget Function(BuildContext, Object?) builder;
   const RemoteBody({
     super.key,
     required this.auth,
     required this.path,
     required this.builder,
+    this.pagingController,
   });
   @override
   State<RemoteBody> createState() => _RemoteBodyState();
@@ -392,80 +716,300 @@ class RemoteBody extends StatefulWidget {
 
 class _RemoteBodyState extends State<RemoteBody> {
   late Future<Object?> future;
+  late String? openedIdentity;
+  Object? accumulated;
+  bool loadingMore = false, exhausted = false;
+  Object? moreError;
+  Object? fatalError;
+  int generation = 0, cursor = 0, consumed = 0;
+  String? get identity => widget.auth.session?.selected == null
+      ? null
+      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  Uri get uri => Uri.parse(widget.path);
+  String? get cursorKey => uri.queryParameters.containsKey('page')
+      ? 'page'
+      : uri.queryParameters.containsKey('offset')
+      ? 'offset'
+      : null;
+  String? collection(Object? value) {
+    if (value is! Json ||
+        ((value['total'] ?? value['totalCount'] ?? value['count']) is! num &&
+            value['hasMore'] is! bool) ||
+        cursorKey == null) {
+      return null;
+    }
+    for (final name in ['items', 'players', 'rows', 'entries']) {
+      if (value[name] is List) return name;
+    }
+    return null;
+  }
+
+  bool get hasMore {
+    if (exhausted || collection(accumulated) == null) return false;
+    final data = accumulated as Json;
+    return data['hasMore'] is bool
+        ? data['hasMore'] == true
+        : consumed <
+              ((data['total'] ?? data['totalCount'] ?? data['count']) as num);
+  }
+
   @override
   void initState() {
     super.initState();
+    openedIdentity = identity;
+    widget.auth.addListener(authChanged);
+    widget.pagingController?.addListener(controllerChanged);
     future = load();
   }
 
-  Future<Object?> load() => widget.auth.request('GET', widget.path);
-  @override
-  void didUpdateWidget(RemoteBody old) {
-    super.didUpdateWidget(old);
-    if (old.path != widget.path) future = load();
+  void authChanged() {
+    if (mounted && openedIdentity != identity) {
+      setState(() {
+        generation++;
+        accumulated = null;
+      });
+    }
+  }
+
+  void controllerChanged() {
+    final c = widget.pagingController;
+    if (c != null && c.hasClients && c.position.extentAfter < 240) loadMore();
+  }
+
+  Future<Object?> load() async {
+    final version = ++generation;
+    accumulated = null;
+    consumed = 0;
+    exhausted = false;
+    loadingMore = false;
+    moreError = null;
+    fatalError = null;
+    cursor =
+        int.tryParse(uri.queryParameters[cursorKey ?? ''] ?? '') ??
+        (cursorKey == 'page' ? 1 : 0);
+    final value = await widget.auth.request('GET', widget.path);
+    if (version == generation && mounted && openedIdentity == identity) {
+      accumulated = value;
+      final key = collection(value);
+      if (key != null) consumed = ((value as Json)[key] as List).length;
+    }
+    return value;
+  }
+
+  Future<void> loadMore() async {
+    if (!mounted ||
+        openedIdentity != identity ||
+        loadingMore ||
+        !hasMore ||
+        moreError != null) {
+      return;
+    }
+    final version = generation, key = collection(accumulated)!;
+    final data = accumulated as Json;
+    final size =
+        (data['pageSize'] as num?)?.toInt() ??
+        int.tryParse(uri.queryParameters['pageSize'] ?? '') ??
+        (data[key] as List).length;
+    final next = cursorKey == 'page' ? cursor + 1 : cursor + size;
+    setState(() => loadingMore = true);
+    try {
+      final value = await widget.auth.request(
+        'GET',
+        uri
+            .replace(
+              queryParameters: {...uri.queryParameters, cursorKey!: '$next'},
+            )
+            .toString(),
+      );
+      if (!mounted || version != generation || openedIdentity != identity) {
+        return;
+      }
+      final result = obj(value), added = (result[key] as List);
+      final known = {
+        for (final row in data[key] as List)
+          if (row is Map && row['id'] != null) row['id'],
+      };
+      final unique = added
+          .where(
+            (row) => row is! Map || row['id'] == null || known.add(row['id']),
+          )
+          .toList();
+      setState(() {
+        accumulated = {
+          ...result,
+          key: [...data[key] as List, ...unique],
+        };
+        consumed += added.length;
+        cursor = next;
+        exhausted = unique.isEmpty;
+      });
+    } catch (error) {
+      if (mounted && version == generation && openedIdentity == identity) {
+        setState(() {
+          if (error is ApiFailure && [401, 403, 404].contains(error.status)) {
+            accumulated = null;
+            fatalError = error;
+            exhausted = true;
+          } else {
+            moreError = error;
+          }
+        });
+      }
+    } finally {
+      if (mounted && version == generation && openedIdentity == identity) {
+        setState(() => loadingMore = false);
+      }
+    }
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Object?>(
-    future: future,
-    builder: (context, snapshot) {
-      if (snapshot.connectionState != ConnectionState.done) {
-        return const Center(
-          child: CircularProgressIndicator(semanticsLabel: 'جارٍ التحميل'),
-        );
-      }
-      if (snapshot.hasError) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                UiText(
-                  snapshot.error is ApiFailure
-                      ? (snapshot.error as ApiFailure).message
-                      : 'تعذر عرض البيانات.',
-                ),
-                TextButton(
-                  onPressed: () => setState(() {
-                    future = load();
-                  }),
-                  child: const UiText('إعادة المحاولة'),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-      Widget content;
-      try {
-        content = widget.builder(context, snapshot.data);
-      } catch (_) {
-        return const EmptyMessage(
-          'تعذر قراءة بيانات الشاشة. حدّثها وحاول مجددًا.',
-        );
-      }
-      return RefreshIndicator(
-        onRefresh: () async {
-          setState(() {
-            future = load();
-          });
-          try {
-            await future;
-          } catch (_) {
-            /* Rendered above. */
+  void didUpdateWidget(RemoteBody old) {
+    super.didUpdateWidget(old);
+    if (old.auth != widget.auth) {
+      old.auth.removeListener(authChanged);
+      widget.auth.addListener(authChanged);
+      openedIdentity = identity;
+    }
+    if (old.pagingController != widget.pagingController) {
+      old.pagingController?.removeListener(controllerChanged);
+      widget.pagingController?.addListener(controllerChanged);
+    }
+    if (old.path != widget.path || old.auth != widget.auth) future = load();
+  }
+
+  @override
+  void dispose() {
+    widget.auth.removeListener(authChanged);
+    widget.pagingController?.removeListener(controllerChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (openedIdentity != identity) return const SizedBox.shrink();
+    return FutureBuilder<Object?>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          if (widget.path == '/api/v1/guardian/home') {
+            return const HomeSkeleton(role: 'Guardian');
           }
-        },
-        child: content,
-      );
-    },
-  );
+          return const PageLoading();
+        }
+        if (snapshot.hasError || fatalError != null) {
+          final failure = fatalError ?? snapshot.error;
+          final denied =
+              failure is ApiFailure && [401, 403].contains(failure.status);
+          return PageStatus(
+            child: StatusPanel(
+              title: denied ? 'لا يمكن عرض هذه الصفحة' : 'تعذر تحميل البيانات',
+              icon: denied
+                  ? Icons.lock_outline_rounded
+                  : Icons.wifi_off_rounded,
+              urgent: true,
+              message: (fatalError ?? snapshot.error) is ApiFailure
+                  ? ((fatalError ?? snapshot.error) as ApiFailure).message
+                  : 'تعذر عرض البيانات.',
+              onAction: () => setState(() {
+                future = load();
+              }),
+              actionLabel: 'إعادة المحاولة',
+            ),
+          );
+        }
+        Widget content;
+        try {
+          content = widget.builder(context, accumulated ?? snapshot.data);
+        } catch (_) {
+          return const EmptyMessage(
+            'تعذر قراءة بيانات الشاشة. حدّثها وحاول مجددًا.',
+          );
+        }
+        if (cursorKey != null) {
+          final body = content;
+          content = NotificationListener<ScrollNotification>(
+            onNotification: (n) {
+              if (n.depth == 0 &&
+                  n.metrics.axis == Axis.vertical &&
+                  n.metrics.extentAfter < 240) {
+                loadMore();
+              }
+              return false;
+            },
+            child: LayoutBuilder(
+              builder: (context, bounds) {
+                final footer = [
+                  if (loadingMore)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: LinearProgressIndicator(
+                        semanticsLabel: 'تحميل المزيد',
+                      ),
+                    ),
+                  if (moreError != null)
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() => moreError = null);
+                        loadMore();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const UiText('تعذر تحميل المزيد · إعادة المحاولة'),
+                    ),
+                ];
+                return Column(
+                  mainAxisSize: bounds.hasBoundedHeight
+                      ? MainAxisSize.max
+                      : MainAxisSize.min,
+                  children: [
+                    if (bounds.hasBoundedHeight)
+                      Expanded(child: body)
+                    else
+                      body,
+                    ...footer,
+                  ],
+                );
+              },
+            ),
+          );
+        }
+        return RefreshIndicator(
+          onRefresh: () async {
+            setState(() {
+              future = load();
+            });
+            try {
+              await future;
+            } catch (_) {}
+          },
+          child: content,
+        );
+      },
+    );
+  }
 }
 
-Widget gList(List<Widget> children) => ListView(
-  padding: const EdgeInsets.all(18),
-  physics: const AlwaysScrollableScrollPhysics(),
-  children: children,
+Widget gList(
+  List<Widget> children, {
+  Key? key,
+  ScrollController? controller,
+  VoidCallback? onNearEnd,
+}) => NotificationListener<ScrollNotification>(
+  onNotification: (notice) {
+    if (notice.depth == 0 &&
+        notice.metrics.axis == Axis.vertical &&
+        notice.metrics.extentAfter < 240) {
+      onNearEnd?.call();
+    }
+    return false;
+  },
+  child: ListView(
+    controller: controller,
+    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+    key: key,
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+    physics: const AlwaysScrollableScrollPhysics(),
+    children: children,
+  ),
 );
 
 class Facts extends StatelessWidget {
@@ -479,7 +1023,9 @@ class Facts extends StatelessWidget {
       children: values
           .map(
             (v) => SizedBox(
-              width: (c.maxWidth - 12) / 2,
+              width: MediaQuery.textScalerOf(context).scale(1) > 1.4
+                  ? c.maxWidth
+                  : (c.maxWidth - 12) / 2,
               child: GCard(
                 child: Column(
                   children: [
@@ -488,14 +1034,17 @@ class Facts extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 25,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     UiText(
                       v.$1,
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),

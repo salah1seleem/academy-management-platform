@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Persistence;
@@ -11,14 +13,17 @@ namespace Academy.Api.Slice2;
 // A read model of associated subscriptions, not collections, payer identity, or revenue.
 public static class MemberSubscriptionValues
 {
+    internal static async Task<bool> FinancialValuesVisible(TenantMembership t,ClaimsPrincipal actor,IAuthorizationService authorization,FoundationDbContext db) => t.Role==AcademyRole.AcademyOwner ||
+        (await authorization.AuthorizeAsync(actor,null,AcademyPermissions.ReportsFinancialRead)).Succeeded && await StaffWorkflowAccess.Allows(db,t.MembershipId,"/api/v1/reports/financial","GET");
     public const string Basis = "القيمة الشهرية المكافئة للاشتراكات السارية؛ ليست تحصيلًا أو إثباتًا للدافع.";
     // Member initializers remain composable inside EF aggregates and ordering.
     public sealed class PeriodValue { public Guid PlayerId {get;init;} public decimal? MonthlyValue {get;init;} }
     public sealed class GuardianValue {
         public Guid Id {get;init;} public required string DisplayName {get;init;} public string? ContactPhone {get;init;}
         public string? PhotoReference {get;init;}
-        public int LinkedChildren {get;init;} public decimal MonthlySubscriptionValue {get;init;}
-        public int UnpricedSubscriptions {get;init;} public required string Currency {get;init;}
+        public string? Gender {get;init;}
+        public int LinkedChildren {get;init;} public decimal? MonthlySubscriptionValue {get;init;}
+        public int? UnpricedSubscriptions {get;init;} public required string Currency {get;init;}
     }
 
     public static IQueryable<PeriodValue> Active(FoundationDbContext db, Guid academy, DateOnly day, string currency,
@@ -45,7 +50,7 @@ public static class MemberSubscriptionValues
     }
 
     public static IQueryable<GuardianValue> Guardians(FoundationDbContext db, Guid academy, DateOnly day, string currency,
-        Guid? branch = null, Guid? sport = null, string? search = null)
+        Guid? branch = null, Guid? sport = null, string? search = null, bool includeFinancial = true)
     {
         var values = Active(db, academy, day, currency, branch, sport);
         var links = db.GuardianPlayerLinks.Where(l => l.AcademyId == academy && l.IsActive && l.Guardian.IsActive && l.Player.IsActive
@@ -56,20 +61,22 @@ public static class MemberSubscriptionValues
         return db.GuardianProfiles.AsNoTracking().Where(g => g.AcademyId == academy && g.IsActive
             && (string.IsNullOrEmpty(term) || g.DisplayName.Contains(term) || phone != null && g.ContactPhone == phone)
             && (!branch.HasValue && !sport.HasValue || links.Any(l => l.GuardianId == g.Id)))
-            .Select(g => new GuardianValue {Id=g.Id, DisplayName=g.DisplayName, ContactPhone=g.ContactPhone, PhotoReference=g.PhotoReference,
+            .Select(g => new GuardianValue {Id=g.Id, DisplayName=g.DisplayName, ContactPhone=g.ContactPhone, PhotoReference=g.PhotoReference, Gender=db.UserClaims.Where(c=>c.UserId==g.UserId&&c.ClaimType==Academy.Api.Operations.SelfProfileEndpoints.GenderClaim).Select(c=>c.ClaimValue).FirstOrDefault(),
                 LinkedChildren=links.Count(l => l.GuardianId == g.Id),
-                MonthlySubscriptionValue=Math.Round(values.Where(v => links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)).Sum(v => v.MonthlyValue) ?? 0, 2),
-                UnpricedSubscriptions=values.Count(v => v.MonthlyValue == null && links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)), Currency=currency});
+                MonthlySubscriptionValue=includeFinancial?Math.Round(values.Where(v => links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)).Sum(v => v.MonthlyValue) ?? 0, 2):(decimal?)null,
+                UnpricedSubscriptions=includeFinancial?values.Count(v => v.MonthlyValue == null && links.Where(l => l.GuardianId == g.Id).Select(l => l.PlayerId).Contains(v.PlayerId)):(int?)null, Currency=currency});
     }
 
     public static async Task<IResult> GuardianList(string? search, string? sort, int? page, int? pageSize, Guid? branchId, Guid? sportId,
-        DateOnly? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
+        DateOnly? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, ClaimsPrincipal actor, IAuthorizationService authorization)
     {
         var t = (await tenant.ResolveAsync())!;
+        var financialValuesVisible=await FinancialValuesVisible(t,actor,authorization,db);
+        if(!financialValuesVisible&&sort is "value_asc" or "value_desc")return Results.Problem(statusCode:403,title:"الترتيب بالقيم المالية يحتاج صلاحية التقارير المالية.");
         if (sort is not (null or "" or "name" or "value_asc" or "value_desc") || page is < 1 or > 1000000 || pageSize is < 1 or > 100)
             return Results.UnprocessableEntity(new { message = "اختر ترتيبًا وصفحة صحيحين." });
         var currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync();
-        var date = asOf ?? clock.Today; var query = Guardians(db, t.AcademyId, date, currency, branchId, sportId, search);
+        var date = asOf ?? clock.Today; var query = Guardians(db, t.AcademyId, date, currency, branchId, sportId, search,financialValuesVisible);
         var ordered = sort switch {
             "value_desc" => query.OrderBy(g => g.UnpricedSubscriptions > 0).ThenByDescending(g => g.MonthlySubscriptionValue).ThenBy(g => g.DisplayName).ThenBy(g => g.Id),
             "value_asc" => query.OrderBy(g => g.UnpricedSubscriptions > 0).ThenBy(g => g.MonthlySubscriptionValue).ThenBy(g => g.DisplayName).ThenBy(g => g.Id),
@@ -77,7 +84,7 @@ public static class MemberSubscriptionValues
         };
         if (!page.HasValue && !pageSize.HasValue) return Results.Ok(await ordered.ToArrayAsync()); // Existing callers retain array contract.
         var size = pageSize ?? 25; var number = page ?? 1;
-        return Results.Ok(new { items = await ordered.Skip((number - 1) * size).Take(size).ToArrayAsync(), total = await query.CountAsync(), page = number, pageSize = size, currency, asOf = date, basis = Basis });
+        return Results.Ok(new { items = await ordered.Skip((number - 1) * size).Take(size).ToArrayAsync(), total = await query.CountAsync(), page = number, pageSize = size, currency, asOf = date, financialValuesVisible, basis = financialValuesVisible?Basis:null });
     }
 
     public static void MapVipMembers(this WebApplication app) => app.MapGet("/api/v1/reports/vip-members",
@@ -86,7 +93,7 @@ public static class MemberSubscriptionValues
             var currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(); var date = asOf ?? clock.Today;
             var items = await Guardians(db, t.AcademyId, date, currency, branchId, sportId).Where(g => g.UnpricedSubscriptions == 0 && g.MonthlySubscriptionValue > 0)
                 .OrderByDescending(g => g.MonthlySubscriptionValue).ThenBy(g => g.DisplayName).ThenBy(g => g.Id).Take(10)
-                .Select(g => new { g.Id, g.DisplayName, g.MonthlySubscriptionValue, g.Currency, g.PhotoReference }).ToArrayAsync();
+                .Select(g => new { g.Id, g.DisplayName, g.MonthlySubscriptionValue, g.Currency, g.PhotoReference, g.Gender }).ToArrayAsync();
             return Results.Ok(new { items, currency, asOf = date, basis = Basis });
         }).RequireAuthorization(AcademyPermissions.OwnerDashboardRead);
 }

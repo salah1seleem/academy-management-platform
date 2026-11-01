@@ -74,7 +74,7 @@ public static class PlatformIdentity
         await db.SaveChangesAsync(); await tx.CommitAsync();
         await context.SignOutAsync(Scheme);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new(ClaimTypes.NameIdentifier, user.Id.ToString()), new(ClaimTypes.Name, user.DisplayName), new("platform_mfa", demoMfa ? "demo" : "totp"), new("platform_stamp", user.SecurityStamp ?? "")], Scheme));
-        await context.SignInAsync(Scheme, principal, new AuthenticationProperties { IsPersistent = false, ExpiresUtc = now.AddMinutes(15), AllowRefresh = false });
+        await context.SignInAsync(Scheme, principal, new AuthenticationProperties { IsPersistent = false, ExpiresUtc = now.AddHours(1), AllowRefresh = true });
         return Results.Ok(new { authenticated = true, demo = demoMfa });
     }
     public static async Task SeedDemo(IServiceProvider services)

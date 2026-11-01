@@ -24,6 +24,91 @@ public sealed class V2PlatformIdentityTests : IAsyncLifetime
     public async Task DisposeAsync() => await factory.DisposeAsync();
 
     [Fact]
+    public async Task Platform_single_intake_ignores_legacy_link_flag_normalizes_slug_and_preserves_identity()
+    {
+        using var platform = factory.CreateClient(); (await Login(platform)).EnsureSuccessStatusCode();
+        var request = new PlatformAcademyWrite(Guid.NewGuid(), "Mixed-" + Guid.NewGuid().ToString("N")[..12], "أكاديمية إنشاء مبسط خيالية", "EGP", "Africa/Cairo", "مالك إنشاء خيالي", $"simple-{Guid.NewGuid():N}@example.test", "Demo-Only-123!", "multi-sport", "01084720930");
+        var legacy = JsonSerializer.SerializeToNode(request, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        legacy["associateExistingOwner"] = true;
+        var response = await Send(platform, "/api/v1/platform/academies", legacy); response.EnsureSuccessStatusCode();
+        var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        legacy["associateExistingOwner"] = false;
+        var replay = await Send(platform, "/api/v1/platform/academies", legacy); replay.EnsureSuccessStatusCode();
+        Assert.Equal(id, (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var originalUser = await db.Users.SingleAsync(x => x.Email == request.OwnerEmail); var passwordHash = originalUser.PasswordHash;
+        Assert.Equal(request.Slug!.ToLowerInvariant(), (await db.Academies.SingleAsync(x => x.Id == id)).Slug);
+        var second = request with { RequestId = Guid.NewGuid(), Slug = "second-" + Guid.NewGuid().ToString("N")[..12], InitialPassword = "Not-Applied-2026!" };
+        (await Send(platform, "/api/v1/platform/academies", second)).EnsureSuccessStatusCode();
+        Assert.Equal(passwordHash, await db.Users.Where(x => x.Id == originalUser.Id).Select(x => x.PasswordHash).SingleAsync());
+        Assert.Equal(1, await db.Users.CountAsync(x => x.Email == request.OwnerEmail));
+        var mismatch = second with { RequestId = Guid.NewGuid(), Slug = "mismatch-" + Guid.NewGuid().ToString("N")[..12], OwnerName = "شخص آخر" };
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(platform, "/api/v1/platform/academies", mismatch)).StatusCode);
+        Assert.False(await db.Academies.AnyAsync(x => x.Slug == mismatch.Slug));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(platform, "/api/v1/platform/academies", mismatch with { OwnerName = request.OwnerName, OwnerEmail = "other-" + request.OwnerEmail })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Platform_provision_names_the_invalid_field_without_creating_records()
+    {
+        using var platform = factory.CreateClient(); (await Login(platform)).EnsureSuccessStatusCode();
+        var valid = new PlatformAcademyWrite(Guid.NewGuid(), "field-" + Guid.NewGuid().ToString("N")[..12], "أكاديمية حقول خيالية", "EGP", "Africa/Cairo", "مالك حقول خيالي", $"fields-{Guid.NewGuid():N}@example.test", "Demo-Only-123!", "multi-sport");
+        var cases = new (PlatformAcademyWrite Body, string Field)[] {
+            (valid with { RequestId = Guid.Empty }, "requestId"),
+            (valid with { ArabicName = " " }, "arabicName"),
+            (valid with { Currency = "invalid" }, "currency"),
+            (valid with { TimeZone = "Cairo" }, "timeZone"),
+            (valid with { OwnerName = " " }, "ownerName"),
+            (valid with { OwnerEmail = "invalid" }, "ownerEmail"),
+            (valid with { InitialPassword = "" }, "password"),
+            (valid with { Template = "invalid" }, "template")
+        };
+        foreach (var (body, field) in cases) {
+            var response = await Send(platform, "/api/v1/platform/academies", body);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(field, problem.GetProperty("field").GetString());
+            Assert.DoesNotContain("راجع بيانات الأكاديمية وحساب المالك", problem.GetProperty("title").GetString());
+        }
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.False(await db.Academies.AnyAsync(x => x.Slug == valid.Slug));
+        Assert.False(await db.Users.AnyAsync(x => x.Email == valid.OwnerEmail));
+    }
+
+    [Fact]
+    public async Task Platform_new_owner_password_failure_is_actionable_atomic_and_retryable()
+    {
+        using var platform = factory.CreateClient(); (await Login(platform)).EnsureSuccessStatusCode();
+        var request = new PlatformAcademyWrite(Guid.NewGuid(), "password-" + Guid.NewGuid().ToString("N")[..12], "أكاديمية مالك جديد خيالية", "EGP", "Africa/Cairo", "مالك خيالي", $"password-{Guid.NewGuid():N}@example.test", "abcdefghijkl", "multi-sport");
+        var failed = await Send(platform, "/api/v1/platform/academies", request);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, failed.StatusCode);
+        var problem = await failed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("password", problem.GetProperty("field").GetString());
+        Assert.Contains("حرف إنجليزي كبير وصغير ورقم ورمز", problem.GetProperty("title").GetString());
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.False(await db.Academies.AnyAsync(x => x.Slug == request.Slug));
+        Assert.False(await db.Users.AnyAsync(x => x.Email == request.OwnerEmail));
+        var corrected = request with { InitialPassword = "Demo-Only-123!" };
+        var success = await Send(platform, "/api/v1/platform/academies", corrected); success.EnsureSuccessStatusCode();
+        var id = (await success.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var replay = await Send(platform, "/api/v1/platform/academies", corrected); replay.EnsureSuccessStatusCode();
+        Assert.Equal(id, (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid());
+        Assert.Equal(1, await db.Academies.CountAsync(x => x.Slug == request.Slug));
+        Assert.Equal(1, await db.AcademyMemberships.CountAsync(x => x.AcademyId == id));
+    }
+
+    [Fact]
+    public async Task Platform_provision_url_is_rejected_with_slug_specific_help_and_no_created_records()
+    {
+        using var platform=factory.CreateClient();(await Login(platform)).EnsureSuccessStatusCode();
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var before=await db.Academies.CountAsync();var email=$"slug-{Guid.NewGuid():N}@example.test";
+        var body=new PlatformAcademyWrite(Guid.NewGuid(),"http://localhost:3379","أكاديمية كود خيالية","EGP","Africa/Cairo","مالك كود خيالي",email,"Demo-Only-123!","multi-sport");
+        var response=await Send(platform,"/api/v1/platform/academies",body);Assert.Equal(HttpStatusCode.UnprocessableEntity,response.StatusCode);
+        var error=await response.Content.ReadFromJsonAsync<JsonElement>();Assert.Equal("slug",error.GetProperty("field").GetString());Assert.Contains("كود الرابط",error.GetProperty("title").GetString());
+        Assert.Equal(before,await db.Academies.CountAsync());Assert.False(await db.Users.AnyAsync(u=>u.Email==email));
+    }
+    [Fact]
     public async Task Platform_cookie_is_separate_from_tenant_cookie_and_never_grants_child_access()
     {
         using var client = factory.CreateClient();
@@ -66,13 +151,13 @@ public sealed class V2PlatformIdentityTests : IAsyncLifetime
         var features = original.EnumerateArray().ToDictionary(x => x.GetProperty("feature").GetString()!, x => x.GetProperty("enabled").GetBoolean());
         try
         {
-            features["nutrition"] = false;
+            features["catalog"] = false;
             (await Send(platform, $"/api/v1/platform/academies/{DemoSeed.NogoomAcademyId}/entitlements", new { planCode = "Trial", features }, put: true)).EnsureSuccessStatusCode();
-            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/nutrition")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync("/api/v1/content/catalog")).StatusCode);
             var history = await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/audit");
             Assert.Contains(history.EnumerateArray(), x => x.GetProperty("action").GetString() == "academy.entitlements" && x.GetProperty("targetAcademyId").GetGuid() == DemoSeed.NogoomAcademyId);
         }
-        finally { features["nutrition"] = true; (await Send(platform, $"/api/v1/platform/academies/{DemoSeed.NogoomAcademyId}/entitlements", new { planCode = "LegacyDemo", features }, put: true)).EnsureSuccessStatusCode(); }
+        finally { features["catalog"] = true; (await Send(platform, $"/api/v1/platform/academies/{DemoSeed.NogoomAcademyId}/entitlements", new { planCode = "LegacyDemo", features }, put: true)).EnsureSuccessStatusCode(); }
         var request = new PlatformAcademyWrite(Guid.NewGuid(), "demo-v2-" + Guid.NewGuid().ToString("N")[..12], "أكاديمية سباحة اختبارية", "EGP", "Africa/Cairo", "مالك تجريبي", $"owner.{Guid.NewGuid():N}@example.test", "Demo-Only-123!", "swimming");
         var response = await Send(platform, "/api/v1/platform/academies", request); response.EnsureSuccessStatusCode();
         var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();

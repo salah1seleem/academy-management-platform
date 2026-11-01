@@ -94,6 +94,11 @@ public sealed class CollectionRefund : TenantEntity
 }
 public sealed class ProductSale : TenantEntity
 {
+    public Guid? VariantId { get; set; }
+    public Guid? SportEnrollmentId { get; set; }
+    public string? SizeSnapshot { get; set; }
+    public string? ColorSnapshot { get; set; }
+    public int? ShirtNumberSnapshot { get; set; }
     public Guid SportId { get; set; }
     public Guid? BranchId { get; set; }
     public Guid ProductId { get; set; }
@@ -116,6 +121,9 @@ public sealed class ProductSale : TenantEntity
 }
 public sealed class AcademyNotice : TenantEntity
 {
+    public Guid? SubjectPlayerId {get;set;}
+    public string? DeduplicationKey {get;set;}
+    public string? EventKey { get; set; }
     public string? AudienceRole { get; set; }
     public string? TargetKind { get; set; }
     public Guid? TargetId { get; set; }
@@ -132,6 +140,13 @@ public sealed class AcademyNews : TenantEntity
     public Guid? ImageAssetId { get; set; }
     public int VisibleDays { get; set; } = 7;
     public DateTimeOffset? PublishedAtUtc { get; set; }
+    public string Kind { get; set; } = "News";
+    public DateTimeOffset? StartsAtUtc { get; set; }
+    public DateTimeOffset? EndsAtUtc { get; set; }
+    public Guid[] TargetBranchIds { get; set; } = [];
+    public string[] AudienceRoles { get; set; } = ["AcademyAdmin", "Coach", "Guardian"];
+    public Guid? CreationRequestId { get; set; }
+    public string? CreationHash { get; set; }
 }
 public sealed class StaffGrant : TenantEntity
 {

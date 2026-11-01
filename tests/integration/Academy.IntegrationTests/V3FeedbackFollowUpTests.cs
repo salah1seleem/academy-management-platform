@@ -14,11 +14,20 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 public sealed partial class BrandingMatchesTests
 {
-    private static async Task<GuardianFeedback[]> OverdueFamilyNotes(FoundationDbContext db,TrainingGroup g)
+    private static async Task<GuardianFeedback[]> OverdueFamilyNotes(FoundationDbContext db,TrainingGroup g,bool scopedPlayer=false)
     {
         var today=await AttendanceCalendar.TodayAsync(g.AcademyId,db,TimeProvider.System);var now=DateTimeOffset.UtcNow;
         var link=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==g.AcademyId&&l.IsActive&&l.Player.IsActive&&l.Guardian.IsActive&&l.Guardian.User.PhoneNumber==DemoSeed.GuardianPhone).Select(l=>new{l.PlayerId,l.Guardian.UserId}).FirstAsync();
         var actor=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();
+        if(scopedPlayer){
+            // A delegated investigation fixture must reference a real child in
+            // this group/sport, not an unrelated multisport legacy-seed child.
+            var player=Guid.NewGuid();var guardian=await db.GuardianProfiles.Where(p=>p.AcademyId==g.AcademyId&&p.UserId==link.UserId).Select(p=>p.Id).SingleAsync();
+            db.Players.Add(new(){Id=player,AcademyId=g.AcademyId,ArabicName="لاعب متابعة اصطناعي",PlayerCode="FDB-"+player.ToString("N")[..12],DateOfBirth=new(2013,1,1)});
+            db.SportEnrollments.Add(new(){Id=Guid.NewGuid(),AcademyId=g.AcademyId,PlayerId=player,BranchId=g.BranchId,SportId=g.SportId,TrainingGroupId=g.Id});
+            db.GuardianPlayerLinks.Add(new(){Id=Guid.NewGuid(),AcademyId=g.AcademyId,GuardianId=guardian,PlayerId=player,CreatedByUserId=actor});await db.SaveChangesAsync();
+            link=new{PlayerId=player,link.UserId};
+        }
         var coach=await db.AcademyMemberships.Where(m=>m.AcademyId==g.AcademyId&&m.Role==AcademyRole.Coach&&m.IsActive).Select(m=>m.Id).FirstAsync();
         var ratingMonth=(await db.GuardianFeedbacks.Where(f=>f.AcademyId==g.AcademyId&&f.Kind=="Rating"&&f.GuardianUserId==link.UserId&&f.PlayerId==link.PlayerId&&f.CoachMembershipId==coach).Select(f=>(DateOnly?)f.PeriodMonth).MaxAsync()??new DateOnly(today.Year,today.Month,1)).AddMonths(1);
         var rows=Enumerable.Range(0,7).Select(i=>new GuardianFeedback{Id=Guid.NewGuid(),AcademyId=g.AcademyId,TrainingGroupId=g.Id,BranchId=g.BranchId,PlayerId=link.PlayerId,GuardianUserId=link.UserId,CoachMembershipId=i==6?coach:null,

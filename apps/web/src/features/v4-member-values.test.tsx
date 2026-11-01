@@ -1,6 +1,7 @@
 import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {afterEach,expect,it,vi} from "vitest";
 import {AdminDataTable} from "../components/dashboard-shell";
+import PlayersPage from "../app/dashboard/players/page";
 import GuardiansPage from "../app/dashboard/guardians/page";
 import {VipMembers} from "./vip-members";
 vi.mock("next/navigation",()=>({useSearchParams:()=>new URLSearchParams(),usePathname:()=>"/dashboard/guardians",useRouter:()=>({push:vi.fn()})}));
@@ -16,4 +17,13 @@ it("guardian table separates phone, children and associated value and requests s
 it("VIP shows actual returned values and no early reward action",async()=>{
   global.fetch=vi.fn(async()=>Response.json({items:[{id:"g",displayName:"أسرة اصطناعية",monthlySubscriptionValue:3000,currency:"SAR"}]})) as typeof fetch;
   render(<VipMembers/>);expect(await screen.findByRole("link",{name:"أسرة اصطناعية"})).toHaveAttribute("href","/dashboard/guardians/g");expect(screen.getByRole("link",{name:"عرض الكل"})).toHaveAttribute("href",expect.stringContaining("sort=value_desc"));expect(screen.queryByRole("button",{name:"إرسال مكافأة"})).not.toBeInTheDocument();
+});
+it("hides financial values and sorting for a non-financial people reader",async()=>{
+ global.fetch=vi.fn(async(path)=>Response.json(String(path).includes("options")?{branches:[],sports:[]}:{financialValuesVisible:false,items:[{id:"g",displayName:"ولي أمر اصطناعي",contactPhone:"01099900101",linkedChildren:2,monthlySubscriptionValue:null,unpricedSubscriptions:null,currency:"EGP"}],total:1})) as typeof fetch;
+ render(<GuardiansPage/>);await screen.findByText("ولي أمر اصطناعي");expect(screen.queryByRole("columnheader",{name:"إجمالي الاشتراكات"})).not.toBeInTheDocument();expect(screen.queryByRole("option",{name:"إجمالي الاشتراكات: الأعلى أولًا"})).not.toBeInTheDocument();expect(screen.getByRole("columnheader",{name:"عدد الأبناء"})).toBeInTheDocument();
+});
+
+it("player directory also hides financial columns and sorting from non-financial readers",async()=>{
+ global.fetch=vi.fn(async(path)=>Response.json(String(path).includes("options")?{branches:[],sports:[],categories:[],groups:[]}:{financialValuesVisible:false,items:[{id:"p",playerCode:"P01",arabicName:"لاعب اصطناعي",dateOfBirth:"2016-01-01",enrollments:1,isActive:true,enrollmentSummaries:[],monthlySubscriptionValue:null,unpricedSubscriptions:null}],total:1})) as typeof fetch;
+ render(<PlayersPage/>);await screen.findByText("لاعب اصطناعي");expect(screen.queryByRole("columnheader",{name:"قيمة الاشتراك"})).not.toBeInTheDocument();expect(screen.queryByRole("option",{name:"قيمة الاشتراك: الأعلى أولًا"})).not.toBeInTheDocument();expect(screen.getByRole("columnheader",{name:"الكود"})).toBeInTheDocument();
 });

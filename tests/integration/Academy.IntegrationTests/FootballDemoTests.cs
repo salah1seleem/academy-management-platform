@@ -17,7 +17,7 @@ using Microsoft.Extensions.Hosting;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class FootballDemoTests : IAsyncLifetime
+public sealed partial class FootballDemoTests : IAsyncLifetime
 {
     private readonly Factory factory = new();
     private static Guid AcademyId => FootballDemoSeed.AcademyId;

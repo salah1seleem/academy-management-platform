@@ -48,8 +48,50 @@ class UiText extends StatelessWidget {
         muted && Theme.of(context).brightness == Brightness.light
         ? style?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)
         : style;
+    final translated = ui(context, data);
+    final currency = RegExp(
+      r'(-?[0-9][0-9,]*(?:\.[0-9]+)?) ([A-Z]{3}|ج\.م|ر\.س|د\.إ|جنيه)(?=\s|$|[،؛.,·)])',
+    ).allMatches(translated).toList();
+    if (currency.isNotEmpty) {
+      final base =
+          adaptiveStyle?.fontSize ??
+          DefaultTextStyle.of(context).style.fontSize ??
+          14;
+      final spans = <InlineSpan>[];
+      var end = 0;
+      for (final match in currency) {
+        if (match.start > end) {
+          spans.add(TextSpan(text: translated.substring(end, match.start)));
+        }
+        spans.add(TextSpan(text: match[1]));
+        spans.add(
+          TextSpan(
+            text: ' ${match[2]}',
+            style: TextStyle(
+              fontSize: (base * .55).clamp(9, 12).toDouble(),
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        );
+        end = match.end;
+      }
+      if (end < translated.length) {
+        spans.add(TextSpan(text: translated.substring(end)));
+      }
+      return Text.rich(
+        TextSpan(style: adaptiveStyle, children: spans),
+        textAlign: textAlign,
+        textDirection: textDirection,
+        overflow: overflow,
+        maxLines: maxLines,
+        softWrap: softWrap,
+        semanticsLabel: semanticsLabel == null
+            ? translated
+            : ui(context, semanticsLabel!),
+      );
+    }
     return Text(
-      ui(context, data),
+      translated,
       style: adaptiveStyle,
       textAlign: textAlign,
       textDirection: textDirection,
@@ -124,6 +166,13 @@ const _english = <String, String>{
   'اختر عضوية واحدة صراحةً. لا يتم جمع صلاحيات الأدوار.':
       'Select one membership. Role permissions are never combined.',
   'رقم الهاتف': 'Phone number',
+  'رحلتك في الأكاديمية': 'Your academy journey',
+  'تسجيل الدخول': 'Sign in',
+  'أدخل رمز التحقق': 'Enter your verification code',
+  'أدخل رمز التحقق المكوّن من ٦ أرقام.':
+      'Enter the six-digit verification code.',
+  'بنفس الرقم المسجّل لدى الأكاديمية.':
+      'Use the phone number registered with your academy.',
   'رمز التحقق': 'Verification code',
   'إرسال رمز التحقق': 'Send verification code',
   'تأكيد الدخول': 'Sign in',

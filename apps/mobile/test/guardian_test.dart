@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/visibility.dart';
+
 import 'auth_controller_test.dart';
 
 Json child(String id) => {
@@ -95,7 +97,7 @@ void main() {
         },
       );
       await tester.pumpWidget(
-        shell(EnrollmentForm(auth: auth, environment: 'Demo')),
+        shell(EnrollmentForm(auth: auth, environment: 'Demo', newChild: true)),
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
@@ -206,11 +208,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('إرسال طلب الاشتراك'),
+      find.text('متابعة إلى الدفع'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('إرسال طلب الاشتراك'));
+    await tester.tap(find.text('متابعة إلى الدفع'));
     await tester.pumpAndSettle();
     expect(writes, isEmpty);
   });
@@ -222,6 +224,11 @@ void main() {
     testWidgets(
       'Guardian home selects one sibling workspace and preserves three enrollment actions at $size',
       (tester) async {
+        tester.platformDispatcher.accessibilityFeaturesTestValue =
+            const FakeAccessibilityFeatures(disableAnimations: true);
+        addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+        );
         await tester.binding.setSurfaceSize(size);
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final auth = await logged(
@@ -234,22 +241,46 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('select-child-ب')));
+        await tester.drag(find.byType(PageView), const Offset(310, 0));
         await tester.pumpAndSettle();
+        await expandChildDetails(tester);
+        expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('child-workspace-ب')),
+          160,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('guardian-home-scroll')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
         expect(find.byKey(const ValueKey('child-workspace-أ')), findsNothing);
         expect(find.byKey(const ValueKey('child-workspace-ب')), findsOneWidget);
-        expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
+        final rail = find.byKey(
+          ValueKey(
+            'guardian-home-actions-${auth.session!.selected!.academyId}:${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}',
+          ),
+        );
+        final vertical = find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        tester.state<ScrollableState>(vertical).position.jumpTo(0);
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(rail, 150, scrollable: vertical);
         for (final title in [
           'اشتراك جديد',
           'تجديد الاشتراك',
           'تجديد اشتراك لغيره',
+          'تقييم المدربين',
+          'شكوى أو اقتراح',
         ]) {
-          await tester.scrollUntilVisible(
-            find.text(title),
-            100,
-            scrollable: find.byType(Scrollable).first,
-          );
-          expect(find.text(title), findsOneWidget);
+          final action = find.byKey(ValueKey('guardian-action-$title'));
+          await revealTestTarget(tester, action);
+          expect(action, findsOneWidget);
         }
         expect(tester.takeException(), isNull);
       },
@@ -258,6 +289,11 @@ void main() {
   testWidgets(
     'Logout destroys private deep routes and back cannot reopen them',
     (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -333,6 +369,11 @@ void main() {
           'reportingPeriod': 'أسبوعي',
           'evaluationDate': '2026-09-28',
           'overallScore': 74,
+          'performanceMean': {
+            'value': 0,
+            'scoredCriteria': 1,
+            'applicableCriteria': 2,
+          },
           'age': 8,
           'heightCm': null,
           'weightKg': 25,
@@ -352,7 +393,9 @@ void main() {
       );
       await tester.pumpWidget(shell(PlayerReport(auth: auth, id: 'report')));
       await tester.pumpAndSettle();
-      expect(find.text('74'), findsOneWidget);
+      expect(find.text('0'), findsWidgets);
+      expect(find.text('التقييم المركب · 74'), findsOneWidget);
+      expect(find.text('متوسط الأداء'), findsOneWidget);
       expect(find.text('AMF'), findsOneWidget);
       expect(find.text('التمرير: 0'), findsOneWidget);
       expect(find.text('السرعة: غير متاح'), findsNothing);

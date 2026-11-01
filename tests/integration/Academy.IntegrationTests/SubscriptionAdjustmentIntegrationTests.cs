@@ -19,7 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
+public sealed partial class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
 {
     private static readonly DateOnly Today = new(2026, 9, 28);
     private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
@@ -342,6 +342,29 @@ public sealed class SubscriptionAdjustmentIntegrationTests : IAsyncLifetime
     {
         var s = await NewScenario(SubscriptionPlanType.Combined); await Freeze(s); var during = await Attend(s, Today.AddDays(-1)); Assert.False(during.SessionConsumed); var frozen = await Snapshot(s); await Resume(s, frozen.Version, Today); var later = await Attend(s, Today.AddDays(1));
         Assert.True(later.SessionConsumed); Assert.Equal(9, (await Period(s)).RemainingSessions); Assert.Equal(1, await MovementCount(s));
+    }
+
+    [Fact] public async Task Approved_day_events_reach_only_linked_guardian_inbox_once_and_point_to_actual_period()
+    {
+        var s=await NewScenario(linkGuardian:true);await using var scope=Scope();var db=Db(scope);
+        var childName=await db.Players.Where(p=>p.Id==s.PlayerId).Select(p=>p.ArabicName).SingleAsync();
+        var key=Guid.NewGuid().ToString();await Days(s,2,true,key:key);await Days(s,2,true,key:key);
+        using var guardian=await Guardian();using var owner=await Staff(DemoSeed.OwnerEmail);using var foreign=await Staff(DemoSeed.FutureOwnerEmail);
+        JsonElement n=default;
+        for(var page=1;page<=1000;page++){
+            var inbox=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/notifications?page={page}");
+            var matching=inbox.GetProperty("items").EnumerateArray().Where(n=>n.GetProperty("targetKind").GetString()=="SubscriptionPeriod"&&n.GetProperty("targetId").GetGuid()==s.PeriodId).ToArray();
+            if(matching.Length>0){n=Assert.Single(matching);break;}
+            if(page*25>=inbox.GetProperty("total").GetInt32())break;
+        }
+        Assert.NotEqual(JsonValueKind.Undefined,n.ValueKind);
+        Assert.Contains(childName,n.GetProperty("message").GetString());Assert.Contains("2",n.GetProperty("message").GetString());Assert.DoesNotContain("{",n.GetProperty("message").GetString());Assert.False(n.GetProperty("isRead").GetBoolean());
+        foreach(var client in new[]{owner,foreign}){var token=await Csrf(client);using var denied=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/notifications/{n.GetProperty("id").GetGuid()}/read"){Content=JsonContent.Create(new{isRead=true})};denied.Headers.Add("X-CSRF-TOKEN",token);Assert.Equal(HttpStatusCode.NotFound,(await client.SendAsync(denied)).StatusCode);}
+        var csrf=await Csrf(guardian);using var read=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/notifications/{n.GetProperty("id").GetGuid()}/read"){Content=JsonContent.Create(new{isRead=true})};read.Headers.Add("X-CSRF-TOKEN",csrf);(await guardian.SendAsync(read)).EnsureSuccessStatusCode();
+        var details=await guardian.GetAsync($"/api/v1/guardian/subscriptions/periods/{s.PeriodId}/adjustments");details.EnsureSuccessStatusCode();
+        Assert.True(await db.AcademyNotices.AsNoTracking().Where(x=>x.Id==n.GetProperty("id").GetGuid()).Select(x=>x.IsRead).SingleAsync());
+        var current=await Period(s);await Days(s,1,false,version:current.Version);
+        Assert.Equal(2,await db.AcademyNotices.CountAsync(n=>n.AcademyId==DemoSeed.NogoomAcademyId&&n.TargetKind=="SubscriptionPeriod"&&n.TargetId==s.PeriodId));
     }
 
     private async Task<Scenario> NewScenario(SubscriptionPlanType type = SubscriptionPlanType.Duration, SubscriptionPeriodStatus status = SubscriptionPeriodStatus.Active, bool linkGuardian = false, Guid? academyId = null, DateOnly? end = null)

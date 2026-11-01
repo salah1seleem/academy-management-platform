@@ -7,7 +7,7 @@ on:
 
 jobs:
   flutter:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: apps/mobile
@@ -23,7 +23,7 @@ jobs:
       - run: flutter test
 
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17
@@ -50,12 +50,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet restore AcademyManagementPlatform.slnx
-      - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release
+      - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release -m:1
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --no-build --configuration Release
-      - run: dotnet test AcademyManagementPlatform.slnx --no-build --configuration Release --logger "console;verbosity=normal" --blame-hang-timeout 10m --blame-hang-dump-type none
+      - run: dotnet test AcademyManagementPlatform.slnx --no-build -m:1 --configuration Release --logger "console;verbosity=normal" --blame-hang-timeout 10m --blame-hang-dump-type none
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
@@ -69,7 +69,7 @@ jobs:
       - run: npm run build:web
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17
@@ -87,6 +87,8 @@ jobs:
     env:
       ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_e2e;Username=academy;Password=academy_ci_only
       API_INTERNAL_URL: http://127.0.0.1:5080
+      ACADEMY_E2E_API_CONFIGURATION: Release
+      ACADEMY_E2E_API_NO_BUILD: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -100,7 +102,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet restore AcademyManagementPlatform.slnx
-      - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api
+      - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release -m:1
+      - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
@@ -112,3 +115,47 @@ jobs:
         run: npx playwright test --config tests/e2e/playwright.football.config.ts
       - name: Staff passkey browser verification E2E
         run: npx playwright test --config tests/e2e/playwright.passkeys.config.ts
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: iacademy-ci-${{ github.run_id }}
+      POSTGRES_DB: iacademy_container_test
+      POSTGRES_USER: iacademy_migrator
+      POSTGRES_PASSWORD: ci-isolated-only-123
+      API_DATABASE_PASSWORD: ci-runtime-isolated-only-456
+      WEB_PORT: 3389
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images and apply migrations on isolated PostgreSQL 17
+        run: docker compose up --build -d --wait --wait-timeout 240
+      - name: Check proxy and production OTP guard
+        run: |
+          curl --fail http://127.0.0.1:3389/login > /dev/null
+          curl --fail http://127.0.0.1:3389/api/v1/auth/csrf > /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"phoneNumber":"+201000000001"}' http://127.0.0.1:3389/api/v1/mobile/auth/otp/request)" = 501
+          docker compose exec -T api sh -c 'test -w /data/media && test -w /data/keys && echo persistent-test > /data/media/compose-test.txt'
+          docker compose run --rm migrate
+          docker compose restart api web
+          docker compose up -d --wait
+          docker compose exec -T api sh -c 'test "$(cat /data/media/compose-test.txt)" = persistent-test && test -n "$(find /data/keys -name "key-*.xml" -print -quit)"'
+      - name: Backup and restore on a second isolated project
+        run: |
+          infra/vps/backup.sh /tmp/iacademy-container-backup
+          export COMPOSE_PROJECT_NAME=iacademy-restore-${{ github.run_id }}
+          export WEB_PORT=3390
+          # Stop the first network to release the deliberately fixed trusted proxy subnet.
+          COMPOSE_PROJECT_NAME=iacademy-ci-${{ github.run_id }} docker compose down
+          infra/vps/restore.sh /tmp/iacademy-container-backup
+          docker compose up -d --wait --wait-timeout 240
+          curl --fail http://127.0.0.1:3390/api/v1/auth/csrf > /dev/null
+          docker compose exec -T api sh -c 'test "$(cat /data/media/compose-test.txt)" = persistent-test && test -n "$(find /data/keys -name "key-*.xml" -print -quit)"'
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose ps -a && docker compose logs --tail 150
+      - name: Remove only this run's disposable projects
+        if: always()
+        run: |
+          docker compose down -v
+          COMPOSE_PROJECT_NAME=iacademy-restore-${{ github.run_id }} docker compose down -v

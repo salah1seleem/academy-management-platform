@@ -41,12 +41,28 @@ Widget shell(Widget page) => MaterialApp(
   supportedLocales: const [Locale('ar')],
   localizationsDelegates: GlobalMaterialLocalizations.delegates,
   theme: AcademyTheme.light(),
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(disableAnimations: true),
+    child: child!,
+  ),
   home: page,
 );
 
 // Explicit new read contracts used only by Home tests. Other module tests keep
 // their strict source handlers and never inherit invented production defaults.
 Future<AuthController> homeOwner(Handler handler) => owner((m, p, b, t) async {
+  if (p.startsWith('/api/v1/subscriptions/home?')) {
+    return {
+      ...summary()['subscriptions'] as Map<String, dynamic>,
+      'asOf': '2026-09-28',
+      'players': 0,
+      'periodRecords': 0,
+      'academy': 'أكاديمية العرض',
+      'dimensions': <String>[],
+      'branches': <Object>[],
+      'sports': <Object>[],
+    };
+  }
   if (p == '/api/v1/academy/calendar') {
     return {'today': '2026-09-28', 'trailingMonthFrom': '2026-08-28'};
   }
@@ -59,6 +75,7 @@ Future<AuthController> homeOwner(Handler handler) => owner((m, p, b, t) async {
       'risk': {'players': 0},
       'attendance': {'percentage': null},
       'capacity': {'seats': 0},
+      'members': {'players': 0, 'groups': 0},
     };
   }
   if (p.contains('/reports/operating-statement')) {
@@ -180,11 +197,16 @@ void main() {
       await tester.tap(link);
       await tester.pumpAndSettle();
       expect(Uri.parse(reportPath!).queryParameters['provider'], 'Unspecified');
+      await tester.scrollUntilVisible(
+        find.textContaining('استرداد اشتراك · بتاريخ الصرف'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(
         find.textContaining('استرداد اشتراك · بتاريخ الصرف'),
         findsOneWidget,
       );
-      expect(find.text('-40.25 ج.م'), findsOneWidget);
+      expect(find.text('-40.25 ج.م'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       auth.dispose();
@@ -197,9 +219,9 @@ void main() {
     final auth = await homeOwner((m, p, b, t) async {
       if (p.contains('/structure/options')) return {'branches': []};
       if (p.endsWith('/news')) return [];
-      if (p.contains('/manage/payment-requests')) {
+      if (p.contains('/manage/product-sales')) {
         requestPath = p;
-        return {'pending': 0, 'items': []};
+        return {'totalCount': 0, 'items': []};
       }
       return {
         ...summary(),
@@ -222,10 +244,18 @@ void main() {
       250,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('owner-request-Product')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('owner-request-Product')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('owner-request-Product')));
     await tester.pumpAndSettle();
     final query = Uri.parse(requestPath!).queryParameters;
-    expect(query['type'], 'Product');
+    expect(Uri.parse(requestPath!).path, '/api/v1/manage/product-sales');
     expect(query['from'], '2026-08-28');
     expect(query['to'], '2026-09-28');
     expect(query['status'], 'Pending');
@@ -263,7 +293,7 @@ void main() {
     );
     await tester.scrollUntilVisible(
       find.text('فعالة'),
-      250,
+      -250,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('فعالة'), findsOneWidget);

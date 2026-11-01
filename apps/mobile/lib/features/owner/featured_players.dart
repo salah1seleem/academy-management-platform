@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
-import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/experience_ui.dart';
 import 'home_destinations.dart';
+import 'honor_portrait_card.dart';
 
 class FeaturedPlayers extends StatefulWidget {
   const FeaturedPlayers({
@@ -36,52 +36,29 @@ class _FeaturedPlayersState extends State<FeaturedPlayers> {
       builder: (context, value) {
         final list = rows(obj(value)['items']);
         final items = all ? list : list.take(5).toList();
-        Widget card(Json p) => GCard(
+        Widget card(Json p) => HonorPortraitCard(
+          compact: true,
+          compactPortraitSize: 84,
+          auth: auth,
+          name: textOf(p['name']),
+          reference: p['photoReference'],
+          gender: p['gender'],
+          identity: textOf(p['playerId'] ?? p['id']),
+          avatarRole: 'player',
+          height:
+              350 +
+              (MediaQuery.textScalerOf(context).scale(12) - 12)
+                      .clamp(0, 24)
+                      .toDouble() *
+                  10,
+          details: [
+            ('${p['stars']} ★', const Color(0xFF9A5719)),
+            ('التقييم ${p['score']}', const Color(0xFF236D46)),
+            (textOf(p['branch']), const Color(0xFF6941A5)),
+          ],
           onTap: () => openPage(
             context,
             StaffPlayerRead(auth: auth, id: textOf(p['id'])),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              UiText(
-                '${p['stars']} ★',
-                style: const TextStyle(
-                  color: ExperienceColors.gold,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              PlayerAvatar(
-                textOf(p['name']),
-                auth: auth,
-                reference: p['photoReference'],
-                size: 70,
-              ),
-              const SizedBox(height: 12),
-              UiText(
-                textOf(p['name']),
-                maxLines: 2,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              UiText(
-                textOf(p['branch']),
-                maxLines: 1,
-                style: const TextStyle(fontSize: 9),
-              ),
-              const SizedBox(height: 8),
-              UiText(
-                '${p['score']}',
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: ExperienceColors.green,
-                ),
-              ),
-            ],
           ),
         );
         if (items.isEmpty) {
@@ -92,32 +69,21 @@ class _FeaturedPlayersState extends State<FeaturedPlayers> {
         if (all) {
           return gList([
             for (final p in items) card(p),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                TextButton(
-                  onPressed: page > 1 ? () => setState(() => page--) : null,
-                  child: const UiText('السابق'),
-                ),
-                UiText('$page'),
-                TextButton(
-                  onPressed: page * 25 < (obj(value)['total'] as int)
-                      ? () => setState(() => page++)
-                      : null,
-                  child: const UiText('التالي'),
-                ),
-              ],
-            ),
+            const SizedBox.shrink(),
           ]);
         }
-        return SizedBox(
-          height: 285,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) =>
-                SizedBox(width: 158, child: card(items[i])),
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < items.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  SizedBox(width: 300, child: card(items[i])),
+                ],
+              ],
+            ),
           ),
         );
       },

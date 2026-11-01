@@ -8,6 +8,19 @@ import '../../core/theme/ui_text.dart';
 import 'guardian_ui.dart';
 import 'guardian_content.dart';
 
+String dailyNutritionPath(String playerId, String today) =>
+    '/api/v1/guardian/children/$playerId/nutrition/recommendations${DateTime.tryParse(today) == null ? '' : '?date=${day(today)}'}';
+
+List<(String, String, Object?)> dailyNutritionMeals(Json d) => [
+  ('الإفطار', 'Breakfast', d['breakfast']),
+  ('الغداء', 'Lunch', d['lunch']),
+  ('العشاء', 'Dinner', d['dinner']),
+  if (d['preTraining'] != null)
+    ('قبل التدريب', 'Before training', d['preTraining']),
+  if (d['postTraining'] != null)
+    ('بعد التدريب', 'After training', d['postTraining']),
+];
+
 class DailyNutritionCard extends StatefulWidget {
   final AuthController auth;
   final String playerId, playerName, today;
@@ -28,7 +41,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
   late Future<Object?> future;
   Future<Object?> load() => widget.auth.request(
     'GET',
-    '/api/v1/guardian/children/${widget.playerId}/nutrition/recommendations${DateTime.tryParse(widget.today) == null ? '' : '?date=${day(widget.today)}'}',
+    dailyNutritionPath(widget.playerId, widget.today),
   );
   @override
   void initState() {
@@ -51,6 +64,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
     NutritionLibrary(
       auth: widget.auth,
       playerId: widget.playerId,
+      playerName: widget.playerName,
       today: widget.today,
     ),
   );
@@ -97,7 +111,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                     : () => setState(() {
                         future = load();
                       }),
-                icon: Icon(unavailable ? Icons.chevron_left : Icons.refresh),
+                icon: Icon(unavailable ? Icons.chevron_right : Icons.refresh),
               ),
             ],
           ),
@@ -127,16 +141,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
           ),
         );
       }
-      final d = obj(result.data),
-          meals = [
-            ('الإفطار', 'Breakfast', d['breakfast']),
-            ('الغداء', 'Lunch', d['lunch']),
-            ('العشاء', 'Dinner', d['dinner']),
-            if (d['preTraining'] != null)
-              ('قبل التدريب', 'Before training', d['preTraining']),
-            if (d['postTraining'] != null)
-              ('بعد التدريب', 'After training', d['postTraining']),
-          ];
+      final d = obj(result.data), meals = dailyNutritionMeals(d);
       if (widget.compact) {
         return GCard(
           onTap: library,
@@ -183,6 +188,8 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                         'متابعة الغذاء اليومي لطفلك',
                         'Your child’s daily nutrition',
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -199,7 +206,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                 ),
               ),
               Icon(
-                Icons.chevron_left,
+                Icons.chevron_right,
                 size: 20,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -220,7 +227,11 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: UiText(
-                    localized(context, 'اقتراحات اليوم', 'Today’s suggestions'),
+                    localized(
+                      context,
+                      'اقتراح نظام غذائي ليوم ${day(d['date'] ?? widget.today)}',
+                      'Nutrition suggestions for ${day(d['date'] ?? widget.today)}',
+                    ),
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),

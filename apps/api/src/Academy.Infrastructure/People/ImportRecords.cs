@@ -2,11 +2,13 @@ using Academy.Infrastructure.Structure;
 
 namespace Academy.Infrastructure.People;
 
-public enum ImportJobState { Queued, Running, Completed, Failed, Expired }
+public enum ImportJobState { Queued, Running, Completed, Failed, Expired, QueuedV3, RunningV3 }
 public sealed class AcademyImportJob : TenantEntity
 {
+    public string? ResultSummary { get; set; }
     public Guid ActorUserId { get; set; }
-    public Guid MembershipId { get; set; }
+    public Guid? MembershipId { get; set; }
+    public bool PlatformInitiated { get; set; }
     public required string SourceSystem { get; set; }
     public required string FileHash { get; set; }
     public required string ReferenceStamp { get; set; }
@@ -53,4 +55,19 @@ public sealed class ImportedHousehold : TenantEntity
     public required string IdentityHash { get; set; }
     public Guid GuardianId { get; set; }
     public Guid JobId { get; set; }
+}
+
+// Evidence of a distinct historical receipt; never converts the immutable
+// imported subscription agreement into a newly collected period.
+public sealed class ImportedHistoricalPayment : TenantEntity
+{
+    public Guid JobId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid SubscriptionPeriodId { get; set; }
+    public Guid CollectionId { get; set; }
+    public required string SourceSystem { get; set; }
+    public required string ExternalCode { get; set; }
+    public required string Evidence { get; set; }
+    public required string ContentHash { get; set; }
+    public Guid ApprovedByUserId { get; set; }
 }

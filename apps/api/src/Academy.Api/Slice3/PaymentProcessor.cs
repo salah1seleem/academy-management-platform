@@ -99,13 +99,10 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SportEnrollments\" WHERE \"AcademyId\"={payment.AcademyId} AND \"Id\"={payment.RenewalRequest.SportEnrollmentId} FOR UPDATE", ct);
         payment.Status = PaymentRequestStatus.Confirmed; payment.ConfirmedAtUtc = clock.UtcNow;
         payment.RenewalRequest.Status = RenewalRequestStatus.Paid; payment.RenewalRequest.UpdatedAtUtc = clock.UtcNow;
-        var collection = new PaymentCollection
-        {
-            Id = Guid.NewGuid(), AcademyId = payment.AcademyId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId,
-            RenewalRequestId = payment.RenewalRequestId, PaymentRequestId = payment.Id, Amount = payment.Amount, Currency = payment.Currency,
-            PaymentMethod = "Online", Provider = payment.Provider, ProviderReference = payment.ProviderReference, ConfirmedAtUtc = clock.UtcNow,
-            ConfirmedBy = "system/provider", CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
-        };
+        var (collection, receipt) = SubscriptionCollectionPosting.Create(payment, payment.RenewalRequest,
+            payment.RenewalRequest.SportEnrollment.PlayerId, payment.RenewalRequest.SportEnrollment.Player.ArabicName,
+            payment.RenewalRequest.SubscriptionPlan.Sport.ArabicName, PlanTerms.From(payment.RenewalRequest, payment.RenewalRequest.SubscriptionPlan).Name,
+            "Online", "الدفع الإلكتروني", clock.UtcNow, clock.UtcNow, "system/provider");
         await Academy.Api.Operations.VipRewards.Consume(db,payment.RenewalRequest,clock.UtcNow);
         db.Collections.Add(collection);
         var plan = payment.RenewalRequest.SubscriptionPlan;
@@ -122,24 +119,11 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             PriceSnapshot = payment.Amount, CurrencySnapshot = payment.Currency, CreatedByUserId = payment.RenewalRequest.RequestedByUserId,
             CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
         };
+        var firstPeriod = !await db.SubscriptionPeriods.AnyAsync(x=>x.AcademyId==payment.AcademyId&&x.SportEnrollmentId==period.SportEnrollmentId,ct);
         terms.Capture(period); db.SubscriptionPeriods.Add(period);
-        var receipt = new Receipt
-        {
-            Id = Guid.NewGuid(), AcademyId = payment.AcademyId, CollectionId = collection.Id,
-            ReceiptNumber = $"RC-{clock.UtcNow:yyyyMMdd}-{collection.Id.ToString("N")[..8].ToUpperInvariant()}",
-            PlayerId = payment.RenewalRequest.SportEnrollment.PlayerId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId, SubscriptionPlanId = plan.Id,
-            PlayerNameSnapshot = payment.RenewalRequest.SportEnrollment.Player.ArabicName, SportNameSnapshot = plan.Sport.ArabicName,
-            PlanNameSnapshot = terms.Name, OriginalAmount = payment.RenewalRequest.OriginalAmount,
-            DiscountType = payment.RenewalRequest.DiscountType, DiscountValue = payment.RenewalRequest.DiscountValue,
-            DiscountAmount = payment.RenewalRequest.DiscountAmount, FinalAmount = payment.RenewalRequest.FinalAmount,
-            DiscountRuleIdSnapshot = payment.RenewalRequest.DiscountRuleIdSnapshot,
-            DiscountRuleRevisionSnapshot = payment.RenewalRequest.DiscountRuleRevisionSnapshot,
-            DiscountReason = payment.RenewalRequest.DiscountReason,
-            Amount = payment.Amount, Currency = payment.Currency, PaidAtUtc = clock.UtcNow,
-            PaymentMethod = "الدفع الإلكتروني", ProviderReference = payment.ProviderReference, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
-        };
         db.Receipts.Add(receipt);
         providerEvent.ProcessedAtUtc = clock.UtcNow; providerEvent.ProcessingResult = "confirmed";
+        await Academy.Api.Operations.GuardianLifecycleNotice.Add(db,payment.AcademyId,period.SportEnrollmentId,firstPeriod?"Enrollment":"SingleRenewal",period.Id,"SubscriptionPeriod",period.Id,clock.UtcNow,token:ct);
         await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
         return new(true, false, "confirmed", receipt.Id);
 

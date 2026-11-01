@@ -37,7 +37,12 @@ public static class Slice6Endpoints
 
     private static async Task<IResult> GuardianHome(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock, IEvaluationReportCalculator calculator, TimeProvider time)
     {
-        var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var today = clock.Today; var expiring = today.AddDays(7);
+        var t = (await tenant.ResolveAsync())!; return await ReadHomeForMembership(t,UserId(principal),db,clock,calculator,time);
+    }
+    internal static async Task<IResult> ReadHomeForMembership(TenantMembership t,Guid user,FoundationDbContext db,ISubscriptionClock clock,IEvaluationReportCalculator calculator,TimeProvider time)
+    {
+        if(t.Role != AcademyRole.Guardian) return Results.Forbid();
+        var today = clock.Today; var expiring = today.AddDays(7);
         var trainingToday = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var academyTimeZone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
         var trainingTime = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(academyTimeZone)).DateTime);
@@ -45,17 +50,23 @@ public static class Slice6Endpoints
         if (guardianName is null) return Results.NotFound();
         var linkedIds = db.GuardianPlayerLinks.Where(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.IsActive && x.Player.IsActive).Select(x => x.PlayerId);
         var players = await db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && linkedIds.Contains(x.Id)).OrderBy(x => x.ArabicName)
-            .Select(x => new { x.Id, x.ArabicName, x.DateOfBirth, x.PhotoReference }).ToListAsync();
+            .Select(x => new { x.Id, x.ArabicName, x.DateOfBirth, x.Gender, x.PhotoReference }).ToListAsync();
         var metadata = await db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && linkedIds.Contains(x.PlayerId) && x.Status == EnrollmentStatus.Active)
-            .OrderBy(x => x.Sport.ArabicName).Select(x => new
+            .OrderBy(x => x.CreatedAtUtc).ThenBy(x=>x.Sport.ArabicName).Select(x => new
             {
                 x.Id, x.PlayerId, x.SportId, sport = x.Sport.ArabicName, registrationFormat = x.RegistrationFormat.ToString(), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, trainingToday)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة", branch = x.Branch.ArabicName,
-                period = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == x.Id)
-                    .OrderByDescending(p => p.UpdatedAtUtc).Select(p => new { p.Id, plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), p.StartDate, p.EndDate, p.FrozenFromDate, p.RemainingSessions, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < today || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > today ? "Scheduled" : p.EndDate <= expiring ? "Expiring" : "Active" }).FirstOrDefault()
+                coaches=db.StaffGroupAssignments.Where(a=>a.TrainingGroupId==FoundationDbContext.AssignedGroupAt(x.AcademyId,x.Id,trainingToday)&&a.IsActive&&a.AcademyMembership.IsActive&&a.AcademyMembership.User.IsActive&&a.AcademyMembership.Role==AcademyRole.Coach).Select(a=>new{id=a.AcademyMembershipId,name=a.AcademyMembership.User.DisplayName,groupId=a.TrainingGroupId}).ToArray(),
+                period = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == x.Id && p.IsActive)
+                    .OrderByDescending(p => p.Status != SubscriptionPeriodStatus.Cancelled && p.StartDate <= today && (p.EndDate == null || p.EndDate >= today) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)).ThenByDescending(p => p.UpdatedAtUtc).ThenBy(p => p.Id).Select(p => new { p.Id, plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), p.StartDate, p.EndDate, p.FrozenFromDate, p.RemainingSessions, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < today || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > today ? "Scheduled" : p.EndDate <= expiring ? "Expiring" : "Active" }).FirstOrDefault()
             }).ToListAsync();
         var nextSessions=await GuardianNextSessionReadModel.Read(db,t.AcademyId,metadata.Select(e=>e.Id).ToArray(),trainingToday,trainingTime);
-        var enrollments=metadata.Select(e=>new{e.Id,e.PlayerId,e.SportId,e.sport,e.registrationFormat,e.group,e.branch,nextSession=nextSessions.GetValueOrDefault(e.Id),e.period}).ToList();
+        var enrollments=metadata.Select(e=>new{e.Id,e.PlayerId,e.SportId,e.sport,e.registrationFormat,e.group,e.branch,e.coaches,nextSession=nextSessions.GetValueOrDefault(e.Id),e.period}).ToList();
         var published = await db.PlayerEvaluations.AsNoTracking().Include(x => x.Scores).Include(x => x.Sport).Where(x => x.AcademyId == t.AcademyId && linkedIds.Contains(x.SportEnrollment.PlayerId) && x.Status == EvaluationStatus.Published).OrderByDescending(x => x.EvaluationDate).ThenByDescending(x => x.PublishedAtUtc).ThenBy(x => x.Id).Select(x => new { playerId = x.SportEnrollment.PlayerId, evaluation = x }).ToListAsync();
+        object? Performance(Guid enrollmentId)
+        {
+            var evaluation = published.FirstOrDefault(x => x.evaluation.SportEnrollmentId == enrollmentId)?.evaluation;
+            return GuardianPerformanceProjection.Read(evaluation, calculator);
+        }
         var starMonth=new DateOnly(trainingToday.Year,trainingToday.Month,1);
         var monthlyStars=await db.MonthlyPlayerStars.Where(s=>s.AcademyId==t.AcademyId&&s.Month==starMonth&&linkedIds.Contains(s.PlayerId)).GroupBy(s=>s.PlayerId).Select(g=>new{id=g.Key,count=g.Count()}).ToDictionaryAsync(g=>g.id,g=>g.count);
         var children = players.Select(p =>
@@ -63,13 +74,13 @@ public static class Slice6Endpoints
             var latest = published.FirstOrDefault(e => e.playerId == p.Id)?.evaluation;
             var evaluation = published.FirstOrDefault(e => e.playerId == p.Id && (e.evaluation.Sport.EnglishName == "Football" || e.evaluation.Sport.ArabicName == "كرة القدم"))?.evaluation;
             var report = evaluation is null ? null : calculator.Calculate(evaluation.Scores);
-            return new { p.Id, p.ArabicName, p.DateOfBirth, p.PhotoReference,monthlyStars=monthlyStars.GetValueOrDefault(p.Id),starMonth,
+            return new { p.Id, p.ArabicName, p.DateOfBirth, p.Gender, p.PhotoReference,monthlyStars=monthlyStars.GetValueOrDefault(p.Id),starMonth,
                 power = report is null ? null : new { evaluationId = evaluation!.Id, report.OverallScore, axes = report.Axes.Select(a => new { axis = a.Axis.ToString(), a.Value }) },
                 latestEvaluation = latest is null ? null : new { latest.Id, sport = latest.Sport.ArabicName, latest.EvaluationDate, latest.ReportingPeriod, calculator.Calculate(latest.Scores).OverallScore },
-                sports = enrollments.Where(e => e.PlayerId == p.Id).ToList() };
+                sports = enrollments.Where(e => e.PlayerId == p.Id).Select(e => new { e.Id, e.PlayerId, e.SportId, e.sport, e.registrationFormat, e.group, e.branch, e.coaches, e.nextSession, e.period, performance = Performance(e.Id) }).ToList() };
         }).ToList();
         var sportContexts = enrollments.GroupBy(x => new { x.SportId, x.sport }).Select(g => new { g.Key.SportId, sport = g.Key.sport, children = g.Select(x => players.Single(p => p.Id == x.PlayerId).ArabicName).Distinct().Order().ToArray(), childCount = g.Select(x => x.PlayerId).Distinct().Count() }).OrderBy(x => x.sport).ToList();
-        var urgentAlerts=await db.AcademyNotices.Where(n=>n.AcademyId==t.AcademyId&&n.UserId==user&&n.IsActive&&!n.IsRead&&n.UrgentUntilUtc>time.GetUtcNow()&&n.MatchId!=null&&db.MatchParticipants.Any(p=>p.MatchId==n.MatchId&&p.IsActive&&linkedIds.Contains(p.PlayerId)))
+        var urgentAlerts=await NoticeEndpoints.GuardianUrgentMatches(db,t.AcademyId,user,time.GetUtcNow())
             .OrderByDescending(n=>n.UrgentUntilUtc).Take(3).Select(n=>new{n.Id,n.Message,n.MatchId,n.UrgentUntilUtc}).ToArrayAsync();
         return Results.Ok(new { academyName = t.AcademyName, guardianName, today, trainingToday, children, sportContexts, urgentAlerts });
     }
@@ -77,7 +88,8 @@ public static class Slice6Endpoints
     private static async Task<IResult> GuardianOptions(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
-        var children = await db.GuardianPlayerLinks.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.IsActive && x.Player.IsActive).OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.PlayerId, name = x.Player.ArabicName }).ToListAsync();
+        var children = await db.GuardianPlayerLinks.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.Guardian.IsActive && x.IsActive && x.Player.IsActive).OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.PlayerId, name = x.Player.ArabicName, x.Player.PhotoReference, x.Player.Gender,
+            enrollments=db.SportEnrollments.Where(e=>e.AcademyId==t.AcademyId&&e.PlayerId==x.PlayerId&&e.Status==EnrollmentStatus.Active).Select(e=>new{e.Id,e.SportId,e.BranchId,registrationFormat=e.RegistrationFormat.ToString()}).ToArray() }).ToListAsync();
         var sports = await db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
         var branches = await db.Branches.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
         var plans = await db.SubscriptionPlans.TrainingOnly().Where(x => x.AcademyId == t.AcademyId && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, x.SportId, x.ArabicName, x.Price, x.Currency, x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount, x.AllBranches, branchIds = x.BranchPublications.Where(p => p.IsActive && p.Branch.IsActive).Select(p => p.BranchId).ToArray() }).ToListAsync();
@@ -253,10 +265,10 @@ public static class Slice6Endpoints
         return Results.Ok(new { status = entity.Status.ToString(), playerId = player.Id, enrollmentId = enrollment.Id });
     }
 
-    private static async Task<IResult> ChildProfile(Guid playerId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time)
+    private static async Task<IResult> ChildProfile(Guid playerId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time, IEvaluationReportCalculator calculator)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var linked = await db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.PlayerId == playerId && x.IsActive && x.Player.IsActive); if (!linked) return Results.NotFound();
-        var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == playerId).Select(x => new { x.Id, x.ArabicName, x.DateOfBirth, x.PhotoReference }).SingleAsync(); var today = clock.Today; var expiring = today.AddDays(7);
+        var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == playerId).Select(x => new { x.Id, x.ArabicName, x.DateOfBirth, x.Gender, x.PhotoReference }).SingleAsync(); var today = clock.Today; var expiring = today.AddDays(7);
         var trainingToday = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var enrollments = await db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.Status == EnrollmentStatus.Active).OrderBy(x => x.Sport.ArabicName).Select(x => new {
             x.Id, x.SportId, sport = x.Sport.ArabicName, registrationFormat = x.RegistrationFormat.ToString(),
@@ -265,12 +277,31 @@ public static class Slice6Endpoints
             upcoming = db.TrainingSessions.Where(s => s.AcademyId == t.AcademyId && FoundationDbContext.IsSessionAssigned(x.AcademyId, x.Id, s.Id) && s.TrainingGroup.IsActive && s.SessionDate >= trainingToday && s.Status == TrainingSessionStatus.Scheduled).OrderBy(s => s.SessionDate).ThenBy(s => s.StartTime).Take(3).Select(s => new { s.Id, group = s.TrainingGroup.ArabicName, s.SessionDate, s.StartTime, s.EndTime }).ToList(),
             transfers = db.EnrollmentGroupTransfers.Where(tr => tr.SportEnrollmentId == x.Id && tr.EffectiveDate >= trainingToday).OrderBy(tr => tr.EffectiveDate).Select(tr => new { tr.EffectiveDate, group = db.TrainingGroups.Where(g => g.Id == tr.TargetGroupId).Select(g => g.ArabicName).First() }).ToList(),
             sessionMoves = db.EnrollmentSessionMoves.Where(m => m.SportEnrollmentId == x.Id).OrderBy(m => m.CreatedAtUtc).Select(m => new { date = db.TrainingSessions.Where(s => s.Id == m.TargetSessionId).Select(s => s.SessionDate).First(), group = db.TrainingGroups.Where(g => g.Id == m.TargetGroupId).Select(g => g.ArabicName).First() }).Where(m => m.date >= trainingToday).ToList(),
-            period = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == x.Id).OrderByDescending(p => p.UpdatedAtUtc).Select(p => new { p.Id, plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), p.StartDate, p.EndDate, p.FrozenFromDate, p.RemainingSessions, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < today || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > today ? "Scheduled" : p.EndDate <= expiring ? "Expiring" : "Active" }).FirstOrDefault()
+            period = db.SubscriptionPeriods.Where(p => p.AcademyId == t.AcademyId && p.SportEnrollmentId == x.Id && p.IsActive).OrderByDescending(p => p.Status != SubscriptionPeriodStatus.Cancelled && p.StartDate <= today && (p.EndDate == null || p.EndDate >= today) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)).ThenByDescending(p => p.UpdatedAtUtc).ThenBy(p => p.Id).Select(p => new { p.Id, plan = (p.PlanNameSnapshot ?? p.SubscriptionPlan.ArabicName), p.StartDate, p.EndDate, p.FrozenFromDate, p.RemainingSessions, status = p.Status == SubscriptionPeriodStatus.Frozen ? "Frozen" : p.Status == SubscriptionPeriodStatus.Cancelled ? "Cancelled" : p.EndDate < today || ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) != SubscriptionPlanType.Duration && p.RemainingSessions <= 0) ? "Expired" : p.StartDate > today ? "Scheduled" : p.EndDate <= expiring ? "Expiring" : "Active" }).FirstOrDefault()
         }).ToListAsync();
-        var attendance = await db.PlayerAttendances.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == playerId && x.Status != AttendanceStatus.NotRecorded && x.TrainingSession.Status != TrainingSessionStatus.Cancelled).OrderByDescending(x => x.TrainingSession.SessionDate).Take(20).Select(x => new { x.Id, x.TrainingSession.SessionDate, sport = x.TrainingSession.Sport.ArabicName, group = x.TrainingSession.TrainingGroup.ArabicName, status = x.Status.ToString() }).ToListAsync();
-        var evaluations = await db.PlayerEvaluations.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == playerId && x.Status == EvaluationStatus.Published).OrderByDescending(x => x.EvaluationDate).Select(x => new { x.Id, sport = x.Sport.ArabicName, x.EvaluationDate, x.ReportingPeriod }).ToListAsync();
+        var attendance = await db.PlayerAttendances.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == playerId && x.Status != AttendanceStatus.NotRecorded && x.TrainingSession.Status != TrainingSessionStatus.Cancelled).OrderByDescending(x => x.TrainingSession.SessionDate).Take(20).Select(x => new { x.Id, x.SportEnrollmentId, x.TrainingSession.SessionDate, sport = x.TrainingSession.Sport.ArabicName, group = x.TrainingSession.TrainingGroup.ArabicName, status = x.Status.ToString() }).ToListAsync();
+        var evaluations = await db.PlayerEvaluations.AsNoTracking()
+            .Where(e => e.AcademyId == t.AcademyId && e.SportEnrollment.PlayerId == playerId && e.Status == EvaluationStatus.Published)
+            .OrderByDescending(e => e.EvaluationDate).ThenByDescending(e => e.PublishedAtUtc).ThenBy(e => e.Id)
+            .Select(e => new { e.Id, e.SportId, e.SportEnrollmentId, sport = e.Sport.ArabicName, e.EvaluationDate, e.ReportingPeriod }).ToListAsync();
+        // Only six recent published reports per active enrollment need scores; historical metadata stays compatible.
+        var reportIds = enrollments.SelectMany(e => evaluations.Where(p => p.SportEnrollmentId == e.Id).Take(6)).Select(p => p.Id).ToArray();
+        var reports = await db.PlayerEvaluations.AsNoTracking().Include(e => e.Scores).Include(e => e.Sport)
+            .Where(e => e.AcademyId == t.AcademyId && reportIds.Contains(e.Id) && e.Status == EvaluationStatus.Published).ToDictionaryAsync(e => e.Id);
+        var performances = enrollments.Select(e => {
+            var history = evaluations.Where(p => p.SportEnrollmentId == e.Id).ToArray();
+            var latest = history.FirstOrDefault();
+            return new {
+                enrollmentId = e.Id, evaluationCount = history.Length,
+                latest = GuardianPerformanceProjection.Read(latest is null ? null : reports.GetValueOrDefault(latest.Id), calculator),
+                history = history.Take(6).Select(p => new { evaluationId = p.Id, p.EvaluationDate,
+                    overallScore = calculator.Calculate(reports[p.Id].Scores).OverallScore })
+            };
+        });
+        var starMonth = new DateOnly(trainingToday.Year, trainingToday.Month, 1);
+        var monthlyStars = await db.MonthlyPlayerStars.CountAsync(s => s.AcademyId == t.AcademyId && s.PlayerId == playerId && s.Month == starMonth);
         var compensations = await Academy.Api.Operations.CompensationReadModel.Load(db, t.AcademyId, enrollments.Select(e => e.Id).ToArray());
-        return Results.Ok(new { player, enrollments, compensations, attendance, attendanceSummary = new { present = attendance.Count(x => x.status is "Present" or "Late"), late = attendance.Count(x => x.status == "Late"), excused = attendance.Count(x => x.status == "Excused"), absent = attendance.Count(x => x.status == "Absent") }, evaluations });
+        return Results.Ok(new { player, enrollments, performances, monthlyStars, starMonth, compensations, attendance, attendanceSummary = new { present = attendance.Count(x => x.status is "Present" or "Late"), late = attendance.Count(x => x.status == "Late"), excused = attendance.Count(x => x.status == "Excused"), absent = attendance.Count(x => x.status == "Absent") }, evaluations });
     }
 
     private static Guid UserId(ClaimsPrincipal principal) => Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);

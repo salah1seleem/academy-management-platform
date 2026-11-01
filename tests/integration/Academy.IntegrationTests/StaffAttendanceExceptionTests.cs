@@ -152,6 +152,13 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
         Assert.Equal(oldVersion,await db.StaffWorkPeriods.AsNoTracking().Where(p=>p.Id==period.Id).Select(p=>p.Version).SingleAsync());
         var history=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/staff-attendance/{s.Member}/history?date=2026-10-15");Assert.Equal(3,history.GetProperty("total").GetInt32());Assert.Equal(2,history.GetProperty("items")[0].GetProperty("after").GetProperty("periods").GetArrayLength());Assert.Contains("أكدت الإدارة",history.GetProperty("items")[0].GetProperty("after").GetProperty("changeReason").GetString());
         (await Manual(owner,s.Member,new(date,"Present",new(8,0),new(16,0),75,"تعديل خصم اليوم فقط",date))).EnsureSuccessStatusCode();Assert.Equal(2,(await PeriodDay(owner,s.Member)).GetProperty("items").GetArrayLength());
+        (await Manual(owner,s.Member,new(date.AddDays(1),"Absent",null,null,0,null))).EnsureSuccessStatusCode();
+        var historySummary=await c.GetFromJsonAsync<JsonElement>("/api/v1/staff/work-periods?date=2026-10-15");
+        Assert.Equal("Present",historySummary.GetProperty("attendanceStatus").GetString());
+        var savedMonth=historySummary.GetProperty("attendanceSummary");
+        Assert.Equal(1,savedMonth.GetProperty("presentDays").GetInt32());Assert.Equal(1,savedMonth.GetProperty("absentDays").GetInt32());Assert.Equal(2,savedMonth.GetProperty("recordedDays").GetInt32());
+        var unrecorded=await c.GetFromJsonAsync<JsonElement>("/api/v1/staff/work-periods?date=2026-10-14");
+        Assert.Equal(JsonValueKind.Null,unrecorded.GetProperty("attendanceStatus").ValueKind);Assert.Equal(1,unrecorded.GetProperty("attendanceSummary").GetProperty("absentDays").GetInt32());
     }
     [Fact]
     public async Task Preserved_periods_reject_overlap_future_stale_or_closed_sources_and_keep_overnight_open_until_explicit_close()
@@ -414,4 +421,21 @@ public sealed class StaffAttendanceExceptionTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,r)).StatusCode);Assert.False(await db.StaffDailyAttendances.AnyAsync(a=>a.MembershipId==s.Member));(await Review(owner,r,false,"طلب مراجعة مستقل لشهر معتمد")).EnsureSuccessStatusCode();
         var t=await Staff();using var tc=t.Client;db.StaffDailyAttendances.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,MembershipId=t.Member,WorkDate=new(2026,10,16),Status="Absent",RecordedByUserId=ownerId});await db.SaveChangesAsync();var another=await Request(tc,Claim(t.Branch));Assert.Equal(HttpStatusCode.Conflict,(await Review(owner,another)).StatusCode);Assert.Equal("Absent",await db.StaffDailyAttendances.Where(a=>a.MembershipId==t.Member).Select(a=>a.Status).SingleAsync());
     }
+    [Fact]
+    public async Task Approved_staff_review_leaf_controls_detail_canReview_and_post_without_hiding_read_history()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var branch=Guid.NewGuid();db.Branches.Add(new(){Id=branch,AcademyId=DemoSeed.NogoomAcademyId,ArabicName="فرع مراجعة اصطناعي مستقل"});await db.SaveChangesAsync();
+        var worker=await Staff(branch:branch);using var coach=worker.Client;
+        var reviewer=await Staff(AcademyRole.AcademyAdmin,branch);using var admin=reviewer.Client;
+        var membership=await db.AcademyMemberships.SingleAsync(m=>m.Id==reviewer.Member);membership.UseActionGrants=true;membership.AllSports=true;membership.AllBranches=true;
+        foreach(var module in new[]{"staff","attendance"})db.StaffActionGrants.Add(new(){Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,MembershipId=reviewer.Member,Module=module,Read=true,Edit=true});
+        var leaf=new StaffGrant{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,MembershipId=reviewer.Member,Permission="workflow.attendance.review",Allowed=true};db.StaffGrants.Add(leaf);await db.SaveChangesAsync();
+        var claim=await Request(coach,Claim(branch));var path=$"{StaffAttendanceExceptions.ManagePath}/{claim.GetProperty("id").GetGuid()}";
+        var permitted=await admin.GetFromJsonAsync<JsonElement>(path);Assert.True(permitted.GetProperty("canReview").GetBoolean());
+        leaf.Allowed=false;await db.SaveChangesAsync();
+        var denied=await admin.GetFromJsonAsync<JsonElement>(path);Assert.False(denied.GetProperty("canReview").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden,(await Review(admin,claim)).StatusCode);
+    }
+
 }

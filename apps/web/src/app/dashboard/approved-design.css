@@ -1,0 +1,59 @@
+@font-face{font-family:AcademyArabic;src:url(/fonts/AcademyArabic-300.ttf) format("truetype");font-weight:300;font-display:swap}
+@font-face{font-family:AcademyArabic;src:url(/fonts/AcademyArabic-400.ttf) format("truetype");font-weight:400;font-display:swap}
+@font-face{font-family:AcademyArabic;src:url(/fonts/AcademyArabic-500.ttf) format("truetype");font-weight:500;font-display:swap}
+@font-face{font-family:AcademyArabic;src:url(/fonts/AcademyArabic-600.ttf) format("truetype");font-weight:600;font-display:swap}
+@font-face{font-family:AcademyArabic;src:url(/fonts/AcademyArabic-700.ttf) format("truetype");font-weight:700;font-display:swap}
+.dashboard-shell:has([data-approved-home]){background:#0a1024}
+.dashboard-shell:has([data-approved-home][data-mode=light]){background:#f6f4ef}
+.dashboard-shell:has([data-approved-home]) .dashboard-content{padding:0;background:transparent}
+.dashboard-shell:has([data-approved-home]) .sidebar{background:#121a36;border-inline-end:1px solid #293653;box-shadow:none;font-family:AcademyArabic,sans-serif}
+.dashboard-shell:has([data-approved-home][data-mode=light]) .sidebar{background:#fff;color:#1b1a17;border-color:#e2ddd3}
+.dashboard-shell:has([data-approved-home]) .sidebar-watermark{display:none}
+.dashboard-shell:has([data-approved-home]) .module-toggle{border-radius:0}
+.dashboard-shell:has([data-approved-home]) .sidebar-brand small{font-size:10px}
+.dashboard-shell:has([data-approved-home][data-mode=light]) .sidebar :is(b,small,.module-toggle,.module-toggle svg,.submodule-list a,.sidebar-security-link){color:#3d3a35}
+
+.dashboard-shell[data-brand-primary="#D71935"]:has([data-approved-home]){--staff-primary-700:#3b6cf0!important;--staff-primary-600:#3b6cf0!important}
+.dashboard-shell[data-brand-primary="#D71935"]:has([data-approved-home][data-mode=light]){--staff-primary-700:#c8102e!important;--staff-primary-600:#c8102e!important}
+.dashboard-shell:has([data-approved-surface]) {
+  --staff-bg:#0a1024!important; --staff-surface:#121a36!important; --staff-surface-muted:#1a2448!important;
+  --staff-text:#eef2ff!important; --staff-text-secondary:#a3acd1!important; --staff-text-muted:#a3acd1!important;
+  --staff-border:#293653!important; --staff-border-strong:#354568!important;
+  --staff-success:#34d399; --staff-danger:#f87171; --staff-warning:#fbbf24;
+  --staff-radius-sm:0; --staff-radius-md:0; --staff-radius-lg:0; --staff-shadow-sm:none; --staff-shadow-md:none;
+  --approved-panel:var(--staff-surface); --approved-border:var(--staff-border);
+  --muted:var(--staff-text-secondary); --border:var(--staff-border);
+  color-scheme:dark;
+  background:var(--staff-bg); font-family:AcademyArabic,sans-serif;
+}
+.dashboard-shell:has([data-approved-surface][data-mode=light]) {
+  --staff-bg:#f6f4ef!important; --staff-surface:#fff!important; --staff-surface-muted:#ede9e1!important;
+  --staff-text:#1b1a17!important; --staff-text-secondary:#6b665d!important; --staff-text-muted:#6b665d!important;
+  --staff-border:#e2ddd3!important; --staff-border-strong:#cec8bc!important;
+  --staff-success:#16803c; --staff-danger:#c8102e; --staff-warning:#b45309;
+  color-scheme:light;
+}
+.dashboard-shell[data-brand-primary="#D71935"]:has([data-approved-surface]) { --staff-primary-700:#3b6cf0!important; --staff-primary-600:#3b6cf0!important; }
+.dashboard-shell[data-brand-primary="#D71935"]:has([data-approved-surface][data-mode=light]) { --staff-primary-700:#c8102e!important; --staff-primary-600:#c8102e!important; }
+.dashboard-shell:has([data-approved-surface]) .sidebar { background:var(--staff-surface); color:var(--staff-text); border-inline-end:1px solid var(--staff-border); box-shadow:none; }
+.dashboard-shell:has([data-approved-surface]) .sidebar-watermark { display:none; }
+.dashboard-shell:has([data-approved-surface]) .sidebar :is(b,.module-toggle,.sidebar-security-link) { color:var(--staff-text); }
+.dashboard-shell:has([data-approved-surface]) .sidebar :is(small,.module-toggle svg,.sidebar-brand p,.sidebar-logout) { color:var(--staff-text-secondary); }
+.dashboard-shell:has([data-approved-surface]) .sidebar .nav-module.current > :is(.module-direct > .module-toggle,.module-toggle),
+.dashboard-shell:has([data-approved-surface]) .sidebar .nav-module.current > :is(.module-direct > .module-toggle,.module-toggle) svg { color:white; }
+.dashboard-shell:has([data-approved-surface]) :is(.detail-card,.list-card,.section-card,.form-shell) { background:var(--staff-surface); color:var(--staff-text); border-color:var(--staff-border); border-radius:0; box-shadow:none; }
+.dashboard-shell:has([data-approved-surface]) :is(input,select,textarea) { background:var(--staff-bg); color:var(--staff-text); border-color:var(--staff-border); border-radius:0; }
+.dashboard-shell:has([data-approved-surface]) :is(.module-toggle,.record-tabs button,.primary-button,.secondary-button) { border-radius:0; }
+.dashboard-shell:has([data-approved-surface]) .dashboard-content { background:var(--staff-bg); }
+.dashboard-shell:has([data-approved-surface]) .page-header { padding-bottom:18px; border-bottom:1px solid var(--staff-border); }
+.dashboard-shell:has([data-approved-surface]) .record-tabs { background:transparent; border-radius:0; }
+.dashboard-shell:has([data-approved-surface]) .submodule-list a[aria-current=page] { background:var(--staff-primary-700); color:white; border-radius:0; }
+.dashboard-shell:has([data-approved-surface]) #notification-templates form { display:block; }
+.dashboard-shell:has([data-approved-surface]) #notification-templates fieldset { min-width:0; margin:0; padding:16px; border:1px solid var(--staff-border); }
+.dashboard-shell:has([data-approved-surface]) #notification-templates .row-actions :is(.primary-button,.secondary-button) { width:auto; }
+.dashboard-shell:has([data-approved-surface]) .report-filters :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { background:var(--staff-bg); color:var(--staff-text); border-color:var(--staff-border-strong); border-radius:0; }
+.dashboard-shell:has([data-approved-surface]) .report-table article { background:var(--staff-surface); color:var(--staff-text); }
+.dashboard-shell:has([data-approved-surface]) .report-total { background:var(--staff-surface-muted); color:var(--staff-text); border-color:var(--staff-border); border-radius:0; }
+.dashboard-shell:has([data-approved-surface]) .report-total strong { color:var(--staff-text); }
+.dashboard-shell:has([data-approved-surface]) .report-total small { color:var(--staff-text-secondary); }
+.dashboard-shell:has([data-approved-surface]) .report-filters button { border-radius:0; }

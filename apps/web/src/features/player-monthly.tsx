@@ -2,7 +2,7 @@
 import Link from "next/link";
 import {useState} from "react";
 import {CalendarDays,FileDown,Milestone} from "lucide-react";
-import {ErrorState,LoadingState,PageHeader,SectionCard,Button} from "../components/dashboard-shell";
+import {ContextHelp,ErrorState,LoadingState,PageHeader,SectionCard,Button} from "../components/dashboard-shell";
 import {GuardianShell} from "../components/guardian-shell";
 import {useGoalData} from "./player-goals";
 import styles from "./player-monthly.module.css";
@@ -22,8 +22,8 @@ export function PlayerMonthly({playerId,enrollmentId}:{playerId?:string;enrollme
  <form className={`form-shell ${styles.filters}`} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);setMonth(String(f.get("month")));setSelected(String(f.get("enrollment")??selected));setPage(0);}}>
  <label>شهر التقرير<input type="month" name="month" required min="1900-01" max={data.asOfDate.slice(0,7)} defaultValue={data.month}/></label>
  {playerId&&<label>التسجيل الرياضي<select name="enrollment" defaultValue={data.enrollment.id}>{data.enrollments.map(e=><option key={e.id} value={e.id}>{e.sport} · {e.branch}</option>)}</select></label>}<Button type="submit">عرض الشهر</Button></form>
- <p className={styles.notice}>{data.notice}</p><div className={styles.stats}><div><b>{data.counts.skills}</b>مراجعة مهارة</div><div><b>{data.counts.badges}</b>شارة مسجلة</div><div><b>{data.counts.certificates}</b>شهادة مسجلة</div></div>
- <div className={styles.actions}><a className="button button-secondary" href={`${base}?${new URLSearchParams({enrollmentId:data.enrollment.id,month:data.month,format:"csv"})}`}><FileDown aria-hidden/>تصدير الشهر CSV</a><span>التصدير يعيد فحص الصلاحية ويشمل الشهر كله، لا الصفحة فقط. احتفظ بالملف خصوصيًا؛ لا يسترجع سحبٌ لاحق نسخة سبق تنزيلها.</span></div>
+ {playerId?<p className={styles.notice}>{data.notice}</p>:<ContextHelp title="كيف يُقرأ التقرير؟"><p>{data.notice}</p></ContextHelp>}<div className={styles.stats}><div><b>{data.counts.skills}</b>مراجعة مهارة</div><div><b>{data.counts.badges}</b>شارة مسجلة</div><div><b>{data.counts.certificates}</b>شهادة مسجلة</div></div>
+ <div className={styles.actions}><a className="button button-secondary" href={`${base}?${new URLSearchParams({enrollmentId:data.enrollment.id,month:data.month,format:"csv"})}`}><FileDown aria-hidden/>تصدير الشهر CSV</a><span>{playerId?"التصدير يعيد فحص الصلاحية ويشمل الشهر كله، لا الصفحة فقط. احتفظ بالملف خصوصيًا؛ لا يسترجع سحبٌ لاحق نسخة سبق تنزيلها.":"يشمل الشهر كله. احتفظ بالملف خصوصيًا؛ سحب السجل لاحقًا لا يسحب نسختك."}</span></div>
  {!data.items.length&&<SectionCard title="لا توجد أدلة في هذه الصفحة"><p>عدم وجود مراجعات ليس حكمًا على قدرات الطفل. راجع شهرًا آخر أو فريق التدريب.</p></SectionCard>}
  <div className={styles.timeline}>{data.items.map(r=><SectionCard key={`${r.kind}:${r.id}`} title={r.title}><small><Milestone size={16} aria-hidden/> {kinds[r.kind]??"دليل"} · <bdi>{r.on}</bdi></small><p><strong>{states[r.state]??"راجع المصدر"}</strong>{r.value!=null&&<> · <bdi>{r.value}</bdi> <span>{units[r.unit??""]??"قياس — راجع المصدر"}</span></>}</p>{r.note&&<p>{r.note}</p>}<p>سجلها: {r.actor}</p><Link href={source(r,data)}>فتح المصدر وسجله</Link></SectionCard>)}</div>
  <nav className={styles.actions} aria-label="صفحات أدلة الشهر"><Button variant="secondary" disabled={page===0} onClick={()=>setPage(n=>n-1)}>الصفحة السابقة</Button><span>صفحة {page+1} · حتى25 دليلًا من كل نوع</span><Button variant="secondary" disabled={!data.hasMore} onClick={()=>setPage(n=>n+1)}>الصفحة التالية</Button></nav>

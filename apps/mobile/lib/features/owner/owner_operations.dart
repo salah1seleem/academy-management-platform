@@ -1,14 +1,18 @@
+import '../shared/directory_cards.dart';
+import '../shared/group_schedule.dart';
+import '../shared/staff_capabilities.dart';
+import '../admin/native_player_workspace.dart';
+import '../coach/coach_evaluation.dart';
+import '../shared/audience_communication.dart';
+import '../admin/native_structure_operations.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
-import '../coach/coach_attendance.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/role_navigation.dart';
-import '../shared/player_badges.dart';
-import '../shared/player_goals.dart';
-import '../shared/player_skills.dart';
 import 'owner_feedback.dart';
 import 'owner_followups.dart';
 import '../shared/player_technical_reviews.dart';
@@ -52,7 +56,12 @@ class _OwnerScopedReadState extends State<OwnerScopedRead> {
 
 class OwnerDecisionsPage extends StatefulWidget {
   final AuthController auth;
-  const OwnerDecisionsPage({super.key, required this.auth});
+  const OwnerDecisionsPage({
+    super.key,
+    required this.auth,
+    this.filters = const {},
+  });
+  final Map<String, String> filters;
   @override
   State<OwnerDecisionsPage> createState() => _OwnerDecisionsPageState();
 }
@@ -77,7 +86,10 @@ class _OwnerDecisionsPageState extends State<OwnerDecisionsPage> {
     child: OwnerScopedRead(
       key: ValueKey(revision),
       auth: widget.auth,
-      path: '/api/v1/reports/owner-summary',
+      path: Uri(
+        path: '/api/v1/reports/owner-summary',
+        queryParameters: widget.filters.isEmpty ? null : widget.filters,
+      ).toString(),
       builder: (context, value) {
         final d = obj(value),
             ops = d['operations'] is Map
@@ -87,13 +99,23 @@ class _OwnerDecisionsPageState extends State<OwnerDecisionsPage> {
           UiText(
             localized(
               context,
-              'كل الفروع ضمن صلاحياتك',
-              'All branches within your access',
+              widget.filters['branchId']?.isNotEmpty == true
+                  ? 'الفرع المختار ضمن صلاحياتك'
+                  : 'كل الفروع ضمن صلاحياتك',
+              widget.filters['branchId']?.isNotEmpty == true
+                  ? 'Selected branch within your access'
+                  : 'All branches within your access',
             ),
           ),
+          if (widget.filters['from'] != null && widget.filters['to'] != null)
+            UiText(
+              '${day(widget.filters['from'])} — ${day(widget.filters['to'])}',
+              style: const TextStyle(fontSize: 12),
+            ),
           OwnerDecisionsPanel(
             auth: widget.auth,
             operations: ops,
+            branchId: widget.filters['branchId'] ?? '',
             onReturn: refresh,
           ),
           OutlinedButton.icon(
@@ -140,6 +162,7 @@ class _OwnerDecisionsPageState extends State<OwnerDecisionsPage> {
               onReturn: refresh,
               operations: ops,
               filters: {
+                ...widget.filters,
                 if (d['from'] != null) 'from': textOf(d['from']),
                 if (d['to'] != null) 'to': textOf(d['to']),
               },
@@ -171,6 +194,23 @@ class OwnerDecisionsPanel extends StatelessWidget {
     final complaints = (operations['openComplaints'] as num?)?.toInt() ?? 0;
     final suggestions = (operations['openSuggestions'] as num?)?.toInt() ?? 0;
     final decisions = <Widget>[
+      for (final coach in rows(operations['underAssignedCoaches'] ?? []))
+        _decision(
+          context,
+          '${coach['name']} · ${coach['groupCount']} مجموعات من أصل ${coach['target']}',
+          'Coach assignment target',
+          'راجع التغطية والمواعيد قبل الإسناد',
+          Icons.sports_outlined,
+          () => openPage(
+            context,
+            NativeCoachAssignment(
+              auth: auth,
+              coachId: textOf(coach['id']),
+              branchId: branchId.isEmpty ? null : branchId,
+            ),
+          ),
+        ),
+
       if ((operations['openSafetyFeedback'] as num? ?? 0) > 0)
         _decision(
           context,
@@ -320,7 +360,7 @@ class OwnerDecisionsPanel extends StatelessWidget {
             ],
           ),
         ),
-        const Icon(Icons.chevron_left),
+        const Icon(Icons.chevron_right),
       ],
     ),
   );
@@ -513,10 +553,26 @@ class OwnerCoachOperations extends StatelessWidget {
   );
 }
 
-class OwnerGroupOperations extends StatelessWidget {
+class OwnerGroupOperations extends StatefulWidget {
   final AuthController auth;
   final String id;
   const OwnerGroupOperations({super.key, required this.auth, required this.id});
+  @override
+  State<OwnerGroupOperations> createState() => _OwnerGroupOperationsState();
+}
+
+class _OwnerGroupOperationsState extends State<OwnerGroupOperations> {
+  AuthController get auth => widget.auth;
+  String get id => widget.id;
+  StaffCapabilities? access;
+  @override
+  void initState() {
+    super.initState();
+    StaffCapabilities.load(auth).then((a) {
+      if (mounted) setState(() => access = a);
+    });
+  }
+
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'تفاصيل المجموعة', 'Group details'),
@@ -526,76 +582,138 @@ class OwnerGroupOperations extends StatelessWidget {
       builder: (context, value) {
         final d = obj(value), group = obj(d['group']);
         return gList([
-          Heading(textOf(group['arabicName'])),
-          UiText(
-            localized(
-              context,
-              '${rows(d['players']).length} لاعب · السعة ${group['capacity']}',
-              '${rows(d['players']).length} players · capacity ${group['capacity']}',
+          GCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                UiText(
+                  textOf(group['arabicName']),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                UiText(
+                  '${group['sportName'] ?? ''} · ${group['branchName'] ?? ''}',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    UiText(
+                      '${rows(d['players']).length}',
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: UiText(
+                        'لاعب في المجموعة${group['capacity'] == null ? '' : ' · السعة ${group['capacity']}'}',
+                      ),
+                    ),
+                  ],
+                ),
+                for (final c in rows(d['coaches']))
+                  UiText('المدرب: ${c['name']}'),
+              ],
             ),
           ),
-          for (final c in rows(d['coaches'])) UiText(textOf(c['name'])),
-          if (rows(d['coaches']).isEmpty)
-            UiText(
-              localized(
-                context,
-                'لا يوجد مدرب مسند؛ الإسناد من إدارة المجموعة في لوحة الويب.',
-                'No assigned coach; assign one in the web group workspace.',
-              ),
-            ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final action in [
+                (
+                  'إسناد مدرب',
+                  Icons.person_add_alt,
+                  () => openPage(
+                    context,
+                    NativeCoachAssignment(
+                      auth: auth,
+                      groupId: id,
+                      coachId: rows(d['coaches']).isEmpty
+                          ? null
+                          : textOf(rows(d['coaches']).first['id']),
+                    ),
+                  ),
+                ),
+                (
+                  'تعديل المجموعة',
+                  Icons.edit_outlined,
+                  () => openPage(context, NativeGroupEdit(auth: auth, id: id)),
+                ),
+                (
+                  'تسكين لاعبين',
+                  Icons.group_add_outlined,
+                  () => openPage(
+                    context,
+                    NativeGroupPlacement(auth: auth, groupId: id),
+                  ),
+                ),
+              ])
+                Expanded(
+                  child: Column(
+                    children: [
+                      IconButton(
+                        onPressed: action.$3,
+                        tooltip: action.$1,
+                        icon: Icon(action.$2),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary
+                              .withValues(alpha: .1),
+                          minimumSize: const Size(48, 48),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      UiText(
+                        action.$1,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          WeeklyGroupSchedule(schedules: rows(d['schedules'] ?? <Json>[])),
+          const SizedBox(height: 12),
+          AudienceCommunicationLink(auth: auth, id: id),
+          const SizedBox(height: 18),
           Heading(localized(context, 'اللاعبون', 'Players')),
-          for (final p in rows(d['players'])) ...[
-            UiText(textOf(p['arabicName'])),
-            if (p['id'] is String)
-              GLink(
-                'خطوات تعلم اللاعب',
-                Icons.auto_graph_rounded,
-                () => openPage(
-                  context,
-                  PlayerSkillsPage(auth: auth, enrollmentId: p['id'] as String),
-                ),
-              ),
-            if (p['id'] is String)
-              GLink(
-                'أهداف التطور',
-                Icons.flag_outlined,
-                () => openPage(
-                  context,
-                  PlayerGoalsPage(auth: auth, enrollmentId: p['id'] as String),
-                ),
-              ),
-            if (p['id'] is String)
-              GLink(
-                'شارات المجهود والتحسن',
-                Icons.auto_awesome,
-                () => openPage(
-                  context,
-                  PlayerBadgesPage(auth: auth, enrollmentId: p['id'] as String),
-                ),
-              ),
-          ],
-          Heading(
-            localized(
-              context,
-              'أحدث حصص المجموعة — حتى 200',
-              'Latest group sessions — up to 200',
+          for (final p in rows(d['players']))
+            PlayerDirectoryCard(
+              auth: auth,
+              player: p,
+              enrollments: [p],
+              onOpen: access?.allows('people.manage', 'players', 'Read') == true
+                  ? () => openPage(
+                      context,
+                      NativePlayerWorkspace(
+                        auth: auth,
+                        id: textOf(p['playerId']),
+                      ),
+                    )
+                  : null,
+              onEvaluate:
+                  access?.allows('evaluation.manage', 'evaluations', 'Add') ==
+                      true
+                  ? () => openPage(
+                      context,
+                      CoachEvaluation(
+                        auth: auth,
+                        enrollment: {
+                          ...p,
+                          'player': p['arabicName'],
+                          'group': group['arabicName'],
+                        },
+                      ),
+                    )
+                  : null,
             ),
-          ),
-          for (final s in rows(d['sessions']))
-            GLink(
-              '${day(s['sessionDate'])} · ${textOf(s['startTime']).split(':').take(2).join(':')} — ${textOf(s['endTime']).split(':').take(2).join(':')}',
-              Icons.calendar_month_outlined,
-              () => openPage(
-                context,
-                CoachAttendance(
-                  auth: auth,
-                  sessionId: textOf(s['id']),
-                  title: localized(context, 'تفاصيل الحصة', 'Session details'),
-                ),
-              ),
-            ),
-          if (rows(d['sessions']).isEmpty)
-            const EmptyMessage('لا توجد حصص لهذه المجموعة.'),
         ]);
       },
     ),

@@ -15,19 +15,22 @@ public static class MatchDrafts
 {
     internal sealed record RosterItem(Guid EnrollmentId,Guid PlayerId,string Name);
     internal static string Hash(object v)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(v))));
-    internal static Task<List<RosterItem>> Roster(FoundationDbContext db,MatchTeam team)=>db.MatchTeamPlayers.Where(p=>p.TeamId==team.Id&&p.IsActive)
-        .Join(db.SportEnrollments.Where(e=>e.IsActive&&e.Player.IsActive&&e.SportId==team.SportId),p=>p.EnrollmentId,e=>e.Id,(p,e)=>e).OrderBy(e=>e.Id).Select(e=>new RosterItem(e.Id,e.PlayerId,e.Player.ArabicName)).ToListAsync();
+    internal static Task<List<RosterItem>> Roster(FoundationDbContext db,MatchTeam team,Guid? tournamentId=null)=>db.MatchTeamPlayers.Where(p=>p.TeamId==team.Id&&p.IsActive)
+        .Join(db.SportEnrollments.Where(e=>e.IsActive&&e.Player.IsActive&&e.SportId==team.SportId),p=>p.EnrollmentId,e=>e.Id,(p,e)=>e)
+        .Where(e=>tournamentId==null || !db.ImportedEnrollments.Any(m=>m.AcademyId==team.AcademyId&&m.SportEnrollmentId==e.Id&&db.AcademyImportJobs.Any(j=>j.Id==m.JobId&&j.ResultSummary!=null))
+            || db.TournamentRegistrations.Any(r=>r.AcademyId==team.AcademyId&&r.EnrollmentId==e.Id&&r.TeamId==team.Id&&r.TournamentId==tournamentId&&r.IsActive))
+        .OrderBy(e=>e.Id).Select(e=>new RosterItem(e.Id,e.PlayerId,e.Player.ArabicName)).ToListAsync();
     internal static string RosterHash(MatchTeam team,List<RosterItem> roster)=>Hash(new{team.Id,team.SportId,team.BranchId,team.CoachMembershipId,team.IsActive,roster});
     internal static Task TeamLock(FoundationDbContext db,Guid academy,Guid team)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"match-team:{academy}:{team}"},0))");
-    internal static async Task<IResult> RosterPreview(Guid id,CurrentTenant current,FoundationDbContext db,HttpResponse response)
+    internal static async Task<IResult> RosterPreview(Guid id,Guid? tournamentId,CurrentTenant current,FoundationDbContext db,HttpResponse response)
     {
-        response.Headers.CacheControl="no-store";var t=(await current.ResolveAsync())!;var team=await db.MatchTeams.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id&&x.AcademyId==t.AcademyId&&x.IsActive);if(team is null)return Results.NotFound();var roster=await Roster(db,team);return Results.Ok(new{teamId=team.Id,teamName=team.Name,items=roster,quoteHash=RosterHash(team,roster)});
+        response.Headers.CacheControl="no-store";var t=(await current.ResolveAsync())!;var team=await db.MatchTeams.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id&&x.AcademyId==t.AcademyId&&x.IsActive);if(team is null||t.Role==AcademyRole.Coach&&(!team.CoachCanManageMatches||team.CoachMembershipId!=t.MembershipId))return Results.NotFound();if(tournamentId.HasValue&&!await db.AcademyTournaments.AnyAsync(t=>t.Id==tournamentId&&t.IsActive&&t.SportId==team.SportId))return Results.NotFound();var roster=await Roster(db,team,tournamentId);return Results.Ok(new{teamId=team.Id,teamName=team.Name,items=roster,quoteHash=RosterHash(team,roster)});
     }
     internal static async Task<IResult> Preview(Guid id,CurrentTenant current,FoundationDbContext db,HttpResponse response)
     {
         response.Headers.CacheControl="no-store";var t=(await current.ResolveAsync())!;await using var tx=await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         var s=await db.AcademyMatches.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id&&x.AcademyId==t.AcademyId);if(s is null)return Results.NotFound();var team=await db.MatchTeams.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==s.TeamId&&x.IsActive);if(team is null||!await db.AcademyTournaments.AnyAsync(x=>x.Id==s.TournamentId&&x.IsActive))return Results.Problem(statusCode:409,title:"الفريق أو البطولة غير فعال؛ راجع الإعداد قبل النسخ.");
-        var roster=await Roster(db,team);return Results.Ok(new{s.Id,s.Opponent,s.Venue,s.Notes,teamName=team.Name,roster,quoteHash=Quote(s,team,roster)});
+        var roster=await Roster(db,team,s.TournamentId);return Results.Ok(new{s.Id,s.Opponent,s.Venue,s.Notes,teamName=team.Name,roster,quoteHash=Quote(s,team,roster)});
     }
     private static string Quote(AcademyMatch source,MatchTeam team,List<RosterItem> roster)=>Hash(new{source.Id,source.UpdatedAtUtc,source.TeamId,source.TournamentId,source.Opponent,source.Venue,source.Notes,rosterHash=RosterHash(team,roster)});
     internal static async Task<IResult> Copy(Guid id,MatchCopyWrite body,HttpContext http,CurrentTenant current,FoundationDbContext db,ISubscriptionClock clock)
@@ -41,7 +44,7 @@ public static class MatchDrafts
         var requestHash=Hash(new{id,body});var replay=await db.AcademyMatches.AsNoTracking().SingleOrDefaultAsync(x=>x.CopiedByMembershipId==t.MembershipId&&x.CopyRequestKey==key);if(replay is not null)return replay.CopyRequestHash==requestHash?Results.Ok(new{replay.Id,replay=true}):Results.Conflict();
         var lockedTeam=source.TeamId;await TeamLock(db,t.AcademyId,lockedTeam);await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"match:{t.AcademyId}:{id}"},0))");
         source=await db.AcademyMatches.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id);if(source is null)return Results.NotFound();if(source.TeamId!=lockedTeam)return Results.Conflict();var team=await db.MatchTeams.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==source.TeamId&&x.IsActive);
-        if(team is null||!await db.AcademyTournaments.AnyAsync(x=>x.Id==source.TournamentId&&x.IsActive))return Results.Conflict();var roster=await Roster(db,team);
+        if(team is null||!await db.AcademyTournaments.AnyAsync(x=>x.Id==source.TournamentId&&x.IsActive))return Results.Conflict();var roster=await Roster(db,team,source.TournamentId);
         if(t.Role!=AcademyRole.AcademyOwner&&!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.IsActive&&(m.AllBranches||db.MembershipBranchAccesses.Any(b=>b.MembershipId==m.Id&&b.IsActive&&b.BranchId==team.BranchId))&&(m.AllSports||db.MembershipSportAccesses.Any(s=>s.MembershipId==m.Id&&s.IsActive&&s.SportId==team.SportId))))return Results.Forbid();
         if(Quote(source,team,roster)!=body.QuoteHash)return Results.Problem(statusCode:409,title:"تغيرت المباراة أو قائمة الفريق؛ حدّث المعاينة قبل النسخ.");
         var row=new AcademyMatch{Id=Guid.NewGuid(),AcademyId=t.AcademyId,TournamentId=source.TournamentId,TeamId=source.TeamId,Opponent=source.Opponent,Venue=source.Venue,Notes=source.Notes,MatchDate=body.MatchDate,StartTime=body.StartTime,IsActive=true,CopiedFromMatchId=source.Id,CopiedByMembershipId=t.MembershipId,CopyRequestKey=key,CopyRequestHash=requestHash,CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow};

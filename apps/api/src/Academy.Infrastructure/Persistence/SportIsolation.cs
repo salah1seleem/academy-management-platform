@@ -30,6 +30,7 @@ public sealed partial class FoundationDbContext
                 Expression.Property(Expression.Constant(this), nameof(RequestSportIds)), Expression.Property(row, "SportId"));
             AddSportFilter(b, type, Expression.Lambda(contains, row));
         }
+        SportFilter<ProductStockVariant>(b, x => SportCatalogItems.Any(p => p.Id == x.ProductId));
         SportFilter<Sport>(b, x => RequestSportIds.Contains(x.Id));
         SportFilter<OperatingExpense>(b, x => x.SportId.HasValue && RequestSportIds.Contains(x.SportId.Value));
         SportFilter<ExternalAgreement>(b,x=>RequestSportIds.Contains(x.SportId));
@@ -87,10 +88,15 @@ public sealed partial class FoundationDbContext
         SportFilter<DayPassTicket>(b, x => SubscriptionPlans.Any(p => p.Id == x.SubscriptionPlanId) && ResourceBookings.Any(r => r.Id == x.ResourceBookingId));
         SportFilter<AcademyMatch>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
         SportFilter<MatchTeamPlayer>(b, x => MatchTeams.Any(t => t.Id == x.TeamId));
+        SportFilter<Academy.Infrastructure.Operations.ImportedHistoricalMatch>(b,x=>AcademyMatches.Any(m=>m.Id==x.MatchId));
+        SportFilter<Academy.Infrastructure.Operations.MatchGoalSlot>(b,x=>AcademyMatches.Any(m=>m.Id==x.MatchId));
+        SportFilter<Academy.Infrastructure.Operations.MatchResultChange>(b,x=>AcademyMatches.Any(m=>m.Id==x.MatchId));
+        SportFilter<Academy.Infrastructure.Operations.MatchTeamPermissionAudit>(b,x=>MatchTeams.Any(t=>t.Id==x.TeamId));
         SportFilter<MatchParticipant>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         SportFilter<MatchCoachAssignment>(b, x => AcademyMatches.Any(m => m.Id == x.MatchId));
         SportFilter<OwnerFollowUp>(b, x => x.SourceKind=="Group"?TrainingGroups.Any(g=>g.Id==x.TrainingGroupId):x.SourceSportId.HasValue&&RequestSportIds.Contains(x.SourceSportId.Value));
         SportFilter<OwnerFollowUpChange>(b, x => OwnerFollowUps.Any(f => f.Id == x.FollowUpId));
+        SportFilter<TournamentRegistration>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         SportFilter<TournamentPayment>(b, x => SportEnrollments.Any(e => e.Id == x.EnrollmentId));
         // Child-global medical/media cannot be split reliably by sport. Narrow
         // sport administration does not delegate these shared sensitive records.
@@ -163,7 +169,7 @@ public sealed partial class FoundationDbContext
             || entry.Entity is DiscountRule rule && (!rule.SportId.HasValue || entry.State != EntityState.Added && entry.Property(nameof(DiscountRule.SportId)).OriginalValue is null)) throw new ResourceScopeException();
         if (entry.Metadata.FindProperty("SportId")?.ClrType == typeof(Guid?) && entry.Property("SportId").CurrentValue is null) throw new ResourceScopeException();
         Guid? player = entry.Entity is Player p ? p.Id : entry.Metadata.FindProperty("PlayerId") is not null ? entry.Property("PlayerId").CurrentValue as Guid? : null;
-        if (player.HasValue && entry.Entity is not (SportEnrollment or NewEnrollmentRequest))
+        if (player.HasValue && entry.Entity is not (SportEnrollment or NewEnrollmentRequest or Academy.Infrastructure.Operations.MatchGoalSlot))
         {
             // A visible child may also train in another sport; touching the global
             // identity/media/guardian link must not change that other sport's record.

@@ -95,7 +95,10 @@ void main() {
       await t.pumpWidget(shell(OwnerFeedbackDetail(auth: owner, id: id)));
       await wait(find.text('شكوى اصطناعية من رحلة المعالجة الخاصة في المحاكي'));
       Future<void> move(String label, String status, String note) async {
-        final dd = find.widgetWithText(DropdownButtonFormField<String>, 'الخطوة التالية');
+        final dd = find.widgetWithText(
+          DropdownButtonFormField<String>,
+          'الخطوة التالية',
+        );
         await scroll(dd, 250);
         expect(dd, findsOneWidget);
         await t.tap(dd);
@@ -112,7 +115,12 @@ void main() {
         await t.tap(save);
         await wait(find.text('تم حفظ تحديث الملاحظة.'));
         // The message can survive a reload, so also await the returned source widgets.
-        await wait(find.widgetWithText(DropdownButtonFormField<String>, 'الخطوة التالية'));
+        await wait(
+          find.widgetWithText(
+            DropdownButtonFormField<String>,
+            'الخطوة التالية',
+          ),
+        );
         expect(
           obj(
             await owner.request('GET', '/api/v1/manage/feedback/$id'),

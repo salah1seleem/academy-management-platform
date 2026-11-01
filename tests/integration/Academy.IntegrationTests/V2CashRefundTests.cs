@@ -116,17 +116,21 @@ public sealed partial class V2ReceivablesTests
         using var owner=await Staff(DemoSeed.OwnerEmail);var f=await CashRefundFixture(owner);var email=$"refund.{Guid.NewGuid():N}@example.test";
         var created=await Post(owner,"/api/v1/manage/staff",new{name="أمين استرداد اصطناعي",email,phone="010"+Random.Shared.Next(10000000,99999999),temporaryPassword="Demo-Only-123!",role="AcademyAdmin",jobTitle="مالية"});created.EnsureSuccessStatusCode();var member=(await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var branch=await db.CashSessions.Where(s=>s.Id==f.Session).Select(s=>s.BranchId).SingleAsync();
-        async Task Access(bool finance)
+        async Task Access(bool finance, string[]? workflowActions = null)
         {
             var actions=StaffAccessRules.Modules.Select(module=>new{module,read=module is "players" or "subscriptions" || module=="finance"&&finance,add=module=="finance"&&finance,edit=module=="subscriptions",delete=false});
-            var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var r=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff/{member}/access"){Content=JsonContent.Create(new{allBranches=false,branches=new[]{branch},actions})};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());(await owner.SendAsync(r)).EnsureSuccessStatusCode();
+            var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var r=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff/{member}/access"){Content=JsonContent.Create(new{allBranches=false,branches=new[]{branch},actions,workflowActions})};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());(await owner.SendAsync(r)).EnsureSuccessStatusCode();
         }
         await Access(false);using var admin=await Staff(email);var body=new RefundWrite(f.Collection,10,null,f.Session);
         Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,RefundRoot(f.Player)+"/quote",body)).StatusCode);
         await Access(true);(await CashAssign(owner,f.Register,member)).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,RefundRoot(f.Player)+"/quote",body)).StatusCode);
         (await Post(owner,$"{CashRoot}/sessions/{f.Session}/close",new{countedAmount=CashRegisterService.Money(100+f.Amount)})).EnsureSuccessStatusCode();
-        var shift=await CashOpen(admin,f.Register,"100");var b=await CashRefundQuote(admin,f.Player,f.Collection,shift,10);
+        var shift=await CashOpen(admin,f.Register,"100");
+        await Access(true, []);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Post(admin, RefundRoot(f.Player)+"/quote", new RefundWrite(f.Collection,10,null,shift))).StatusCode);
+        await Access(true, ["workflow.subscriptions.refund"]);
+        var b=await CashRefundQuote(admin,f.Player,f.Collection,shift,10);
         Assert.Equal(HttpStatusCode.Forbidden,(await Post(owner,RefundRoot(f.Player)+"/quote",b)).StatusCode);
         (await Post(admin,RefundRoot(f.Player),b)).EnsureSuccessStatusCode();
         var second=await CashRefundQuote(admin,f.Player,f.Collection,shift,10);await Access(false);Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,RefundRoot(f.Player),second)).StatusCode);
@@ -164,6 +168,15 @@ public sealed partial class V2ReceivablesTests
         var cashReport=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?"+period+"&provider=Cash");
         Assert.Equal(cashReport.GetProperty("netAmount").GetDecimal(),summary.GetProperty("todayCash").GetDecimal());
         Assert.Equal(summary.GetProperty("total").GetDecimal(),summary.GetProperty("monthCash").GetDecimal()+summary.GetProperty("monthOnline").GetDecimal()+summary.GetProperty("monthUnspecified").GetDecimal());
+        Assert.Equal(summary.GetProperty("today").GetDecimal(),summary.GetProperty("todaySources").EnumerateArray().Sum(s=>s.GetProperty("amount").GetDecimal()));
+        Assert.Equal(summary.GetProperty("month").GetDecimal(),summary.GetProperty("monthSources").EnumerateArray().Sum(s=>s.GetProperty("amount").GetDecimal()));
+        Assert.Equal(summary.GetProperty("today").GetDecimal(),summary.GetProperty("todayBranches").EnumerateArray().Sum(s=>s.GetProperty("amount").GetDecimal()));
+        var refundSource=Assert.Single(summary.GetProperty("todaySources").EnumerateArray(),s=>s.GetProperty("key").GetString()=="Refund");
+        Assert.Equal(-periodReport.GetProperty("totalRefunds").GetDecimal(),refundSource.GetProperty("amount").GetDecimal());
+        var onlyRefund=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?"+filter+"&collectionType=Refund");
+        Assert.Equal(-40.25m,onlyRefund.GetProperty("netAmount").GetDecimal());Assert.Equal(0,onlyRefund.GetProperty("totalAmount").GetDecimal());
+        Assert.Single(onlyRefund.GetProperty("items").EnumerateArray());
+        Assert.Contains("-40.25",await owner.GetStringAsync("/api/v1/reports/financial/export?"+filter+"&collectionType=Refund"));
         using var other=await Staff(DemoSeed.FutureOwnerEmail);var isolated=await other.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?"+filter);Assert.Equal(0,isolated.GetProperty("totalCount").GetInt32());
     }
     [Fact]

@@ -10,7 +10,7 @@ public static class AttendanceCorrectionEndpoints
         var api=app.MapGroup("/api/v1/attendance").RequireAuthorization(AcademyPermissions.AttendanceRead);
         api.MapGet("/sessions/{id:guid}/correction-context",async(Guid id,AttendanceCorrectionService service)=>await Run(async()=>await service.Context(id)));
         api.MapPost("/sessions/{id:guid}/corrections",async(Guid id,AttendanceCorrectionWrite body,HttpRequest request,AttendanceCorrectionService service)=>await Run(()=>service.Request(id,body,request.Headers["Idempotency-Key"].ToString()))).RequireAuthorization(AcademyPermissions.AttendanceManage).AddEndpointFilter<CsrfFilter>();
-        api.MapGet("/corrections",async(AttendanceCorrectionService service)=>await Run(()=>service.Read()));
+        api.MapGet("/corrections",async(int? page,AttendanceCorrectionService service)=>await Run(()=>service.Read(page:page)));
         api.MapGet("/corrections/{id:guid}",async(Guid id,AttendanceCorrectionService service)=>await Run(()=>service.Read(id)));
         api.MapPost("/corrections/{id:guid}/approve",async(Guid id,AttendanceCorrectionDecision body,AttendanceCorrectionService service)=>await Run(()=>service.Decide(id,body,true))).RequireAuthorization(AcademyPermissions.AttendanceManage).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/corrections/{id:guid}/reject",async(Guid id,AttendanceCorrectionDecision body,AttendanceCorrectionService service)=>await Run(()=>service.Decide(id,body,false))).RequireAuthorization(AcademyPermissions.AttendanceManage).AddEndpointFilter<CsrfFilter>();

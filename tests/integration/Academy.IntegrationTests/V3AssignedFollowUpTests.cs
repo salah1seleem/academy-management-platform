@@ -19,6 +19,8 @@ public sealed partial class BrandingMatchesTests
         var m = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == group.AcademyId && m.User.Email == DemoSeed.AdminEmail && m.Role == AcademyRole.AcademyAdmin && m.PrimaryMembershipId == null); var before = (m.AllBranches,m.AllSports,m.UseActionGrants);
         var grant = await db.StaffActionGrants.SingleOrDefaultAsync(g => g.MembershipId == m.Id && g.Module == "followups"); var old = grant == null ? null : JsonSerializer.Serialize(grant); var added = grant == null;
         grant ??= new() { Id = Guid.NewGuid(), AcademyId = m.AcademyId, MembershipId = m.Id, Module = "followups" };
+        var leaf=await db.StaffGrants.SingleOrDefaultAsync(g=>g.MembershipId==m.Id&&g.Permission=="workflow.followups.update");var leafBefore=leaf==null?null:JsonSerializer.Serialize(leaf);
+        leaf??=new(){Id=Guid.NewGuid(),AcademyId=m.AcademyId,MembershipId=m.Id,Permission="workflow.followups.update"};
         var branches = await db.MembershipBranchAccesses.Where(b => b.MembershipId == m.Id).ToListAsync(); var sports = await db.MembershipSportAccesses.Where(b => b.MembershipId == m.Id).ToListAsync(); var oldBranches = branches.ToDictionary(x=>x.Id,x=>x.IsActive); var oldSports = sports.ToDictionary(x=>x.Id,x=>x.IsActive);
         var branch = branches.FirstOrDefault(b=>b.BranchId==group.BranchId); var sport = sports.FirstOrDefault(s=>s.SportId==group.SportId);
         if (branch == null) { branch = new() { Id=Guid.NewGuid(), AcademyId=m.AcademyId,MembershipId=m.Id,BranchId=group.BranchId }; db.MembershipBranchAccesses.Add(branch); }
@@ -26,12 +28,14 @@ public sealed partial class BrandingMatchesTests
         try {
             m.AllBranches=false;m.AllSports=false;m.UseActionGrants=true;
             foreach(var b in branches)b.IsActive=b.BranchId==group.BranchId; foreach(var s in sports)s.IsActive=s.SportId==group.SportId; branch.IsActive=true;sport.IsActive=true;
-            grant.Read=true;grant.Edit=true;grant.Add=false;grant.Delete=false;grant.IsActive=true;if(added)db.StaffActionGrants.Add(grant);await db.SaveChangesAsync();
+            grant.Read=true;grant.Edit=true;grant.Add=false;grant.Delete=false;grant.IsActive=true;if(added)db.StaffActionGrants.Add(grant);
+            leaf.Allowed=true;leaf.IsActive=true;if(leafBefore==null)db.StaffGrants.Add(leaf);await db.SaveChangesAsync();
             using var admin=await Staff(DemoSeed.AdminEmail); await action(owner,admin,db,group,m.Id);
         } finally {
             m.AllBranches=before.AllBranches;m.AllSports=before.AllSports;m.UseActionGrants=before.UseActionGrants;
             foreach(var b in branches)b.IsActive=oldBranches[b.Id];foreach(var s in sports)s.IsActive=oldSports[s.Id];if(!oldBranches.ContainsKey(branch.Id))db.MembershipBranchAccesses.Remove(branch);if(!oldSports.ContainsKey(sport.Id))db.MembershipSportAccesses.Remove(sport);
-            if(added)db.StaffActionGrants.Remove(grant);else db.Entry(grant).CurrentValues.SetValues(JsonSerializer.Deserialize<StaffActionGrant>(old!)!);await db.SaveChangesAsync();
+            if(added)db.StaffActionGrants.Remove(grant);else db.Entry(grant).CurrentValues.SetValues(JsonSerializer.Deserialize<StaffActionGrant>(old!)!);
+            if(leafBefore==null)db.StaffGrants.Remove(leaf);else db.Entry(leaf).CurrentValues.SetValues(JsonSerializer.Deserialize<StaffGrant>(leafBefore)!);await db.SaveChangesAsync();
         }
     }
     private static async Task<Guid> AssignFollowUp(HttpClient owner, TrainingGroup group, Guid member)

@@ -14,6 +14,8 @@ public sealed partial class CashRegisterService
     public async Task AuthorizeRefund(bool readOnly = false)
     {
         var (t, _) = await Context(write: !readOnly);
+        if (!readOnly && t.Role != AcademyRole.AcademyOwner && !await Academy.Api.Auth.StaffWorkflowAccess.Allows(db, t.MembershipId, "/api/v1/people/players/current/refunds", "POST"))
+            throw new CashRejected("يلزم تفويض الاسترداد المالي المستقل؛ تعديل الاشتراك وحده لا يكفي.", 403);
         if (t.Role != AcademyRole.AcademyOwner &&
             (!await db.StaffActionGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Module == "subscriptions" && g.Read && (readOnly || g.Edit)) ||
              !await db.StaffActionGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Module == "players" && g.Read)))

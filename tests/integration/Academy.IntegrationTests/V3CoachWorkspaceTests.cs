@@ -84,6 +84,19 @@ public sealed partial class V3CoachWorkspaceTests
             write.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString());
             Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(write)).StatusCode);
             Assert.False(await db.PlayerAttendances.AnyAsync(a => a.TrainingSessionId == nearest.Id));
+            var nearestPath = $"/api/v1/attendance/sessions?nearestOnly=true&groupId={group.Id}";
+            var nearestRows = await client.GetFromJsonAsync<JsonElement>(nearestPath);
+            Assert.Equal(nearest.Id, Assert.Single(nearestRows.EnumerateArray()).GetProperty("id").GetGuid());
+            // The Home card must still find a real next session beyond the old 14-day agenda window.
+            foreach (var s in new[] { nearest, tomorrow, later, horizon }) s.Status = TrainingSessionStatus.Held;
+            await db.SaveChangesAsync();
+            nearestRows = await client.GetFromJsonAsync<JsonElement>(nearestPath);
+            Assert.Equal(excluded[2].Id, Assert.Single(nearestRows.EnumerateArray()).GetProperty("id").GetGuid());
+            Assert.Empty((await client.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions?upcomingOnly=true&groupId={group.Id}")).EnumerateArray());
+            foreach (var deniedGroup in new[] { hidden.Id, other.Id })
+                Assert.Empty((await client.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions?nearestOnly=true&groupId={deniedGroup}")).EnumerateArray());
+            foreach (var suffix in new[] { "&allDates=true", "&from=2026-10-15", "&to=2026-10-20", "&upcomingOnly=true" })
+                Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(nearestPath + suffix)).StatusCode);
         }
         finally { experience.CoachAttendanceEnabled = previousAttendance; await db.SaveChangesAsync(); }
     }

@@ -24,7 +24,7 @@ class AuthController extends ChangeNotifier {
     return result;
   }
 
-  Future<void> _accept(Object? json, int epoch) async {
+  Future<void> _accept(Object? json, int epoch, {bool notify = true}) async {
     if (epoch != _epoch) return;
     final next = Session.fromJson(json);
     await _storage(() async {
@@ -33,7 +33,7 @@ class AuthController extends ChangeNotifier {
     if (epoch != _epoch) return;
     session = next;
     error = null;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   Future<void> restore() async {
@@ -73,7 +73,15 @@ class AuthController extends ChangeNotifier {
         body: {
           'phoneNumber': phone,
           'challengeId': challenge,
-          'code': code,
+          'code': String.fromCharCodes(
+            code.runes.map(
+              (c) => c >= 0x660 && c <= 0x669
+                  ? c - 0x660 + 48
+                  : c >= 0x6f0 && c <= 0x6f9
+                  ? c - 0x6f0 + 48
+                  : c,
+            ),
+          ),
           'deviceName': 'Academy Native',
         },
       ),
@@ -169,6 +177,7 @@ class AuthController extends ChangeNotifier {
           body: {'membershipId': membershipId},
         ),
         epoch,
+        notify: false,
       );
     } finally {
       busy = false;
@@ -218,6 +227,24 @@ class AuthController extends ChangeNotifier {
     String contentType,
     Map<String, String> fields,
   ) => _assetAction((t, token) => t.upload(bytes, contentType, fields, token));
+
+  Future<Object?> importWorkbook(
+    Uint8List bytes, {
+    bool commit = false,
+    Map<String, String> fields = const {},
+    String? idempotencyKey,
+  }) => _assetAction((_, token) {
+    if (transport is! WorkbookTransport) {
+      throw const ApiFailure(501, 'خدمة استيراد الملفات غير متاحة.');
+    }
+    return (transport as WorkbookTransport).importWorkbook(
+      bytes,
+      commit,
+      fields,
+      token,
+      idempotencyKey: idempotencyKey,
+    );
+  });
 
   Future<void> logout() async {
     final token = session?.accessToken;

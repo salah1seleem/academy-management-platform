@@ -62,8 +62,11 @@ public sealed partial class V2ReceivablesTests
     {
         using var owner = await Staff(DemoSeed.OwnerEmail); var f = await CashRegistrationFixture(owner);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Post(owner, "/api/v1/people/registrations", f.Body with { CashSessionId = null })).StatusCode);
-        foreach (var amount in new decimal?[] { null, 0, -1, .001m, 1000000000 })
+        foreach (var amount in new decimal?[] { null, -1, .001m, 1000000000 })
             Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Post(owner, "/api/v1/people/registrations", f.Body with { ExpectedAmount = amount })).StatusCode);
+        // Zero is a valid amount only for a server-confirmed full waiver. It
+        // conflicts with this nonzero quote, and must still create no records.
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, "/api/v1/people/registrations", f.Body with { ExpectedAmount = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, "/api/v1/people/registrations", f.Body with { ExpectedAmount = .01m })).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         Assert.False(await db.Players.AnyAsync(p => p.ArabicName == f.Body.PlayerArabicName));

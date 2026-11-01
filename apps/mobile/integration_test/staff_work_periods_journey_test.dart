@@ -143,8 +143,8 @@ void main() {
       await waitFor(find.text('المزيد'));
       await t.tap(find.text('المزيد'));
       await t.pumpAndSettle();
-      await reach(find.text('فترات عملي'));
-      await t.tap(find.text('فترات عملي'));
+      await reach(find.text('سجل الحضور'));
+      await t.tap(find.text('سجل الحضور'));
       await waitFor(find.text('اختيار يوم'));
       await t.tap(find.text('اختيار يوم'));
       await t.pumpAndSettle();

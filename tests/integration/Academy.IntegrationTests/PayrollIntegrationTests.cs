@@ -164,6 +164,48 @@ foreach (var permission in new[] { AcademyPermissions.PayrollRead, AcademyPermis
         Assert.Equal(200, (await Row(owner, e.Id)).GetProperty("additions").GetDecimal());
     }
 
+    [Fact]
+    public async Task Advance_request_approval_is_not_salary_or_cash_and_payment_is_atomic_replay_safe_and_isolated()
+    {
+        using var owner = await Staff(); using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        using var coach = factory.CreateClient();
+        var e = await Employee(owner, AcademyRole.Coach);
+        await MobileCoachTestSession.SignInAsync(coach, factory.Services, e.Email!);
+        var reason = await Reason(owner); var key = Guid.NewGuid().ToString();
+        var body = new AdditionWrite(reason, Kind: "Advance", RequestedAmount: 250);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Send(coach, "/api/v1/staff/payroll/requests", body with { RequestedAmount = null }, Guid.NewGuid().ToString())).StatusCode);
+        var created = await Send(coach, "/api/v1/staff/payroll/requests", body, key); created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Send(coach, "/api/v1/staff/payroll/requests", body, key)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(coach, "/api/v1/staff/payroll/requests", body with { RequestedAmount = 300 }, key)).StatusCode);
+        var reviewPath = $"/api/v1/manage/payroll/requests/{id}/review";
+        var paymentPath = $"/api/v1/manage/payroll/requests/{id}/record-advance";
+        var review = new AdditionReview(true, day, "اعتماد جزئي للسلفة", 200);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(coach, reviewPath, review)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(other, reviewPath, review)).StatusCode);
+        (await Send(owner, reviewPath, review)).EnsureSuccessStatusCode();
+        (await Send(owner, reviewPath, review)).EnsureSuccessStatusCode();
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.False(await db.PayrollAdjustments.AnyAsync(a => a.AdditionRequestId == id));
+        Assert.False(await db.PayrollAdvances.AnyAsync(a => a.Id == id));
+        Assert.Equal(0, (await Row(owner, e.Id)).GetProperty("additions").GetDecimal());
+        var payment = new AdvanceRequestPayment(200, "تحويل عرض خيالي ١");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(coach, paymentPath, payment, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(other, paymentPath, payment, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, paymentPath, payment with { ExpectedAmount = 250 }, key)).StatusCode);
+        var paid = await Task.WhenAll(Send(owner, paymentPath, payment, key), Send(owner, paymentPath, payment, key));
+        Assert.All(paid, r => Assert.True(r.IsSuccessStatusCode, r.StatusCode.ToString()));
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, paymentPath, payment with { Reference = "مرجع مختلف" }, key)).StatusCode);
+        Assert.Equal(1, await db.PayrollAdvances.CountAsync(a => a.Id == id));
+        Assert.Equal(200, (await db.PayrollAdvances.SingleAsync(a => a.Id == id)).Amount);
+        Assert.False(await db.PayrollAdjustments.AnyAsync(a => a.AdditionRequestId == id));
+        Assert.Equal("Paid", await db.PayrollAdditionRequests.Where(r => r.Id == id).Select(r => r.Status).SingleAsync());
+        var own = await coach.GetFromJsonAsync<JsonElement>("/api/v1/staff/payroll/");
+        var ownRow = own.GetProperty("requests").EnumerateArray().Single(r => r.GetProperty("id").GetGuid() == id);
+        Assert.Equal("Advance", ownRow.GetProperty("kind").GetString()); Assert.Equal(250, ownRow.GetProperty("requestedAmount").GetDecimal()); Assert.Equal(200, ownRow.GetProperty("amount").GetDecimal());
+        Assert.DoesNotContain((await other.GetFromJsonAsync<JsonElement>("/api/v1/manage/payroll/requests")).EnumerateArray(), r => r.GetProperty("id").GetGuid() == id);
+    }
+
     private sealed class Factory(string connection) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder b) { b.UseEnvironment("Demo"); b.UseSetting("ConnectionStrings:Default", connection); b.UseSetting("Demo:SeedProfile", "LegacyRegression"); b.UseSetting("Demo:SeedEnabled", "true"); b.UseSetting("Demo:FixedOtpEnabled", "true"); b.UseSetting("Demo:FixedOtp", "246810"); b.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); b.UseSetting("Demo:ReferenceDate", "2026-09-28"); b.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Warning)); b.ConfigureServices(s => { s.RemoveAll<TimeProvider>(); s.AddSingleton<TimeProvider>(new TestTime()); }); }

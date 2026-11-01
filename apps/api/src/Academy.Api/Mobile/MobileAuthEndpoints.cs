@@ -171,7 +171,7 @@ public static class MobileAuthEndpoints
         session.AccessExpiresAtUtc = now.AddMinutes(10);
         session.LastUsedAtUtc = now;
         return new(access, refresh, session.AccessExpiresAtUtc, session.ExpiresAtUtc, session.MembershipId,
-            session.User.DisplayName, memberships);
+            session.User.DisplayName, memberships, session.UserId);
     }
 }
 
@@ -181,4 +181,4 @@ public sealed record MobileRefresh(string RefreshToken);
 public sealed record MobileRoleSelection(Guid MembershipId);
 public sealed record MobileMembership(Guid Id, Guid AcademyId, string AcademyName, string Role, string? ContextName = null, bool AllBranches = true, bool AllSports = true, string[]? BranchNames = null, string[]? SportNames = null, int ContextRevision = 0);
 public sealed record MobileCredentials(string AccessToken, string RefreshToken, DateTimeOffset AccessExpiresAtUtc,
-    DateTimeOffset RefreshExpiresAtUtc, Guid? MembershipId, string DisplayName, List<MobileMembership> Memberships);
+    DateTimeOffset RefreshExpiresAtUtc, Guid? MembershipId, string DisplayName, List<MobileMembership> Memberships, Guid? UserId = null);

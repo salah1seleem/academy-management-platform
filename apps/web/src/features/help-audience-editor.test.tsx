@@ -13,10 +13,23 @@ it("offers only product-eligible roles and distinguishes empty audience from def
 });
 it("owner saves audience into the existing draft, not directly into active settings",async()=>{
   const settings={currency:"EGP",timeZone:"Africa/Cairo",features:{learning_hub:true},cashEnabled:true,consecutiveAbsenceAlert:3,tenantMarketingOptIn:false,helpAudiences:null};
-  global.fetch=vi.fn(async(input,init)=>Response.json(String(input).endsWith("my-permissions")?["academy.settings.manage"]:String(input).endsWith("/me")?{role:"AcademyOwner"}:String(input).endsWith("help-options")?{lessons}:String(input).endsWith("csrf")?{token:"csrf"}:init?{}:{entitlements:[],versions:[{id:"v1",revision:1,version:5,state:"Active",contentHash:"a".repeat(64),settings}],history:[]})) as typeof fetch;
+  let versions=[{id:"v1",revision:1,version:5,state:"Active",contentHash:"a".repeat(64),settings}];
+  global.fetch=vi.fn(async(input,init)=>{
+    const path=String(input);
+    if(path.endsWith("my-permissions"))return Response.json(["academy.settings.manage"]);
+    if(path.endsWith("/me"))return Response.json({role:"AcademyOwner"});
+    if(path.endsWith("help-options"))return Response.json({lessons});
+    if(path.endsWith("csrf"))return Response.json({token:"csrf"});
+    if(path.endsWith("/drafts")&&init?.method==="POST"){
+      versions=[...versions,{id:"v2",revision:2,version:1,state:"Draft",contentHash:"b".repeat(64),settings:JSON.parse(String(init.body))}];
+      return Response.json({id:"v2",revision:2});
+    }
+    return Response.json({entitlements:[],versions,history:[]});
+  }) as typeof fetch;
   render(<VersionedConfiguration/>);fireEvent.click(await screen.findByRole("checkbox",{name:"تجديد اشتراك أبنائك — ولي الأمر"}));fireEvent.click(screen.getByRole("button",{name:"حفظ إصدار مسودة"}));
   await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p,i])=>String(p).endsWith("/drafts")&&JSON.parse(String(i?.body)).helpAudiences["family-renewal"].length===0)).toBe(true));
   expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith("transition"))).toBe(false);
+  expect(await screen.findByText("تم حفظ المسودة والتحقق منها؛ لم تُفعّل.")).toBeVisible();
 });
 it("settings administrator cannot see owner audience controls",async()=>{
   global.fetch=vi.fn(async input=>Response.json(String(input).endsWith("my-permissions")?["academy.settings.manage"]:String(input).endsWith("/me")?{role:"AcademyAdmin"}:String(input).endsWith("help-options")?{lessons}:{entitlements:[],versions:[],history:[]})) as typeof fetch;

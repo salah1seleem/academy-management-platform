@@ -308,7 +308,7 @@ class _GuardianDayPassPageState extends State<GuardianDayPassPage> {
                     ),
                     UiText('${quote!['player']} · ${quote!['resource']}'),
                     UiText(
-                      '${day(quote!['bookingDate'])} · ${quote!['startTime']}–${quote!['endTime']}',
+                      '${day(quote!['bookingDate'])} · ${trainingTimeRange(quote!['startTime'], quote!['endTime'])}',
                     ),
                     UiText(
                       '${quote!['plan']} · ${money(quote!['amount'], quote!['currency'])}',

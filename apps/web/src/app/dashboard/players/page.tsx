@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AdminDataTable, ConfirmationDialog, EmptyState, ErrorState, FilterToolbar, LoadingState, PageHeader, RowActions, SearchInput, StatusBadge } from "../../../components/dashboard-shell";
+import { AdminDataTable, type DataColumn, ConfirmationDialog, EmptyState, ErrorState, FilterToolbar, LoadingState, PageHeader, RowActions, SearchInput, StatusBadge } from "../../../components/dashboard-shell";
 import { csrfRequest } from "../../../features/dashboard-api";
 import { IdentityMark } from "../../../components/sports-ui";
 import { formatDateAr, formatMoneyAr } from "../../../lib/formatters";
@@ -14,6 +14,7 @@ type Options = { branches: Option[]; sports: Option[]; categories: Option[]; gro
 
 export default function PlayersPage() {
   const incoming = useSearchParams();
+  const [financialValuesVisible,setFinancialValuesVisible]=useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ branchId: incoming?.get("branchId") ?? "", sportId: "", ageCategoryId: "", groupId: "", subscriptionState: incoming?.get("subscriptionState") ?? "", asOf: incoming?.get("asOf") ?? "" });
@@ -36,8 +37,8 @@ export default function PlayersPage() {
     const timer = window.setTimeout(() => {
     setLoading(true);
     fetch(`/api/v1/people/players?${params}`, { signal: controller.signal })
-      .then(async response => { if (!response.ok) throw new Error(); return response.json() as Promise<Player[] | { items: Player[]; total: number }>; })
-      .then(data => { if (active) { const rows = Array.isArray(data) ? data : data.items; const count = Array.isArray(data) ? rows.length : data.total; setPlayers(rows); setTotal(count); if(page > Math.max(0,Math.ceil(count/pageSize)-1))setPage(Math.max(0,Math.ceil(count/pageSize)-1)); setError(""); } })
+      .then(async response => { if (!response.ok) throw new Error(); return response.json() as Promise<Player[] | { items: Player[]; financialValuesVisible?:boolean; total: number }>; })
+      .then(data => { if (active) { const rows = Array.isArray(data) ? data : data.items; const count = Array.isArray(data) ? rows.length : data.total; setPlayers(rows); setFinancialValuesVisible(Array.isArray(data)||data.financialValuesVisible!==false); setTotal(count); if(page > Math.max(0,Math.ceil(count/pageSize)-1))setPage(Math.max(0,Math.ceil(count/pageSize)-1)); setError(""); } })
       .catch(() => { if (active) setError("تعذر تحميل اللاعبين."); })
       .finally(() => { if (active) setLoading(false); });
     },150);
@@ -49,22 +50,22 @@ export default function PlayersPage() {
   function resetFilters() { setPage(0); setSort("name"); setSearch(""); setFilters({ branchId: "", sportId: "", ageCategoryId: "", groupId: "", subscriptionState: "", asOf: "" }); }
 
   return <>
-    <PageHeader title="قائمة اللاعبين" context="اللاعبون / إدارة اللاعبين" description="ابحث في ملفات اللاعبين وتسجيلاتهم الرياضية وحالتهم الحالية." action={{ label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }} />
-    <FilterToolbar resultCount={total} onReset={search || Object.values(filters).some(Boolean) ? resetFilters : undefined}>
+    <PageHeader title="قائمة اللاعبين" context="اللاعبون / إدارة اللاعبين" action={{ label: "تسجيل لاعب جديد", href: "/dashboard/players/new" }} />
+    <FilterToolbar resultCount={total} onReset={search || Object.values(filters).some(Boolean) ? resetFilters : undefined} activeAdvancedCount={[filters.sportId,filters.ageCategoryId,filters.groupId,sort!=="name"].filter(Boolean).length} advanced={<>      <select aria-label="ترتيب اللاعبين" value={sort} onChange={e => { setPage(0); setSort(e.target.value); }}><option value="name">بالاسم</option>{financialValuesVisible&&<><option value="value_desc">قيمة الاشتراك: الأعلى أولًا</option><option value="value_asc">قيمة الاشتراك: الأقل أولًا</option></>}</select>      <select aria-label="فلتر الرياضة" value={filters.sportId} onChange={event => pick("sportId", event.target.value)}><option value="">كل الرياضات</option>{options.sports.map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select>
+      <select aria-label="فلتر الفئة" value={filters.ageCategoryId} onChange={event => pick("ageCategoryId", event.target.value)}><option value="">كل الفئات</option>{options.categories.map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select>
+      <select aria-label="فلتر المجموعة" value={filters.groupId} onChange={event => pick("groupId", event.target.value)}><option value="">كل المجموعات</option>{options.groups.filter(option => (!filters.branchId || option.branchId === filters.branchId) && (!filters.sportId || option.sportId === filters.sportId) && (!filters.ageCategoryId || option.ageCategoryId === filters.ageCategoryId)).map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select></>}>
       <SearchInput label="بحث اللاعبين" value={search} onChange={value => { setPage(0); setSearch(value); }} placeholder="الاسم أو الكود أو هاتف ولي الأمر" />
-      <select aria-label="ترتيب اللاعبين" value={sort} onChange={e => { setPage(0); setSort(e.target.value); }}><option value="name">بالاسم</option><option value="value_desc">قيمة الاشتراك: الأعلى أولًا</option><option value="value_asc">قيمة الاشتراك: الأقل أولًا</option></select>
+
       <select aria-label="حالة الاشتراك" value={filters.subscriptionState} onChange={event => pick("subscriptionState", event.target.value)}><option value="">كل حالات الاشتراك</option><option value="active">فعال</option><option value="expiring">ينتهي قريبًا</option><option value="expired">منتهي</option><option value="subscribed">لديه سجل اشتراك</option><option value="stable">فعال — لا ينتهي قريبًا</option><option value="other">مجمد / لم يبدأ</option></select>
       <select aria-label="فلتر الفرع" value={filters.branchId} onChange={event => pick("branchId", event.target.value)}><option value="">كل الفروع</option>{options.branches.map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select>
-      <select aria-label="فلتر الرياضة" value={filters.sportId} onChange={event => pick("sportId", event.target.value)}><option value="">كل الرياضات</option>{options.sports.map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select>
-      <select aria-label="فلتر الفئة" value={filters.ageCategoryId} onChange={event => pick("ageCategoryId", event.target.value)}><option value="">كل الفئات</option>{options.categories.map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select>
-      <select aria-label="فلتر المجموعة" value={filters.groupId} onChange={event => pick("groupId", event.target.value)}><option value="">كل المجموعات</option>{options.groups.filter(option => (!filters.branchId || option.branchId === filters.branchId) && (!filters.sportId || option.sportId === filters.sportId) && (!filters.ageCategoryId || option.ageCategoryId === filters.ageCategoryId)).map(option => <option key={option.id} value={option.id}>{option.arabicName}</option>)}</select>
+
     </FilterToolbar>
     {success && <p className="success-message" role="status">{success}</p>}{error && <ErrorState message={error} />}
-    <p className="muted">قيمة الاشتراك مكافئة شهريًا للرياضات المختارة، وليست تحصيلًا. السعر والمدة والتفاصيل من ملف اللاعب.</p>
+    <details className="list-explanation"><summary>كيف تُحسب قيمة الاشتراك؟</summary><p>قيمة الاشتراك مكافئة شهريًا للرياضات المختارة، وليست تحصيلًا. السعر والمدة والتفاصيل من ملف اللاعب.</p></details>
     <section className="list-card">{loading ? <LoadingState /> : players.length === 0 ? <EmptyState title="لا يوجد لاعبون مطابقون" message="جرّب تعديل البحث أو إعادة ضبط الفلاتر." /> : <AdminDataTable label="قائمة اللاعبين" rows={players} serverPagination={{ page, pageSize, total, onPageChange: setPage, onPageSizeChange: size => { setPageSize(size); setPage(0); } }} rowKey={player => player.id} rowClassName={player => !player.isActive ? "inactive-record" : ""} columns={[
       { key: "player", header: "اللاعب", primary: true, width: "minmax(11rem, 1.5fr)", render: player => <IdentityMark photo={player.photoReference} name={player.arabicName} detail={`تاريخ الميلاد ${formatDateAr(player.dateOfBirth)}`} /> },
       { key: "code", header: "الكود", width: "minmax(5rem, .65fr)", render: player => <span dir="ltr">{player.playerCode}</span> },
-      { key: "value", header: "قيمة الاشتراك", width: "minmax(8rem,1fr)", sortDirection: sort === "value_desc" ? "descending" : sort === "value_asc" ? "ascending" : "none", onSort: () => { setSort(sort === "value_desc" ? "value_asc" : "value_desc"); setPage(0); }, render: player => <div><strong>{player.monthlySubscriptionValue == null ? "لم تحسب بعد" : formatMoneyAr(player.monthlySubscriptionValue, player.currency)}</strong><small>شهريًا{player.unpricedSubscriptions ? " · توجد باقات بلا مكافئ شهري" : ""}</small></div> },
+      ...(financialValuesVisible ? [{ key: "value", header: "قيمة الاشتراك", width: "minmax(8rem,1fr)", sortDirection: sort === "value_desc" ? "descending" : sort === "value_asc" ? "ascending" : "none", onSort: () => { setSort(sort === "value_desc" ? "value_asc" : "value_desc"); setPage(0); }, render: player => <div><strong>{player.monthlySubscriptionValue == null ? "لم تحسب بعد" : formatMoneyAr(player.monthlySubscriptionValue, player.currency)}</strong><small>شهريًا{player.unpricedSubscriptions ? " · توجد باقات بلا مكافئ شهري" : ""}</small></div> } satisfies DataColumn<Player>] : []),
       { key: "enrollments", header: "الفرع والمجموعة", width: "minmax(8rem, 1.1fr)", render: player => !player.enrollmentSummaries ? <small>بيانات التسجيلات غير متاحة</small> : player.enrollmentSummaries?.length === 0 ? "لا توجد تسجيلات" : player.enrollmentSummaries?.map(enrollment => <div className="player-enrollment" key={enrollment.id}><strong>{enrollment.branchName}</strong><small>{enrollment.sportName} · {enrollment.groupName}</small></div>) },
       { key: "subscription", header: "الاشتراك", width: "minmax(7rem, 1fr)", render: player => player.enrollmentSummaries?.map(enrollment => <div className="player-enrollment" key={enrollment.id}><small>{enrollment.sportName} · {enrollment.subscription?.plan ?? "بلا اشتراك"}</small>{enrollment.subscription && <StatusBadge status={enrollment.subscription.status} />}</div>) ?? "—" },
       { key: "status", header: "الحالة", width: "minmax(5rem, .6fr)", render: player => <StatusBadge status={player.isActive && (player.hasActiveSubscription ?? player.enrollmentSummaries?.some(e => e.subscription?.status === "Active")) ? "Active" : "Inactive"} /> },

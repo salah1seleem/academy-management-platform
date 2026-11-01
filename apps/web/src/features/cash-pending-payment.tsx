@@ -5,7 +5,7 @@ import { ErrorState, LoadingState } from "../components/dashboard-shell";
 import { formatMoneyAr } from "../lib/formatters";
 import { csrfRequest } from "./dashboard-api";
 
-type Options = { amount: string; currency: string; sessions: { id: string; name: string; branch: string }[] };
+type Options = { cashEnabled?: boolean; amount: string; currency: string; sessions: { id: string; name: string; branch: string }[] };
 export function CashPendingPayment({ id, onCollected }: { id: string; onCollected: () => Promise<unknown> }) {
   const [data, setData] = useState<Options | null>(null), [error, setError] = useState("");
   const [session, setSession] = useState(""), [busy, setBusy] = useState(false), [refresh, setRefresh] = useState(0);
@@ -21,7 +21,7 @@ export function CashPendingPayment({ id, onCollected }: { id: string; onCollecte
   }, [id, refresh]);
   async function collect(event: FormEvent) {
     event.preventDefault();
-    if (!data || !session || busy || !window.confirm(`تأكيد استلام ${formatMoneyAr(data.amount, data.currency)} نقدًا وإضافته للوردية؟`)) return;
+    if (!data || data.cashEnabled === false || !session || busy || !window.confirm(`تأكيد استلام ${formatMoneyAr(data.amount, data.currency)} نقدًا وإضافته للوردية؟`)) return;
     setBusy(true); setError("");
     try {
       await csrfRequest(`/api/v1/manage/payments/${id}/collect`, "POST", { paymentMethod: "Cash", cashSessionId: session, expectedAmount: data.amount });
@@ -33,7 +33,8 @@ export function CashPendingPayment({ id, onCollected }: { id: string; onCollecte
     <h3>تحصيل نقدي من ورديتك</h3>
     {error && <ErrorState message={error} />}
     {!data && !error && <LoadingState />}
-    {data && <form onSubmit={collect} className="form-shell">
+    {data?.cashEnabled === false && <p role="status">التحصيل النقدي غير مفعّل. فعّله من إعدادات الأكاديمية ثم افتح ورديتك من الصناديق والعهد.</p>}
+    {data && data.cashEnabled !== false && <form onSubmit={collect} className="form-shell">
       <p>المبلغ المطلوب: <strong>{formatMoneyAr(data.amount, data.currency)}</strong></p>
       <label>وردية التحصيل<select value={session} required disabled={busy} onChange={e => setSession(e.target.value)}>
         <option value="">اختر ورديتك المفتوحة</option>

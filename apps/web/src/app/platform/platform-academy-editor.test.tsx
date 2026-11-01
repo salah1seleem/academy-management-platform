@@ -1,0 +1,12 @@
+import {afterEach,expect,it,vi} from "vitest";
+import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
+import {PlatformAcademyEditor} from "./platform-academy-editor";
+import {platformRequest} from "../../features/platform-api";
+vi.mock("../../features/platform-api",()=>({platformRequest:vi.fn(async()=>new Response('{}'))}));
+vi.mock("../../features/academy-import",()=>({AcademyImport:()=>null}));
+vi.mock("./platform-launcher-icons",()=>({PlatformLauncherIcons:()=>null}));
+const detail={id:"a",arabicName:"أكاديمية مصر",slug:"academy",timeZone:"Africa/Cairo",defaultCurrency:"EGP",isActive:false,profile:{editVersion:2,operationalState:"Suspended",location:"",contactPhone:"",commercialState:"Unspecified",platformFee:null,feeCurrency:"EGP",billingPeriod:"Monthly",subscriptionFrom:null,subscriptionTo:null},branding:null,branches:[],sports:[],users:[],readiness:["ارفع شعار الأكاديمية"],audit:[]};
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.clearAllMocks();});
+function open(){global.fetch=vi.fn(async url=>Response.json(String(url).endsWith("/entitlements")?[]:detail));render(<PlatformAcademyEditor academyId="a" onBack={()=>{}} onChanged={()=>{}}/>);}
+it("reactivation is clickable despite legacy readiness and requests the current version",async()=>{open();const button=await screen.findByRole("button",{name:"تفعيل الأكاديمية"});expect(button).toBeEnabled();vi.spyOn(window,"confirm").mockReturnValue(true);fireEvent.click(button);await waitFor(()=>expect(platformRequest).toHaveBeenCalledWith("/api/v1/platform/academies/a/state","PUT",{target:"Active",version:2}));expect(screen.queryByRole("button",{name:"تحديث الجاهزية"})).not.toBeInTheDocument();});
+it("subscription writes only commercial fields even when setup is incomplete",async()=>{open();await screen.findByRole("button",{name:"تفعيل الأكاديمية"});fireEvent.click(screen.getByRole("tab",{name:"اشتراك المنصة"}));fireEvent.change(screen.getByLabelText("رسوم المنصة"),{target:{value:"1200"}});fireEvent.submit(screen.getByRole("button",{name:"حفظ اشتراك المنصة"}).closest("form")!);await waitFor(()=>expect(platformRequest).toHaveBeenCalledWith("/api/v1/platform/academies/a/subscription","PUT",expect.objectContaining({version:2,platformFee:1200})));expect(vi.mocked(platformRequest).mock.calls[0][2]).not.toHaveProperty("ownerPhone");expect(vi.mocked(platformRequest).mock.calls[0][2]).not.toHaveProperty("location");});

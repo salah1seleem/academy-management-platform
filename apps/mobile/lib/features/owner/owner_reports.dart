@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import '../guardian/guardian_payments.dart' show ReceiptPage;
 import '../shared/experience_ui.dart';
 import '../shared/receivable_balances.dart';
 import '../shared/staff_attendance_exceptions.dart';
@@ -12,11 +13,12 @@ import 'owner_cockpit.dart';
 import 'home_destinations.dart';
 import 'external_agreements.dart';
 import 'renewal_opportunities.dart';
+import '../admin/native_product_orders.dart';
 
 const _reports = {
   'financial-hub': 'التقارير المالية',
-  'financial': 'التحصيلات',
-  'income': 'الإيرادات',
+  'financial': 'الإيرادات والتحصيلات',
+  'income': 'الإيرادات والتحصيلات',
   'receivables': 'المستحقات المالية',
   'expenses': 'المصروفات',
   'operating': 'الأرباح والخسائر',
@@ -67,6 +69,7 @@ class _OwnerReportsState extends State<OwnerReports> {
       branch = widget.initialFilters['branchId'] ?? '';
   late bool all = widget.initialFilters['allDates'] == 'true';
   int page = 1;
+  late String collectionType = widget.initialFilters['collectionType'] ?? '';
   late Future<Json> metadata = load();
   Future<Json> load() async {
     final result = await Future.wait([
@@ -89,6 +92,13 @@ class _OwnerReportsState extends State<OwnerReports> {
     'to': to,
     'allDates': all ? 'true' : 'false',
     'branchId': branch,
+    'collectionType': collectionType,
+    'subscriptionKind': collectionType == 'Subscription'
+        ? widget.initialFilters['subscriptionKind'] ?? ''
+        : '',
+    'externalKind': collectionType == 'External'
+        ? widget.initialFilters['externalKind'] ?? ''
+        : '',
   };
   void open(String name) => openPage(
     context,
@@ -98,7 +108,8 @@ class _OwnerReportsState extends State<OwnerReports> {
       initialFilters: filters,
     ),
   );
-  String get report => widget.initialReport;
+  String get report =>
+      widget.initialReport == 'income' ? 'financial' : widget.initialReport;
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: report.isEmpty ? 'التقارير' : _reports[report] ?? 'التقارير',
@@ -123,26 +134,28 @@ class _OwnerReportsState extends State<OwnerReports> {
         final query = filters..removeWhere((key, value) => value.isEmpty);
         return Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: ScopeDateTiles(
-                from: from,
-                to: to,
-                onChanged: (a, b) => setState(() {
-                  from = a;
-                  to = b;
-                  all = false;
-                  page = 1;
-                }),
-                onClear: () => setState(() {
-                  from = '';
-                  to = '';
-                  branch = '';
-                  all = true;
-                  page = 1;
-                }),
+            if (report != 'receivables')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: ScopeDateTiles(
+                  from: from,
+                  to: to,
+                  onChanged: (a, b) => setState(() {
+                    from = a;
+                    to = b;
+                    all = false;
+                    page = 1;
+                  }),
+                  onClear: () => setState(() {
+                    from = '';
+                    to = '';
+                    branch = '';
+                    all = true;
+                    collectionType = '';
+                    page = 1;
+                  }),
+                ),
               ),
-            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ScopeBranchTabs(
@@ -162,7 +175,21 @@ class _OwnerReportsState extends State<OwnerReports> {
   );
   Widget menu(List<(String, IconData)> items) => gList([
     for (final item in items)
-      GLink(_reports[item.$1] ?? item.$1, item.$2, () => open(item.$1)),
+      GLink(
+        _reports[item.$1] ?? item.$1,
+        item.$2,
+        () => open(item.$1),
+        subtitle: const {
+          'financial-hub': 'التحصيل والمستحقات والتشغيل والرواتب',
+          'attendance-hub': 'حضور اللاعبين وفريق العمل',
+          'subscriptions': 'حالة الاشتراكات ومتابعة اللاعبين',
+          'financial': 'المبالغ المحصلة ومصادرها',
+          'receivables': 'الأرصدة والمبالغ المستحقة',
+          'expenses': 'مصروفات الأكاديمية المسجلة',
+          'operating': 'الإيرادات والمصروفات ونتيجة الفترة',
+          'payroll': 'الأساسي والمستحق والتسويات',
+        }[item.$1],
+      ),
   ]);
   Widget content(Map<String, String> query) {
     if (report.isEmpty) {
@@ -174,7 +201,6 @@ class _OwnerReportsState extends State<OwnerReports> {
     }
     if (report == 'financial-hub') {
       return menu([
-        ('income', Icons.trending_up_rounded),
         ('financial', Icons.receipt_long_outlined),
         ('receivables', Icons.pending_actions_rounded),
         ('expenses', Icons.payments_outlined),
@@ -207,47 +233,6 @@ class _OwnerReportsState extends State<OwnerReports> {
         ('deductions', Icons.remove_circle_outline),
         ('additions', Icons.add_circle_outline),
       ]);
-    }
-    if (report == 'income') {
-      return RemoteBody(
-        auth: widget.auth,
-        path:
-            '/api/v1/reports/operating-statement?${Uri(queryParameters: query).query}',
-        builder: (context, value) {
-          final d = obj(value);
-          return gList([
-            Heading(
-              'الإيرادات المحصلة · ${money(d['totalIncome'], d['currency'])}',
-            ),
-            const UiText(
-              'مقبوضات فعلية بعد الاسترداد؛ لا تمثل إيرادًا مكتسبًا نهائيًا.',
-            ),
-            for (final line in rows(d['income']).where((r) => r['amount'] != 0))
-              GCard(
-                child: ListTile(
-                  title: UiText(textOf(line['label'])),
-                  trailing: UiText(money(line['amount'], d['currency'])),
-                  onTap: () => openPage(
-                    context,
-                    OwnerReports(
-                      auth: widget.auth,
-                      initialReport: 'financial',
-                      initialFilters: {
-                        ...query,
-                        'collectionType': switch (line['key']) {
-                          'product' => 'Product',
-                          'tournament' => 'Tournament',
-                          'rental' || 'external' => 'External',
-                          _ => 'Subscription',
-                        },
-                      },
-                    ),
-                  ),
-                ),
-              ),
-          ]);
-        },
-      );
     }
     if (report == 'operating') {
       return NativeOperatingStatement(auth: widget.auth, filters: query);
@@ -331,7 +316,18 @@ class _OwnerReportsState extends State<OwnerReports> {
       builder: (context, value) {
         final d = obj(value), items = rows(d['items']);
         return gList([
-          Heading(_reports[report] ?? 'التقرير'),
+          if (financial) ...[
+            CollectionSourceSummary(
+              data: d,
+              selected: collectionType,
+              onSelected: (source) => setState(() {
+                collectionType = source;
+                page = 1;
+              }),
+            ),
+            const Heading('سجل التحصيلات'),
+          ] else
+            Heading(_reports[report] ?? 'التقرير'),
           if (financial)
             UiText(
               'صافي التحصيل: ${money(d['netAmount'] ?? d['totalAmount'], d['currency'])}',
@@ -353,11 +349,7 @@ class _OwnerReportsState extends State<OwnerReports> {
                 ),
                 subtitle: UiText(
                   financial
-                      ? '${row['collectionType'] == 'Void'
-                            ? 'عكس إيصال نقدي · الفترة ملغاة · '
-                            : row['collectionType'] == 'Refund'
-                            ? 'استرداد اشتراك · بتاريخ الصرف · '
-                            : ''}${row['branch']}\n${row['receiptNumber']}'
+                      ? '${financialCollectionName(row['collectionType'])}${row['collectionType'] == 'Refund' ? ' · بتاريخ الصرف' : ''} · ${row['branch']}\n${row['receiptNumber']}'
                       : '${row['group'] ?? row['category'] ?? ''} · ${day(row['date'] ?? row['periodFrom'])}',
                   style: const TextStyle(fontSize: 10),
                 ),
@@ -372,52 +364,255 @@ class _OwnerReportsState extends State<OwnerReports> {
                 ),
                 onTap: () => openPage(
                   context,
-                  GuardianPage(
-                    title: financial ? 'تفاصيل التحصيل' : 'تفاصيل السجل',
-                    child: gList([
-                      for (final field in [
-                        ('الاسم', 'player'),
-                        ('الفرع', 'branch'),
-                        ('المجموعة', 'group'),
-                        ('التاريخ', 'date'),
-                        ('رقم الإيصال', 'receiptNumber'),
-                        ('المبلغ', 'amount'),
-                        ('الملاحظة', 'description'),
-                      ])
-                        if (row[field.$2] != null)
-                          ListTile(
-                            title: UiText(field.$1),
-                            subtitle: UiText(textOf(row[field.$2])),
-                          ),
-                    ]),
-                  ),
+                  financial
+                      ? FinancialCollectionDetail(auth: widget.auth, row: row)
+                      : GuardianPage(
+                          title: 'تفاصيل السجل',
+                          child: gList([
+                            for (final field in [
+                              ('الاسم', 'player'),
+                              ('الفرع', 'branch'),
+                              ('المجموعة', 'group'),
+                              ('التاريخ', 'date'),
+                              ('رقم الإيصال', 'receiptNumber'),
+                              ('المبلغ', 'amount'),
+                              ('الملاحظة', 'description'),
+                            ])
+                              if (row[field.$2] != null)
+                                ListTile(
+                                  title: UiText(field.$1),
+                                  subtitle: UiText(textOf(row[field.$2])),
+                                ),
+                          ]),
+                        ),
                 ),
               ),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: page <= 1 ? null : () => setState(() => page--),
-                child: const UiText('السابق'),
-              ),
-              UiText('$page'),
-              TextButton(
-                onPressed:
-                    page * 25 >=
-                        ((d['totalCount'] ??
-                                d['total'] ??
-                                d['count'] ??
-                                items.length)
-                            as num)
-                    ? null
-                    : () => setState(() => page++),
-                child: const UiText('التالي'),
-              ),
-            ],
-          ),
+          const SizedBox.shrink(),
         ]);
       },
+    );
+  }
+}
+
+String financialCollectionName(Object? type) => switch (type) {
+  null || '' || 'Subscription' => 'اشتراك',
+  'Product' => 'منتجات رياضية',
+  'Tournament' => 'بطولة',
+  'DayPass' => 'زيارة يومية',
+  'External' => 'اتفاق خارجي',
+  'Refund' => 'استرداد اشتراك',
+  'Void' => 'عكس إيصال نقدي',
+  _ => 'حركة مالية',
+};
+
+/// A read-only view of the exact authorized ledger row; it does not reprice or
+/// reconstruct a receipt from a different source's identifier.
+class FinancialCollectionDetail extends StatefulWidget {
+  FinancialCollectionDetail({super.key, required this.auth, required Json row})
+    : row = Map.unmodifiable(row);
+  final AuthController auth;
+  final Json row;
+  @override
+  State<FinancialCollectionDetail> createState() =>
+      _FinancialCollectionDetailState();
+}
+
+class _FinancialCollectionDetailState extends State<FinancialCollectionDetail> {
+  String? get identity => widget.auth.session?.selected == null
+      ? null
+      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  late final opened = identity;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.auth,
+    builder: (context, _) {
+      if (opened == null || identity != opened) return const SizedBox.shrink();
+      final row = widget.row;
+      final kind = row['collectionType'];
+      final refund = kind == 'Refund' || kind == 'Void';
+      final subscription = kind == null || kind == '' || kind == 'Subscription';
+      final receipt = row['receiptId'];
+      final hasReceipt =
+          receipt is String &&
+          receipt.isNotEmpty &&
+          receipt != '00000000-0000-0000-0000-000000000000';
+      final owner = widget.auth.session!.selected!.role == 'AcademyOwner';
+      return GuardianPage(
+        title: refund ? 'تفاصيل الاسترداد' : 'تفاصيل التحصيل',
+        child: gList([
+          Heading(financialCollectionName(kind)),
+          Heading(textOf(row['player'])),
+          const UiText('المبلغ في التقرير'),
+          MoneyText(
+            row['netAmount'] ?? row['amount'],
+            row['currency'],
+            color: refund ? ExperienceColors.negative(context) : null,
+          ),
+          if (refund) ...[
+            UiText(
+              'قيمة المبلغ المردود: ${money(row['refundAmount'], row['currency'])}',
+            ),
+            const UiText(
+              'حركة صرف مستقلة بتاريخها؛ الإيصال المرتبط يعرض التحصيل الأصلي.',
+            ),
+          ],
+          for (final field in [
+            ('الرياضة', 'sport'),
+            ('الفرع', 'branch'),
+            ('المجموعة أو النشاط', 'group'),
+            ('الباقة أو الخدمة', 'plan'),
+            ('رقم المرجع في السجل', 'receiptNumber'),
+          ])
+            if (row[field.$2] != null)
+              ListTile(
+                title: UiText(field.$1),
+                subtitle: UiText(textOf(row[field.$2])),
+              ),
+          if (row['confirmedAtUtc'] != null)
+            ListTile(
+              title: UiText(
+                refund
+                    ? 'تاريخ الصرف بالتوقيت العالمي'
+                    : 'تاريخ التأكيد بالتوقيت العالمي',
+              ),
+              subtitle: UiText(day(row['confirmedAtUtc'])),
+            ),
+          ListTile(
+            title: const UiText('طريقة الدفع'),
+            subtitle: UiText(switch (row['paymentMethod']) {
+              'Cash' => 'نقدي',
+              'Online' => 'إلكتروني',
+              _ => 'غير مسجلة',
+            }),
+          ),
+          if (row['providerReference'] is String &&
+              (row['providerReference'] as String).isNotEmpty)
+            ListTile(
+              title: const UiText('مرجع العملية'),
+              subtitle: UiText(row['providerReference']),
+            ),
+          if ((subscription || refund) && hasReceipt)
+            GLink(
+              refund ? 'عرض إيصال التحصيل الأصلي' : 'عرض الإيصال',
+              Icons.receipt_long_outlined,
+              () => openPage(
+                context,
+                ReceiptPage(auth: widget.auth, id: receipt, staff: true),
+              ),
+            ),
+          if (owner && kind == 'Product' && row['collectionId'] is String)
+            GLink(
+              'عرض طلب المنتج',
+              Icons.shopping_bag_outlined,
+              () => openPage(
+                context,
+                NativeProductOrderReview(
+                  auth: widget.auth,
+                  id: row['collectionId'],
+                ),
+              ),
+            ),
+          if (owner && kind == 'External' && hasReceipt)
+            GLink(
+              'عرض الاتفاق وإيصالاته',
+              Icons.handshake_outlined,
+              () => openPage(
+                context,
+                NativeExternalAgreementDetail(auth: widget.auth, id: receipt),
+              ),
+            ),
+        ]),
+      );
+    },
+  );
+}
+
+class CollectionSourceSummary extends StatelessWidget {
+  const CollectionSourceSummary({
+    super.key,
+    required this.data,
+    required this.selected,
+    required this.onSelected,
+  });
+  final Json data;
+  final String selected;
+  final ValueChanged<String> onSelected;
+  @override
+  Widget build(BuildContext context) {
+    final lines = rows(data['sourceSummary'] ?? <Json>[])
+        .where((l) => l['amount'] != 0)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: UiText(
+                'مصادر التحصيل',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+            IconButton(
+              tooltip: 'أساس المبالغ المحصلة',
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const UiText('المبالغ المحصلة'),
+                  content: const UiText(
+                    'المصادر تعرض المقبوضات الفعلية والاستردادات بالسالب ضمن الفلاتر نفسها لكل السجلات. طلب الدفع المعلق لا يُحسب قبضًا، وانتهاء الاشتراك لا يثبت دينًا.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const UiText('حسنًا'),
+                    ),
+                  ],
+                ),
+              ),
+              icon: const Icon(Icons.info_outline, size: 19),
+            ),
+          ],
+        ),
+        MoneyText(
+          data['netAmount'] ?? data['totalAmount'],
+          data['currency'],
+          size: 28,
+        ),
+        LayoutBuilder(
+          builder: (context, bounds) => Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final line in lines)
+                SizedBox(
+                  width: (bounds.maxWidth - 10) / 2,
+                  child: GCard(
+                    onTap: () => onSelected(textOf(line['key'])),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        UiText(
+                          textOf(line['label']),
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        MoneyText(line['amount'], data['currency'], size: 20),
+                        if (selected == line['key'])
+                          const Icon(Icons.check_circle_outline, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (selected.isNotEmpty)
+          TextButton(
+            onPressed: () => onSelected(''),
+            child: const UiText('عرض سجل كل المصادر'),
+          ),
+      ],
     );
   }
 }

@@ -1,3 +1,5 @@
+import '../shared/guardian_contact.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
@@ -78,6 +80,9 @@ class OwnerVipMembers extends StatelessWidget {
                             auth: auth,
                             adult: true,
                             reference: r['photoReference'],
+                            gender: r['gender'],
+                            identity: textOf(r['id']),
+                            avatarRole: 'guardian',
                             size: 64,
                           ),
                           const SizedBox(height: 10),
@@ -165,6 +170,7 @@ class _OwnerGuardianValuesState extends State<OwnerGuardianValues> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: DropdownButtonFormField<String>(
               initialValue: sort,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'إجمالي الاشتراكات'),
               items: const [
                 DropdownMenuItem(
@@ -190,7 +196,6 @@ class _OwnerGuardianValuesState extends State<OwnerGuardianValues> {
               builder: (context, value) {
                 final d = obj(value);
                 final items = rows(d['items']);
-                final total = d['total'] as int? ?? 0;
                 return ListView(
                   padding: const EdgeInsets.all(12),
                   children: [
@@ -200,56 +205,81 @@ class _OwnerGuardianValuesState extends State<OwnerGuardianValues> {
                     if (items.isEmpty) const UiText('لا توجد نتائج مطابقة.'),
                     for (final row in items)
                       GCard(
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: UiText(textOf(obj(row)['displayName'])),
-                          subtitle: UiText(
-                            '${obj(row)['contactPhone']}\n${obj(row)['linkedChildren']} أبناء',
+                        onTap: () => openPage(
+                          context,
+                          MemberGuardianDetail(
+                            auth: widget.auth,
+                            id: textOf(obj(row)['id']),
                           ),
-                          trailing: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              UiText(
-                                money(
-                                  obj(row)['monthlySubscriptionValue'],
-                                  obj(row)['currency'],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                PlayerAvatar(
+                                  textOf(row['displayName']),
+                                  adult: true,
+                                  auth: widget.auth,
+                                  reference: row['photoReference'],
+                                  gender: row['gender'],
+                                  identity: textOf(row['id']),
+                                  avatarRole: 'guardian',
+                                  size: 48,
                                 ),
-                              ),
-                              if ((obj(row)['unpricedSubscriptions'] as num? ??
-                                      0) >
-                                  0)
-                                const UiText('قيمة غير مكتملة'),
-                            ],
-                          ),
-                          onTap: () => openPage(
-                            context,
-                            MemberGuardianDetail(
-                              auth: widget.auth,
-                              id: textOf(obj(row)['id']),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      UiText(
+                                        textOf(row['displayName']),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Directionality(
+                                        textDirection: TextDirection.ltr,
+                                        child: UiText(
+                                          textOf(row['contactPhone']),
+                                          textAlign: TextAlign.end,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_left_rounded,
+                                  size: 22,
+                                ),
+                              ],
                             ),
-                          ),
+                            const SizedBox(height: 12),
+                            UiText(
+                              '${row['linkedChildren']} أبناء',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                            const UiText(
+                              'قيمة الاشتراكات شهريًا',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            MoneyText(
+                              row['monthlySubscriptionValue'],
+                              row['currency'],
+                              size: 22,
+                            ),
+                            if ((row['unpricedSubscriptions'] as num? ?? 0) > 0)
+                              const UiText('قيمة غير مكتملة'),
+                          ],
                         ),
                       ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextButton(
-                          onPressed: page == 0
-                              ? null
-                              : () => setState(() => page--),
-                          child: const UiText('السابق'),
-                        ),
-                        UiText(
-                          '${page + 1} / ${((total + 24) ~/ 25).clamp(1, 1000000)}',
-                        ),
-                        TextButton(
-                          onPressed: (page + 1) * 25 >= total
-                              ? null
-                              : () => setState(() => page++),
-                          child: const UiText('التالي'),
-                        ),
-                      ],
-                    ),
+                    const SizedBox.shrink(),
                   ],
                 );
               },
@@ -278,6 +308,7 @@ class MemberGuardianDetail extends StatelessWidget {
           children: [
             Heading(textOf(d['displayName'])),
             UiText(textOf(d['contactPhone'])),
+            GuardianContactAction(auth: auth, guardianId: id),
             const Heading('الأبناء المرتبطون'),
             for (final row in rows(d['children']))
               GCard(

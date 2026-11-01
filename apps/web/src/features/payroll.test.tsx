@@ -28,13 +28,13 @@ it("module management alone exposes neither salary payment nor addition review",
   expect(screen.queryByRole("button", { name: "تأكيد الدفع" })).not.toBeInTheDocument(); view.unmount();
   renderPage(<PayrollRequests />); await screen.findByText("مباراة");
   expect(screen.queryByRole("button", { name: "مراجعة" })).not.toBeInTheDocument();
-  expect(await screen.findByRole("heading", { name: "أسباب المبالغ الإضافية" })).toBeVisible();
+  expect(await screen.findByRole("heading", { name: "أسباب طلبات السلف والمبالغ الإضافية" })).toBeVisible();
 });
 
 it("review-only permission does not imply payroll configuration or salary payment", async () => {
   global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.addition.review"]) : response([{ id: "claim", name: "موظف تجريبي", reasonName: "مباراة", status: "Pending" }])) as typeof fetch;
   renderPage(<PayrollRequests />); expect(await screen.findByRole("button", { name: "مراجعة" })).toBeVisible();
-  expect(screen.queryByRole("heading", { name: "أسباب المبالغ الإضافية" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "أسباب طلبات السلف والمبالغ الإضافية" })).not.toBeInTheDocument();
 });
 
 it("does not replace the selected payroll month with a slower previous response", async () => {
@@ -141,4 +141,18 @@ it("reviews a selected request in a dialog; rejection requires neither date nor 
   fireEvent.change(screen.getByLabelText("القرار"), { target: { value: "reject" } }); expect(screen.getByLabelText("تاريخ الاستحقاق")).not.toBeRequired();
   fireEvent.click(screen.getByRole("button", { name: "حفظ القرار" })); await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   const save = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "POST"); expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ accept: false, dueDate: null, note: "" });
+});
+
+
+it("advance approval stays separate from recording cash and needs explicit grants", async () => {
+  const row = { id:"advance", employeeId:"worker", name:employee.name, kind:"Advance", requestedAmount:250, amount:200, currency:"EGP", reasonName:"ظرف شخصي", status:"Approved" };
+  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage","payroll.addition.review"]) : String(input).includes("reasons") ? response([]) : response([row])) as typeof fetch;
+  const view=renderPage(<PayrollRequests />); await screen.findByText("معتمدة · بانتظار الصرف");
+  expect(screen.queryByRole("button",{name:"تسجيل صرف السلفة"})).not.toBeInTheDocument(); view.unmount();
+  global.fetch = vi.fn((input,init) => String(input).includes("my-permissions") ? response(["payroll.manage","payroll.advance.manage","payroll.pay"]) : String(input).includes("csrf") ? response({token:"demo"}) : init?.method === "POST" ? response({status:"Paid"}) : String(input).includes("reasons") ? response([]) : response([row])) as typeof fetch;
+  renderPage(<PayrollRequests />); fireEvent.click(await screen.findByRole("button",{name:"تسجيل صرف السلفة"}));
+  expect(await screen.findByText(/الاعتماد وحده لا يسجل صرفًا/)).toBeVisible();
+  fireEvent.change(screen.getByLabelText("مرجع الصرف"),{target:{value:"تحويل عرض ١"}});
+  fireEvent.click(screen.getByRole("button",{name:"تسجيل الصرف"}));
+  await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("/record-advance"),expect.objectContaining({method:"POST",body:JSON.stringify({expectedAmount:200,reference:"تحويل عرض ١"})})));
 });

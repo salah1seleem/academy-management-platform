@@ -12,10 +12,26 @@ public sealed partial class FoundationDbContext
     public DbSet<AcademyImportJob> AcademyImportJobs => Set<AcademyImportJob>();
     public DbSet<ImportedEnrollment> ImportedEnrollments => Set<ImportedEnrollment>();
     public DbSet<ImportedHousehold> ImportedHouseholds => Set<ImportedHousehold>();
+    public DbSet<ImportedHistoricalPayment> ImportedHistoricalPayments => Set<ImportedHistoricalPayment>();
     private static void ConfigureImports(ModelBuilder b)
     {
-        Tenant<AcademyImportJob>(b); Tenant<ImportedEnrollment>(b); Tenant<ImportedHousehold>(b);
+        Tenant<AcademyImportJob>(b); Tenant<ImportedEnrollment>(b); Tenant<ImportedHousehold>(b); Tenant<ImportedHistoricalPayment>(b);
+        b.Entity<ImportedHistoricalPayment>(e => {
+            e.Property(x => x.SourceSystem).HasMaxLength(80); e.Property(x => x.ExternalCode).HasMaxLength(80);
+            e.Property(x => x.Evidence).HasMaxLength(160); e.Property(x => x.ContentHash).HasMaxLength(64);
+            e.HasIndex(x => new { x.AcademyId, x.SourceSystem, x.ExternalCode }).IsUnique();
+            e.HasIndex(x => new { x.AcademyId, x.SourceSystem, x.Evidence }).IsUnique();
+            e.HasIndex(x => new { x.AcademyId, x.SubscriptionPeriodId }).IsUnique();
+            e.HasIndex(x => new { x.AcademyId, x.CollectionId }).IsUnique();
+            e.HasOne<AcademyImportJob>().WithMany().HasForeignKey(x => new { x.AcademyId, x.JobId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<SubscriptionPeriod>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SubscriptionPeriodId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<PaymentCollection>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CollectionId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ApprovedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
         b.Entity<AcademyImportJob>(e => {
+            e.ToTable(t => t.HasCheckConstraint("CK_ImportJob_Authority", "(\"PlatformInitiated\" AND \"MembershipId\" IS NULL) OR (NOT \"PlatformInitiated\" AND \"MembershipId\" IS NOT NULL)"));
+            e.Property(x => x.ResultSummary).HasColumnType("jsonb");
             e.Property(x => x.SourceSystem).HasMaxLength(80); e.Property(x => x.FileHash).HasMaxLength(64); e.Property(x => x.ReferenceStamp).HasMaxLength(64);
             e.Property(x => x.IdempotencyKey).HasMaxLength(100); e.Property(x => x.ApprovedBranches).HasColumnType("jsonb");
             e.Property(x => x.GuardianResolutions).HasColumnType("jsonb");

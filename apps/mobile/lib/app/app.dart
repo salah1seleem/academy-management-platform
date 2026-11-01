@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -16,18 +18,26 @@ import '../features/coach/coach_home.dart';
 import '../features/owner/owner_dashboard.dart';
 import '../features/admin/admin_home.dart';
 import '../features/shared/role_navigation.dart';
-import '../features/shared/academy_news.dart';
+import '../features/shared/staff_passkeys.dart';
+import '../features/shared/self_profile.dart';
 import '../features/shared/role_intro_gate.dart';
+import '../features/shared/launcher_icon.dart';
+import '../features/shared/mobile_push.dart';
+import '../core/widgets/platform_splash.dart';
 
 class AcademyApp extends StatefulWidget {
   final AuthController auth;
   final String environment;
   final Appearance? appearance;
+
+  /// Injectable frame signal for deterministic startup tests.
+  final Future<void>? entryFrameReady;
   const AcademyApp({
     super.key,
     required this.auth,
     required this.environment,
     this.appearance,
+    this.entryFrameReady,
   });
   @override
   State<AcademyApp> createState() => _AcademyAppState();
@@ -35,6 +45,9 @@ class AcademyApp extends StatefulWidget {
 
 class _AcademyAppState extends State<AcademyApp> {
   late final AcademyBrand brand;
+  Timer? entryTimer;
+  late bool entryReady;
+  int entryStage = 0;
   AuthController get auth => widget.auth;
   String get environment => widget.environment;
   Appearance? get appearance => widget.appearance;
@@ -42,10 +55,25 @@ class _AcademyAppState extends State<AcademyApp> {
   void initState() {
     super.initState();
     brand = AcademyBrand(auth);
+    entryReady = !auth.restoring;
+    if (!entryReady) {
+      (widget.entryFrameReady ??
+              WidgetsBinding.instance.waitUntilFirstFrameRasterized)
+          .then((_) {
+            if (!mounted) return;
+            // Start the rise after the engine has actually displayed a frame;
+            // shader/font warm-up must not consume the visible animation.
+            setState(() => entryStage++);
+            entryTimer = Timer(const Duration(milliseconds: 1500), () {
+              if (mounted) setState(() => entryReady = true);
+            });
+          });
+    }
   }
 
   @override
   void dispose() {
+    entryTimer?.cancel();
     brand.dispose();
     super.dispose();
   }
@@ -58,30 +86,33 @@ class _AcademyAppState extends State<AcademyApp> {
       child: ListenableBuilder(
         listenable: Listenable.merge([appearance ?? fallbackAppearance, brand]),
         builder: (context, _) => MaterialApp(
-          title: 'أكاديميتي',
+          title: 'iAcademy One',
+          builder: (context, child) => LauncherIconGuard(
+            auth: auth,
+            child: MobilePushBridge(
+              auth: auth,
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
           debugShowCheckedModeBanner: false,
           locale: (appearance ?? fallbackAppearance).locale,
           supportedLocales: const [Locale('ar'), Locale('en')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
           theme: AcademyTheme.light(primary: brand.primary),
-          darkTheme: guardianTheme(
-            primary: brand.primary,
-            secondary: brand.secondary,
-          ),
+          darkTheme: (appearance ?? fallbackAppearance).model.fixedPalette
+              ? AcademyTheme.themed((appearance ?? fallbackAppearance).model)
+              : guardianTheme(
+                  primary: brand.primary,
+                  secondary: brand.secondary,
+                ),
           themeMode: (appearance ?? fallbackAppearance).dark
               ? ThemeMode.dark
               : ThemeMode.light,
           home: ListenableBuilder(
             listenable: auth,
             builder: (context, _) {
-              if (auth.restoring) {
-                return const Scaffold(
-                  body: Center(
-                    child: CircularProgressIndicator(
-                      semanticsLabel: 'استعادة الجلسة',
-                    ),
-                  ),
-                );
+              if (!entryReady || auth.restoring) {
+                return PlatformSplash(key: ValueKey('entry-$entryStage'));
               }
               if (auth.session == null) {
                 if (auth.restoreFailed) {
@@ -151,37 +182,40 @@ class _SessionNavigationState extends State<SessionNavigation> {
           onGenerateRoute: (_) => MaterialPageRoute<void>(
             builder: (_) => role == null
                 ? RoleFoundation(auth: widget.auth)
-                : RoleIntroGate(
+                : PushIntentGate(
                     auth: widget.auth,
-                    appearance:
-                        AppearanceScope.of(context) ?? fallbackAppearance,
-                    child: NativeRoleTabs(
+                    child: RoleIntroGate(
                       auth: widget.auth,
-                      role: role,
-                      environment: widget.environment,
-                      account: RoleFoundation(auth: widget.auth),
-                      home: guardian
-                          ? GuardianHome(
-                              auth: widget.auth,
-                              environment: widget.environment,
-                              accountPage: RoleFoundation(auth: widget.auth),
-                            )
-                          : role == 'Coach'
-                          ? CoachHome(
-                              auth: widget.auth,
-                              accountPage: RoleFoundation(auth: widget.auth),
-                            )
-                          : role == 'AcademyOwner'
-                          ? OwnerDashboard(
-                              auth: widget.auth,
-                              accountPage: RoleFoundation(auth: widget.auth),
-                            )
-                          : role == 'AcademyAdmin'
-                          ? AdminHome(
-                              auth: widget.auth,
-                              accountPage: RoleFoundation(auth: widget.auth),
-                            )
-                          : RoleFoundation(auth: widget.auth),
+                      appearance:
+                          AppearanceScope.of(context) ?? fallbackAppearance,
+                      child: NativeRoleTabs(
+                        auth: widget.auth,
+                        role: role,
+                        environment: widget.environment,
+                        account: RoleFoundation(auth: widget.auth),
+                        home: guardian
+                            ? GuardianHome(
+                                auth: widget.auth,
+                                environment: widget.environment,
+                                accountPage: RoleFoundation(auth: widget.auth),
+                              )
+                            : role == 'Coach'
+                            ? CoachHome(
+                                auth: widget.auth,
+                                accountPage: RoleFoundation(auth: widget.auth),
+                              )
+                            : role == 'AcademyOwner'
+                            ? OwnerDashboard(
+                                auth: widget.auth,
+                                accountPage: RoleFoundation(auth: widget.auth),
+                              )
+                            : role == 'AcademyAdmin'
+                            ? AdminHome(
+                                auth: widget.auth,
+                                accountPage: RoleFoundation(auth: widget.auth),
+                              )
+                            : RoleFoundation(auth: widget.auth),
+                      ),
                     ),
                   ),
           ),
@@ -229,56 +263,55 @@ class _RoleFoundationState extends State<RoleFoundation> {
   Widget build(BuildContext context) {
     final session = widget.auth.session!;
     final membership = session.selected;
-    return AppScaffold(
-      title: membership?.label ?? 'اختر الأكاديمية والدور',
+    return GuardianPage(
+      title: membership == null ? 'اختيار الأكاديمية' : 'حسابي',
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                UiText(
-                  'أهلًا، ${session.displayName}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                if (membership != null) ...[
-                  UiText(membership.academyName),
-                  UiText('الدور الحالي: ${membership.label}'),
-                  const SizedBox(height: 12),
-                  const AppearanceSettings(),
-                ] else
-                  const UiText(
-                    'اختر عضوية واحدة صراحةً. لا يتم جمع صلاحيات الأدوار.',
-                  ),
-              ],
+          if (membership != null)
+            SelfProfileCard(auth: widget.auth)
+          else ...[
+            Heading('أهلًا، ${session.displayName}'),
+            const UiText('اختر الأكاديمية والدور للمتابعة.'),
+            const SizedBox(height: 16),
+          ],
+          if (membership != null)
+            GLink(
+              'ابدأ من هنا',
+              Icons.explore_outlined,
+              () => openPage(context, RoleIntroReplay(auth: widget.auth)),
             ),
-          ),
+          if (membership != null) const AppearanceSettings(),
           if (error != null) ErrorNotice(error!),
           if (session.memberships.length > 1 || membership == null) ...[
             const SizedBox(height: 16),
-            const UiText('الأكاديميات والأدوار المتاحة'),
+            const UiText(
+              'الأكاديميات والأدوار المتاحة',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
             for (final item in session.memberships)
               Card(
                 child: ListTile(
-                  title: UiText(item.academyName),
-                  subtitle: UiText(
-                    item.role == 'AcademyAdmin'
-                        ? '${item.label}\n${item.scopeLabel}'
-                        : item.label,
+                  leading: Icon(
+                    item.id == session.membershipId
+                        ? Icons.check_circle_rounded
+                        : Icons.swap_horiz_rounded,
                   ),
+                  title: UiText(item.academyName),
+                  subtitle: UiText('${item.label}\n${item.scopeLabel}'),
                   selected: item.id == session.membershipId,
-                  trailing: const Icon(Icons.chevron_left),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: widget.auth.busy ? null : () => select(item),
                 ),
               ),
           ],
-          const SizedBox(height: 20),
-          GLink(
-            localized(context, 'الأخبار والإشعارات', 'News & notices'),
-            Icons.notifications_outlined,
-            () => openPage(context, AcademyNewsPage(auth: widget.auth)),
-          ),
+          if (membership?.role == 'Coach' || membership?.role == 'AcademyAdmin')
+            GLink(
+              'وسائل التحقق',
+              Icons.security_outlined,
+              () => openPage(context, StaffPasskeyPage(auth: widget.auth)),
+            ),
+          const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: widget.auth.busy ? null : logout,
             icon: const Icon(Icons.logout),

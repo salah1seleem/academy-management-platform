@@ -3,12 +3,12 @@ import Link from "next/link";
 import {useEffect,useRef,useState} from "react";
 import {Bell,PlayCircle} from "lucide-react";
 import {PageVideoSettings} from "./page-video-settings";
-import {NotificationTemplates} from "./notification-center";
+import {OwnerHomePreferences} from "./owner-home-settings";
 
 export function OwnerSettingsExtras(){
   const [owner,setOwner]=useState(false);
   useEffect(()=>{const c=new AbortController();fetch('/api/v1/me',{signal:c.signal,cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(!c.signal.aborted)setOwner(d?.role==='AcademyOwner');}).catch(()=>{});return()=>c.abort();},[]);
-  return owner?<><PageVideoSettings/><NotificationTemplates/></>:null;
+  return owner?<><OwnerHomePreferences/><PageVideoSettings/></>:null;
 }
 export function ExperienceTools(){
   const [unread,setUnread]=useState<number|null>(null),[video,setVideo]=useState<{title:string;url:string}|null>(null),[message,setMessage]=useState('');

@@ -67,6 +67,26 @@ class _TransferPaymentState extends State<TransferPayment> {
             'Proof received. Awaiting academy review; do not pay again.',
           ),
         );
+        showDialog<void>(
+          context: context,
+          builder: (c) => AlertDialog(
+            icon: Icon(
+              Icons.check_circle_outline_rounded,
+              size: 52,
+              color: Theme.of(c).colorScheme.primary,
+            ),
+            title: const UiText('تم إرسال الطلب للمراجعة'),
+            content: const UiText(
+              'سنرسل لك إشعارًا عند مراجعة الإدارة واعتماد الطلب.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(c),
+                child: const UiText('حسنًا'),
+              ),
+            ],
+          ),
+        );
         widget.onSubmitted?.call();
       }
     } catch (e) {
@@ -204,6 +224,7 @@ class _EnrollmentPaymentPageState extends State<EnrollmentPaymentPage> {
   int revision = 0;
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: localized(context, 'دفع الاشتراك الجديد', 'New enrollment payment'),
     child: RemoteBody(
       key: ValueKey(revision),

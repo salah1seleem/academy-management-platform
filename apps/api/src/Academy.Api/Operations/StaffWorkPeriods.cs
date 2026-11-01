@@ -61,8 +61,13 @@ public static class StaffWorkPeriods
         if(!managed&&row?.Status=="Present"&&row.CheckIn.HasValue)periods=[Legacy(row)];
         var seconds=periods.Select(Seconds).ToArray();
         var zone=await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.TimeZone).SingleAsync();
+        var monthFrom=new DateOnly(day.Year,day.Month,1);var monthTo=monthFrom.AddMonths(1);
+        var recorded=await db.StaffDailyAttendances.AsNoTracking().Where(a=>a.AcademyId==t.AcademyId&&a.MembershipId==member&&a.IsActive&&a.WorkDate>=monthFrom&&a.WorkDate<monthTo)
+            .GroupBy(a=>a.Status).Select(g=>new{status=g.Key,count=g.Count()}).ToArrayAsync();
+        // Count saved daily decisions only. Missing records are never absences.
+        var attendanceSummary=new{from=monthFrom,to=monthTo.AddDays(-1),recordedDays=recorded.Sum(r=>r.count),presentDays=recorded.Where(r=>r.status=="Present").Sum(r=>r.count),absentDays=recorded.Where(r=>r.status=="Absent").Sum(r=>r.count)};
         var canEdit=management&&(t.Role==AcademyRole.AcademyOwner||!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants)||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.IsActive&&g.Module=="staff"&&g.Read&&g.Edit));
-        return Results.Ok(new{configured=true,workDate=day,today,timeZone=zone,version=row?.Version??0,hasPreservedPeriods=managed,canEdit,items=periods.Select(View),knownWorkedSeconds=seconds.Sum(s=>s??0),totalWorkedSeconds=seconds.Length>0&&seconds.All(s=>s.HasValue)?seconds.Sum():(long?)null});
+        return Results.Ok(new{configured=true,workDate=day,today,timeZone=zone,attendanceStatus=row?.Status,attendanceSummary,version=row?.Version??0,hasPreservedPeriods=managed,canEdit,items=periods.Select(View),knownWorkedSeconds=seconds.Sum(s=>s??0),totalWorkedSeconds=seconds.Length>0&&seconds.All(s=>s.HasValue)?seconds.Sum():(long?)null});
     }
     private static bool Overlap(StaffWorkPeriod a,StaffWorkPeriod b)
     {

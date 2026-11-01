@@ -74,6 +74,19 @@ public sealed class V3GuardianHomeWorkspaceTests
         db.PlayerEvaluations.AddRange(footballReport, latest, draft, unlinkedReport, siblingReport);
         var criterion = await db.EvaluationCriteria.FirstAsync(c => c.AcademyId == member.AcademyId && c.SportId == f.SportId && c.FootballAxis != null);
         db.EvaluationScores.Add(new EvaluationScore { Id = Guid.NewGuid(), AcademyId = member.AcademyId, PlayerEvaluationId = footballReport.Id, SportId = f.SportId, EvaluationCriterionId = criterion.Id, CriterionNameSnapshot = criterion.ArabicName, WeightSnapshot = 1, FootballAxisSnapshot = criterion.FootballAxis, Score = 80 });
+        var swimCriterion = await db.EvaluationCriteria.SingleOrDefaultAsync(c => c.AcademyId == member.AcademyId && c.SportId == s.SportId && c.ArabicName == "انسياب الماء التجريبي")
+            ?? new EvaluationCriterion { Id = Guid.NewGuid(), AcademyId = member.AcademyId, SportId = s.SportId, ArabicName = "انسياب الماء التجريبي", Weight = 1 };
+        var untouchedCriterion = await db.EvaluationCriteria.SingleOrDefaultAsync(c => c.AcademyId == member.AcademyId && c.SportId == s.SportId && c.ArabicName == "معيار غير مقيم تجريبي")
+            ?? new EvaluationCriterion { Id = Guid.NewGuid(), AcademyId = member.AcademyId, SportId = s.SportId, ArabicName = "معيار غير مقيم تجريبي", Weight = 1 };
+        foreach (var c in new[] { swimCriterion, untouchedCriterion }) if (db.Entry(c).State == EntityState.Detached) db.EvaluationCriteria.Add(c);
+        foreach (var (criterionRow, score) in new[] { (swimCriterion, (int?)0), (untouchedCriterion, (int?)null) })
+            db.EvaluationScores.Add(new EvaluationScore { Id = Guid.NewGuid(), AcademyId = member.AcademyId, PlayerEvaluationId = latest.Id, SportId = s.SportId, EvaluationCriterionId = criterionRow.Id, CriterionNameSnapshot = criterionRow.ArabicName, WeightSnapshot = 1, Score = score });
+        // Older complete reports must not replace the newer partially scored report.
+        for (var i = 0; i < 7; i++) {
+            var historical = Evaluation(swim, s, today.AddDays(-10 - i), EvaluationStatus.Published);
+            db.PlayerEvaluations.Add(historical);
+            db.EvaluationScores.Add(new EvaluationScore { Id = Guid.NewGuid(), AcademyId = member.AcademyId, PlayerEvaluationId = historical.Id, SportId = s.SportId, EvaluationCriterionId = swimCriterion.Id, CriterionNameSnapshot = swimCriterion.ArabicName, WeightSnapshot = 1, Score = 70 });
+        }
         var before = (await db.Collections.CountAsync(), await db.SubscriptionPeriods.CountAsync(), await db.PaymentRequests.CountAsync());
         await db.SaveChangesAsync(); client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         var response = await client.GetAsync("/api/v1/guardian/home"); response.EnsureSuccessStatusCode(); var raw = await response.Content.ReadAsStringAsync(); var home = JsonDocument.Parse(raw).RootElement;
@@ -84,6 +97,21 @@ public sealed class V3GuardianHomeWorkspaceTests
         Assert.Equal(latest.Id, child.GetProperty("latestEvaluation").GetProperty("id").GetGuid()); Assert.Equal(JsonValueKind.Null, child.GetProperty("latestEvaluation").GetProperty("overallScore").ValueKind);
         Assert.Equal(footballReport.Id, child.GetProperty("power").GetProperty("evaluationId").GetGuid()); Assert.Equal(80, child.GetProperty("power").GetProperty("overallScore").GetDecimal());
         var sports = child.GetProperty("sports").EnumerateArray().ToArray();
+        var footballPerformance = Assert.Single(sports, x => x.GetProperty("id").GetGuid() == e1.Id).GetProperty("performance");
+        Assert.True(footballPerformance.GetProperty("isFootballReport").GetBoolean());
+        Assert.Equal(footballReport.Id, footballPerformance.GetProperty("evaluationId").GetGuid());
+        Assert.Equal(80, Assert.Single(footballPerformance.GetProperty("axes").EnumerateArray()).GetProperty("value").GetDecimal());
+        var swimPerformance = Assert.Single(sports, x => x.GetProperty("id").GetGuid() == swim.Id).GetProperty("performance");
+        Assert.False(swimPerformance.GetProperty("isFootballReport").GetBoolean());
+        Assert.Equal(0m,swimPerformance.GetProperty("meanPerformance").GetDecimal());
+        Assert.Equal(1,swimPerformance.GetProperty("scoredCriteria").GetInt32());
+        Assert.Equal(2,swimPerformance.GetProperty("applicableCriteria").GetInt32());
+        Assert.Equal(50m,swimPerformance.GetProperty("coveragePercent").GetDecimal());
+        Assert.Equal(80m,footballPerformance.GetProperty("meanPerformance").GetDecimal());
+        Assert.Empty(swimPerformance.GetProperty("axes").EnumerateArray());
+        var swimScore = Assert.Single(swimPerformance.GetProperty("criteria").EnumerateArray());
+        Assert.Equal("انسياب الماء التجريبي", swimScore.GetProperty("name").GetString());
+        Assert.Equal(0, swimScore.GetProperty("value").GetInt32());
         Assert.Equal(next.Id, Assert.Single(sports, x => x.GetProperty("id").GetGuid() == e1.Id).GetProperty("nextSession").GetProperty("id").GetGuid());
         Assert.Equal(swimNext.Id, Assert.Single(sports, x => x.GetProperty("id").GetGuid() == swim.Id).GetProperty("nextSession").GetProperty("id").GetGuid());
         var sibling = Assert.Single(children, c => c.GetProperty("id").GetGuid() == second.Id);
@@ -95,6 +123,24 @@ public sealed class V3GuardianHomeWorkspaceTests
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/guardian/evaluations/{Academy.Api.Slice5.Slice5DemoSeed.AcademyBEvaluationId}/report")).StatusCode);
         var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/evaluations/{latest.Id}/report");
         Assert.Equal(latest.Id, detail.GetProperty("id").GetGuid());
+        Assert.Equal(swimPerformance.GetProperty("meanPerformance").GetDecimal(),detail.GetProperty("performanceMean").GetProperty("value").GetDecimal());
+        Assert.Equal(50m,detail.GetProperty("performanceMean").GetProperty("coveragePercent").GetDecimal());
+        var profileResponse = await client.GetAsync($"/api/v1/guardian/children/{first.Id}/profile");
+        profileResponse.EnsureSuccessStatusCode(); var profileRaw = await profileResponse.Content.ReadAsStringAsync();
+        var profile = JsonDocument.Parse(profileRaw).RootElement;
+        var performances = profile.GetProperty("performances").EnumerateArray().ToArray();
+        Assert.Equal(footballReport.Id, Assert.Single(performances, p => p.GetProperty("enrollmentId").GetGuid() == e1.Id).GetProperty("latest").GetProperty("evaluationId").GetGuid());
+        var swimProfile = Assert.Single(performances, p => p.GetProperty("enrollmentId").GetGuid() == swim.Id);
+        Assert.Equal(8, swimProfile.GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(6, swimProfile.GetProperty("history").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, swimProfile.GetProperty("latest").GetProperty("overallScore").ValueKind);
+        Assert.Equal(0m,swimProfile.GetProperty("latest").GetProperty("meanPerformance").GetDecimal());
+        Assert.Equal(0, swimProfile.GetProperty("latest").GetProperty("criteria")[0].GetProperty("value").GetInt32());
+        Assert.Equal(latest.Id, swimProfile.GetProperty("history")[0].GetProperty("evaluationId").GetGuid());
+        Assert.DoesNotContain("NOTE-NOT-FOR-HOME", profileRaw); Assert.DoesNotContain(draft.Id.ToString(), profileRaw);
+        Assert.DoesNotContain(unlinkedReport.Id.ToString(), profileRaw); Assert.DoesNotContain(siblingReport.Id.ToString(), profileRaw);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/guardian/children/{privateChild.Id}/profile")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/guardian/children/{Academy.Api.Slice2.Slice2DemoSeed.AcademyBPlayerId}/profile")).StatusCode);
         Assert.Equal(before, (await db.Collections.CountAsync(), await db.SubscriptionPeriods.CountAsync(), await db.PaymentRequests.CountAsync()));
     }
 }

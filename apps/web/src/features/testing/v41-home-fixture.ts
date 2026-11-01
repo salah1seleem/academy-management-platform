@@ -1,5 +1,6 @@
 // Explicit API-contract fixtures for the restructured home, never UI defaults.
 export function v41HomeFixture(path:string):unknown|undefined {
+  if(path.includes('/subscriptions/home'))return {academy:'أكاديمية الاختبار',asOf:'2026-09-28',total:4,active:3,expiring:1,expired:1,players:4,dimensions:[],branches:[],sports:[{id:'s',name:'كرة القدم',kind:'Football'}]};
   if(path.includes('/academy/calendar'))return {today:'2026-09-28',trailingMonthFrom:'2026-08-28'};
   if(path.includes('/academy/experience'))return {displayName:'أكاديمية الاختبار',logoUrl:null};
   if(path.includes('/notifications'))return {items:[],unread:0,total:0};

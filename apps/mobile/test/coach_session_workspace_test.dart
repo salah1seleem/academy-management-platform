@@ -1,3 +1,5 @@
+import 'support/visibility.dart';
+
 import 'dart:async';
 
 import 'package:academy_mobile/core/api/api_client.dart';
@@ -42,13 +44,7 @@ Json roster({bool editable = false, List<Json>? players}) => {
 };
 
 Future<void> reach(WidgetTester tester, Finder finder) async {
-  await tester.scrollUntilVisible(
-    finder,
-    200,
-    scrollable: find.byType(Scrollable).first,
-  );
-  await tester.ensureVisible(finder);
-  await tester.pumpAndSettle();
+  await revealTestTarget(tester, finder);
 }
 
 void main() {
@@ -123,7 +119,7 @@ void main() {
       await reach(tester, find.text('حاضر'));
       await tester.tap(find.text('حاضر'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byType(TextField));
+      await revealTestTarget(tester, find.byType(TextField));
       await tester.enterText(find.byType(TextField), 'FB-2');
       await tester.pumpAndSettle();
       await reach(tester, find.text('غائب'));
@@ -171,6 +167,9 @@ void main() {
         }
         if (p.endsWith('/evaluation')) {
           return {
+            'id': 'evaluation',
+            'sportEnrollmentId': 'e1',
+            'status': 'Draft',
             'player': 'لاعب التجربة 1',
             'group': 'براعم الاختبار',
             'scores': [],
@@ -200,7 +199,7 @@ void main() {
       await reach(tester, find.text('تقييم اللاعب'));
       await tester.tap(find.text('تقييم اللاعب'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('بدء تقييم جديد'));
+
       await tester.pumpAndSettle();
       expect(created, containsPair('sportEnrollmentId', 'e1'));
       expect(created, containsPair('trainingSessionId', 'replacement'));
@@ -293,8 +292,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('لاعب التجربة 2'), findsNothing);
       expect(find.text('تقييم اللاعب'), findsNothing);
-      await reach(tester, find.text('عرض الملف'));
-      await tester.tap(find.text('عرض الملف'));
+      await reach(tester, find.text('تفاصيل اللاعب'));
+      await tester.tap(find.text('تفاصيل اللاعب'));
       await tester.pumpAndSettle();
       expect(find.text('ملف اللاعب'), findsOneWidget);
       expect(find.text('لاعب التجربة 1'), findsOneWidget);

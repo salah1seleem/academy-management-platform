@@ -46,8 +46,10 @@ public sealed partial class CashRegisterService
 
     public async Task<object> PendingPaymentOptions(Guid id)
     {
-        var (t, _) = await Context(write: true); await CollectionPermissions(t, true); await Enabled(t.AcademyId);
+        var (t, _) = await Context(write: true); await CollectionPermissions(t, true);
         var payment = await StaffPayment(id, t); var branch = payment.RenewalRequest.SportEnrollment.BranchId;
+        if ((await config.Active(t.AcademyId))?.CashEnabled != true)
+            return new { cashEnabled = false, canPrepare = t.Role == AcademyRole.AcademyOwner, amount = Money(payment.Amount), payment.Currency, sessions = Array.Empty<object>() };
         var sessions = await (from s in db.CashSessions.AsNoTracking()
                               join r in db.CashRegisters on s.RegisterId equals r.Id
                               join b in db.Branches on s.BranchId equals b.Id
@@ -56,7 +58,7 @@ public sealed partial class CashRegisterService
                                   db.CashierAssignments.Any(a => a.RegisterId == r.Id && a.MembershipId == t.MembershipId && a.IsActive)
                               orderby r.Name
                               select new { s.Id, name = r.Name, branch = b.ArabicName }).ToArrayAsync();
-        return new { amount = Money(payment.Amount), payment.Currency, sessions };
+        return new { cashEnabled = true, canPrepare = t.Role == AcademyRole.AcademyOwner, amount = Money(payment.Amount), payment.Currency, sessions };
     }
 
     public async Task<object> CollectPendingPayment(Guid id, Guid? sessionId, string? expectedAmount, CollectionService collections)

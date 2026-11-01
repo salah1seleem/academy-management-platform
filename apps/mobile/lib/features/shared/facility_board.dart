@@ -154,7 +154,7 @@ class _FacilityBoardPageState extends State<FacilityBoardPage> {
                   ),
                   UiText('${b['facility']} · ${b['space']}'),
                   UiText(
-                    '${textOf(b['startTime']).split(':').take(2).join(':')} — ${textOf(b['endTime']).split(':').take(2).join(':')} · ${b['coach'] ?? localized(context, 'بدون مدرب', 'No coach')}',
+                    '${trainingTimeRange(b['startTime'], b['endTime'])} · ${b['coach'] ?? localized(context, 'بدون مدرب', 'No coach')}',
                   ),
                   if (textOf(b['plannedCoach']).isNotEmpty &&
                       b['plannedCoach'] != b['coach'])

@@ -82,8 +82,13 @@ var file=await family.GetPrivateAssetAsync(factory,url);Assert.Equal(HttpStatusC
             Assert.Equal(HttpStatusCode.NotFound,(await admin.GetPrivateAssetAsync(factory,$"/api/v1/assets/media-audience?groupId={group.Id}")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound,(await Send(admin,$"/api/v1/assets/{id}/withdraw",withdraw)).StatusCode);
             branch.IsActive=true;grant.Read=false;await db.SaveChangesAsync();
-            // Explicit module permission denial is 403 at middleware; a foreign branch resource remains hidden with 404.
-            Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetPrivateAssetAsync(factory,$"/api/v1/assets/{id}")).StatusCode);
+            // Standalone asset reads authorize their actual purpose inside Download. A denied media
+            // read hides the resource with 404 and must issue neither bytes nor a short-lived ticket.
+            var deniedRead=await admin.GetPrivateAssetAsync(factory,$"/api/v1/assets/{id}");
+            Assert.Equal(HttpStatusCode.NotFound,deniedRead.StatusCode);
+            Assert.Null(deniedRead.Headers.Location);
+            Assert.Empty(await deniedRead.Content.ReadAsByteArrayAsync());
+            // Mutation requests still enforce the explicit module denial at middleware.
             Assert.Equal(HttpStatusCode.Forbidden,(await Send(admin,$"/api/v1/assets/{id}/withdraw",withdraw)).StatusCode);
         }
         finally{if(added)db.StaffActionGrants.Remove(grant);else db.Entry(grant).CurrentValues.SetValues(JsonSerializer.Deserialize<StaffActionGrant>(before!)!);await db.SaveChangesAsync();}

@@ -11,7 +11,10 @@ test("Arabic mobile owner login is tenant-scoped and logout invalidates the sess
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
   await page.getByRole("button", { name: "دخول آمن" }).click();
 
-  await expect(page.getByRole("heading", { name: "أكاديمية النجوم الرياضية", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "الرئيسية", exact: true, level: 1 })).toBeVisible();
+  const me = await (await page.request.get("/api/v1/me")).json();
+  expect(me.academyId).toBe("10000000-0000-0000-0000-000000000001");
+  await expect(page.locator('[data-approved-home="true"] header').getByText(/أكاديمية النجوم الرياضية/)).toBeVisible();
   await expect(page.getByRole("region", { name: "ملخص الأكاديمية", exact: true })).toBeVisible({timeout:20_000});
 
   const forbidden = await page.evaluate(async () => {

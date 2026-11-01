@@ -20,7 +20,7 @@ using Microsoft.Extensions.Logging;
 namespace Academy.IntegrationTests;
 
 [Collection("Tenant authentication database")]
-public sealed class OwnerReviewOperationsTests : IAsyncLifetime
+public sealed partial class OwnerReviewOperationsTests : IAsyncLifetime
 {
     private Factory factory = null!;
     public async Task InitializeAsync() { factory = new Factory(Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("Test database required")); _ = factory.CreateClient(); await CleanupOwnedFixtures(); }
@@ -162,11 +162,20 @@ public sealed class OwnerReviewOperationsTests : IAsyncLifetime
     [Fact] public async Task Photo_and_group_media_are_protected_and_new_joiners_do_not_inherit_old_media()
     {
         using var c = await Owner(); using var guardian = await Guardian(); using var coach = factory.CreateClient(); await MobileCoachTestSession.SignInAsync(coach, factory.Services);
-        var record = await Register(c); var photo = await Upload(c, "Photo", record.Player); Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/assets/{photo}")).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await coach.GetAsync($"/api/v1/assets/{photo}")).StatusCode); await Upload(c, "Photo", record.Player, valid: false);
+        var record = await Register(c); var photo = await Upload(c, "Photo", record.Player); Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/assets/{photo}")).StatusCode); Assert.Equal(HttpStatusCode.OK, (await coach.GetAsync($"/api/v1/assets/{photo}")).StatusCode); await Upload(c, "Photo", record.Player, valid: false);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var group = await db.SportEnrollments.Where(x => x.Id == record.Enrollment).Select(x => x.TrainingGroupId).SingleAsync();
+        // A coach may see a roster portrait only while this selected membership owns its current group.
+        var coachMembership = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.User.NormalizedEmail == DemoSeed.CoachEmail.ToUpperInvariant() && m.Role == Academy.Infrastructure.Tenancy.AcademyRole.Coach && m.IsActive);
+        var assignments = await db.StaffGroupAssignments.Where(a => a.AcademyMembershipId == coachMembership.Id && a.TrainingGroupId == group && a.IsActive).ToArrayAsync();
+        Assert.NotEmpty(assignments);
+        try {
+            foreach(var assignment in assignments) assignment.IsActive = false;
+            await db.SaveChangesAsync();
+            Assert.Equal(HttpStatusCode.NotFound, (await coach.GetAsync($"/api/v1/assets/{photo}")).StatusCode);
+        } finally { foreach(var assignment in assignments) assignment.IsActive = true; await db.SaveChangesAsync(); }
         var media = await Upload(c, "Media", group: group); Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/assets/{media}")).StatusCode); Assert.True(await db.PrivateAssetAudiences.AnyAsync(x => x.AssetId == media && x.PlayerId == record.Player));
         var later = await Register(c, group); Assert.False(await db.PrivateAssetAudiences.AnyAsync(x => x.AssetId == media && x.PlayerId == later.Player));
-        var future = factory.CreateClient(); (await Send(future, "/api/v1/auth/login", new { email = DemoSeed.FutureOwnerEmail, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); Assert.Equal(HttpStatusCode.NotFound, (await future.GetAsync($"/api/v1/assets/{media}")).StatusCode);
+        var future = factory.CreateClient(); (await Send(future, "/api/v1/auth/login", new { email = DemoSeed.FutureOwnerEmail, password = "Demo-Only-123!" })).EnsureSuccessStatusCode(); Assert.Equal(HttpStatusCode.NotFound, (await future.GetAsync($"/api/v1/assets/{media}")).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await future.GetAsync($"/api/v1/assets/{photo}")).StatusCode);
     }
     [Fact] public async Task Draft_and_expired_news_hide_both_text_and_private_image()
     {

@@ -53,7 +53,7 @@ public static class MonthlyPlayerStarEndpoints
         var name=await db.Players.Where(p=>p.Id==body.PlayerId).Select(p=>p.ArabicName).SingleAsync();
         var template=await db.NoticeTemplates.Where(n=>n.AcademyId==t.AcademyId&&n.Key=="Star").Select(n=>n.Message).SingleOrDefaultAsync()??NoticeEndpoints.Defaults["Star"];
         var families=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==t.AcademyId&&l.PlayerId==body.PlayerId&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.User.IsActive).Select(l=>new{l.Guardian.UserId,l.Guardian.DisplayName}).Distinct().ToArrayAsync();
-        foreach(var f in families)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=f.UserId,AudienceRole="Guardian",TargetKind="Stars",TargetId=body.PlayerId,Message=template.Replace("{children}",name).Replace("{guardian}",f.DisplayName),CreatedAtUtc=clock.GetUtcNow(),UpdatedAtUtc=clock.GetUtcNow()});
+        foreach(var f in families)db.AcademyNotices.Add(new(){EventKey="Star",Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=f.UserId,AudienceRole="Guardian",TargetKind="Stars",TargetId=body.PlayerId,Message=NoticeText.RenderValues(template,name,guardian:f.DisplayName),CreatedAtUtc=clock.GetUtcNow(),UpdatedAtUtc=clock.GetUtcNow()});
         await db.SaveChangesAsync();await tx.CommitAsync();return Results.Ok(new{row.Id,replay=false,remaining=2-count});
     }
     private static async Task<IResult> Featured(DateOnly? asOf,Guid? branchId,int? page,CurrentTenant tenant,FoundationDbContext db,TimeProvider clock,IEvaluationReportCalculator calculator,HttpResponse response)
@@ -67,7 +67,7 @@ public static class MonthlyPlayerStarEndpoints
         var stars=await db.MonthlyPlayerStars.Where(s=>s.AcademyId==t.AcademyId&&s.Month==month&&(!branchId.HasValue||db.MatchTeams.Any(team=>team.Id==s.TeamId&&team.BranchId==branchId))).GroupBy(s=>s.PlayerId).Select(g=>new{player=g.Key,count=g.Count()}).ToDictionaryAsync(g=>g.player,g=>g.count);
         var comparable=evals.OrderByDescending(e=>e.EvaluationDate).ThenByDescending(e=>e.PublishedAtUtc).ThenBy(e=>e.Id).GroupBy(e=>e.SportEnrollment.PlayerId).Select(g=>g.First())
             .Select(e=>new{evaluation=e,score=calculator.Calculate(e.Scores)}).Where(r=>r.score.OverallScore.HasValue&&r.score.AvailableAxes==6&&r.score.CompletenessPercentage==100)
-            .Select(r=>new{id=r.evaluation.SportEnrollment.PlayerId,name=r.evaluation.SportEnrollment.Player.ArabicName,photoReference=r.evaluation.SportEnrollment.Player.PhotoReference,branch=r.evaluation.TrainingGroup.Branch.ArabicName,
+            .Select(r=>new{id=r.evaluation.SportEnrollment.PlayerId,name=r.evaluation.SportEnrollment.Player.ArabicName,photoReference=r.evaluation.SportEnrollment.Player.PhotoReference,gender=r.evaluation.SportEnrollment.Player.Gender,branch=r.evaluation.TrainingGroup.Branch.ArabicName,
                 score=r.score.OverallScore!.Value,stars=stars.GetValueOrDefault(r.evaluation.SportEnrollment.PlayerId),index=MonthlyStarRanking.Index(r.score.OverallScore!.Value,stars.GetValueOrDefault(r.evaluation.SportEnrollment.PlayerId)),evaluationId=r.evaluation.Id})
             .OrderByDescending(r=>r.index).ThenByDescending(r=>r.score).ThenBy(r=>r.name).ThenBy(r=>r.id).ToArray();
         return Results.Ok(new{month,asOf=date,total=comparable.Length,page=page??1,items=comparable.Skip(((page??1)-1)*25).Take(25),basis="تقييم كرة قدم منشور مكتمل بالمحاور الستة، ونجوم شهر نهاية الفترة فقط. الرقم الظاهر هو التقييم؛ مؤشر الترتيب منفصل."});

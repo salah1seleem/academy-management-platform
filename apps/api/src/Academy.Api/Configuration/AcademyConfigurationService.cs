@@ -28,6 +28,11 @@ public sealed class AcademyConfigurationService(FoundationDbContext db, TimeProv
     public async Task<bool> Enabled(Guid academyId, string feature)
     {
         if (!AcademyFeatures.All.Contains(feature)) return false;
+        // V5.13: the information-only nutrition library is a permanent base
+        // service. Legacy configuration/license switches cannot hide it.
+        // Authentication, tenant membership and resource authorization remain
+        // enforced by the endpoint pipeline.
+        if (feature == "nutrition") return await db.Academies.AsNoTracking().AnyAsync(a => a.Id == academyId && a.IsActive);
         var settings = await Active(academyId);
         if (settings?.Features.GetValueOrDefault(feature) != true) return false;
         if (!requestLicenses.TryGetValue(academyId, out var licenses))
@@ -64,7 +69,10 @@ public sealed class AcademyConfigurationService(FoundationDbContext db, TimeProv
         var a = await db.Academies.AsNoTracking().SingleAsync(x => x.Id == row.AcademyId);
         var licenses = await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == row.AcademyId && x.IsActive).ToDictionaryAsync(x => x.Feature, x => x.Enabled);
         var settings = AcademyRuntimeSettings.Read(row.Payload);
-        return [.. settings.Validate(licenses, a.DefaultCurrency, a.TimeZone), .. Academy.Api.Help.HelpAudiencePolicy.Validate(settings.HelpAudiences)];
+        var targetBranches = (settings.OwnerHome?.Targets ?? []).Where(t => t?.BranchId != null).Select(t => t!.BranchId!.Value).Distinct().ToArray();
+        var validBranches = targetBranches.Length == 0 ? 0 : await db.Branches.IgnoreQueryFilters().CountAsync(b => b.AcademyId == row.AcademyId && b.IsActive && targetBranches.Contains(b.Id));
+        return [.. settings.Validate(licenses, a.DefaultCurrency, a.TimeZone), .. Academy.Api.Help.HelpAudiencePolicy.Validate(settings.HelpAudiences),
+            .. validBranches == targetBranches.Length ? Array.Empty<string>() : new[] { "أحد فروع هدف التحصيل غير متاح داخل الأكاديمية." }];
     }
 
     public async Task Transition(AcademyConfigurationVersion row, ConfigurationState target, Guid actor)

@@ -84,7 +84,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await t.tap(find.text('حضوري وانصرافي'));
-      await wait(find.textContaining('الإعداد المحلي الحالي لا يكفي'));
+      await wait(find.textContaining('إعداد الحضور الآمن غير مكتمل'));
       expect(find.text('تسجيل حضوري'), findsNothing);
       await t.scrollUntilVisible(
         find.text('طلب إثبات حضور للمراجعة'),

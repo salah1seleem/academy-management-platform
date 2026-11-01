@@ -1,3 +1,5 @@
+import 'introduction_test_helpers.dart';
+
 import 'package:academy_mobile/app/app.dart';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
@@ -38,25 +40,28 @@ void main() {
       );
       expect(find.text('رقم الهاتف'), findsOneWidget);
       await tester.enterText(find.byType(TextFormField).first, '01099900100');
-      await tester.tap(find.text('إرسال رمز التحقق'));
+      await tester.ensureVisible(find.text('متابعة'));
+      await tester.tap(find.text('متابعة'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).last, '246810');
+      await tester.ensureVisible(find.text('تأكيد الدخول'));
       await tester.tap(find.text('تأكيد الدخول'));
       await tester.pumpAndSettle();
       expect(find.byType(AcademyOnboarding), findsOneWidget);
       expect(find.byType(GuardianHome), findsNothing);
-      await tester.tap(find.text('تخطي'));
+      await finishRoleIntroduction(tester);
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('academy-reveal')), findsNothing);
       expect(find.byType(GuardianHome), findsOneWidget);
       expect(find.text('أكاديمية العرض'), findsOneWidget);
       expect(find.text('الرئيسية'), findsWidgets);
-      expect(find.text('أهلًا، حساب تجريبي'), findsOneWidget);
       expect(
         Directionality.of(tester.element(find.byType(GuardianHome))),
         TextDirection.rtl,
       );
       await tester.tap(find.byTooltip('حسابي'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('أهلًا، حساب تجريبي'), findsOneWidget);
       await tester.tap(find.text('تسجيل الخروج'));
       await tester.pumpAndSettle();
       expect(find.text('رقم الهاتف'), findsOneWidget);
@@ -71,9 +76,9 @@ void main() {
       )..restoring = false;
       await auth.verify('phone', 'challenge', 'otp');
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
-      expect(find.text('اختر الأكاديمية والدور'), findsOneWidget);
-      expect(find.text('ولي أمر'), findsOneWidget);
-      expect(find.text('مالك'), findsOneWidget);
+      expect(find.text('اختيار الأكاديمية'), findsOneWidget);
+      expect(find.textContaining('ولي أمر'), findsOneWidget);
+      expect(find.textContaining('مالك'), findsOneWidget);
       expect(auth.session!.membershipId, isNull);
     },
   );
@@ -85,7 +90,8 @@ void main() {
         environment: 'Demo',
       ),
     );
-    await tester.tap(find.text('إرسال رمز التحقق'));
+    await tester.ensureVisible(find.text('متابعة'));
+    await tester.tap(find.text('متابعة'));
     await tester.pumpAndSettle();
     expect(api.paths, isEmpty);
     expect(find.text('أدخل رقم الهاتف المصري.'), findsOneWidget);

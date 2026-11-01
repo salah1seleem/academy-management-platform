@@ -9,7 +9,7 @@ it('permanent deletion requires explicit confirmation; optional-note retry keeps
 });
 it('policy is compact and never invents another branch storage usage',async()=>{
  global.fetch=vi.fn(async()=>Response.json({notice:'حصة التخزين تشمل الملفات المعلقة حتى إزالتها.',retention:{days:30,deleteOnExpiry:true},storedBytes:null,storageLimitBytes:1073741824,downloadLimitBytes:536870912,workerEnabled:false}))as typeof fetch;
- render(<MediaStorageNotice/>);await screen.findByText(/حصة التخزين تشمل/);const details=screen.getByText('الاحتفاظ وحدود الوسائط').closest('details')!;expect(details).not.toHaveAttribute('open');expect(screen.queryByText(/تخزين الأكاديمية:/)).not.toBeInTheDocument();fireEvent.click(screen.getByText('الاحتفاظ وحدود الوسائط'));expect(screen.getByText(/عامل التنظيف الآلي غير مشغّل/)).toBeInTheDocument();
+ render(<MediaStorageNotice/>);await screen.findByText(/حصة التخزين تشمل/);const details=screen.getByText('التخزين والاحتفاظ بالملفات').closest('details')!;expect(details).not.toHaveAttribute('open');expect(screen.queryByText(/تخزين الأكاديمية:/)).not.toBeInTheDocument();fireEvent.click(screen.getByText('التخزين والاحتفاظ بالملفات'));expect(screen.getByText(/عامل التنظيف الآلي غير مشغّل/)).toBeInTheDocument();
 });
 it('owner retention is an optional new-upload policy saved only as a draft with explicit deletion opt-in',async()=>{
  const settings={currency:'EGP',timeZone:'Africa/Cairo',features:{media:true},cashEnabled:false,consecutiveAbsenceAlert:3,tenantMarketingOptIn:false};const writes:unknown[]=[];

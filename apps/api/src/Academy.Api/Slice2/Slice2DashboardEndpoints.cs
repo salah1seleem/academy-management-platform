@@ -68,14 +68,14 @@ public static class Slice2DashboardEndpoints
         var bounds=Academy.Api.Slice8.ReportingEndpoints.UtcRange(from,to,zone);
         var ratings=db.GuardianFeedbacks.Where(f=>f.AcademyId==academy&&f.IsActive&&f.Kind=="Rating"&&f.Score>=1&&f.Score<=5&&f.CreatedAtUtc>=bounds.Start&&f.CreatedAtUtc<bounds.EndExclusive&&(!branch.HasValue||f.BranchId==branch));
         var items=await db.AcademyMemberships.AsNoTracking().Where(m=>m.AcademyId==academy&&m.Role==Infrastructure.Tenancy.AcademyRole.Coach&&(!branch.HasValue||db.StaffGroupAssignments.Any(a=>a.AcademyId==academy&&a.AcademyMembershipId==m.Id&&a.IsActive&&a.TrainingGroup.IsActive&&a.TrainingGroup.BranchId==branch)))
-            .Select(m=>new{id=m.Id,arabicName=m.User.DisplayName,m.IsActive,
+            .Select(m=>new{id=m.Id,arabicName=m.User.DisplayName,m.IsActive,gender=db.UserClaims.Where(c=>c.UserId==m.UserId&&c.ClaimType==Academy.Api.Operations.SelfProfileEndpoints.GenderClaim).Select(c=>c.ClaimValue).FirstOrDefault(),
                 photoReference=db.Employees.Where(e=>e.AcademyId==academy&&e.MembershipId==m.Id).Select(e=>e.PhotoAssetId.HasValue?"/api/v1/assets/"+e.PhotoAssetId:e.DemoPortraitReference).FirstOrDefault(),
                 parentRating=ratings.Where(f=>f.CoachMembershipId==m.Id).Average(f=>(decimal?)f.Score),
                 parentRatingCount=ratings.Count(f=>f.CoachMembershipId==m.Id),
                 assignedGroups=db.StaffGroupAssignments.Count(a=>a.AcademyId==academy&&a.AcademyMembershipId==m.Id&&a.IsActive&&a.TrainingGroup.IsActive&&(!branch.HasValue||a.TrainingGroup.BranchId==branch)),
                 groups=db.StaffGroupAssignments.Where(a=>a.AcademyId==academy&&a.AcademyMembershipId==m.Id&&a.IsActive&&a.TrainingGroup.IsActive&&(!branch.HasValue||a.TrainingGroup.BranchId==branch)).OrderBy(a=>a.TrainingGroup.ArabicName).Select(a=>new{id=a.TrainingGroupId,name=a.TrainingGroup.ArabicName,branch=a.TrainingGroup.Branch.ArabicName}).ToArray()
             }).OrderByDescending(m=>m.IsActive).ThenByDescending(m=>m.parentRating.HasValue).ThenByDescending(m=>m.parentRating).ThenBy(m=>m.arabicName).ToArrayAsync();
-        return items.Select(m=>new{m.id,m.arabicName,m.IsActive,m.photoReference,m.assignedGroups,m.groups,parentRating=m.parentRating.HasValue?Math.Round(m.parentRating.Value,1):(decimal?)null,m.parentRatingCount});
+        return items.Select(m=>new{m.id,m.arabicName,m.IsActive,m.photoReference,m.gender,m.assignedGroups,m.groups,parentRating=m.parentRating.HasValue?Math.Round(m.parentRating.Value,1):(decimal?)null,m.parentRatingCount});
     }
 
     private static async Task<IResult> GetStructure(string kind, Guid id, CurrentTenant tenant, FoundationDbContext db)
@@ -184,22 +184,23 @@ public static class Slice2DashboardEndpoints
         var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, time);
         var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == playerId).Select(x => new
         {
-            x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive, x.PhotoReference,
+            x.Id, x.PlayerCode, x.ArabicName, x.EnglishName, x.RegisteredOn, x.DateOfBirth, x.Gender, x.HeightCm, x.WeightKg, x.PreferredFoot, x.FootballPosition, x.Address, x.IsActive, x.PhotoReference,
             asOfDate = clock.Today,
             hasActiveSubscription = db.SubscriptionPeriods.Any(p => p.AcademyId == current.AcademyId && p.SportEnrollment.PlayerId == x.Id && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen && p.StartDate <= clock.Today && (p.EndDate == null || p.EndDate >= clock.Today) && ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration || p.RemainingSessions > 0)),
             guardians = db.GuardianPlayerLinks.Where(l => l.AcademyId == current.AcademyId && l.PlayerId == x.Id && l.IsActive && l.Guardian.IsActive)
                 .OrderBy(l => l.Guardian.DisplayName).Select(l => new { id = l.GuardianId, l.Guardian.DisplayName, l.RelationshipType }).ToList(),
             enrollments = db.SportEnrollments.Where(e => e.AcademyId == current.AcademyId && e.PlayerId == x.Id).OrderBy(e => e.Sport.ArabicName).Select(e => new
             {
-                e.Id, trainingGroupId = FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate), e.SportId, e.BranchId, registrationFormat = e.RegistrationFormat.ToString(), e.TrainingLevelId, e.GroupAssignedFrom,
+                e.Id, e.ShirtNumber, trainingGroupId = FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate), e.SportId, e.BranchId, registrationFormat = e.RegistrationFormat.ToString(), e.TrainingLevelId, e.GroupAssignedFrom,
                 levelName = db.TrainingLevels.Where(l => l.Id == e.TrainingLevelId).Select(l => l.ArabicName).FirstOrDefault(),
                 placement = e.TrainingGroupId == null ? "Unassigned" : "Assigned",
                 sportName = e.Sport.ArabicName,
                 branchName = e.Branch.ArabicName,
                 groupName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة",
+                recurring = db.RecurringSchedules.Where(s=>s.AcademyId==current.AcademyId&&s.TrainingGroupId==FoundationDbContext.AssignedGroupAt(e.AcademyId,e.Id,groupDate)&&s.IsActive).Select(s=>new{s.DayOfWeek,s.StartTime,s.EndTime,s.ValidFrom,s.ValidTo}).ToList(),
                 categoryName = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, groupDate)).Select(g => g.AgeCategory.ArabicName).FirstOrDefault() ?? "غير محددة",
                 transfers = db.EnrollmentGroupTransfers.Where(tr => tr.SportEnrollmentId == e.Id).OrderByDescending(tr => tr.EffectiveDate).Select(tr => new { tr.EffectiveDate, groupName = db.TrainingGroups.Where(g => g.Id == tr.TargetGroupId).Select(g => g.ArabicName).FirstOrDefault() }).ToList(),
-                sessionMoves = db.EnrollmentSessionMoves.Where(m => m.SportEnrollmentId == e.Id).OrderByDescending(m => m.CreatedAtUtc).Select(m => new { date = db.TrainingSessions.Where(s => s.Id == m.TargetSessionId).Select(s => s.SessionDate).First(), group = db.TrainingGroups.Where(g => g.Id == m.TargetGroupId).Select(g => g.ArabicName).First() }).ToList(),
+                sessionMoves = db.EnrollmentSessionMoves.Where(m => m.SportEnrollmentId == e.Id).OrderByDescending(m => m.CreatedAtUtc).Select(m => new { m.SourceSessionId, m.TargetSessionId, m.BatchId, date = db.TrainingSessions.Where(s => s.Id == m.TargetSessionId).Select(s => s.SessionDate).First(), group = db.TrainingGroups.Where(g => g.Id == m.TargetGroupId).Select(g => g.ArabicName).First() }).ToList(),
                 status = e.Status.ToString(),
                 subscription = db.SubscriptionPeriods.Where(period => period.AcademyId == current.AcademyId && period.SportEnrollmentId == e.Id)
                     .OrderByDescending(period => period.UpdatedAtUtc)
@@ -222,6 +223,9 @@ public static class Slice2DashboardEndpoints
         if (string.IsNullOrWhiteSpace(request.ArabicName)) return Validation("arabicName", "اسم اللاعب مطلوب.");
         var player = await db.Players.SingleOrDefaultAsync(x => x.AcademyId == current.AcademyId && x.Id == playerId);
         if (player is null) return Results.NotFound();
+        if (request.DateOfBirth == DateOnly.MinValue ||
+            request.DateOfBirth > await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, clock))
+            return Validation("dateOfBirth", "أدخل تاريخ الميلاد الصحيح بما لا يتجاوز اليوم بتوقيت الأكاديمية.");
         player.ArabicName = request.ArabicName.Trim(); player.EnglishName = Clean(request.EnglishName); player.DateOfBirth = request.DateOfBirth; player.Gender = request.Gender; player.HeightCm = request.HeightCm; player.WeightKg = request.WeightKg; player.PreferredFoot = request.PreferredFoot; player.FootballPosition = Clean(request.FootballPosition); player.Address = Clean(request.Address); player.UpdatedAtUtc = clock.GetUtcNow();
         await db.SaveChangesAsync(); return Results.NoContent();
     }

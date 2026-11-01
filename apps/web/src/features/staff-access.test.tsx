@@ -102,3 +102,8 @@ it("applies a template without saving, restricts branches, previews changes and 
   expect(body).toMatchObject({ allBranches: false, branches: ["branch-a"], templateKey: "branch-operator" });
   expect(body.actions).toEqual(preset.actions);
 });
+
+it("uses the selected platform academy and platform CSRF while reusing the same reviewed grant payload",async()=>{
+ const fetcher=vi.fn(async(url:RequestInfo|URL)=>new Response(JSON.stringify(String(url).endsWith("/csrf")?{token:"csrf"}:value),{status:200}));global.fetch=fetcher;const close=vi.fn();render(<StaffAccessEditor id="admin" name="إداري خيالي" platformAcademyId="academy-b" onClose={close}/>);
+ await screen.findByRole("button",{name:"اعتماد الصلاحيات"});fireEvent.click(screen.getByRole("button",{name:"اعتماد الصلاحيات"}));fireEvent.click(screen.getByRole("button",{name:"تأكيد الاعتماد"}));await waitFor(()=>expect(close).toHaveBeenCalledOnce());expect(fetcher.mock.calls.some(c=>String(c[0])==="/api/v1/platform/auth/csrf")).toBe(true);expect(vi.mocked(fetch).mock.calls.find(c=>c[1]?.method==="PUT")?.[0]).toBe("/api/v1/platform/academies/academy-b/users/admin/access");
+});

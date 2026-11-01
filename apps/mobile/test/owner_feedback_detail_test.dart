@@ -91,12 +91,22 @@ void main() {
       await t.testTextInput.receiveAction(TextInputAction.done);
       await t.pumpAndSettle();
       final button = find.text('حفظ مرحلة المعالجة');
-      await t.ensureVisible(button);
+      await t.scrollUntilVisible(
+        button,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.pumpAndSettle();
       await t.tap(button);
       await t.pumpAndSettle();
       expect(saved, isFalse);
       expect(find.widgetWithText(TextField, 'تحقيق داخلي فقط'), findsOneWidget);
-      await t.ensureVisible(button);
+      await t.scrollUntilVisible(
+        button,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.pumpAndSettle();
       await t.tap(button);
       await t.pumpAndSettle();
       expect(saved, isTrue);

@@ -1,0 +1,3 @@
+# Academy Arabic font assets
+
+Arabic and Latin subsets of IBM Plex Sans Arabic weights300–700 supplied inside the approved Design-2 Owner export were decoded from WOFF2 and merged losslessly to TTF with fontTools4.60.2. Primary family names were changed to Academy Arabic/AcademyArabic for the modified distribution; glyph outlines were not redesigned. Copyright2019 IBM Corp. Original license notice: Copyright2017 IBM Corp., Reserved Font Name Plex. SIL OFL1.1 is included in AcademyArabic-OFL.txt; source https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsansarabic/OFL.txt . The application uses family AcademyArabic offline. Existing Cairo assets remain for compatibility.

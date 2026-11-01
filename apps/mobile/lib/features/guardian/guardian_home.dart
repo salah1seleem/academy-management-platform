@@ -1,23 +1,36 @@
+import '../shared/modern_home.dart';
+import '../shared/experience_ui.dart';
+
+import 'dart:convert';
+
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
+import '../../core/widgets/gentle_carousel.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
+import '../../core/theme/academy_brand.dart';
 import 'guardian_ui.dart';
 import 'guardian_profile.dart';
+import 'coach_feedback.dart';
 import 'guardian_payments.dart';
 import 'guardian_report.dart';
 import 'daily_nutrition.dart';
-import '../shared/vip_rewards.dart';
-import '../shared/experience_ui.dart';
+import 'family_nutrition_rail.dart';
+import 'family_media.dart';
+import 'reward_banner.dart';
 import 'enrollment_requests.dart';
 import '../shared/academy_news.dart';
 import '../shared/community_ads.dart';
+import '../shared/notification_inbox.dart';
 import 'sport_store.dart';
-import 'tournament_fees.dart';
-import 'guardian_day_pass.dart';
 import '../shared/matches.dart';
 import '../shared/receivable_balances.dart';
+import '../shared/private_media.dart';
+import 'guardian_content.dart';
+import '../owner/owner_action_rail.dart';
 
 class GuardianHome extends StatefulWidget {
   final AuthController auth;
@@ -33,17 +46,68 @@ class GuardianHome extends StatefulWidget {
   State<GuardianHome> createState() => _GuardianHomeState();
 }
 
-class _GuardianHomeState extends State<GuardianHome> {
+class _GuardianHomeState extends State<GuardianHome>
+    with WidgetsBindingObserver {
   String? selectedPlayer, identity;
-  int section = 0;
-  String? get currentIdentity => widget.auth.session?.selected == null
+  int section = 0, homeRevision = 0;
+  bool detailsExpanded = false;
+  final selectedEnrollments = <String, String>{};
+
+  Json workspaceChild(Json child) {
+    final sports = rows(child['sports']);
+    final sport =
+        sports
+            .where((s) => s['id'] == selectedEnrollments[textOf(child['id'])])
+            .firstOrNull ??
+        sports.firstOrNull;
+    final performance = sport?['performance'] is Map
+        ? obj(sport!['performance'])
+        : null;
+    final legacy = child['latestEvaluation'];
+    final latest = sport?.containsKey('performance') == true
+        ? performance == null || performance['evaluationId'] == null
+              ? null
+              : <String, dynamic>{
+                  'id': performance['evaluationId'],
+                  'sport': sport?['sport'],
+                  'evaluationDate': performance['evaluationDate'],
+                  'overallScore': performance['meanPerformance'],
+                }
+        : legacy is Map && legacy['sport'] == sport?['sport']
+        ? legacy
+        : null;
+    return {
+      ...child,
+      'sports': <Json>[?sport],
+      'latestEvaluation': latest,
+      'power': null,
+    };
+  }
+
+  String? get currentIdentity =>
+      widget.auth.session?.selected?.role != 'Guardian'
       ? null
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   @override
   void initState() {
     super.initState();
     identity = currentIdentity;
+    WidgetsBinding.instance.addObserver(this);
     widget.auth.addListener(contextChanged);
+    notificationChanges(widget.auth).addListener(noticesChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      noticesChanged();
+    }
+  }
+
+  void noticesChanged() {
+    if (mounted && identity != null && identity == currentIdentity) {
+      setState(() => homeRevision++);
+    }
   }
 
   void contextChanged() {
@@ -51,6 +115,8 @@ class _GuardianHomeState extends State<GuardianHome> {
     setState(() {
       identity = currentIdentity;
       selectedPlayer = null;
+      detailsExpanded = false;
+      selectedEnrollments.clear();
     });
   }
 
@@ -59,15 +125,21 @@ class _GuardianHomeState extends State<GuardianHome> {
     super.didUpdateWidget(old);
     if (old.auth != widget.auth) {
       old.auth.removeListener(contextChanged);
+      notificationChanges(old.auth).removeListener(noticesChanged);
       widget.auth.addListener(contextChanged);
+      notificationChanges(widget.auth).addListener(noticesChanged);
       identity = currentIdentity;
       selectedPlayer = null;
+      detailsExpanded = false;
+      selectedEnrollments.clear();
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.auth.removeListener(contextChanged);
+    notificationChanges(widget.auth).removeListener(noticesChanged);
     super.dispose();
   }
 
@@ -86,11 +158,17 @@ class _GuardianHomeState extends State<GuardianHome> {
     child: currentIdentity == null
         ? const SizedBox.shrink()
         : RemoteBody(
-            key: ValueKey(identity),
+            key: ValueKey('$identity:$homeRevision'),
             auth: widget.auth,
             path: '/api/v1/guardian/home',
             builder: (context, value) {
-              final home = obj(value), allChildren = rows(home['children']);
+              final home = obj(value),
+                  allChildren = rows(home['children'])
+                    ..sort(
+                      (a, b) =>
+                          textOf(a['dateOfBirth'])
+                              .compareTo(textOf(b['dateOfBirth'])),
+                    );
               final selected = allChildren.any((c) => c['id'] == selectedPlayer)
                   ? selectedPlayer
                   : allChildren.isEmpty
@@ -98,291 +176,348 @@ class _GuardianHomeState extends State<GuardianHome> {
                   : textOf(allChildren.first['id']);
               final children = allChildren
                   .where((c) => c['id'] == selected)
+                  .map(workspaceChild)
                   .toList();
+              final competitions =
+                  BrandScope.maybeOf(context)?.features.contains('matches') ??
+                  true;
+              final effectiveSection = section == 4 && !competitions
+                  ? 0
+                  : section;
               final nutritionToday = textOf(
                 home['trainingToday'] ?? home['today'],
               );
               return gList([
-                ExperienceHeader(
-                  auth: widget.auth,
-                  subtitle: 'أهلًا، ${home['guardianName']}',
-                  lesson: 'family-progress',
-                  account: widget.accountPage,
-                ),
                 GuardianUrgentMatchAlerts(
                   auth: widget.auth,
                   alerts: rows(home['urgentAlerts'] ?? <Json>[]),
+                  onReturned: () {
+                    if (mounted) setState(() => homeRevision++);
+                  },
                 ),
-                GuardianSponsoredCard(auth: widget.auth),
-                Heading(localized(context, 'أبنائي', 'My children')),
-                if (allChildren.isNotEmpty)
-                  SizedBox(
-                    height: 100 + MediaQuery.textScalerOf(context).scale(32),
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: allChildren.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 10),
-                      itemBuilder: (context, i) {
-                        final c = allChildren[i];
-                        final active = c['id'] == selected;
-                        return SizedBox(
-                          width: 98,
-                          child: InkWell(
-                            key: ValueKey('select-child-${c['id']}'),
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () => setState(
-                              () => selectedPlayer = textOf(c['id']),
-                            ),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                color: active
-                                    ? Theme.of(context).colorScheme.primary
-                                          .withValues(alpha: .13)
-                                    : Colors.transparent,
-                                border: Border.all(
-                                  color: active
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.transparent,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  PlayerAvatar(
-                                    textOf(c['arabicName']),
-                                    auth: widget.auth,
-                                    reference: c['photoReference'],
-                                    size: 56,
-                                  ),
-                                  const SizedBox(height: 6),
-                                  UiText(
-                                    textOf(c['arabicName']),
-                                    maxLines: 2,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                const SizedBox(height: 14),
-                if (children.isNotEmpty)
+                GuardianRewardBanner(
+                  key: ValueKey('reward-$identity'),
+                  auth: widget.auth,
+                ),
+                const RoleHomeIntro(
+                  title: 'رحلة أبنائك',
+                  subtitle: 'تقدمهم ومواعيدهم، وأنت بالقرب منهم',
+                ),
+                if (allChildren.length > 1)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        for (final item in [
-                          (0, 'الاشتراك'),
-                          (1, 'الجدول والحصص'),
-                          (2, 'التقييمات'),
-                          (3, 'التغذية والصحة'),
-                        ])
+                        for (final child in allChildren)
                           Padding(
                             padding: const EdgeInsetsDirectional.only(end: 8),
                             child: ChoiceChip(
-                              key: ValueKey('child-section-${item.$1}'),
+                              key: ValueKey('child-tab-${child['id']}'),
                               label: UiText(
-                                item.$2,
-                                style: const TextStyle(fontSize: 11),
+                                textOf(child['arabicName']),
+                                style: const TextStyle(fontSize: 12),
                               ),
-                              selected: section == item.$1,
+                              selected: child['id'] == selected,
                               showCheckmark: false,
-                              onSelected: (_) =>
-                                  setState(() => section = item.$1),
+                              onSelected: (_) => setState(
+                                () => selectedPlayer = textOf(child['id']),
+                              ),
                             ),
                           ),
                       ],
                     ),
                   ),
-                const SizedBox(height: 14),
-                if (children.isEmpty)
+                if (allChildren.isNotEmpty)
+                  GuardianChildCarousel(
+                    key: ValueKey('carousel-$identity'),
+                    auth: widget.auth,
+                    children: allChildren,
+                    selectedPlayerId: selected,
+                    selectedEnrollments: selectedEnrollments,
+                    onEnrollmentSelected: (player, enrollment) => setState(() {
+                      selectedPlayer = player;
+                      selectedEnrollments[player] = enrollment;
+                    }),
+                    today: textOf(home['today']),
+                    onSelected: (id) => setState(() => selectedPlayer = id),
+                    onOpenEnrollment: (id, enrollmentId) => open(
+                      ChildProfile(
+                        auth: widget.auth,
+                        environment: widget.environment,
+                        playerId: id,
+                        today: home['today'],
+                        nutritionDate: nutritionToday,
+                        initialEnrollmentId: enrollmentId,
+                      ),
+                    ),
+                    onOpen: (id) => open(
+                      ChildProfile(
+                        auth: widget.auth,
+                        environment: widget.environment,
+                        playerId: id,
+                        today: home['today'],
+                        nutritionDate: nutritionToday,
+                      ),
+                    ),
+                  ),
+                if (allChildren.isEmpty)
                   const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
-                for (final child in children)
-                  KeyedSubtree(
-                    key: ValueKey('child-workspace-${child['id']}'),
-                    child: Column(
-                      children: [
-                        PremiumChildCard(
+                OwnerActionRail(
+                  key: ValueKey('guardian-home-actions-$identity'),
+                  automatic: false,
+                  actions: [
+                    OwnerRailAction(
+                      localized(context, 'اشتراك جديد', 'New enrollment'),
+                      Icons.person_add_alt,
+                      const Color(0xFFCA2449),
+                      () => open(
+                        EnrollmentForm(
                           auth: widget.auth,
-                          childData: child,
-                          today: textOf(home['today']),
-                          showSubscription: false,
-                          onTap: () => open(
-                            ChildProfile(
-                              auth: widget.auth,
-                              environment: widget.environment,
-                              playerId: child['id'],
-                              today: home['today'],
-                            ),
-                          ),
+                          environment: widget.environment,
                         ),
-                        if (section == 1)
-                          for (final sport in rows(child['sports']))
-                            if (sport['nextSession'] is Map)
-                              NextSessionCard(
-                                childName: textOf(child['arabicName']),
-                                sport: sport,
-                                onTap: () => open(
-                                  ProfileRecords(
-                                    auth: widget.auth,
-                                    playerId: child['id'],
-                                    section: 'schedule',
+                      ),
+                      key: const ValueKey('guardian-action-اشتراك جديد'),
+                    ),
+                    OwnerRailAction(
+                      localized(context, 'تجديد الاشتراك', 'Renew'),
+                      Icons.autorenew,
+                      const Color(0xFF159B82),
+                      () => open(
+                        RenewalPicker(
+                          auth: widget.auth,
+                          environment: widget.environment,
+                        ),
+                      ),
+                      key: const ValueKey('guardian-action-تجديد الاشتراك'),
+                    ),
+                    OwnerRailAction(
+                      localized(context, 'تجديد لغيره', 'Renew for someone'),
+                      Icons.card_giftcard,
+                      const Color(0xFF6755C7),
+                      () => open(
+                        ExternalRenewal(
+                          auth: widget.auth,
+                          environment: widget.environment,
+                        ),
+                      ),
+                      key: const ValueKey('guardian-action-تجديد اشتراك لغيره'),
+                    ),
+                    OwnerRailAction(
+                      'تقييم المدربين',
+                      Icons.star_outline_rounded,
+                      const Color(0xFFE5B54D),
+                      () => open(
+                        GuardianFeedbackChildren(
+                          auth: widget.auth,
+                          children: allChildren,
+                        ),
+                      ),
+                      key: const ValueKey('guardian-action-تقييم المدربين'),
+                    ),
+                    OwnerRailAction(
+                      'شكوى أو اقتراح',
+                      Icons.chat_bubble_outline_rounded,
+                      const Color(0xFF5076B8),
+                      () => open(
+                        GuardianFeedbackChildren(
+                          auth: widget.auth,
+                          children: allChildren,
+                          complaint: true,
+                        ),
+                      ),
+                      key: const ValueKey('guardian-action-شكوى أو اقتراح'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (children.isNotEmpty)
+                  GCard(
+                    padding: EdgeInsets.zero,
+                    child: ExpansionTile(
+                      key: const ValueKey('child-home-details'),
+                      initiallyExpanded: detailsExpanded,
+                      onExpansionChanged: (value) =>
+                          setState(() => detailsExpanded = value),
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      title: UiText(
+                        'تفاصيل ${textOf(children.first['arabicName']).split(' ').first}',
+                      ),
+                      leading: const Icon(Icons.manage_accounts_outlined),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      children: [
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final item in [
+                                (0, 'الاشتراك', Icons.card_membership_rounded),
+                                (
+                                  1,
+                                  'الجدول والحصص',
+                                  Icons.calendar_month_rounded,
+                                ),
+                                (2, 'التقييمات', Icons.insights_rounded),
+                                (3, 'التغذية والصحة', Icons.restaurant_rounded),
+                                if (competitions)
+                                  (4, 'المنافسات', Icons.emoji_events_rounded),
+                              ])
+                                Padding(
+                                  padding: const EdgeInsetsDirectional.only(
+                                    end: 8,
+                                  ),
+                                  child: _ChildFeatureTab(
+                                    key: ValueKey('child-section-${item.$1}'),
+                                    label: item.$2,
+                                    icon: item.$3,
+                                    selected: effectiveSection == item.$1,
+                                    onTap: () =>
+                                        setState(() => section = item.$1),
                                   ),
                                 ),
-                              ),
-                        if (section == 1 &&
-                            !rows(child['sports'])
-                                .any((s) => s['nextSession'] is Map))
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: UiText(
-                              localized(
-                                context,
-                                'لا يوجد موعد تدريب قادم منشور لهذا الطفل.',
-                                'No upcoming training session published for this child.',
-                              ),
-                              style: const TextStyle(fontSize: 14),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        for (final child in children)
+                          KeyedSubtree(
+                            key: ValueKey('child-workspace-${child['id']}'),
+                            child: Column(
+                              children: [
+                                if (effectiveSection == 1)
+                                  for (final sport in rows(child['sports']))
+                                    if (sport['nextSession'] is Map)
+                                      NextSessionCard(
+                                        childName: textOf(child['arabicName']),
+                                        sport: sport,
+                                        onTap: () => open(
+                                          ProfileRecords(
+                                            auth: widget.auth,
+                                            playerId: child['id'],
+                                            section: 'schedule',
+                                            enrollmentId: textOf(sport['id']),
+                                          ),
+                                        ),
+                                      ),
+                                if (effectiveSection == 1 &&
+                                    !rows(child['sports'])
+                                        .any((s) => s['nextSession'] is Map))
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: UiText(
+                                      localized(
+                                        context,
+                                        'لا يوجد موعد تدريب قادم منشور لهذا الطفل.',
+                                        'No upcoming training session published for this child.',
+                                      ),
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ),
+                                if (effectiveSection == 0)
+                                  GuardianSubscriptionSummary(
+                                    auth: widget.auth,
+                                    environment: widget.environment,
+                                    childData: child,
+                                  ),
+                                if (effectiveSection == 2)
+                                  GuardianLatestProgress(
+                                    auth: widget.auth,
+                                    childData: child,
+                                  ),
+                                if (effectiveSection == 4)
+                                  NextMatchStrip(
+                                    auth: widget.auth,
+                                    playerId: textOf(child['id']),
+                                  ),
+                                if (effectiveSection == 4)
+                                  GLink(
+                                    'مباريات ${child['arabicName']}',
+                                    Icons.emoji_events_outlined,
+                                    () => open(
+                                      MatchSchedule(
+                                        auth: widget.auth,
+                                        playerId: textOf(child['id']),
+                                      ),
+                                    ),
+                                  ),
+                                if (effectiveSection == 3)
+                                  DailyNutritionCard(
+                                    key: ValueKey(
+                                      'home-nutrition-${child['id']}',
+                                    ),
+                                    auth: widget.auth,
+                                    playerId: child['id'],
+                                    playerName: child['arabicName'],
+                                    today: nutritionToday,
+                                  ),
+                                const SizedBox(height: 18),
+                              ],
                             ),
                           ),
-                        if (section == 0)
-                          GuardianSubscriptionSummary(
-                            auth: widget.auth,
-                            environment: widget.environment,
-                            childData: child,
-                          ),
-                        if (section == 2)
-                          GuardianLatestProgress(
-                            auth: widget.auth,
-                            childData: child,
-                          ),
-                        if (section == 3)
-                          DailyNutritionCard(
-                            key: ValueKey('home-nutrition-${child['id']}'),
-                            auth: widget.auth,
-                            playerId: child['id'],
-                            playerName: child['arabicName'],
-                            today: nutritionToday,
-                          ),
-                        const SizedBox(height: 18),
                       ],
                     ),
                   ),
-                Heading(localized(context, 'خدمات الأسرة', 'Family services')),
-                TextButton.icon(
-                  onPressed: () => open(NativeVipRewards(auth: widget.auth)),
-                  icon: const Icon(Icons.card_giftcard_rounded),
-                  label: const UiText('مكافآت أسرتك وشروط استخدامها'),
-                ),
-                LayoutBuilder(
-                  builder: (context, bounds) => Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      homeAction(
-                        context,
-                        bounds,
-                        'اشتراك جديد',
-                        'New enrollment',
-                        Icons.person_add_alt,
-                        () => open(
-                          EnrollmentForm(
-                            auth: widget.auth,
-                            environment: widget.environment,
-                          ),
-                        ),
-                      ),
-                      homeAction(
-                        context,
-                        bounds,
-                        'تجديد الاشتراك',
-                        'Renew',
-                        Icons.autorenew,
-                        () => open(
-                          RenewalPicker(
-                            auth: widget.auth,
-                            environment: widget.environment,
-                          ),
-                        ),
-                      ),
-                      homeAction(
-                        context,
-                        bounds,
-                        'تجديد اشتراك لغيره',
-                        'Renew for someone',
-                        Icons.card_giftcard,
-                        () => open(
-                          ExternalRenewal(
-                            auth: widget.auth,
-                            environment: widget.environment,
-                          ),
-                        ),
-                      ),
-                      homeAction(
-                        context,
-                        bounds,
-                        'الباقات',
-                        'Plans',
-                        Icons.layers_outlined,
-                        () => open(
-                          RenewalPicker(
-                            auth: widget.auth,
-                            environment: widget.environment,
-                          ),
-                        ),
-                      ),
-                      homeAction(
-                        context,
-                        bounds,
-                        'المتجر',
-                        'Store',
-                        Icons.shopping_bag_outlined,
-                        () => open(
-                          GuardianPage(
-                            title: localized(
-                              context,
-                              'المنتجات الرياضية',
-                              'Sports store',
-                            ),
-                            child: gList([CatalogSections(auth: widget.auth)]),
-                          ),
-                        ),
-                      ),
-                      homeAction(
-                        context,
-                        bounds,
-                        'البطولات',
-                        'Tournaments',
-                        Icons.emoji_events_outlined,
-                        () => open(TournamentFees(auth: widget.auth)),
-                      ),
-                      homeAction(
-                        context,
-                        bounds,
-                        'زيارة يومية',
-                        'Day pass',
-                        Icons.confirmation_number_outlined,
-                        () => open(GuardianDayPassPage(auth: widget.auth)),
-                      ),
-                    ],
+                Heading(
+                  localized(
+                    context,
+                    'أقرب المواعيد لأبنائي',
+                    'Upcoming for my children',
                   ),
                 ),
-                const SizedBox(height: 18),
-                NextMatchStrip(auth: widget.auth),
+                for (final child in allChildren) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: UiText(
+                      textOf(child['arabicName']),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  for (final sport in rows(child['sports']))
+                    if (sport['nextSession'] is Map)
+                      NextSessionCard(
+                        childName: textOf(child['arabicName']),
+                        sport: sport,
+                        onTap: () => open(
+                          ProfileRecords(
+                            auth: widget.auth,
+                            playerId: child['id'],
+                            section: 'schedule',
+                            enrollmentId: textOf(sport['id']),
+                          ),
+                        ),
+                      ),
+                  if (competitions)
+                    NextMatchStrip(
+                      key: ValueKey('family-match-${child['id']}'),
+                      auth: widget.auth,
+                      playerId: textOf(child['id']),
+                    ),
+                ],
+                const SizedBox(height: 12),
+                Heading(
+                  localized(
+                    context,
+                    'النظام الغذائي اليومي للأبناء',
+                    'Daily family nutrition',
+                  ),
+                ),
+                FamilyNutritionRail(
+                  auth: widget.auth,
+                  children: allChildren,
+                  today: nutritionToday,
+                ),
+                GuardianSponsoredCard(auth: widget.auth),
                 NewsStrip(auth: widget.auth),
                 Heading(
                   localized(context, 'منتجات الرياضة', 'Sports products'),
                 ),
                 CatalogSections(auth: widget.auth),
+                if (selected != null)
+                  FamilyTrainingMedia(
+                    key: ValueKey('home-media-$identity-$homeRevision'),
+                    auth: widget.auth,
+                    children: allChildren,
+                  ),
                 GLink(
                   localized(context, 'طلبات الاشتراك', 'Enrollment requests'),
                   Icons.inbox_outlined,
@@ -403,49 +538,41 @@ class _GuardianHomeState extends State<GuardianHome> {
                   Icons.account_balance_wallet_outlined,
                   () => open(ReceivableBalancesPage(auth: widget.auth)),
                 ),
-              ]);
+              ], key: const ValueKey('guardian-home-scroll'));
             },
           ),
   );
-  Widget homeAction(
-    BuildContext context,
-    BoxConstraints bounds,
-    String ar,
-    String en,
-    IconData icon,
-    VoidCallback action,
-  ) => SizedBox(
-    width: (bounds.maxWidth - 10) / 2,
-    child: Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        key: ValueKey('guardian-action-$ar'),
-        onTap: action,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: Theme.of(context).colorScheme.primary,
-                size: 26,
-              ),
-              const SizedBox(height: 8),
-              UiText(
-                localized(context, ar, en),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+}
+
+class GuardianHomeMedia extends StatelessWidget {
+  const GuardianHomeMedia({
+    super.key,
+    required this.auth,
+    required this.playerId,
+  });
+  final AuthController auth;
+  final String playerId;
+  @override
+  Widget build(BuildContext context) => RemoteBody(
+    auth: auth,
+    path:
+        '/api/v1/assets/gallery?playerId=${Uri.encodeQueryComponent(playerId)}',
+    builder: (context, value) {
+      final media = rows(value).take(4).toList();
+      if (media.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Heading('صور وفيديوهات التمرين'),
+          for (final item in media) MediaTile(auth: auth, media: item),
+          TextButton(
+            onPressed: () =>
+                openPage(context, GalleryPage(auth: auth, playerId: playerId)),
+            child: const UiText('عرض كل الصور والفيديوهات'),
           ),
-        ),
-      ),
-    ),
+        ],
+      );
+    },
   );
 }
 
@@ -489,7 +616,7 @@ class GuardianSubscriptionSummary extends StatelessWidget {
                     style: const TextStyle(fontSize: 14),
                   ),
                 UiText(
-                  '${day(sport['period']['startDate'])} — ${day(sport['period']['endDate'])}',
+                  'بداية الاشتراك ${day(sport['period']['startDate'])} · نهاية الاشتراك ${day(sport['period']['endDate'])}',
                   style: const TextStyle(fontSize: 14),
                   textDirection: TextDirection.ltr,
                 ),
@@ -619,19 +746,250 @@ class GuardianLatestProgress extends StatelessWidget {
                 ),
               ),
             ),
-          const Icon(Icons.chevron_left),
+          const Icon(Icons.chevron_right),
         ],
       ),
     );
   }
 }
 
-class PremiumChildCard extends StatelessWidget {
+class _ChildFeatureTab extends StatelessWidget {
+  const _ChildFeatureTab({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Column(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: selected
+                      ? color.withValues(alpha: .13)
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                ),
+                child: Icon(
+                  icon,
+                  size: 21,
+                  color: selected
+                      ? color
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 6),
+              UiText(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? color : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class GuardianChildCarousel extends StatefulWidget {
+  const GuardianChildCarousel({
+    super.key,
+    required this.auth,
+    required this.children,
+    this.selectedPlayerId,
+    required this.today,
+    required this.onSelected,
+    required this.onOpen,
+    this.onOpenEnrollment,
+    this.selectedEnrollments = const {},
+    this.onEnrollmentSelected,
+  });
+  final Map<String, String> selectedEnrollments;
+  final void Function(String playerId, String enrollmentId)?
+  onEnrollmentSelected;
+  final AuthController auth;
+  final List<Json> children;
+  final String? selectedPlayerId;
+  final String today;
+  final ValueChanged<String> onSelected, onOpen;
+  final void Function(String playerId, String? enrollmentId)? onOpenEnrollment;
+  @override
+  State<GuardianChildCarousel> createState() => _GuardianChildCarouselState();
+}
+
+class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
+  late final controller = PageController(
+    viewportFraction: .94,
+    keepPage: false,
+    initialPage:
+        widget.children.indexWhere((c) => c['id'] == widget.selectedPlayerId) <
+            0
+        ? 0
+        : widget.children.indexWhere((c) => c['id'] == widget.selectedPlayerId),
+  );
+  final heights = <int, double>{};
+  String? layoutSignature;
+  double get uniformHeight =>
+      heights.values.fold<double>(450, (a, b) => a > b ? a : b);
+  @override
+  void didUpdateWidget(GuardianChildCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedPlayerId == widget.selectedPlayerId) return;
+    final index = widget.children.indexWhere(
+      (c) => c['id'] == widget.selectedPlayerId,
+    );
+    if (index < 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          controller.hasClients &&
+          controller.page?.round() != index) {
+        controller.jumpToPage(index);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final signature = jsonEncode([
+      MediaQuery.sizeOf(context).width,
+      MediaQuery.textScalerOf(context).scale(1),
+      widget.children,
+      widget.selectedEnrollments,
+    ]);
+    if (signature != layoutSignature) {
+      layoutSignature = signature;
+      heights.clear();
+    }
+    return SizedBox(
+      height: uniformHeight,
+      child: PageView.builder(
+        controller: controller,
+        padEnds: false,
+        itemCount: widget.children.length,
+        onPageChanged: (i) =>
+            widget.onSelected(textOf(widget.children[i]['id'])),
+        itemBuilder: (context, i) {
+          final c = widget.children[i];
+          return Padding(
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: Semantics(
+              label: 'الابن ${i + 1} من ${widget.children.length}',
+              child: GestureDetector(
+                key: ValueKey('select-child-${c['id']}'),
+                onTap: () => widget.onSelected(textOf(c['id'])),
+                child: OverflowBox(
+                  alignment: Alignment.topCenter,
+                  minHeight: 0,
+                  maxHeight: double.infinity,
+                  child: _ChildCardMeasure(
+                    onSize: (size) {
+                      if (mounted &&
+                          ((heights[i] ?? 0) - size.height).abs() > .5) {
+                        setState(() {
+                          heights[i] = size.height;
+                        });
+                      }
+                    },
+                    child: PremiumChildCard(
+                      key: ValueKey('large-child-${c['id']}'),
+                      cardHeight: heights.containsKey(i) ? uniformHeight : null,
+                      auth: widget.auth,
+                      childData: c,
+                      today: widget.today,
+                      selectedEnrollmentId:
+                          widget.selectedEnrollments[textOf(c['id'])],
+                      onEnrollmentChanged: widget.onEnrollmentSelected == null
+                          ? null
+                          : (id) => widget.onEnrollmentSelected!(
+                              textOf(c['id']),
+                              id,
+                            ),
+                      onTap: () => widget.onOpen(textOf(c['id'])),
+                      onOpenEnrollment: widget.onOpenEnrollment == null
+                          ? null
+                          : (id) =>
+                                widget.onOpenEnrollment!(textOf(c['id']), id),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ChildCardMeasure extends SingleChildRenderObjectWidget {
+  const _ChildCardMeasure({required this.onSize, required super.child});
+  final ValueChanged<Size> onSize;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _ChildCardMeasurement(onSize);
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _ChildCardMeasurement renderObject,
+  ) {
+    renderObject.onSize = onSize;
+  }
+}
+
+class _ChildCardMeasurement extends RenderProxyBox {
+  _ChildCardMeasurement(this.onSize);
+  ValueChanged<Size> onSize;
+  Size? previous;
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (previous == size) return;
+    previous = size;
+    final measured = size;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onSize(measured);
+    });
+  }
+}
+
+class PremiumChildCard extends StatefulWidget {
   final bool showSubscription;
+  final double? cardHeight;
   final AuthController auth;
   final Json childData;
   final String today;
   final VoidCallback onTap;
+  final ValueChanged<String?>? onOpenEnrollment;
+  final String? selectedEnrollmentId;
+  final ValueChanged<String>? onEnrollmentChanged;
   const PremiumChildCard({
     super.key,
     required this.auth,
@@ -639,153 +997,445 @@ class PremiumChildCard extends StatelessWidget {
     required this.today,
     required this.onTap,
     this.showSubscription = true,
+    this.cardHeight,
+    this.onOpenEnrollment,
+    this.selectedEnrollmentId,
+    this.onEnrollmentChanged,
   });
   @override
+  State<PremiumChildCard> createState() => _PremiumChildCardState();
+}
+
+class _PremiumChildCardState extends State<PremiumChildCard> {
+  String? enrollment;
+  @override
   Widget build(BuildContext context) {
-    final c = childData;
-    return Container(
-      key: ValueKey('child-${c['id']}'),
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          colors: [
-            Color.alphaBlend(
-              Theme.of(context).colorScheme.primary.withValues(alpha: .08),
-              Theme.of(context).colorScheme.surface,
+    final c = widget.childData, sports = rows(c['sports']);
+    final sport =
+        sports
+            .where(
+              (s) => s['id'] == (widget.selectedEnrollmentId ?? enrollment),
+            )
+            .firstOrNull ??
+        sports.firstOrNull;
+    final performance = sport?['performance'] is Map
+        ? obj(sport!['performance'])
+        : sport?.containsKey('performance') != true &&
+              sports.length == 1 &&
+              sport?['sport'] == 'كرة القدم' &&
+              c['power'] is Map
+        ? <String, dynamic>{...obj(c['power']), 'isFootballReport': true}
+        : <String, dynamic>{};
+    final assessedAxes = rows(performance['axes'] ?? <Json>[])
+        .where((a) => a['value'] is num)
+        .toList();
+    final criteria = rows(performance['criteria'] ?? <Json>[])
+        .where((a) => a['value'] is num)
+        .toList();
+    final score = performance['meanPerformance'];
+    final legacyScore = performance['overallScore'];
+    final scored = performance['scoredCriteria'] as num? ?? criteria.length;
+    final applicable =
+        performance['applicableCriteria'] as num? ?? criteria.length;
+    final colors = Theme.of(context).colorScheme;
+    final name = textOf(c['arabicName']);
+    final mean = score is num ? performanceScoreText(score) : '—';
+    final chart =
+        performance['isFootballReport'] == true && assessedAxes.isNotEmpty
+        ? assessedAxes
+        : [
+            for (final item in criteria)
+              {'axis': item['name'], 'value': item['value']},
+          ];
+    Widget portrait(double width) => ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        width: width,
+        height: 158,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PlayerAvatar(
+              name,
+              auth: widget.auth,
+              reference: c['photoReference'],
+              gender: c['gender'],
+              size: width,
+              height: 158,
+              square: true,
             ),
-            Theme.of(context).colorScheme.surface,
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 32, 12, 10),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0xF0071B32)],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(
+                      mean,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        height: 1.1,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const UiText(
+                      'متوسط التقييم',
+                      style: TextStyle(
+                        color: Color(0xFFDCE7F3),
+                        fontSize: 10,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: .22),
-        ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  PlayerAvatar(
-                    textOf(c['arabicName']),
-                    auth: auth,
-                    reference: c['photoReference'],
-                    size: 48,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
+    );
+    Widget indicators() => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        UiText(
+          'مؤشر الأداء · ${sport?['sport'] ?? ''}',
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.3,
+            fontWeight: FontWeight.w600,
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+        if (performance['isFootballReport'] == true && chart.isNotEmpty)
+          RadarChart(chart, compact: true)
+        else if (criteria.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              children: [
+                for (final criterion in criteria.take(6))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         UiText(
-                          textOf(c['arabicName']),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          '${criterion['name']} · ${performanceScoreText(criterion['value'] as num)}',
+                          style: const TextStyle(fontSize: 11, height: 1.25),
                         ),
-                        UiText(
-                          localized(
-                            context,
-                            '${ageOn(c['dateOfBirth'], today) ?? '—'} سنوات',
-                            '${ageOn(c['dateOfBirth'], today) ?? '—'} years',
+                        const SizedBox(height: 4),
+                        LinearProgressIndicator(
+                          value: ((criterion['value'] as num) / 100).clamp(
+                            0,
+                            1,
                           ),
-                          style: const TextStyle(fontSize: 14),
+                          minHeight: 3,
                         ),
-                        if ((c['monthlyStars'] as num? ?? 0) > 0)
-                          UiText(
-                            '${c['monthlyStars']} ★ نجوم هذا الشهر',
-                            style: const TextStyle(
-                              color: Color(0xFFF3D083),
-                              fontSize: 12,
-                            ),
-                          ),
-                        if (c['power'] is Map)
-                          UiText(
-                            (c['power']['overallScore'] as num?)
-                                    ?.round()
-                                    .toString() ??
-                                '—',
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w900,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        if (c['power'] is Map)
-                          UiText(
-                            localized(
-                              context,
-                              'آخر تقييم منشور',
-                              'Latest published report',
-                            ),
-                            style: const TextStyle(fontSize: 14),
-                          ),
                       ],
                     ),
                   ),
-                  if (c['power'] is Map)
-                    SizedBox(
-                      width: 105,
-                      height: 105,
-                      child: RadarChart(
-                        rows(c['power']['axes']),
-                        compact: true,
+              ],
+            ),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: UiText(
+              'سيظهر تطور الأداء عند نشر تقييم لهذه الرياضة.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+      ],
+    );
+    return Container(
+      key: ValueKey('child-${c['id']}'),
+      height: widget.cardHeight,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: .85)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .035),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: widget.cardHeight == null
+            ? MainAxisAlignment.start
+            : MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(
+                      name,
+                      style: TextStyle(
+                        fontSize: 20,
+                        height: 1.35,
+                        fontWeight: FontWeight.w800,
+                        color: colors.onSurface,
                       ),
-                    )
-                  else
-                    Icon(
-                      Icons.chevron_left,
-                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 3),
+                    UiText(
+                      '${ageOn(c['dateOfBirth'], widget.today) ?? '—'} سنة',
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if ((c['monthlyStars'] as num? ?? 0) > 0)
+                UiText(
+                  '★ ' * (c['monthlyStars'] as num).toInt(),
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: ExperienceColors.award(context),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (sports.length > 1) ...[
+            DropdownButtonFormField<String>(
+              key: ValueKey('card-enrollment-${c['id']}-${sport?['id']}'),
+              initialValue: textOf(sport!['id']),
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'الرياضة والاشتراك',
+                isDense: true,
+                constraints: BoxConstraints(minHeight: 42),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+              ),
+              items: [
+                for (final item in sports)
+                  DropdownMenuItem(
+                    value: textOf(item['id']),
+                    child: UiText(
+                      '${item['sport']} · ${item['branch'] ?? ''}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+              onChanged: (value) {
+                setState(() => enrollment = value);
+                widget.onEnrollmentChanged?.call(value!);
+              },
+            ),
+            const SizedBox(height: 14),
+          ] else if (sport != null) ...[
+            UiText(
+              '${sport['sport']} · ${sport['branch'] ?? ''}',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.3,
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          LayoutBuilder(
+            builder: (context, bounds) =>
+                bounds.maxWidth > 248 &&
+                    MediaQuery.textScalerOf(context).scale(1) <= 1.3
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      portrait(bounds.maxWidth * .4),
+                      const SizedBox(width: 12),
+                      Expanded(child: indicators()),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(child: portrait(146)),
+                      const SizedBox(height: 14),
+                      indicators(),
+                    ],
+                  ),
+          ),
+          if (score is num) ...[
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              key: ValueKey('performance-mean-gauge-${c['id']}'),
+              value: (score / 100).clamp(0, 1),
+              minHeight: 3,
+            ),
+            const SizedBox(height: 6),
+            Tooltip(
+              message: 'متوسط حسابي لمعايير التقييم المنشور نفسه من100. المعايير غير المقيمة لا تدخل بصفر.',
+              child: UiText(
+                '$scored من $applicable معايير · آخر تقييم منشور',
+                style: TextStyle(
+                  fontSize: 10,
+                  height: 1.3,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (scored < applicable)
+              UiText(
+                'التقييم غير مكتمل',
+                style: TextStyle(fontSize: 11, color: colors.error),
+              ),
+          ] else ...[
+            const UiText(
+              'بيانات الأداء غير كافية لحساب المتوسط',
+              style: TextStyle(fontSize: 11),
+            ),
+            if (legacyScore is num)
+              UiText(
+                '${performanceScoreText(legacyScore)} · التقييم المركب',
+                style: const TextStyle(fontSize: 12),
+              ),
+          ],
+          if (widget.showSubscription && sport != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (sport['period'] is Map) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: UiText(
+                            textOf(sport['period']['plan']),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        StatusPill(sport['period']['status'], fontSize: 10),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    UiText(
+                      textOf(sport['group'] ?? 'في انتظار المجموعة'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    if (sport['period']['remainingSessions'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 4),
+                        child: UiText(
+                          '${sport['period']['remainingSessions']} حصص متبقية',
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.3,
+                            fontWeight: FontWeight.w800,
+                            color: colors.primary,
+                          ),
+                        ),
+                      ),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: [
+                        UiText(
+                          'بداية الاشتراك: ${day(sport['period']['startDate'])}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            height: 1.4,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        UiText(
+                          'نهاية الاشتراك: ${day(sport['period']['endDate'])}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            height: 1.4,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else
+                    const UiText(
+                      'لا يوجد اشتراك فعال',
+                      style: TextStyle(fontSize: 12),
                     ),
                 ],
               ),
-              for (final s in rows(c['sports']))
-                UiText(
-                  '${s['sport']} · ${s['branch'] ?? ''}',
-                  style: const TextStyle(fontSize: 14),
+            ),
+          ],
+          for (final coach in rows(sport?['coaches'] ?? []))
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: () => openPage(
+                  context,
+                  CoachFeedbackPage(
+                    auth: widget.auth,
+                    playerId: textOf(c['id']),
+                    initialGroupId: textOf(coach['groupId']),
+                    initialCoachId: textOf(coach['id']),
+                  ),
                 ),
-              const SizedBox(height: 8),
-              for (final sport in rows(
-                c['sports'],
-              ).where((_) => showSubscription))
-                Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (sport['period'] != null) ...[
-                      StatusPill(sport['period']['status']),
-                      UiText(
-                        '${day(sport['period']['startDate'])} — ${day(sport['period']['endDate'])}',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ] else
-                      UiText(
-                        localized(
-                          context,
-                          'لا يوجد اشتراك فعال',
-                          'No active subscription',
-                        ),
-                      ),
-                  ],
-                ),
-              const SizedBox(height: 6),
-              UiText(
-                localized(context, 'عرض الملف', 'View profile'),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontSize: 14,
+                icon: const Icon(Icons.sports_outlined, size: 17),
+                label: UiText(
+                  'المدرب ${coach['name']}',
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
-            ],
+            ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () {
+              if (widget.onOpenEnrollment != null) {
+                widget.onOpenEnrollment!(sport?['id']?.toString());
+              } else {
+                widget.onTap();
+              }
+            },
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: UiText(
+                'ملف ${name.split(' ').first} والتقرير',
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -872,11 +1522,11 @@ class NextSessionCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 UiText(
-                  '${textOf(session['startTime']).split(':').take(2).join(':')} — ${textOf(session['endTime']).split(':').take(2).join(':')}',
-                  textDirection: TextDirection.ltr,
+                  trainingTimeRange(session['startTime'], session['endTime']),
+                  textDirection: TextDirection.rtl,
                 ),
                 UiText(
-                  day(session['sessionDate']),
+                  sessionDateLabel(session['sessionDate']),
                   style: const TextStyle(fontSize: 14),
                 ),
                 UiText(
@@ -891,7 +1541,7 @@ class NextSessionCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_left),
+          Icon(Icons.chevron_right),
         ],
       ),
     );
@@ -937,83 +1587,185 @@ class _CatalogSectionsState extends State<CatalogSections> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          GLink(
+            'طلباتي من المنتجات الرياضية',
+            Icons.shopping_bag_outlined,
+            () => openPage(context, GuardianProductOrders(auth: widget.auth)),
+          ),
           if (sections.isEmpty)
             const EmptyMessage('لا توجد منتجات منشورة لرياضات الأبناء.'),
           for (final section in sections) ...[
             Heading(textOf(section['sport'])),
-            SizedBox(
-              height: 260,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: rows(section['items']).length,
-                separatorBuilder: (_, index) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final item = rows(section['items'])[index];
-                  final base = (item['displayPrice'] as num?)?.toDouble();
-                  final price = base == null
-                      ? null
-                      : base *
-                            (100 - (item['discountPercentage'] as num? ?? 0)) /
-                            100;
-                  return SizedBox(
-                    width: 166,
-                    child: GCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: DemoImage(
-                              item['imageReference'],
-                              height: 106,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          UiText(
-                            textOf(item['arabicName']),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (price != null)
-                            UiText(
-                              money(price, item['currency']),
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          FilledButton(
-                            onPressed:
-                                price != null &&
-                                    (item['stockQuantity'] as num? ?? 0) > 0
-                                ? () => openPage(
-                                    context,
-                                    ProductPurchase(
-                                      auth: widget.auth,
-                                      product: {
-                                        ...item,
-                                        'sportId': section['sportId'],
-                                      },
-                                    ),
-                                  )
-                                : null,
-                            child: UiText(localized(context, 'شراء', 'Buy')),
-                          ),
-                        ],
+            GentleCarousel(
+              height:
+                  300 +
+                  (MediaQuery.textScalerOf(context).scale(1).clamp(1, 2) - 1) *
+                      120,
+              width:
+                  200 +
+                  (MediaQuery.textScalerOf(context).scale(1).clamp(1, 2) - 1) *
+                      60,
+              count: rows(section['items']).length,
+              itemBuilder: (context, index) {
+                final item = rows(section['items'])[index];
+                final base = (item['displayPrice'] as num?)?.toDouble();
+                final price = base == null
+                    ? null
+                    : base *
+                          (100 - (item['discountPercentage'] as num? ?? 0)) /
+                          100;
+                return GCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: DemoImage(item['imageReference'], height: 146),
                       ),
-                    ),
-                  );
-                },
-              ),
+                      const SizedBox(height: 8),
+                      UiText(
+                        textOf(item['arabicName']),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (price != null)
+                        UiText(
+                          money(price, item['currency']),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      FilledButton(
+                        onPressed:
+                            price != null &&
+                                (item['stockQuantity'] as num? ?? 0) > 0
+                            ? () => openPage(
+                                context,
+                                ProductPurchase(
+                                  auth: widget.auth,
+                                  product: {
+                                    ...item,
+                                    'sportId': section['sportId'],
+                                  },
+                                ),
+                              )
+                            : null,
+                        child: UiText(localized(context, 'شراء', 'Buy')),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ],
         ],
       );
     },
   );
+}
+
+class GuardianFeedbackChildren extends StatelessWidget {
+  const GuardianFeedbackChildren({
+    super.key,
+    required this.auth,
+    required this.children,
+    this.complaint = false,
+  });
+  final AuthController auth;
+  final List<Json> children;
+  final bool complaint;
+  @override
+  Widget build(BuildContext context) {
+    final associations = <String, List<Json>>{};
+    for (final child in children) {
+      for (final sport in rows(child['sports'] ?? [])) {
+        for (final coach in rows(sport['coaches'] ?? [])) {
+          associations.putIfAbsent(textOf(coach['id']), () => []).add({
+            'child': child,
+            'sport': sport,
+            'coach': coach,
+          });
+        }
+      }
+    }
+    Widget childTile(Json child, {Json? sport, Json? coach}) => ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 6),
+      leading: PlayerAvatar(
+        textOf(child['arabicName']),
+        auth: auth,
+        reference: child['photoReference'],
+        gender: child['gender'],
+        size: 44,
+        square: true,
+      ),
+      title: UiText(
+        textOf(child['arabicName']),
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      subtitle: sport == null
+          ? null
+          : UiText(
+              '${sport['sport']} · ${sport['group']}',
+              style: const TextStyle(fontSize: 12),
+            ),
+      trailing: const Icon(Icons.chevron_left),
+      onTap: () => openPage(
+        context,
+        CoachFeedbackPage(
+          auth: auth,
+          playerId: textOf(child['id']),
+          initialKind: complaint ? 'Complaint' : 'Rating',
+          initialGroupId: coach?['groupId']?.toString(),
+          initialCoachId: coach?['id']?.toString(),
+        ),
+      ),
+    );
+    return GuardianPage(
+      title: complaint ? 'شكوى أو اقتراح' : 'تقييم المدربين',
+      child: gList([
+        if (complaint)
+          for (final child in children) GCard(child: childTile(child)),
+        if (!complaint)
+          for (final entries in associations.values)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.sports_outlined),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: UiText(
+                          textOf(entries.first['coach']['name']),
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  for (final entry in entries)
+                    childTile(
+                      obj(entry['child']),
+                      sport: obj(entry['sport']),
+                      coach: obj(entry['coach']),
+                    ),
+                ],
+              ),
+            ),
+        if (children.isEmpty)
+          const EmptyMessage('لا يوجد أبناء مرتبطون بالحساب حاليًا.'),
+        if (!complaint && children.isNotEmpty && associations.isEmpty)
+          const EmptyMessage('لا يوجد مدرب نشط مرتبط بالأبناء حاليًا.'),
+      ]),
+    );
+  }
 }

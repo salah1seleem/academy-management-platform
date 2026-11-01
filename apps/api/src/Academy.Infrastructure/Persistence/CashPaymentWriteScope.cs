@@ -1,4 +1,5 @@
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Operations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Infrastructure.Persistence;
@@ -21,6 +22,24 @@ public sealed partial class FoundationDbContext
             throw new InvalidOperationException("Invalid isolated family cash scope");
         cashFamilyLimit=new(session,branch,guardian,new(choices));
     }
+    private sealed record CashNoticeBinding(Guid Academy,Guid User,string? Role,string? Event,string? Kind,Guid? Target,string Message,DateTimeOffset Created,DateTimeOffset Updated);
+    private readonly Dictionary<Guid,CashNoticeBinding> cashNoticeBindings=[];
+    // A server event may bind one new notice to the period currently being created
+    // by this purpose-limited payment context. This grants no profile reads or
+    // edits, and an unbound/modified/foreign notice still fails the write guard.
+    public async Task BindCashLifecycleNotice(AcademyNotice notice,Guid enrollment,CancellationToken token=default)
+    {
+        if(cashPaymentLimit is null&&cashFamilyLimit is null)return;
+        Guid? plan=null;
+        if(cashPaymentLimit is {} single&&single.Enrollment==enrollment)plan=single.Plan;
+        else if(cashFamilyLimit is {} family&&family.Choices.TryGetValue(enrollment,out var familyPlan))plan=familyPlan;
+        var period=ChangeTracker.Entries<SubscriptionPeriod>().Where(e=>e.State==EntityState.Added&&e.Entity.Id==notice.TargetId).Select(e=>e.Entity).SingleOrDefault();
+        if(plan is null||plan==Guid.Empty||period is null||notice.AcademyId!=RequestAcademyId||notice.AudienceRole!="Guardian"||notice.TargetKind!="SubscriptionPeriod"||notice.EventKey is not("Enrollment" or "SingleRenewal")||notice.IsRead||period.AcademyId!=RequestAcademyId||period.SportEnrollmentId!=enrollment||period.SubscriptionPlanId!=plan||period.CreatedByUserId!=RequestUserId||period.Origin!=SubscriptionOrigin.Collected||!period.CollectionId.HasValue)throw new ResourceScopeException();
+        if(!ChangeTracker.Entries<PaymentCollection>().Any(e=>e.State==EntityState.Added&&e.Entity.Id==period.CollectionId&&e.Entity.AcademyId==RequestAcademyId&&e.Entity.SportEnrollmentId==enrollment&&e.Entity.ConfirmedBy==RequestUserId.ToString()))throw new ResourceScopeException();
+        if(!await GuardianPlayerLinks.AnyAsync(l=>l.AcademyId==RequestAcademyId&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.User.IsActive&&l.Guardian.UserId==notice.UserId&&SportEnrollments.Any(e=>e.AcademyId==RequestAcademyId&&e.Id==enrollment&&e.PlayerId==l.PlayerId),token))throw new ResourceScopeException();
+        cashNoticeBindings.Add(notice.Id,new(notice.AcademyId,notice.UserId,notice.AudienceRole,notice.EventKey,notice.TargetKind,notice.TargetId,notice.Message,notice.CreatedAtUtc,notice.UpdatedAtUtc));
+    }
+    private bool BoundCashNotice(AcademyNotice n)=>cashNoticeBindings.TryGetValue(n.Id,out var b)&&!n.IsRead&&n.AcademyId==b.Academy&&n.UserId==b.User&&n.AudienceRole==b.Role&&n.EventKey==b.Event&&n.TargetKind==b.Kind&&n.TargetId==b.Target&&n.Message==b.Message&&n.CreatedAtUtc==b.Created&&n.UpdatedAtUtc==b.Updated&&n.MatchId is null&&n.UrgentUntilUtc is null;
     private sealed record CashPaymentLimit(Guid Session,Guid Branch,Guid? Enrollment,Guid? Plan)
     {
         public HashSet<Guid> Renewals {get;}=[];
@@ -52,6 +71,7 @@ public sealed partial class FoundationDbContext
                 PaymentCollection c=>added&&c.AcademyId==RequestAcademyId&&c.SportEnrollmentId==limit.Enrollment&&payments.Contains(c.PaymentRequestId)&&renewals.Contains(c.RenewalRequestId)&&c.PaymentMethod=="Cash"&&c.ConfirmedBy==RequestUserId.ToString(),
                 SubscriptionPeriod p=>added&&p.AcademyId==RequestAcademyId&&p.SportEnrollmentId==limit.Enrollment&&p.SubscriptionPlanId==limit.Plan&&p.CollectionId.HasValue&&collections.Contains(p.CollectionId.Value)&&p.Origin==SubscriptionOrigin.Collected&&p.CreatedByUserId==RequestUserId,
                 Receipt r=>added&&r.AcademyId==RequestAcademyId&&r.SportEnrollmentId==limit.Enrollment&&r.SubscriptionPlanId==limit.Plan&&collections.Contains(r.CollectionId)&&r.PaymentMethod=="Cash",
+                AcademyNotice n=>added&&BoundCashNotice(n),
                 CashReceiptPosting p=>added&&p.AcademyId==RequestAcademyId&&p.SessionId==limit.Session&&p.BranchId==limit.Branch&&p.ActorUserId==RequestUserId&&collections.Contains(p.CollectionId)&&receipts.Contains(p.ReceiptId),
                 _=>false
             };
@@ -107,6 +127,7 @@ public sealed partial class FoundationDbContext
                 PaymentCollection c=>added&&collections.TryGetValue(c.Id,out var e)&&c.SportEnrollmentId==e&&c.AcademyId==RequestAcademyId,
                 SubscriptionPeriod p=>added&&p.CollectionId.HasValue&&collections.TryGetValue(p.CollectionId.Value,out var e)&&p.SportEnrollmentId==e&&p.SubscriptionPlanId==limit.Choices[e]&&p.AcademyId==RequestAcademyId&&p.Origin==SubscriptionOrigin.Collected&&p.CreatedByUserId==RequestUserId&&periods.Add(e),
                 Receipt r=>added&&receipts.TryGetValue(r.Id,out var e)&&r.SportEnrollmentId==e&&r.SubscriptionPlanId==limit.Choices[e]&&r.AcademyId==RequestAcademyId,
+                AcademyNotice n=>added&&BoundCashNotice(n),
                 CashReceiptPosting p=>added&&receipts.TryGetValue(p.ReceiptId,out var e)&&collections.TryGetValue(p.CollectionId,out var c)&&e==c&&p.AcademyId==RequestAcademyId&&p.SessionId==limit.Session&&p.BranchId==limit.Branch&&p.ActorUserId==RequestUserId&&posted.Add(e),
                 _=>false
             };

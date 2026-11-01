@@ -1,4 +1,5 @@
 "use client";
+import {FilePicker} from "../components/file-picker";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { AdminDataTable, ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
@@ -49,7 +50,7 @@ function ImportForm({ options }: { options: StatementOptions }) {
       <label>مصدر الكشف<select {...field("sourceKind")}><option value="Provider">مزود الدفع</option><option value="Bank">البنك</option></select></label>
       <label>اسم الحساب المختصر<input required maxLength={60} autoComplete="off" {...field("accountTag")} /></label><label>مرجع الكشف<input required maxLength={100} {...field("statementReference")} /></label>
       <label>المزود المسجل<select required {...field("provider")}><option value="">اختر المزود</option>{options.providers.map(p => <option key={p} value={p}>{p}</option>)}</select></label>
-      <label className={styles.upload}>ملف الكشف CSV<input aria-label="ملف الكشف CSV" className={styles.fileInput} type="file" accept=".csv,text/csv" onChange={e => void loadFile(e.target.files?.[0])} /><span aria-hidden="true" className={styles.uploadButton}>اختيار ملف CSV</span></label>
+      <label className={styles.upload}>ملف الكشف CSV<FilePicker aria-label="ملف الكشف CSV" className={styles.fileInput}  accept=".csv,text/csv" onChange={e => void loadFile(e.target.files?.[0])} /><span aria-hidden="true" className={styles.uploadButton}>اختيار ملف CSV</span></label>
     </fieldset><div className={styles.notice}><strong>2. استخدم القالب، دون أسرار أو بيانات بطاقة</strong><p>كل صف: مرجع سطر فريد، مرجع دفع، تاريخ <bdi dir="ltr">YYYY-MM-DD</bdi>، إجمالي، رسوم، صافي، عملة، ملاحظة اختيارية. المبالغ بنقطة عشرية. المثال اصطناعي، ولا يُرفع ملف البنك الأصلي قبل تحويله لهذه الأعمدة.</p><a className="secondary-button" href={`${api}/import/template`} download>تنزيل قالب CSV</a>{fileName && <p role="status">الملف المختار: {fileName}</p>}</div>
     {!preview && <button className="primary-button" disabled={busy || !values.csvText}>معاينة الكشف</button>}</form>
     {preview && <section className={styles.preview}><h2>3. راجع نتائج الكشف</h2><div className="cash-session-stats"><div><small>كل الأسطر</small><strong>{preview.count}</strong></div><div><small>مطابق يدويًا</small><strong>{preview.matched}</strong></div><div><small>تحتاج مراجعة</small><strong>{preview.differences}</strong></div></div><p>{preview.reused} سطر محفوظ سابقًا لن يتكرر. تُحفظ الاختلافات كما هي دون اعتبارها دفعًا مؤكدًا.</p>

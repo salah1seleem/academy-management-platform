@@ -67,3 +67,9 @@ it("locks all context controls while submitting and never changes the pending am
   for (const name of ["الفرع", "الكمية", "طريقة الدفع", "اللاعب — اختياري", "وردية التحصيل"]) expect(screen.getByLabelText(name)).toBeDisabled();
   done(response({ id: "sale", amount: "180.20", currency: "EGP" })); await screen.findByText("تم التحصيل وخصم المخزون");
 });
+it("requires an available size/number and sends its exact id to quote and sale",async()=>{
+ setup((url)=>{if(url.endsWith('/catalog/product'))return Promise.resolve(response({arabicName:'منتج اصطناعي',isActive:true,stockQuantity:3,usesVariants:true}));if(url.endsWith('/inventory'))return Promise.resolve(response({variants:[{id:'M7',size:'M',shirtNumber:7,quantity:3}]}));return undefined;});
+ render(<ProductSaleForm id="product"/>);await screen.findByLabelText('المقاس ورقم القميص');expect(screen.queryByRole('button',{name:'تأكيد التحصيل والبيع'})).not.toBeInTheDocument();
+ fireEvent.change(screen.getByLabelText('المقاس ورقم القميص'),{target:{value:'M7'}});await choose('Online');
+ await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([u])=>String(u).includes('variantId=M7'))).toBe(true));fireEvent.click(screen.getByRole('button',{name:'تأكيد التحصيل والبيع'}));await screen.findByText('تم التحصيل وخصم المخزون');expect(JSON.parse(String(writes[0].body)).variantId).toBe('M7');expect(screen.getByLabelText('المقاس ورقم القميص')).toBeDisabled();
+});

@@ -320,37 +320,7 @@ class _MonthlyState extends State<PlayerMonthlyPage>
                     ],
                   ),
                 ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: page == 0
-                          ? null
-                          : () => setState(() {
-                              page--;
-                              message = '';
-                            }),
-                      child: Text(
-                        localized(context, 'الصفحة السابقة', 'Previous page'),
-                      ),
-                    ),
-                  ),
-                  Text('${page + 1}'),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: d['hasMore'] != true
-                          ? null
-                          : () => setState(() {
-                              page++;
-                              message = '';
-                            }),
-                      child: Text(
-                        localized(context, 'الصفحة التالية', 'Next page'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox.shrink(),
               Text(
                 localized(
                   context,

@@ -40,7 +40,7 @@ void main() {
 
   Future<void> login(WidgetTester tester, String phone, String homeText) async {
     await tester.enterText(find.byType(TextFormField).first, phone);
-    await tester.tap(find.text('إرسال رمز التحقق'));
+    await tester.tap(find.text('متابعة'));
     await tester.pumpAndSettle();
     await waitFor(tester, find.text('رمز التحقق'));
     await tester.enterText(find.byType(TextFormField).last, '246810');

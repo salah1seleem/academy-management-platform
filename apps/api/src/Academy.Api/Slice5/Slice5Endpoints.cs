@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice5;
 
-public static class Slice5Endpoints
+public static partial class Slice5Endpoints
 {
     public static void MapSlice5Endpoints(this WebApplication app)
     {
@@ -20,6 +20,8 @@ public static class Slice5Endpoints
         evaluations.MapPost("/criteria", CreateCriterion).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage).AddEndpointFilter<CsrfFilter>();
         evaluations.MapPut("/criteria/{id:guid}", UpdateCriterion).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage).AddEndpointFilter<CsrfFilter>();
         evaluations.MapPut("/criteria/{id:guid}/status", SetCriterionStatus).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage).AddEndpointFilter<CsrfFilter>();
+        evaluations.MapGet("/criteria/defaults", PreviewCriteriaDefaults).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage);
+        evaluations.MapPost("/criteria/defaults", SaveCriteriaDefaults).RequireAuthorization(AcademyPermissions.EvaluationCriteriaManage).AddEndpointFilter<CsrfFilter>();
         evaluations.MapGet("/options", Options);
         api.MapGet("/people/roster", Options).RequireAuthorization(AcademyPermissions.PeopleManage);
         evaluations.MapGet("/", ListEvaluations);
@@ -89,11 +91,12 @@ public static class Slice5Endpoints
         var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var enrollments = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) && a.AcademyMembership.UserId == user && a.IsActive));
-        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, photoReference = x.Player.PhotoReference, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة",
+        var rows = await enrollments.OrderBy(x => x.Player.ArabicName).Select(x => new { id = x.Id, playerId = x.PlayerId, player = x.Player.ArabicName, playerCode = x.Player.PlayerCode, criteriaReady=db.EvaluationCriteria.Any(c=>c.AcademyId==t.AcademyId&&c.SportId==x.SportId&&c.IsActive),photoReference = x.Player.PhotoReference, x.Player.DateOfBirth, x.Player.Gender, branch=x.Branch.ArabicName, sportId = x.SportId, sport = x.Sport.ArabicName, groupId = FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day), group = db.TrainingGroups.Where(g => g.Id == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day)).Select(g => g.ArabicName).FirstOrDefault() ?? "في انتظار المجموعة",
+            recurring=db.RecurringSchedules.Where(s=>s.TrainingGroupId==FoundationDbContext.AssignedGroupAt(x.AcademyId,x.Id,day)&&s.IsActive).Select(s=>new{s.DayOfWeek,s.StartTime,s.EndTime,s.ValidFrom,s.ValidTo}).ToList(),
             trainingSafetyNote=x.TrainingSafetyNote,
             subscription=db.SubscriptionPeriods.Where(p=>p.AcademyId==t.AcademyId&&p.SportEnrollmentId==x.Id&&p.IsActive&&p.Status!=Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Cancelled&&p.StartDate<=day)
                 .OrderByDescending(p=>p.StartDate).ThenByDescending(p=>p.CreatedAtUtc).ThenBy(p=>p.Id)
-                .Select(p=>new{p.RemainingSessions,
+                .Select(p=>new{p.RemainingSessions,p.EndDate,
                     expired=p.Status!=Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Frozen&&(p.EndDate<day||((p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)!=Academy.Infrastructure.Subscriptions.SubscriptionPlanType.Duration&&p.RemainingSessions<=0)),
                     sessionBased=(p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)!=Academy.Infrastructure.Subscriptions.SubscriptionPlanType.Duration,
                     frozen=p.Status==Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Frozen}).FirstOrDefault()
@@ -101,7 +104,7 @@ public static class Slice5Endpoints
         var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
         var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
-        var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded;
+        var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/evaluations","POST",default));
         return Results.Ok(new { enrollments = rows, sports, canEvaluate });
     }
 
@@ -113,7 +116,7 @@ public static class Slice5Endpoints
         if (sportId.HasValue) query = query.Where(x => x.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<EvaluationStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed); if (from.HasValue) query = query.Where(x => x.EvaluationDate >= from); if (to.HasValue) query = query.Where(x => x.EvaluationDate <= to);
         var data = await query.Include(x => x.Scores).OrderByDescending(x => x.EvaluationDate).ThenByDescending(x => x.CreatedAtUtc).Take(500).ToListAsync();
-        return Results.Ok(data.Select(x => { var calc = calculator.Calculate(x.Scores); return new { x.Id, player = x.SportEnrollment.Player.ArabicName, sport = x.Sport.ArabicName, group = x.TrainingGroup.ArabicName, x.EvaluationDate, evaluator = x.EvaluatedByUser.DisplayName, status = x.Status.ToString(), overallScore = x.Status == EvaluationStatus.Published ? calc.OverallScore : null, calc.ScoredCriteria, calc.TotalApplicableCriteria, calc.CompletenessPercentage, x.Version }; }));
+        return Results.Ok(data.Select(x => { var calc = calculator.Calculate(x.Scores); return new { x.Id, x.SportEnrollmentId, x.SportId, x.TrainingGroupId, player = x.SportEnrollment.Player.ArabicName, sport = x.Sport.ArabicName, group = x.TrainingGroup.ArabicName, x.EvaluationDate, evaluator = x.EvaluatedByUser.DisplayName, status = x.Status.ToString(), overallScore = x.Status is EvaluationStatus.Published or EvaluationStatus.PublishedInternal ? calc.OverallScore : null, calc.ScoredCriteria, calc.TotalApplicableCriteria, calc.CompletenessPercentage, x.Version }; }));
     }
 
     private static async Task<IResult> CreateEvaluation(CreateEvaluationRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock)
@@ -136,10 +139,10 @@ public static class Slice5Endpoints
             : await AccessibleEnrollment(request.SportEnrollmentId, t, principal, db, request.EvaluationDate);
         if (enrollment is null) return Results.NotFound();
         var datedGroup = sessionGroup ?? await db.SportEnrollments.Where(e => e.Id == enrollment.Id).Select(e => FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, request.EvaluationDate)).SingleAsync();
-        if (datedGroup is not Guid groupId) return Results.Conflict(new { message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
+        if (datedGroup is not Guid groupId) return Results.Conflict(new {code="evaluation_group_required",message = "أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم." });
         if (enrollment.GroupAssignedFrom > request.EvaluationDate) return Results.Conflict(new { message = "تاريخ التقييم يسبق إسناد اللاعب للمجموعة." });
         var criteria = await db.EvaluationCriteria.Where(x => x.AcademyId == t.AcademyId && x.SportId == enrollment.SportId && x.IsActive).OrderBy(x => x.DisplayOrder).ToListAsync();
-        if (criteria.Count == 0) return Results.Conflict(new { message = "لا توجد معايير فعالة لهذه الرياضة." });
+        if (criteria.Count == 0) return Results.Conflict(new { code="evaluation_criteria_missing", message = "جهّز معايير تقييم الرياضة أولًا، ثم ابدأ تقييم اللاعب." });
         if (request.EvaluationDate == default) return Validation("evaluationDate", "تاريخ التقييم مطلوب.");
         var now = clock.GetUtcNow(); var id = Guid.NewGuid();
         var entity = new PlayerEvaluation { TrainingSessionId = request.TrainingSessionId, Id = id, AcademyId = t.AcademyId, SportEnrollmentId = enrollment.Id, SportId = enrollment.SportId, TrainingGroupId = groupId, EvaluatedByUserId = UserId(principal), EvaluationDate = request.EvaluationDate, ReportingPeriod = string.IsNullOrWhiteSpace(request.ReportingPeriod) ? "تقييم دوري" : request.ReportingPeriod.Trim(), Status = EvaluationStatus.Draft, GeneralNotes = Clean(request.GeneralNotes), CreatedAtUtc = now, UpdatedAtUtc = now };
@@ -176,18 +179,20 @@ public static class Slice5Endpoints
         var t = (await tenant.ResolveAsync())!; var entity = await AccessibleEvaluations(t, principal, db).Include(x => x.Scores).SingleOrDefaultAsync(x => x.Id == id); if (entity is null) return Results.NotFound();
         if (entity.Status != EvaluationStatus.Draft) return Results.Conflict(new { message = "يمكن نشر المسودة فقط." });
         if (!entity.Scores.Any(x => x.Score.HasValue)) return Validation("scores", "أدخل درجة واحدة على الأقل قبل النشر.");
-        db.Entry(entity).Property(x => x.Version).OriginalValue = request.Version; entity.Status = EvaluationStatus.Published; entity.PublishedAtUtc = clock.GetUtcNow(); entity.PublishedByUserId = UserId(principal); entity.UpdatedAtUtc = clock.GetUtcNow();
+        db.Entry(entity).Property(x => x.Version).OriginalValue = request.Version; entity.Status = request.ShareWithGuardian ? EvaluationStatus.Published : EvaluationStatus.PublishedInternal; entity.PublishedAtUtc = clock.GetUtcNow(); entity.PublishedByUserId = UserId(principal); entity.UpdatedAtUtc = clock.GetUtcNow();
+        if (request.ShareWithGuardian) {
         var player=await db.SportEnrollments.Where(e=>e.Id==entity.SportEnrollmentId).Select(e=>new{e.PlayerId,e.Player.ArabicName}).SingleAsync();
         var users=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==t.AcademyId&&l.PlayerId==player.PlayerId&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.User.IsActive).Select(l=>l.Guardian.UserId).Distinct().ToArrayAsync();
         var notice=await Academy.Api.Operations.NoticeText.Render(db,t.AcademyId,"Evaluation",$"نشر المدرب تقييمًا جديدًا لـ{player.ArabicName}. افتحوا التقييمات لمتابعة التقدم.",player.ArabicName);
-        foreach(var user in users)db.AcademyNotices.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=user,AudienceRole="Guardian",TargetKind="Evaluation",TargetId=entity.Id,Message=notice,CreatedAtUtc=clock.GetUtcNow(),UpdatedAtUtc=clock.GetUtcNow()});
+        foreach(var user in users)db.AcademyNotices.Add(new(){EventKey="Evaluation",Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=user,AudienceRole="Guardian",TargetKind="Evaluation",TargetId=entity.Id,Message=notice,CreatedAtUtc=clock.GetUtcNow(),UpdatedAtUtc=clock.GetUtcNow()});
+        }
         try { await db.SaveChangesAsync(); } catch (DbUpdateConcurrencyException) { return ConflictReload(); }
         return Results.Ok(new { entity.Id, status = entity.Status.ToString(), entity.PublishedAtUtc });
     }
 
     private static async Task<IResult> StaffReport(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)
     {
-        var t = (await tenant.ResolveAsync())!; var entity = await AccessibleEvaluations(t, principal, db).AsNoTracking().Include(x => x.Scores).ThenInclude(x => x.EvaluationCriterion).SingleOrDefaultAsync(x => x.Id == id && x.Status == EvaluationStatus.Published); if (entity is null) return Results.NotFound();
+        var t = (await tenant.ResolveAsync())!; var entity = await AccessibleEvaluations(t, principal, db).AsNoTracking().Include(x => x.Scores).ThenInclude(x => x.EvaluationCriterion).SingleOrDefaultAsync(x => x.Id == id && (x.Status == EvaluationStatus.Published || x.Status == EvaluationStatus.PublishedInternal)); if (entity is null) return Results.NotFound();
         return Results.Ok(BuildReport(entity, calculator));
     }
 
@@ -195,7 +200,7 @@ public static class Slice5Endpoints
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal); var linked = await db.GuardianPlayerLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.Guardian.UserId == user && x.IsActive); if (!linked) return Results.NotFound();
         var rows = await db.PlayerEvaluations.AsNoTracking().Include(x => x.Scores).Include(x => x.Sport).Include(x => x.EvaluatedByUser).Where(x => x.AcademyId == t.AcademyId && x.SportEnrollment.PlayerId == playerId && x.Status == EvaluationStatus.Published).OrderByDescending(x => x.EvaluationDate).ThenByDescending(x => x.PublishedAtUtc).ToListAsync();
-        return Results.Ok(rows.Select(x => { var calc = calculator.Calculate(x.Scores); return new { x.Id, sport = x.Sport.ArabicName, x.EvaluationDate, evaluator = x.EvaluatedByUser.DisplayName, calc.OverallScore, calc.CompletenessPercentage }; }));
+        return Results.Ok(rows.Select(x => { var calc = calculator.Calculate(x.Scores); return new { x.Id, sport = x.Sport.ArabicName, x.EvaluationDate, evaluator = x.EvaluatedByUser.DisplayName, calc.OverallScore, calc.CompletenessPercentage, performanceMean = PublishedPerformanceMean.Read(x.Scores) }; }));
     }
 
     private static async Task<IResult> GuardianReport(Guid id, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)
@@ -210,7 +215,7 @@ public static class Slice5Endpoints
         var calc = calculator.Calculate(entity.Scores); var player = entity.SportEnrollment.Player;
         var age = entity.EvaluationDate.Year - player.DateOfBirth.Year; if (entity.EvaluationDate < player.DateOfBirth.AddYears(age)) age--;
         return new { entity.Id, player = player.ArabicName, player.PhotoReference, player.FootballPosition, sport = entity.Sport.ArabicName, entity.EvaluationDate, entity.ReportingPeriod, evaluator = entity.EvaluatedByUser.DisplayName, entity.GeneralNotes, age, player.HeightCm, player.WeightKg, preferredFoot = player.PreferredFoot?.ToString(),
-            isFootballReport = IsFootball(entity.Sport), calc.OverallScore, calc.ScoredCriteria, calc.TotalApplicableCriteria, calc.CompletenessPercentage, calc.AvailableAxes,
+            isFootballReport = IsFootball(entity.Sport), performanceMean = PublishedPerformanceMean.Read(entity.Scores), calc.OverallScore, calc.ScoredCriteria, calc.TotalApplicableCriteria, calc.CompletenessPercentage, calc.AvailableAxes,
             axes = calc.Axes.Where(x => !assessedOnly || x.Value is >= 0 and <= 100).Select(x => new { axis = x.Axis.ToString(), x.Value }),
             criteria = entity.Scores.Where(x => !assessedOnly || x.Score is >= 0 and <= 100).OrderBy(x => x.EvaluationCriterion.DisplayOrder).Select(x => new { name = x.CriterionNameSnapshot, x.Score, x.Notes, axis = x.FootballAxisSnapshot == null ? null : x.FootballAxisSnapshot.ToString() }) };
     }
@@ -249,4 +254,4 @@ public sealed record CriterionStatusRequest(bool IsActive, uint Version);
 public sealed record CreateEvaluationRequest(Guid SportEnrollmentId, DateOnly EvaluationDate, string ReportingPeriod, string? GeneralNotes, Guid? TrainingSessionId = null);
 public sealed record EvaluationScoreRequest(Guid CriterionId, int? Score, string? Notes);
 public sealed record UpdateEvaluationRequest(string ReportingPeriod, string? GeneralNotes, uint Version, IReadOnlyList<EvaluationScoreRequest> Scores);
-public sealed record PublishEvaluationRequest(uint Version);
+public sealed record PublishEvaluationRequest(uint Version, bool ShareWithGuardian = true);

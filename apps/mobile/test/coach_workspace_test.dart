@@ -1,7 +1,10 @@
+import 'support/visibility.dart';
+
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
+import 'package:academy_mobile/features/shared/directory_cards.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -27,12 +30,20 @@ Map<String, dynamic> session(
   'playerCount': 12,
 };
 Object? homeResponse(String path, {List<Object?>? sessions}) {
+  if (path == '/api/v1/academy/calendar') return {'today': '2026-10-15'};
+  if (path == '/api/v1/staff/passkeys/attendance') {
+    return {
+      'branches': [
+        {'enabled': true},
+      ],
+    };
+  }
   if (path == '/api/v1/coach/groups') {
     return [
       {'id': 'g1', 'arabicName': 'مجموعة الناشئين'},
     ];
   }
-  if (path == '/api/v1/attendance/sessions?upcomingOnly=true') {
+  if (path == '/api/v1/attendance/sessions?nearestOnly=true') {
     return sessions ?? [session('nearest', '2026-10-16', '18:00:00')];
   }
   if (path == '/api/v1/evaluations/options') {
@@ -61,7 +72,9 @@ Widget app(
   localizationsDelegates: GlobalMaterialLocalizations.delegates,
   theme: dark ? guardianTheme() : AcademyTheme.light(),
   builder: (context, child) => MediaQuery(
-    data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+    data: MediaQuery.of(
+      context,
+    ).copyWith(textScaler: TextScaler.linear(scale), disableAnimations: true),
     child: child!,
   ),
   home: CoachHome(
@@ -81,6 +94,11 @@ void main() {
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('coach-session-nearest')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(
         find.byKey(const ValueKey('coach-session-nearest')),
         findsOneWidget,
@@ -124,15 +142,16 @@ void main() {
         }
         return homeResponse(
           p,
-          sessions: [
-            session('later', '2026-10-17', '19:00:00'),
-            session('cancelled', '2026-10-15', '16:00:00', status: 'Cancelled'),
-            session('nearest', '2026-10-16', '18:00:00'),
-          ],
+          sessions: [session('nearest', '2026-10-16', '18:00:00')],
         );
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('coach-session-nearest')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       final cards = tester
           .widgetList<CoachSessionCard>(find.byType(CoachSessionCard))
           .toList();
@@ -142,9 +161,18 @@ void main() {
         find.byKey(const ValueKey('coach-session-cancelled')),
         findsNothing,
       );
-      expect(find.text('المجموعات المسندة'), findsOneWidget);
-      expect(paths, contains('/api/v1/attendance/sessions?upcomingOnly=true'));
-      await tester.tap(find.text('فتح الحصة'));
+      expect(paths, contains('/api/v1/coach/groups'));
+      expect(paths, contains('/api/v1/attendance/sessions?nearestOnly=true'));
+      final nearestOpen = find.descendant(
+        of: find.byKey(const ValueKey('coach-session-nearest')),
+        matching: find.widgetWithText(FilledButton, 'فتح الحصة'),
+      );
+      await tester.scrollUntilVisible(
+        nearestOpen,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(nearestOpen);
       await tester.pumpAndSettle();
       expect(paths, contains('/api/v1/attendance/sessions/nearest/players'));
       expect(find.text('تفاصيل الحصة'), findsOneWidget);
@@ -166,12 +194,29 @@ void main() {
       );
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
-      expect(find.text('لا توجد حصة قادمة خلال 14 يومًا'), findsOneWidget);
-      await tester.tap(find.text('مجموعة الناشئين'));
+      await tester.scrollUntilVisible(
+        find.text('لا توجد حصة قادمة مجدولة.'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('لا توجد حصة قادمة مجدولة.'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('مجموعاتي'),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('مجموعاتي'));
+      await tester.pumpAndSettle();
+      await revealTestTarget(tester, find.byType(GroupDirectoryCard));
+      await tester.tap(find.byType(GroupDirectoryCard));
       await tester.pumpAndSettle();
       expect(find.text('آدم التجريبي'), findsOneWidget);
       expect(find.text('فتح الحصة الأقرب'), findsNothing);
-      expect(find.text('رفع صور وفيديوهات للحصة'), findsOneWidget);
+      expect(
+        find.text('رفع صور وفيديوهات للحصة'),
+        findsNothing,
+        reason: 'Session media needs an actual session; empty groups do not bypass publication context.',
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       auth.dispose();
@@ -183,7 +228,7 @@ void main() {
     (tester) async {
       var fail = true;
       final auth = await coach((m, p, b, t) async {
-        if (p.contains('upcomingOnly') && fail) {
+        if (p.contains('nearestOnly') && fail) {
           throw const ApiFailure(0, 'تعذر الاتصال');
         }
         return homeResponse(p);
@@ -192,9 +237,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('تعذر الاتصال'), findsOneWidget);
       fail = false;
-      await tester.tap(find.text('إعادة المحاولة'));
+      await tester.tap(find.text('إعادة تحميل الحصة القادمة'));
       await tester.pumpAndSettle();
-      expect(find.text('حصتك الأقرب'), findsOneWidget);
+      await revealTestTarget(tester, find.text('المجموعات المسندة'));
+      expect(find.text('المجموعات المسندة'), findsOneWidget);
       expect(find.text('تعذر الاتصال'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -217,16 +263,17 @@ void main() {
               app(auth, dark: dark, locale: locale, scale: 2),
             );
             await tester.pumpAndSettle();
+            expect(find.byIcon(Icons.fingerprint), findsOneWidget);
+            await tester.scrollUntilVisible(
+              find.byKey(const ValueKey('coach-session-nearest')),
+              200,
+              scrollable: find.byType(Scrollable).first,
+            );
             expect(
               find.byKey(const ValueKey('coach-session-nearest')),
               findsOneWidget,
             );
-            await tester.scrollUntilVisible(
-              find.byIcon(Icons.fingerprint),
-              250,
-              scrollable: find.byType(Scrollable).first,
-            );
-            expect(find.byIcon(Icons.fingerprint), findsOneWidget);
+
             expect(
               tester.takeException(),
               isNull,

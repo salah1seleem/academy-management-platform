@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
+using System.Net;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
@@ -28,10 +31,26 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+// Existing private video limit is 50 MiB; allow multipart overhead at transport level.
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 55 * 1024 * 1024);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole(options => options.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fffK");
 builder.Services.AddProblemDetails();
+var keyPath = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(keyPath))
+    builder.Services.AddDataProtection().SetApplicationName("iAcademyOne")
+        .PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+var trustedProxy = builder.Configuration["ReverseProxy:Address"];
+if (!string.IsNullOrWhiteSpace(trustedProxy))
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        options.KnownProxies.Add(IPAddress.Parse(trustedProxy));
+    });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 var connectionString = builder.Configuration.GetConnectionString("Default");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -176,14 +195,27 @@ builder.Services.AddScoped<GroupCreationService>();
 builder.Services.AddScoped<Academy.Api.Facilities.ResourceSessionCoordinator>();
 builder.Services.AddScoped<Academy.Api.Facilities.FacilityService>();
 builder.Services.AddAuthorization(options => {
-    foreach (var p in new[] { AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage, AcademyPermissions.FollowUpRead, AcademyPermissions.FollowUpManage }) options.AddPolicy(p, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(p)));
+    foreach (var p in new[] { AcademyPermissions.MatchesManage, AcademyPermissions.FacilitiesRead, AcademyPermissions.FacilitiesManage, AcademyPermissions.FollowUpRead, AcademyPermissions.FollowUpManage }) options.AddPolicy(p, policy => policy.RequireAuthenticatedUser().AddRequirements(new TenantPermissionRequirement(p)));
 });
 builder.Services.AddScoped<Academy.Api.Importing.ImportCommitService>();
+builder.Services.AddScoped<Academy.Api.Importing.ImportRequestContext>();
+if (builder.Configuration.GetValue("Notifications:WorkerEnabled", builder.Environment.IsProduction())) builder.Services.AddHostedService<Academy.Api.Operations.NotificationSchedule>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<Academy.Api.Operations.MobilePushProvider>();
+builder.Services.AddHostedService<Academy.Api.Operations.MobilePushWorker>();
 if (builder.Configuration.GetValue("Imports:WorkerEnabled", true)) builder.Services.AddHostedService<Academy.Api.Importing.ImportWorker>();
 builder.Services.AddScoped<IEvaluationReportCalculator, EvaluationReportCalculator>();
 builder.Services.AddHealthChecks().AddDbContextCheck<FoundationDbContext>("postgresql", tags: ["ready"]);
 
 var app = builder.Build();
+// A one-shot deployment process: no web listener, workers, seed or reset.
+if (args.Contains("--migrate-only"))
+{
+    await using var migrationScope = app.Services.CreateAsyncScope();
+    await migrationScope.ServiceProvider.GetRequiredService<FoundationDbContext>().Database.MigrateAsync();
+    return;
+}
+if (!string.IsNullOrWhiteSpace(trustedProxy)) app.UseForwardedHeaders();
 DemoSeed.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
 InternalTestPaymentGateway.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<InternalTestPaymentOptions>>().Value);
 app.UseExceptionHandler();
@@ -395,6 +427,7 @@ app.MapSlice8ReportingEndpoints();
 app.MapSubscriptionAdjustmentEndpoints();
 app.MapSubscriptionDiscountEndpoints();
 app.MapAssetEndpoints();
+Academy.Api.Operations.SelfProfileEndpoints.MapSelfProfile(app);
 app.MapGroupMediaPrivacy();
 app.MapMediaPublication();
 PrivateMediaLifecycle.Map(app);
@@ -405,6 +438,7 @@ app.MapGroupPlacement();
 app.MapManualPayments();
 app.MapExperience();
 app.MapMatches();
+app.MapMobilePush();
 app.MapTournamentPayments();
 app.MapProductSales();
 app.MapNews();
@@ -418,9 +452,12 @@ app.MapGuardianFeedback();
 app.MapVipMembers();
 app.MapVipRewards();
 app.MapNoticeInbox();
+app.MapAudienceCommunication();
+Academy.Api.Slice8.SubscriptionHomeEndpoints.MapSubscriptionHome(app);
 app.MapMonthlyPlayerStars();
 app.MapPageHelp();
 app.MapOwnerFollowUps();
+app.MapCoachTasks();
 app.MapHelp();
 app.MapHelpVideos();
 app.MapCommunityAds();
@@ -448,6 +485,11 @@ app.MapFreeTraining();
 app.MapFamilyRenewalRequests();
 app.MapRenewalOpportunities();
 Academy.Api.Importing.ImportEndpoints.MapImportPreview(app);
+Academy.Api.Platform.PlatformSetup.MapPlatformSetup(app);
+Academy.Api.Platform.LauncherIcons.MapLauncherIcons(app);
+Academy.Api.Platform.PlatformStaffAccess.MapPlatformStaffAccess(app);
+Academy.Api.Platform.PlatformRolePreview.MapPlatformRolePreview(app);
+Academy.Api.Operations.GuardianContactEndpoints.MapGuardianContacts(app);
 Academy.Api.Facilities.FacilityEndpoints.MapFacilities(app);
 Academy.Api.Facilities.VisitEndpoints.MapVisits(app);
 Academy.Api.Facilities.DayPassEndpoints.MapDayPass(app);

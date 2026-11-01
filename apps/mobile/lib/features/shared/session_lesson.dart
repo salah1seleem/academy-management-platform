@@ -133,11 +133,8 @@ class _SessionLessonState extends State<SessionLessonPage>
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    Text(day(s['sessionDate'])),
-                    Text(
-                      '${textOf(s['startTime']).split(':').take(2).join(':')} — ${textOf(s['endTime']).split(':').take(2).join(':')}',
-                      textDirection: TextDirection.ltr,
-                    ),
+                    Text(sessionDateLabel(s['sessionDate'])),
+                    Text(trainingTimeRange(s['startTime'], s['endTime'])),
                     Text(
                       '${d['sessionMinutes']} ${l('دقيقة · الحصة الفعلية', 'minutes · actual session')}',
                     ),

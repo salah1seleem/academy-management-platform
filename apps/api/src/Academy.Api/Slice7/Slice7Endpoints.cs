@@ -55,13 +55,14 @@ public static class Slice7Endpoints
         var linkedPlayers = db.GuardianPlayerLinks.Where(x => x.AcademyId == t.AcademyId && x.Guardian.UserId == user && x.IsActive && x.Player.IsActive).Select(x => x.PlayerId);
         var sports = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.Status == EnrollmentStatus.Active && linkedPlayers.Contains(x.PlayerId)).Select(x => x.SportId).Distinct();
         var rows = await db.SportCatalogItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive && sports.Contains(x.SportId)).OrderBy(x => x.Sport.ArabicName).ThenBy(x => x.DisplayOrder).ThenBy(x => x.ArabicName)
-            .Select(x => new { x.Id, x.SportId, sport = x.Sport.ArabicName, x.ArabicName, x.ArabicDescription, x.ImageReference, x.DisplayPrice, x.StockQuantity, x.Currency, x.DiscountPercentage }).ToListAsync();
+            .Select(x => new { x.Id, x.SportId, sport = x.Sport.ArabicName, x.ArabicName, x.ArabicDescription, x.ImageReference, x.DisplayPrice, x.UsesVariants, x.NumberedUniform, x.StockRevision, x.StockQuantity, x.Currency, x.DiscountPercentage }).ToListAsync();
         return Results.Ok(rows.GroupBy(x => new { x.SportId, x.sport }).Select(x => new { x.Key.SportId, sport = x.Key.sport, items = x.ToList() }));
     }
 
     private static async Task<IResult> GuardianNutrition(string? category, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!; var parsed = ParseCategory(category);
+        await DefaultNutritionLibrary.EnsureAsync(db,t.AcademyId);
         var query = db.NutritionCategoryLinks.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.NutritionItem.IsActive);
         if (parsed.HasValue) query = query.Where(x => x.Category == parsed.Value);
         return Results.Ok(await query.OrderBy(x => x.Category).ThenBy(x => x.DisplayOrder).Select(x => new { x.NutritionItem.Id, x.NutritionItem.ArabicName, x.NutritionItem.ArabicDescription, x.NutritionItem.ImageReference, category = x.Category.ToString(), servingProfile = x.NutritionItem.ServingProfile == null ? null : x.NutritionItem.ServingProfile.ToString(), dataStatus = x.NutritionItem.DataStatus.ToString() }).ToListAsync());
@@ -84,7 +85,8 @@ public static class Slice7Endpoints
         var age = day.Year - player.DateOfBirth.Year - (day < player.DateOfBirth.AddYears(day.Year - player.DateOfBirth.Year) ? 1 : 0);
         if (age is < 6 or > 18) return Results.ValidationProblem(new Dictionary<string, string[]> { ["playerId"] = ["الاقتراحات التجريبية متاحة للأعمار من 6 إلى 18 سنة فقط."] });
         var profile = age <= 9 ? NutritionServingProfile.Small : age <= 13 ? NutritionServingProfile.Medium : NutritionServingProfile.Large;
-        var groups = db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive && x.Status == EnrollmentStatus.Active && x.Sport.EnglishName == "Football").Select(x => FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day));
+        await DefaultNutritionLibrary.EnsureAsync(db,t.AcademyId,requireReviewed:true);
+        var groups = db.SportEnrollments.Where(x => x.AcademyId == t.AcademyId && x.PlayerId == playerId && x.IsActive && x.Status == EnrollmentStatus.Active).Select(x => FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day));
         if (!await groups.AnyAsync()) return Results.NotFound();
         var session = await db.TrainingSessions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && groups.Contains(x.TrainingGroupId) && x.SessionDate == day && x.Status != Academy.Infrastructure.Attendance.TrainingSessionStatus.Cancelled)
             .OrderBy(x => x.StartTime).Select(x => new { x.StartTime, x.EndTime }).FirstOrDefaultAsync();
@@ -96,7 +98,7 @@ public static class Slice7Endpoints
             var options = meals.Where(x => x.categories.Contains(category)).OrderBy(x => x.Id).ToArray();
             return options.Length == 0 ? null : options[Math.Abs(day.DayNumber) % options.Length];
         }
-        return Results.Ok(new { date = day, isTrainingDay = trainingDay, trainingTime = session?.StartTime, ageBand = age <= 9 ? "6-9" : age <= 13 ? "10-13" : "14-18", servingProfile = profile.ToString(), context = new { age, player.HeightCm, player.WeightKg, sport = "Football", note = "تُستخدم القياسات كسياق عام فقط ولا يتم تصنيف الوزن أو تقديم تشخيص." }, breakfast = Pick("Breakfast"), lunch = Pick("Lunch"), dinner = Pick("Dinner"), preTraining = trainingDay ? meals.FirstOrDefault(x => x.SuitablePreTraining) : null, postTraining = trainingDay ? meals.FirstOrDefault(x => x.SuitablePostTraining) : null, disclaimer = "اقتراحات غذائية مناسبة للعمر والنشاط وليست وصفة طبية. القيم الغذائية تقديرية حسب الحصة الموضحة." });
+        return Results.Ok(new { date = day, isTrainingDay = trainingDay, trainingTime = session?.StartTime, ageBand = age <= 9 ? "6-9" : age <= 13 ? "10-13" : "14-18", servingProfile = profile.ToString(), context = new { age, player.HeightCm, player.WeightKg, sport = "Sports", note = "تُستخدم القياسات كسياق عام فقط ولا يتم تصنيف الوزن أو تقديم تشخيص." }, breakfast = Pick("Breakfast"), lunch = Pick("Lunch"), dinner = Pick("Dinner"), preTraining = trainingDay ? meals.FirstOrDefault(x => x.SuitablePreTraining) : null, postTraining = trainingDay ? meals.FirstOrDefault(x => x.SuitablePostTraining) : null, disclaimer = "اقتراحات غذائية مناسبة للعمر والنشاط وليست وصفة طبية. القيم الغذائية تقديرية حسب الحصة الموضحة." });
     }
 
     private static async Task<IResult> GuardianMedical(Guid playerId, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db)
@@ -117,12 +119,12 @@ public static class Slice7Endpoints
     {
         var t = (await tenant.ResolveAsync())!; var q = db.SportCatalogItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
         if (sportId.HasValue) q = q.Where(x => x.SportId == sportId); if (active.HasValue) q = q.Where(x => x.IsActive == active); if (!string.IsNullOrWhiteSpace(search)) q = q.Where(x => x.ArabicName.Contains(search.Trim()));
-        return Results.Ok(await q.OrderBy(x => x.Sport.ArabicName).ThenBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, sport = x.Sport.ArabicName, x.SportId, x.ImageReference, x.DisplayPrice, x.StockQuantity, x.Currency, x.DiscountPercentage, x.IsActive, x.DisplayOrder }).ToListAsync());
+        return Results.Ok(await q.OrderBy(x => x.Sport.ArabicName).ThenBy(x => x.DisplayOrder).Select(x => new { x.Id, x.ArabicName, sport = x.Sport.ArabicName, x.SportId, x.ImageReference, x.DisplayPrice, x.UsesVariants, x.NumberedUniform, x.StockRevision, x.StockQuantity, x.Currency, x.DiscountPercentage, x.IsActive, x.DisplayOrder }).ToListAsync());
     }
 
     private static async Task<IResult> CatalogDetails(Guid id, CurrentTenant tenant, FoundationDbContext db)
     {
-        var t = (await tenant.ResolveAsync())!; var row = await db.SportCatalogItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == id).Select(x => new { x.Id, x.SportId, x.ArabicName, x.EnglishName, x.ArabicDescription, x.ImageReference, x.DisplayPrice, x.StockQuantity, x.Currency, x.DiscountPercentage, x.IsActive, x.DisplayOrder }).SingleOrDefaultAsync(); return row is null ? Results.NotFound() : Results.Ok(row);
+        var t = (await tenant.ResolveAsync())!; var row = await db.SportCatalogItems.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.Id == id).Select(x => new { x.Id, x.SportId, x.ArabicName, x.EnglishName, x.ArabicDescription, x.ImageReference, x.DisplayPrice, x.UsesVariants, x.NumberedUniform, x.StockRevision, x.StockQuantity, x.Currency, x.DiscountPercentage, x.IsActive, x.DisplayOrder }).SingleOrDefaultAsync(); return row is null ? Results.NotFound() : Results.Ok(row);
     }
 
     private static async Task<IResult> CatalogCreate(CatalogWrite request, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
@@ -135,6 +137,8 @@ public static class Slice7Endpoints
     private static async Task<IResult> CatalogUpdate(Guid id, CatalogWrite request, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {
         var t = (await tenant.ResolveAsync())!; await using var tx = await db.Database.BeginTransactionAsync(); await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"product-stock:{t.AcademyId}:{id}"}, 0))"); var row = await db.SportCatalogItems.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (row is null) return Results.NotFound(); var error = await ValidateCatalog(request, t.AcademyId, db); if (error is not null) return error;
+        if(row.UsesVariants&&(request.StockQuantity.HasValue&&request.StockQuantity!=row.StockQuantity||request.SportId!=row.SportId))return Results.Problem(statusCode:409,title:"عدّل الرصيد من المقاسات والأرقام. رياضة منتج المقاسات ثابتة بعد تفعيله.");
+        if(request.StockQuantity.HasValue&&request.StockQuantity!=row.StockQuantity)row.StockRevision++;
         if (request.StockQuantity.HasValue) row.StockQuantity = request.StockQuantity.Value; row.SportId = request.SportId; row.ArabicName = request.ArabicName.Trim(); row.EnglishName = Clean(request.EnglishName); row.ArabicDescription = Clean(request.ArabicDescription); row.ImageReference = request.ImageReference; row.DisplayPrice = request.DisplayPrice; row.Currency = request.DisplayPrice.HasValue ? (Clean(request.Currency) ?? "EGP") : null; row.DiscountPercentage = request.DiscountPercentage; row.DisplayOrder = request.DisplayOrder; row.IsActive = request.IsActive; row.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 
@@ -163,7 +167,7 @@ public static class Slice7Endpoints
         row.ArabicName = request.ArabicName.Trim(); row.ArabicDescription = request.ArabicDescription.Trim(); row.ImageReference = request.ImageReference; row.ServingDescription = request.ServingDescription.Trim(); row.Calories = request.Calories; row.ProteinGrams = request.ProteinGrams; row.CarbohydratesGrams = request.CarbohydratesGrams; row.FatGrams = request.FatGrams; row.DataStatus = request.DataStatus; row.SourceDescription = Clean(request.SourceDescription); row.IsActive = request.IsActive; row.UpdatedAtUtc = clock.GetUtcNow(); db.NutritionCategoryLinks.RemoveRange(row.Categories); row.Categories = request.Categories.Distinct().Select(x => new NutritionCategoryLink { AcademyId = t.AcademyId, NutritionItemId = row.Id, Category = x, DisplayOrder = request.DisplayOrder }).ToList(); await db.SaveChangesAsync(); return Results.NoContent();
     }
 
-    private static async Task<IResult> NutritionStatus(Guid id, StatusWrite request, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock) { var t = (await tenant.ResolveAsync())!; var row = await db.NutritionItems.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (row is null) return Results.NotFound(); row.IsActive = request.IsActive; row.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); return Results.Ok(new { row.IsActive }); }
+    private static async Task<IResult> NutritionStatus(Guid id, StatusWrite request, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock) { var t = (await tenant.ResolveAsync())!; if(DefaultNutritionLibrary.IsDefault(t.AcademyId,id))return Results.Conflict(new{message="وجبات المكتبة الأساسية متاحة دائمًا. يمكنك إضافة وجبات أخرى للأكاديمية."}); var row = await db.NutritionItems.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (row is null) return Results.NotFound(); row.IsActive = request.IsActive; row.UpdatedAtUtc = clock.GetUtcNow(); await db.SaveChangesAsync(); return Results.Ok(new { row.IsActive }); }
 
     private static async Task<IResult> MedicalList(Guid? playerId, MedicalRecordType? type, MedicalRecordStatus? status, bool? published, CurrentTenant tenant, FoundationDbContext db)
     {

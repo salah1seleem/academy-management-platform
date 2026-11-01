@@ -1,3 +1,4 @@
+import '../../core/widgets/guided_form.dart';
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
@@ -10,10 +11,12 @@ import 'guardian_payments.dart';
 class EnrollmentForm extends StatefulWidget {
   final AuthController auth;
   final String environment;
+  final bool newChild;
   const EnrollmentForm({
     super.key,
     required this.auth,
     this.environment = 'Production',
+    this.newChild = false,
   });
   @override
   State<EnrollmentForm> createState() => _EnrollmentFormState();
@@ -22,7 +25,8 @@ class EnrollmentForm extends StatefulWidget {
 class _EnrollmentFormState extends State<EnrollmentForm> {
   final form = GlobalKey<FormState>();
   final name = TextEditingController(), notes = TextEditingController();
-  int kind = 2;
+  late int kind = widget.newChild ? 2 : 1;
+  int? gender;
   String? child, sport, branch, dob, error, plan;
   bool busy = false;
   Json? submitted;
@@ -47,7 +51,7 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
         'existingPlayerId': kind == 1 ? child : null,
         'newChildArabicName': kind == 2 ? name.text.trim() : null,
         'newChildDateOfBirth': kind == 2 ? dob : null,
-        'newChildGender': null,
+        'newChildGender': kind == 2 ? gender : null,
         'sportId': sport,
         'subscriptionPlanId': plan,
         'preferredBranchId': branch,
@@ -101,13 +105,35 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: 'اشتراك جديد',
+    operation: true,
+    title: widget.newChild ? 'تسجيل طفل جديد' : 'اشتراك جديد',
     child: RemoteBody(
       auth: widget.auth,
       path: '/api/v1/guardian/enrollment-request-options',
       builder: (context, value) {
         final d = obj(value);
-        return Form(
+        final currentChild = rows(d['children'])
+            .where((c) => c['id'] == child)
+            .firstOrNull;
+        final currentPlan = rows(d['plans'] ?? [])
+            .where((p) => p['id'] == plan)
+            .firstOrNull;
+        final format =
+            ['Private', 'SemiPrivate'].contains(currentPlan?['trainingFormat'])
+            ? currentPlan!['trainingFormat']
+            : 'Group';
+        final existing = kind == 1 && currentPlan != null
+            ? rows(currentChild?['enrollments'] ?? [])
+                  .where(
+                    (e) =>
+                        e['sportId'] == sport &&
+                        e['branchId'] == branch &&
+                        e['registrationFormat'] == format,
+                  )
+                  .firstOrNull
+            : null;
+
+        return GuidedForm(
           key: form,
           child: gList([
             const UiText(
@@ -119,14 +145,21 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment(value: 2, label: UiText('طفل جديد')),
-                      ButtonSegment(value: 1, label: UiText('طفل مرتبط')),
-                    ],
-                    selected: {kind},
-                    onSelectionChanged: (s) => setState(() => kind = s.single),
-                  ),
+                  if (!widget.newChild)
+                    OutlinedButton.icon(
+                      onPressed: busy
+                          ? null
+                          : () => openPage(
+                              context,
+                              EnrollmentForm(
+                                auth: widget.auth,
+                                environment: widget.environment,
+                                newChild: true,
+                              ),
+                            ),
+                      icon: const Icon(Icons.person_add_alt_1_rounded),
+                      label: const UiText('اشتراك لطفل جديد'),
+                    ),
                   const SizedBox(height: 20),
                   if (kind == 1)
                     select(
@@ -145,6 +178,15 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
                       validator: (v) => v == null || v.trim().length < 2
                           ? 'أدخل اسم الطفل.'
                           : null,
+                    ),
+                    DropdownButtonFormField<int>(
+                      initialValue: gender,
+                      decoration: const InputDecoration(labelText: 'النوع'),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: UiText('ولد')),
+                        DropdownMenuItem(value: 2, child: UiText('بنت')),
+                      ],
+                      onChanged: (v) => setState(() => gender = v),
                     ),
                     OutlinedButton.icon(
                       onPressed: pickDate,
@@ -210,9 +252,32 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
               const UiText(
                 'لمنع الطلب المكرر، أعد إرسال نفس البيانات من هنا عند عودة الاتصال.',
               ),
+            if (existing != null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: UiText('الاشتراك الحالي متاح للتجديد.'),
+              ),
             FilledButton(
-              onPressed: busy ? null : submit,
-              child: UiText(busy ? 'جارٍ الإرسال…' : 'إرسال طلب الاشتراك'),
+              onPressed: busy
+                  ? null
+                  : existing != null
+                  ? () => openPage(
+                      context,
+                      PlanPicker(
+                        auth: widget.auth,
+                        environment: widget.environment,
+                        enrollmentId: textOf(existing['id']),
+                        childName: textOf(currentChild?['name']),
+                      ),
+                    )
+                  : submit,
+              child: UiText(
+                busy
+                    ? 'جارٍ الإرسال…'
+                    : existing != null
+                    ? 'تجديد الاشتراك الحالي'
+                    : 'متابعة إلى الدفع',
+              ),
             ),
           ]),
         );
@@ -232,7 +297,22 @@ class _EnrollmentFormState extends State<EnrollmentForm> {
         .map(
           (x) => DropdownMenuItem<String>(
             value: x['id'],
-            child: UiText(x['name']),
+            child: title == 'الطفل'
+                ? Row(
+                    children: [
+                      PlayerAvatar(
+                        textOf(x['name']),
+                        auth: widget.auth,
+                        reference: x['photoReference'],
+                        gender: x['gender'],
+                        size: 30,
+                        square: true,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: UiText(textOf(x['name']))),
+                    ],
+                  )
+                : UiText(x['name']),
           ),
         )
         .toList(),
@@ -251,6 +331,7 @@ class EnrollmentRequests extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) => GuardianPage(
+    operation: true,
     title: 'طلبات الاشتراك',
     child: RemoteBody(
       auth: auth,

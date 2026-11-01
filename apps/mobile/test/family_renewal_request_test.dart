@@ -167,12 +167,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('الاعتماد الجماعي متاحة من لوحة الويب'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('هذا الطلب للقراءة فقط'), findsOneWidget);
       expect(find.text('إلغاء طلب التجديد'), findsNothing);
       expect(find.text('رفع إيصال الدفع'), findsNothing);
+      expect(find.text('قبول وتجديد كل التسجيلات'), findsNothing);
     },
   );
   testWidgets(

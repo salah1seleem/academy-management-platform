@@ -11,6 +11,7 @@ public static class AcademyPermissions
     public const string TenantAccess = "tenant.access";
     public const string AcademySettingsManage = "academy.settings.manage";
     public const string StaffProvision = "staff.provision";
+    public const string MatchesManage = "matches.manage";
     public const string StructureManage = "structure.manage";
     public const string FacilitiesRead = "facilities.read";
     public const string FacilitiesManage = "facilities.manage";
@@ -68,6 +69,8 @@ public sealed class TenantPermissionHandler(CurrentTenant currentTenant, Foundat
     {
         var membership = await currentTenant.ResolveAsync();
         if (membership is null) return;
+
+        if(requirement.Permission==AcademyPermissions.MatchesManage){if(await Academy.Api.Operations.MatchAccess.Read(db,membership)&&await configuration.Enabled(membership.AcademyId,"matches"))context.Succeed(requirement);return;}
 
         if (requirement.Permission is AcademyPermissions.FollowUpRead or AcademyPermissions.FollowUpManage)
         {

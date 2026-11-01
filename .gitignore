@@ -8,7 +8,9 @@ TestResults/
 # Node
 node_modules/
 .next/
+.next*/
 .next-e2e/
+.next-v5*/
 .next-refinement*/
 out/
 coverage/
@@ -41,3 +43,23 @@ dumps/
 # Logs / temporary files
 *.log
 tmp/
+apps/web/.next-approved-design/
+
+# Isolated platform preview build output
+apps/web/.next-platform-*/
+
+# Private delivery workbooks and artifact inspection sidecars
+outputs/
+*.xlsx.inspect.ndjson
+
+# Production credential files must remain outside version control.
+*.p8
+*.p12
+*.pem
+appsettings.Production.local.json
+infra/digitalocean/app.local.yaml
+infra/digitalocean/app.local.yml
+
+# Local promotional renders and private deployment backups
+output/
+backups/

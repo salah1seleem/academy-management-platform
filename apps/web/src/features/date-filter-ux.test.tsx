@@ -63,7 +63,7 @@ it("keeps an explicitly linked report period instead of replacing it with defaul
   render(<DateFilterDefaults range={range}><FinancialReport /></DateFilterDefaults>);
   expect(await screen.findByLabelText("من تاريخ")).toHaveValue("2026-09-01");
   expect(screen.getByLabelText("إلى تاريخ")).toHaveValue("2026-09-28");
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28"));
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28&page=1&pageSize=25",expect.objectContaining({cache:"no-store",signal:expect.anything()})));
 });
 it("uses Cairo month rollover and leap-day dates without changing the Demo clock", () => {
   expect(monthToDate(new Date("2026-09-30T22:30:00Z"))).toEqual({ from: "2026-10-01", to: "2026-10-01" });

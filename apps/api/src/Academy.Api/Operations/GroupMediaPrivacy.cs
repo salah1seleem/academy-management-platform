@@ -19,6 +19,21 @@ public static class GroupMediaPrivacy
         var g=app.MapGroup("/api/v1/guardian/children/{playerId:guid}/group-media-consent").RequireAuthorization(AcademyPermissions.TenantAccess);
         g.MapGet("",Read);g.MapPost("",Save).AddEndpointFilter<CsrfFilter>();
         app.MapGet("/api/v1/assets/media-audience",Options).RequireAuthorization(AcademyPermissions.TenantAccess).WithMetadata(new Academy.Api.Configuration.AcademyFeatureMetadata("media"));
+        app.MapGet("/api/v1/assets/media-groups", MediaGroups).RequireAuthorization(AcademyPermissions.PlayerMediaManage).WithMetadata(new Academy.Api.Configuration.AcademyFeatureMetadata("media"));
+    }
+    private static async Task<IResult> MediaGroups(string? search,int? page,int? pageSize,CurrentTenant tenant,FoundationDbContext db,HttpContext h)
+    {
+        h.Response.Headers.CacheControl="private, no-store";
+        var t=(await tenant.ResolveAsync())!;
+        if(t.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin))return Results.Forbid();
+        if(t.Role==AcademyRole.AcademyAdmin&&await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants)&&!await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.IsActive&&g.Module=="media"&&g.Read&&g.Add))return Results.Forbid();
+        var index=page??1;var size=pageSize??25;var term=search?.Trim();
+        if(index is <1 or >1000000||size is <1 or >50||term?.Length>100)return Results.UnprocessableEntity(new{message="راجع البحث ورقم الصفحة وعدد المجموعات."});
+        // Existing tenant/branch query filters remain active. No player, guardian or medical data is selected.
+        var query=db.TrainingGroups.AsNoTracking().Where(g=>g.AcademyId==t.AcademyId&&g.IsActive&&db.Branches.Any(b=>b.Id==g.BranchId&&b.IsActive)&&db.Sports.Any(s=>s.Id==g.SportId&&s.IsActive));
+        if(!string.IsNullOrEmpty(term))query=query.Where(g=>g.ArabicName.Contains(term));
+        var items=await query.OrderBy(g=>g.ArabicName).ThenBy(g=>g.Id).Skip((index-1)*size).Take(size+1).Select(g=>new{g.Id,g.ArabicName,branchName=db.Branches.Where(b=>b.Id==g.BranchId).Select(b=>b.ArabicName).Single(),sportName=db.Sports.Where(s=>s.Id==g.SportId).Select(s=>s.ArabicName).Single()}).ToArrayAsync();
+        return Results.Ok(new{items=items.Take(size),page=index,pageSize=size,hasMore=items.Length>size});
     }
     internal static Task Lock(FoundationDbContext db,Guid academy)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-media-privacy:{academy}"},0))");
     internal static IQueryable<Academy.Infrastructure.People.GuardianPlayerLink> Links(FoundationDbContext db)=>db.GuardianPlayerLinks.Where(l=>l.IsActive&&l.Player.IsActive&&l.Guardian.IsActive&&l.Guardian.User.IsActive);

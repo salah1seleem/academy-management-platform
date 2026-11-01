@@ -11,11 +11,12 @@ namespace Academy.Api.Facilities;
 // Called inside the caller's transaction; no detached reservation or nested commit.
 public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityService facilities, TimeProvider time)
 {
-    public async Task LockCalendar(Guid academy, IEnumerable<Guid> groups, string action = "Add")
+    public async Task LockCalendar(Guid academy, IEnumerable<Guid> groups, string action = "Add", Guid? platformImportJob = null)
     {
         if (db.RequestMembershipId != Guid.Empty) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{academy}:{db.RequestMembershipId}"}, 0))");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + academy}, 0))");
-        if (db.RequestScopeEnabled)
+        if (platformImportJob.HasValue) await Academy.Api.Importing.ImportAuthority.CheckPlatformCalendar(db, academy, platformImportJob.Value);
+        else if (db.RequestScopeEnabled)
         {
             var member = await db.AcademyMemberships.AsNoTracking().SingleOrDefaultAsync(m => m.Id == db.RequestMembershipId && m.IsActive && m.User.IsActive && m.Academy.IsActive);
             if (member is null || member.Role is not (AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)) throw new FacilityRejected("إدارة الحصص للإداري المصرح له.", 403);
@@ -34,7 +35,7 @@ public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityS
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"group-capacity:{academy}:{group}"}, 0))");
         }
         // Calendar -> resource -> coach is shared by timetable/manual/generator writes.
-        foreach (var resource in await db.GroupResourceSchedules.Where(x => groupIds.Contains(x.TrainingGroupId) && x.IsActive).Select(x => x.ResourceId).Distinct().OrderBy(x => x).ToArrayAsync()) await facilities.Lock(resource);
+        foreach (var resource in await db.GroupResourceSchedules.Where(x => groupIds.Contains(x.TrainingGroupId) && x.IsActive).Select(x => x.ResourceId).Distinct().OrderBy(x => x).ToArrayAsync()) await facilities.Lock(resource, platformImportJob);
         foreach (var coach in await db.StaffGroupAssignments.Where(x => groupIds.Contains(x.TrainingGroupId) && x.IsActive).Select(x => x.AcademyMembershipId).Distinct().OrderBy(x => x).ToArrayAsync()) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"facility-coach:{academy}:{coach}"}, 0))");
     }
     public async Task CheckCoachSlot(Guid academy, Guid group, DateOnly date, TimeOnly start, TimeOnly end, Guid? session = null, Guid[]? excludedSessions = null, Guid[]? excludedBookings = null)
@@ -49,30 +50,42 @@ public sealed class ResourceSessionCoordinator(FoundationDbContext db, FacilityS
                 || await db.TrainingSessions.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).AnyAsync(s => s.AcademyId == academy && s.Id != session && !excludedSessions.Contains(s.Id) && s.SessionDate == date && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < end && start < s.EndTime && FoundationDbContext.IsSessionStaffAssigned(academy,coach,s.Id))) throw new FacilityRejected("أحد مدربي المجموعة لديه حصة أو حجز آخر في الموعد المختار.");
         }
     }
-    public async Task Reserve(TrainingSession session, Guid actor)
+    public async Task Reserve(TrainingSession session, Guid actor, Guid? platformImportJob = null)
     {
         await CheckCoachSlot(session.AcademyId, session.TrainingGroupId, session.SessionDate, session.StartTime, session.EndTime, session.Id);
         await CheckRosterSlot(session.AcademyId, session.TrainingGroupId, session.SessionDate, session.StartTime, session.EndTime, session.Id);
         var plan = await db.GroupResourceSchedules.AsNoTracking().SingleOrDefaultAsync(x => x.TrainingGroupId == session.TrainingGroupId && x.IsActive);
         if (plan is null) return;
-        await facilities.Authority("Add");
+        if (platformImportJob.HasValue) await Academy.Api.Importing.ImportAuthority.CheckPlatformCalendar(db, session.AcademyId, platformImportJob.Value);
+        else await facilities.Authority("Add");
         if (session.SessionDate < plan.ValidFrom || session.SessionDate > plan.ValidTo) throw new FacilityRejected("الحصة خارج فترة حجز المجموعة. عدّل جدول المورد أولًا.", 422);
         if (await db.ResourceBookings.AnyAsync(x => x.TrainingSessionId == session.Id && x.State == ResourceBookingState.Reserved)) return;
-        await facilities.ReserveLocked(new(plan.ResourceId, session.SessionDate, session.StartTime, session.EndTime, plan.ReservedSeats, plan.Exclusive, "Training", session.TrainingGroupId, plan.CoachMembershipId, session.Id), "session-" + Guid.NewGuid().ToString("N"), session.AcademyId, actor);
+        await facilities.ReserveLocked(new(plan.ResourceId, session.SessionDate, session.StartTime, session.EndTime, plan.ReservedSeats, plan.Exclusive, "Training", session.TrainingGroupId, plan.CoachMembershipId, session.Id), "session-" + Guid.NewGuid().ToString("N"), session.AcademyId, actor, platformImportJob);
     }
     public async Task<int> CheckRosterSlot(Guid academy, Guid group, DateOnly date, TimeOnly start, TimeOnly end, Guid? session = null, bool checkBookedSeats = true)
     {
         var persisted = session.HasValue && await db.TrainingSessions.AnyAsync(s => s.Id == session);
         var sessionId = session.GetValueOrDefault();
-        var roster = db.SportEnrollments.Where(e => e.AcademyId == academy && e.IsActive && (persisted ? FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, sessionId) : FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group));
+        // Restrict candidates before invoking the dated SQL functions. Incoming
+        // transfers, one-session moves and reserved compensation remain candidates;
+        // the same authoritative functions still make the final membership decision.
+        var candidates = await db.SportEnrollments.Where(e => e.AcademyId == academy && e.IsActive && e.TrainingGroupId == group).Select(e => e.Id).ToListAsync();
+        candidates.AddRange(await db.EnrollmentGroupTransfers.Where(t => t.AcademyId == academy && t.TargetGroupId == group && t.EffectiveDate <= date).Select(t => t.SportEnrollmentId).ToArrayAsync());
+        if (persisted) {
+            candidates.AddRange(await db.EnrollmentSessionMoves.Where(m => m.AcademyId == academy && m.TargetSessionId == sessionId).Select(m => m.SportEnrollmentId).ToArrayAsync());
+            candidates.AddRange(await db.CompensationBookings.Where(b => b.AcademyId == academy && b.TrainingSessionId == sessionId && b.State == Academy.Infrastructure.People.CompensationBookingState.Reserved).Select(b => b.SportEnrollmentId).ToArrayAsync());
+        }
+        var candidateIds = candidates.Distinct().ToArray();
+        var roster = db.SportEnrollments.Where(e => candidateIds.Contains(e.Id) && e.AcademyId == academy && e.IsActive && (persisted ? FoundationDbContext.IsSessionAssigned(e.AcademyId, e.Id, sessionId) : FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, date) == group));
         var count = await roster.CountAsync();
         var capacity = await db.TrainingGroups.Where(g => g.Id == group).Select(g => g.Capacity).SingleAsync();
         if (capacity.HasValue && count > capacity.Value) throw new FacilityRejected("عدد أعضاء المجموعة المؤرخ يتجاوز سعتها في هذا اليوم.");
         var seats = await db.GroupResourceSchedules.Where(g => g.TrainingGroupId == group && g.IsActive).Select(g => (int?)g.ReservedSeats).SingleOrDefaultAsync();
         if (checkBookedSeats && seats.HasValue && count > seats.Value) throw new FacilityRejected("حجز المورد لا يكفي عدد الأعضاء في تاريخ الحصة.");
-        var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).Where(e => e.AcademyId == academy && e.IsActive);
+        var rosterPlayers = await roster.Select(e => e.PlayerId).Distinct().ToArrayAsync();
+        var allEnrollments = db.SportEnrollments.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).Where(e => e.AcademyId == academy && e.IsActive && rosterPlayers.Contains(e.PlayerId));
         var allSessions = db.TrainingSessions.IgnoreQueryFilters(["trusted-branches", "trusted-sports"]).Where(s => s.AcademyId == academy && s.Id != session && s.TrainingGroupId != group && s.SessionDate == date && s.Status != TrainingSessionStatus.Cancelled && s.StartTime < end && start < s.EndTime);
-        if (await roster.AnyAsync(e => allEnrollments.Any(other => other.PlayerId == e.PlayerId && other.IsActive && allSessions.Any(s => FoundationDbContext.IsSessionAssigned(other.AcademyId, other.Id, s.Id))))) throw new FacilityRejected("أحد اللاعبين لديه حصة أخرى متعارضة في هذا الموعد.");
+        if (await allEnrollments.AnyAsync(other => allSessions.Any(s => FoundationDbContext.IsSessionAssigned(other.AcademyId, other.Id, s.Id)))) throw new FacilityRejected("أحد اللاعبين لديه حصة أخرى متعارضة في هذا الموعد.");
         return count;
     }
     public async Task CancelBookings(TrainingSession session, Guid actor)
