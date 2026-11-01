@@ -113,7 +113,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install private media inspection tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg postgresql-client
       - run: dotnet tool restore
       - run: dotnet restore AcademyManagementPlatform.slnx
       - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release -m:1
@@ -126,9 +126,21 @@ jobs:
         env:
           API_INTERNAL_URL: http://127.0.0.1:5190
       - name: Football demo and coach provisioning E2E
-        run: npx playwright test --config tests/e2e/playwright.football.config.ts --output tests/e2e/test-results/football
+        env:
+          PGPASSWORD: academy_ci_only
+          ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_v3_help_video_ci;Username=academy;Password=academy_ci_only
+        run: |
+          createdb -h 127.0.0.1 -U academy academy_v3_help_video_ci
+          dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
+          npx playwright test --config tests/e2e/playwright.football.config.ts --output tests/e2e/test-results/football
       - name: Staff passkey browser verification E2E
-        run: npx playwright test --config tests/e2e/playwright.passkeys.config.ts --output tests/e2e/test-results/passkeys
+        env:
+          PGPASSWORD: academy_ci_only
+          ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_passkeys_ci;Username=academy;Password=academy_ci_only
+        run: |
+          createdb -h 127.0.0.1 -U academy academy_passkeys_ci
+          dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
+          npx playwright test --config tests/e2e/playwright.passkeys.config.ts --output tests/e2e/test-results/passkeys
 
       - name: Preserve browser failure evidence
         if: always()

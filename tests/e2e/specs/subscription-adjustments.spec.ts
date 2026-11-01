@@ -1,6 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
-import { todaySession } from "../support/attendance";
+import { cairoDateRange, todaySession } from "../support/attendance";
 import { formatDateAr } from "../../../apps/web/src/lib/formatters";
 
 const footballPeriod = "53000000-0000-0000-0000-000000000501";
@@ -57,8 +57,9 @@ test.describe.serial("Slice 8B subscription adjustment journeys", () => {
     const access = await page.request.get(`/api/v1/manage/staff/${member.id}/access`).then(r => r.json());
     const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
     const grantedAccess = await page.request.put(`/api/v1/manage/staff/${member.id}/access`, { headers: { "X-CSRF-TOKEN": csrf.token }, data: {
-      allBranches: false, branches: ["31000000-0000-0000-0000-000000000001"],
-      workflowActions: ["workflow.subscriptions.sessions", "workflow.subscriptions.days"],
+      allBranches: false, branches: ["31000000-0000-0000-0000-000000000002"],
+      allSports: false, sports: ["32000000-0000-0000-0000-000000000002"],
+      workflowActions: ["workflow.subscriptions.sessions", "workflow.subscriptions.days", "workflow.payments.read"],
       actions: access.modules.map((module: string) => ({ module, read: ["subscriptions", "payments"].includes(module), add: false, edit: module === "subscriptions", delete: false })),
     } });
     expect(grantedAccess.ok(), await grantedAccess.text()).toBe(true);
@@ -90,6 +91,18 @@ test.describe.serial("Slice 8B subscription adjustment journeys", () => {
   });
 
   test("Journey D — frozen combined attendance does not consume, resume restores future consumption", async ({ page }) => {
+    // Attendance uses real Cairo dates. Keep this reserved period eligible without
+    // backdating a session or relaxing the closed-day attendance guard.
+    await staffLogin(page, "owner.nogoom@example.test");
+    const current = await period(page, swimmingPeriod), today = cairoDateRange().to;
+    if (current.endDate < today) {
+      await write(page, `/api/v1/subscriptions/periods/${swimmingPeriod}/sessions`, {
+        sessions: 1, endDate: shifted(today, 30), reason: "تهيئة استحقاق حضور اصطناعي لليوم الفعلي", expectedVersion: current.version,
+      });
+      const prepared = await period(page, swimmingPeriod);
+      expect(prepared.priceSnapshot).toBe(current.priceSnapshot);
+      expect(prepared.receiptId).toBe(current.receiptId);
+    }
     await staffLogin(page);
     const group = "34000000-0000-0000-0000-000000000002";
     const frozenSession = await todaySession(page, group, "01:30", "01:45"), resumedSession = await todaySession(page, group, "01:50", "02:05");

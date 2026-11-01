@@ -1,3 +1,4 @@
+import { openOperationalFollowUp } from "../support/follow-ups";
 import { expect, test } from '@playwright/test';
 
 test('Owner reviews actual saved draft evidence; only source publication removes the condition', async ({ page }, info) => {
@@ -16,10 +17,7 @@ test('Owner reviews actual saved draft evidence; only source publication removes
   expect(candidate.source.evaluationDrafts.playerCount).toBe(1);
   const financial = await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   await page.goto('/dashboard/operations/follow-ups');
-  const card = page.locator('article').filter({ has: page.getByRole('heading', { name: candidate.source.name, exact: true }) }).filter({ hasText: 'مسودات تقييم منذ 7 أيام' });
-  if (candidate.activeFollowUpId) await card.getByRole('link', { name: 'فتح المتابعة القائمة' }).click();
-  else await card.getByRole('button', { name: 'إنشاء متابعة' }).click();
-  await page.waitForURL(/follow-ups\/[a-f0-9-]+$/);
+  await openOperationalFollowUp(page, candidate);
   const url = page.url(), id = url.split('/').at(-1)!;
   const get = async () => (await page.request.get(`/api/v1/manage/owner-followups/${id}`)).json();
   const before = await get(), ids: string[] = before.item.evidence.evaluationIds;

@@ -23,6 +23,7 @@ test('Private complaint lifecycle survives close and reopen, while the family re
     await page.goto(`/dashboard/feedback/${id}`);
     const read = async () => (await page.request.get(path)).json();
     const move = async (status: string, note = '') => {
+      await page.getByRole('tab', { name: 'الرد والمتابعة', exact: true }).click();
       await page.getByLabel('الخطوة التالية').selectOption(status); await page.getByLabel('ملاحظة داخلية (اختياري)').fill(note); await page.getByRole('button', { name: 'حفظ مرحلة المعالجة', exact: true }).click();
       await expect.poll(async () => (await read()).status).toBe(status);
       await expect(page.getByLabel('الخطوة التالية')).toHaveValue('');
@@ -30,6 +31,7 @@ test('Private complaint lifecycle survives close and reopen, while the family re
     await move('InProgress', 'دليل تحقيق داخلي اصطناعي للمالك فقط');
     await move('AwaitingInfo');
     const waiting = await read(); expect(waiting.history).toHaveLength(2);
+    await page.getByRole('tab', { name: 'السجل', exact: true }).click();
     await page.getByText('سجل الملاحظة الخاص', { exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByText('ملاحظة داخلية: دليل تحقيق داخلي اصطناعي للمالك فقط')).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -37,10 +39,12 @@ test('Private complaint lifecycle survives close and reopen, while the family re
     let mine = await (await family.request.get(`/api/v1/guardian/children/${child}/feedback-options`)).json();
     const familyCase = mine.mine.find((x: {id:string})=>x.id===id); expect(familyCase.status).toBe('AwaitingInfo'); expect(familyCase).not.toHaveProperty('history'); expect(familyCase).not.toHaveProperty('internalNote'); expect(JSON.stringify(mine)).not.toContain('دليل تحقيق داخلي');
     expect((await family.request.get(path)).status()).toBe(403);
+    await page.getByRole('tab', { name: 'الرد والمتابعة', exact: true }).click();
     await page.getByLabel('الرد على الملاحظة').fill('رد عام محفوظ للأسرة بعد مراجعة تنظيم التدريب'); await page.getByRole('button', { name: 'إرسال الرد وحل الملاحظة', exact: true }).click();
     await expect.poll(async()=> (await read()).status).toBe('Resolved');
     await move('Closed'); await expect(page.getByRole('button', { name: 'إرسال الرد وحل الملاحظة' })).toHaveCount(0);
     await move('Reopened', 'مراجعة داخلية إضافية دون مسح الرد الأول');
+    await page.getByRole('tab', { name: 'الرد والمتابعة', exact: true }).click();
     await page.getByLabel('الرد على الملاحظة').fill('رد عام ثانٍ بعد استكمال المراجعة الاصطناعية'); await page.getByRole('button', { name: 'إرسال الرد وحل الملاحظة', exact: true }).click();
     await expect.poll(async()=> (await read()).status).toBe('Resolved');
     const final = await read(); expect(final.history).toHaveLength(6); expect(final.history.filter((c:{action:string})=>c.action==='Resolve')).toHaveLength(2);

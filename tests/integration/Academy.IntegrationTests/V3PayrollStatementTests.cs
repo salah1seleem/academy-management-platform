@@ -35,6 +35,9 @@ public sealed partial class V2StaffScopeTests
     public async Task V3_statement_demo_seed_is_opt_in_repeatable_unpaid_and_forbidden_in_production()
     {
         await using var demo=factory.WithWebHostBuilder(b=>b.UseSetting("Demo:SeedProfile","Football"));using var client=demo.CreateClient();await using var scope=demo.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>();var options=scope.ServiceProvider.GetRequiredService<IOptions<DemoOptions>>().Value;var time=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        // This test exercises repeatable current-month approval, not the expired showcase contract.
+        var fixtureEmployee=await db.Employees.SingleAsync(e=>e.Id==PayrollStatementDemoSeed.EmployeeId);
+        if(!await db.PayrollStatements.AnyAsync(s=>s.EmployeeId==fixtureEmployee.Id)) { fixtureEmployee.ContractEnd=null; await db.SaveChangesAsync(); }
         var beforePayments=await db.PayrollDisbursements.CountAsync(p=>p.EmployeeId==PayrollStatementDemoSeed.EmployeeId);await PayrollStatementDemoSeed.Seed(db,env,options,time);var statement=await db.PayrollStatements.AsNoTracking().SingleAsync(s=>s.EmployeeId==PayrollStatementDemoSeed.EmployeeId);await PayrollStatementDemoSeed.Seed(db,env,options,time);Assert.Equal(statement.Id,(await db.PayrollStatements.SingleAsync(s=>s.EmployeeId==PayrollStatementDemoSeed.EmployeeId)).Id);Assert.Equal(beforePayments,await db.PayrollDisbursements.CountAsync(p=>p.EmployeeId==PayrollStatementDemoSeed.EmployeeId));var old=env.EnvironmentName;try{env.EnvironmentName="Production";await Assert.ThrowsAsync<InvalidOperationException>(()=>PayrollStatementDemoSeed.Seed(db,env,options,time));}finally{env.EnvironmentName=old;}
     }
     private static string StatementRoot(Guid e)=>$"/api/v1/manage/payroll/{e}/statement";

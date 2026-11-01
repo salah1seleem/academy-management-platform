@@ -1,3 +1,5 @@
+import { expectFeedbackState } from "../support/feedback";
+import { openOperationalFollowUp } from "../support/follow-ups";
 import { expect, test } from '@playwright/test';
 
 test('Owner follows overdue notes, replies from each actual source and only the linked guardian receives the response', async ({ page, browser }, info) => {
@@ -10,8 +12,7 @@ test('Owner follows overdue notes, replies from each actual source and only the 
   expect(candidate).toBeTruthy(); expect(candidate.source.overdueFeedback).toMatchObject({ complaintCount: 1, suggestionCount: 1, submitterCount: 1 });
   const financial = await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   await page.goto('/dashboard/operations/follow-ups');
-  const card = page.locator('article').filter({ has: page.getByRole('heading', { name: candidate.source.name, exact: true }) }).filter({ hasText: 'ملاحظات تجاوزت موعد المتابعة' });
-  await card.getByRole('button', { name: 'إنشاء متابعة' }).click(); await page.waitForURL(/follow-ups\/[a-f0-9-]+$/);
+  await openOperationalFollowUp(page, candidate);
   const url = page.url(), id = url.split('/').at(-1)!;
   const read = async () => (await page.request.get(`/api/v1/manage/owner-followups/${id}`)).json();
   const before = await read(), ids: string[] = before.item.evidence.feedbackIds; expect(ids).toHaveLength(2);
@@ -25,10 +26,11 @@ test('Owner follows overdue notes, replies from each actual source and only the 
     const source = await (await page.request.get(`/api/v1/manage/feedback/${note}`)).json(); child = source.playerId;
     expect(source.status).not.toBe('Resolved');
     await expect(page.getByRole('link', { name: 'ملاحظات المجموعة نفسها' })).toHaveAttribute('href', `/dashboard/feedback?groupId=${groupId}`);
-    if (source.status === 'Open') { await page.getByRole('button', { name: 'تسجيل المراجعة', exact: true }).click(); await expect(page.getByText('الحالة: تمت المراجعة')).toBeVisible(); }
+    await page.getByRole('tab', { name: 'الرد والمتابعة', exact: true }).click();
+    if (source.status === 'Open') { await page.getByRole('button', { name: 'تسجيل المراجعة', exact: true }).click(); await expectFeedbackState(page, 'تمت المراجعة'); }
     await page.screenshot({ path: info.outputPath(`family-feedback-${note}-390.png`), fullPage: true, animations: 'disabled' });
     await page.getByLabel('الرد على الملاحظة').fill('رد تجريبي محفوظ للأسرة من صفحة الملاحظة نفسها');
-    await page.getByRole('button', { name: 'إرسال الرد وحل الملاحظة', exact: true }).click(); await expect(page.getByText('الحالة: تم الرد والحل')).toBeVisible();
+    await page.getByRole('button', { name: 'إرسال الرد وحل الملاحظة', exact: true }).click(); await expectFeedbackState(page, 'تم الرد والحل');
   }
   const after = await read(); expect(after.item.state).toBe('Closed'); expect(after.item.conditionActive).toBe(false); expect(after.item.evidence).toEqual(before.item.evidence); expect(after.history).toEqual(closed.history);
   expect(await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json()).toEqual(financial);
@@ -46,6 +48,6 @@ test('Owner follows overdue notes, replies from each actual source and only the 
     expect((await context.request.get(`/api/v1/manage/feedback/${ids[0]}`)).status()).toBe(403);
   } finally { await context.close(); }
   await page.goto(`/dashboard/feedback?groupId=${groupId}`); await expect(page.getByText('ملاحظات المجموعة المختارة فقط', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'مسح', exact: true }).click(); await expect(page.getByText('ملاحظات المجموعة المختارة فقط', { exact: false })).toHaveCount(0);
+  await page.getByRole('button', { name: 'مسح جميع الفلاتر', exact: true }).click(); await expect(page.getByText('ملاحظات المجموعة المختارة فقط', { exact: false })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

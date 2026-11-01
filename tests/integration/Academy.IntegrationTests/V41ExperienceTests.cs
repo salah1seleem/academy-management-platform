@@ -16,13 +16,13 @@ public sealed partial class BrandingMatchesTests
     {
         using var owner=await Staff();using var other=await Staff(DemoSeed.FutureOwnerEmail);using var guardian=await Mobile(AcademyRole.Guardian);
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var ownerId=await db.AcademyMemberships.Where(m=>m.AcademyId==DemoSeed.NogoomAcademyId&&m.Role==AcademyRole.AcademyOwner&&m.IsActive).Select(m=>m.UserId).FirstAsync();
+        var ownerId=await db.AcademyMemberships.Where(m=>m.AcademyId==DemoSeed.NogoomAcademyId&&m.Role==AcademyRole.AcademyOwner&&m.IsActive&&m.User.Email==DemoSeed.OwnerEmail).Select(m=>m.UserId).SingleAsync();
         var mine=new AcademyNotice{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,UserId=ownerId,AudienceRole="AcademyOwner",Message="تنبيه اصطناعي خاص بالمالك",TargetKind="PaymentQueue",TargetId=Guid.NewGuid()};
         var wrongRole=new AcademyNotice{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,UserId=ownerId,AudienceRole="Guardian",Message="لا يظهر في دور المالك"};
         db.AcademyNotices.AddRange(mine,wrongRole);await db.SaveChangesAsync();
-        var list=await owner.GetFromJsonAsync<JsonElement>("/api/v1/notifications");
-        Assert.Contains(list.GetProperty("items").EnumerateArray(),n=>n.GetProperty("id").GetGuid()==mine.Id);
-        Assert.DoesNotContain(list.GetProperty("items").EnumerateArray(),n=>n.GetProperty("id").GetGuid()==wrongRole.Id);
+        var list=await ReadAllReminderInboxItems(owner);
+        Assert.Contains(list,n=>n.GetProperty("id").GetGuid()==mine.Id);
+        Assert.DoesNotContain(list,n=>n.GetProperty("id").GetGuid()==wrongRole.Id);
         foreach(var c in new[]{other,guardian}){
             var hidden=await c.GetFromJsonAsync<JsonElement>("/api/v1/notifications");Assert.DoesNotContain(hidden.GetProperty("items").EnumerateArray(),n=>n.GetProperty("id").GetGuid()==mine.Id);
             Assert.Equal(HttpStatusCode.NotFound,(await Send(c,$"/api/v1/notifications/{mine.Id}/read",new{isRead=true},true)).StatusCode);

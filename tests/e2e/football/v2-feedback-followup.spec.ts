@@ -12,9 +12,12 @@ test("Owner opens an overdue synthetic family follow-up on mobile", async ({ pag
   const menu = page.getByRole("button", { name: "فتح القائمة", exact: true });
   if (await menu.isVisible()) await menu.click();
   await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "الشكاوى والاقتراحات", exact: true }).click();
+  await page.getByRole("combobox", { name: "النوع", exact: true }).selectOption("");
+  await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("");
+  await page.getByText("الموضوع والاستعجال وفترة الملاحظات", { exact: true }).click();
   await page.getByRole("combobox", { name: "الموعد", exact: true }).selectOption("overdue");
   await expect(page.getByRole("combobox", { name: "الموعد", exact: true })).toHaveValue("overdue");
-  await expect(page.getByRole("table", { name: "ملاحظات أولياء الأمور" }).getByRole("row")).toHaveCount(overdue.length + 1);
+  await expect(page.getByRole("table", { name: "ملاحظات أولياء الأمور" }).getByRole("rowgroup").getByRole("row")).toHaveCount(overdue.length);
   await expect(page.getByRole("table", { name: "ملاحظات أولياء الأمور" })).toContainText("شكوى اصطناعية: انتظار مراجعة إشعار تغيير التدريب");
   await expect(page.getByRole("table", { name: "ملاحظات أولياء الأمور" })).toContainText("متأخرة عن الموعد");
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

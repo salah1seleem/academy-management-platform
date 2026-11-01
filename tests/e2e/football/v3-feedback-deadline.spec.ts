@@ -19,7 +19,7 @@ test('Owner publishes a follow-up policy, family submits, captured deadline surv
   const financial = await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   const family = await browser.newContext({baseURL:new URL(info.project.use.baseURL!).origin,viewport:{width:390,height:844}});
   try {
-    await page.goto('/dashboard/settings');
+    await page.goto('/dashboard/settings?tab=advanced');
     await page.getByRole('checkbox',{name:'تحديد مهلة متابعة تلقائية'}).check(); await page.getByLabel('مهلة المتابعة بالأيام').fill('2');
     const draftResponse = page.waitForResponse(r=>r.url().endsWith('/configuration/drafts')&&r.request().method()==='POST');
     await page.getByRole('button',{name:'حفظ إصدار مسودة'}).click(); const draft = await (await draftResponse).json();

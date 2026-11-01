@@ -37,10 +37,24 @@ public sealed partial class V2PlanPublicationTests
     [Fact]
     public async Task Player_card_rejects_other_tenant_unlinked_guardian_coach_default_unknown_code_CSRF_future_and_cancelled()
     {
+        await using var policyScope = factory.Services.CreateAsyncScope();
+        var policyDb = policyScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var policy = await policyDb.AcademyExperiences.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId);
+        var enabled = policy.CoachAttendanceEnabled;
+        policy.CoachAttendanceEnabled = false;
+        await policyDb.SaveChangesAsync();
+        try
+        {
         using var owner = await Staff(); var f = await AttendanceReady(owner); var player = await PlayerFor(f.First); var card = await IssueCard(owner, player); var code = new PlayerCardResolve(card.GetProperty("code").GetString()!); var resolve = $"/api/v1/attendance/sessions/{f.Next}/player-card/resolve"; using var foreign = await Staff("owner.future@example.test"); using var guardian = await Guardian(); using var coach = factory.CreateClient(); await MobileCoachTestSession.SignInAsync(coach, factory.Services);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(resolve, code)).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await Write(guardian, resolve, code)).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, resolve, code)).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await Write(foreign, resolve, code)).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(CardPath(player))).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await Write(owner, resolve, new PlayerCardResolve("academity:player:v1:" + new string('A',64)))).StatusCode);
         var mine = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{player}/card"); Assert.Equal(code.Code, mine.GetProperty("code").GetString()); var other = await Fixture(false); Assert.Equal(HttpStatusCode.NotFound, (await guardian.GetAsync($"/api/v1/guardian/children/{await PlayerFor(other.Enrollment)}/card")).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var s = await db.TrainingSessions.SingleAsync(s => s.Id == f.Next); s.SessionDate = PlacementToday.AddDays(1); await db.SaveChangesAsync(); Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, resolve, code)).StatusCode); s.SessionDate = PlacementToday; s.Status = TrainingSessionStatus.Cancelled; await db.SaveChangesAsync(); Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, resolve, code)).StatusCode);
+        }
+        finally
+        {
+            policy.CoachAttendanceEnabled = enabled;
+            await policyDb.SaveChangesAsync();
+        }
     }
     [Fact]
     public async Task Player_card_is_only_valid_for_its_assigned_session_and_manual_roster_still_works()

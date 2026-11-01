@@ -52,9 +52,23 @@ public sealed partial class V2PlanPublicationTests
     [Fact]
     public async Task Attendance_states_keep_scope_CSRF_coach_default_and_future_cancelled_guards()
     {
+        await using var policyScope = factory.Services.CreateAsyncScope();
+        var policyDb = policyScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var policy = await policyDb.AcademyExperiences.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId);
+        var enabled = policy.CoachAttendanceEnabled;
+        policy.CoachAttendanceEnabled = false;
+        await policyDb.SaveChangesAsync();
+        try
+        {
         using var owner = await Staff(); var f = await AttendanceReady(owner); using var guardian = await Guardian(); using var foreign = await Staff("owner.future@example.test"); using var coach = factory.CreateClient(); await MobileCoachTestSession.SignInAsync(coach, factory.Services); var path = $"/api/v1/attendance/sessions/{f.Next}/players"; var body = new { items = new[] { new PlayerAttendanceChange(f.First, AttendanceStatus.Late, 0) } };
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync(path, body)).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await Write(guardian, path, body, true)).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, path, body, true)).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await Write(foreign, path, body, true)).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var s = await db.TrainingSessions.SingleAsync(s => s.Id == f.Next); s.SessionDate = PlacementToday.AddDays(1); await db.SaveChangesAsync(); Assert.Equal(HttpStatusCode.BadRequest, (await Write(owner, path, body, true)).StatusCode); s.SessionDate = PlacementToday; s.Status = TrainingSessionStatus.Cancelled; await db.SaveChangesAsync(); Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, path, body, true)).StatusCode); Assert.False(await db.PlayerAttendances.AnyAsync(a => a.TrainingSessionId == f.Next));
+        }
+        finally
+        {
+            policy.CoachAttendanceEnabled = enabled;
+            await policyDb.SaveChangesAsync();
+        }
     }
     [Fact]
     public async Task Attendance_states_late_compensation_is_consumed_once_and_excused_restores_without_original_debit()

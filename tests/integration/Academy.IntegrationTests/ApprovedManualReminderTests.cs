@@ -28,16 +28,21 @@ public sealed partial class BrandingMatchesTests
         // Only its family link is added in this dedicated integration database.
         var player = RenewalOpportunityDemoSeed.Id(6, 1);
         var parent = await db.GuardianProfiles.SingleAsync(g => g.Id == Slice2DemoSeed.MainGuardianId);
-        if (!await db.GuardianPlayerLinks.AnyAsync(l => l.GuardianId == parent.Id && l.PlayerId == player && l.IsActive))
+        var fixtureLink = await db.GuardianPlayerLinks.SingleOrDefaultAsync(l => l.GuardianId == parent.Id && l.PlayerId == player);
+        if (fixtureLink is null)
         {
-            db.GuardianPlayerLinks.Add(new GuardianPlayerLink
+            fixtureLink = new GuardianPlayerLink
             {
                 Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId,
                 GuardianId = parent.Id, PlayerId = player, CreatedByUserId = parent.UserId,
                 RelationshipType = "رابط اختبار اصطناعي"
-            });
-            await db.SaveChangesAsync();
+            };
+            db.GuardianPlayerLinks.Add(fixtureLink);
         }
+        fixtureLink.IsActive = true;
+        await db.SaveChangesAsync();
+        try
+        {
         var before = (await db.Collections.CountAsync(), await db.Receipts.CountAsync(),
             await db.SubscriptionPeriods.CountAsync(), await db.PaymentRequests.CountAsync());
         var candidates = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/notifications/recipients?kind=Renewal");
@@ -76,8 +81,8 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal("Renewal", notice.TargetKind);
         Assert.Null(notice.TargetId);
         Assert.DoesNotContain("{اسم_", notice.Message);
-        var inbox = await guardian.GetFromJsonAsync<JsonElement>("/api/v1/notifications");
-        Assert.Contains(inbox.GetProperty("items").EnumerateArray(), n => n.GetProperty("id").GetGuid() == notice.Id);
+        var inbox = await ReadAllReminderInboxItems(guardian);
+        Assert.Contains(inbox, n => n.GetProperty("id").GetGuid() == notice.Id);
         foreach (var nonRecipient in new[] { owner, admin, other })
         {
             var hidden = await nonRecipient.GetFromJsonAsync<JsonElement>("/api/v1/notifications");
@@ -88,5 +93,29 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal(1, await db.NoticeDispatches.CountAsync(d => d.RequestId == request));
         Assert.Equal(before, (await db.Collections.CountAsync(), await db.Receipts.CountAsync(),
             await db.SubscriptionPeriods.CountAsync(), await db.PaymentRequests.CountAsync()));
+        }
+        finally
+        {
+            // This reserved link exists solely for the reminder fixture. Leaving
+            // it active changes sibling pricing in the independent FIN-01 seed.
+            fixtureLink.IsActive = false;
+            await db.SaveChangesAsync();
+        }
     }
+    private static async Task<List<JsonElement>> ReadAllReminderInboxItems(HttpClient client)
+    {
+        var items = new List<JsonElement>();
+        var first = await client.GetFromJsonAsync<JsonElement>("/api/v1/notifications?page=1");
+        items.AddRange(first.GetProperty("items").EnumerateArray().Select(item => item.Clone()));
+        // The inbox deliberately returns 25 rows. This business-dated reminder can
+        // follow newer actual-clock match notices; inspect its real page as well.
+        var pages = (first.GetProperty("total").GetInt32() + 24) / 25;
+        for (var page = 2; page <= pages; page++)
+        {
+            var result = await client.GetFromJsonAsync<JsonElement>($"/api/v1/notifications?page={page}");
+            items.AddRange(result.GetProperty("items").EnumerateArray().Select(item => item.Clone()));
+        }
+        return items;
+    }
+
 }

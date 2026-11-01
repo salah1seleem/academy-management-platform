@@ -11,7 +11,7 @@ test('Approved compensation books a real session and is visible to its linked Gu
     grants = await page.request.get(`/api/v1/people/enrollments/${id(81)}/compensations`).then(r => r.json());
   }
   if (!grants[0].bookings.some((b: { state: string }) => b.state === 'Reserved')) {
-    await page.getByRole('combobox', { name: 'التعويض', exact: true }).selectOption(grants[0].id); await page.getByRole('combobox', { name: 'الحصة التعويضية', exact: true }).selectOption(id(91)); await page.getByRole('button', { name: 'معاينة حجز التعويض' }).click();
+    await page.getByRole('combobox', { name: 'التعويض', exact: true }).selectOption(grants[0].id); await page.getByRole('combobox', { name: 'الحصة التعويضية', exact: true }).selectOption(id(91)); const previewResponse = page.waitForResponse(r => r.url().endsWith('/booking/preview') && r.request().method() === 'POST'); await page.getByRole('button', { name: 'معاينة حجز التعويض' }).click(); const preview = await previewResponse; expect(preview.ok(), await preview.text()).toBe(true);
     const review = page.getByRole('region', { name: 'معاينة التعويض', exact: true }); await expect(review.getByRole('button', { name: 'تأكيد حجز التعويض' })).toBeEnabled();
     for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await review.screenshot({ path: info.outputPath(`compensation-${width}.png`), animations: 'disabled' }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); }
     await review.getByRole('button', { name: 'تأكيد حجز التعويض' }).click(); await expect(page.getByText('تم حجز الحصة التعويضية وتحديث مواعيد ولي الأمر.', { exact: true })).toBeVisible();

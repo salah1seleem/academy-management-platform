@@ -35,7 +35,7 @@ public sealed partial class V2ReceivablesTests
     {
         var f = await Fixture(); var collection = await Collection(f.Enrollment, f.Owner, 100);
         await using var setup = factory.Services.CreateAsyncScope(); var db = setup.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var other = await db.Branches.FirstAsync(b => b.AcademyId == DemoSeed.NogoomAcademyId && b.Id != f.Branch);
+        var other = await db.Branches.FirstAsync(b => b.AcademyId == DemoSeed.NogoomAcademyId && b.Id != f.Branch && b.Id != RenewalOpportunityDemoSeed.BranchId);
         var doc = new ReceivableDocument { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, BranchId = other.Id, SportEnrollmentId = f.Enrollment, PlayerId = f.Player, PlayerNameSnapshot = "تاريخ فرع اصطناعي", Amount = 100, Currency = "EGP", Description = "مطالبة فرع سابق اصطناعية", DueDate = new(2026,9,20), Source = ReceivableSource.OpeningBalance, SourceKey = Guid.NewGuid().ToString(), ContentHash = "TEST", ActorUserId = f.Owner };
         db.ReceivableDocuments.Add(doc);
         db.ReceivableMovements.Add(new() { Id = Guid.NewGuid(), AcademyId = doc.AcademyId, DocumentId = doc.Id, Kind = ReceivableMovementKind.PaymentAllocation, Amount = 80, Currency = "EGP", CollectionId = collection, Reason = "تاريخ تخصيص اصطناعي", SourceKey = Guid.NewGuid().ToString(), ContentHash = "TEST", ActorUserId = f.Owner });

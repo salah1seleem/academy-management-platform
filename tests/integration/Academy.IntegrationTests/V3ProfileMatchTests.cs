@@ -37,13 +37,37 @@ public sealed partial class BrandingMatchesTests
         var body=new MatchWrite(f.Tournament,f.Team,"منافس نطاق الملف",new(2026,10,22),new(17,0),"ملعب",null,null,null,[],true,true);
         var saved=await Send(owner,"/api/v1/manage/matches/",body);saved.EnsureSuccessStatusCode();var id=(await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var draft=await Send(owner,"/api/v1/manage/matches/",body with{Publish=false,Opponent="مسودة ليست للأسرة"});draft.EnsureSuccessStatusCode();var draftId=(await draft.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var team=await db.MatchTeams.AsNoTracking().SingleAsync(x=>x.Id==f.Team);
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var team=await db.MatchTeams.SingleAsync(x=>x.Id==f.Team);
+        team.CoachCanManageMatches = true; await db.SaveChangesAsync();
         var managed=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/matches/?coachMembershipId={team.CoachMembershipId}&playerId={f.Player}");Assert.Contains(managed.EnumerateArray(),x=>x.GetProperty("id").GetGuid()==id);Assert.DoesNotContain(managed.EnumerateArray(),x=>x.GetProperty("id").GetGuid()==draftId);
         foreach(var client in new[]{guardian,coach})
         {
             var mine=await client.GetFromJsonAsync<JsonElement>($"/api/v1/my-matches?playerId={f.Player}");Assert.Contains(mine.EnumerateArray(),x=>x.GetProperty("id").GetGuid()==id);Assert.DoesNotContain(mine.EnumerateArray(),x=>x.GetProperty("id").GetGuid()==draftId);
             Assert.Empty((await client.GetFromJsonAsync<JsonElement>($"/api/v1/my-matches?playerId={Slice2DemoSeed.AcademyBPlayerId}")).EnumerateArray());
-            Assert.Equal(HttpStatusCode.Forbidden,(await client.GetAsync($"/api/v1/manage/matches/?coachMembershipId={team.CoachMembershipId}")).StatusCode);
+            var management = await client.GetAsync($"/api/v1/manage/matches/?coachMembershipId={team.CoachMembershipId}");
+            if (client == guardian) Assert.Equal(HttpStatusCode.Forbidden, management.StatusCode);
+            else
+            {
+                // V5 permits a coach to manage explicitly delegated teams. A filter
+                // must still intersect that authority, never expand it.
+                management.EnsureSuccessStatusCode();
+                var permitted = await management.Content.ReadFromJsonAsync<JsonElement>();
+                Assert.Contains(permitted.EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+                var otherCoach = Guid.NewGuid();
+                Assert.Equal(HttpStatusCode.NotFound, (await coach.GetAsync($"/api/v1/manage/matches/?coachMembershipId={otherCoach}")).StatusCode);
+            }
+        }
+        var delegatedTeams = await db.MatchTeams.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.CoachCanManageMatches).ToArrayAsync();
+        try
+        {
+            foreach (var delegated in delegatedTeams) delegated.CoachCanManageMatches = false;
+            await db.SaveChangesAsync();
+            Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync($"/api/v1/manage/matches/?coachMembershipId={team.CoachMembershipId}")).StatusCode);
+        }
+        finally
+        {
+            foreach (var delegated in delegatedTeams) delegated.CoachCanManageMatches = true;
+            await db.SaveChangesAsync();
         }
         Assert.Equal(HttpStatusCode.NotFound,(await owner.GetAsync($"/api/v1/manage/matches/?coachMembershipId={Guid.NewGuid()}")).StatusCode);
         var foreignUser=await db.AcademyMemberships.Where(m=>m.AcademyId==DemoSeed.FutureAcademyId&&m.Role==AcademyRole.AcademyOwner).Select(m=>m.UserId).FirstAsync();

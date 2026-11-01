@@ -19,7 +19,7 @@ public sealed partial class SubscriptionAdjustmentIntegrationTests
     private async Task<SubscriptionAdjustmentResult> GrantSessions(Scenario s, int count = 4, DateOnly? end = null, uint? version = null, string? key = null)
     {
         await using var scope = Scope(); var db = Db(scope); var academy = await Academy(s);
-        var member = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == academy && m.Role == AcademyRole.AcademyOwner);
+        var member = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == academy && m.Role == AcademyRole.AcademyOwner && m.User.Email == (academy == DemoSeed.NogoomAcademyId ? DemoSeed.OwnerEmail : DemoSeed.FutureOwnerEmail));
         return await scope.ServiceProvider.GetRequiredService<SubscriptionAdjustmentService>().GrantSessionsAsync(academy, member.UserId, member.Id, s.PeriodId, count,
             end ?? s.EndDate.AddDays(7), "إضافة حصص اصطناعية", version ?? (await Period(s)).Version, key ?? Guid.NewGuid().ToString());
     }
@@ -187,7 +187,7 @@ public sealed partial class SubscriptionAdjustmentIntegrationTests
             {
                 var db = Db(setup);
                 var admin = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.User.Email == DemoSeed.AdminEmail);
-                var owner = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.AcademyOwner);
+                var owner = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.AcademyOwner && m.User.Email == DemoSeed.OwnerEmail);
                 adminUser = admin.UserId; adminMember = admin.Id;
                 branch = await db.SportEnrollments.Where(e => e.Id == s.EnrollmentId).Select(e => e.BranchId).SingleAsync();
                 var now = DateTimeOffset.UtcNow;

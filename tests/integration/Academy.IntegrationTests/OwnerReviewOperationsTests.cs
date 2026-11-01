@@ -132,7 +132,7 @@ public sealed partial class OwnerReviewOperationsTests : IAsyncLifetime
         if(purpose=="Media") { var audience=await c.GetFromJsonAsync<JsonElement>($"/api/v1/assets/media-audience?groupId={group}");form.Add(new StringContent(audience.GetProperty("eventOn").GetString()!),"eventOn");form.Add(new StringContent("true"),"privacyConfirmed");form.Add(new StringContent("true"),"noRecognizableChildren"); } // Valid synthetic pixel contains no identifiable child.
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = form }; request.Headers.Add("X-CSRF-TOKEN", (await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString());
         var r = await c.SendAsync(request); if (!valid) { Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode); return Guid.Empty; }
-        Assert.Equal(HttpStatusCode.Created, r.StatusCode); return (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.True(r.StatusCode == HttpStatusCode.Created, $"Expected private media upload Created; got {r.StatusCode}: {await r.Content.ReadAsStringAsync()}"); return (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
     private async Task<Guid> Product()
     {
