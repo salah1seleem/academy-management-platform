@@ -4,7 +4,7 @@ umask 077
 cd "$(dirname "$0")/../.."
 backup_dir=${1:?Usage: restore.sh /absolute/private/backup-directory}
 [[ "$backup_dir" = /* ]] || exit 1
-(cd "$backup_dir" && shasum -a 256 -c SHA256SUMS)
+(cd "$backup_dir" && sha256sum -c SHA256SUMS)
 source_project=$(cat "$backup_dir/source-project.txt")
 [[ -n "${COMPOSE_PROJECT_NAME:-}" && "$COMPOSE_PROJECT_NAME" != "$source_project" ]] || { echo 'Restore requires a different, explicit COMPOSE_PROJECT_NAME.' >&2; exit 1; }
 # Never replace an existing deployment or merge with existing files.

@@ -61,15 +61,23 @@ void main() {
         expect(t.getTopLeft(find.text('إجراء 0')), initial);
         expect(activated, -1);
         expect(find.text('إجراء 7'), findsNothing);
-        await t.ensureVisible(find.text('كل الإجراءات · 8'));
-        await t.tap(find.text('كل الإجراءات · 8'));
-        await t.pumpAndSettle();
         for (var i = 0; i < 8; i++) {
-          expect(find.text('إجراء $i'), findsOneWidget);
+          await t.scrollUntilVisible(
+            find.text('إجراء $i'),
+            160,
+            scrollable: find.descendant(
+              of: find.byKey(const ValueKey('owner-shortcut-scroll')),
+              matching: find.byType(Scrollable),
+            ),
+          );
+          await Scrollable.ensureVisible(
+            t.element(find.text('إجراء $i')),
+            alignment: .5,
+          );
+          await t.pumpAndSettle();
+          await t.tap(find.text('إجراء $i'));
+          expect(activated, i);
         }
-        await t.ensureVisible(find.text('إجراء 7'));
-        await t.tap(find.text('إجراء 7'));
-        expect(activated, 7);
         expect(t.takeException(), isNull);
         await t.pumpWidget(const SizedBox());
       },

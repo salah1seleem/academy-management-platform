@@ -49,9 +49,23 @@ test.describe.serial("Slice 8B subscription adjustment journeys", () => {
     await staffLogin(page); await openPeriod(page, footballPeriod); await page.getByRole("button", { name: "استئناف" }).click(); await page.getByLabel("التاريخ الفعلي").fill("2026-09-28"); await page.getByLabel("سبب التعديل").fill("عودة اللاعب"); await page.getByRole("button", { name: "متابعة" }).click(); await expectEnd(page, footballPeriod, shifted(before.endDate, 1)); await expect(page.locator(".adjustment-history").getByText("استئناف الاشتراك", { exact: true }).first()).toBeVisible();
   });
 
-  test("Journey B — admin adds five days then deducts two with both audit rows", async ({ page }) => {
-    await staffLogin(page); const before = await period(page, footballPeriod); await openPeriod(page, footballPeriod); await page.getByRole("button", { name: "إضافة أيام" }).click(); await page.getByLabel("عدد الأيام").fill("5"); await page.getByLabel("سبب التعديل").fill("تعويض توقف التدريب"); await page.getByRole("button", { name: "متابعة" }).click(); await expectEnd(page, footballPeriod, shifted(before.endDate, 5));
-    await page.getByRole("button", { name: "خصم أيام" }).click(); await page.getByLabel("عدد الأيام").fill("2"); await page.getByLabel("سبب التعديل").fill("تصحيح إداري"); await page.getByRole("button", { name: "متابعة" }).click(); await expect(page.getByRole("dialog")).toContainText("سيتم خصم 2 يوم"); await page.getByRole("button", { name: "تأكيد الخصم" }).click(); await expectEnd(page, footballPeriod, shifted(before.endDate, 3)); const history = page.locator(".adjustment-history"); await expect(history.getByText("إضافة أيام", { exact: true }).first()).toBeVisible(); await expect(history.getByText("خصم أيام", { exact: true }).first()).toBeVisible();
+  test("Journey B — admin grants five sessions, sets the period end and deducts two days with both audit rows", async ({ page }) => {
+    await staffLogin(page); const before = await period(page, swimmingPeriod); await openPeriod(page, swimmingPeriod);
+    await page.getByRole("button", { name:"إضافة حصص وتحديد نهاية الاشتراك",exact:true }).click();
+    await page.getByLabel("عدد الحصص الإضافية").fill("5");
+    await page.getByLabel("نهاية الاشتراك الجديدة").fill(shifted(before.endDate,5));
+    await page.getByLabel("سبب الإضافة").fill("تعويض توقف التدريب");
+    await page.getByRole("button",{name:"مراجعة الإضافة",exact:true}).click();
+    await page.getByRole("dialog").getByRole("button",{name:"تأكيد إضافة الحصص",exact:true}).click();
+    await expectEnd(page,swimmingPeriod,shifted(before.endDate,5));
+    const granted=await period(page,swimmingPeriod);
+    expect(granted.remainingSessions).toBe(before.remainingSessions+5);
+    expect(granted.priceSnapshot).toBe(before.priceSnapshot);
+    expect(granted.receiptId).toBe(before.receiptId);
+    await page.getByRole("button", { name: "خصم أيام" }).click(); await page.getByLabel("عدد الأيام").fill("2"); await page.getByLabel("سبب التعديل").fill("تصحيح إداري"); await page.getByRole("button", { name: "متابعة" }).click(); await expect(page.getByRole("dialog")).toContainText("سيتم خصم 2 يوم"); await page.getByRole("button", { name: "تأكيد الخصم" }).click(); await expectEnd(page, swimmingPeriod, shifted(before.endDate, 3));
+    const history = page.locator(".adjustment-history");
+    await expect(history.getByText("إضافة حصص وتحديد نهاية الاشتراك", { exact: true }).first()).toBeVisible();
+    await expect(history.getByText("خصم أيام", { exact: true }).first()).toBeVisible();
   });
 
   test("Journey C — cancellation preserves receipt and owner revenue", async ({ page }) => {

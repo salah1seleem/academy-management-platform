@@ -59,7 +59,7 @@ test("Owner sees approved and rejected payment requests and confirmed collection
   await page.getByRole("button", { name: "المتابعات والطلبات" }).click();
   await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "طلبات الدفع", exact: true }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
   await page.getByRole("button", { name: "مسح", exact: true }).click(); await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue("");
-  await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Approved"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مقبول" }).first()).toBeVisible(); await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Rejected"); await expect(page.locator(".payment-queue-row").filter({ hasText: "مرفوض" }).first()).toBeVisible();
+  await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Approved"); await expect(page.getByRole("table", {name:"طلبات الدفع",exact:true}).getByRole("row").filter({ hasText: "مقبول" }).first()).toBeVisible(); await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Rejected"); await expect(page.getByRole("table", {name:"طلبات الدفع",exact:true}).getByRole("row").filter({ hasText: "مرفوض" }).first()).toBeVisible();
   await page.goto("/dashboard/subscriptions/collections");
   await expect(page.getByText(/إجمالي التحصيل المؤكد/)).toBeVisible(); await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
 });

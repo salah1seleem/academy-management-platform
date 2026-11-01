@@ -227,7 +227,7 @@ void main() {
     },
   );
   testWidgets(
-    'actions stay stable, expansion retains all commands and decisions remain manual',
+    'reduced-motion actions stay stable, scrolling reaches all commands and decisions remain manual',
     (t) async {
       t.view.physicalSize = const Size(375, 850);
       t.view.devicePixelRatio = 1;
@@ -251,7 +251,14 @@ void main() {
       }
       expect(t.getTopLeft(first), beforeAction);
       expect(find.text('إجراء 7'), findsNothing);
-      await t.tap(find.text('كل الإجراءات · 8'));
+      await t.scrollUntilVisible(
+        find.text('إجراء 7'),
+        160,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('owner-shortcut-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await t.pumpAndSettle();
       expect(find.text('إجراء 7'), findsOneWidget);
       expect(t.takeException(), isNull);

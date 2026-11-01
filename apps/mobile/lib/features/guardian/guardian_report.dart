@@ -195,8 +195,7 @@ class PlayerReport extends StatelessWidget {
   );
 }
 
-Color scoreColor(Object? score, {BuildContext? context}) =>
-    context != null && Theme.of(context).brightness == Brightness.light
+Color scoreColor(Object? score, {BuildContext? context}) => context != null
     ? score == null
           ? Theme.of(context).colorScheme.onSurfaceVariant
           : (score as num) >= 90

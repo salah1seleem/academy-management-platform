@@ -144,10 +144,12 @@ class _OwnerActionRailState extends State<OwnerActionRail>
                 ),
               ),
               if (widget.onAll != null)
-                TextButton.icon(
-                  onPressed: widget.onAll,
-                  icon: const Icon(Icons.grid_view_rounded, size: 17),
-                  label: const UiText('كل العمليات'),
+                Flexible(
+                  child: TextButton.icon(
+                    onPressed: widget.onAll,
+                    icon: const Icon(Icons.grid_view_rounded, size: 17),
+                    label: const UiText('كل العمليات'),
+                  ),
                 ),
             ],
           ),

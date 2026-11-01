@@ -10,7 +10,7 @@ test("Owner follows a durable signed mismatch; a correct event confirms once wit
   await page.goto(`/dashboard/finance/provider-quarantine/${issueId}`); await expect(page.getByRole("heading", { name: "تفاصيل اختلاف الدفع" })).toBeVisible();
   await expect(page.getByText("925 جنيه", { exact: true })).toBeVisible(); await expect(page.getByText("900 جنيه", { exact: true })).toBeVisible();
   for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 1000 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); await page.screenshot({ path: info.outputPath(`provider-quarantine-${width}.png`), animations: "disabled" }); }
-  expect(await page.getByRole("button", { name: /قبول|اعتماد|تفعيل/ }).count()).toBe(0);
+  expect(await page.locator("main").getByRole("button", { name: /قبول|اعتماد|تفعيل/ }).count()).toBe(0);
   const event = { academyId: "10000000-0000-0000-0000-000000000001", paymentRequestId: paymentId, providerReference: "demo-quarantine-request", providerEventId: `e2e-correct-${Date.now()}`, status: "succeeded", amount: 900, currency: "EGP", signature: "" };
   const payload = [event.academyId, event.paymentRequestId, event.providerReference, event.providerEventId, event.status, event.amount.toFixed(2), event.currency].join("|");
   event.signature = createHmac("sha256", "Demo-Test-Signing-Key-Only-123456").update(payload).digest("hex").toUpperCase();

@@ -1020,3 +1020,7 @@ A07/A08المعتمدانيمتدانفيالخطنفسه:AudienceCommunication�
 - تخزين مفاتيح Data Protection باسم تطبيق ثابت مع DB sessions، ووسائط خاصة خارج ملفات Web، ونسخة متسقة بإيقاف كل كتّاب التطبيق. الاستعادة إلى هدف جديد فقط، بلا clean أو حذف إنتاج.
 - حدود النقل 55 MiB لاستيعاب فيديو 50 MiB المعتمد مع multipart؛ حدود الملف والتحقق والمعالجة والصلاحيات القائمة تظل مطبقة. مفاتيح ونسخ احتياطية يجب تأمينها وتشفيرها تشغيليًا؛ لا مزود أسرار/نسخ مدفوع ضمن المهمة.
 - OTP الحقيقي وتهيئة الهوية الإنتاجية وTLS واختبارات staging عوائق معلنة، ولا يُفعّل fixed OTP في Production. تفاصيل التنفيذ وحدود الدليل في infra/vps.
+
+### تخفيف كلفة بدء API ضمن معالجة CI
+
+أظهر dotnet-stack في التشغيل المحلي إعادة ترجمة RequestDelegateFactory عند إنشاء خوادم التكامل المتكررة. فُعّل مولد request delegates المدمج في ASP.NET Core وقت البناء، دون Native AOT أو trimming أو إطار جديد. بناء التجربة نجح بلا warnings/errors؛ قياس محلي واحد من بدء العملية إلى /health/live كان4.952ث قبل التوليد و1.432ث بعده، وليس ضمان أداء إنتاج. لا نجزم بأن ذلك وحده سبب فقد runner القديم؛ نجاح اختبارات PR هو دليل الإغلاق. المرجع: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/aot/request-delegate-generator/rdg?view=aspnetcore-10.0

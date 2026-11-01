@@ -24,7 +24,7 @@ test("Explicitly authorized branch Admin registers a paid synthetic player from 
   await write(`/api/v1/manage/staff/${member.id}/access`, { allBranches: false, branches: ["31000000-0000-0000-0000-000000000001"], actions: access.modules.map((module: string) => ({ module, read: ["players", "subscriptions", "finance"].includes(module), add: ["players", "subscriptions", "finance"].includes(module), edit: false, delete: false })) }, "PUT");
   await page.context().clearCookies(); await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
-  await page.getByRole("navigation", { name: "الإجراءات التشغيلية السريعة" }).getByRole("link", { name: /^تسجيل لاعب/ }).click();
+  await page.getByRole("navigation", { name: "إجراءات نطاقك" }).getByRole("link", { name: /^تسجيل لاعب/ }).click();
   await expect(page.getByRole("heading", { name: "تسجيل لاعب جديد" })).toBeVisible();
   await page.getByLabel("اسم اللاعب بالعربية").fill(playerName);
   await page.getByLabel("تاريخ الميلاد").fill("2016-05-10");

@@ -60,13 +60,18 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         var group = options.GetProperty("id").GetGuid(); var coach = options.GetProperty("coaches")[0].GetProperty("id").GetGuid();
         // Reused isolated QA can contain other synthetic ratings. Retain an exact
         // baseline, then assert count and score after this new 5/5, without deleting history.
+        var calendar = await owner.GetFromJsonAsync<JsonElement>("/api/v1/academy/calendar");
+        var today = DateOnly.Parse(calendar.GetProperty("today").GetString()!);
+        var monthFrom = new DateOnly(today.Year, today.Month, 1);
+        var monthTo = monthFrom.AddMonths(1).AddDays(-1);
+        var reportRange = $"from={monthFrom:yyyy-MM-dd}&to={monthTo:yyyy-MM-dd}";
         int[] baselineScores, baselineSummaryScores;
         await using (var baselineScope = factory.Services.CreateAsyncScope())
         {
             var db = baselineScope.ServiceProvider.GetRequiredService<FoundationDbContext>();
             var academy = DemoSeed.NogoomAcademyId;
             var zone = TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(a=>a.Id==academy).Select(a=>a.TimeZone).SingleAsync());
-            var start = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026,10,1), zone); var end = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026,11,1), zone);
+            var start = TimeZoneInfo.ConvertTimeToUtc(monthFrom.ToDateTime(TimeOnly.MinValue), zone); var end = TimeZoneInfo.ConvertTimeToUtc(monthFrom.AddMonths(1).ToDateTime(TimeOnly.MinValue), zone);
             var assigned = await db.StaffGroupAssignments.Where(a=>a.AcademyId==academy&&a.AcademyMembershipId==coach&&a.IsActive&&a.TrainingGroup.IsActive).Select(a=>a.TrainingGroupId).ToArrayAsync();
             baselineScores = await db.GuardianFeedbacks.Where(f=>f.AcademyId==academy&&f.CoachMembershipId==coach&&f.Kind=="Rating"&&assigned.Contains(f.TrainingGroupId)&&f.CreatedAtUtc>=start&&f.CreatedAtUtc<end).Select(f=>f.Score!.Value).ToArrayAsync();
             var allGroups = await db.TrainingGroups.Where(g=>g.AcademyId==academy&&g.IsActive).Select(g=>g.Id).ToArrayAsync();
@@ -100,7 +105,7 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
             await db.GuardianFeedbacks.Where(x => x.Id == complaintId).ExecuteUpdateAsync(s => s.SetProperty(x => x.DueOn, new DateOnly(2020, 1, 1)));
         }
         Assert.Contains((await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?overdue=true")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId && x.GetProperty("overdue").GetBoolean());
-        var overdueSummary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
+        var overdueSummary = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/owner-summary?{reportRange}");
         Assert.True(overdueSummary.GetProperty("operations").GetProperty("overdueFeedback").GetInt32() >= 1);
         Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync("/api/v1/manage/feedback")).StatusCode);
         var list = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?kind=Complaint&status=Open"); Assert.Contains(list.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
@@ -131,10 +136,10 @@ public sealed class GuardianFeedbackTests : IAsyncLifetime
         unresolved = await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?kind=Complaint&status=Unresolved");
         Assert.DoesNotContain(unresolved.EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
         Assert.DoesNotContain((await owner.GetFromJsonAsync<JsonElement>("/api/v1/manage/feedback?overdue=true")).EnumerateArray(), x => x.GetProperty("id").GetGuid() == complaintId);
-        var summary = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?from=2026-10-01&to=2026-10-31");
+        var summary = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/owner-summary?{reportRange}");
         var operations = summary.GetProperty("operations");
         Assert.Contains(operations.GetProperty("coachPerformance").EnumerateArray(), x => x.GetProperty("id").GetGuid() == coach && x.GetProperty("parentRating").GetDecimal() == expectedSummaryScore && x.GetProperty("parentRatingCount").GetInt32() == baselineSummaryScores.Length+1);
-        var coachDetailPath = $"/api/v1/reports/coach-performance/{coach}?from=2026-10-01&to=2026-10-31";
+        var coachDetailPath = $"/api/v1/reports/coach-performance/{coach}?{reportRange}";
         var coachDetail = await owner.GetFromJsonAsync<JsonElement>(coachDetailPath);
         Assert.Equal(expectedScore, coachDetail.GetProperty("parentRating").GetDecimal());
         Assert.Equal(baselineScores.Length+1, coachDetail.GetProperty("parentRatingCount").GetInt32());

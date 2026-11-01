@@ -142,7 +142,7 @@ jobs:
       - name: Check proxy and production OTP guard
         run: |
           curl --fail http://127.0.0.1:3389/login > /dev/null
-          curl --fail http://127.0.0.1:3389/api/v1/auth/csrf > /dev/null
+          curl --fail -H "X-Forwarded-Proto: https" http://127.0.0.1:3389/api/v1/auth/csrf > /dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"phoneNumber":"+201000000001"}' http://127.0.0.1:3389/api/v1/mobile/auth/otp/request)" = 501
           docker compose exec -T api sh -c 'test -w /data/media && test -w /data/keys && echo persistent-test > /data/media/compose-test.txt'
           docker compose run --rm migrate
@@ -158,7 +158,7 @@ jobs:
           COMPOSE_PROJECT_NAME=iacademy-ci-${{ github.run_id }} docker compose down
           infra/vps/restore.sh /tmp/iacademy-container-backup
           docker compose up -d --wait --wait-timeout 240
-          curl --fail http://127.0.0.1:3390/api/v1/auth/csrf > /dev/null
+          curl --fail -H "X-Forwarded-Proto: https" http://127.0.0.1:3390/api/v1/auth/csrf > /dev/null
           docker compose exec -T api sh -c 'test "$(cat /data/media/compose-test.txt)" = persistent-test && test -n "$(find /data/keys -name "key-*.xml" -print -quit)"'
       - name: Container diagnostics
         if: failure()

@@ -27,6 +27,13 @@ for (const role of ["owner", "admin"] as const) for (const size of sizes) {
         // Comparing scrollWidth with an already-inflated mobile innerWidth
         // misses RTL min-content overflow and displaced tap coordinates.
         expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(size.width+1);
+        const menu = page.getByRole("button", {name:"فتح القائمة",exact:true});
+        if (await menu.isVisible()) {
+          const titleBox = (await page.getByRole("heading", {name:"الرئيسية",exact:true,level:1}).boundingBox())!;
+          const menuBox = (await menu.boundingBox())!;
+          const overlap = titleBox.x < menuBox.x + menuBox.width && titleBox.x + titleBox.width > menuBox.x && titleBox.y < menuBox.y + menuBox.height && titleBox.y + titleBox.height > menuBox.y;
+          expect(overlap).toBe(false);
+        }
         const widgets = info.outputPath(`${role}-${size.width}-widgets.png`);
         await page.locator('[aria-label="مؤشرات الأكاديمية"]').screenshot({ path: widgets, scale: "css", animations: "disabled" });
         await info.attach("real-data widgets", { path: widgets, contentType: "image/png" });

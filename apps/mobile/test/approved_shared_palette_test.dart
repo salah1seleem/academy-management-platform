@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ocean_palette.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:academy_mobile/features/admin/native_operation_form.dart';
@@ -21,11 +22,11 @@ Widget frame(bool light, Widget body) => MaterialApp(
 );
 void main() {
   for (final light in [true, false]) {
-    final good = light ? const Color(0xff16803c) : const Color(0xff34d399);
+    final good = light ? const Color(0xff16803c) : OceanPalette.positive;
     final bad =
         (light ? AcademyTheme.light() : AcademyTheme.dark()).colorScheme.error;
-    final negative = light ? const Color(0xffc8102e) : const Color(0xfff87171);
-    final warn = light ? const Color(0xffb45309) : const Color(0xfffbbf24);
+    final negative = light ? const Color(0xffc8102e) : OceanPalette.negative;
+    final warn = light ? const Color(0xffb45309) : OceanPalette.warning;
     for (final result in [
       ('فوز', 3, 1, Icons.check_circle_outline, good),
       ('خسارة', 1, 3, Icons.arrow_downward, bad),

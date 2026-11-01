@@ -25,7 +25,7 @@ test("Owner previews and activates a version; disabled feature rejects API; reac
   // Recover only this synthetic test's feature toggle from an interrupted run.
   // Use the audited/versioned workflow, preserving unrelated settings.
   await restoreNutrition();
-  await page.goto("/dashboard/settings");
+  await page.goto("/dashboard/settings?tab=advanced");
   const panel = page.locator("section").filter({ has: page.getByRole("heading", { name: "إصدارات إعدادات التشغيل", exact: true }) });
   await expect(panel.getByRole("checkbox", { name: /إعلانات المجتمع/ })).toBeDisabled();
   async function saveDraft(enabled: boolean) {

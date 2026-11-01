@@ -16,5 +16,5 @@ docker compose run --rm --no-deps -T --user root --entrypoint tar api -C /data -
 db_container=$(docker compose ps -q db)
 docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$db_container" > "$backup_dir/source-project.txt"
 docker inspect --format '{{.Config.Image}} {{.Image}}' $(docker compose ps -aq api web) > "$backup_dir/image-tag.txt"
-(cd "$backup_dir" && shasum -a 256 database.dump files.tar.gz source-project.txt image-tag.txt > SHA256SUMS)
+(cd "$backup_dir" && sha256sum database.dump files.tar.gz source-project.txt image-tag.txt > SHA256SUMS)
 echo 'Backup complete. Keep it encrypted outside the VPS; it includes private media and session keys.'

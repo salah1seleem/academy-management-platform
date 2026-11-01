@@ -9,7 +9,7 @@ test("Platform has a separate login, auditable branding and no implicit access t
   await page.waitForURL("**/platform");
   await expect(page.getByRole("heading", { name: "إدارة المنصة", exact: true })).toBeVisible();
   expect((await page.request.get("/api/v1/guardian/children")).status()).toBe(401);
-  await page.locator(".platform-academy").filter({ hasText: "nogoom" }).click();
+  await page.getByRole("button", {name:"أكاديمية النجوم الرياضية nogoom-demo",exact:true}).click();
   const identity = page.locator("section").filter({ has: page.getByRole("heading", { name: /^هوية / }) });
   await identity.getByRole("button", { name: "حفظ الهوية" }).click();
   await expect(page.getByRole("status")).toHaveText("تم حفظ هوية الأكاديمية.");

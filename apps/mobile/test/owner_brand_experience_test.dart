@@ -107,7 +107,7 @@ void main() {
     },
   );
   testWidgets(
-    'quick actions remain fixed while idle and retain one active target',
+    'reduced-motion quick actions remain fixed and every target stays reachable',
     (t) async {
       var taps = 0;
       await t.pumpWidget(
@@ -123,17 +123,37 @@ void main() {
                 ),
             ],
           ),
+          reduced: true,
         ),
       );
       await t.pumpAndSettle();
       final start = t.getTopLeft(find.text('عملية 0'));
       await t.pump(const Duration(seconds: 10));
       expect(t.getTopLeft(find.text('عملية 0')), start);
+      await t.scrollUntilVisible(
+        find.text('عملية 1'),
+        160,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('owner-shortcut-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await Scrollable.ensureVisible(
+        t.element(find.text('عملية 1')),
+        alignment: .5,
+      );
+      await t.pumpAndSettle();
       await t.tap(find.text('عملية 1'));
       expect(taps, 1);
-      await t.tap(find.text('كل الإجراءات · 7'));
-      await t.pumpAndSettle();
-      for (var i = 0; i < 7; i++) {
+      for (var i = 1; i < 7; i++) {
+        await t.scrollUntilVisible(
+          find.text('عملية $i'),
+          160,
+          scrollable: find.descendant(
+            of: find.byKey(const ValueKey('owner-shortcut-scroll')),
+            matching: find.byType(Scrollable),
+          ),
+        );
         expect(find.text('عملية $i'), findsOneWidget);
       }
       expect(t.takeException(), isNull);
@@ -227,18 +247,20 @@ void main() {
           };
           for (final route in routes.entries) {
             final item = find.text(route.key);
-            if (item.evaluate().isEmpty &&
-                find.textContaining('كل الإجراءات').evaluate().isNotEmpty) {
-              await t.ensureVisible(find.textContaining('كل الإجراءات'));
-              await t.tap(find.textContaining('كل الإجراءات'));
-              await t.pumpAndSettle();
-            }
+            await t.ensureVisible(
+              find.byKey(const ValueKey('owner-shortcut-scroll')),
+            );
             await t.scrollUntilVisible(
               item,
-              100,
-              scrollable: find.byType(Scrollable).first,
+              160,
+              scrollable: find.descendant(
+                of: find.byKey(const ValueKey('owner-shortcut-scroll')),
+                matching: find.byType(Scrollable),
+              ),
               maxScrolls: 20,
             );
+            await Scrollable.ensureVisible(t.element(item), alignment: .5);
+            await t.pumpAndSettle();
             await t.tap(item);
             await t.pumpAndSettle();
             expect(find.byType(route.value), findsOneWidget);

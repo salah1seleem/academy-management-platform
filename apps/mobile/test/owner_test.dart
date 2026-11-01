@@ -1,6 +1,7 @@
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/owner/owner_dashboard.dart';
+import 'package:academy_mobile/features/shared/role_navigation.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -219,7 +220,8 @@ void main() {
     final auth = await homeOwner((m, p, b, t) async {
       if (p.contains('/structure/options')) return {'branches': []};
       if (p.endsWith('/news')) return [];
-      if (p.contains('/manage/product-sales')) {
+      if (p.contains('/manage/product-sales') ||
+          p.contains('/manage/payment-requests')) {
         requestPath = p;
         return {'totalCount': 0, 'items': []};
       }
@@ -240,24 +242,33 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('owner-request-Product')),
+      find.text('مراجعة طلبات الدفع'),
       250,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('owner-request-Product')),
-    );
+    await tester.ensureVisible(find.text('مراجعة طلبات الدفع'));
+    await tester.tap(find.text('مراجعة طلبات الدفع'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('owner-request-Product')),
+    final scope = Uri.parse(requestPath!).queryParameters;
+    expect(Uri.parse(requestPath!).path, '/api/v1/manage/payment-requests');
+    expect(scope['from'], '2026-08-28');
+    expect(scope['to'], '2026-09-28');
+    expect(scope['status'], 'Pending');
+    // The approved home links to the combined queue. Preserve the product
+    // route's exact scope contract as well, without relying on a removed tile.
+    await tester.pumpWidget(
+      shell(
+        NativePaymentRequests(
+          auth: auth,
+          filters: {...scope, 'type': 'Product'},
+        ),
+      ),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('owner-request-Product')));
     await tester.pumpAndSettle();
     final query = Uri.parse(requestPath!).queryParameters;
     expect(Uri.parse(requestPath!).path, '/api/v1/manage/product-sales');
-    expect(query['from'], '2026-08-28');
-    expect(query['to'], '2026-09-28');
+    expect(query['from'], scope['from']);
+    expect(query['to'], scope['to']);
     expect(query['status'], 'Pending');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

@@ -141,3 +141,6 @@
 .home{--trend-secondary:#22d3ee}.home[data-mode=light]{--trend-secondary:var(--ink)}
 
 .pendingSection{display:grid;gap:14px;min-height:160px;align-content:center;background:linear-gradient(105deg,#8b98ad06 30%,#8b98ad14 47%,#8b98ad06 64%);background-size:240% 100%;animation:homeSectionPending 1.6s ease-in-out infinite}.pendingSection span{display:block;height:24px;background:#8b98ad12;border-radius:8px}.pendingSection span:first-child{width:45%}@keyframes homeSectionPending{from{background-position:100% 0}to{background-position:-100% 0}}@media(prefers-reduced-motion:reduce){.pendingSection{animation:none}}
+
+/* Reserve the collapsed navigation button's space in the custom home header. */
+@media(max-width:1049px){.header{padding-inline-start:56px}.header>div:first-of-type{min-width:0}.header p{overflow-wrap:anywhere}}

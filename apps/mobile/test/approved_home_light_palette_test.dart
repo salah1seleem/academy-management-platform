@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/theme/ocean_palette.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
@@ -49,13 +50,11 @@ void main() {
         );
         final positive = light
             ? const Color(0xff16803c)
-            : const Color(0xff34d399);
+            : OceanPalette.positive;
         final negative = light
             ? const Color(0xffc8102e)
-            : const Color(0xfff87171);
-        final warning = light
-            ? const Color(0xffb45309)
-            : const Color(0xfffbbf24);
+            : OceanPalette.negative;
+        final warning = light ? const Color(0xffb45309) : OceanPalette.warning;
         expect(
           t.widget<UiText>(find.widgetWithText(UiText, '6')).style!.color,
           positive,
