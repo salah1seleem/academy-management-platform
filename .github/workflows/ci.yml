@@ -5,6 +5,10 @@ on:
     branches: [main, "codex/**"]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   flutter:
     runs-on: ubuntu-24.04
@@ -129,7 +133,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build images and apply migrations on isolated PostgreSQL 17
-        run: docker compose up --build -d --wait --wait-timeout 240
+        run: |
+          docker compose build api
+          docker compose build web
+          docker compose up -d --wait --wait-timeout 240
       - name: Check proxy and production OTP guard
         run: |
           curl --fail http://127.0.0.1:3389/login > /dev/null

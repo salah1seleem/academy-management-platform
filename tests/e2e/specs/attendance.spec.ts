@@ -22,24 +22,24 @@ async function openTodayFootballRoster(page: Page) {
 
 test("Admin records player attendance and session balance is consumed once", async ({ page }) => {
   await staffLogin(page); const path = await openTodayFootballRoster(page);
-  const player = page.getByRole("group", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true });
+  const player = page.getByRole("combobox", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true });
   const save = page.getByRole("button", { name: "حفظ الحضور" });
-  await player.getByRole("button", { name: "غائب" }).click(); await expect(player.getByRole("button", { name: "غائب" })).toHaveAttribute("aria-pressed", "true"); await save.click(); await expect(page.getByText(/تم حفظ الحضور بنجاح\.|لا توجد تغييرات جديدة للحفظ\./)).toBeVisible(); await expect(save).toBeEnabled();
+  await player.selectOption({label:"غائب"}); await expect(player).toHaveValue("Absent"); await save.click(); await expect(page.getByText(/تم حفظ الحضور بنجاح\.|لا توجد تغييرات جديدة للحفظ\./)).toBeVisible(); await expect(save).toBeEnabled();
   const baseline = (await page.request.get(path).then(r => r.json())).players.find((p: { sportEnrollmentId: string }) => p.sportEnrollmentId === "5a000000-0000-0000-0000-000000000111").remainingSessions;
-  const card = page.locator(".attendance-roster article").filter({ has: player });
-  await expect(card).toContainText(`الرصيد: ${baseline}`);
-  await player.getByRole("button", { name: "حاضر" }).click(); await expect(player.getByRole("button", { name: "حاضر" })).toHaveAttribute("aria-pressed", "true"); await save.click(); await expect(save).toBeEnabled();
-  await expect(card).toContainText(`الرصيد: ${baseline - 1}`);
-  await page.reload(); const reloaded = page.getByRole("group", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true }); await reloaded.getByRole("button", { name: "حاضر", exact: true }).click(); await expect(reloaded.getByRole("button", { name: "حاضر", exact: true })).toHaveAttribute("aria-pressed", "true"); const reloadSave = page.getByRole("button", { name: "حفظ الحضور" }); await reloadSave.click(); await expect(reloadSave).toBeEnabled(); await expect(page.locator(".attendance-roster article").filter({ has: reloaded })).toContainText(`الرصيد: ${baseline - 1}`);
+  const card = page.getByRole("row").filter({ has: player }).locator('[data-label="رصيد الحصص"]');
+  await expect(card).toHaveText(`${baseline}`);
+  await player.selectOption({label:"حاضر"}); await expect(player).toHaveValue("Present"); await save.click(); await expect(save).toBeEnabled();
+  await expect(card).toHaveText(`${baseline - 1}`);
+  await page.reload(); const reloaded = page.getByRole("combobox", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true }); await reloaded.selectOption({label:"حاضر"}); await expect(reloaded).toHaveValue("Present"); const reloadSave = page.getByRole("button", { name: "حفظ الحضور" }); await reloadSave.click(); await expect(reloadSave).toBeEnabled(); await expect(page.getByRole("row").filter({ has: reloaded }).locator('[data-label="رصيد الحصص"]')).toHaveText(`${baseline - 1}`);
 });
 
 test("Admin correction restores the consumed session", async ({ page }) => {
-  await staffLogin(page); const path = await openTodayFootballRoster(page); const player = page.getByRole("group", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true });
+  await staffLogin(page); const path = await openTodayFootballRoster(page); const player = page.getByRole("combobox", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true });
   const save = page.getByRole("button", { name: "حفظ الحضور" });
-  await player.getByRole("button", { name: "حاضر" }).click(); await expect(player.getByRole("button", { name: "حاضر" })).toHaveAttribute("aria-pressed", "true"); await save.click(); await expect(page.getByText(/تم حفظ الحضور بنجاح\.|لا توجد تغييرات جديدة للحفظ\./)).toBeVisible(); await expect(save).toBeEnabled();
+  await player.selectOption({label:"حاضر"}); await expect(player).toHaveValue("Present"); await save.click(); await expect(page.getByText(/تم حفظ الحضور بنجاح\.|لا توجد تغييرات جديدة للحفظ\./)).toBeVisible(); await expect(save).toBeEnabled();
   const consumed = (await page.request.get(path).then(r => r.json())).players.find((p: { sportEnrollmentId: string }) => p.sportEnrollmentId === "5a000000-0000-0000-0000-000000000111").remainingSessions;
-  await player.getByRole("button", { name: "غائب" }).click(); await expect(player.getByRole("button", { name: "غائب" })).toHaveAttribute("aria-pressed", "true"); await save.click(); await expect(save).toBeEnabled();
-  await expect(page.locator(".attendance-roster article").filter({ has: player })).toContainText(`الرصيد: ${consumed + 1}`); await expect(player.getByRole("button", { name: "غائب" })).toHaveAttribute("aria-pressed", "true");
+  await player.selectOption({label:"غائب"}); await expect(player).toHaveValue("Absent"); await save.click(); await expect(save).toBeEnabled();
+  await expect(page.getByRole("row").filter({ has: player }).locator('[data-label="رصيد الحصص"]')).toHaveText(`${consumed + 1}`); await expect(player).toHaveValue("Absent");
 });
 
 test("Coach cannot sign in to the web dashboard", async ({ page }) => {

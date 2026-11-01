@@ -34,8 +34,8 @@ async function cancellablePeriod(page: Page) {
 }
 async function attendance(page: Page, session: string, state: string) {
   await page.goto(`/dashboard/attendance/sessions/${session}/players`);
-  const player = page.getByRole("group", { name: "حضور عمر أحمد محمود", exact: true });
-  await player.getByRole("button", { name: state, exact: true }).click();
+  const player = page.getByRole("combobox", { name: "حضور عمر أحمد محمود", exact: true });
+  await player.selectOption({ label: state });
   await page.getByRole("button", { name: "حفظ الحضور" }).click();
   await expect(page.getByText("تم حفظ الحضور بنجاح.")).toBeVisible();
   await expect(page.getByRole("button", { name: "حفظ الحضور" })).toBeEnabled();
