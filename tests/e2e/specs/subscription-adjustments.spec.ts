@@ -50,7 +50,22 @@ test.describe.serial("Slice 8B subscription adjustment journeys", () => {
   });
 
   test("Journey B — admin grants five sessions, sets the period end and deducts two days with both audit rows", async ({ page }) => {
-    await staffLogin(page); const before = await period(page, swimmingPeriod); await openPeriod(page, swimmingPeriod);
+    // The current workflow requires an explicit session-grant leaf, beyond the admin role.
+    await staffLogin(page, "owner.nogoom@example.test");
+    const email = `session.grant.${crypto.randomUUID()}@example.test`;
+    const member = await write(page, "/api/v1/manage/staff", { name: "إداري إضافة حصص اصطناعي", email, phone: `011${Date.now().toString().slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "اشتراكات" });
+    const access = await page.request.get(`/api/v1/manage/staff/${member.id}/access`).then(r => r.json());
+    const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
+    const grantedAccess = await page.request.put(`/api/v1/manage/staff/${member.id}/access`, { headers: { "X-CSRF-TOKEN": csrf.token }, data: {
+      allBranches: false, branches: ["31000000-0000-0000-0000-000000000001"],
+      workflowActions: ["workflow.subscriptions.sessions", "workflow.subscriptions.days"],
+      actions: access.modules.map((module: string) => ({ module, read: ["subscriptions", "payments"].includes(module), add: false, edit: module === "subscriptions", delete: false })),
+    } });
+    expect(grantedAccess.ok(), await grantedAccess.text()).toBe(true);
+    await staffLogin(page, email); const before = await period(page, swimmingPeriod); await openPeriod(page, swimmingPeriod);
+    expect(before.canGrantSessions).toBe(true);
+    expect(before.receiptId).toBeTruthy();
+    expect(before.priceSnapshot).toBeGreaterThan(0);
     await page.getByRole("button", { name:"إضافة حصص وتحديد نهاية الاشتراك",exact:true }).click();
     await page.getByLabel("عدد الحصص الإضافية").fill("5");
     await page.getByLabel("نهاية الاشتراك الجديدة").fill(shifted(before.endDate,5));

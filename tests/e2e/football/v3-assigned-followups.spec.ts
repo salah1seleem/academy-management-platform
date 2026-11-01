@@ -26,8 +26,9 @@ test("Owner delegates a scoped follow-up; administrator updates, closes and lose
   const grant = await page.request.put(`/api/v1/manage/staff/${member}/access`, { headers, data: scope }); expect(grant.status(), await grant.text()).toBe(204);
   const financial = await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   await page.goto('/dashboard/operations/follow-ups');
-  const card = page.locator('article').filter({ has: page.getByRole('heading', { name: candidate.source.name, exact: true }) }).filter({ hasText: 'إشغال أقل من نصف السعة' });
-  await card.getByRole('button', { name: 'إنشاء متابعة' }).click();
+  await page.getByRole('link', { name: 'إنشاء متابعة', exact: true }).click();
+  await page.getByRole('combobox', { name: 'مصدر المتابعة', exact: true }).selectOption(`${candidate.source.groupId}:${candidate.condition}`);
+  await page.getByRole('button', { name: 'حفظ المتابعة', exact: true }).click();
   await page.waitForURL(/follow-ups\/[a-f0-9-]+$/); const ownerUrl = page.url(), id = ownerUrl.split('/').at(-1)!;
   await page.getByLabel('حالة المتابعة').selectOption('Assigned');
   await page.getByRole('combobox', { name: 'المسؤول', exact: true }).selectOption(member);

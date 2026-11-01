@@ -20,7 +20,7 @@ test("Owner opens stored operational signals and private family feedback", async
   // contextual route must still preserve this exact group, not the whole list.
   await page.goto("/dashboard/academy/coaches/new?groupId=34000000-0000-0000-0000-000000000003");
   await expect(page).toHaveURL(/\/dashboard\/academy\/coaches\/new\?groupId=/);
-  await expect(page.getByRole("combobox", { name: "المجموعة" }).locator("option")).toHaveCount(1);
+  await expect(page.getByRole("combobox", { name: "المجموعة" }).locator('option:not([value=""])')).toHaveCount(1);
   await expect(page.getByRole("combobox", { name: "المجموعة" })).toHaveValue("34000000-0000-0000-0000-000000000003");
   await page.goto("/dashboard");
   await page.getByRole("link",{name:"كل المدربين",exact:true}).click();

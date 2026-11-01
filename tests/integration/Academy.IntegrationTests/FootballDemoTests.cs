@@ -106,14 +106,16 @@ public sealed partial class FootballDemoTests : IAsyncLifetime
     public async Task Explicit_marked_demo_reset_clears_private_payroll_sources_without_touching_other_tenants()
     {
         await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        // The synthetic specialist contract ends on 25 October; seed its closed fixture month deterministically.
+        var seedClock = new ResetFixtureClock();
         await PrivateServiceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value);
-        await SalaryHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
-        await ContractHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await SalaryHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);
+        await ContractHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);
         var otherContracts=await db.ContractVersions.CountAsync(v=>v.AcademyId!=AcademyId);
-        await PayrollStatementDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
-        await PayrollAccountDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
-        await PayrollAdvanceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
-        await PayrollOpeningDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await PayrollStatementDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);
+        await PayrollAccountDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);
+        await PayrollAdvanceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);
+        await PayrollOpeningDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);
         Assert.Single(await db.PayrollStatements.Where(s=>s.EmployeeId==PayrollOpeningDemoSeed.EmployeeId&&s.Kind=="Opening").ToArrayAsync());
         var otherAdvances=await db.PayrollAdvances.CountAsync(a=>a.AcademyId!=AcademyId);Assert.Single(await db.PayrollAdvances.Where(a=>a.Id==PayrollAdvanceDemoSeed.AdvanceId).ToArrayAsync());Assert.Single(await db.PayrollDisbursements.Where(p=>p.AdvanceId==PayrollAdvanceDemoSeed.AdvanceId).ToArrayAsync());
         var otherStatements=await db.PayrollStatements.CountAsync(s=>s.AcademyId!=AcademyId);Assert.Single(await db.PayrollStatements.Where(s=>s.EmployeeId==PayrollStatementDemoSeed.EmployeeId).ToArrayAsync());Assert.Equal(2,await db.PayrollStatements.CountAsync(s=>s.EmployeeId==PayrollAccountDemoSeed.EmployeeId));
@@ -127,10 +129,10 @@ public sealed partial class FootballDemoTests : IAsyncLifetime
         var otherOpeningCorrections=await db.PayrollPayableCorrections.CountAsync(c=>c.AcademyId!=AcademyId);
         var openingRoot=$"/api/v1/manage/payroll/{PayrollOpeningDemoSeed.EmployeeId}/opening";var openingQuote=await owner.GetFromJsonAsync<JsonElement>(openingRoot);
         using var correction=new HttpRequestMessage(HttpMethod.Post,openingRoot+"/corrections"){Content=JsonContent.Create(new {targetAmount=1000,reference="سند تصحيح ديمو محفوظ",quoteHash=openingQuote.GetProperty("correctionQuoteHash").GetString()})};correction.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());correction.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var corrected=await owner.SendAsync(correction);Assert.True(corrected.IsSuccessStatusCode,await corrected.Content.ReadAsStringAsync());
-        await PayrollOpeningDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());Assert.Single(await db.PayrollPayableCorrections.Where(c=>c.AcademyId==AcademyId).ToArrayAsync());
+        await PayrollOpeningDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock);Assert.Single(await db.PayrollPayableCorrections.Where(c=>c.AcademyId==AcademyId).ToArrayAsync());
         var saved=await owner.SendAsync(request); Assert.True(saved.IsSuccessStatusCode,await saved.Content.ReadAsStringAsync()); Assert.Equal(1,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
         await FootballDemoSeed.RunAsync(scope.ServiceProvider,false); Assert.Equal(1,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
-        await PostContractPrivateDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>(),scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Academy.Infrastructure.Identity.ApplicationUser>>());
+        await PostContractPrivateDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,seedClock,scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Academy.Infrastructure.Identity.ApplicationUser>>());
         var finalRoot=$"/api/v1/manage/payroll/coaches/{PostContractPrivateDemoSeed.Id("member")}/private-services/{PostContractPrivateDemoSeed.Id("delivery/1")}";
         async Task ConfirmFinalSource(string suffix,object body){using var r=new HttpRequestMessage(HttpMethod.Post,finalRoot+suffix){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var result=await owner.SendAsync(r);Assert.True(result.IsSuccessStatusCode,await result.Content.ReadAsStringAsync());}
         var finalReview=await owner.GetFromJsonAsync<JsonElement>(finalRoot+"/posting-preview");await ConfirmFinalSource("/entries",new{action="Review",quoteHash=finalReview.GetProperty("quoteHash").GetString()});var finalQuote=await owner.GetFromJsonAsync<JsonElement>(finalRoot+"/final-preview");await ConfirmFinalSource("/final-settlement",new{quoteHash=finalQuote.GetProperty("quoteHash").GetString()});
@@ -402,6 +404,11 @@ public sealed partial class FootballDemoTests : IAsyncLifetime
         var token = (await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/manage/coaches") { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", token); return await client.SendAsync(request);
     }
+    private sealed class ResetFixtureClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 10, 15, 9, 0, 0, TimeSpan.Zero);
+    }
+
     private sealed class Factory : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)

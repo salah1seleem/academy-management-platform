@@ -9,9 +9,10 @@ test("Owner previews and activates a version; disabled feature rejects API; reac
   type Version = { id: string; revision: number; state: string; version: number; settings: { features: Record<string, boolean> } };
   const versions = async (): Promise<Version[]> => (await page.request.get("/api/v1/manage/configuration").then(r => r.json())).versions;
   const initial = (await versions()).find(v => v.state === "Active")!;
-  const restoredSettings = { ...initial.settings, features: { ...initial.settings.features, nutrition: true } };
-  async function restoreNutrition() {
-    if ((await versions()).find(v => v.state === "Active")?.settings.features.nutrition) return;
+  // Nutrition is a permanent base service in V5.13; exercise the optional catalog gate.
+  const restoredSettings = { ...initial.settings, features: { ...initial.settings.features, catalog: true } };
+  async function restoreCatalog() {
+    if ((await versions()).find(v => v.state === "Active")?.settings.features.catalog) return;
     const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
     const headers = { "X-CSRF-TOKEN": csrf.token };
     const saved = await page.request.post("/api/v1/manage/configuration/drafts", { headers, data: restoredSettings });
@@ -24,7 +25,7 @@ test("Owner previews and activates a version; disabled feature rejects API; reac
   }
   // Recover only this synthetic test's feature toggle from an interrupted run.
   // Use the audited/versioned workflow, preserving unrelated settings.
-  await restoreNutrition();
+  await restoreCatalog();
   await page.goto("/dashboard/settings?tab=advanced");
   const panel = page.locator("section").filter({ has: page.getByRole("heading", { name: "إصدارات إعدادات التشغيل", exact: true }) });
   await expect(panel.getByRole("checkbox", { name: /إعلانات المجتمع/ })).toBeDisabled();
@@ -34,7 +35,7 @@ test("Owner previews and activates a version; disabled feature rejects API; reac
     expect((await response).ok()).toBe(true);
     // Read the authoritative draft separately, without waiting on a proxied
     // browser response body that may still be streaming.
-    const draft = (await versions()).filter(v => v.state === "Draft" && v.settings.features.nutrition === enabled).sort((a, b) => b.revision - a.revision)[0];
+    const draft = (await versions()).filter(v => v.state === "Draft" && v.settings.features.catalog === enabled).sort((a, b) => b.revision - a.revision)[0];
     expect(draft).toBeTruthy();
     return panel.locator("article").filter({ hasText: new RegExp(`الإصدار ${draft.revision} ·`) });
   }
@@ -46,15 +47,15 @@ test("Owner previews and activates a version; disabled feature rejects API; reac
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
   try {
-    await panel.getByRole("checkbox", { name: "التغذية", exact: true }).uncheck();
-    const draft = await saveDraft(false); await expect(draft).toContainText("التغذية: إيقاف");
-    expect((await page.request.get("/api/v1/content/nutrition/")).status()).toBe(200);
+    await panel.getByRole("checkbox", { name: "المنتجات الرياضية", exact: true }).uncheck();
+    const draft = await saveDraft(false); await expect(draft).toContainText("المنتجات الرياضية: إيقاف");
+    expect((await page.request.get("/api/v1/content/catalog")).status()).toBe(200);
     await activate(draft);
-    expect((await page.request.get("/api/v1/content/nutrition/")).status()).toBe(403);
-    await panel.getByRole("checkbox", { name: "التغذية", exact: true }).check();
+    expect((await page.request.get("/api/v1/content/catalog")).status()).toBe(403);
+    await panel.getByRole("checkbox", { name: "المنتجات الرياضية", exact: true }).check();
     await activate(await saveDraft(true));
-    expect((await page.request.get("/api/v1/content/nutrition/")).status()).toBe(200);
+    expect((await page.request.get("/api/v1/content/catalog")).status()).toBe(200);
   } finally {
-    await restoreNutrition();
+    await restoreCatalog();
   }
 });

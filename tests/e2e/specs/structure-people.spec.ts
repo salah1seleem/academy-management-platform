@@ -21,7 +21,7 @@ test("Explicitly authorized branch Admin registers a paid synthetic player from 
   expect(typeof groupId).toBe("string");
   const member = await write("/api/v1/manage/staff", { name: "إداري تسجيل اصطناعي", email, phone: `011${Date.now().toString().slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "تسجيل" });
   const access = await page.request.get(`/api/v1/manage/staff/${member.id}/access`).then(r => r.json());
-  await write(`/api/v1/manage/staff/${member.id}/access`, { allBranches: false, branches: ["31000000-0000-0000-0000-000000000001"], actions: access.modules.map((module: string) => ({ module, read: ["players", "subscriptions", "finance"].includes(module), add: ["players", "subscriptions", "finance"].includes(module), edit: false, delete: false })) }, "PUT");
+  await write(`/api/v1/manage/staff/${member.id}/access`, { allBranches: false, branches: ["31000000-0000-0000-0000-000000000001"], workflowActions: ["workflow.players.read", "workflow.players.create", "workflow.payments.collect"], actions: access.modules.map((module: string) => ({ module, read: ["players", "subscriptions", "payments"].includes(module), add: ["players", "payments"].includes(module), edit: module === "payments", delete: false })) }, "PUT");
   await page.context().clearCookies(); await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
   await page.getByRole("navigation", { name: "إجراءات نطاقك" }).getByRole("link", { name: /^تسجيل لاعب/ }).click();

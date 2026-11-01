@@ -58,7 +58,15 @@ jobs:
       - run: dotnet restore AcademyManagementPlatform.slnx
       - run: dotnet build AcademyManagementPlatform.slnx --no-restore --configuration Release -m:1
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --no-build --configuration Release
-      - run: dotnet test AcademyManagementPlatform.slnx --no-build -m:1 --configuration Release --logger "console;verbosity=normal" --blame-hang-timeout 10m --blame-hang-dump-type none
+      - run: dotnet test AcademyManagementPlatform.slnx --no-build -m:1 --configuration Release --logger "console;verbosity=normal" --logger "trx;LogFilePrefix=backend" --blame-hang-timeout 10m --blame-hang-dump-type none
+
+      - name: Preserve backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-results
+          path: tests/**/TestResults/*.trx
+          retention-days: 7
 
   frontend:
     runs-on: ubuntu-24.04
@@ -112,15 +120,23 @@ jobs:
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/regression
       - name: Build football demo web
         run: npm run build:web
         env:
           API_INTERNAL_URL: http://127.0.0.1:5190
       - name: Football demo and coach provisioning E2E
-        run: npx playwright test --config tests/e2e/playwright.football.config.ts
+        run: npx playwright test --config tests/e2e/playwright.football.config.ts --output tests/e2e/test-results/football
       - name: Staff passkey browser verification E2E
-        run: npx playwright test --config tests/e2e/playwright.passkeys.config.ts
+        run: npx playwright test --config tests/e2e/playwright.passkeys.config.ts --output tests/e2e/test-results/passkeys
+
+      - name: Preserve browser failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: tests/e2e/test-results/
+          retention-days: 7
 
   containers:
     runs-on: ubuntu-24.04
