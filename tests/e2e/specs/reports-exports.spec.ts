@@ -48,6 +48,28 @@ test.describe("Slice 8A operational reporting journeys", () => {
     const download = page.waitForEvent("download"); await page.getByRole("link", { name: "تصدير CSV" }).click(); expect((await download).suggestedFilename()).toBe(`attendance-players-${month}.csv`);
   });
 
+  test("Attendance report waits for permissions before offering editable date filters", async ({ page }) => {
+    await staffLogin(page, "owner.nogoom@example.test");
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/v1/my-permissions", async route => { await pending; await route.continue(); });
+    try {
+      await page.goto("/dashboard/reports/attendance");
+      await expect(page.getByRole("heading", { name: "تقارير الحضور", exact: true })).toBeVisible();
+      await expect(page.getByLabel("من تاريخ")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "تطبيق الفلاتر" })).toHaveCount(0);
+      await page.screenshot({ path: test.info().outputPath("attendance-report-waiting.png"), fullPage: true });
+    } finally { release(); }
+    await page.getByLabel("من تاريخ").fill("2026-09-01");
+    await page.getByLabel("إلى تاريخ").fill("2026-09-30");
+    const report = page.waitForResponse(r => r.url().includes("/api/v1/reports/attendance?") && r.url().includes("from=2026-09-01") && r.url().includes("to=2026-09-30"));
+    await page.getByRole("button", { name: "تطبيق الفلاتر" }).click();
+    expect((await report).status()).toBe(200);
+    await expect(page.getByLabel("من تاريخ")).toHaveValue("2026-09-01");
+    await expect(page.getByRole("link", { name: "تصدير CSV" })).toHaveAttribute("href", /from=2026-09-01&to=2026-09-30/);
+    await page.screenshot({ path: test.info().outputPath("attendance-report-ready.png"), fullPage: true });
+  });
+
   test("Journey D — guardian payment history opens printable Arabic receipt", async ({ page }) => {
     await guardianLogin(page); await page.getByRole("link", { name: "الإيصالات" }).click();
     await expect(page.getByRole("heading", { name: "إيصالات الدفع" })).toBeVisible(); await page.getByRole("link").filter({ hasText: /DEMO-|RC-/ }).first().click();
