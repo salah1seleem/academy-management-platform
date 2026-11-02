@@ -1,3 +1,5 @@
+**2 November 2026 — Shared runtime startup requested by user:** Web3378 and API5278/5518 restarted from existing builds without seed/reset or rebuild. HTTP200 verified for web, platform login, and both readiness endpoints. Website and platform login tabs opened visibly. All four established role simulators booted; existing Professional simulator preserved. Owner app displayed login; sign-in incomplete. Admin/Coach/Guardian app launch commands remained pending; their home screens were not visually verified. Simulator UI was unresponsive during attempts. Four-role startup is incomplete. Evidence: `tmp/run-apps-20261102/verification.json`. User authorizes reuse of these visible simulators for review, screenshots and tests while sharing navigation.
+
 **30 أكتوبر2026 — الموقع والأربعة محاكيات مفتوحون بطلب المستخدم:** الموقع3378متاح200ومفتوح فيSafariعلىصفحة الدخوللانتهاءجلسته. المالك والإداري والمدرب وولي الأمر يعملون في4محاكيات مستقلة، بمظهر أزرق المحيط وجلساتهم المحفوظة؛ تُركت الأربعة شغالة. فُحصت عملياتRunnerوالرئيسيات، دون كود أو إعادة بناء أو بيانات أعمال. [حالة التشغيل](run-all-v519-20261030/STATUS_AR.md).
 
 ## 30 أكتوبر 2026 — V5.21: مراجعة شاشات الإعلان قبل إعادة التسجيل
@@ -1524,3 +1526,14 @@ Frozen production web: http://localhost:3378; frozen API: http://127.0.0.1:5278.
 - مراجعة فعلية لصورة الوسائط390px:التعليق ورابط النسخة الخاصة واضحان فوق التنقل بعد تمرير التعليق؛ فحص عدم الحجب بقي ونجح.
 - TypeScript وESLint ناجحان بعد آخر تصحيحات الرحلات. CI عند4b31a016:containers وfrontend وFlutter ناجحة، e2e فشلت قبل آخر الإصلاحات، backend قيد التشغيل. لا دمج.
 - فُصلت قواعدLegacy وFootball وPasskeys فيCI، وحُفظ guard قاعدةHelpVideo وكل السيناريوهات. جميع التعديلات فيAcademy Management Platform؛ لا تعديل لمشروع الأهلي.
+
+
+## 2 نوفمبر 2026 — Professional V5.22 ونتيجة CI 217
+
+العمل فيAcademy Management Platform المستقل. اختير الموبايل أولًا والويب متوافق، بقاعدة تصوير جديدة محلية معزولة، دون تعديل بيانات التشغيل أو مشروع الأهلي. ديموProfessional:300 لاعب اصطناعي،150 ولي أمر،18 مجموعة، فروع الرحاب ومدينتي والشروق؛165 كرة قدم و90 سباحة و45 كرة سلة. إعادة seed أبقت تعداد اللاعبين/التحصيلات/الإيصالات/الفترات(300،430،430،430)؛ رفض الإنتاج والقاعدة خارج النطاق والخادم البعيد مثبت حتى معPython-O.
+
+تعديل الموبايل:بانر رئيسية المالك وشريط العمليات قبل الاشتراكات؛ المدرب يفتح المجموعة ولاعبيها مباشرة، والتقييم مستقل عن الحضور. canManageAttendance من صلاحية الخادم وتفويض المدرب، مع اختبارات الإلغاء والعزل القائمة. أصول الصور فيحزمةFlutter صارت allowlist صريحة؛ الصور المرجعية الخاصة غير مرفوعة.
+
+CI217 عند2f5b4392:frontend وFlutter وcontainers وe2e ناجحة. المتصفح120 أساسية +54 Football +2 passkeys، دون حالات فشل. الحاويات أثبتت البناء و160migration والصحة وحظرOTP الإنتاجي وثبات media/keys وbackup/restore معزولًا. backend فشل:تكامل1198/1236 وUnit317/318 وArchitecture1/1. لا يُعد هذا نجاحBackend شاملًا؛ يجري إصلاحه دون تقليل الاختبارات. اختلاف تسامحffmpeg مع PNG علىLinux عولج بفحص غلافPNG كامل قبل فك الصورة، ثم نجحتUnit318 محليًا. أُضيف مستوىWarning للـCI بعد قياس سجل SQL بحجم2.42GB، مع حفظTRX وتشخيصات الاختبار.
+
+أعيد إنشاء runtime دائم تحتoutput/professional-demo-20261102 بعد إعادة تشغيل الجهاز؛ الأدلة القديمة تحت/tmp لم تعد موجودة، والنتائج التاريخية لا تعني إعادة تشغيلها بعد الإقلاع. قاعدة الديمو ووسائطها ومفاتيحها محلية مستبعدة منGit. رحلة الموبايل الجديدة واختبارBackend النهائي لا يُعتمدان حتى ظهور نتيجتهما. PR1 مسودة، بلا دمج أو نشر. تعليمات التشغيل والحدود فيscripts/demo/README_PROFESSIONAL_AR.md؛ OTP الحقيقي والتهيئة الأولية الآمنة وTLS ونسخ خارجية مشفرة واعتمادالفحوص لا تزال موانع إنتاج.

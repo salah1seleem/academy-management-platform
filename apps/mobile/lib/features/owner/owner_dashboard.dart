@@ -1,3 +1,4 @@
+import 'owner_welcome_banner.dart';
 import '../shared/modern_home.dart';
 import 'inventory_preview.dart';
 import '../../core/api/api_client.dart';
@@ -194,7 +195,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                             widget.header!,
                             const SizedBox(height: 10),
                           ],
-
+                          NativeOperationActions(
+                            key: ValueKey('owner-rail-$identity'),
+                            auth: widget.auth,
+                            compact: true,
+                            carousel: true,
+                          ),
                           SubscriptionHomePanel(
                             key: ValueKey('owner-subscriptions-$identity'),
                             auth: widget.auth,
@@ -334,15 +340,18 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         await data;
                       },
                       child: gList([
-                        const RoleHomeIntro(
-                          title: 'نظرة اليوم',
-                          subtitle: 'أهم الأرقام والقرارات في مكان واحد',
-                        ),
+                        const OwnerWelcomeBanner(),
                         if (widget.header != null) ...[
                           widget.header!,
                           const SizedBox(height: 10),
                         ],
 
+                        NativeOperationActions(
+                          key: ValueKey('owner-rail-$identity'),
+                          auth: widget.auth,
+                          compact: true,
+                          carousel: true,
+                        ),
                         SubscriptionHomePanel(
                           key: ValueKey('owner-subscriptions-$identity'),
                           auth: widget.auth,
@@ -541,12 +550,6 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                             ),
                           ),
                         ],
-                        NativeOperationActions(
-                          key: ValueKey('owner-rail-$identity'),
-                          auth: widget.auth,
-                          compact: true,
-                          carousel: true,
-                        ),
                         if (!ready(0))
                           sectionState(0, 'التحصيلات')
                         else

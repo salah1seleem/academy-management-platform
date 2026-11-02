@@ -43,6 +43,7 @@ public sealed class V2AttendancePolicyTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.OK, (await coach.GetAsync("/api/v1/attendance/sessions")).StatusCode);
             var roster = await coach.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions/{Slice4DemoSeed.TodayFootballSessionId}/players");
             Assert.False(roster.GetProperty("canManageAttendance").GetBoolean());
+            Assert.False((await coach.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options")).GetProperty("canManageAttendance").GetBoolean());
             Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, $"/api/v1/attendance/sessions/{Slice4DemoSeed.TodayFootballSessionId}/players", new { items = Array.Empty<object>() })).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = true })).StatusCode);
             using var admin = await Staff(DemoSeed.AdminEmail);
@@ -66,12 +67,14 @@ public sealed class V2AttendancePolicyTests : IAsyncLifetime
             Assert.Equal(before + 1, await History(owner));
             var roster = await coach.GetFromJsonAsync<JsonElement>($"/api/v1/attendance/sessions/{session}/players");
             Assert.True(roster.GetProperty("canManageAttendance").GetBoolean());
+            Assert.True((await coach.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options")).GetProperty("canManageAttendance").GetBoolean());
             Assert.Equal(HttpStatusCode.NotFound, (await Write(coach, $"/api/v1/attendance/sessions/{Slice4DemoSeed.TodaySwimmingSessionId}/players", new { items = Array.Empty<object>() })).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync("/api/v1/manage/academy/policy-audit")).StatusCode);
             using var other = await Staff(DemoSeed.FutureOwnerEmail);
             var foreignHistoryBefore = await History(other);
             Assert.Equal(HttpStatusCode.NoContent, (await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = false })).StatusCode);
             Assert.Equal(before + 2, await History(owner)); Assert.Equal(foreignHistoryBefore, await History(other));
+            Assert.False((await coach.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options")).GetProperty("canManageAttendance").GetBoolean());
             Assert.Equal(HttpStatusCode.Forbidden, (await Write(coach, $"/api/v1/attendance/sessions/{session}/players", new { items = Array.Empty<object>() })).StatusCode);
         }
         finally { await Write(owner, "/api/v1/manage/academy/experience", new { coachAttendanceEnabled = false }); }

@@ -1024,3 +1024,7 @@ A07/A08المعتمدانيمتدانفيالخطنفسه:AudienceCommunication�
 ### تخفيف كلفة بدء API ضمن معالجة CI
 
 أظهر dotnet-stack في التشغيل المحلي إعادة ترجمة RequestDelegateFactory عند إنشاء خوادم التكامل المتكررة. فُعّل مولد request delegates المدمج في ASP.NET Core وقت البناء، دون Native AOT أو trimming أو إطار جديد. بناء التجربة نجح بلا warnings/errors؛ قياس محلي واحد من بدء العملية إلى /health/live كان4.952ث قبل التوليد و1.432ث بعده، وليس ضمان أداء إنتاج. لا نجزم بأن ذلك وحده سبب فقد runner القديم؛ نجاح اختبارات PR هو دليل الإغلاق. المرجع: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/aot/request-delegate-generator/rdg?view=aspnetcore-10.0
+
+## 2 نوفمبر2026 — شريحة تصويرProfessional المعزولة
+
+توجيه المستخدم فيV5.22 يستكملVPS ولا يستبدله. نعيد استخدام اللوجو والأصول وشريط العمليات وتنفيذ المجموعات والتقييم والمخزون الموجود. بيانات300 الاصطناعية في قاعدةDemo جديدة ذاتprefix محجوز؛ seed idempotent ولا يحذف بيانات. لا إعادة تهيئة المحاكي أو قاعدة قائمة. يضاف علمcanManageAttendance إلى خيارات المدرب من AuthorizationService والتفويض الفعلي، ولا يستنتج العميل الصلاحية منAcademyId أو الدور. رحلة التقييم تختار لاعبي المجموعة مباشرة؛ الحضور يبقى علىTrainingSession الفعلية.

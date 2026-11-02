@@ -105,7 +105,8 @@ public static partial class Slice5Endpoints
         if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
         var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/evaluations","POST",default));
-        return Results.Ok(new { enrollments = rows, sports, canEvaluate });
+        var canManageAttendance = (await authorization.AuthorizeAsync(principal, AcademyPermissions.AttendanceManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/attendance/sessions/check/players","PUT",default));
+        return Results.Ok(new { enrollments = rows, sports, canEvaluate, canManageAttendance });
     }
 
     private static async Task<IResult> ListEvaluations(string? search, Guid? playerId, Guid? sportId, Guid? groupId, string? status, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)

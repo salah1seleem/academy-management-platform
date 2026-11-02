@@ -45,6 +45,17 @@ Future<void> main() async {
               ])
                 key: (data!['after'] as Map)[key],
             },
+          if (data?['source'] == 'real-isolated-api')
+            'professionalDemo': {
+              for (final key in [
+                'players',
+                'sports',
+                'stockBefore',
+                'stockAfter',
+                'productSaleId',
+              ])
+                key: data?[key],
+            },
           'responseKeys': data?.keys.toList() ?? <String>[],
         }),
       );

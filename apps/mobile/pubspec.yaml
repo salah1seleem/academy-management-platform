@@ -39,9 +39,26 @@ flutter:
     - assets/avatars/
     - assets/branding/
     - assets/onboarding/
-    - assets/demo/
+    - assets/demo/catalog-football.svg
+    - assets/demo/catalog-iacademy-ball.png
+    - assets/demo/catalog-iacademy-kit.png
+    - assets/demo/catalog-iacademy-socks.png
+    - assets/demo/catalog-iacademy-training.png
+    - assets/demo/catalog-swimming.svg
+    - assets/demo/gallery-medal.svg
+    - assets/demo/gallery-training.svg
+    - assets/demo/nutrition-meal.svg
+    - assets/demo/professional-kit-black.jpg
+    - assets/demo/professional-kit-red.jpg
+    - assets/demo/professional-kit-turquoise.jpg
+    - assets/demo/promo-proof.png
     - assets/demo/nutrition/
-    - assets/demo/portraits/
+    - assets/demo/portraits/child-01.jpg
+    - assets/demo/portraits/child-02.jpg
+    - assets/demo/portraits/coach-01.jpg
+    - assets/demo/portraits/coach-02.jpg
+    - assets/demo/portraits/guardian-01.jpg
+    - assets/demo/portraits/guardian-02.jpg
   fonts:
     - family: Cairo
       fonts:

@@ -1,3 +1,4 @@
+import 'package:academy_mobile/features/owner/owner_welcome_banner.dart';
 import 'package:academy_mobile/core/theme/academy_home_skin.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/owner/refined_home_panels.dart';
@@ -150,6 +151,7 @@ void main() {
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             children: [
+                              const OwnerWelcomeBanner(),
                               ExperienceHeader(
                                 auth: auth,
                                 subtitle: 'لوحة المالك',
@@ -219,6 +221,11 @@ void main() {
               ),
             );
             await t.pumpAndSettle();
+            final banner = find.byType(OwnerWelcomeBanner);
+            expect(banner, findsOneWidget);
+            final bannerBox = t.getRect(banner);
+            expect(bannerBox.left, greaterThanOrEqualTo(0));
+            expect(bannerBox.right, lessThanOrEqualTo(width));
             expect(t.takeException(), isNull);
             final compact = t.widget<ScopeDateTiles>(
               find.byType(ScopeDateTiles),

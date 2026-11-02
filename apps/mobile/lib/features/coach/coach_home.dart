@@ -171,13 +171,27 @@ class _CoachHomeState extends State<CoachHome> {
     }
   }
 
+  void openGroup(Json session) {
+    final group = rows(partial?[0])
+        .where((g) => g['id'] == session['trainingGroupId'])
+        .firstOrNull;
+    if (group != null) {
+      openPage(context, CoachGroup(auth: widget.auth, group: group));
+    }
+  }
+
   void openSession(Json session, {bool evaluations = false}) => openPage(
     context,
-    CoachAttendance(
-      auth: widget.auth,
-      sessionId: textOf(session['id']),
-      title: evaluations ? 'تقييم لاعبي الحصة' : 'تفاصيل الحصة',
-    ),
+    evaluations
+        ? NativeEvaluationPicker(
+            auth: widget.auth,
+            groupId: textOf(session['trainingGroupId']),
+          )
+        : CoachAttendance(
+            auth: widget.auth,
+            sessionId: textOf(session['id']),
+            title: 'تسجيل حضور المجموعة',
+          ),
   );
   @override
   Widget build(BuildContext context) => GuardianPage(
@@ -264,7 +278,13 @@ class _CoachHomeState extends State<CoachHome> {
             else if (nearest.isNotEmpty)
               CoachSessionCard(
                 session: nearest.first,
-                onOpen: () => openSession(nearest.first),
+                onOpen: () => openGroup(nearest.first),
+                openLabel: 'عرض المجموعة ولاعبيها',
+                showAction:
+                    ready(0) &&
+                    groups.any(
+                      (g) => g['id'] == nearest.first['trainingGroupId'],
+                    ),
                 featured: true,
               )
             else
@@ -273,13 +293,6 @@ class _CoachHomeState extends State<CoachHome> {
             OwnerActionRail(
               key: ValueKey('coach-home-actions-$identity'),
               actions: [
-                if (nearest.isNotEmpty)
-                  OwnerRailAction(
-                    'فتح الحصة',
-                    Icons.fact_check_outlined,
-                    const Color(0xFF248EBA),
-                    () => openSession(nearest.first),
-                  ),
                 OwnerRailAction(
                   'مجموعاتي',
                   Icons.groups_outlined,
@@ -415,6 +428,7 @@ class _CoachHomeState extends State<CoachHome> {
                 const GCard(child: UiText('لا توجد حصص في اليوم المختار.')),
               for (final session in sessions)
                 GCard(
+                  onTap: () => openGroup(session),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -431,10 +445,12 @@ class _CoachHomeState extends State<CoachHome> {
                       Wrap(
                         spacing: 8,
                         children: [
-                          OutlinedButton(
-                            onPressed: () => openSession(session),
-                            child: const UiText('تسجيل الحضور'),
-                          ),
+                          if (ready(2) &&
+                              obj(values[2])['canManageAttendance'] == true)
+                            OutlinedButton(
+                              onPressed: () => openSession(session),
+                              child: const UiText('تسجيل الحضور'),
+                            ),
                           if (ready(2) && obj(values[2])['canEvaluate'] == true)
                             TextButton(
                               onPressed: () =>
@@ -587,12 +603,14 @@ class CoachSessionCard extends StatelessWidget {
   final bool featured;
   final VoidCallback onOpen;
   final String? openLabel;
+  final bool showAction;
   const CoachSessionCard({
     super.key,
     required this.session,
     required this.onOpen,
     this.featured = false,
     this.openLabel,
+    this.showAction = true,
   });
   static String time(Object? v) => trainingTimeOf(v);
 
@@ -603,7 +621,7 @@ class CoachSessionCard extends StatelessWidget {
     final large = MediaQuery.textScalerOf(context).scale(1) > 1.4;
     return GCard(
       key: ValueKey('coach-session-${session['id']}'),
-      onTap: onOpen,
+      onTap: showAction ? onOpen : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -721,13 +739,13 @@ class CoachSessionCard extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
-          if (featured)
+          if (showAction && featured)
             FilledButton.icon(
               onPressed: onOpen,
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: UiText(localized(context, 'فتح الحصة', 'Open session')),
+              label: UiText(openLabel ?? 'عرض المجموعة ولاعبيها'),
             )
-          else
+          else if (showAction)
             TextButton.icon(
               onPressed: onOpen,
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
@@ -843,65 +861,95 @@ class _CoachGroupState extends State<CoachGroup> {
               padding: const EdgeInsets.all(18),
               children: [
                 AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      const Icon(Icons.groups_2_outlined, size: 32),
-                      const SizedBox(height: 10),
-                      UiText(
-                        textOf(active.first['arabicName']),
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      UiText(
-                        localized(
-                          context,
+                      const Icon(Icons.groups_2_outlined, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: UiText(
                           '${players.length} لاعب في المجموعة',
-                          '${players.length} players in the group',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
                     ],
                   ),
                 ),
-                WeeklyGroupSchedule(
-                  schedules: rows(active.first['recurring'] ?? <Json>[]),
-                ),
-                AudienceCommunicationLink(
-                  auth: widget.auth,
-                  id: textOf(widget.group['id']),
-                ),
-                if (sessions.isNotEmpty) ...[
-                  UiText(
-                    localized(context, 'الموعد القادم', 'Next session'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  CoachSessionCard(
-                    session: sessions.first,
-                    openLabel: localized(
-                      context,
-                      'فتح الحصة الأقرب',
-                      'Open nearest session',
-                    ),
-                    onOpen: () => openPage(
-                      context,
-                      CoachAttendance(
-                        auth: widget.auth,
-                        sessionId: textOf(sessions.first['id']),
-                        title: localized(
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    if (options['canEvaluate'] == true)
+                      FilledButton.icon(
+                        onPressed: () => openPage(
                           context,
-                          'تفاصيل الحصة',
-                          'Session details',
+                          NativeEvaluationPicker(
+                            auth: widget.auth,
+                            groupId: textOf(widget.group['id']),
+                          ),
+                        ),
+                        icon: const Icon(Icons.assessment_outlined),
+                        label: const UiText('التقييم الشهري'),
+                      ),
+                    if (options['canManageAttendance'] == true &&
+                        sessions.isNotEmpty)
+                      OutlinedButton.icon(
+                        onPressed: () => openPage(
+                          context,
+                          CoachAttendance(
+                            auth: widget.auth,
+                            sessionId: textOf(sessions.first['id']),
+                            title: 'تسجيل الحضور',
+                          ),
+                        ),
+                        icon: const Icon(Icons.fact_check_outlined),
+                        label: const UiText('تسجيل الحضور'),
+                      ),
+                  ],
+                ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const UiText('المواعيد والتواصل'),
+                  children: [
+                    WeeklyGroupSchedule(
+                      schedules: rows(active.first['recurring'] ?? <Json>[]),
+                    ),
+                    AudienceCommunicationLink(
+                      auth: widget.auth,
+                      id: textOf(widget.group['id']),
+                    ),
+                    if (sessions.isNotEmpty) ...[
+                      UiText(
+                        localized(context, 'الموعد القادم', 'Next session'),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      CoachSessionCard(
+                        session: sessions.first,
+                        showAction: false,
+                        openLabel: 'تسجيل الحضور',
+                        onOpen: () => openPage(
+                          context,
+                          CoachAttendance(
+                            auth: widget.auth,
+                            sessionId: textOf(sessions.first['id']),
+                            title: localized(
+                              context,
+                              'تفاصيل الحصة',
+                              'Session details',
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                ] else
-                  UiText(
-                    localized(
-                      context,
-                      'لا توجد حصة قادمة خلال 14 يومًا',
-                      'No upcoming session within 14 days',
-                    ),
-                  ),
+                    ] else
+                      UiText(
+                        localized(
+                          context,
+                          'لا توجد حصة قادمة خلال 14 يومًا',
+                          'No upcoming session within 14 days',
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: search,
@@ -971,17 +1019,22 @@ class _CoachGroupState extends State<CoachGroup> {
                         : null,
                   ),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => openPage(
-                    context,
-                    UploadSessionMedia(
-                      auth: widget.auth,
-                      groupId: textOf(widget.group['id']),
+                if (rows(snapshot.data![2]).any(
+                  (s) =>
+                      s['trainingGroupId'] == widget.group['id'] &&
+                      s['status'] != 'Cancelled',
+                ))
+                  OutlinedButton.icon(
+                    onPressed: () => openPage(
+                      context,
+                      UploadSessionMedia(
+                        auth: widget.auth,
+                        groupId: textOf(widget.group['id']),
+                      ),
                     ),
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: const UiText('رفع صور وفيديوهات للحصة'),
                   ),
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
-                  label: const UiText('رفع صور وفيديوهات للحصة'),
-                ),
               ],
             );
           },

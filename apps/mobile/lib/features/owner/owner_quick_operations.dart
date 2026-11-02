@@ -441,8 +441,9 @@ class _NativeOperationActionsState extends State<NativeOperationActions> {
 }
 
 class NativeEvaluationPicker extends StatelessWidget {
-  const NativeEvaluationPicker({super.key, required this.auth});
+  const NativeEvaluationPicker({super.key, required this.auth, this.groupId});
   final AuthController auth;
+  final String? groupId;
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: 'إنشاء تقييم',
@@ -450,7 +451,9 @@ class NativeEvaluationPicker extends StatelessWidget {
       auth: auth,
       path: '/api/v1/evaluations/options',
       builder: (context, v) => SearchableDirectory(
-        items: rows(obj(v)['enrollments']),
+        items: rows(obj(v)['enrollments'])
+            .where((e) => groupId == null || e['groupId'] == groupId)
+            .toList(),
         label: 'بحث عن لاعب للتقييم',
         itemBuilder: (context, e) => PlayerDirectoryCard(
           auth: auth,

@@ -147,12 +147,12 @@ void main() {
           ),
         );
         await t.scrollUntilVisible(
-          find.text('فتح الحصة'),
+          find.text('عرض المجموعة ولاعبيها'),
           180,
           scrollable: find.byType(Scrollable).first,
         );
         await t.pumpAndSettle();
-        await t.tap(find.text('فتح الحصة'));
+        await t.tap(find.text('عرض المجموعة ولاعبيها'));
         expect(opened, 1);
         await t.scrollUntilVisible(
           find.text('الطول · سم'),

@@ -1,5 +1,7 @@
 import 'support/visibility.dart';
 
+import 'package:academy_mobile/features/owner/owner_quick_operations.dart';
+
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
@@ -48,6 +50,8 @@ Object? homeResponse(String path, {List<Object?>? sessions}) {
   }
   if (path == '/api/v1/evaluations/options') {
     return {
+      'canEvaluate': true,
+      'canManageAttendance': false,
       'enrollments': [
         {
           'id': 'e1',
@@ -84,6 +88,73 @@ Widget app(
 );
 
 void main() {
+  for (final allowed in [false, true]) {
+    testWidgets(
+      'Today group evaluation stays independent; attendance grant=$allowed',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final paths = <String>[];
+        final auth = await coach((method, path, body, token) async {
+          paths.add(path);
+          if (path == '/api/v1/evaluations/options') {
+            return {
+              ...homeResponse(path) as Map<String, dynamic>,
+              'canManageAttendance': allowed,
+              'enrollments': [
+                {
+                  'id': 'e1',
+                  'groupId': 'g1',
+                  'player': 'آدم التجريبي',
+                  'playerCode': 'TEST-1',
+                },
+                {
+                  'id': 'e2',
+                  'groupId': 'g2',
+                  'player': 'لاعب مجموعة أخرى',
+                  'playerCode': 'TEST-2',
+                },
+              ],
+            };
+          }
+          if (path.startsWith('/api/v1/attendance/sessions?from=')) {
+            return [session('today', '2026-10-15', '18:00:00')];
+          }
+          return homeResponse(path);
+        });
+        await tester.pumpWidget(app(auth));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('حصص اليوم · 1'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        final evaluate = find.widgetWithText(TextButton, 'التقييم');
+        await tester.scrollUntilVisible(
+          evaluate,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(
+          find.widgetWithText(OutlinedButton, 'تسجيل الحضور'),
+          allowed ? findsOneWidget : findsNothing,
+        );
+        await tester.ensureVisible(evaluate);
+        await tester.pumpAndSettle();
+        await tester.tap(evaluate);
+        await tester.pumpAndSettle();
+        expect(find.byType(NativeEvaluationPicker), findsOneWidget);
+        expect(find.text('آدم التجريبي'), findsOneWidget);
+        expect(find.text('لاعب مجموعة أخرى'), findsNothing);
+        expect(paths.any((path) => path.endsWith('/players')), false);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
+
   testWidgets(
     'Logout clears private home data without issuing anonymous reloads',
     (tester) async {
@@ -165,7 +236,7 @@ void main() {
       expect(paths, contains('/api/v1/attendance/sessions?nearestOnly=true'));
       final nearestOpen = find.descendant(
         of: find.byKey(const ValueKey('coach-session-nearest')),
-        matching: find.widgetWithText(FilledButton, 'فتح الحصة'),
+        matching: find.widgetWithText(FilledButton, 'عرض المجموعة ولاعبيها'),
       );
       await tester.scrollUntilVisible(
         nearestOpen,
@@ -174,9 +245,15 @@ void main() {
       );
       await tester.tap(nearestOpen);
       await tester.pumpAndSettle();
-      expect(paths, contains('/api/v1/attendance/sessions/nearest/players'));
-      expect(find.text('تفاصيل الحصة'), findsOneWidget);
-      expect(find.text('تقييم اللاعب'), findsOneWidget);
+      expect(
+        paths,
+        isNot(contains('/api/v1/attendance/sessions/nearest/players')),
+      );
+      expect(find.text('مجموعة الناشئين'), findsWidgets);
+      expect(find.text('آدم التجريبي'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'التقييم الشهري'), findsOneWidget);
+      expect(find.text('تسجيل الحضور'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'تقييم'), findsOneWidget);
       expect(find.text('حفظ الحضور'), findsNothing);
       expect(find.byType(ChoiceChip), findsNothing);
       expect(writes, 0);
