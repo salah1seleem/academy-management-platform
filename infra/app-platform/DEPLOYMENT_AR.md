@@ -1,5 +1,7 @@
 # App Platform — تجهيز فقط، دون نشر
 
+تحديث2نوفمبر2026: عنوان هذا القسم ووصف عدم النشر أدناه يخصان تجهيز PR2 التاريخي. نُفّذت staging لاحقًا بموافقة صريحة وبالموارد القائمة؛ النتائج والحدود الحالية في `STAGING_ACCEPTANCE_2026-11-02_AR.md`. يبقى هذا الملف والقالب العام بلا أسرار، ولا تُرسل قيم REPLACE_* للمزود.
+
 الفرع من main عند fd811e58 بعد دمج PR1. لا موارد منشأة، لا أسرار، لا DNS ولا نقل بيانات عملاء. ملفات infra/digitalocean المحلية القديمة محفوظة ولم تُستخدم بدل Dockerfiles المراجعة.
 
 ## الإعداد
@@ -12,6 +14,10 @@
 - App Platform يتولى TLS عند ingress. Hosting__AppPlatform=true يثبت Scheme=https دون الثقة في X-Forwarded-* المرسلة من العميل. لا تضبط ReverseProxy__Address الخاص بـCompose. AllowedHosts يقتصر على اسم التطبيق/الدومين الفعلي. يلزم اختبار عنوان العميل ومعدلات IP عند staging؛ لا تثق في كل proxy لمعالجة ذلك.
 - Managed PostgreSQL17 إنتاجي منفصل، وليس development DB ذات7دولارات. cluster_name يشير إلى عنقود سيتم اختياره لاحقًا، لا ينشئ القالب عنقودًا بالحجم المقترح. اختر نفس المنطقة وأضف التطبيق إلى trusted sources، دون0.0.0.0/0. اتصال Npgsql صريح بــSSL Mode=VerifyFull ومستخدم runtime، وشهادة CA بالـbase64 من المزود.
 - مهمة PRE_DEPLOY تستعمل صورة API نفسها و--migrate-only بحساب DDL منفصل. لا seed أو خادم أو عامل داخلها. فشلها يمنع النشر؛ migrations إضافية متوافقة مع النسخة القديمة لأن الأخيرة قد تبقى تعمل أثناء المهمة. خذ backup وراجع SQL قبل أي تطبيق على بيانات قائمة. طبّق runtime-grants.sql بحساب مالك schema بعد المهاجرات، واضبط default privileges من الحساب نفسه. لا تعيد تنفيذ grants العامة دون إعادة تضييق جدول المفاتيح.
+
+في التهيئة الأولى: شغّل migrations منفصلة بحساب doadmin والـAPI متوقف، ثم `runtime-grants.sql` وتدقيق الصلاحيات، وبعد نجاحهما فقط أنشئ التطبيق. مهمة PRE_DEPLOY التالية تتحقق من المهاجرات وتطبق الجديد عند نشر معتمد؛ لا تغني عن بوابة grants قبل أول API. يستخدم SQL متغيرات psql `expected_database` و`ddl_role` و`runtime_role`، ويرفض الهدف أو الدور غير الآمن، ثم يلغي TEMP/CREATE عن PUBLIC ويضيق runtime إلى CONNECT وUSAGE وCRUD، وجدول المفاتيح SELECT/INSERT وسجل المهاجرات SELECT فقط. راجع أثر PUBLIC على أي مستخدم آخر؛ الإجراء مخصص لقاعدة تطبيق مستقلة.
+
+ميزانية العنقود الحالية22اتصال عميل: pool API أقصاه4 وحده الأدنى0، وDDL أقصاه2، وحد دور runtime16. الاحتياط لتداخل الإصدارات20من22 متضمنًا اتصالَي إدارة؛ ليس اختبار حمل ولا مبررًا لزيادة النسخ. يعاد تدقيق الصلاحيات بعد أي migration يغير الملكية أو الجداول المحمية.
 
 ## Spaces والخصوصية
 
@@ -57,6 +63,8 @@ OTP الإنتاجي غير موصول ويعيد501؛ fixed OTP محظور خا
 
 الأمر الآمن: `doctl apps spec validate infra/app-platform/app.template.yaml --schema-only` باستخدامdoctl2.0.1؛ لا token أو اتصال بـAPI في هذا الوضع. لا تستخدم validate دون --schema-only مع هذا القالب. ينفذ job app-spec ذلك تلقائيًا، ثم scripts/deployment/validate_app_spec.py مقابلOpenAPI الرسمي المثبت عند112b3762423ee6e853d7b0e9c1777fe89f493e21، مع حل14مرجعًا ومراجعة الأنواع والقيود.
 
-يستخدم ingress للـAPI `rewrite: /api` للحفاظ على /api/v1/...؛ لا يجمعه معpreserve_path_prefix. الاختيار يتجنب اختلاف نوع preserve_path_prefix في OpenAPI (string) عن الدليل وSDK (boolean). اجتاز المسار البديل التحققين دون استثناءات أو تعديل schema. مصدر المخطط: https://github.com/digitalocean/openapi/blob/112b3762423ee6e853d7b0e9c1777fe89f493e21/specification/resources/apps/models/app_spec.yml .
+يستخدم ingress للـAPI `rewrite: /api/` للحفاظ على `/api/v1/...`؛ الشرطة المائلة النهائية لازمة عند ضم بقية المسار. كشف قبول staging الفعلي أن `/api` وحده يعيد404 للمسارات الصحيحة، بينما إضافة فاصل آخر في طلب تشخيصي أعادت401 لمسار الهوية و200 لمسار CSRF؛ لا يُستخدم المسار التشخيصي لتسجيل الدخول. لا يجمع الإعداد بين rewrite وpreserve_path_prefix. الاختيار يتجنب اختلاف نوع preserve_path_prefix في OpenAPI (string) عن الدليل وSDK (boolean)، دون تجاهل خطأ schema. مصدر المخطط: https://github.com/digitalocean/openapi/blob/112b3762423ee6e853d7b0e9c1777fe89f493e21/specification/resources/apps/models/app_spec.yml .
+
+طلبات الصحة الداخلية تستخدم Host الحاوية، وليس دومين التطبيق العام. يضيف أمر بدء API اسم الحاوية وعناوينها الذاتية المكتشفة وقت التشغيل إلى AllowedHosts المحدد، ثم يستبدل shell بعملية dotnet. لا wildcard ولا عنوان pod ثابت، ولا تغيير لمسار HTTP readiness أو تحقق PostgreSQL. أثبتت الحاوية الفعلية200 للمضيف المحلي وعنوانها الذاتي و400 لمضيف غريب. ضبط log levels يمر كخيارات إعداد .NET غير سرية؛ أسماء متغيرات App Platform لا تسمح بالنقاط الموجودة في فئات logging.
 
 هذا قبول لبنية القالب وحقوله، وليس اقتراحًا مقبولًا داخل حساب DigitalOcean. جميع REPLACE_* تظل placeholders؛ توافر المنطقة والحجوم والموارد والأذونات والسعر النهائي تحتاج مراجعة النسخة الخاصة بعد استبدالها وقبل تأكيد أي طلب. لم يرسل هذا التحقق القالب إلى DigitalOcean أو ينشئ موارد.
