@@ -7,7 +7,7 @@ alerts:
 ingress:
   rules:
     - match: {path: {prefix: /api}}
-      component: {name: api, rewrite: /api}
+      component: {name: api, rewrite: /api/}
     - match: {path: {prefix: /}}
       component: {name: web}
 databases:
@@ -23,6 +23,16 @@ services:
     github: {repo: salah1seleem/academy-management-platform, branch: main, deploy_on_push: false}
     source_dir: /
     dockerfile_path: infra/vps/api.Dockerfile
+    # HTTP probes address the current container, so allow its own hosts at startup.
+    # Keep the configured public host and reject unrelated hosts; no fixed pod IP.
+    run_command: >-
+      /bin/sh -c 'set -eu; internal_name=$(hostname); internal_ips=$(hostname -i);
+      test -n "$internal_name"; test -n "$internal_ips";
+      internal_hosts=$(printf "%s" "$internal_ips" | tr " " ";");
+      export AllowedHosts="$AllowedHosts;$internal_name;$internal_hosts";
+      exec dotnet Academy.Api.dll
+      --Logging:LogLevel:Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware=Debug
+      --Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command=Warning'
     http_port: 8080
     instance_size_slug: apps-s-1vcpu-2gb
     instance_count: 1
