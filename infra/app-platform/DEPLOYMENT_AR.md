@@ -52,3 +52,11 @@ OTP الإنتاجي غير موصول ويعيد501؛ fixed OTP محظور خا
 ## القبول المتبقي
 
 فحوص PR، وتحقق schema الرسمي للقالب بعد اختيار المنطقة والحجوم وأسماء الموارد، وتجربة staging لاحقة مصرح بها: رفع صور وفيديو وإثبات تجريبي؛ دخول أدوار؛ رفض أكاديمية ثانية؛ سحب الموافقة؛ recreation لحاويات التطبيق دون حذف DB/Spaces؛ استمرار الصورة وجلسة المستخدم؛ Range؛ الاستعادة المعزولة. لا يُعد إنشاء store/provider جديد محليًا وحده إثباتًا لتشغيل DigitalOcean الفعلي.
+
+## التحقق الرسمي للقالب
+
+الأمر الآمن: `doctl apps spec validate infra/app-platform/app.template.yaml --schema-only` باستخدامdoctl2.0.1؛ لا token أو اتصال بـAPI في هذا الوضع. لا تستخدم validate دون --schema-only مع هذا القالب. ينفذ job app-spec ذلك تلقائيًا، ثم scripts/deployment/validate_app_spec.py مقابلOpenAPI الرسمي المثبت عند112b3762423ee6e853d7b0e9c1777fe89f493e21، مع حل14مرجعًا ومراجعة الأنواع والقيود.
+
+يستخدم ingress للـAPI `rewrite: /api` للحفاظ على /api/v1/...؛ لا يجمعه معpreserve_path_prefix. الاختيار يتجنب اختلاف نوع preserve_path_prefix في OpenAPI (string) عن الدليل وSDK (boolean). اجتاز المسار البديل التحققين دون استثناءات أو تعديل schema. مصدر المخطط: https://github.com/digitalocean/openapi/blob/112b3762423ee6e853d7b0e9c1777fe89f493e21/specification/resources/apps/models/app_spec.yml .
+
+هذا قبول لبنية القالب وحقوله، وليس اقتراحًا مقبولًا داخل حساب DigitalOcean. جميع REPLACE_* تظل placeholders؛ توافر المنطقة والحجوم والموارد والأذونات والسعر النهائي تحتاج مراجعة النسخة الخاصة بعد استبدالها وقبل تأكيد أي طلب. لم يرسل هذا التحقق القالب إلى DigitalOcean أو ينشئ موارد.

@@ -7,6 +7,19 @@ concurrency:
   group: app-platform-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  app-spec:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: digitalocean/action-doctl@v2
+        with: {version: "2.0.1", no_auth: "true"}
+      - name: Validate App Spec offline without credentials or resources
+        run: |
+          doctl apps spec validate infra/app-platform/app.template.yaml --schema-only > /tmp/app-spec.normalized.yaml
+          pip install 'PyYAML==6.0.3' 'jsonschema==4.25.1'
+          python scripts/deployment/validate_app_spec.py
   persistence:
     runs-on: ubuntu-24.04
     services:

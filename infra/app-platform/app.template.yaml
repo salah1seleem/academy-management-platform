@@ -7,7 +7,7 @@ alerts:
 ingress:
   rules:
     - match: {path: {prefix: /api}}
-      component: {name: api, preserve_path_prefix: true}
+      component: {name: api, rewrite: /api}
     - match: {path: {prefix: /}}
       component: {name: web}
 databases:
