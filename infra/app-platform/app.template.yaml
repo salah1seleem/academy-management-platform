@@ -1,0 +1,77 @@
+# Preparation only. Replace placeholders privately; never submit this template as-is.
+name: iacademy-one
+region: fra
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+ingress:
+  rules:
+    - match: {path: {prefix: /api}}
+      component: {name: api, preserve_path_prefix: true}
+    - match: {path: {prefix: /}}
+      component: {name: web}
+databases:
+  - name: postgres
+    engine: PG
+    version: "17"
+    production: true
+    cluster_name: REPLACE_EXISTING_MANAGED_CLUSTER
+    db_name: iacademy
+    db_user: iacademy_app
+services:
+  - name: api
+    github: {repo: salah1seleem/academy-management-platform, branch: main, deploy_on_push: false}
+    source_dir: /
+    dockerfile_path: infra/vps/api.Dockerfile
+    http_port: 8080
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 1
+    health_check:
+      http_path: /health/ready
+      initial_delay_seconds: 60
+      period_seconds: 15
+      timeout_seconds: 5
+      failure_threshold: 6
+    envs:
+      - {key: ASPNETCORE_ENVIRONMENT, value: Production, scope: RUN_TIME}
+      - {key: Hosting__AppPlatform, value: "true", scope: RUN_TIME}
+      - {key: AllowedHosts, value: REPLACE_APP_HOST, scope: RUN_TIME}
+      - {key: ConnectionStrings__Default, value: REPLACE_RUNTIME_NPGSQL_VERIFYFULL_CONNECTION, type: SECRET, scope: RUN_TIME}
+      - {key: Database__CaCertificateBase64, value: REPLACE_CLUSTER_CA_BASE64, type: SECRET, scope: RUN_TIME}
+      - {key: DataProtection__CertificateBase64, value: REPLACE_PFX_BASE64, type: SECRET, scope: RUN_TIME}
+      - {key: DataProtection__CertificatePassword, value: REPLACE_PFX_PASSWORD, type: SECRET, scope: RUN_TIME}
+      - {key: Media__Provider, value: Spaces, scope: RUN_TIME}
+      - {key: Media__PrivateRoot, value: /tmp/iacademy-processing, scope: RUN_TIME}
+      - {key: Spaces__Endpoint, value: "https://fra1.digitaloceanspaces.com", scope: RUN_TIME}
+      - {key: Spaces__Region, value: fra1, scope: RUN_TIME}
+      - {key: Spaces__Bucket, value: REPLACE_PRIVATE_BUCKET, scope: RUN_TIME}
+      - {key: Spaces__AccessKey, value: REPLACE_BUCKET_SCOPED_KEY, type: SECRET, scope: RUN_TIME}
+      - {key: Spaces__SecretKey, value: REPLACE_BUCKET_SCOPED_SECRET, type: SECRET, scope: RUN_TIME}
+      - {key: Demo__SeedEnabled, value: "false", scope: RUN_TIME}
+      - {key: Demo__FixedOtpEnabled, value: "false", scope: RUN_TIME}
+      - {key: Payments__InternalTest__Enabled, value: "false", scope: RUN_TIME}
+      - {key: Imports__WorkerEnabled, value: "true", scope: RUN_TIME}
+  - name: web
+    github: {repo: salah1seleem/academy-management-platform, branch: main, deploy_on_push: false}
+    source_dir: /
+    dockerfile_path: infra/vps/web.Dockerfile
+    http_port: 3000
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    health_check: {http_path: /, initial_delay_seconds: 30}
+    envs:
+      - {key: ACADEMY_EDGE_API, value: "true", scope: BUILD_TIME}
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    github: {repo: salah1seleem/academy-management-platform, branch: main, deploy_on_push: false}
+    source_dir: /
+    dockerfile_path: infra/vps/api.Dockerfile
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    run_command: dotnet Academy.Api.dll --migrate-only
+    envs:
+      - {key: ASPNETCORE_ENVIRONMENT, value: Production, scope: RUN_TIME}
+      - {key: ConnectionStrings__Default, value: REPLACE_DDL_NPGSQL_VERIFYFULL_CONNECTION, type: SECRET, scope: RUN_TIME}
+      - {key: Hosting__ManagedDatabase, value: "true", scope: RUN_TIME}
+      - {key: Database__CaCertificateBase64, value: REPLACE_CLUSTER_CA_BASE64, type: SECRET, scope: RUN_TIME}

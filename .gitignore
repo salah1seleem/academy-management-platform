@@ -66,3 +66,6 @@ backups/
 
 # Private child reference photographs remain local.
 **/reference-child-*.jpg
+
+# Private App Platform rendered specs
+infra/app-platform/app.local.y*ml

@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Operations;
 
 public sealed record MediaErasureWrite(Guid RequestId,string? Note);
-public sealed class PrivateMediaLifecycle(FoundationDbContext db,IConfiguration config,IWebHostEnvironment environment,TimeProvider clock)
+public sealed class PrivateMediaLifecycle(FoundationDbContext db,IConfiguration config,IWebHostEnvironment environment,TimeProvider clock, Academy.Api.Hosting.MediaObjectStore store)
 {
     public bool WorkerEnabled => config.GetValue("Media:LifecycleWorkerEnabled",false);
     private DateTimeOffset Now => clock.GetUtcNow();
@@ -56,12 +56,7 @@ public sealed class PrivateMediaLifecycle(FoundationDbContext db,IConfiguration 
         if(erasure==null||asset==null||!Regex.IsMatch(asset.StorageName,"^[a-fA-F0-9]{32}$"))return false;
         // Never remove a shared legacy filename, including a reference in another academy.
         if(await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM \"PrivateAssets\" WHERE \"StorageName\"={asset.StorageName} AND \"Id\"<>{assetId}").SingleAsync()!=0)return false;
-        var path=Path.Combine(AssetEndpoints.Root(config,environment),asset.StorageName);
-        try
-        {
-            if(Directory.Exists(path))return false; // Only the exact asset file, never a recursive directory operation.
-            File.Delete(path); // Missing after an interrupted prior attempt is safe to complete.
-        }
+        try { await store.Delete($"{asset.AcademyId:N}/{asset.StorageName}"); }
         catch(IOException){return false;}catch(UnauthorizedAccessException){return false;}
         var now=clock.GetUtcNow();db.PrivateMediaPurges.Add(new(){Id=Guid.NewGuid(),AcademyId=academy,AssetId=assetId,ErasureId=erasure.Id,ReleasedBytes=asset.Length,CreatedAtUtc=now,UpdatedAtUtc=now});await db.SaveChangesAsync();await tx.CommitAsync();return true;
     }

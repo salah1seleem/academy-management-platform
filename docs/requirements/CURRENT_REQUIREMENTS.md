@@ -2,8 +2,10 @@
 
 Project: Academy Management Platform
 Repository: salah1seleem/academy-management-platform
-Business baseline: ACADEMY_REQUIREMENTS_BASELINE_AR_v5.22.md
+Business baseline: ACADEMY_REQUIREMENTS_BASELINE_AR_v5.23.md
 Owner approval: APPROVAL_2026-09-28.md
+
+توجيه2نوفمبر2026: اعتماد App Platform بدل VPS، وتخزين Spaces خاص ومفاتيح جلسات دائمة ومشفرة؛ انظر V5.23. لا نشر أو شراء.
 
 توجيه2نوفمبر2026:إكمالVPS، وديموProfessional بثلاثةفروع ونحو300مشترك متعدديالرياضات، ورحلة شراءومخزون، وتحسين افتتاحية المالك ومسار مجموعات المدرب والتقييم والحضور المفوض؛ انظرV5.22.
 
