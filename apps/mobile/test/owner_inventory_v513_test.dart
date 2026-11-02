@@ -26,6 +26,7 @@ void main() {
           'arabicName': 'طقم التدريب',
           'imageReference': '/demo-assets/catalog-iacademy-kit.png',
           'stockQuantity': 12,
+          'usesVariants': true,
           'displayPrice': 850,
           'currency': 'EGP',
         },
@@ -36,6 +37,7 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(find.text('المتبقي 12'), findsOneWidget);
+    expect(find.text('المخزون حسب المقاس'), findsOneWidget);
     expect(find.textContaining('850'), findsNothing);
     await t.tap(find.text('طقم التدريب'));
     await t.pumpAndSettle();
@@ -47,4 +49,29 @@ void main() {
     await t.pumpWidget(const SizedBox());
     auth.dispose();
   });
+  testWidgets(
+    'Products without variants show total stock without promising sizes',
+    (t) async {
+      final auth = await f.authenticate(
+        'AcademyOwner',
+        (m, p, b, token) async => [
+          {
+            'id': 'plain',
+            'arabicName': 'طقم تجريبي',
+            'stockQuantity': 22,
+            'usesVariants': false,
+          },
+        ],
+      );
+      await t.pumpWidget(
+        f.app(Scaffold(body: OwnerInventoryPreview(auth: auth))),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('المتبقي 22'), findsOneWidget);
+      expect(find.text('المخزون الإجمالي'), findsOneWidget);
+      expect(find.text('المخزون حسب المقاس'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
 }

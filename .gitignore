@@ -63,3 +63,6 @@ infra/digitalocean/app.local.yml
 # Local promotional renders and private deployment backups
 output/
 backups/
+
+# Private child reference photographs remain local.
+**/reference-child-*.jpg

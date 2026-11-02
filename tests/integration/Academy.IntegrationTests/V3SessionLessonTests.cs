@@ -15,7 +15,8 @@ public sealed partial class BrandingMatchesTests
     private const string Lessons="/api/v1/evaluations/lessons";
     private async Task<(Guid Level,Guid Session,Guid Coach)> LessonFixture(FoundationDbContext db,TrainingGroup? selected=null)
     {
-        var source=selected??await db.TrainingGroups.FirstAsync(g=>g.AcademyId==DemoSeed.NogoomAcademyId&&g.IsActive);var level=Guid.NewGuid();var group=Guid.NewGuid();var session=Guid.NewGuid();var owner=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();var coach=await db.AcademyMemberships.Where(m=>m.AcademyId==source.AcademyId&&m.Role==AcademyRole.Coach&&m.IsActive).Select(m=>m.Id).FirstAsync();
+        // Match Mobile(Coach): other regression fixtures add active coaches.
+        var source=selected??await db.TrainingGroups.FirstAsync(g=>g.AcademyId==DemoSeed.NogoomAcademyId&&g.IsActive&&g.Branch.IsActive&&g.Sport.IsActive);var level=Guid.NewGuid();var group=Guid.NewGuid();var session=Guid.NewGuid();var owner=await db.Users.Where(u=>u.Email==DemoSeed.OwnerEmail).Select(u=>u.Id).SingleAsync();var coach=await db.AcademyMemberships.Where(m=>m.AcademyId==source.AcademyId&&m.Role==AcademyRole.Coach&&m.IsActive&&m.User.Email==DemoSeed.CoachEmail).Select(m=>m.Id).FirstAsync();
         db.TrainingLevels.Add(new(){Id=level,AcademyId=source.AcademyId,SportId=source.SportId,ArabicName="مستوى خطة حصة اصطناعي "+level.ToString("N")[..8],Rank=90});
         db.TrainingGroups.Add(new(){Id=group,AcademyId=source.AcademyId,BranchId=source.BranchId,SportId=source.SportId,AgeCategoryId=source.AgeCategoryId,TrainingLevelId=level,ArabicName="مجموعة خطة حصة اصطناعية "+group.ToString("N")[..8]});
         db.StaffGroupAssignments.Add(new(){Id=Guid.NewGuid(),AcademyId=source.AcademyId,TrainingGroupId=group,AcademyMembershipId=coach});

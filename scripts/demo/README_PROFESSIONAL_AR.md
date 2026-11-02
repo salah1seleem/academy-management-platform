@@ -9,7 +9,7 @@
 
 ## التهيئة الآمنة
 
-استخدم قاعدة PostgreSQL17 محلية جديدة باسم يبدأ بـ`academy_professional_demo_`، وشغّل migrations ثم API ببيئة`Demo` وملف`Football` مرة واحدة. اجعل media/keys في مجلد خاص دائم للديمو. تشغيلDLL يحتاج`ASPNETCORE_CONTENTROOT` يشير إلى مجلد`apps/api/src/Academy.Api` لقراءة الأصول؛ ملفCompose الإنتاجي يضبط مجلد التشغيل داخل الصورة بالفعل.
+استخدم قاعدة PostgreSQL17 محلية جديدة باسم يبدأ بـ`academy_professional_demo_`، وشغّل migrations ثم API ببيئة`Demo` وملف`Football` مرة واحدة. اجعل media/keys في مجلد خاص دائم للديمو. بعد اكتمال التهيئة شغّل خدمة التصوير بـDemo:SeedEnabled=false؛ تبقى بياناتها ولا يعادseed عند تشغيل الخدمة. تشغيلDLL يحتاج`ASPNETCORE_CONTENTROOT` يشير إلى مجلد`apps/api/src/Academy.Api` لقراءة الأصول؛ ملفCompose الإنتاجي يضبط مجلد التشغيل داخل الصورة بالفعل.
 
 ثبّت`psycopg[binary]` فيvenv خاصة، ثم شغّل من جذر المستودع:
 

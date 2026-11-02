@@ -202,6 +202,7 @@ void main() {
         await guardian.request('GET', '/api/v1/guardian/product-sales'),
       ).map((r) => r['id']).toSet();
       Widget frame(Widget child) => MaterialApp(
+        debugShowCheckedModeBanner: false,
         locale: const Locale('ar'),
         supportedLocales: const [Locale('ar')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,

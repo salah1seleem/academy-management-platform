@@ -61,9 +61,11 @@ class OwnerInventoryPreview extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                const UiText(
-                                  'المخزون حسب المقاس',
-                                  style: TextStyle(fontSize: 12),
+                                UiText(
+                                  item['usesVariants'] == true
+                                      ? 'المخزون حسب المقاس'
+                                      : 'المخزون الإجمالي',
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                               ],
                             ),

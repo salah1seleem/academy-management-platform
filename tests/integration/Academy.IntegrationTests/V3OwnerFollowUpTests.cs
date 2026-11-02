@@ -25,7 +25,7 @@ public sealed partial class BrandingMatchesTests
     }
     private async Task<TrainingGroup> FollowUpGroup(FoundationDbContext db)
     {
-        var source=await db.TrainingGroups.FirstAsync(g=>g.AcademyId==DemoSeed.NogoomAcademyId&&g.IsActive);
+        var source=await db.TrainingGroups.FirstAsync(g=>g.AcademyId==DemoSeed.NogoomAcademyId&&g.IsActive&&g.Branch.IsActive&&g.Sport.IsActive);
         var g=new TrainingGroup{Id=Guid.NewGuid(),AcademyId=source.AcademyId,ArabicName="مجموعة متابعة اصطناعية "+Guid.NewGuid().ToString("N")[..8],BranchId=source.BranchId,SportId=source.SportId,AgeCategoryId=source.AgeCategoryId,Capacity=20,CreatedAtUtc=DateTimeOffset.UtcNow,UpdatedAtUtc=DateTimeOffset.UtcNow};db.TrainingGroups.Add(g);await db.SaveChangesAsync();return g;
     }
     [Fact] public async Task Owner_followup_lifecycle_retries_history_and_closure_never_change_source_or_finance()

@@ -34,14 +34,14 @@ def prepare():
   insert('Academies',dict(original,Id=foreign_academy,ArabicName='أكاديمية اختبار العزل',EnglishName='Synthetic isolation fixture',Slug='professional-isolation-demo'))
   sample=allrows('Players')[0]
   insert('Players',dict(sample,Id=foreign_player,AcademyId=foreign_academy,PlayerCode='ISO-0001',ArabicName='لاعب اختبار عزل خيالي',PhotoReference=None))
+  c.execute('SELECT 1 FROM "Players" WHERE "Id"=%s',(mid('player/299'),))
+  if c.fetchone():print('Professional dataset already prepared; no reset or duplicate collections.');return
   # The Football base has its own future slots. Keep historical attendance,
-  # but let Professional's actual recurring timetable supply future sessions.
+  # but cancel their future slots so Professional's timetable supplies them.
   for group_index in range(6):
    for week in [0,1]:
     original_id=uuid.UUID(bytes_le=hashlib.sha256(f'football-demo/v1/session/{group_index}/{week}'.encode()).digest()[:16])
-    c.execute('UPDATE "TrainingSessions" SET "IsActive"=false WHERE "AcademyId"=%s AND "Id"=%s AND "Status"=%s AND "SessionDate">=%s',(ACADEMY,original_id,'Scheduled',D))
-  c.execute('SELECT 1 FROM "Players" WHERE "Id"=%s',(mid('player/299'),))
-  if c.fetchone():print('Professional dataset already prepared; no reset or duplicate collections.');return
+    c.execute('UPDATE "TrainingSessions" SET "IsActive"=false,"Status"=%s WHERE "AcademyId"=%s AND "Id"=%s AND "Status"=%s AND "SessionDate">=%s',('Cancelled',ACADEMY,original_id,'Scheduled',D))
   players=sorted(allrows('Players'),key=lambda r:r['PlayerCode']);enrolls=allrows('SportEnrollments');byplayer={r['PlayerId']:r for r in enrolls};groups=allrows('TrainingGroups');groups.sort(key=lambda r:r['ArabicName']);oldgroups={r['Id']:r for r in groups}
   # Preserve the principal player in its existing seeded group for evaluations.
   base_player=next(r for r in players if r['PlayerCode']=='FB-0001');base_en=byplayer[base_player['Id']];g0=next(r for r in groups if r['Id']==base_en['TrainingGroupId']);groups=[g0]+[r for r in groups if r['Id']!=g0['Id']]
