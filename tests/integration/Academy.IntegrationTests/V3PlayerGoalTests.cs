@@ -20,8 +20,8 @@ public sealed partial class BrandingMatchesTests
     {
         using var owner = await Staff(); using var guardian = await Mobile(AcademyRole.Guardian);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var player = await db.GuardianPlayerLinks.Where(l => l.IsActive && l.Guardian.User.PhoneNumber == DemoSeed.GuardianPhone).Select(l => l.PlayerId).FirstAsync();
-        var e = await db.SportEnrollments.AsNoTracking().FirstAsync(e => e.PlayerId == player && e.IsActive); var today = await AttendanceCalendar.TodayAsync(e.AcademyId, db, TimeProvider.System);
+        var (_, e) = await ActivePrimaryFamilyEnrollment(db); var player = e.PlayerId;
+        var today = await AttendanceCalendar.TodayAsync(e.AcademyId, db, TimeProvider.System);
         var financial = await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28"); var periods = await db.SubscriptionPeriods.CountAsync(); var notices = await db.AcademyNotices.CountAsync();
         var body = new GoalDraft("تمرير دقيق — سيناريو اصطناعي", "مراجعة دقة التمرير في التقييم القادم؛ لا ترقية تلقائية.", today.AddDays(14), Guid.NewGuid());
         var create = await Send(owner, $"{Goals}/enrollments/{e.Id}", body); create.EnsureSuccessStatusCode(); var id = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();

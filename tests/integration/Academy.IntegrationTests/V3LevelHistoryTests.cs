@@ -14,7 +14,7 @@ public sealed partial class BrandingMatchesTests
     [Fact] public async Task Level_review_history_preserves_old_levels_replays_snapshots_and_private_notes_without_moving_or_promoting_automatically()
     {
         using var owner=await Staff();using var family=await Mobile(AcademyRole.Guardian);using var foreign=await Staff(DemoSeed.FutureOwnerEmail);using var coach=await Mobile(AcademyRole.Coach);
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var link=await db.GuardianPlayerLinks.FirstAsync(l=>l.IsActive&&l.Guardian.User.PhoneNumber==DemoSeed.GuardianPhone);var source=await db.SportEnrollments.AsNoTracking().FirstAsync(e=>e.PlayerId==link.PlayerId&&e.IsActive);var e=await FreshSkillChild(db,source,link.GuardianId);
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var(link,source)=await ActivePrimaryFamilyEnrollment(db);var e=await FreshSkillChild(db,source,link.GuardianId);
         var a=await SkillDefinition(owner,e.SportId);var b=await SkillDefinition(owner,e.SportId);var url=$"/api/v1/people/enrollments/{e.Id}/placement-level";
         var financial=await owner.GetStringAsync("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28");var periods=await db.SubscriptionPeriods.CountAsync();
         var before=await owner.GetFromJsonAsync<JsonElement>(url);Assert.Empty(before.GetProperty("history").GetProperty("items").EnumerateArray());

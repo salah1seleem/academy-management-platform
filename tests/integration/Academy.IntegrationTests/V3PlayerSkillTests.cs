@@ -14,6 +14,21 @@ namespace Academy.IntegrationTests;
 public sealed partial class BrandingMatchesTests
 {
     private const string Skills = "/api/v1/evaluations/skills";
+    // Match Mobile(Guardian)'s tenant and use an eligible source; other cases
+    // deliberately retain foreign, archived and inactive records in this DB.
+    private static async Task<(GuardianPlayerLink Link, SportEnrollment Enrollment)> ActivePrimaryFamilyEnrollment(FoundationDbContext db)
+    {
+        var source = await (from e in db.SportEnrollments.AsNoTracking()
+                            join l in db.GuardianPlayerLinks.AsNoTracking()
+                                on new { e.AcademyId, e.PlayerId } equals new { l.AcademyId, l.PlayerId }
+                            where e.AcademyId == DemoSeed.NogoomAcademyId && e.IsActive
+                                && e.Player.IsActive && e.Branch.IsActive && e.Sport.IsActive
+                                && l.IsActive && l.Guardian.IsActive && l.Guardian.User.IsActive
+                                && l.Guardian.User.PhoneNumber == DemoSeed.GuardianPhone
+                            orderby e.Id, l.Id
+                            select new { Link = l, Enrollment = e }).FirstAsync();
+        return (source.Link, source.Enrollment);
+    }
     private static async Task<SportEnrollment> FreshSkillChild(FoundationDbContext db, SportEnrollment source, Guid? guardian=null)
     {
         var p=new Player {Id=Guid.NewGuid(),AcademyId=source.AcademyId,PlayerCode="SKL-"+Guid.NewGuid().ToString("N")[..16],ArabicName="لاعب رحلة مهارات اصطناعي",DateOfBirth=new(2016,1,1)};
@@ -39,8 +54,7 @@ public sealed partial class BrandingMatchesTests
     {
         using var owner = await Staff(); using var family = await Mobile(AcademyRole.Guardian); using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var link = await db.GuardianPlayerLinks.Where(l => l.IsActive && l.Guardian.User.PhoneNumber == DemoSeed.GuardianPhone).FirstAsync();
-        var source = await db.SportEnrollments.AsNoTracking().FirstAsync(e => e.PlayerId == link.PlayerId && e.IsActive);
+        var (link, source) = await ActivePrimaryFamilyEnrollment(db);
         var e = await FreshSkillChild(db,source,link.GuardianId);var player=e.PlayerId;
         var (id, level, draft) = await SkillDefinition(owner, e.SportId); var today = await AttendanceCalendar.TodayAsync(e.AcademyId, db, TimeProvider.System);
         Assert.Equal(HttpStatusCode.Forbidden, (await family.GetAsync(Skills + "/curricula")).StatusCode);
