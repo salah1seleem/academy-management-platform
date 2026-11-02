@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -56,6 +57,7 @@ public sealed class PrivateMediaProcessor(IConfiguration configuration) : IDispo
                     await file.WriteAsync(buffer.AsMemory(0, read), processingToken);
                 }
             }
+            if (format == "png_pipe") ValidatePngEnvelope(input);
             var before = await Probe(input, format, processingToken);
             Validate(before, video);
             var args = new List<string> { "-nostdin", "-hide_banner", "-loglevel", "error", "-max_alloc", "67108864", "-xerror", "-filter_threads", "1", "-threads", "1", "-err_detect", "explode", "-protocol_whitelist", "file", "-f", format, "-i", input,
@@ -87,6 +89,39 @@ public sealed class PrivateMediaProcessor(IConfiguration configuration) : IDispo
             if (work != null) Directory.Delete(work, true);
             slots.Release();
         }
+    }
+
+    // Decoder tolerance differs between ffmpeg builds. Require one complete PNG
+    // container, including IEND at EOF, before trusting decoded pixels.
+    private static void ValidatePngEnvelope(string path)
+    {
+        using var file = File.OpenRead(path);
+        if (file.Length < 8) throw Invalid();
+        Span<byte> signature = stackalloc byte[8];
+        file.ReadExactly(signature);
+        if (!signature.SequenceEqual(new byte[] {137,80,78,71,13,10,26,10})) throw Invalid();
+        Span<byte> header = stackalloc byte[8];
+        var first = true;
+        var hasData = false;
+        while (file.Position < file.Length)
+        {
+            if (file.Length - file.Position < 12) throw Invalid();
+            file.ReadExactly(header);
+            var length = BinaryPrimitives.ReadUInt32BigEndian(header[..4]);
+            var type = header[4..];
+            if (length > file.Length - file.Position - 4) throw Invalid();
+            if (first && (!type.SequenceEqual("IHDR"u8) || length != 13)) throw Invalid();
+            if (!first && type.SequenceEqual("IHDR"u8)) throw Invalid();
+            first = false;
+            if (type.SequenceEqual("IDAT"u8) && length > 0) hasData = true;
+            if (type.SequenceEqual("IEND"u8))
+            {
+                if (length != 0 || !hasData || file.Position + 4 != file.Length) throw Invalid();
+                return;
+            }
+            file.Seek((long)length + 4, SeekOrigin.Current);
+        }
+        throw Invalid();
     }
 
     private async Task<MediaShape> Probe(string input, string format, CancellationToken token)

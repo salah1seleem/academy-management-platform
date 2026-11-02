@@ -47,6 +47,9 @@ jobs:
       ACADEMY_TEST_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=academy_test;Username=academy;Password=academy_ci_only
       Media__PrivateRoot: /tmp/iacademy-backend-media
       DataProtection__KeyPath: /tmp/iacademy-backend-keys
+      # Keep every test and its TRX result; avoid multi-gigabyte EF command logs.
+      Logging__LogLevel__Default: Warning
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -65,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-results
-          path: tests/**/TestResults/*.trx
+          path: tests/**/TestResults/**
           retention-days: 7
 
   frontend:
