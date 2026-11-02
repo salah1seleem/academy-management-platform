@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Operations;
 
 public sealed record MediaErasureWrite(Guid RequestId,string? Note);
-public sealed class PrivateMediaLifecycle(FoundationDbContext db,IConfiguration config,IWebHostEnvironment environment,TimeProvider clock, Academy.Api.Hosting.MediaObjectStore store)
+public sealed class PrivateMediaLifecycle(FoundationDbContext db,IConfiguration config,TimeProvider clock, Academy.Api.Hosting.MediaObjectStore store)
 {
     public bool WorkerEnabled => config.GetValue("Media:LifecycleWorkerEnabled",false);
     private DateTimeOffset Now => clock.GetUtcNow();

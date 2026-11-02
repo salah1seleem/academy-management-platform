@@ -9,6 +9,8 @@ using Npgsql;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
 
 var connection = Environment.GetEnvironmentVariable("DEPLOYMENT_TEST_DB") ?? throw new Exception("Disposable PostgreSQL connection required");
 var cs = new NpgsqlConnectionStringBuilder(connection);
@@ -28,10 +30,13 @@ ServiceProvider Provider() {
     services.Configure<KeyManagementOptions>(o=>o.XmlRepository=new PostgresKeyRepository(connection));
     return services.BuildServiceProvider();
 }
+TicketDataFormat Cookie(ServiceProvider provider) => new(provider.GetRequiredService<IDataProtectionProvider>()
+    .CreateProtector("Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationMiddleware", "Identity.Application", "v2"));
+var identity = new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(new[]{new Claim(ClaimTypes.NameIdentifier,"synthetic-owner")},"Identity.Application")),"Identity.Application");
 string ticket;
 if(saved!=null)ticket=saved["ticket"];
-else using(var first=Provider())ticket=first.GetRequiredService<IDataProtectionProvider>().CreateProtector("session-test").Protect("synthetic-session");
-using(var second=Provider())if(second.GetRequiredService<IDataProtectionProvider>().CreateProtector("session-test").Unprotect(ticket)!="synthetic-session")throw new Exception("Session lost");
+else using(var first=Provider())ticket=Cookie(first).Protect(identity);
+using(var second=Provider())if(Cookie(second).Unprotect(ticket)?.Principal.FindFirstValue(ClaimTypes.NameIdentifier)!="synthetic-owner")throw new Exception("Session lost");
 using(var cmd=new NpgsqlCommand("SELECT xml FROM app_data_protection_keys",db))if(!((string)cmd.ExecuteScalar()!).Contains("encryptedSecret"))throw new Exception("Keys not encrypted");
 Console.WriteLine("PASS: encrypted PostgreSQL key ring and session survive independent service providers");
 var endpoint=Environment.GetEnvironmentVariable("DEPLOYMENT_TEST_S3") ?? throw new Exception("Local S3 test endpoint required");

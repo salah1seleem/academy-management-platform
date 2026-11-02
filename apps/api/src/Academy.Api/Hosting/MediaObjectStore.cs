@@ -57,6 +57,7 @@ public sealed class MediaObjectStore : IDisposable
         }
         try {
             using var result = await client.GetObjectAsync(bucket, key, ct);
+            if(result.ContentLength > 55 * 1024 * 1024) throw new IOException("Private object exceeds supported size.");
             // A request-local seekable spool preserves authorized video Range responses.
             // It is never the source of truth and disappears on dispose/container replacement.
             var stream = new FileStream(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), FileMode.CreateNew,

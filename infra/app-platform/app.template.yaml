@@ -35,7 +35,7 @@ services:
     envs:
       - {key: ASPNETCORE_ENVIRONMENT, value: Production, scope: RUN_TIME}
       - {key: Hosting__AppPlatform, value: "true", scope: RUN_TIME}
-      - {key: AllowedHosts, value: REPLACE_APP_HOST, scope: RUN_TIME}
+      - {key: AllowedHosts, value: "REPLACE_APP_HOST;localhost;127.0.0.1", scope: RUN_TIME}
       - {key: ConnectionStrings__Default, value: REPLACE_RUNTIME_NPGSQL_VERIFYFULL_CONNECTION, type: SECRET, scope: RUN_TIME}
       - {key: Database__CaCertificateBase64, value: REPLACE_CLUSTER_CA_BASE64, type: SECRET, scope: RUN_TIME}
       - {key: DataProtection__CertificateBase64, value: REPLACE_PFX_BASE64, type: SECRET, scope: RUN_TIME}
