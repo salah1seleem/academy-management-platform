@@ -22,8 +22,8 @@ public sealed partial class V3CoachWorkspaceTests
     {
         await using var factory = new Factory(); using var client = factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var coach = await db.AcademyMemberships.Include(m => m.User).FirstAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.Coach && m.IsActive);
-        var assigned = await db.StaffGroupAssignments.Where(a => a.AcademyMembershipId == coach.Id && a.IsActive).Select(a => a.TrainingGroup).FirstAsync();
+        var coach = await WorkspaceCoach(db);
+        var assigned = await WorkspaceSourceGroup(db, coach);
         var now = new DemoClock().GetUtcNow(); var token = MobileAuthenticationHandler.NewToken();
         db.MobileSessions.Add(new MobileSession { Id = Guid.NewGuid(), UserId = coach.UserId, MembershipId = coach.Id, AccessTokenHash = MobileAuthenticationHandler.Hash(token), RefreshTokenHash = MobileAuthenticationHandler.Hash(MobileAuthenticationHandler.NewToken()), SecurityStamp = coach.User.SecurityStamp ?? "", DeviceName = "سياق الحصة الاصطناعي", CreatedAtUtc = now, LastUsedAtUtc = now, AccessExpiresAtUtc = now.AddMinutes(10), ExpiresAtUtc = now.AddHours(1) });
         var sessions = new List<(Guid Id, TrainingRegistrationFormat Format)>();

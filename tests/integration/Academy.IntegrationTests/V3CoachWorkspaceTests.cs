@@ -38,15 +38,26 @@ public sealed partial class V3CoachWorkspaceTests
         }
     }
 
+    // Use the seeded actor whose default evaluation contract these scenarios exercise.
+    // Regression data also contains active coaches with no assignments or different grants.
+    private static Task<AcademyMembership> WorkspaceCoach(FoundationDbContext db) =>
+        db.AcademyMemberships.Include(m => m.User).SingleAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId
+            && m.Role == AcademyRole.Coach && m.PrimaryMembershipId == null && m.IsActive && m.User.IsActive && m.User.Email == DemoSeed.CoachEmail);
+
+    private static Task<TrainingGroup> WorkspaceSourceGroup(FoundationDbContext db, AcademyMembership coach) =>
+        db.StaffGroupAssignments.Where(a => a.AcademyId == coach.AcademyId && a.AcademyMembershipId == coach.Id
+            && a.IsActive && a.TrainingGroup.IsActive && a.TrainingGroup.Branch.IsActive && a.TrainingGroup.Sport.IsActive)
+            .OrderBy(a => a.TrainingGroupId).Select(a => a.TrainingGroup).FirstAsync();
+
     [Fact]
     public async Task Upcoming_coach_workspace_uses_real_academy_day_and_live_session_assignment_without_attendance_write()
     {
         await using var factory = new Factory(); using var client = factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var coach = await db.AcademyMemberships.Include(m => m.User).FirstAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.Coach && m.IsActive);
+        var coach = await WorkspaceCoach(db);
         var token = MobileAuthenticationHandler.NewToken(); var now = new DemoClock().GetUtcNow();
         db.MobileSessions.Add(new MobileSession { Id = Guid.NewGuid(), UserId = coach.UserId, MembershipId = coach.Id, AccessTokenHash = MobileAuthenticationHandler.Hash(token), RefreshTokenHash = MobileAuthenticationHandler.Hash(MobileAuthenticationHandler.NewToken()), SecurityStamp = coach.User.SecurityStamp ?? "", DeviceName = "مدرب تجربة معزولة", CreatedAtUtc = now, LastUsedAtUtc = now, AccessExpiresAtUtc = now.AddMinutes(10), ExpiresAtUtc = now.AddHours(1) });
-        var assigned = await db.StaffGroupAssignments.Where(a => a.AcademyId == coach.AcademyId && a.AcademyMembershipId == coach.Id && a.IsActive).Select(a => a.TrainingGroup).FirstAsync();
+        var assigned = await WorkspaceSourceGroup(db, coach);
         var group = new TrainingGroup { Id = Guid.NewGuid(), AcademyId = assigned.AcademyId, ArabicName = "مجموعة رحلة المدرب " + Guid.NewGuid(), BranchId = assigned.BranchId, SportId = assigned.SportId, AgeCategoryId = assigned.AgeCategoryId };
         db.TrainingGroups.Add(group);
         db.StaffGroupAssignments.Add(new StaffGroupAssignment { Id = Guid.NewGuid(), AcademyId = coach.AcademyId, AcademyMembershipId = coach.Id, TrainingGroupId = group.Id });
