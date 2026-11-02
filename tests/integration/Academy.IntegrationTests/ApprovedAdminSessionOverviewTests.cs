@@ -22,9 +22,9 @@ public sealed partial class V3CoachWorkspaceTests
     {
         await using var factory = new Factory(); using var client = factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
-        var coach = await db.AcademyMemberships.Include(m => m.User).FirstAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.Coach && m.IsActive);
-        var admin = await db.AcademyMemberships.Include(m => m.User).FirstAsync(m => m.AcademyId == coach.AcademyId && m.Role == AcademyRole.AcademyAdmin && m.IsActive);
-        var assigned = await db.StaffGroupAssignments.Where(a => a.AcademyMembershipId == coach.Id && a.IsActive).Select(a => a.TrainingGroup).FirstAsync();
+        var coach = await WorkspaceCoach(db);
+        var admin = await db.AcademyMemberships.Include(m => m.User).SingleAsync(m => m.AcademyId == coach.AcademyId && m.Role == AcademyRole.AcademyAdmin && m.PrimaryMembershipId == null && m.IsActive && m.User.IsActive && m.User.Email == DemoSeed.AdminEmail);
+        var assigned = await WorkspaceSourceGroup(db, coach);
         var group = new TrainingGroup { Id = Guid.NewGuid(), AcademyId = coach.AcademyId, BranchId = assigned.BranchId, SportId = assigned.SportId, AgeCategoryId = assigned.AgeCategoryId, ArabicName = "مجموعة ملخص الإداري الاصطناعية " + Guid.NewGuid(), RegistrationFormat = TrainingRegistrationFormat.Group };
         db.TrainingGroups.Add(group);
         foreach (var member in new[] { coach.Id, admin.Id }) db.StaffGroupAssignments.Add(new StaffGroupAssignment { Id = Guid.NewGuid(), AcademyId = coach.AcademyId, TrainingGroupId = group.Id, AcademyMembershipId = member });

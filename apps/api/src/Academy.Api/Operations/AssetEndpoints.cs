@@ -137,13 +137,10 @@ public static partial class AssetEndpoints
             if(problem!=null)return Results.UnprocessableEntity(new{message=problem});
             if(!await context.RequestServices.GetRequiredService<PrivateMediaLifecycle>().Admit(asset))return Results.Json(new{message="لا يمكن نشر الملف: راجع إتاحة الوسائط وحصة تخزين الأكاديمية. لا تُحرر الملفات المسحوبة المساحة قبل إزالتها فعليًا."},statusCode:409);
         }
-        var root = Root(config, env); Directory.CreateDirectory(root); var path = Path.Combine(root, asset.StorageName);
-        if (prepared != null) File.Move(prepared.Path, path);
-        else
-        {
-            await using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            await output.WriteAsync(header, context.RequestAborted); await source.CopyToAsync(output, context.RequestAborted);
-        }
+        var store = context.RequestServices.GetRequiredService<Academy.Api.Hosting.MediaObjectStore>();
+        var objectKey = $"{asset.AcademyId:N}/{asset.StorageName}";
+        await using (var upload = prepared != null ? File.OpenRead(prepared.Path) : file.OpenReadStream())
+            await store.Put(objectKey, upload, context.RequestAborted);
         db.PrivateAssets.Add(asset);
         if (purpose == "Photo")
         {
@@ -151,7 +148,7 @@ public static partial class AssetEndpoints
             row.PhotoReference = $"/api/v1/assets/{asset.Id}"; row.UpdatedAtUtc = now;
         }
         try { await db.SaveChangesAsync(); if(transaction!=null)await transaction.CommitAsync(); }
-        catch { File.Delete(path); throw; }
+        catch { await store.Delete(objectKey); throw; }
         return Results.Created($"/api/v1/assets/{asset.Id}", new { asset.Id, url = $"/api/v1/assets/{asset.Id}", asset.ContentType,asset.MediaPolicyVersion,asset.MediaEventOn,asset.RetainUntilUtc,asset.DeleteOnExpiry });
     }
 
@@ -215,11 +212,11 @@ public static partial class AssetEndpoints
                 foreach(var revision in revisions)if(await CommunityAds.AuthorizedTarget(db,features,t,Actor(context.User),revision,context.RequestServices.GetRequiredService<TimeProvider>(),clock.Today)!=null){allowed=true;break;}
             }
             if(!allowed||!asset.IsActive)return Results.NotFound();
-            var campaignPath=Path.Combine(Root(config,env),asset.StorageName);if(!File.Exists(campaignPath))return Results.NotFound();context.Response.Headers.CacheControl="private, no-store";context.Response.Headers["X-Content-Type-Options"]="nosniff";return Results.File(campaignPath,asset.ContentType);
+            var campaignFile=await context.RequestServices.GetRequiredService<Academy.Api.Hosting.MediaObjectStore>().Open($"{asset.AcademyId:N}/{asset.StorageName}",context.RequestAborted);if(campaignFile==null)return Results.NotFound();context.Response.Headers.CacheControl="private, no-store";context.Response.Headers["X-Content-Type-Options"]="nosniff";return Results.File(campaignFile,asset.ContentType);
         }
         if (asset is not null && asset.Purpose is "Media" or "News" && !await features.Enabled(t.AcademyId, asset.Purpose == "News" ? "news" : "media")) return Results.NotFound();
         if (asset is null || !await CanRead(asset, t, context.User, db, authorization, clock,context.RequestServices.GetRequiredService<TimeProvider>())) return Results.NotFound();
-        var path = Path.Combine(Root(config, env), asset.StorageName); if (!File.Exists(path)) return Results.NotFound();
+        var store = context.RequestServices.GetRequiredService<Academy.Api.Hosting.MediaObjectStore>();
         if(asset.Purpose=="Media")
         {
             // Existing authenticated entry URLs remain usable by Web/native clients. Only the
@@ -234,14 +231,14 @@ public static partial class AssetEndpoints
             if(HttpMethods.IsGet(context.Request.Method)&&!await context.RequestServices.GetRequiredService<PrivateMediaLifecycle>().ReserveDownload(t.AcademyId,Actor(context.User),asset.Length))return Results.Json(new{message="بلغت حد تنزيل الوسائط اليومي. يعود الحد مع بداية يوم UTC التالي؛ لا يتغير الاشتراك أو حق الوصول الدائم."},statusCode:429);
             // Open within the authorized request, not later by pathname: a concurrent purge
             // between existence check and open must be a 404, not an unhandled file-result 500.
-            FileStream media;
-            try{media=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete);}
-            catch(FileNotFoundException){return Results.NotFound();}catch(DirectoryNotFoundException){return Results.NotFound();}
+            var media = await store.Open($"{asset.AcademyId:N}/{asset.StorageName}",context.RequestAborted);
+            if(media == null)return Results.NotFound();
             context.Response.Headers["X-Content-Type-Options"]="nosniff";
             return Results.File(media,asset.ContentType,enableRangeProcessing:true);
         }
         context.Response.Headers.CacheControl = "private, no-store"; context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-        return Results.File(path, asset.ContentType, enableRangeProcessing: true);
+        var stream = await store.Open($"{asset.AcademyId:N}/{asset.StorageName}",context.RequestAborted);
+        return stream == null ? Results.NotFound() : Results.File(stream, asset.ContentType, enableRangeProcessing: true);
     }
     private static Task<IResult> Gallery(Guid? playerId, Guid? groupId,bool? includeWithdrawn, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IAuthorizationService authorization,TimeProvider time,HttpContext context)
         =>ReadGallery(playerId,groupId,includeWithdrawn,tenant,principal,db,authorization,time,context);

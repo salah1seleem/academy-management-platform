@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   experimental: { proxyClientMaxBodySize: "55mb" },
   ...(process.env.ACADEMY_WEB_STANDALONE === "true" ? { output: "standalone" as const } : {}),
   async rewrites() {
+    if (process.env.ACADEMY_EDGE_API === "true") return [];
     const api = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:5080";
     const platformApi = process.env.PLATFORM_API_INTERNAL_URL ?? api;
     const legacyWeb = process.env.ACADEMY_LEGACY_WEB_URL;

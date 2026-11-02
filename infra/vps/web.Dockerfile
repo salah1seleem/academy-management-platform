@@ -8,6 +8,8 @@ COPY apps/web/ apps/web/
 COPY apps/mobile/assets/fonts/ apps/mobile/assets/fonts/
 COPY tests/e2e/support/ tests/e2e/support/
 ARG API_INTERNAL_URL=http://api:8080
+ARG ACADEMY_EDGE_API=false
+ENV ACADEMY_EDGE_API=$ACADEMY_EDGE_API
 ENV API_INTERNAL_URL=$API_INTERNAL_URL NEXT_TELEMETRY_DISABLED=1 ACADEMY_WEB_STANDALONE=true
 RUN npm run build:web
 

@@ -22,8 +22,8 @@ public sealed partial class V3CoachWorkspaceTests
         await using var factory = new Factory(); using var client = factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/evaluations/options")).StatusCode);
-        var coach = await db.AcademyMemberships.Include(m => m.User).FirstAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId && m.Role == AcademyRole.Coach && m.IsActive);
-        var source = await db.StaffGroupAssignments.Where(a => a.AcademyMembershipId == coach.Id && a.IsActive).Select(a => a.TrainingGroup).FirstAsync();
+        var coach = await WorkspaceCoach(db);
+        var source = await WorkspaceSourceGroup(db, coach);
         TrainingGroup Group() => new() { Id = Guid.NewGuid(), AcademyId = source.AcademyId, ArabicName = "مجموعة ملف المدرب " + Guid.NewGuid(), BranchId = source.BranchId, SportId = source.SportId, AgeCategoryId = source.AgeCategoryId };
         var assigned = Group(); var hidden = Group(); db.TrainingGroups.AddRange(assigned, hidden);
         var assignment = new StaffGroupAssignment { Id = Guid.NewGuid(), AcademyId = coach.AcademyId, AcademyMembershipId = coach.Id, TrainingGroupId = assigned.Id };

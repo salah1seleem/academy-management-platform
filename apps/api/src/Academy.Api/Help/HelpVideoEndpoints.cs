@@ -1,3 +1,4 @@
+using Academy.Api.Hosting;
 using System.Security.Claims;
 using System.Text.Json;
 using Academy.Api.Auth;
@@ -24,9 +25,9 @@ public static class HelpVideoEndpoints
         g.MapPut("/{id:guid}", Edit).AddEndpointFilter<CsrfFilter>();
         g.MapPost("/{id:guid}/upload/{kind}", Upload).AddEndpointFilter<CsrfFilter>();
         g.MapPost("/{id:guid}/transition", Transition).AddEndpointFilter<CsrfFilter>();
-        g.MapGet("/{id:guid}/preview/{kind}", async (Guid id, string kind, FoundationDbContext db, IConfiguration config, IHostEnvironment env, HttpResponse response) => {
+        g.MapGet("/{id:guid}/preview/{kind}", async (Guid id, string kind, FoundationDbContext db, IConfiguration config, IHostEnvironment env, HttpResponse response, MediaObjectStore store) => {
             var row = await db.HelpVideoRevisions.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
-            return row == null ? Results.NotFound() : FileResult(row, kind, config, env, response);
+            return row == null ? Results.NotFound() : await FileResult(row, kind, store, response);
         });
         app.MapGet("/api/v1/help/lessons/{lesson}/media/{id:guid}/{kind}", Read)
             .RequireAuthorization(AcademyPermissions.TenantAccess);
@@ -57,7 +58,7 @@ public static class HelpVideoEndpoints
         var row = await db.HelpVideoRevisions.SingleAsync(x => x.Id == id); if (row.State != "Draft" || row.EditVersion != b.Version) return Conflict();
         Metadata(row, b.Metadata); row.EditVersion++; Audit(db, h, row, "edit"); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(ManageView(row));
     }
-    private static async Task<IResult> Upload(Guid id, string kind, HttpContext h, FoundationDbContext db, IConfiguration config, IHostEnvironment env)
+    private static async Task<IResult> Upload(Guid id, string kind, HttpContext h, FoundationDbContext db, IConfiguration config, IHostEnvironment env, MediaObjectStore store)
     {
         if (kind is not ("video" or "thumbnail") || !h.Request.HasFormContentType) return Invalid("اختر ملف فيديو MP4 أو صورة مصغرة PNG.");
         if (h.Request.ContentLength is null or > 27_000_000) return Invalid("حجم الملف أكبر من الحد المسموح.");
@@ -71,16 +72,16 @@ public static class HelpVideoEndpoints
         var root = Root(config, env); Directory.CreateDirectory(root); var name = Guid.NewGuid().ToString("N") + (kind == "video" ? ".mp4" : ".png"); var path = Path.Combine(root, name); var old = kind == "video" ? row.VideoFile : row.ThumbnailFile;
         try
         {
-            await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) await output.WriteAsync(bytes);
+            await store.Put("help/" + name, new MemoryStream(bytes));
             if (kind == "video") { row.VideoFile = name; row.DurationSeconds = duration; } else row.ThumbnailFile = name;
             row.EditVersion++; Audit(db, h, row, "upload-" + kind); await db.SaveChangesAsync(); await tx.CommitAsync();
         }
-        catch { if (File.Exists(path)) File.Delete(path); throw; }
+        catch { await store.Delete("help/" + name); throw; }
         // Only the replaced file belonging to this draft, never shared tenant media.
-        if (old != null) { try { File.Delete(Path.Combine(root, old)); } catch (IOException) { /* Unreferenced private file may be collected later. */ } }
+        if (old != null) { try { await store.Delete("help/" + old); } catch (IOException) { /* Unreferenced private file may be collected later. */ } }
         return Results.Ok(ManageView(row));
     }
-    private static async Task<IResult> Transition(Guid id, HelpVideoTransition b, FoundationDbContext db, HttpContext h, IConfiguration config, IHostEnvironment env)
+    private static async Task<IResult> Transition(Guid id, HelpVideoTransition b, FoundationDbContext db, HttpContext h, IConfiguration config, IHostEnvironment env, MediaObjectStore store)
     {
         if (b.Target is not ("Published" or "Archived")) return Invalid("اختر نشرًا أو أرشفة.");
         var lesson = await db.HelpVideoRevisions.Where(x => x.Id == id).Select(x => x.LessonId).SingleOrDefaultAsync(); if (lesson == null) return Results.NotFound();
@@ -88,25 +89,25 @@ public static class HelpVideoEndpoints
         var row = await db.HelpVideoRevisions.SingleAsync(x => x.Id == id); if (row.EditVersion != b.Version || row.State == "Archived" || b.Target == "Published" && row.State != "Draft") return Conflict();
         if (b.Target == "Published")
         {
-            if (row.VideoFile == null || row.ThumbnailFile == null || row.DurationSeconds is null or <= 0 || !File.Exists(Path.Combine(Root(config, env), row.VideoFile)) || !File.Exists(Path.Combine(Root(config, env), row.ThumbnailFile))) return Invalid("أكمل رفع الفيديو والصورة المصغرة قبل النشر.");
+            if (row.VideoFile == null || row.ThumbnailFile == null || row.DurationSeconds is null or <= 0 || !await store.Exists("help/" + row.VideoFile) || !await store.Exists("help/" + row.ThumbnailFile)) return Invalid("أكمل رفع الفيديو والصورة المصغرة قبل النشر.");
             foreach (var previous in await db.HelpVideoRevisions.Where(x => x.LessonId == lesson && x.State == "Published").ToListAsync()) { previous.State = "Archived"; previous.EditVersion++; Audit(db, h, previous, "replaced"); }
             await db.SaveChangesAsync(); row.PublishedAtUtc = DateTimeOffset.UtcNow;
         }
         row.State = b.Target; row.EditVersion++; Audit(db, h, row, b.Target == "Published" ? "publish" : "archive"); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(ManageView(row));
     }
-    private static async Task<IResult> Read(string lesson, Guid id, string kind, CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h, IConfiguration settings, IHostEnvironment env)
+    private static async Task<IResult> Read(string lesson, Guid id, string kind, CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config, IAuthorizationService authorization, HttpContext h, IConfiguration settings, IHostEnvironment env, MediaObjectStore store)
     {
         h.Response.Headers.CacheControl = "private, no-store";
         if (!(await HelpEndpoints.Allowed(tenant, db, config, authorization, h)).Any(l => l.Id == lesson)) return Results.NotFound();
         var row = await db.HelpVideoRevisions.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.LessonId == lesson && x.State == "Published");
-        return row == null ? Results.NotFound() : FileResult(row, kind, settings, env, h.Response);
+        return row == null ? Results.NotFound() : await FileResult(row, kind, store, h.Response);
     }
-    private static IResult FileResult(HelpVideoRevision row, string kind, IConfiguration config, IHostEnvironment env, HttpResponse response)
+    private static async Task<IResult> FileResult(HelpVideoRevision row, string kind, MediaObjectStore store, HttpResponse response)
     {
         response.Headers.CacheControl = "private, no-store"; response.Headers.XContentTypeOptions = "nosniff";
         var name = kind == "video" ? row.VideoFile : kind == "thumbnail" ? row.ThumbnailFile : null;
-        if (name == null || Path.GetFileName(name) != name) return Results.NotFound(); var path = Path.Combine(Root(config, env), name);
-        return File.Exists(path) ? Results.File(path, kind == "video" ? "video/mp4" : "image/png", enableRangeProcessing: true) : Results.NotFound();
+        if (name == null || Path.GetFileName(name) != name) return Results.NotFound(); var stream = await store.Open("help/" + name);
+        return stream != null ? Results.File(stream, kind == "video" ? "video/mp4" : "image/png", enableRangeProcessing: true) : Results.NotFound();
     }
 }
 public sealed record HelpVideoMetadata(string Title, string Description, string AlternativeText);

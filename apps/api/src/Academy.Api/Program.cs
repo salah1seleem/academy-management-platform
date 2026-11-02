@@ -1,3 +1,6 @@
+using Academy.Api.Hosting;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
@@ -37,8 +40,20 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole(options => options.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fffK");
 builder.Services.AddProblemDetails();
+builder.Services.AddSingleton<MediaObjectStore>();
+var appPlatform = builder.Configuration.GetValue("Hosting:AppPlatform", false);
+if (appPlatform)
+{
+    if(builder.Configuration["Media:Provider"] != "Spaces") throw new InvalidOperationException("App Platform requires private object storage.");
+    var certificate = X509CertificateLoader.LoadPkcs12(Convert.FromBase64String(builder.Configuration["DataProtection:CertificateBase64"] ?? ""),
+        builder.Configuration["DataProtection:CertificatePassword"], X509KeyStorageFlags.EphemeralKeySet);
+    if(!certificate.HasPrivateKey) throw new InvalidOperationException("Session encryption certificate needs a private key.");
+    builder.Services.AddDataProtection().SetApplicationName("iAcademyOne").ProtectKeysWithCertificate(certificate);
+    builder.Services.Configure<KeyManagementOptions>(options => options.XmlRepository = new PostgresKeyRepository(
+        builder.Configuration.GetConnectionString("Default")!));
+}
 var keyPath = builder.Configuration["DataProtection:KeyPath"];
-if (!string.IsNullOrWhiteSpace(keyPath))
+if (!appPlatform && !string.IsNullOrWhiteSpace(keyPath))
     builder.Services.AddDataProtection().SetApplicationName("iAcademyOne")
         .PersistKeysToFileSystem(new DirectoryInfo(keyPath));
 var trustedProxy = builder.Configuration["ReverseProxy:Address"];
@@ -53,6 +68,19 @@ if (!string.IsNullOrWhiteSpace(trustedProxy))
     });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 var connectionString = builder.Configuration.GetConnectionString("Default");
+if((appPlatform || builder.Configuration.GetValue("Hosting:ManagedDatabase",false)) && !string.IsNullOrWhiteSpace(connectionString))
+{
+    var database = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+    if(database.SslMode != Npgsql.SslMode.VerifyFull) throw new InvalidOperationException("Managed PostgreSQL requires VerifyFull TLS.");
+    var ca = builder.Configuration["Database:CaCertificateBase64"];
+    if(!string.IsNullOrEmpty(ca)) {
+        var caPath = Path.Combine(Path.GetTempPath(), "iacademy-db-ca.crt");
+        File.WriteAllBytes(caPath, Convert.FromBase64String(ca));
+        database.RootCertificate = caPath;
+        connectionString = database.ConnectionString;
+        builder.Configuration["ConnectionStrings:Default"] = connectionString;
+    }
+}
 if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("ConnectionStrings__Default must be provided through environment configuration.");
 
@@ -216,6 +244,8 @@ if (args.Contains("--migrate-only"))
     return;
 }
 if (!string.IsNullOrWhiteSpace(trustedProxy)) app.UseForwardedHeaders();
+// App Platform terminates HTTPS at its managed ingress; do not trust client X-Forwarded-*.
+if(appPlatform) app.Use((context,next) => { context.Request.Scheme = "https"; return next(context); });
 DemoSeed.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
 InternalTestPaymentGateway.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<InternalTestPaymentOptions>>().Value);
 app.UseExceptionHandler();

@@ -8,6 +8,7 @@
     <ProjectReference Include="../Academy.Infrastructure/Academy.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="QRCoder" />
     <PackageReference Include="Fido2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

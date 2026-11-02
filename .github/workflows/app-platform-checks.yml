@@ -1,0 +1,66 @@
+name: App Platform persistence
+on:
+  pull_request:
+  push:
+    branches: ["codex/app-platform-readiness"]
+concurrency:
+  group: app-platform-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  app-spec:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: digitalocean/action-doctl@v2
+        with: {version: "2.0.1", no_auth: "true"}
+      - name: Validate App Spec offline without credentials or resources
+        run: |
+          doctl apps spec validate infra/app-platform/app.template.yaml --schema-only > /tmp/app-spec.normalized.yaml
+          pip install 'PyYAML==6.0.3' 'jsonschema==4.25.1'
+          python scripts/deployment/validate_app_spec.py
+  persistence:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: academy_app_platform_test_ci
+        ports: ["55472:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with: {global-json-file: global.json}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Start isolated S3 protocol fixture
+        run: |
+          pip install 'moto[server]==5.1.16'
+          moto_server -H 127.0.0.1 -p 5005 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5005/ && break || sleep 1; done
+          python - <<'PY'
+          import boto3
+          boto3.client('s3',endpoint_url='http://127.0.0.1:5005',aws_access_key_id='isolated-test',aws_secret_access_key='isolated-test-secret',region_name='us-east-1').create_bucket(Bucket='iacademy-test')
+          PY
+      - name: Publish checks and build existing API Dockerfile
+        run: |
+          dotnet publish tests/deployment/Academy.DeploymentChecks.csproj -c Release -m:1 -o /tmp/deployment-checks
+          docker build -f infra/vps/api.Dockerfile -t iacademy-platform-check .
+          mkdir /tmp/check-state
+          chmod 777 /tmp/check-state
+      - name: Verify private media and encrypted session across two recreated containers
+        env:
+          DEPLOYMENT_TEST_DB: Host=127.0.0.1;Port=55472;Database=academy_app_platform_test_ci;Username=postgres;Password=isolated-test-only
+          DEPLOYMENT_TEST_S3: http://127.0.0.1:5005
+        run: |
+          for phase in write read; do
+            docker run --rm --network host --entrypoint dotnet \
+              -e DEPLOYMENT_TEST_DB -e DEPLOYMENT_TEST_S3 \
+              -e DEPLOYMENT_TEST_PHASE="$phase" -e DEPLOYMENT_TEST_STATE=/state/synthetic-state.json \
+              -v /tmp/deployment-checks:/checks:ro -v /tmp/check-state:/state \
+              iacademy-platform-check /checks/Academy.DeploymentChecks.dll
+          done
