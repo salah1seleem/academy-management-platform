@@ -1,0 +1,93 @@
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ConfirmationDialog, ErrorState, LoadingState } from "../components/dashboard-shell";
+import { announceSaveSuccess, csrfRequest, DashboardRequestError } from "./dashboard-api";
+import { HelpAudienceEditor, HelpOption } from "./help-audience-editor";
+import { FeedbackDeadlineEditor } from "./feedback-deadline-policy";
+type Settings = { monthlyCollectionTarget?:number|null; currency: string; timeZone: string; features: Record<string, boolean>; cashEnabled: boolean; consecutiveAbsenceAlert: number; tenantMarketingOptIn: boolean; helpAudiences?: Record<string,string[]> | null; mediaRetention?:{days:number;deleteOnExpiry:boolean}|null; feedbackFollowUpDays?: number | null };
+type Version = { id: string; revision: number; version: number; state: string; contentHash: string; settings: Settings };
+type Data = { academyCurrency?:string; canManageMediaRetention?:boolean; entitlements: { feature: string; enabled: boolean; planCode: string }[]; versions: Version[]; history: { configurationId: string; from: string; to: string; createdAtUtc: string }[] };
+type PendingChange = { id: string | null; revision?: number; state: string; settings?: Settings };
+function sameSubmitted(actual: unknown, expected: unknown): boolean {
+  if (expected == null) return actual == null;
+  if (Array.isArray(expected)) return Array.isArray(actual) && actual.length === expected.length && expected.every((value, i) => sameSubmitted(actual[i], value));
+  if (typeof expected === "object") return actual != null && typeof actual === "object" && Object.entries(expected).every(([key, value]) => sameSubmitted((actual as Record<string, unknown>)[key], value));
+  return actual === expected;
+}
+const states: Record<string, string> = { Draft: "مسودة", Validated: "متحقق منها", Staged: "جاهزة للتفعيل", Active: "سارية", Suspended: "موقوفة", Superseded: "إصدار سابق" };
+const labels: Record<string, string> = { training: "التدريب", nutrition: "التغذية", medical: "السجلات الطبية", media: "الوسائط", catalog: "المنتجات الرياضية", news: "الأخبار", matches: "المباريات", payroll: "الرواتب", facilities: "المرافق والحارات", expenses: "المصروفات", external_partners: "الشركاء الخارجيون", learning_hub: "مركز التعلم", calendar: "التقويم", crm: "متابعة العملاء", simulator: "المحاكي", community_ads: "إعلانات المجتمع", voice_notes: "الملاحظات الصوتية", ai_assistant: "المساعد الذكي" };
+export const featureLabels = labels;
+const next: Record<string, string> = { Draft: "Validated", Validated: "Staged", Staged: "Active", Active: "Suspended", Suspended: "Staged" };
+const actions: Record<string, string> = { Draft: "التحقق", Validated: "تجهيز التفعيل", Staged: "تفعيل الآن", Active: "إيقاف الإصدار", Suspended: "إعادة التجهيز" };
+export function VersionedConfiguration() {
+  const [confirm, setConfirm] = useState<Version | null>(null);
+  const [helpOptions, setHelpOptions] = useState<HelpOption[]>([]), [owner, setOwner] = useState(false);
+  const [data, setData] = useState<Data | null>(null), [draft, setDraft] = useState<Settings | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [allowed, setAllowed] = useState(false);
+  const [pending, setPending] = useState<PendingChange | null>(null), [message, setMessage] = useState("");
+  const working = useRef(false), locked = busy || pending !== null;
+  const read = useCallback(async () => { const r = await fetch("/api/v1/manage/configuration", { cache: "no-store" }); if (!r.ok) throw new Error("تعذر تحميل إصدارات الإعدادات."); return await r.json() as Data; }, []);
+  const load = useCallback(async () => { const d = await read(); setData(d); setDraft(d.versions.find(v => v.state === "Active")?.settings ?? d.versions[0]?.settings ?? null); }, [read]);
+  useEffect(() => { void fetch("/api/v1/my-permissions").then(r => r.ok ? r.json() : []).then(p => { if (Array.isArray(p) && p.includes("academy.settings.manage")) { setAllowed(true); return load(); } }).catch(() => setError("تعذر تحميل إعدادات التشغيل.")); }, [load]);
+  useEffect(() => { if (!allowed) return; const c = new AbortController();
+    Promise.all([fetch("/api/v1/me", { signal: c.signal, cache: "no-store" }).then(r => r.ok ? r.json() : {}), fetch("/api/v1/manage/configuration/help-options", { signal: c.signal, cache: "no-store" }).then(r => r.ok ? r.json() : {})]).then(([me, options]) => { if (!c.signal.aborted) { setOwner((me as {role?:string}).role === "AcademyOwner"); const lessons = (options as {lessons?:HelpOption[]}).lessons; setHelpOptions(Array.isArray(lessons) ? lessons : []); } }).catch(() => { /* Optional editor must not block other settings. */ }); return () => c.abort();
+  }, [allowed]);
+  async function verify(change: PendingChange) {
+    const snapshot = await read();
+    const saved = snapshot.versions.find(v => v.id === change.id);
+    if (!saved || saved.state !== change.state || (change.revision !== undefined && saved.revision !== change.revision) || (change.settings && !sameSubmitted(saved.settings, change.settings))) {
+      throw new Error("لم تتطابق قراءة الإصدار مع العملية المرسلة. أعد التحقق قبل إجراء تغيير آخر.");
+    }
+    setData(snapshot); setDraft(change.settings ? saved.settings : snapshot.versions.find(v => v.state === "Active")?.settings ?? saved.settings);
+    setPending(null); setConfirm(null);
+    const text = change.settings ? "تم حفظ المسودة والتحقق منها؛ لم تُفعّل." : "تم التحقق من حالة الإصدار المحفوظة.";
+    setMessage(text); announceSaveSuccess(text);
+  }
+  function reject(e: unknown) { setError(e instanceof Error && /[\u0600-\u06ff]/.test(e.message) ? e.message : "تعذر التحقق من حفظ الإعدادات. أعد قراءة الإصدارات قبل أي محاولة أخرى."); }
+  async function act(change: PendingChange, action: () => Promise<Response>) {
+    if (working.current || pending) return;
+    working.current = true; setBusy(true); setError(""); setMessage(""); setPending(change);
+    try {
+      const response = await action();
+      if (change.settings) {
+        const receipt = await response.json() as { id: string; revision: number };
+        change = { ...change, id: receipt.id, revision: receipt.revision }; setPending(change);
+      }
+      await verify(change);
+    } catch (e) {
+      if (e instanceof DashboardRequestError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 499) setPending(null);
+      reject(e);
+    } finally { working.current = false; setBusy(false); }
+  }
+  async function recheck() {
+    if (working.current || !pending) return;
+    working.current = true; setBusy(true); setError("");
+    try { await verify(pending); } catch(e) { reject(e); } finally { working.current = false; setBusy(false); }
+  }
+  async function reloadCurrent() {
+    if (working.current) return;
+    working.current = true; setBusy(true); setError(""); setMessage("");
+    try { await load(); setPending(null); setConfirm(null); setMessage("أُعيدت قراءة الإصدارات الحالية. راجعها قبل إرسال تغيير جديد."); }
+    catch(e) { reject(e); } finally { working.current = false; setBusy(false); }
+  }
+  async function transition(v: Version) { await act({ id: v.id, state: next[v.state] }, () => csrfRequest(`/api/v1/manage/configuration/${v.id}/transition`, "POST", { target: next[v.state], version: v.version }, {}, { announce: false })); setConfirm(null); }
+  function differences(v: Version) {
+    const active = data?.versions.find(x => x.state === "Active")?.settings;
+    if (!active) return "لا يوجد إصدار سارٍ؛ سيطبق هذا الإصدار بعد الاعتماد.";
+    const changed = Object.keys(v.settings.features).filter(f => active.features[f] !== v.settings.features[f]).map(f => `${labels[f] ?? f}: ${v.settings.features[f] ? "تفعيل" : "إيقاف"}`);
+    if ((active.monthlyCollectionTarget??null)!==(v.settings.monthlyCollectionTarget??null)) changed.push("تغيير الهدف الشهري للتحصيل");
+    if (active.consecutiveAbsenceAlert !== v.settings.consecutiveAbsenceAlert) changed.push(`تنبيه الغياب: ${active.consecutiveAbsenceAlert} ← ${v.settings.consecutiveAbsenceAlert}`);
+    if ((active.feedbackFollowUpDays ?? null) !== (v.settings.feedbackFollowUpDays ?? null)) changed.push(v.settings.feedbackFollowUpDays ? `مهلة الملاحظات الجديدة: ${v.settings.feedbackFollowUpDays} أيام تقويمية؛ القديمة محفوظة` : "إلغاء المهلة التلقائية للتقديم الجديد فقط");
+    if (JSON.stringify(active.helpAudiences ?? {}) !== JSON.stringify(v.settings.helpAudiences ?? {})) changed.push("تغيير جمهور دليل الاستخدام — لا يغيّر صلاحيات المنتج");
+    if (JSON.stringify(active.mediaRetention??null)!==JSON.stringify(v.settings.mediaRetention??null)) changed.push(v.settings.mediaRetention?`احتفاظ الميديا الجديدة ${v.settings.mediaRetention.days} يومًا؛ ${v.settings.mediaRetention.deleteOnExpiry?"طلب إزالة الملف بعد الانتهاء عند تشغيل العامل":"حجب بعد الانتهاء دون إزالة آلية"}`:"إلغاء موعد الاحتفاظ للرفع القادم فقط؛ لا تمديد أو إحياء لملف سابق");
+    return changed.join(" · ") || "لا اختلاف في الميزات أو تنبيه الغياب عن الإصدار الساري.";
+  }
+  if (!allowed) return null;
+  return <section className="detail-card"><h2>إصدارات إعدادات التشغيل</h2><p>المسودة لا تغيّر التشغيل. تحقق منها ثم جهّزها واعتمد التفعيل. الخطة المتاحة تُدار من المنصة ولا يمنح تفعيل زر صلاحية للمستخدم.</p>{message && <p role="status">{message}</p>}{error && <ErrorState message={error} />}{pending && <div><p>توقّف إرسال التغييرات حتى التحقق من العملية السابقة. إعادة التحقق تقرأ الإصدارات فقط ولا تعيد الحفظ.</p><button disabled={busy} onClick={() => void recheck()}>إعادة التحقق من الحفظ</button></div>}{(pending || error) && <button disabled={busy} onClick={() => void reloadCurrent()}>إعادة تحميل الإصدارات الحالية</button>}{!data ? <LoadingState /> : <>
+    {owner && draft && <FeedbackDeadlineEditor days={draft.feedbackFollowUpDays} disabled={locked} onChange={feedbackFollowUpDays => setDraft({ ...draft, feedbackFollowUpDays })}/>}
+    <fieldset><legend>عملة الأكاديمية المعتمدة</legend><label>رمز العملة<input readOnly value={data.academyCurrency??data.versions.find(v=>v.state==="Active")?.settings.currency??""}/></label><small>تحدد عند إنشاء الأكاديمية من المنصة؛ لا يغير إصدار تشغيل جديد العملة أو يحول الإيصالات والرواتب السابقة.</small></fieldset>
+    {draft && <form className="form-shell" onSubmit={e => { e.preventDefault(); void act({ id: null, state: "Draft", settings: draft }, () => csrfRequest("/api/v1/manage/configuration/drafts", "POST", draft, {}, { announce: false })); }}>{owner&&<label id="collection-target">هدف التحصيل الشهري ({draft.currency}) · اختياري<input disabled={locked} type="number" min="0.01" max="1000000000" step="0.01" value={draft.monthlyCollectionTarget??""} onChange={e=>setDraft({...draft,monthlyCollectionTarget:e.target.value?Number(e.target.value):null})}/><small>يسري بعد حفظ الإصدار واعتماده؛ ليس تحصيلًا أو ربحًا متوقعًا مضمونًا.</small></label>}<label>المنطقة الزمنية<input disabled={locked} value={draft.timeZone} onChange={e => setDraft({ ...draft, timeZone: e.target.value })} required /></label><label>تنبيه الغياب المتتالي<input disabled={locked} type="number" min={1} max={30} value={draft.consecutiveAbsenceAlert} onChange={e => setDraft({ ...draft, consecutiveAbsenceAlert: Number(e.target.value) })} /></label><fieldset><legend>الميزات التشغيلية</legend>{data.entitlements.map(e => <label className="policy-switch" key={e.feature}><input type="checkbox" disabled={!e.enabled || locked} checked={draft.features[e.feature] ?? false} onChange={ev => setDraft({ ...draft, features: { ...draft.features, [e.feature]: ev.target.checked } })} />{labels[e.feature] ?? e.feature}{!e.enabled && <small>غير متاحة في الخطة</small>}</label>)}</fieldset>{data.canManageMediaRetention&&<fieldset><legend>احتفاظ صور وفيديوهات التدريب الجديدة</legend><p>للرفع القادم فقط؛ لا يحذف أو يمدد الملفات القديمة. انتهاء المدة يحجب النسخة حتى عن الإدارة. إزالة الملف الآلية تحتاج الاختيار أدناه وتشغيل عامل التنظيف.</p><label><input type="checkbox" checked={draft.mediaRetention!=null} disabled={locked} onChange={e=>setDraft({...draft,mediaRetention:e.target.checked?{days:365,deleteOnExpiry:false}:null})}/>تحديد مدة احتفاظ للرفع الجديد</label>{draft.mediaRetention&&<><label>مدة الاحتفاظ بالأيام<input disabled={locked} type="number" min={1} max={3650} required value={draft.mediaRetention.days} onChange={e=>setDraft({...draft,mediaRetention:{...draft.mediaRetention!,days:Number(e.target.value)}})}/></label><label><input type="checkbox" disabled={locked} checked={draft.mediaRetention.deleteOnExpiry} onChange={e=>setDraft({...draft,mediaRetention:{...draft.mediaRetention!,deleteOnExpiry:e.target.checked}})}/>أوافق على طلب إزالة ملفات الرفع الجديد نهائيًا بعد انتهاء مدتها عند تشغيل عامل التنظيف؛ لا استرجاع تلقائي.</label></>}</fieldset>}{owner && helpOptions.length > 0 && <HelpAudienceEditor lessons={helpOptions} value={draft.helpAudiences} disabled={locked} onChange={helpAudiences => setDraft({ ...draft, helpAudiences })} />}<button className="primary-button" disabled={locked}>حفظ إصدار مسودة</button></form>}
+    <div className="linked-list">{data.versions.map(v => <article key={v.id}><div><strong>الإصدار {v.revision} · {states[v.state]}</strong><small dir="ltr">{v.contentHash.slice(0, 12)}</small>{v.state !== "Active" && <p>{differences(v)}</p>}</div>{next[v.state] && <button disabled={locked} onClick={() => v.state === "Staged" || v.state === "Active" ? setConfirm(v) : void transition(v)}>{actions[v.state]}</button>}</article>)}</div>
+    {confirm && <ConfirmationDialog open title={confirm.state === "Active" ? "إيقاف إعدادات التشغيل؟" : "تفعيل إصدار الإعدادات؟"} message={confirm.state === "Active" ? "ستتعطل الميزات التشغيلية حتى تفعيل إصدار صالح. لا تُحذف السجلات." : differences(confirm)} confirmLabel="تأكيد الاعتماد" busy={busy} onConfirm={() => void transition(confirm)} onCancel={() => setConfirm(null)} />}
+    <details><summary>سجل تغير الحالات ({data.history.length})</summary>{data.history.map((h, i) => <p key={i}>{states[h.from]} ← {states[h.to]} · {new Date(h.createdAtUtc).toLocaleString("ar-EG-u-nu-latn")}</p>)}</details>
+  </>}</section>;
+}

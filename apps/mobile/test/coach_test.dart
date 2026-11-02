@@ -1,0 +1,330 @@
+import 'support/visibility.dart';
+
+import 'package:academy_mobile/core/auth/auth_controller.dart';
+import 'package:academy_mobile/core/api/api_client.dart';
+import 'package:academy_mobile/core/theme/app_theme.dart';
+import 'package:academy_mobile/features/coach/coach_attendance.dart';
+import 'package:academy_mobile/features/coach/coach_home.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'auth_controller_test.dart';
+
+Map<String, dynamic> coachCredentials() => {
+  'accessToken': 'coach-access',
+  'refreshToken': 'coach-refresh',
+  'displayName': 'مدرب الاختبار',
+  'accessExpiresAtUtc': '2100-01-01T00:00:00Z',
+  'membershipId': 'coach',
+  'memberships': [
+    {
+      'id': 'coach',
+      'academyId': 'academy',
+      'academyName': 'أكاديمية العرض',
+      'role': 'Coach',
+    },
+  ],
+};
+
+Future<AuthController> coach(Handler handler) async {
+  final auth = AuthController(
+    FakeApi(
+      (m, p, b, t) => p.contains('/auth/')
+          ? Future.value(coachCredentials())
+          : handler(m, p, b, t),
+    ),
+    MemoryStore(),
+  )..restoring = false;
+  await auth.verify('phone', 'challenge', 'otp');
+  return auth;
+}
+
+Widget shell(Widget page) => MaterialApp(
+  locale: const Locale('ar'),
+  supportedLocales: const [Locale('ar')],
+  localizationsDelegates: GlobalMaterialLocalizations.delegates,
+  theme: AcademyTheme.light(),
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(disableAnimations: true),
+    child: child!,
+  ),
+  home: page,
+);
+
+void main() {
+  for (final lostResponse in [false, true]) {
+    testWidgets(
+      'Attendance network retry checks server before write; lost response $lostResponse',
+      (tester) async {
+        var writes = 0;
+        var remote = 'NotRecorded';
+        final auth = await coach((m, p, b, t) async {
+          if (m == 'PUT') {
+            writes++;
+            if (writes == 1) {
+              if (lostResponse) remote = 'Present';
+              throw const ApiFailure(0, 'تعذر الاتصال');
+            }
+            remote = 'Present';
+            return {};
+          }
+          return {
+            'canManageAttendance': true,
+            'draftLease': 'lease',
+            'draftScope': 'scope',
+            'session': {
+              'group': 'مجموعة مزامنة',
+              'sessionDate': '2026-10-12',
+              'startTime': '17:00',
+            },
+            'players': [
+              {
+                'sportEnrollmentId': 'e',
+                'arabicName': 'لاعب مسودة',
+                'playerCode': 'SYNC',
+                'attendanceStatus': remote,
+                'version': remote == 'Present' ? 4 : 0,
+              },
+            ],
+          };
+        });
+        await tester.pumpWidget(
+          shell(CoachAttendance(auth: auth, sessionId: 's')),
+        );
+        await tester.pumpAndSettle();
+        await revealTestTarget(tester, find.text('حاضر'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('حاضر'));
+        await tester.tap(find.text('حفظ الحضور'));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('بانتظار المزامنة'),
+          -250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('بانتظار المزامنة'), findsOneWidget);
+        expect(writes, 1);
+        final retry = find.text('مراجعة وإعادة المزامنة');
+        await revealTestTarget(tester, retry);
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(writes, lostResponse ? 1 : 2);
+        expect(find.text('بانتظار المزامنة'), findsNothing);
+        expect(
+          find.textContaining(
+            lostResponse ? 'دون إعادة الإرسال' : 'يمكن تصحيحه',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
+  testWidgets(
+    'Replacement roster opens evaluation with the actual session and date, never attendance write',
+    (tester) async {
+      Object? sent;
+      final auth = await coach((m, p, b, t) async {
+        if (p == '/api/v1/evaluations' && m == 'POST') {
+          sent = b;
+          return {'id': 'evaluation'};
+        }
+        if (p == '/api/v1/evaluations/evaluation') {
+          return {
+            'id': 'evaluation',
+            'sportEnrollmentId': 'e1',
+            'status': 'Draft',
+            'player': 'آدم',
+            'group': 'الحصة البديلة',
+            'scores': [],
+          };
+        }
+        return {
+          'canManageAttendance': false,
+          'canEvaluate': true,
+          'session': {
+            'group': 'الحصة البديلة',
+            'sessionDate': '2026-11-15',
+            'startTime': '17:00',
+          },
+          'players': [
+            {
+              'sportEnrollmentId': 'e1',
+              'arabicName': 'آدم',
+              'playerCode': 'DEMO',
+              'attendanceStatus': 'NotRecorded',
+              'version': 9104,
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        shell(CoachAttendance(auth: auth, sessionId: 'replacement')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('حفظ الحضور'), findsNothing);
+      await revealTestTarget(tester, find.text('تقييم اللاعب'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('تقييم اللاعب'));
+      await tester.pumpAndSettle();
+
+      await tester.pumpAndSettle();
+      expect(sent, containsPair('trainingSessionId', 'replacement'));
+      expect(sent, containsPair('evaluationDate', '2026-11-15'));
+      expect(sent, containsPair('sportEnrollmentId', 'e1'));
+      expect(tester.takeException(), isNull);
+    },
+  );
+  for (final allowed in [false, null]) {
+    testWidgets('Coach attendance fails closed when capability is $allowed', (
+      tester,
+    ) async {
+      var writes = 0;
+      final auth = await coach((m, p, b, t) async {
+        if (m == 'PUT') writes++;
+        return {
+          'canManageAttendance': allowed,
+          'session': {
+            'group': 'مجموعة اختبار',
+            'sessionDate': '2026-10-11',
+            'startTime': '17:00',
+          },
+          'players': [
+            {
+              'sportEnrollmentId': 'e',
+              'arabicName': 'لاعب اختبار',
+              'playerCode': 'P-TEST',
+              'attendanceStatus': 'NotRecorded',
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        shell(CoachAttendance(auth: auth, sessionId: 's')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('يتولى الإداري'), findsOneWidget);
+      expect(find.text('حفظ الحضور'), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(writes, 0);
+      auth.dispose();
+    });
+  }
+  testWidgets('Coach home exposes assigned work and no finance', (
+    tester,
+  ) async {
+    final auth = await coach((m, p, b, t) async {
+      if (p == '/api/v1/coach/groups') {
+        return [
+          {'id': 'g1', 'arabicName': 'براعم 2018'},
+        ];
+      }
+      if (p == '/api/v1/academy/calendar') return {'today': '2026-09-28'};
+      if (p == '/api/v1/attendance/sessions?nearestOnly=true') {
+        return [
+          {
+            'id': 's1',
+            'trainingGroupId': 'g1',
+            'group': 'براعم 2018',
+            'branch': 'مدينة نصر',
+            'sport': 'كرة القدم',
+            'sessionDate': '2026-09-28',
+            'startTime': '15:00',
+            'endTime': '16:00',
+            'recorded': 3,
+            'resource': 'مسبح الاختبار · A',
+            'playerCount': 5,
+          },
+        ];
+      }
+      if (p == '/api/v1/evaluations/options') {
+        return {
+          'enrollments': [
+            {
+              'id': 'e1',
+              'groupId': 'g1',
+              'group': 'براعم 2018',
+              'player': 'آدم',
+              'playerCode': 'FB-001',
+            },
+          ],
+          'sports': [],
+        };
+      }
+      return [];
+    });
+    await tester.pumpWidget(
+      shell(CoachHome(auth: auth, accountPage: const SizedBox())),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('براعم 2018'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.textContaining('مسبح الاختبار · A'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.textContaining('مسبح الاختبار · A'), findsOneWidget);
+    for (final forbidden in ['تحصيل', 'مدفوعات', 'إيرادات', 'اشتراكات']) {
+      expect(find.textContaining(forbidden), findsNothing);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Explicitly authorized attendance supports five states and correction save',
+    (tester) async {
+      Object? sent;
+      final auth = await coach((m, p, b, t) async {
+        if (m == 'PUT') {
+          sent = b;
+          return {'items': []};
+        }
+        return {
+          'canManageAttendance': true,
+          'session': {
+            'group': 'براعم',
+            'sessionDate': '2026-09-28',
+            'startTime': '15:00',
+          },
+          'players': [
+            {
+              'sportEnrollmentId': 'e1',
+              'arabicName': 'آدم',
+              'playerCode': 'FB-001',
+              'attendanceStatus': 'NotRecorded',
+              'version': 9104,
+            },
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        shell(CoachAttendance(auth: auth, sessionId: 's1')),
+      );
+      await tester.pumpAndSettle();
+      await revealTestTarget(tester, find.text('حاضر'));
+      expect(find.text('حاضر'), findsOneWidget);
+      expect(find.text('غائب'), findsOneWidget);
+      await revealTestTarget(tester, find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('متأخر'), findsOneWidget);
+      expect(find.text('معتذر'), findsOneWidget);
+      expect(find.text('لم يُسجل'), findsOneWidget);
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is CheckedPopupMenuItem<String> && w.value == 'Late',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('حفظ الحضور'));
+      await tester.pumpAndSettle();
+      expect(sent.toString(), contains('Late'));
+      expect(sent.toString(), contains('expectedVersion: 9104'));
+      expect(find.textContaining('يمكن تصحيحه'), findsOneWidget);
+    },
+  );
+}

@@ -1,0 +1,76 @@
+"use client";
+import {FormEvent,useEffect,useRef,useState} from "react";
+import {TimeField} from "../components/time-field";
+import {ErrorState,LoadingState} from "../components/dashboard-shell";
+import {csrfRequest,DashboardRequestError} from "./dashboard-api";
+import {formatDateTimeAr} from "../lib/formatters";
+
+export type MatchEditValue={id:string;tournamentId:string;teamId:string;opponent:string;goalSlots?:MatchGoal[];resultFinalized?:boolean;resultRevision?:number;matchDate:string;startTime:string;venue:string;notes?:string;ourScore?:number;opponentScore?:number;publishedAtUtc?:string;isActive:boolean;copiedFromMatchId?:string;assignedCoachMembershipId?:string;coachAssignmentVersion?:number;coachAssignmentSource?:string;coachName?:string;players:{playerId:string;isBench:boolean;name?:string}[]};
+type Roster={items:{enrollmentId:string;playerId:string;name:string}[];quoteHash:string};
+type Preview={teamName:string;opponent:string;venue:string;roster:Roster["items"];quoteHash:string};
+export type MatchGoal={ordinal:number;kind:"Player"|"Unknown"|"OwnGoal";playerId?:string|null};
+
+export function MatchGoals({score,players,initial=[]}:{score:number;players:{playerId:string;name:string}[];initial?:MatchGoal[]}){
+  const [state,setState]=useState({score,goals:initial});
+  const goals=state.score===score?state.goals:state.goals.slice(0,Number.isInteger(score)?Math.max(0,Math.min(100,score)):0);
+  if(state.score!==score)setState({score,goals});
+  return <fieldset className="match-roster-review"><legend>هدافو فريق الأكاديمية</legend>{Array.from({length:Number.isInteger(score)&&score>=0&&score<=100?score:0},(_,i)=>{
+    const goal=goals[i],value=goal?.kind==="Player"?goal.playerId??"Unknown":goal?.kind??"Unknown";
+    return <label key={i}>الهدف {i+1}<select aria-label={`الهدف ${i+1}`} name={`goal-${i+1}`} value={value} onChange={e=>{const next=e.target.value;setState(old=>{const changed=old.goals.slice(0,score);changed[i]={ordinal:i+1,kind:next==="Unknown"||next==="OwnGoal"?next:"Player",playerId:next==="Unknown"||next==="OwnGoal"?null:next};return {score,goals:changed};});}}>
+      <option value="Unknown">غير معروف</option><option value="OwnGoal">هدف عكسي للمنافس</option>{players.map(p=><option key={p.playerId} value={p.playerId}>{p.name}</option>)}
+    </select></label>;
+  })}</fieldset>;
+}
+
+export function MatchCopyDialog({id,onCancel,onCreated}:{id:string;onCancel:()=>void;onCreated:(id:string)=>Promise<void>}){
+  const dialog=useRef<HTMLDialogElement>(null),keys=useRef(new Map<string,string>());const [data,setData]=useState<Preview|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0);
+  useEffect(()=>{const element=dialog.current;element?.showModal();return()=>element?.close();},[]);
+  useEffect(()=>{const c=new AbortController();void fetch(`/api/v1/manage/matches/${id}/copy-preview`,{cache:"no-store",signal:c.signal}).then(async r=>{if(!r.ok)throw new Error();const v=await r.json();if(!c.signal.aborted){setData(v);setError("");}}).catch(()=>{if(!c.signal.aborted){setData(null);setError("تعذر معاينة المباراة أو الفريق غير متاح. لم تُنشأ نسخة.");}});return()=>c.abort();},[id,revision]);
+  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!data||busy)return;const f=new FormData(e.currentTarget),body={matchDate:f.get("date"),startTime:`${f.get("time")}:00`,quoteHash:data.quoteHash},signature=JSON.stringify(body);if(!keys.current.has(signature))keys.current.set(signature,crypto.randomUUID());setBusy(true);setError("");try{const response=await csrfRequest(`/api/v1/manage/matches/${id}/copy`,"POST",body,{"Idempotency-Key":keys.current.get(signature)!});const result=await response.json() as {id:string};await onCreated(result.id);}catch(e){setError(e instanceof DashboardRequestError?e.message:"تعذر تأكيد النسخ؛ حدّث المعاينة أو أعد نفس المحاولة دون إنشاء نسخة أخرى.");}finally{setBusy(false);}}
+  return <dialog ref={dialog} className="confirmation-dialog match-copy-dialog" aria-labelledby="copy-match-title" onCancel={e=>{if(busy)e.preventDefault();else onCancel();}}>
+    <h2 id="copy-match-title">نسخ مباراة كمسودة</h2><p>نسخة مستقلة بلا نتيجة أو حضور أو مستندات دفع. لن تظهر في تطبيق الأسرة أو المدرب قبل النشر.</p>
+    {error&&<ErrorState message={error}/>} {!data?<><LoadingState/><button type="button" onClick={()=>setRevision(v=>v+1)}>إعادة المعاينة</button></>:<form className="form-shell match-draft-form" onSubmit={e=>void save(e)}>
+      <p>{data.teamName} × {data.opponent} · {data.venue}</p>
+      <label>تاريخ النسخة الجديدة<input name="date" type="date" min="2000-01-01" max="2100-12-31" required/></label><TimeField name="time" label="توقيت النسخة الجديدة" required/>
+      <fieldset className="match-roster-review"><legend>قائمة الفريق الحالية — {data.roster.length} لاعب</legend>{data.roster.map(p=><span key={p.enrollmentId}>{p.name}</span>)}{!data.roster.length&&<p>القائمة فارغة؛ يمكن حفظ المسودة، لكن النشر يحتاج لاعبين.</p>}<label className="match-review-check"><input type="checkbox" required/>راجعت الموعد والمشاركين؛ سأتأكد منهم مجددًا قبل النشر</label></fieldset>
+      <div className="form-actions"><button className="primary-button" disabled={busy}>{busy?"جارٍ إنشاء المسودة…":"إنشاء المسودة المستقلة"}</button><button type="button" disabled={busy} onClick={()=>setRevision(v=>v+1)}>تحديث المعاينة</button></div>
+    </form>}
+    <button type="button" className="secondary-button" disabled={busy} onClick={onCancel}>إلغاء النسخ</button>
+  </dialog>;
+}
+
+export function MatchEditor({match,template,options,busy,onSubmit,onNew}:{match:MatchEditValue|null;template:{tournamentId:string;teamId:string;venue:string}|null;options:{coachHistoryEnabled?:boolean;tournaments:{id:string;name:string;isActive:boolean}[];teams:{id:string;name:string;isActive:boolean;branchId?:string;sportId?:string;sportKind?:string}[];players:{playerId:string;name:string}[];coaches?:{id:string;name:string;allBranches?:boolean;allSports?:boolean;branchIds?:string[];sportIds?:string[]}[]};busy:boolean;onSubmit:(e:FormEvent<HTMLFormElement>)=>void;onNew:()=>void}){
+  const [teamId,setTeamId]=useState(match?.teamId??template?.teamId??""),[roster,setRoster]=useState<Roster|null>(null),[error,setError]=useState(""),[revision,setRevision]=useState(0);
+  useEffect(()=>{if(!teamId)return;const c=new AbortController();void fetch(`/api/v1/manage/matches/teams/${teamId}/roster`,{cache:"no-store",signal:c.signal}).then(async r=>{if(!r.ok)throw new Error();const v=await r.json();if(!c.signal.aborted){setRoster(v);setError("");}}).catch(()=>{if(!c.signal.aborted){setRoster(null);setError("تعذر تحميل قائمة الفريق؛ حدّثها قبل النشر.");}});return()=>c.abort();},[teamId,revision]);
+  const [ourGoals,setOurGoals]=useState(match?.ourScore??0);
+  const unpublished=!match?.publishedAtUtc;
+  const team=options.teams.find(t=>t.id===teamId);
+  const coaches=(options.coaches??[]).filter(c=>(c.allBranches!==false||c.branchIds?.includes(team?.branchId??""))&&(c.allSports!==false||c.sportIds?.includes(team?.sportId??"")));
+  return <section className="match-editor-content" id="match-editor"><form className="form-shell match-draft-form" aria-label="محرر المباراة" onSubmit={onSubmit}>
+    <h2>{match?"تعديل المباراة / النتيجة":template?"إضافة مباراة أخرى":"إنشاء مباراة"}</h2>{match?.copiedFromMatchId&&<p role="note">{unpublished?"مسودة منسوخة مستقلة. راجع الموعد وقائمة الفريق الحالية؛ لا نتيجة أو جمهور منشور موروث.":"مباراة منسوخة مستقلة؛ تعديلها لا يغير المباراة الأصلية."}</p>}
+    <label>البطولة<select aria-label="البطولة" name="tournament" required defaultValue={match?.tournamentId??template?.tournamentId??""}>{<option value="">اختر البطولة</option>}{options.tournaments.filter(x=>x.isActive).map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select></label>
+    <label>فريق الأكاديمية<select aria-label="فريق الأكاديمية" name="team" required value={teamId} onChange={e=>{setTeamId(e.target.value);setRoster(null);setError("");}}><option value="">اختر الفريق</option>{options.teams.filter(x=>x.isActive).map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select></label>
+    <label>مدرب المباراة<select disabled={!options.coachHistoryEnabled||busy} key={teamId} name="coachMembershipId" defaultValue={match?.assignedCoachMembershipId??""}><option value="">{unpublished?"مدرب الفريق عند أول نشر":"غير موثق — اختر بعد المراجعة"}</option>{match?.assignedCoachMembershipId&&!coaches.some(c=>c.id===match.assignedCoachMembershipId)&&<option value={match.assignedCoachMembershipId}>{match.coachName??"المدرب المحفوظ"} — إسناد سابق</option>}{coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+    <input type="hidden" name="coachAssignmentVersion" value={match?.coachAssignmentVersion??0}/>
+    {!options.coachHistoryEnabled&&<p>يلزم تحديث خدمة المباريات قبل تثبيت إسناد مدرب مستقل؛ لن نؤكد حفظ إسناد لا تدعمه الخدمة.</p>}
+    {!unpublished&&!match?.assignedCoachMembershipId&&<p role="note">مدرب المباراة القديمة غير موثق. اختيار مدرب يحفظ مراجعتك الآن، ولا يختلق إسنادًا في تاريخ سابق.</p>}
+    <label>ملاحظة إسناد المدرب (اختياري)<input name="coachAssignmentNote" maxLength={300}/></label>
+    <label>الفريق المنافس<input name="opponent" required maxLength={120} defaultValue={match?.opponent??""} autoFocus={!!template}/></label>
+    <label>تاريخ المباراة<input name="date" type="date" required defaultValue={match?.matchDate??""}/></label><TimeField name="time" label="التوقيت" required defaultValue={match?.startTime}/>
+    <label>الملعب / المكان<input name="venue" required maxLength={200} defaultValue={match?.venue??template?.venue??""}/></label><label>ملاحظات الملعب والتجمع<textarea name="notes" maxLength={500} defaultValue={match?.notes??""}/></label>
+    {unpublished&&teamId&&<fieldset className="match-roster-review"><legend>المشاركون عند النشر</legend>{error?<><ErrorState message={error}/><button type="button" onClick={()=>setRevision(v=>v+1)}>تحديث قائمة الفريق</button></>:!roster?<LoadingState/>:<><input type="hidden" name="rosterQuoteHash" value={roster.quoteHash}/>{roster.items.map(p=><span key={p.enrollmentId}>{p.name}</span>)}{!roster.items.length&&<p>لا يوجد لاعبون في الفريق؛ النشر غير متاح.</p>}{match?.copiedFromMatchId&&<label className="match-review-check"><input name="rosterReviewed" type="checkbox" required/>راجعت موعد المسودة وقائمة المشاركين الحالية</label>}</>}</fieldset>}
+    {!!match?.players.length&&<details><summary>البدلاء</summary>{match.players.map(p=><label key={p.playerId}><input type="checkbox" name="bench" value={p.playerId} defaultChecked={p.isBench}/>{options.players.find(x=>x.playerId===p.playerId)?.name??"لاعب في القائمة"}</label>)}</details>}
+    <div className="form-grid"><label>أهداف الأكاديمية<input name="ourScore" type="number" min="0" max="100" defaultValue={match?.ourScore??""} onChange={e=>setOurGoals(Number(e.target.value))}/></label><label>أهداف المنافس<input name="opponentScore" type="number" min="0" max="100" defaultValue={match?.opponentScore??""}/></label></div>
+    {team?.sportKind==="Football"&&<MatchGoals key={teamId} score={ourGoals} initial={(match?.goalSlots??[]).slice(0,ourGoals)} players={unpublished?(roster?.items??[]):(match?.players??[]).map(p=>({playerId:p.playerId,name:p.name??options.players.find(v=>v.playerId===p.playerId)?.name??""}))}/> }
+    <input type="hidden" name="resultRevision" value={match?.resultRevision??0}/>
+    <label className="match-review-check"><input name="resultFinalized" type="checkbox" defaultChecked={match?.resultFinalized??false}/>{"\u0627\u0639\u062a\u0645\u0627\u062f \u0627\u0644\u0646\u062a\u064a\u062c\u0629"}</label>
+    <label className="match-review-check"><input name="active" type="checkbox" defaultChecked={match?.isActive??true}/>مباراة قائمة (ألغِ لتسجيل الإلغاء وإبلاغ المعنيين)</label>
+    <div className="form-actions"><button name="action" value="draft" disabled={busy}>حفظ{match?.publishedAtUtc?" التعديل":" كمسودة"}</button><button name="action" value="another" disabled={busy}>حفظ وإضافة أخرى</button><button name="action" value="publish" className="primary-button" disabled={busy||(unpublished&&(!roster?.items.length||!!error))}>نشر وإبلاغ أولياء الأمور والمدرب</button>{(match||template)&&<button type="button" onClick={onNew}>مباراة جديدة</button>}</div>
+  </form>{options.coachHistoryEnabled&&match?.publishedAtUtc&&<MatchCoachHistory id={match.id}/>}</section>;
+}
+
+function MatchCoachHistory({id}:{id:string}){
+  const [history,setHistory]=useState<{version:number;coach:string;reviewer:string;source:string;note?:string;createdAtUtc:string}[]|null>(null),[error,setError]=useState(false);
+  useEffect(()=>{const c=new AbortController();fetch(`/api/v1/manage/matches/${id}/coach-history`,{cache:"no-store",signal:c.signal}).then(async r=>{if(!r.ok)throw new Error();const v=await r.json();if(!Array.isArray(v))throw new Error();if(!c.signal.aborted)setHistory(v);}).catch(()=>{if(!c.signal.aborted)setError(true);});return()=>c.abort();},[id]);
+  return <details className="detail-card"><summary>سجل إسناد مدرب المباراة</summary>{error?<p>تعذر عرض سجل الإسناد.</p>:!history?<LoadingState/>:history.length?history.map(h=><article key={h.version}><strong>{h.coach}</strong><p>{h.source==="LegacyReview"?"مراجعة مباراة قديمة":h.source==="Reassignment"?"تغيير إسناد":h.source==="DraftSelection"?"اختيار للمسودة":h.source==="DemoFixture"?"إسناد ديمو اصطناعي":"عند أول نشر"} · نسخة {h.version} · {formatDateTimeAr(h.createdAtUtc)} · {h.reviewer}</p>{h.note&&<p>{h.note}</p>}</article>):<p>لا يوجد إسناد موثق؛ لا نستنتج تاريخًا من مدرب الفريق الحالي.</p>}</details>;
+}

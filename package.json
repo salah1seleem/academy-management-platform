@@ -1,0 +1,19 @@
+{
+  "name": "academy-management-platform",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "tests/e2e"
+  ],
+  "scripts": {
+    "build:web": "npm run build -w @academy/web",
+    "dev:web": "npm run dev -w @academy/web",
+    "lint": "npm run lint -w @academy/web",
+    "test:e2e": "npm run test -w @academy/e2e",
+    "test:web": "npm run test -w @academy/web",
+    "typecheck": "npm run typecheck -w @academy/web"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

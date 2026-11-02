@@ -1,0 +1,420 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Academy.Api.Auth;
+using Academy.Api.Demo;
+using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.Tenancy;
+using Academy.Infrastructure.Subscriptions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+namespace Academy.IntegrationTests;
+
+[Collection("Tenant authentication database")]
+public sealed partial class FootballDemoTests : IAsyncLifetime
+{
+    private readonly Factory factory = new();
+    private static Guid AcademyId => FootballDemoSeed.AcademyId;
+    public async Task InitializeAsync() { _ = factory.CreateClient(); await Reset(); }
+    public async Task DisposeAsync() => await factory.DisposeAsync();
+    private async Task Reset()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        // Reset only this fixture's reserved synthetic OTP history. Production throttling
+        // remains unchanged; rapid reruns must not share a prior test's 15-minute quota.
+        var phones = Enumerable.Range(100, 29).Select(FootballDemoSeed.Phone).ToArray();
+        await db.MobileOtpChallenges.Where(x => phones.Contains(x.PhoneNumberNormalized)).ExecuteDeleteAsync();
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider, true);
+    }
+    [Fact]
+    public async Task V3_second_shift_demo_claim_is_repeatable_preserves_independent_decision_and_resets_only_reserved_evidence()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>();var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value;var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);await StaffWorkPeriodDemoSeed.SeedClaim(db,env,options,clock);await StaffWorkPeriodDemoSeed.SeedClaim(db,env,options,clock);
+        var claim=await db.StaffAttendanceExceptions.AsNoTracking().SingleAsync(r=>r.Id==StaffWorkPeriodDemoSeed.ClaimId);Assert.Equal("Pending",claim.Status);Assert.Equal(StaffWorkPeriodDemoSeed.AttendanceId,claim.TargetAttendanceId);Assert.Null(claim.AppliedWorkPeriodId);
+        var count=await db.Collections.CountAsync();using var owner=await Login("owner");var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var command=new HttpRequestMessage(HttpMethod.Post,$"/api/v1/manage/staff-attendance-exceptions/{claim.Id}/review"){Content=JsonContent.Create(new{approve=true,note=(string?)null,version=claim.Version})};command.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());command.Headers.Add("Idempotency-Key","demo-second-shift-review-v1");var response=await owner.SendAsync(command);Assert.True(response.IsSuccessStatusCode,await response.Content.ReadAsStringAsync());
+        await StaffWorkPeriodDemoSeed.SeedClaim(db,env,options,clock);var saved=await db.StaffAttendanceExceptions.AsNoTracking().SingleAsync(r=>r.Id==claim.Id);Assert.Equal("Approved",saved.Status);Assert.NotNull(saved.AppliedWorkPeriodId);Assert.Equal(3,await db.StaffWorkPeriods.CountAsync(p=>p.AttendanceId==StaffWorkPeriodDemoSeed.AttendanceId));Assert.Equal(count,await db.Collections.CountAsync());
+        var foreign=await db.StaffAttendanceExceptions.Where(r=>r.AcademyId!=AcademyId).Select(r=>r.Id).OrderBy(x=>x).ToArrayAsync();await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);Assert.False(await db.StaffAttendanceExceptions.AnyAsync(r=>r.Id==claim.Id));Assert.Equal(foreign,await db.StaffAttendanceExceptions.Where(r=>r.AcademyId!=AcademyId).Select(r=>r.Id).OrderBy(x=>x).ToArrayAsync());
+    }
+    [Fact]
+    public async Task V3_work_period_demo_is_repeatable_preserves_correction_and_reserved_reset_keeps_foreign_periods()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>();var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value;var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);var source=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a=>a.Id==StaffWorkPeriodDemoSeed.AttendanceId);var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>p.AttendanceId==source.Id).OrderBy(p=>p.StartTime).ToArrayAsync();Assert.Equal(2,periods.Length);Assert.Equal(14400,periods.Sum(p=>(p.EndUtc!.Value-p.StartUtc!.Value).TotalSeconds));Assert.Equal(0,source.ApprovedDeduction);
+        using var owner=await Login("owner");var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var command=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff-attendance/{source.MembershipId}/periods/{periods[1].Id}"){Content=JsonContent.Create(new Academy.Api.Operations.WorkPeriodWrite(source.WorkDate,source.Version,new(14,30),new(16,0),source.WorkDate,periods[1].Version,"تصحيح اصطناعي يحفظ عند تكرار الديمو"))};command.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());command.Headers.Add("Idempotency-Key","demo-period-correction-v1");(await owner.SendAsync(command)).EnsureSuccessStatusCode();await StaffWorkPeriodDemoSeed.Seed(db,env,options,clock);Assert.Equal(new TimeOnly(14,30),await db.StaffWorkPeriods.Where(p=>p.Id==periods[1].Id).Select(p=>p.StartTime).SingleAsync());
+        var foreign=await db.StaffWorkPeriods.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync();await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);Assert.False(await db.StaffWorkPeriods.AnyAsync(p=>p.AcademyId==AcademyId));Assert.Equal(foreign,await db.StaffWorkPeriods.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync());
+    }
+    [Fact]
+    public async Task V3_overnight_staff_demo_is_repeatable_preserves_acceptance_and_reserved_reset()
+    {
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>(); var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value; var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock); await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock);
+        var row=await db.StaffAttendanceExceptions.SingleAsync(r=>r.Id==StaffAttendanceExceptionDemoSeed.OvernightRequestId); Assert.Equal("Pending",row.Status); Assert.Equal(new DateOnly(2026,10,14),row.WorkDate);
+        Assert.Null((await db.StaffDailyAttendances.SingleAsync(a=>a.Id==row.TargetAttendanceId)).CheckOut);
+        var before=(await db.Collections.CountAsync(),await db.StaffDailyAttendances.CountAsync()); using var owner=await Login("owner");
+        var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var request=new HttpRequestMessage(HttpMethod.Post,$"/api/v1/manage/staff-attendance-exceptions/{row.Id}/review"){Content=JsonContent.Create(new {approve=true,note=(string?)null,version=row.Version})}; request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString()); request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());
+        var result=await owner.SendAsync(request); Assert.True(result.IsSuccessStatusCode,await result.Content.ReadAsStringAsync());
+        await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock); await db.Entry(row).ReloadAsync(); Assert.Equal("Approved",row.Status);
+        var source=await db.StaffDailyAttendances.AsNoTracking().SingleAsync(a=>a.Id==row.AttendanceId); Assert.Equal(new DateOnly(2026,10,15),source.CheckOutDate); Assert.Equal(new TimeOnly(3,0),source.CheckOut);
+        Assert.Equal(before,(await db.Collections.CountAsync(),await db.StaffDailyAttendances.CountAsync()));
+        using var manual=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/manage/staff-attendance/{source.MembershipId}"){Content=JsonContent.Create(new { date=source.WorkDate,status=source.Status,source.CheckIn,source.CheckOut,source.CheckOutDate,approvedDeduction=0,reason=(string?)null,version=source.Version })}; manual.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString()); manual.Headers.Add("Idempotency-Key","demo-overnight-manual-history-v1"); (await owner.SendAsync(manual)).EnsureSuccessStatusCode();
+        Assert.Equal(1,await db.StaffAttendanceChanges.CountAsync(c=>c.AcademyId==AcademyId)); await StaffAttendanceExceptionDemoSeed.SeedOvernight(db,env,options,clock); Assert.Equal(1,await db.StaffAttendanceChanges.CountAsync(c=>c.AcademyId==AcademyId));
+        var foreignChanges=await db.StaffAttendanceChanges.Where(c=>c.AcademyId!=AcademyId).Select(c=>c.Id).OrderBy(c=>c).ToArrayAsync();
+        var foreign=await db.Players.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync(); await FootballDemoSeed.RunAsync(scope.ServiceProvider,true); Assert.False(await db.StaffAttendanceExceptions.AnyAsync(r=>r.Id==row.Id)); Assert.False(await db.StaffAttendanceChanges.AnyAsync(c=>c.AcademyId==AcademyId)); Assert.Equal(foreignChanges,await db.StaffAttendanceChanges.Where(c=>c.AcademyId!=AcademyId).Select(c=>c.Id).OrderBy(c=>c).ToArrayAsync()); Assert.Equal(foreign,await db.Players.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync());
+    }
+    [Fact]
+    public async Task V3_staff_exception_demo_is_repeatable_preserves_review_and_reserved_reset_keeps_other_academies()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var env=scope.ServiceProvider.GetRequiredService<IHostEnvironment>();var options=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value;var clock=scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        await StaffAttendanceExceptionDemoSeed.Seed(db,env,options,clock);await StaffAttendanceExceptionDemoSeed.Seed(db,env,options,clock);var row=await db.StaffAttendanceExceptions.SingleAsync(r=>r.Id==StaffAttendanceExceptionDemoSeed.RequestId);Assert.Equal("Pending",row.Status);var before=(await db.Collections.CountAsync(),await db.StaffDailyAttendances.CountAsync(),await db.StaffAttendanceExceptions.CountAsync());
+        using var owner=await Login("owner");var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var request=new HttpRequestMessage(HttpMethod.Post,$"/api/v1/manage/staff-attendance-exceptions/{row.Id}/review"){Content=JsonContent.Create(new {approve=false,note="رفض اصطناعي لاختبار حفظ القرار",version=row.Version})};request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var result=await owner.SendAsync(request);Assert.True(result.IsSuccessStatusCode,await result.Content.ReadAsStringAsync());
+        await StaffAttendanceExceptionDemoSeed.Seed(db,env,options,clock);await db.Entry(row).ReloadAsync();Assert.Equal("Rejected",row.Status);Assert.Equal(before,(await db.Collections.CountAsync(),await db.StaffDailyAttendances.CountAsync(),await db.StaffAttendanceExceptions.CountAsync()));
+        var foreign=await db.Players.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync();await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);Assert.False(await db.StaffAttendanceExceptions.AnyAsync(r=>r.AcademyId==AcademyId));Assert.Equal(foreign,await db.Players.Where(p=>p.AcademyId!=AcademyId).Select(p=>p.Id).OrderBy(p=>p).ToArrayAsync());
+    }
+    [Fact]
+    public async Task V3_copied_matches_survive_reseed_and_reserved_reset_handles_self_reference_without_touching_other_tenants()
+    {
+        using var owner=await Login("owner");var source=FootballDemoSeed.Id("matches/next");var path=$"/api/v1/manage/matches/{source}";var q=await owner.GetFromJsonAsync<JsonElement>(path+"/copy-preview");var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var request=new HttpRequestMessage(HttpMethod.Post,path+"/copy"){Content=JsonContent.Create(new{matchDate="2026-10-21",startTime="18:00:00",quoteHash=q.GetProperty("quoteHash").GetString()})};request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var copied=await owner.SendAsync(request);Assert.True(copied.IsSuccessStatusCode,await copied.Content.ReadAsStringAsync());
+        var id=(await copied.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var other=await db.AcademyMatches.CountAsync(x=>x.AcademyId!=AcademyId);await FootballDemoSeed.RunAsync(scope.ServiceProvider,false);Assert.True(await db.AcademyMatches.AnyAsync(x=>x.Id==id));await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);Assert.False(await db.AcademyMatches.AnyAsync(x=>x.Id==id));Assert.Equal(other,await db.AcademyMatches.CountAsync(x=>x.AcademyId!=AcademyId));Assert.True(await db.AcademyMatches.AnyAsync(x=>x.Id==source));
+    }
+
+    [Fact]
+    public async Task Payroll_demo_is_synthetic_linked_repeatable_and_keeps_manual_salary_edits()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var employees = await db.Employees.Where(x => x.AcademyId == AcademyId).ToListAsync(); Assert.Equal(7, employees.Count); Assert.Equal(2, employees.Count(x => x.MembershipId is null));
+        Assert.Equal(new[] { "ساعة إضافية", "سبب آخر", "حضور مباراة", "يوم إضافي" }.Order(),
+            (await db.PayrollReasons.Where(x => x.AcademyId == AcademyId && x.IsActive).Select(x => x.Name).ToArrayAsync()).Order());
+        Assert.Equal(new[] { "Approved", "Pending", "Rejected" }, await db.PayrollAdditionRequests.Where(x => x.AcademyId == AcademyId).OrderBy(x => x.Status).Select(x => x.Status).ToArrayAsync());
+        Assert.Equal(300, await db.PayrollAdjustments.Where(x => x.AcademyId == AcademyId && x.Kind == "Addition").SumAsync(x => x.Amount));
+        Assert.Equal(100, await db.PayrollAdjustments.Where(x => x.AcademyId == AcademyId && x.Kind == "Deduction").SumAsync(x => x.Amount));
+        Assert.Single(await db.PayrollSettlements.Where(x => x.AcademyId == AcademyId).ToListAsync());
+        var employee = employees[0]; employee.MonthlySalary = 7100; await db.SaveChangesAsync();
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider, false); await FootballDemoSeed.RunAsync(scope.ServiceProvider, false); db.ChangeTracker.Clear();
+        Assert.Equal(7100, (await db.Employees.SingleAsync(x => x.Id == employee.Id)).MonthlySalary); Assert.Equal(7, await db.Employees.CountAsync(x => x.AcademyId == AcademyId)); Assert.Equal(3, await db.PayrollAdditionRequests.CountAsync(x => x.AcademyId == AcademyId));
+    }
+
+    [Fact]
+    public async Task Explicit_marked_demo_reset_clears_private_payroll_sources_without_touching_other_tenants()
+    {
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        await PrivateServiceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value);
+        await SalaryHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await ContractHistoryDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        var otherContracts=await db.ContractVersions.CountAsync(v=>v.AcademyId!=AcademyId);
+        // Reset coverage needs current financial sources. Keep this fixture's synthetic
+        // specialist active; the default showcase contract ended on 25 October.
+        var statementEmployee = await db.Employees.SingleAsync(e => e.Id == PayrollStatementDemoSeed.EmployeeId);
+        statementEmployee.ContractEnd = null;
+        await db.SaveChangesAsync();
+        await PayrollStatementDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await PayrollAccountDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await PayrollAdvanceDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        await PayrollOpeningDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        Assert.Single(await db.PayrollStatements.Where(s=>s.EmployeeId==PayrollOpeningDemoSeed.EmployeeId&&s.Kind=="Opening").ToArrayAsync());
+        var otherAdvances=await db.PayrollAdvances.CountAsync(a=>a.AcademyId!=AcademyId);Assert.Single(await db.PayrollAdvances.Where(a=>a.Id==PayrollAdvanceDemoSeed.AdvanceId).ToArrayAsync());Assert.Single(await db.PayrollDisbursements.Where(p=>p.AdvanceId==PayrollAdvanceDemoSeed.AdvanceId).ToArrayAsync());
+        var otherStatements=await db.PayrollStatements.CountAsync(s=>s.AcademyId!=AcademyId);Assert.Single(await db.PayrollStatements.Where(s=>s.EmployeeId==PayrollStatementDemoSeed.EmployeeId).ToArrayAsync());Assert.Equal(2,await db.PayrollStatements.CountAsync(s=>s.EmployeeId==PayrollAccountDemoSeed.EmployeeId));
+        var otherSalaries=await db.SalaryVersions.CountAsync(v=>v.AcademyId!=AcademyId);Assert.Equal(2,await db.SalaryVersions.CountAsync(v=>v.AcademyId==AcademyId));
+        var salaries=await db.SalaryVersions.Where(v=>v.AcademyId==AcademyId).OrderBy(v=>v.Revision).ToArrayAsync();Assert.Equal(500,salaries[1].MonthlySalary-salaries[0].MonthlySalary);Assert.Equal(salaries[0].EffectiveFrom.AddMonths(1),salaries[1].EffectiveFrom);
+        var other=await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId!=AcademyId);
+        using var owner=await Login("owner"); var delivery=await db.PrivateServiceDeliveries.Where(d=>d.AcademyId==AcademyId).Select(d=>new {d.Id,d.CoachMembershipId}).FirstAsync();
+        var root=$"/api/v1/manage/payroll/coaches/{delivery.CoachMembershipId}/private-services/{delivery.Id}";
+        var quote=await owner.GetFromJsonAsync<JsonElement>(root+"/posting-preview"); Assert.Equal("Accrual",quote.GetProperty("action").GetString());
+        var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var request=new HttpRequestMessage(HttpMethod.Post,root+"/entries") { Content=JsonContent.Create(new {action="Accrual",quoteHash=quote.GetProperty("quoteHash").GetString()}) }; request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString()); request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());
+        var otherOpeningCorrections=await db.PayrollPayableCorrections.CountAsync(c=>c.AcademyId!=AcademyId);
+        var openingRoot=$"/api/v1/manage/payroll/{PayrollOpeningDemoSeed.EmployeeId}/opening";var openingQuote=await owner.GetFromJsonAsync<JsonElement>(openingRoot);
+        using var correction=new HttpRequestMessage(HttpMethod.Post,openingRoot+"/corrections"){Content=JsonContent.Create(new {targetAmount=1000,reference="سند تصحيح ديمو محفوظ",quoteHash=openingQuote.GetProperty("correctionQuoteHash").GetString()})};correction.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());correction.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var corrected=await owner.SendAsync(correction);Assert.True(corrected.IsSuccessStatusCode,await corrected.Content.ReadAsStringAsync());
+        await PayrollOpeningDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>());Assert.Single(await db.PayrollPayableCorrections.Where(c=>c.AcademyId==AcademyId).ToArrayAsync());
+        var saved=await owner.SendAsync(request); Assert.True(saved.IsSuccessStatusCode,await saved.Content.ReadAsStringAsync()); Assert.Equal(1,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider,false); Assert.Equal(1,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
+        await PostContractPrivateDemoSeed.Seed(db,scope.ServiceProvider.GetRequiredService<IHostEnvironment>(),scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DemoOptions>>().Value,scope.ServiceProvider.GetRequiredService<TimeProvider>(),scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Academy.Infrastructure.Identity.ApplicationUser>>());
+        var finalRoot=$"/api/v1/manage/payroll/coaches/{PostContractPrivateDemoSeed.Id("member")}/private-services/{PostContractPrivateDemoSeed.Id("delivery/1")}";
+        async Task ConfirmFinalSource(string suffix,object body){using var r=new HttpRequestMessage(HttpMethod.Post,finalRoot+suffix){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());var result=await owner.SendAsync(r);Assert.True(result.IsSuccessStatusCode,await result.Content.ReadAsStringAsync());}
+        var finalReview=await owner.GetFromJsonAsync<JsonElement>(finalRoot+"/posting-preview");await ConfirmFinalSource("/entries",new{action="Review",quoteHash=finalReview.GetProperty("quoteHash").GetString()});var finalQuote=await owner.GetFromJsonAsync<JsonElement>(finalRoot+"/final-preview");await ConfirmFinalSource("/final-settlement",new{quoteHash=finalQuote.GetProperty("quoteHash").GetString()});
+        Assert.Single(await db.PayrollStatements.Where(s=>s.AcademyId==AcademyId&&s.Kind=="PrivateFinal").ToArrayAsync());Assert.Equal(3,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId==AcademyId));
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider,true);
+        Assert.False(await db.PayrollPayableCorrections.AnyAsync(c=>c.AcademyId==AcademyId));Assert.Equal(otherOpeningCorrections,await db.PayrollPayableCorrections.CountAsync(c=>c.AcademyId!=AcademyId));
+        Assert.False(await db.SalaryVersions.AnyAsync(v=>v.AcademyId==AcademyId));Assert.Equal(otherSalaries,await db.SalaryVersions.CountAsync(v=>v.AcademyId!=AcademyId));
+        Assert.False(await db.ContractVersions.AnyAsync(v=>v.AcademyId==AcademyId));Assert.Equal(otherContracts,await db.ContractVersions.CountAsync(v=>v.AcademyId!=AcademyId));
+        Assert.False(await db.PayrollStatements.AnyAsync(s=>s.AcademyId==AcademyId));Assert.Equal(otherStatements,await db.PayrollStatements.CountAsync(s=>s.AcademyId!=AcademyId));
+        Assert.False(await db.PayrollAdvances.AnyAsync(a=>a.AcademyId==AcademyId));Assert.Equal(otherAdvances,await db.PayrollAdvances.CountAsync(a=>a.AcademyId!=AcademyId));
+        Assert.False(await db.PrivateCompensationEntries.AnyAsync(e=>e.AcademyId==AcademyId)); Assert.Equal(other,await db.PrivateCompensationEntries.CountAsync(e=>e.AcademyId!=AcademyId)); Assert.Equal(30,await db.Players.CountAsync(p=>p.AcademyId==AcademyId)); Assert.Equal(6,await db.TrainingGroups.CountAsync(g=>g.AcademyId==AcademyId));
+    }
+
+    [Fact]
+    public async Task Football_dataset_has_exact_counts_and_unique_linked_identities()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Equal(["كرة القدم"], await db.Sports.Where(x => x.AcademyId == AcademyId).Select(x => x.ArabicName).ToArrayAsync());
+        Assert.Equal(new[] { "فرع مدينة نصر", "فرع مدينتي", "فرع الشروق" }.Order(), (await db.Branches.Where(x => x.AcademyId == AcademyId).Select(x => x.ArabicName).ToArrayAsync()).Order());
+        var players = await db.Players.Where(x => x.AcademyId == AcademyId).ToArrayAsync();
+        Assert.Equal(30, players.Length); Assert.Equal(30, players.Select(p => p.PlayerCode).Distinct().Count()); Assert.Equal(30, players.Select(p => p.ArabicName).Distinct().Count());
+        Assert.Equal(30, await db.SportEnrollments.CountAsync(x => x.AcademyId == AcademyId));
+        Assert.Equal(30, await db.GuardianPlayerLinks.CountAsync(x => x.AcademyId == AcademyId));
+        Assert.Equal(6, await db.TrainingGroups.CountAsync(x => x.AcademyId == AcademyId));
+        var coaches = await db.AcademyMemberships.Where(m => m.AcademyId == AcademyId && m.Role == AcademyRole.Coach).Include(m => m.User).ToArrayAsync();
+        Assert.Equal(4, coaches.Length); Assert.All(coaches, c => Assert.True(c.IsActive));
+        Assert.Equal(4, coaches.Select(c => c.User.DisplayName).Distinct().Count()); Assert.Equal(4, coaches.Select(c => c.User.PhoneNumber).Distinct().Count());
+        Assert.All(coaches, c => Assert.Equal(c.User.PhoneNumber, EgyptPhoneNormalizer.Normalize(c.User.PhoneNumber)));
+        foreach (var coach in coaches) Assert.True(await db.StaffGroupAssignments.AnyAsync(a => a.AcademyId == AcademyId && a.AcademyMembershipId == coach.Id));
+        Assert.Equal(1, await db.GuardianPlayerLinks.CountAsync(x => x.GuardianId == FootballDemoSeed.Id("guardian/0")));
+        Assert.Equal(2, await db.GuardianPlayerLinks.CountAsync(x => x.GuardianId == FootballDemoSeed.Id("guardian/1")));
+    }
+
+    [Fact]
+    public async Task Reset_is_repeatable_and_preserves_other_tenants_and_global_users()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var before = await db.Players.AsNoTracking().Where(p => p.AcademyId != AcademyId).Select(p => new { p.Id, p.ArabicName }).ToArrayAsync();
+        var users = await db.Users.AsNoTracking().Select(u => new { u.Id, u.PasswordHash, u.SecurityStamp }).ToArrayAsync();
+        var ids = await db.Players.Where(p => p.AcademyId == AcademyId).Select(p => p.Id).ToArrayAsync();
+        await Reset(); await Reset();
+        Assert.Equal(ids.Order(), (await db.Players.Where(p => p.AcademyId == AcademyId).Select(p => p.Id).ToArrayAsync()).Order());
+        Assert.Equal(before.OrderBy(p => p.Id), (await db.Players.AsNoTracking().Where(p => p.AcademyId != AcademyId).Select(p => new { p.Id, p.ArabicName }).ToArrayAsync()).OrderBy(p => p.Id));
+        Assert.Equal(users.OrderBy(u => u.Id), (await db.Users.AsNoTracking().Select(u => new { u.Id, u.PasswordHash, u.SecurityStamp }).ToArrayAsync()).OrderBy(u => u.Id));
+        Assert.Equal(30, await db.Receipts.CountAsync(x => x.AcademyId == AcademyId));
+        Assert.Equal(90, await db.PlayerAttendances.CountAsync(x => x.AcademyId == AcademyId));
+        Assert.Equal(31, await db.PlayerEvaluations.CountAsync(x => x.AcademyId == AcademyId));
+    }
+
+    [Fact]
+    public async Task Explicit_demo_reset_clears_only_marked_waiver_sources_and_preserves_other_academies()
+    {
+        using var owner=factory.CreateClient();
+        async Task<JsonElement> Write(string path, object body) { var csrf=await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");using var r=new HttpRequestMessage(HttpMethod.Post,path){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());r.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString("N"));var reply=await owner.SendAsync(r);reply.EnsureSuccessStatusCode();return await reply.Content.ReadFromJsonAsync<JsonElement>(); }
+        _=await Write("/api/v1/auth/login",new{email="owner.football@example.test",password="Demo-Only-123!"});
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var enrollment=await db.SportEnrollments.Where(e=>e.AcademyId==AcademyId).Select(e=>e.Id).FirstAsync();var options=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/finance/free-training/{enrollment}/options");var plan=options.GetProperty("plans")[0].GetProperty("id").GetGuid();var quote=await Write("/api/v1/finance/free-training/quote",new{sportEnrollmentId=enrollment,subscriptionPlanId=plan,reason="إعفاء اختبار reset الاصطناعي"});var approval=await Write("/api/v1/finance/free-training/approve",new{sportEnrollmentId=enrollment,subscriptionPlanId=plan,reason="إعفاء اختبار reset الاصطناعي",quoteHash=quote.GetProperty("quoteHash").GetString()});
+        var other=await db.FreeTrainingApprovals.Where(a=>a.AcademyId!=AcademyId).Select(a=>a.Id).ToArrayAsync();Assert.True(await db.FreeTrainingApprovals.AnyAsync(a=>a.Id==approval.GetProperty("id").GetGuid()));await Reset();db.ChangeTracker.Clear();Assert.False(await db.FreeTrainingApprovals.AnyAsync(a=>a.AcademyId==AcademyId));Assert.Equal(other.Order(),(await db.FreeTrainingApprovals.Where(a=>a.AcademyId!=AcademyId).Select(a=>a.Id).ToArrayAsync()).Order());Assert.Equal(30,await db.Players.CountAsync(p=>p.AcademyId==AcademyId));
+    }
+    [Fact]
+    public async Task Explicit_demo_reset_clears_only_reserved_credit_applications()
+    {
+        using var owner = await Login("owner");
+        async Task<JsonElement> Write(string path, object body) { var csrf = await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString()); request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString()); var reply = await owner.SendAsync(request); reply.EnsureSuccessStatusCode(); return await reply.Content.ReadFromJsonAsync<JsonElement>(); }
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var collection = await db.Collections.Where(c => c.AcademyId == AcademyId && c.Amount >= 200 && !db.ReceivableMovements.Any(m => m.CollectionId == c.Id) && !db.CollectionRefunds.Any(r => r.CollectionId == c.Id)).FirstAsync();
+        async Task<Guid> Charge(decimal amount) => (await Write("/api/v1/finance/receivables/", new { sportEnrollmentId = collection.SportEnrollmentId, amount, dueDate = "2026-09-20", source = "ManualCharge", description = "مطالبة reset اصطناعية" })).GetProperty("id").GetGuid();
+        var source = await Charge(100); var target = await Charge(300);
+        _ = await Write($"/api/v1/finance/receivables/{source}/movements", new { kind = "PaymentAllocation", amount = 200, collectionId = collection.Id, reason = "رصيد اصطناعي" });
+        var quote = await Write("/api/v1/finance/credit-applications/quote", new { sourceDocumentId = source, targetDocumentId = target, amount = 60, reason = "تخصيص reset اصطناعي" });
+        _ = await Write("/api/v1/finance/credit-applications/approve", new { sourceDocumentId = source, targetDocumentId = target, amount = 60, reason = "تخصيص reset اصطناعي", quoteHash = quote.GetProperty("quoteHash").GetString() });
+        var others = await db.ReceivableCreditApplications.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync(); Assert.True(await db.ReceivableCreditApplications.AnyAsync(x => x.AcademyId == AcademyId));
+        await Reset(); db.ChangeTracker.Clear(); Assert.False(await db.ReceivableCreditApplications.AnyAsync(x => x.AcademyId == AcademyId)); Assert.Equal(others.Order(), (await db.ReceivableCreditApplications.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync()).Order()); Assert.Equal(30, await db.Players.CountAsync(x => x.AcademyId == AcademyId));
+    }
+    [Fact]
+    public async Task Explicit_demo_reset_clears_only_marked_synthetic_price_history_and_restores_immutable_guard()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var plan = await db.SubscriptionPlans.FirstAsync(x => x.AcademyId == AcademyId);
+        db.PlanPriceVersions.Add(PlanPriceVersion.Create(plan, [], null, DateTimeOffset.UtcNow)); await db.SaveChangesAsync();
+        var other = await db.PlanPriceVersions.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync();
+        await Reset(); db.ChangeTracker.Clear();
+        Assert.Empty(await db.PlanPriceVersions.Where(x => x.AcademyId == AcademyId).ToArrayAsync());
+        Assert.Equal(other.Order(), (await db.PlanPriceVersions.Where(x => x.AcademyId != AcademyId).Select(x => x.Id).ToArrayAsync()).Order());
+        var fresh = await db.SubscriptionPlans.FirstAsync(x => x.AcademyId == AcademyId);
+        var version = PlanPriceVersion.Create(fresh, [], null, DateTimeOffset.UtcNow); db.PlanPriceVersions.Add(version); await db.SaveChangesAsync();
+        var error = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"PlanPriceVersions\" WHERE \"Id\" = {version.Id}")); Assert.Equal("23514", error.SqlState);
+    }
+
+    [Fact]
+    public async Task Normal_startup_does_not_undo_manual_edits()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var player = await db.Players.SingleAsync(p => p.Id == FootballDemoSeed.Id("player/0")); player.ArabicName = "تعديل يدوي محفوظ"; await db.SaveChangesAsync();
+        var product = await db.SportCatalogItems.SingleAsync(p => p.Id == FootballDemoSeed.Id("catalog")); product.StockQuantity = 2; product.DisplayPrice = 450m;
+        var offer = await db.DiscountRules.SingleAsync(x => x.AcademyId == AcademyId && x.IsSiblingOffer); offer.Percentage = 15m; await db.SaveChangesAsync();
+        await FootballDemoSeed.RunAsync(scope.ServiceProvider, false); db.ChangeTracker.Clear();
+        Assert.Equal("تعديل يدوي محفوظ", (await db.Players.SingleAsync(p => p.Id == player.Id)).ArabicName);
+        Assert.Equal(2, (await db.SportCatalogItems.SingleAsync(p => p.Id == product.Id)).StockQuantity); Assert.Equal(450m, (await db.SportCatalogItems.SingleAsync(p => p.Id == product.Id)).DisplayPrice);
+        Assert.Equal(15m, (await db.DiscountRules.SingleAsync(x => x.AcademyId == AcademyId && x.IsSiblingOffer)).Percentage);
+    }
+
+    [Fact]
+    public async Task Reset_refuses_missing_confirmation_and_changed_marker_before_deletion()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>(); config["Demo:ResetConfirmation"] = "wrong";
+        await Assert.ThrowsAsync<InvalidOperationException>(() => FootballDemoSeed.RunAsync(scope.ServiceProvider, true));
+        config["Demo:ResetConfirmation"] = "football-demo-only";
+        var academy = await db.Academies.SingleAsync(a => a.Id == AcademyId); academy.EnglishName = "Unmarked"; await db.SaveChangesAsync();
+        try { await Assert.ThrowsAsync<InvalidOperationException>(() => FootballDemoSeed.RunAsync(scope.ServiceProvider, true)); Assert.Equal(30, await db.Players.CountAsync(p => p.AcademyId == AcademyId)); }
+        finally { academy.EnglishName = FootballDemoSeed.Marker; await db.SaveChangesAsync(); }
+    }
+
+    [Fact]
+    public async Task Production_reset_is_forbidden_even_with_confirmation()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        var previous = environment.EnvironmentName; environment.EnvironmentName = "Production";
+        try { await Assert.ThrowsAsync<InvalidOperationException>(() => FootballDemoSeed.RunAsync(scope.ServiceProvider, true)); }
+        finally { environment.EnvironmentName = previous; }
+    }
+
+    [Fact]
+    public async Task Financial_attendance_evaluation_and_reviewed_nutrition_are_connected()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var today = new DateOnly(2026, 9, 28);
+        Assert.Equal(10, await db.SubscriptionPeriods.CountAsync(p => p.AcademyId == AcademyId && p.EndDate < today));
+        Assert.Equal(10, await db.SubscriptionPeriods.CountAsync(p => p.AcademyId == AcademyId && p.EndDate >= today && p.EndDate <= today.AddDays(7)));
+        Assert.Equal(30, await db.Collections.CountAsync(c => c.AcademyId == AcademyId));
+        Assert.Equal(24, await db.TrainingSessions.CountAsync(c => c.AcademyId == AcademyId));
+        var meals = await db.NutritionItems.Where(m => m.AcademyId == AcademyId).ToArrayAsync();
+        Assert.Equal(24, meals.Length);
+        Assert.Equal(18, await db.NutritionCategoryLinks.CountAsync(x => x.AcademyId == AcademyId));
+        Assert.All(meals, m =>
+        {
+            Assert.Equal(Academy.Infrastructure.Content.NutritionDataStatus.Reviewed, m.DataStatus);
+            Assert.NotNull(m.Calories); Assert.NotNull(m.ServingProfile); Assert.NotNull(m.SourceReference);
+            Assert.DoesNotContain("شكشوكة", m.ArabicName); Assert.DoesNotContain("كشري", m.ArabicName);
+        });
+    }
+
+    [Fact]
+    public async Task Guardian_nutrition_recommendations_are_deterministic_and_use_training_context()
+    {
+        using var guardian = await MobileLogin(FootballDemoSeed.Phone(100));
+        var player = FootballDemoSeed.Id("player/0");
+        var path = $"/api/v1/guardian/children/{player}/nutrition/recommendations?date=2026-09-28";
+        var first = await guardian.GetFromJsonAsync<JsonElement>(path); var second = await guardian.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal(first.ToString(), second.ToString()); Assert.True(first.GetProperty("isTrainingDay").GetBoolean());
+        Assert.Equal("Small", first.GetProperty("servingProfile").GetString());
+        Assert.True(first.TryGetProperty("preTraining", out var pre) && pre.ValueKind == JsonValueKind.Object);
+        Assert.DoesNotContain("weightStatus", first.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Guardian_nutrition_recommendations_enforce_child_link_and_rest_day()
+    {
+        using var guardian = await MobileLogin(FootballDemoSeed.Phone(100));
+        Assert.Equal(HttpStatusCode.NotFound, (await guardian.GetAsync($"/api/v1/guardian/children/{FootballDemoSeed.Id("player/2")}/nutrition/recommendations?date=2026-09-29")).StatusCode);
+        var rest = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{FootballDemoSeed.Id("player/0")}/nutrition/recommendations?date=2026-09-29");
+        Assert.False(rest.GetProperty("isTrainingDay").GetBoolean()); Assert.Equal(JsonValueKind.Null, rest.GetProperty("preTraining").ValueKind);
+    }
+
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("admin")]
+    public async Task Authorized_staff_creates_individual_coach_idempotently_and_coach_can_use_mobile_OTP(string role)
+    {
+        using var client = await Login(role); var phone = NewPhone();
+        var body = new { displayName = "مدرب اختبار مستقل", phoneNumber = phone, email = (string?)null, isActive = true, groupIds = new[] { FootballDemoSeed.Id("group/0") } };
+        var response = await Post(client, body); Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("membershipId").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await Post(client, body)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var user = await db.Users.SingleAsync(u => u.PhoneNumber == EgyptPhoneNormalizer.Normalize(phone));
+        Assert.Null(user.PasswordHash); Assert.False(user.PhoneNumberConfirmed);
+        Assert.Equal(1, await db.AcademyMemberships.CountAsync(m => m.UserId == user.Id));
+        Assert.Equal(1, await db.StaffGroupAssignments.CountAsync(a => a.AcademyMembershipId == id));
+        using var mobile = factory.CreateClient();
+        var challengeResponse = await mobile.PostAsJsonAsync("/api/v1/mobile/auth/otp/request", new { phoneNumber = phone });
+        var challenge = (await challengeResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid();
+        var verified = await mobile.PostAsJsonAsync("/api/v1/mobile/auth/otp/verify", new { phoneNumber = phone, challengeId = challenge, code = "246810", deviceName = "Phase B test" });
+        verified.EnsureSuccessStatusCode(); var tokens = await verified.Content.ReadFromJsonAsync<JsonElement>();
+        mobile.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.GetProperty("accessToken").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await mobile.GetAsync("/api/v1/reports/owner-summary")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Coach_and_anonymous_cannot_provision()
+    {
+        using var coach = await MobileLogin(FootballDemoSeed.Phone(20)); using var anonymous = factory.CreateClient();
+        var body = new { displayName = "ممنوع", phoneNumber = NewPhone(), isActive = true };
+        Assert.Equal(HttpStatusCode.Forbidden, (await Post(coach, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Post(anonymous, body)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Invalid_or_foreign_group_does_not_create_identity_and_CSFR_is_required()
+    {
+        using var owner = await Login("owner"); var phone = NewPhone();
+        var body = new { displayName = "اختبار مجموعة", phoneNumber = phone, isActive = true, groupIds = new[] { Guid.NewGuid() } };
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(owner, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync("/api/v1/manage/coaches", body)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope();
+        Assert.False(await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Users.AnyAsync(u => u.PhoneNumber == EgyptPhoneNormalizer.Normalize(phone)));
+    }
+
+    [Fact]
+    public async Task Existing_identity_is_not_renamed_and_inactive_coach_cannot_authenticate()
+    {
+        using var owner = await Login("owner");
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, new { displayName = "اسم بديل", phoneNumber = FootballDemoSeed.Phone(20), isActive = true })).StatusCode);
+        var phone = NewPhone(); Assert.Equal(HttpStatusCode.Created, (await Post(owner, new { displayName = "مدرب غير نشط", phoneNumber = phone, isActive = false })).StatusCode);
+        using var mobile = factory.CreateClient(); var challenge = await mobile.PostAsJsonAsync("/api/v1/mobile/auth/otp/request", new { phoneNumber = phone });
+        Assert.Equal(HttpStatusCode.Unauthorized, challenge.StatusCode);
+    }
+
+    private static string NewPhone() => $"011{System.Security.Cryptography.RandomNumberGenerator.GetInt32(10000000, 99999999)}";
+
+    [Fact]
+    public async Task Shared_identity_is_reused_without_mutating_another_academy_or_credentials()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Academy.Infrastructure.Identity.ApplicationUser>>();
+        var phone = EgyptPhoneNormalizer.Normalize(NewPhone())!; var userId = Guid.NewGuid(); var otherId = Guid.NewGuid();
+        var user = new Academy.Infrastructure.Identity.ApplicationUser { Id = userId, UserName = phone, PhoneNumber = phone, DisplayName = "مدرب متعدد الأكاديميات", IsActive = true };
+        Assert.True((await users.CreateAsync(user, "Original-Only-123!")).Succeeded);
+        db.Academies.Add(new Academy.Infrastructure.Tenancy.Academy { Id = otherId, ArabicName = "أكاديمية عزل اختبارية", Slug = $"test-{otherId:N}", DefaultCurrency = "EGP", TimeZone = "Africa/Cairo" });
+        db.AcademyMemberships.Add(new AcademyMembership { Id = Guid.NewGuid(), AcademyId = otherId, UserId = userId, Role = AcademyRole.Coach, IsActive = true });
+        await db.SaveChangesAsync(); var hash = user.PasswordHash; var stamp = user.SecurityStamp;
+        using var owner = await Login("owner");
+        var response = await Post(owner, new { displayName = user.DisplayName, phoneNumber = phone, isActive = true }); response.EnsureSuccessStatusCode();
+        await Reset(); db.ChangeTracker.Clear();
+        user = await db.Users.SingleAsync(u => u.Id == userId);
+        Assert.Equal(hash, user.PasswordHash); Assert.Equal(stamp, user.SecurityStamp);
+        Assert.True(await db.AcademyMemberships.AnyAsync(m => m.AcademyId == otherId && m.UserId == userId && m.IsActive));
+        Assert.False(await db.GuardianPlayerLinks.AnyAsync(l => l.Guardian.UserId == userId));
+    }
+
+    [Fact]
+    public async Task Concurrent_duplicate_create_has_one_identity_membership_and_assignment()
+    {
+        using var first = await Login("owner"); using var second = await Login("admin"); var phone = NewPhone();
+        var body = new { displayName = "مدرب متزامن", phoneNumber = phone, isActive = true, groupIds = new[] { FootballDemoSeed.Id("group/0") } };
+        var results = await Task.WhenAll(Post(first, body), Post(second, body));
+        Assert.Single(results, r => r.StatusCode == HttpStatusCode.Created); Assert.Single(results, r => r.StatusCode == HttpStatusCode.OK);
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var user = await db.Users.SingleAsync(u => u.PhoneNumber == EgyptPhoneNormalizer.Normalize(phone));
+        Assert.Equal(1, await db.AcademyMemberships.CountAsync(m => m.AcademyId == AcademyId && m.UserId == user.Id));
+    }
+    private async Task<HttpClient> Login(string role)
+    {
+        var client = factory.CreateClient(); var token = (await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login") { Content = JsonContent.Create(new { email = $"{role}.football@example.test", password = "Demo-Only-123!" }) };
+        request.Headers.Add("X-CSRF-TOKEN", token); (await client.SendAsync(request)).EnsureSuccessStatusCode(); return client;
+    }
+    private async Task<HttpClient> MobileLogin(string phone)
+    {
+        var client = factory.CreateClient();
+        var challenge = await client.PostAsJsonAsync("/api/v1/mobile/auth/otp/request", new { phoneNumber = phone }); challenge.EnsureSuccessStatusCode();
+        var id = (await challenge.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid();
+        var verified = await client.PostAsJsonAsync("/api/v1/mobile/auth/otp/verify", new { phoneNumber = phone, challengeId = id, code = "246810", deviceName = "Nutrition test" }); verified.EnsureSuccessStatusCode();
+        var token = (await verified.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accessToken").GetString();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token); return client;
+    }
+    private static async Task<HttpResponseMessage> Post(HttpClient client, object body)
+    {
+        var token = (await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/manage/coaches") { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", token); return await client.SendAsync(request);
+    }
+    private sealed class Factory : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Demo"); builder.UseSetting("ConnectionStrings:Default", Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING"));
+            builder.UseSetting("Demo:SeedProfile", "Football"); builder.UseSetting("Demo:SeedEnabled", "true"); builder.UseSetting("Demo:ResetConfirmation", "football-demo-only");
+            builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); builder.UseSetting("Demo:ReferenceDate", "2026-09-28");
+            builder.UseSetting("Demo:FixedOtpEnabled", "true"); builder.UseSetting("Demo:FixedOtp", "246810");
+        }
+    }
+}

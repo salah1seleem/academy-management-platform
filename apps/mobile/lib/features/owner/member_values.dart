@@ -1,0 +1,325 @@
+import '../shared/guardian_contact.dart';
+
+import 'package:flutter/material.dart';
+
+import '../../core/auth/auth_controller.dart';
+import '../../core/theme/ui_text.dart';
+import '../guardian/guardian_ui.dart';
+import '../shared/vip_rewards.dart';
+import '../shared/experience_ui.dart';
+
+class OwnerVipMembers extends StatelessWidget {
+  const OwnerVipMembers({
+    super.key,
+    required this.auth,
+    this.branch = '',
+    this.asOf = '',
+  });
+  final AuthController auth;
+  final String branch, asOf;
+  @override
+  Widget build(BuildContext context) {
+    final q = Uri(
+      queryParameters: {
+        if (branch.isNotEmpty) 'branchId': branch,
+        if (asOf.isNotEmpty) 'asOf': asOf,
+      },
+    ).query;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ExperienceSection(
+          'أعضاء مميزون',
+          Icons.workspace_premium_rounded,
+          color: ExperienceColors.gold,
+          action: () => openPage(
+            context,
+            OwnerGuardianValues(auth: auth, branch: branch, asOf: asOf),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: () =>
+              openPage(context, NativeVipRewards(auth: auth, owner: true)),
+          icon: const Icon(Icons.card_giftcard_rounded, size: 18),
+          label: const UiText(
+            'إدارة مكافآت الأعضاء المميزين',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(height: 12),
+        RemoteBody(
+          auth: auth,
+          path: '/api/v1/reports/vip-members?$q',
+          builder: (context, value) {
+            final items = rows(obj(value)['items']).take(5).toList();
+            if (items.isEmpty) {
+              return const EmptyMessage(
+                'لا توجد اشتراكات سارية ذات قيمة شهرية مكتملة.',
+              );
+            }
+            return SizedBox(
+              height: 218,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: items.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final r = items[i];
+                  return SizedBox(
+                    width: 152,
+                    child: GCard(
+                      onTap: () => openPage(
+                        context,
+                        MemberGuardianDetail(auth: auth, id: textOf(r['id'])),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          PlayerAvatar(
+                            textOf(r['displayName']),
+                            auth: auth,
+                            adult: true,
+                            reference: r['photoReference'],
+                            gender: r['gender'],
+                            identity: textOf(r['id']),
+                            avatarRole: 'guardian',
+                            size: 64,
+                          ),
+                          const SizedBox(height: 10),
+                          UiText(
+                            textOf(r['displayName']),
+                            maxLines: 2,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const Spacer(),
+                          UiText(
+                            money(r['monthlySubscriptionValue'], r['currency']),
+                            style: const TextStyle(
+                              color: ExperienceColors.gold,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const UiText(
+                            'قيمة الاشتراكات الشهرية',
+                            style: TextStyle(fontSize: 9),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class OwnerGuardianValues extends StatefulWidget {
+  const OwnerGuardianValues({
+    super.key,
+    required this.auth,
+    this.branch = '',
+    this.asOf = '',
+  });
+  final AuthController auth;
+  final String branch, asOf;
+  @override
+  State<OwnerGuardianValues> createState() => _OwnerGuardianValuesState();
+}
+
+class _OwnerGuardianValuesState extends State<OwnerGuardianValues> {
+  String search = '', sort = 'value_desc';
+  int page = 0;
+  @override
+  Widget build(BuildContext context) {
+    final q = Uri(
+      queryParameters: {
+        'search': search,
+        'sort': sort,
+        'page': '${page + 1}',
+        'pageSize': '25',
+        if (widget.branch.isNotEmpty) 'branchId': widget.branch,
+        if (widget.asOf.isNotEmpty) 'asOf': widget.asOf,
+      },
+    ).query;
+    return GuardianPage(
+      title: 'أولياء الأمور',
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'البحث بالاسم أو الهاتف',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onSubmitted: (v) => setState(() {
+                search = v;
+                page = 0;
+              }),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonFormField<String>(
+              initialValue: sort,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'إجمالي الاشتراكات'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'value_desc',
+                  child: UiText('الأعلى أولًا'),
+                ),
+                DropdownMenuItem(
+                  value: 'value_asc',
+                  child: UiText('الأقل أولًا'),
+                ),
+                DropdownMenuItem(value: 'name', child: UiText('بالاسم')),
+              ],
+              onChanged: (v) => setState(() {
+                sort = v ?? 'value_desc';
+                page = 0;
+              }),
+            ),
+          ),
+          Expanded(
+            child: RemoteBody(
+              auth: widget.auth,
+              path: '/api/v1/people/guardians?$q',
+              builder: (context, value) {
+                final d = obj(value);
+                final items = rows(d['items']);
+                return ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    const UiText(
+                      'القيمة الشهرية للأبناء المرتبطين؛ ليست سجل مدفوعات الأسرة.',
+                    ),
+                    if (items.isEmpty) const UiText('لا توجد نتائج مطابقة.'),
+                    for (final row in items)
+                      GCard(
+                        onTap: () => openPage(
+                          context,
+                          MemberGuardianDetail(
+                            auth: widget.auth,
+                            id: textOf(obj(row)['id']),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                PlayerAvatar(
+                                  textOf(row['displayName']),
+                                  adult: true,
+                                  auth: widget.auth,
+                                  reference: row['photoReference'],
+                                  gender: row['gender'],
+                                  identity: textOf(row['id']),
+                                  avatarRole: 'guardian',
+                                  size: 48,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      UiText(
+                                        textOf(row['displayName']),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Directionality(
+                                        textDirection: TextDirection.ltr,
+                                        child: UiText(
+                                          textOf(row['contactPhone']),
+                                          textAlign: TextAlign.end,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_left_rounded,
+                                  size: 22,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            UiText(
+                              '${row['linkedChildren']} أبناء',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                            const UiText(
+                              'قيمة الاشتراكات شهريًا',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            MoneyText(
+                              row['monthlySubscriptionValue'],
+                              row['currency'],
+                              size: 22,
+                            ),
+                            if ((row['unpricedSubscriptions'] as num? ?? 0) > 0)
+                              const UiText('قيمة غير مكتملة'),
+                          ],
+                        ),
+                      ),
+                    const SizedBox.shrink(),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MemberGuardianDetail extends StatelessWidget {
+  const MemberGuardianDetail({super.key, required this.auth, required this.id});
+  final AuthController auth;
+  final String id;
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: 'ولي الأمر',
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/people/guardians/$id',
+      builder: (context, value) {
+        final d = obj(value);
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Heading(textOf(d['displayName'])),
+            UiText(textOf(d['contactPhone'])),
+            GuardianContactAction(auth: auth, guardianId: id),
+            const Heading('الأبناء المرتبطون'),
+            for (final row in rows(d['children']))
+              GCard(
+                child: ListTile(
+                  title: UiText(textOf(obj(row)['arabicName'])),
+                  subtitle: UiText(textOf(obj(row)['playerCode'])),
+                ),
+              ),
+          ],
+        );
+      },
+    ),
+  );
+}

@@ -1,0 +1,9 @@
+:global(.dashboard-shell) .field.field { min-width: 0; margin: 0; padding: 0; border: 0; align-self: start; grid-column: auto; }
+.field.field legend { margin-bottom: 10px; font-size: 13px; font-weight: 650; color: var(--staff-text-muted); }
+.grid.grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+:global(.dashboard-shell) .choice.choice { position: relative; display: flex; flex-direction: row; align-items: center; justify-content: center; min-height: 46px; margin: 0; padding: 8px 5px; border: 1px solid var(--staff-border-strong); border-radius: 10px; background: var(--staff-primary-50); color: var(--staff-primary-800); font-size: 13px; font-weight: 650; cursor: pointer; text-align: center; }
+:global(.dashboard-shell) .choice.choice.selected { padding: 7px 4px; border: 2px solid var(--staff-primary-700); background: var(--staff-primary-700); color: white; box-shadow: 0 2px 8px color-mix(in srgb,var(--staff-primary-700),transparent 85%); }
+:global(.dashboard-shell) .choice.choice input[type="checkbox"] { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; opacity: 0; cursor: pointer; appearance: none; -webkit-appearance: none; }
+.choice.choice:focus-within { outline: 3px solid var(--staff-primary-100); outline-offset: 2px; }
+@media(max-width:760px) { :global(.dashboard-shell) .field.field { grid-column: 1/-1; } }
+@media(max-width:440px) { .grid.grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }

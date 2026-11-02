@@ -1,0 +1,534 @@
+# أدلة قبول V2 + V3
+
+## V2-12C4a / V3-AC40 الجزئي — 2026-10-19
+
+Request في المصدر الحالي لأسرة وطفل ومجموعة مخولين؛ KPIOwner→فلتر→نفس السجل→رد وحل→الأسرة فقط، ومتابعة متأخرة للطلب وحده لا شكوى/تقييم/تحصيل. API7/Web18/Flutter12، Browser19.1s وiOSQA رحلة11s وصور وتقرير مطابق، schema134/EF بلاpending. [الأوامر والإخفاقات المصححة والقيود](PROGRESS.md). الطلب العام دون طفل/مجموعة والمرفقات/التجميع/الرضا والقبول الموحد لم تُغلق؛ المالي المتبقي آخرًا. لاCI شامل أوNativeAppRoot/Android/جهاز فعلي مدعى.
+
+## V2-12C3 / V3-AC40 الجزئي — 2026-10-19
+
+سياسة متابعة1–30يومًا بأيام تقويمية مع اعتماد مالك ونسخة ثابتة لكل تقديم جديد؛لا backfill أو تغيير عند الإلغاء، وخصوصية/سجل/نفسDueOn. Unit16/API5/Web11/Flutter6، Browser1/16.8s وصورة فعلية وتقريرمطابق، schema133/EFبلاpending علىQAفقط. [التفاصيل والإخفاقات المصححة والقيود](PROGRESS.md). الطلبات والمرفقات والتجميع/الرضا وبقيةالخريطة/الماليالأخير/Hلمتغلق،لا اختبار Native جديد أوCI نهائي أوUAT مدعى.
+
+## V2-12C2 — الحصة ومدرب الواقعة دون تخمين، 2026-10-19
+
+Code `3fe45b7` /D3-077/schema132 في قاعدتي QA فقط. API **7/7/45s** نهائية: مصادر قرار الحصة/Present لا الحالي أو الغائب، نسخة محفوظة/replay/SQL، أخطاء الربط/Rating/التاريخ، عزل طفل وأكاديمية ثانية وسحب التسجيل، seed وثبات التقرير ومستهلكو12A/B/C1. TRX `/tmp/academity-feedback-incident-tests/feedback-incident-verified.trx`؛ filter `Feedback_incident_|Feedback_triage_|Feedback_case_lifecycle|Feedback_investigation_private` مع FullyQualifiedName لكل جزء وACADEMY_TEST_CONNECTION_STRING صريحة. Web **24/4ملفات/2.95s** وlint/build/typecheck، Flutter **15/5ملفات ثم373/373/1m38s** لإغلاق فشلCI، ثم2متأثرتين بعد تنسيق الوقت وتحليل نظيف6.7s؛ دون إضعاف assertions أو full backend regression.
+
+Browser390 النهائية **1/18.1s** في `v3-feedback-triage.spec.ts` بعد build معزول5258/3258؛ [الأسرة](evidence/v2-12c2/guardian-incident-intake-web-390.png)، [سياق المالك](evidence/v2-12c2/owner-incident-context-web-390.png) فعلية نهائية مراجعة. iOSQA **رحلة27s+teardown** من `integration_test/feedback_triage_journey_test.dart` وAPI5259 حقيقية معISOLATED_DEMO/CAPTURE_VISUALS، علىiPhone17Pro/iOS26.2؛ [النسخة الخاصة](evidence/v2-12c2/owner-incident-context-ios.png) موضع تمرير فعلي. ربط/فرز/رد/خصوصية/عداد وتقرير مطابق وlogout. ليست AppRoot/Android/جهازًا فعليًا أو بصمة. [المحاولات المصححة والأوامر والبيئات والقيود والاستئناف](PROGRESS.md): استعلام اسم غير محمل، finder لحقل التاريخ، اختبارCI قديم لزر خارج الشاشة. لا ملفات معدلة لإيهام النجاح أواتصال/دفع حقيقي.
+
+Seedاختياري `Demo__FeedbackIncidentSeedEnabled=true` محروس ومفاتيحه ثابتة، لا اختلاق مدرب أو reset/إشعار/مال؛ بيانات اصطناعية مرتبطة بحصة2026-09-28 موجودة. لا معرف حضور وظيفي في اقتراح الأسرة. SLA/صندوق الطلبات وبقية V2-12/AC40 والقبول الموحد ما زالت partial، وكل المالي المتبقي آخرًا. CI السابقFlutter370/1فشل معروف أصلح محليًا؛ نجاحCI للرأس الجديد ينتظر التحقق.
+
+## V2-12C1 — تقديم سلامة وفرز بشري لا يغير الأصل، 2026-10-19
+
+Code `787a11f` /D3-076/schema131 على قاعدتي QA فقط. API نهائية5/5/25s تشمل حالتين جديدتين وseed ومستهلكي12A/B، مع replay/CAS/SQL/roles/tenantB/منع الحل دون فرز/إعادة الفتح والخصوصية وثبات التقرير. Web28/4ملفات/4.83s وFlutter11/4ملفات/5s؛ build/typecheck/lint/analyze وEF ناجحة. لا Full Regression أو نجاحCI جديد مفترض.
+
+Browser390 نهائية1/30.4s من تقديم FamilyUI إلى قائمة/فرز/رد OwnerUI وانعكاس خاص وتقرير مطابق. [الأسرة](evidence/v2-12c1/guardian-safety-intake-web-390.png)، [المالك](evidence/v2-12c1/owner-human-triage-web-390.png) فعلية. iOSQA رحلة17s+teardown علىiPhone17Pro/iOS26.2 وAPIحقيقية، تقديم/فرز/حل/خصوصية/عدّاد/مطابقة/logout؛ [السجل](evidence/v2-12c1/owner-human-triage-ios.png) فعلي بموضع تمرير، ليستAppRoot/Android/جهازًا ماديًا أو بصمة. [الأوامر والمحاولات المصححة والحدود والاستئناف](PROGRESS.md): locator ثم استهلاك رد الإرسال؛ overflow اسم مسؤول طويل واتجاه تمرير الاختبار. لا timeout أكبر أو assertion محذوفة.
+
+إعادة التحقق: API `dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~Feedback_triage_|FullyQualifiedName~Feedback_case_lifecycle|FullyQualifiedName~Feedback_investigation_private'` مع ACADEMY_TEST_CONNECTION_STRING لقاعدةQAالمذكورة؛ TRX تحت`/tmp/academity-feedback-triage-tests`. Web `npm run test -w @academy/web -- --run src/features/feedback-triage.test.tsx src/features/guardian-feedback-detail.test.tsx src/features/owner-home.test.tsx src/features/guardian-core.test.tsx`؛ Flutter `flutter test test/feedback_triage_test.dart test/owner_feedback_detail_test.dart test/coach_feedback_test.dart test/feedback_investigations_test.dart`. Browser `v3-feedback-triage.spec.ts` مع build معزولAPI5258/Web3258 وConnectionStrings__Default صريحة، وNative `integration_test/feedback_triage_journey_test.dart` مع API5259 وISOLATED_DEMO/CAPTURE_VISUALS، لا استخدام5080 أو reset.
+
+Seed `Demo__FeedbackTriageSeedEnabled=true` اختياري محروس، بلاغان ثابتان ولا فرز بشري مفبرك/إشعار/مال. V2-12/AC40 جزئيان؛ مدرب الواقعة/الحصة وSLA/الطلبات باقية ثم بقية غير المالي، **كل المالي المتبقي آخرًا** ثمH/UAT. لاProduction أو بيانات عملاء/اتصال حقيقي أو نشر ديمو يدوي.
+
+## V2-12B — تحقيق خاص مفوض في المصدر الحالي، 2026-10-19
+
+Code `f2c69668e03ae1765ae21f5fbf1ad2e8e3817cd3`، migrations129/130 فيقاعدتيQAفقط. API9حالاتمختلفةمثبتةعبرجولة8/9في1m9sوإعادةالمتأثرة1/20s؛ لاجولة9/9واحدةمدعاة. إسناد/نتيجة/replay/CAS وأدواروعزلAcademyB وسحبRead/Edit/فرع/رياضة/ترخيصومنعنفسالشخصبدورCoach وimmutable/forgedSQL وحلثمإعادةفتحدونإحياءرابط، seedوتقريرمالمطابق. Web20/Flutter14 والأدوات/EFناجحة، دونFullRegression.
+
+Browserنهائية **1/20.2s**: شكوىGuardianAPI، موظف/نطاقعبرOwnerAPI، تكليفOwnerUI→نتيجةAdminUI→سجلالمالكفقط→إلغاءOwnerUIوإخفاءحي/404، تقريرمطابق. [Web390](evidence/v2-12b/private-investigation-web-390.png)فعليةنهائيةمراجعةبعدتحسينالكارتوالأزرار. iOS **رحلةواحدة10s+teardown** علىAcademityV3CoachReview/iPhone17Pro/iOS26.2: FamilyAPIثمOwner/AdminUI والخصوصيةوالإلغاءوالمطابقةوالخروج. [الصورة](evidence/v2-12b/private-investigation-ios.png)فعليةمراجعة، widgetshellsليستAppRoot/جهازمادي/Android. [المحاولاتوالقيودوخطةالاستئناف](PROGRESS.md). الموجزمراجعةبشريةوليسanonymizerمضمونًا؛ صندوقأول100وآخر20نتيجةللتكليف، الأرشيفالكاملغيرمدعى. لاProduction/عملاء/مدفوعاتأواتصالاتفعلية، والماليآخرًا؛12C/H/UATباقية.
+
+## V2-12A — دورة معالجة ودليل خاص دون نشر الأسرة، 2026-10-19
+
+Migrations127/128: المصدر GuardianFeedback الحالي، لا نظام موازٍ. Unit1 يفحص64 انتقالًا، API **9/9 في59s** تشمل التزامن وCAS ومفتاح المحاولة وحد50/51 ورفض tamper/roles/tenantB والأرشيف وlegacy snapshot وseed المحروس والمستهلكين والتقرير المطابق. Web8/Flutter7 والأدوات/EF ناجحة. Browser نهائية **1/17.5s**: شكوى بGuardian API ثم مراحل Owner UI ورد وإغلاق وإعادة فتح ورد ثانٍ؛ الأسرة تقرأ العام فقط و403 للمصدر وتقرير مطابق. [Web390](evidence/v2-12a/private-case-history-web-390.png). iOS أولية1/16s منAPIفعلي، [الصورة](evidence/v2-12a/private-case-history-ios.png)؛ عرض الوقت/التباعد حُسّن بعد المراجعة وإعادة الالتقاط النهائية تسجل في [PROGRESS](PROGRESS.md).
+
+النتيجة النهائية: Browser1/18.5s بعدbuild أخير، وiOS1/15s بعد تحسين الوقت/التباعد واحترام مهلة OTP في إعادة وسطية؛ اللقطتان أعلاه نهائيتان فعليتان مراجعتان. آخرFlutter7/2s/analyze4.9s. بعد إصلاح استبعاد archived/Rating من عدّاد التشغيل، المتأثرتانAPI2/2 في16s؛ إعادة متداخلة لا تضاف إلى9حالات مستقلة. API5080ready200 وWeb3000لاlistener/000، لا ادعاء تشغيل الديمو اليدوي كاملًا.
+
+الحالات والردود وسجل التحديث ذريّة، لكن الواجهات القديمة Review/Due/Resolve لا تدعي CAS/مفتاح محاولة جديدًا. السجل يعرض آخر50 بوجود الأقدم، لا أرشيف كامل/SLA/تحقيق مفوض أو AppRoot/Android/جهاز مادي/H. V2-12/AC40 جزئيان؛ المالي المتبقي أخيرًا. لا Production أو تحديث ديمو يدوي/عميل/إرسال حقيقي.
+
+## V2-15B2 — ذكريات خاصة قابلة للحجب لا ألبوم جديد، 2026-10-18
+
+Code `5536aa11a50b894e4705679cc4dd4663ca51cec3` مرفوع؛ [CI39159813736](https://github.com/salah1seleem/academy-management-platform/actions/runs/39159813736) بدأ، ليس نجاح بوابة بعيدة مدعى.
+
+D3-073/schema126 بلاmigration: نفساستعلامالمعرض وجمهوره ثمشهرالواقعة وصفحات وفهرسوصفي1000maxبلا URLs/tickets/bytes. المسحوب/المنتهي/المحذوف/الـpolicy0 يستبعدحتى لذكرياتالإدارة، دونتغييرحقالمراجعةالإداريةالأصلي. Unit9/44ms، API6حالاتعبر5نجاح/1فشلثمإعادة1/12s و1تقاطعأهداف/25sمتداخلة، Web21/3.80s وFlutter11/5s وأدوات/EFناجحة. ليسجولة6/6واحدة؛ [المحاولاتوالبيئاتوالقيود](PROGRESS.md).
+
+Browser2/2/1.2m: 360/390، PNGوموافقةوحصةوFamilyUIوسحبونسخةجديدة، ذكرياتفعليةNaturalWidthوفهرسCSVdownload، وMOVUI/MP4playbackداخلMemories معتقريرمالي مطابق. [كارتصورة360](evidence/v2-15b2/guardian-memory-image-web-360.png)، [فيديو390](evidence/v2-15b2/guardian-memory-video-web-390.png) فعليان راجعتهما؛ لاطفلمصور. iOSرحلةواحدة27s+teardown، نسخفهرسفعليللحافظة دونروابطومعالجديدلاالمسحوب، ثمحذفOwnerUIواختفاءمنالمعرضوالذكريات و404وتحريرمساحة وتقريرمطابق؛ [الصورة](evidence/v2-15b2/guardian-monthly-memories-ios.png) فعليةراجعت: PNG c5bfdالهدفوفيديوBrowser387b4a أسفله لمتشغلNative. الرفعNative API، لاFilePicker/MP4iOS/Android/جهازمادي/AppRoot/H.
+
+الميديا لرياضةإداريضيقةمازالت403، وميدياpolicy1قديمةلمتعادمعالجتهارجعيًا. ليسأرشيفًا ثابتًا أوZIP/PDF/مونتاج/إذننشرخارجي، ولااسترجاعلتنزيل/حافظةسابقة. حد1001Unitلااختبارتحميل1001ملف. كل الماليالمتبقيآخرًا، التاليV2-12الشكاوىالخاصة، لااكتمالV2/V3 أوProduction/تحديثللديمواليدوي.
+
+## V2-15B1 — شهر الطفل من الدليل لا من مؤشر مختلق، 2026-10-18
+
+Code `3e0a0fe3a8e491e6546ec1d8fa23c8898069ba2e` مرفوع؛ [CI39151268156](https://github.com/salah1seleem/academy-management-platform/actions/runs/39151268156) بدأ ولم يتحقق نجاحه بعد.
+
+D3-072/schema126 بلاmigration: مراجعات مهارات منشورة، شارات وشهادات بحالة السحب الحالية، لكل تسجيل وشهر حقيقي، مصدر مباشر وصفحات وتصديرشهر كامل مخول. لا متوسط/AI/مال أوشرطتجديد، ولا ميديا/حضور/أهدافخاصة فيالتجميع. Unit8/51ms وAPI4/35s ثمCoach1/15s، Web8/3.17s وFlutter8/6s، EF/build/typecheck/lint/analyze ناجحة. حدود2000/2001 مثبتةUnit، لا تحميل6000سطر أوقياسstressمدعى.
+
+Browserنهائي1/28.2s: Owner/Family، تنزيلCSVفعلي ومحتواه منالخادم، سحبومصدر وشهرخلو/عرض390 وتقريرمالي مطابق. [OwnerWeb](evidence/v2-15b1/owner-monthly-web-390.png)، [FamilyWeb](evidence/v2-15b1/guardian-monthly-web-390.png) فعليتان راجعتهما بعدإصلاحCSS/fixture. iOS **رحلةواحدة7s+teardown**، نسخ تقريرCSVفعليًا للحافظةومطابقتهبالخادم، سحبوتحديث وتقريرمالي مطابق وlogout؛ [FamilyiOS](evidence/v2-15b1/guardian-monthly-ios.png) راجعته: كارت25100 هدفالرحلةالمسحوب معأثرBrowserسابق، لقطةمركزةعلىالدليل وليستAppRoot. لاAndroid/جهازمادي/Nativefile أوH. [المحاولات والأوامر والبيئات والقيود](PROGRESS.md).
+
+التجميعالمخول للميديا/الذكريات، PDF/ZIP والأرشيفالثابت والإشعاراتالمجمعة ليستمنفذةهنا؛ V2-15/AC47 وV2/V3 مازالتجزئية. كل الماليالمتبقيآخرًا. لا main/Production أوreset/تحديثللديمواليدوي، ولاCIجديدناجحمدعى قبلتشغيله.
+
+## V2-15A3c — احتفاظ وحذف فعلي وحصص، 2026-10-18
+
+Code `c8484024b0c95639c7e6aae8884bbe00595d99a9` مرفوع؛ [CI39148777526](https://github.com/salah1seleem/academy-management-platform/actions/runs/39148777526) بدأ، ليس بوابة بعيدة ناجحة مدعاة.
+
+D3-071/schema126: سياسة FullOwner جديدة فقط، Erasure ثم Purge موثقان، فشل القرص/الملف المشترك لا يحرر الحصة، expiry يحجب الجميع، وتخزين أكاديمية وتنزيل User/UTC ذريان. Web/Native حفظ وقراءة وتأكيد، لا نظام موازٍ أو تغيير مالي. Unit73، API8/65s ثم3/56s متداخلة جزئيًا، Web23 وFlutter23، EF/build/typecheck/lint/analyze ناجحة.
+
+Browser النهائي **3/3 في1.6m** للإعداد/الرفع/الحذف وFamily404 وquota وتقرير مطابق، ثم360/390 مع MOVUI/MP4playback. [حذف OwnerWeb390](evidence/v2-15a3c/owner-erased-media-web-390.png) راجعته. iOS **رحلة واحدة29s+teardown30s** للصورة/السحب/نسخةجديدة/الحذف منOwnerUI، erased+purged و404 للمالك والأسرة وتحريرمساحة وتقريرمطابق؛ [الكارت المحذوف](evidence/v2-15a3c/owner-erased-media-ios.png) راجعته، الأصل المسحوب محفوظ أسفله. الرفع Native عبرAPI وليسFilePicker؛ لاMP4علىiOS/Android/جهازمادي/AppRoot أوH. [المحاولات المصححة والبيئات والأوامر والقيود](PROGRESS.md)، [عقد التشغيل](PRIVATE_MEDIA_OPERATIONS.md).
+
+worker default-off؛ no unknown/orphan/backup cleanup أو SLAfairness/فحص50MiBعبرproxy. migration126 فيQA فقط، لاDown/reset/Production/ترحيلالديمواليدوي. CIالسابقad42: frontend/flutter/E2E success وbackend جارٍ، لاCIشامللهذهالشريحة. الذكريات/تقريرالشهر/التصدير وبقيةغيرالمالي تالية؛ كل المالي المتبقي آخرًا، V2/V3 غيرمكتملتين.
+
+## V2-15A3b — حفظ pixels/samples معاد ترميزها دون geotags، 2026-10-18
+
+Code `ad42c42a976986e3cc5f55b0af86235f1a2d26cd` مرفوع؛ [CI39141523431](https://github.com/salah1seleem/academy-management-platform/actions/runs/39141523431) بدأ ولا يزال بانتظار النتيجة.
+
+D3-070/schema125، دونmigration: Media/Photo الجديدان فقط، حدود وفشل503بلاrawfallback، نفسالموافقات والجمهور والسحب والروابط. Unit9/4s وAPI7/1m31s وWeb18/5.52s وFlutter22/3s، EF/build/typecheck/lint/analyzeنظيفة. Browser2/2/1.7m في360/390، منهاMOVيرفعبـUI وMP4يشغلفيFamilyWeb فعليًا ويتقدمالوقت؛ [الفيديوالأحمرالاصطناعيووصفهفوقnav](evidence/v2-15a3b/guardian-reencoded-video-web-390.png) راجعتهبعدإصلاحCSS. iOS **رحلةواحدة23s+teardown** عبرOTP/Family/OwnerUI للسحبوالصورةالمعادترميزهاونشرنسخةجديدةوتقريرمطابق؛ [الكارتالأولهوالهدف28f9c](evidence/v2-15a3b/guardian-processed-image-ios.png)، الأبيضpixelاصطناعيصحيح، والفيديوأسفلهBrowser2d8bd7ولميسجلتشغيلNative. رفعiOSبـAPI لاFilePickerUI؛ لاAndroid/جهازمادي/AppRoot/Hمدعى. [تفاصيلالمحاولاتوالإخفاقاتالمصححةوالعقدوالبيئة](PROGRESS.md).
+
+فحصCIc921السابقأثبتfrontend/flutter/E2Eناجحة، backendجارٍ؛ لاCIكاملللدفعة. **لاantivirus أوتنظيفرجعيأواحتفاظ/حذف/حصصتخزينوتنزيلأوGCبعدانهيارمدعاة**؛ هذه15A3cباقيةثمبقيةغيرالماليوالماليأخيرًاوبوابةH. الخطةغيرمكتملة، ولانشرProductionأوتعديلmain/الديمواليدوي.
+
+## V2-15A3a — رابط محدود لا يستبدل التفويض، 2026-10-18
+
+`e8e45d7`/D3-069 دون migration، نفس schema125. Unit6/123ms لعمر120s والتلاعب والهوية والسياق والجلسة؛ API10 مميزة نجحت عبر9/10 ثم المتأثر2/2 وsession1/1 متداخل، لا جولة10/10 واحدة مدعاة. Flutter20/11s، Browser1/50s، iOS1/17s بنقل302/bytes وسحب ونسخة جديدة وتقرير مطابق. ليست رحلة FilePicker/MP4 أوAndroid أوجهاز مادي أوAppRoot.
+
+CI السابق فشل41/42 عند تأكيد السحب؛ أصلح scoped nowrap وحدود الأزرار في`c92104b`. Web12/5.12s وBrowser360/390 **2/2/58.4s** مع assert geometry ونقر حقيقي؛ [صورة360 راجعت](evidence/v2-15a3a/owner-media-actions-web-360.png). CI39138249055 ينتظر إثبات الإصلاح بعيدًا. [تفصيل المحاولات والأوامر والحدود](PROGRESS.md). الصورة PNG اصطناعي صحيح بكسل واحد، لا طفل؛ ليست دليل expiry أوفحص ملفات. الاحتفاظ والحذف وmetadata/geotags والحصة وبقيةV2/V3 وH باقية، وكل المالي آخرًا.
+
+
+## V2-15A2 — حصة فعلية وضيوف وسحب إداري، 2026-10-18
+
+`f831feb91379f6e9a0563213a2e52ff4abc95460`/125/D3-068: نفس الجمهور والمعرض، مصدر حصة وعزل موافقات/عضوية، سحب إداري محفوظ وملاحظة اختيارية وفصلRead/Edit/Add، لا إحياء للأصل أو مال/حضور/إشعار ضمني. API7/50s+تعويض1/15s وgrants1/22s متداخل، Unit60/Web21/Flutter11، Browser1/31.7s وiOS1/24s؛ تقارير مطابقة وأدوات/EF ناجحة. [Owner Web390](evidence/v2-15a2/owner-withdrawn-session-media-web-390.png)، [Owner iOS](evidence/v2-15a2/owner-withdrawn-session-media-ios.png)، [Family iOS نسخة جديدة](evidence/v2-15a2/guardian-new-session-media-ios.png) فعلية راجعت؛ الأبيض PNG اصطناعي صحيح لا صورة طفل. NativeOwner في موضع تمرير، فلا تنسب الصورة التالية لحالة السحب أعلاها؛ معرف النسخة مثبت بالرحلة. [المحاولات والبيئات والحدود والاستئناف](PROGRESS.md). لاH/Full Regression أو MP4/FilePicker جهاز/Android/جهاز مادي/AppRoot شامل؛ فحص الملفات والروابط والاحتفاظ وبقيةV2-15/V2/V3 باقية، كل المالي المتبقي آخرًا.
+
+
+## V2-15A1 — جمهور واقعة الوسائط وموافقة الأسرة، 2026-10-18
+
+`d61d5de7ef72d19a46f57392b52868ab83b97ce7`/124/D3-067: اختيار Guardian مستقل افتراضيهOFF، مراجعة الناشر للظاهرين، roster مؤرخ وموافقات محفوظة، إعادة تحقق وتنزيلno-store، السحب/فك الرابط لا يحيي الملف بإعادة السماح أو حذف الساحب. لا مال/حضور/إعلان ضمني، وRead/Add/branch للرافع نفسه. API5/5/30s، Web13 بملفين، Flutter9 (7Widget+2HTTP)، Browser1/20.7s وiOSرحلة1/7s، تقرير مالي مطابق وأدوات/EF ناجحة. [Owner Web](evidence/v2-15a1/owner-media-audience-web-390.png)، [Family Web](evidence/v2-15a1/guardian-withdrawn-media-consent-web-390.png)، [Family iOS منشور](evidence/v2-15a1/guardian-published-media-ios.png)، [iOS مسحوب](evidence/v2-15a1/guardian-withdrawn-media-ios.png) فعلية راجعت؛ الأبيض PNG اختبار صحيح لا صورة طفل. [كل المحاولات والبيئات والحدود](PROGRESS.md). لاH/CI شامل/FilePicker أو MP4 جهاز/Android/جهاز مادي/AppRoot كامل أو نشر5080. الحصة وضيوفها والسحب الإداري والفحص والاحتفاظ والتصدير/الذكريات وبقيةV2-15/V2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
+## V2-10G — شارات المجهود بقواعد ونشر خاصين، 2026-10-18
+
+`8f84b9f8d35d07fe99d5e45618dd9e374bd2982e`/123/D3-066: قاعدة رياضية ثابتة، نشر/إيقاف صريحان، grant/revoke بسجل وملاحظة أسرة اختيارية وملخص لنفس الرياضة؛ لا مال/حضور/ترقية/لوحة ترتيب أو إعادة منح ضمنية. تفويض حي وCRUD/نطاق/coach assignment/linked child/CSRF/CAS/replay وEF/SQL. API3/3/32s، Unit57، Web10 بملفين، Flutter6، Browser1/30.3s وiOS رحلة1/7s، profile/report مطابقان، build/typecheck/lint/analyze/EF ناجحة. [Owner Web](evidence/v2-10g/owner-granted-badge-web-390.png)، [Family Web](evidence/v2-10g/guardian-revoked-badge-web-390.png)، [Family iOS](evidence/v2-10g/guardian-revoked-badge-ios.png) فعلية راجعت. [المحاولات المصححة والبيانات والأوامر والقيود](PROGRESS.md): صورتاiOS40→20 تحفظان منحة المحاولة الأولى، ليستا0→20/بيانات قبول نهائي. لاH/CI شامل/Android/جهاز فعلي/AppRoot/Native Rule Editor أو نشر5080؛ V2/V3 جزئيتان، كل المالي المتبقي آخرًا.
+
+
+## V2-10F — أرشفة المصدر دون محو الحصة، 2026-10-18
+
+`53d8c220a7518030edbc9c358abe4d9ab6d64a01`/122/D3-065: واقعة أرشفة ثابتة، منع الاستخدام/الاعتماد الجديد والقالب المتأثر، مرجع الحصة محفوظ بتحذير Web/Native، صلاحية عامةRead/Edit وCSRF/CAS/replay/SQL. API6/6/1m33s معseed والمستهلكات، Unit53، Web7، Flutter8، Browser1/21.7s وiOSرحلة1/4s وتقارير/حضور/تاريخ مطابق، أدوات وEF نظيفة. [Owner Web](evidence/v2-10f/owner-archived-exercise-web-390.png)، [الحصة Web](evidence/v2-10f/session-archived-source-web-390.png)، [Coach iOS](evidence/v2-10f/coach-archive-warning-ios.png) فعلية راجعت؛ [كل المحاولات والقيود والاستئناف](PROGRESS.md). لاH/CI شامل/Android/جهازفعلي/Native editor أو نشر5080؛ الشارات وبقية§21/V2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
+## V2-10E — شهادة من ترقية منفذة، 2026-10-18
+
+`4242b3b311251cac49cb77c16040a3b7d5e538a3`/121/D3-064: إصدار صريح واحد من قرار+نقل فعليين، snapshot ثابت وسحب مستقل، Add/Edit منفصلان وtenant/branch/sport/linked-child/CSRF/CAS/replay وحارس المصدر. Web/Native والأسرة، browser print بعد قراءة مخولة، دون اعتماد خارجي أو مال/ترقية ثانية. API3/3/22s نهائية، Unit51، Web10، Flutter13 بعد إصلاح حفظ حالة نموذج retry، Browser1/30.1s وiOSرحلة1/11s، أدوات وEF نظيفة وتقارير/اشتراك ثابتان. [Web المالك](evidence/v2-10e/owner-issued-certificate-web-390.png)، [print HTML](evidence/v2-10e/guardian-certificate-print-preview.png)، [Family Web بعد التمرير](evidence/v2-10e/guardian-withdrawn-certificate-web-390.png)، [Family iOS](evidence/v2-10e/guardian-withdrawn-certificate-ios.png) فعلية راجعت. [المحاولات والبيانات والاستئناف والقيود](PROGRESS.md). لا PDF/طابعة أو Android/جهازفعلي/AppRoot كامل/H/CI شامل؛ إعادة إصدار/شارات/أرشفة/بقية§21 وV2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
+## V2-10D2 — مستوى ونقل مؤرخ في معاملة واحدة، 2026-10-18
+
+`c151423`/120/D3-063: تطبيق مخول للتوصية بعد معاينة/إعادة تحقق، سجل مستوى مرتبط بالنقل ويحفظ السابق، الأسرة ترى التنفيذ والموعد دون مال/اشتراك جديد. API4/4/32s وحارسSQL1/17sمتداخل، Unit46، Web11، Flutter14، Browser1/36.4s ومستهلك1/24.5s، iOSرحلة10s ثم5s بعدspacing على طفل آخر. أدوات/EF ناجحة. [Owner Web قراءة لاحقة](evidence/v2-10d2/owner-applied-promotion-web-390.png)، [Family Web](evidence/v2-10d2/guardian-applied-promotion-web-390.png)، [Owner iOS معاينة](evidence/v2-10d2/owner-promotion-preview-ios.png)، [Family iOS](evidence/v2-10d2/guardian-promotion-applied-ios.png) فعلية راجعت؛ [كل المحاولات والبيانات والأوامر والقيود](PROGRESS.md). تطبيق اليوم لتسجيل مسكن فقط، لا مستقبل مبكر/انتظار تسكين/شهادة/إشعار أوH/CI كامل/Android/جهازفعلي؛ V2/V3 غيرمكتملتين وكل المالي المتبقي آخرًا.
+
+
+## V2-10D1 — مراجعة فنية بأدلة ثابتة قبل النقل، 2026-10-18
+
+`29e6905`/119/D3-062: طلب من إتقان حقيقي وقرار بشري مخول، مصدر تاريخي محفوظ وتفويض حي وCAS/replay، Web/Native والأسرةLinked child دون كتابة؛ لا نقل تلقائي أو مال. API3/3 ثمالمتأثرةInbox1/1، Unit41، Web12، Flutterالجديدة7/7 بعدتصحيحfinder مع10مستهلكات ناجحة أولًا، Browser1/23.5s وiOSرحلة1/6s، أدوات وEF نظيفة. [Web المالك](evidence/v2-10d1/owner-technical-review-web-390.png)، [Web الأسرة](evidence/v2-10d1/guardian-technical-review-web-390.png)، [iOS الأسرة](evidence/v2-10d1/guardian-technical-review-ios.png) فعلية راجعت؛ [كل الفشل المصحح والبيئات والأوامر والحدود](PROGRESS.md). لاFullRegression/Android/physical/AppRoot أوCI شامل؛ تنفيذ التوصية/الشهادة وأرشفة المحتوى وبقيةV2/V3 باقية، وكل المالي المتبقي آخرًا.
+
+
+## V2-10C2 — قالب فني ومدة محسوبة وإسناد لحصة فعلية، 2026-10-18
+
+`0cbab383b03f635cdae8ec1170fb5ffabdce3dea`/migration118/D3-061: مكتبة أصلية/مرخصة ومسودة→مراجعة بشرية، تصحيح بنسخة جديدة، خطوات10+15+20+10+5=60 لا76، ورفض اعتماد التعارض أو قبل اعتماد التمارين. إسناد فعلي للمستوى/الرياضة/مدة Scheduled، تاريخ محفوظ وCAS/replay بعد إعادة التفويض، Web إدارة/تحضير وNative Coach تحضير وحفظ. API4/4 ثم3/3 متداخلة مع حالة تفويض جديدة، Web12/12، Flutter19/19 ثم المتأثر4/4 ثم7/7 وanalyze/typecheck/lint/build/EF نظيفة. Browser1/20.3s وiOSرحلة1/7s، وحضور/تقرير/مصادر ثابتة؛ [Web قالب](evidence/v2-10c2/owner-reviewed-lesson-web-390.png)، [Web حصة](evidence/v2-10c2/session-lesson-web-390.png)، [Coach iOS](evidence/v2-10c2/coach-session-lesson-ios.png) فعلية روجعت. [كل المحاولات والأوامر والحدود](PROGRESS.md). seedOFF/مسودات فقط ولا موافقة بشرية مختلقة؛ لا سلامة/ترخيص مضمون أو نشر Guardian/attendance grant/مال/تقويم جديد. تقاعد المحتوى/الترقية والشهادات وبقية§21 باقية؛ ليستH أوAndroid/جهازفعلي/AppRoot أوCI جديد كامل/نشر الديمو اليدوي. المالي المتبقي آخرًا.
+
+## V2-10C1 — سجل مراجعات يدوي محفوظ لا تاريخ مخترع، 2026-10-18
+
+`68b6cba`/migration117/D3-060: الأمر القائم يحفظ السابق/الجديد وأسماءهما والفاعل والتاريخ/التسلسل والملاحظة الخاصة ذريًا؛ CAS/replay في الواجهة الجديدة، والعقد القديم متوافق بلا وعدCAS. قارئ Web/Native للأدوار المخولة والأسرة دون private note؛ لا تعديل للمدرب/ولي الأمر أو نقل/ترقية/مال آلي. API4 ثم3مستهلكين ثم المتأثرة1/atomic1، Web18، Flutter20نجاحًا مع1fixturelazyفاشلة ثم6/6المتأثرة، أدوات ناجحة وEF بلاpending. Browser1/16.4s وiOSرحلة1/6s وصور [Owner](evidence/v2-10c1/owner-level-history-web-390.png)/[Family Web](evidence/v2-10c1/guardian-level-history-web-390.png)/[Family iOS](evidence/v2-10c1/guardian-level-history-ios.png)، وسلامة snapshot/rollback/report. [المحاولات والأوامر والحدود](PROGRESS.md). ليس تأريخًا للاستيراد/الصيانة أو الماضي أو ترقية متكاملة، ولاH/Android/جهاز فعلي أوCI جديد كامل؛ V2-10 جزئي، المالي المتبقي آخرًا.
+
+## V2-10B — متطلبات مستوى وأدلة تعلم لا ترقية آلية، 2026-10-18
+
+`4e1c19c`/migration116/D3-059: نسخة منهج ثابتة على المستوى والرياضة القائمين، إسناد/استبدال صريح وسجل محفوظ، ملاحظات منشورة للأسرة بوحدات/تاريخ/مدرب ونسبة متطلبات فقط. API8/8 في61s ثم المتأثرة1/1 في9s، Web25/25 وFlutter27/27 والأدوات نظيفة وEF بلاpending؛ Browser1/37.1s وiOSرحلة1/8s، profile/report مطابقان وصلاحيات/نطاقات وحفظ/resetguard وseed opt-in مثبتة. [Web Owner](evidence/v2-10b/owner-skills-web-390.png)، [Web Family](evidence/v2-10b/guardian-skills-web-390.png)، [Coach iOS](evidence/v2-10b/coach-skills-ios.png)، [Family iOS](evidence/v2-10b/guardian-skills-ios.png)، [المحاولات والأوامر والحدود](PROGRESS.md). أصلح رابط خطة قديمة أثناء الاستبدال وCSS الأسرة وتباين الشريط مع اختبارات فعلية. ليست مكتبة تمارين أو مراجعة ترقية/شهادات/Native editor للمنهج أوAndroid/جهاز فعلي/H؛ V2-10 وAC47 جزئيان، كل المالي المتبقي آخرًا.
+
+## V2-10A — هدف فني محفوظ ومقروء للأسرة، 2026-10-18
+
+`0c9e908`/migration115/D3-058: مسودة/نشر/مراجعات/تحقق أو سحب على التسجيل الرياضي نفسه، نص منشور وتاريخ ثابتان بلا ترقية أو مال أو إشعار ضمني. Owner/Admin في النطاق، Coach المجموعة الحالية، Guardian المنشور فقط. API4/4 في29s، Web19، Flutter أول31 ثم آخر17 مع analyze، EF بلاpending؛ Browser1/16.6s وiOS1/7s، نفس profile/report وخصوصية المسودات ومصفوفة Add/Edit وسحب النطاق. [Web](evidence/v2-10a/owner-goal-web-390.png)، [Coach](evidence/v2-10a/coach-goal-ios.png)، [Guardian](evidence/v2-10a/guardian-goal-ios.png)، [المحاولات والأوامر والقيود](PROGRESS.md). ليست مهارات/منهج/ترقية/خطة كاملة أوH/CI شامل؛ V2-10 جزئي والمالي المتبقي آخرًا.
+
+## F1b5 — الملاحظة الأصلية والرد الخاص للأسرة، 2026-10-18
+
+`dbff455`، migration114/D3-057: ملاحظات تجاوزت موعدًا صريحًا من المالك، عدد الملاحظات وحسابات مقدميها منفصلان، دليل ثابت ومصدر حي. المالك يفتح المصدر Web/Native ويرد؛ Admin ملخص فقط ومصدره403، وClose لا يحل الشكوى. API4/seed1/Web17 ثم المتأثر3/Flutter23 ثم المستهلك2، أدوات ناجحة وEF بلاpending؛ Browser3 في44.8s ثم رحلة المصدر1 في26.1s، iOS رحلة1 في15s، report/history/evidence مطابقة وGuardian يرى الردين. [Web390](evidence/f1b5/owner-family-feedback-web-390.png)، [iOS](evidence/f1b5/owner-family-feedback-ios.png)، [الأوامر والمحاولات والحدود](PROGRESS.md). V2-12/AC40 جزئيان؛ ليست دورة تحقيق/SLA كاملة أوH/CI شامل. التاليV2-10 غير المالي، وكل المالي المتبقي آخرًا.
+
+## F1b4 — متابعة 3 وقائع غياب مؤهلة دون تعديلها، 2026-10-18
+
+`998ee5fcdc194f7fdb005f7baedfe625df0e69b5`، migration113. نفسالمتابعات؛ آخر3كشوفمسجلة داخل المجموعة، استبعادunknown/cancelled/future/archive/unassigned، Present/Late/Excusedتقطعالسلسلة، أعدادفريدة ودليلIDsثابت. Adminملخصبلاكشفطفلأوصلاحيةحضور، Ownerيفتحالكشفالقائم Web/Native. Closeلايغيرالحضورأويرسل، الحضوراللاحقمنمصدره يزيلالسببفقطمعثباتالدليل/التاريخ/المال. API8ثممتأثر2وfixture1/seed1/Web13/Flutter25ثممتأثر7، أدواتناجحة؛ Browser4/4في55.1s وiOS1في12s وصور[Web](evidence/f1b4/recorded-absence-followup-web-390.png)/[Native](evidence/f1b4/recorded-absence-followup-ios.png)فعليةمراجعة. [المحاولات والأوامر والقيود](PROGRESS.md). V2-12/AC40جزئيان، CI39090988732جارٍ، لاHأوAndroid/جهازفعليأونشر يدوي/Productionمدعى؛ الماليالمتبقيآخرًا.
+
+## F1b3 — دليل تقييم حقيقي لا نشر من زر متابعة، 2026-10-18
+
+المصدر `b559ad004915de66dbfbe3208ef9f94500e66a2c`، migration112. نفس المتابعة ومصفوفة الصلاحيات، مسودات فعالة ≥7أيام وفصل عدد المسودات عن اللاعبين الفريدين، IDs ثابتة ومصدر حي وروابط المحرر القائم فيWeb وقارئ Native فعلي. الإداري يرى ملخصًا لا IDs/أسماء/درجات/ملاحظات طفل؛ API التقييم يظل403 دون منحته المستقلة، وtenantB404. إغلاق المهمة لا ينشر، والنشر الحقيقي يزيل السبب مع ثبات الدليل/التاريخ/المال. قاعدة مراجعة لا SLA أو اتهام كفاءة.
+
+API7 ثم إعادة المتأثر2/2، seed1، Web22، Flutter15 وأدوات الجودة/EF بلاpending؛ Browser1 في17.8s وiOS1 في6s +teardown، نشر من المصدر وثبات التقرير. [Web390](evidence/f1b3/evaluation-followup-web-390.png) و[iOS](evidence/f1b3/evaluation-source-ios.png) فعليتان روجعتا. CI fixture سياق الإداري استثنتAdd غير المدعومة فيfollowups؛ الرحلة الفاشلة أعيدت1/1 في38.2s دون تقليل assertions. [الأوامر والمحاولات والقيود](PROGRESS.md). CI39086502916 كانin_progress، لا نجاح شامل/H أو Android/جهاز مادي أو اكتمالV2/V3. بقية غير المالي أولًا، كل المالي المتبقي آخرًا.
+
+## F1b2 — تفويض متابعة تشغيلية وصندوق Admin حي، 2026-10-18
+
+المصدر `037236b2b55496312e444d851441d83abad6df6d`، migration111. نفس OwnerFollowUp/Changes؛ Owner ينشئ ويسند ويعيد الفتح، Admin ذو Read/Edit صريحين وفي فرع/رياضة المجموعة يقرأ المسند إليه ويحدثه فقط. قيد SQL يتحقق من الفاعل والنطاق وsnapshot، CAS/replay بعد إعادة الأهلية، تاريخ ثابت وإغلاق بسبب لا يغير مصدرًا أو مالًا. لا مالية/حضور أطفال/تفويض تلقائي أو Add/Delete. Web/Native وصلاحية مستقلة لفتح المصدر؛ الشهر→اليوم ومسح كل الافتراضات، حد100 صريح. Seed اختياري محروس مطبع الهاتف، لا يعيد تفعيل العضو/المنحة، يرفضProduction، واختبر مرتين.
+
+API14/14، seed بعد التطبيع1/1؛ مستهلكو المصفوفة94 حالة:93 نجحت، وفشل توقع5قوالب ثم إصلاحه مع تحقق حقوق القالب السادس وأعيد1/1، لا إسقاط assertions. Unit36، Web32، Flutter26 ثم المتأثر6، analyze/typecheck/lint/build وEF بلاpending. Browser2/2 في24.7s، Native رحلة1 في9s +teardown، مقارنة المجموعة والتقرير المالي وتحقق سحب الصلاحية وtenantB؛ [صور Web390](evidence/f1b2/admin-followup-web-390.png) و[iOS](evidence/f1b2/admin-followup-ios.png) فعلية مراجعة. [الأوامر والمحاولات والحدود](PROGRESS.md). V2-12/AC40 لا تزال جزئية؛ F1b3 بقية المصادر، ثم غير المالي فالمالي المؤجل وH. آخرCI سابق فشلbackend/خطوةtestcancelled، لا نجاح شامل أو نشر يدوي/Production/Android/جهاز مادي مدعى.
+
+## G1b2b — دورة فيديو منصة فعلية وخاصة، 2026-10-17
+
+المصدر `d4ee95db4c245d6b81e59d2e0cab9cdcfa7d7e19`، migration109/110. Platform MFA/CSRF ومسودة/ملفان مفحوصان ومدة مقروءة/نسخ ثابتة/CAS/نشر بديل وأرشفة/تدقيق، وأهلية المتعلم الحية نفسها؛ لا تفويض مالي أو حضور أطفال مكتسب. تشغيل MP4 حقيقي عبر Web وFlutter مع النص، seed اصطناعي اختياري محروس بـSHA دون فتح الرخصة. API16 وUnit37 وWeb18 وFlutter277، Browser2 في35.3s وإعادة الفيديو18.3s، iOS رحلة1 في6s وصور مراجعة وتقرير مالي مطابق؛ EF بلاpending. [الدليل والأوامر والفشل المصحح والقيود](PROGRESS.md). V2-11 وV2/V3 لا تزال جزئية؛ محتوى12 درسًا الإنتاجي وF1b2 وبقية غير المالي ثم المالي المؤجل وH باقية. لا Android/جهاز مادي/Full-system regression/CI شامل أو نشر يدوي مدعى.
+
+## G1b2a — جمهور أدلة معتمد ومساعدة سياقية، 2026-10-17
+
+`68a80d2fdc921413512e3b8d09a33481c14ba0fc`: المالك يضيّق الأدوار المؤهلة من إعدادات التشغيل الحالية، حفظ/تحقق/تجهيز/تفعيل فعلي، وempty يخفي وdefault يستعيد دون منح صلاحية. الخادم يرفض رفع الدور وتفعيل سياسة المالك من إداري إعدادات، وtenantB مستقل. Context help يفتح الدليل المخول نفسه من Web/Native. API9/Unit35/Web24/Flutter28، جولة Web عامة551/551 أصلحت فشل fixture CI السابق دون تغيير ماليات؛ Browser21.5s/iOS7s وصور مراجعة، التقرير مطابق. لا migration/EFpending. [الأدلة والمحاولات والبيئة](PROGRESS.md). G1b2b الفيديو الفعلي/إدارة المنصة/الرفع/النسخ/النشر/الأرشفة ما زال ناقصًا، V2-11 جزئي، المالي المتبقي آخرًا ثمH؛ لا جهاز مادي/Android/قبول شامل أو نشر يدوي مدعى.
+
+## G1b1 — دليل مكتوب حسب الدور، لا فيديو مختلق، 2026-10-17
+
+المصدر `a233c14b5e06d9f7b3dc947aae0c08db8c7bab87`: فهرس16موضوعًا (15 دليلًا وموضوع AwaitingContent)، بحث عربي/قسم وتفاصيل حقيقية Web/Flutter للأدوار الأربعة؛ ترخيص learning_hub القائم مع صلاحيات حية/رياضة، GET فقط، no-store و404 لدرس غير مسموح، المدرب لا يحصل على حضور الأطفال. لا migration؛ المخطط108 بلاpending. API4/4 +5 مستهلكين، Unit27، Web21، Flutter40؛ الأدوات ناجحة. Browser16.4s وiOS4أدوار13s بOTP/الخادم الفعليين، وتقرير المال مطابق، صور فعلية مراجعة. [التفاصيل والمحاولات وبيئة QA والصور](PROGRESS.md). G1a محفوظ، وG1b2 الفيديو الفعلي/إدارة المنصة/النشر/الجمهور والمساعدة السياقية لم تنفذ؛ V2-11 جزئي، والمالي المتبقي آخرًا ثمH. لا Full Regression أو Android/جهاز مادي/نشر يدوي/اكتمال الخطة مدعى.
+
+## F1b1 — دليل حصص قادمة غير مغطاة دون اتهام غياب أو أثر مالي، 2026-10-17
+
+`338aa08aac263d23e472bf607d2d7975ac259a73`: نفسالمتابعات، Scheduled/active لمتبدأمنnowإلى+7أيام، نفسeffective-session staff/أحدثبديل ونطاقCoach/User/branch/sport الفعال. FKgroup ودليلsessionIDs/time/windowثابت معgapsحية، current/archive وSource links، Closedلايغيرالإسناد/الحضور/المال. Migration108/Applied107→108ومنالصفر/EFبلاpending؛ seedF1اختياريةGroup/sessionstableدونoverwrite/حضورومال. API17/17، Web7، Flutter11، الأدواتناجحة، Browser16.9s وNative4s وصورمراجعة؛ نفسgroup/reportقبلوبعد. [الدليل والمحاولات والاستئناف](PROGRESS.md). V2-12/AC40جزئيان، باقيالمصادر/التفويضوكلالماليالمتبقيآخرًا ثمH. ليستكلالأزرار/FullRegression/Android/جهازفعلي أوCIشامل/deployيدوي مدعاة.
+
+## F2a — موافقة الفرع والحساب قبل المحتوى برعاية، 2026-10-17
+
+Code `06d091c50ce8b26364bc9d808961661164f71349`، migration107. نسخ ثابتة/اعتماد كل فرع/تعديل يبطل القديم/سجل/CAS/replay/tenant isolation، FullOwner فقط؛ Guardian مرتبط باشتراك مؤهل وبالغ بالإقرار وموافق اختياريًا، انسحاب حتى عندlicense-off، image خاصة غير صور الأطفال، typed urgent قبلplacement. GETليسview؛50%لمدة1s foreground/حد يومي للحساب/dedup، مجاميع<5محجوبة، لا بيانات طفل أو رسائل أو مال. API7/7 في38.744s، Web21/21، Flutter33/33، analyze/typecheck/lint/build/modelcheck؛ Browser1في24.8s وNative1في10s وصور فعلية مراجعة، نفس التقرير المالي قبل/بعد. Seed6حملات/7نسخ وurgent اصطناعي اختبرت restart/withdrawal/Production refusal، دون مشاهدات مزروعة. [التفاصيل والمحاولات والأوامر والقيود](PROGRESS.md). V2-16 وAC35–39 **جزئية**؛ منصة متعددة الأكاديميات والتفويض وNative creative editing والبوابة النهائية ليست منفذة. كل المالي المتبقي آخرًا، ولاAndroid/جهاز فعلي أوCIشامل/deploy يدوي مدعى.
+
+## F1a — متابعة المالك مرتبطة بالمصدر ولا تخلط بالإغلاق المالي، 2026-10-17
+
+`a23fbe59c5c836682f362e8e14948bd154143d61`: حالتا مجموعة حقيقيتان ودورةحياة محفوظة وhistory/CAS/replay وOwner/tenant/sport/branch/entitlement حية. Source/capacityunknown صريحان، إغلاقبسببلايحلالمصدرأويغيرالمال. Migration106 منالصفر/لاpending، API4/4 في24.296s؛ جولة20/20 السابقةتتضمن3نفسها+17استهلاكًا. Web7/Flutter23/analyze/typecheck/lint/build؛ browser23.1s وnative6s وصورمراجعة، نفسgroup/reportقبلوبعد. SeedاختياريFootballمحروس/idempotent اختبرمرتينويرفضProduction. [التفاصيل والأوامر والسجلات والمحاولات](PROGRESS.md). ليستكلV2-12/AC40 أوكلاللغات/Android/بوابةH؛ التفويضومصادرأخرىوكلالماليالمتبقيآخرًا باقية. اليدوي5080/.env/بياناتالمراجع لمينشرعليهاالاختبار.
+
+## G1a — Onboarding للأدوار الأربعة بعد سياق موثوق، 2026-10-17
+
+`157e701d2dffe4a52a73c84af6834fee848f171c`: إعادة استخدام التعريف/الثيم،3صفحات لكل دور،Skip/replay، حفظ role/version/sportTheme محليًا، fallback ميزات مسحوبة/تخزين فاشل ولا role claims قبلlogin. API3/Flutter62/analyze/EFبلاpending، native رحلة4أدوار19s وGuardianconsumer8s وصورiOSفعلية مراجعة. لم تختبر إعادة قتلOS أوAndroid أو كل12رحلةnativeالمعدلة؛ لا مكتبة فيديو مكتملة/قبول47شامل. [الدليل والمحاولات](PROGRESS.md). التاليF1 متابعة قرار تشغيل محفوظة؛ كل المتبقي الماليآخرًا ثمH، V2/V3جزئيتان.
+
+## D2c — حصص ومباريات بتقويم Native واحد، 2026-10-17
+
+Code `b0748e059c2229159722e670009c55a65b706e63`؛ نفس profile/attendance/my-matches، نافذة مباريات بالوقت الفعلي ومؤشر عقدي لا ثقة فيAPI يتجاهل المرشح. اختيار طفل وترتيب وتحديث/حالةخطأ مستقلة وروابط فعلية بلا كتابة أو تفويض جديد. API6/Flutter28/analyze ورحلة iOS4s بصورتين مراجعتين؛ الحدود3حصص/تسجيل و14يومًا للمدرب و100مباراة معلنة، لا تقويمشهري كامل. تصحيحCI `a91a2f8`: رابط المجموعة المفقود فعليًا ورابط مصدر الخاص إلىtabالمخصص، وتحديث رحلات5tabs وعزل فريقالاختبار؛ Web25 وأدواتالجودة وFootball9/9في48.6s. [المحاولات والأدلة والقيود](PROGRESS.md). AC26/V2-11 جزئيان، الماليآخرًا وH لم ينفذ.
+
+## D2b — إسناد مدرب المباراة المستقل، 2026-10-17
+
+Code `78910cf530298ddafe752d0a2b97faedb19e6c5b`؛ migration105 وEF بلا pending. إسناد مستقل append-only، مراجعة القديم الآن بلا backfill، CAS وتفويض حي وإشعار المعنيين فقط؛ النسخ لا يرث التاريخ ولا أثر مالي. API19 ثم1/Web16/Flutter17 وأدوات الجودة، E2E2/2 في24.9s وnative رحلة10s بصور فعلية مراجعة. مستهلكو CI الستة أعيدوا6/6 في55s بعد تعديل رحلة التبويبات لا تخفيف assertions. [الدليل والمحاولات والحدود](PROGRESS.md). AC26/V2-11 جزئيان: التقويم/أفراد خارج roster/التأجيل/القبول الموحد باقية؛ المالي آخرًا. الديمو اليدوي لم ينشر هذا API، واختبار جهاز/Android/بصمة إيجابية غير منفذ.
+
+## D2a — مباريات ملفات اللاعب والمدرب والطفل، 2026-10-17
+
+الحارس اللاحق `8139dc377970f7d259b49e4a8067b50a626428fd` يرفض عرض200منAPIلايؤكدIDالمرشح. API3/3 في22s وWeb15/15 في2.91s وlint/build وE2E14.8s أعيدت ونجحت؛16المستهلكين وFlutter28/Native4s أدناه تحققت قبل هذاالتعديل غيرالمؤثرعلىFlutter. الديمو اليدوي لم يُعد نشرAPIله؛ قد تظهر ضرورة تحديثالخدمة بدل عرضمباريات بلاfilter.
+
+Code `4a1692cecac46530c05c57f2051842bd2099edf7`: نفسMatchParticipants المحفوظة وAPIs، تبويبات مخصصة معفلاترسياقمقيدة وتاريخ/حالةفيURLورجوعصحيح؛ المباراةالملغاةمرئيةولاتصبحقادمة، وBenchواضح. المعرفلايمنحالدور؛ Coachبفرقهالحالية/Guardianبأطفالهمنشورة، ولااستجابةقديمةبعدتغيرالسياق. **CurrentTeamليسإسنادمدربتاريخيًا**؛ D2bباقٍ، AC26partial.
+
+API16/16، Web14/14، Flutter28/28 وanalyze/typecheck/lint/build ناجحة؛ لاmigration/EFpending. E2Eنهائية1/1 في21.6s بإنشاءAPIودرِلداون/رجوعوإلغاءوانعكاسGuardianوثباتمالمالك؛ iOSرحلةواحدةPASS4s منملفالطفلثمlogout. [Player390](evidence/d2a/player-matches-web-390.png)، [Player1440](evidence/d2a/player-matches-web-1440.png)، [Coach390](evidence/d2a/coach-matches-web-390.png)، [iOS](evidence/d2a/child-matches-ios.png) صور فعليةراجعت. النهائيعلىقاعدةPG16جديدة104migration؛ OTP3/15لميمسحأويخفف. [المحاولاتوالحدودوالسجلات](PROGRESS.md). لاAndroid/جهازمادي/قبولموحدأواكتمالخطةمدعى، والماليالمتبقيآخرًا.
+
+## E2c3a — Flutter/iOS pipeline مع رفض إعداد فعلي، 2026-10-17
+
+Code `1fede83622a0de20abd51be789a3b6c223eb4b18`: إضافة/تجربة الوسيلة وحضور/انصراف الموظف على نفس API والمصدر؛ GPS عند الضغط وtimestamp القراءة، توقيع UV، retry نفسJSON فقط، إتلاف عند تغير السياق، والتحقق من receipt قبل النجاح. RP القديم لا يعد وسيلة حالية، ولا Boolean/LastVerifiedAt أو أطفال/راتب تلقائي. التفعيل off افتراضيًا، Android محجوب؛ لا migration وEF بلاpending،104كماهي.
+
+API **6/6،31s**؛ Web **8/8،1.63s**؛ Flutter **39/39،5s** وanalyze4.7s وlock ناجحة. اختبار200% كشف dropdownoverflow وأصلح دون تخفيف assertions؛ المقاسات360/390/430 وغيابالإعداد وسحبالفرع وretry/cancellation/context/contracts متحققة. native رحلة واحدة PASS5s بمكتبة OS فعلية على iPhone17Pro/iOS26.2/محاكي الاختبار/API5207/قاعدةFootballمعزولة: دعمplugin مثبت، رفضRPغيرمرتبط، لا registerComplete أو وسيلة/فترة جديدة، ثم عرضfallback دون إرساله. [إعداد](evidence/e2c3a/native-passkey-setup-ios.png)، [مراجعة](evidence/e2c3a/native-passkey-review-ios.png) صورتان فعليتان راجعتا.
+
+**ليست رحلة إيجابية لجهاز فعلي أو FaceID أو Android أو قبول موحد.** E2c3b يحتاج HTTPSمملوك/AASA وAppleTeam/profile وAssociatedDomains وجهازًا فعليًا؛ [دليل المدخلات والتشغيل](../architecture/NATIVE_STAFF_PASSKEY_SETUP.md). pipeline الإيجابي فيunit يستعملdouble؛ الخادم مصادقًا اصطناعيًا. AC28–33 partial؛ D2 roster وتبويبات مباريات التالي غير المحجوب، ثم بقيةD/E/F/G فالماليالمتبقيآخرًا ثمH. CIcheckpoint38974397279 frontend/flutter/e2e success وbackendin_progress، لا نجاح شامل مدعى. [المحاولات والسجلات والحفظ](PROGRESS.md).
+
+## E2c2b — سياسة فرع ومراجع مستقل، 2026-10-16–17
+
+Code `624d06fbd9ad25fd664e5357e04a20a79c29bad3`: حفظ Owner/CAS/قبل وبعد، قيم تستخدمها عملية التوقيع نفسها وTTL، تعطيل دون إغلاق وردية أو تغيير إيصال. مسؤول حي فوق التفويض القائم وOwner بديل دون self-review، وFK يرفض أكاديمية أخرى. Flutter يقرأ نفس80م/10م/15ث/60ث، لا native signing.
+
+API5/5؛ المستهلكون43/46 ثم إصلاح3fixtures وإعادة الفاشل مع المسؤول4/4؛ **46حالة فريدة ناجحة عبر الأوامر**. Web15/15 وtypecheck/lint/build؛ Flutter7/7 وanalyze. E2Eالسياسة1/1 في24.6s؛ Native قراءة واحدةPASS8s؛ Football22/22 في2m بعد معالجةOTP429 بالانتظار المحدود دون تغيير حد المنتج. migration104 طبقت بثلاث قواعدPG16 معزولة وEFبلاpending، لاreset للعروض في شريحة التنفيذ. [Web390](evidence/e2c2b/branch-policy-web-390.png)، [Web1440](evidence/e2c2b/branch-policy-web-1440.png)، [iOS](evidence/e2c2b/branch-policy-ios.png) صور فعلية راجعت.
+
+CIالأساس38935734402 frontend/flutter نجحتا، e2e429 عولج محليًا؛ backendfailure سببهغيرمؤكد وجلبسجلهMCPtimeout. AC28–32partial، nativeprovider/جهازفعلي/التخصيصالفردي/التأخيرالموقع والقبولالموحد باقية. [السجلات والمحاولات](PROGRESS.md)، وكل المالي المتبقي آخرًا.
+
+## E2c2a — حضور موقع مع فترة وقرار محفوظين — 2026-10-16
+
+Code `16ecff3b97390b641a7ef80bcfdb57fa9bceabe4`: إثباتCheckIn/CheckOut مربوط بالمستخدم/الأكاديمية/فرع/نسخة/موقع/hash/day/period، UV/signature/nonce/time، كتابةذرية فيالمصدرالقائم. nonceالفاشل لايعاد، replayالمطابق يعيد الأصل بلافترة/خصم/مال/حضورطفل مكرر. d+a≤50 ودقة≤30م وعمر≤30ثانية؛ حدود/قديم/ضعيف/فرعغيرمهيأ أوغيرمخول/تغيرفرع/المصدر ترفض. وقتخادم، ورديتان7200ثانية لا10800، منتصفالليل يومواحد، MixedVerifiedEnd يحفظ بدايةإدارية وlegacy بلاUTCمختلق.
+
+Backend **44حالةفريدة** ناجحة عبرالتشغيلاتالمستهدفة (22وسائل/عمليات+Device،21Exception، ثمMixedجديدة واحدة؛ الإعاداتمتداخلة). Web **19/19 في2.41s** وtypecheck/lint/build؛ Flutter **11/11 فينحو2s** وanalyze3.8s. E2E الجديدة **1/1 نهائي17.2s**: فعلBrowserWebAuthn/Geo→حضور→انصراف→replay→نفسالفترة→ثباتتحصيل/طلباتالمالك، ومصادقاصطناعي لاFaceIDمادي. القائمة E2c1 نجحت فيالتشغيلالأول قبلإصلاحsetupالجديدة؛ لاFullRegression جديدمدعى.
+
+Native رحلة **PASS4s** تقرأ المصدرالموقع نفسه منAdminOTP01099900011 فيالتطبيق الحالي علىAPI5205/قاعدةE2E المعزولة والمحاكيAcademity V3 Coach Review/iPhone17Pro/iOS26.2؛ **قراءة فقط، لا native enrollment/assertion**. [Web390](evidence/e2c2a/verified-attendance-web-390.png)، [Web1440](evidence/e2c2a/verified-attendance-web-1440.png)، [iOS](evidence/e2c2a/verified-period-ios.png) صور فعلية مراجعة، مدة0دقيقة لأنالرحلةأقلمن دقيقة. migration103 طبقتمنالصفر بقاعدتينPG16، EFبلاpending، لا.env أوreset/تعديلعرضيدوي؛ resetمعالأدلةالجديدة غيرمختبرهنا.
+
+CIالأساس38900957776 frontend/flutter/e2e ناجحة وUnit196/Architecture1، لكنintegration انتهتrunner shutdown/MSB4166 دوننتيجة نهائية؛ logging/10mhangtimeout بلاdump لتحديدالعالق، لا نجاح مفترض أو إسقاطassertions. [المحاولات والسجلات والحدود](PROGRESS.md). إعدادات سياسةالفرعالكاملة وnativeprovider/جهازمادي/associateddomains والقبولالموحد باقية؛ AC28–32 partial، الماليالمتبقيآخرًا ثمH.
+
+## E2c1 — تسجيل وتوقيع وإيقاف وسيلة تحقق، 2026-10-16
+
+Code `1e7281c8cd7e7bde3636671fb54c8c0161b74e79`: Fido2 4.3.1 يتحقق خادميًا من signature/UV/challenge/RP/origin/userHandle/counter؛ كل تحدٍ قصير أحادي الاستخدام، وown list منقحة وإيقاف نهائي. Backend14/14 في51s (11جديدة+3مستهلكين)، Web4/4 في1.55s/typecheck/lint/build، Flutter27/27 في4s/analyze. إعادةFlutter5/5 متداخلة، لا تجمع.
+
+Chromium virtual authenticator فعلية بالبروتوكول: UIRegister→Verify→replay409→revoke→verifyoptions409، لاattendance/collection/paymentRequest تغير؛ **1/1 نهائي13.3s**. iOS الحالي يقرأ المفتاح الذي أنشأه المتصفح ويوقفه مع حفظ الأصل/ثبات اليوم والمجاميع، رحلة واحدة **7s** على API5204/قاعدةpasskeysE2E المعزولة وجهازAcademity V3 Coach Review/iPhone17Pro/iOS26.2. لا native enrollment/assertion/FaceID مادي أوAndroid مثبتة. [Web390](evidence/e2c1/passkeys-web-390.png)، [Web1440](evidence/e2c1/passkeys-web-1440.png)، [iOSقبل](evidence/e2c1/passkeys-ios-own.png)، [iOSبعد](evidence/e2c1/passkeys-ios-revoked.png) صور فعلية مراجعة.
+
+migration102 أمامية طبقت منالصفر على قاعدتين، EF بلاpending؛ لاreset أوتعديل.env/العرض اليدوي. لاseed لمفتاحموثوق مختلق؛ إعادةseed تحفظالسجل، reset مع مفاتيح مملوءة غيرمختبر هنا. NuGetaudit لم يجدknownvulnerable بالمصادرالحالية؛ لاFullRegression/npm audit جديد. [المحاولات والسجلات والإعداد والقيود](PROGRESS.md). AC28/30partial فقط: **E2c2** يحتاج تحديعمليةالحضور/فرع/موقع/وقت/child+version واستهلاكذري، ثم nativeprovider/إعداداتآمنة وجهازفعلي أوعائقخارجي محدد؛ LastVerifiedAt أوVerify ليسدليلحضور. كل المالي المتبقي آخرًا ثمH. CI الأساس38885036464 frontend/flutter/e2e ناجحة وbackendin_progress عندالقراءة، لاCIجديدأخضر أو اكتمالV2/V3 مدعى.
+
+## E2b2c — استثناءات متعددة الفترات مرتبطة بالمصدر — 2026-10-16
+
+Code `35cbf5b267998b088eedc5d7c9c543c2fed14f29`: طلب وردية لاحقة يحفظ الأولى، وطلب انصراف يحمل child+version/snapshot لا يغلق غيره. مراجعة مستقلة، CAS/replay/حظر تغيير المنطقة والحساب المتوقف والشهر المعتمد، مصدر/طفل/دليل ذري، خصم وتقرير يومي مرة واحدة؛ لا جهاز مثبت أو مالية جديدة. migration101 أمامية، EFبلاpending، قاعدةنهائية معزولة جديدة وحفظ أدلةالأكاديمية الثانية فيresetالمحجوز. seedPendingاختياري يحفظ القرار عندالتكرار.
+
+Backend23/23 ثم3/3 (واحدة متداخلة)=25حالةفريدة، وإعادة2/2 متداخلة أخيرة؛ Web17/17/typecheck/lint/build، Flutter15/15/analyze. WebE2E3/3 في28.5s ثمالجديدة1/1 في14s لتنسيقالدليل/التحقق، وNativeرحلةواحدةنهائية18sعلىAPI5203/القاعدةالنهائية/iPhone17Pro/iOS26.2. [Web390](evidence/e2b2c/requested-period-web-390.png)، [1440](evidence/e2b2c/requested-period-web-1440.png)، [iOSقبل](evidence/e2b2c/review-period-ios.png)، [بعد](evidence/e2b2c/approved-period-ios.png) فعليةراجعتبعداستقرارtransition. [المحاولات والأوامر والقيود](PROGRESS.md). لاFullRegression/npm auditجديد أوphysical/Android/WebAuthn. AC31/32جزئيان؛ التاليE2c الإثباتالخادمي وعملياتالجهازالمحددة، كل الماليالمتبقيآخرًا ثمH.
+
+## E2b2b — فترات إدارية وقراءة ذاتية محفوظة — 2026-10-16
+
+Code `6764694932df5fc9071d90c29fec2e7913e21df4`: فترات مرتبطة باليوم نفسه ونسخة كل طفل، UTC/zone للجديد وlegacy مجهول صريح، جمع المدد دون الفواصل، مصدر ودليل ذريان وخصم مرة واحدة. منع التداخل/المستقبل/DST الملتبس/الشهر المعتمد، وعزل الأكاديمية والفرع والقراءة الذاتية مثبتة. المسار القديم للطلب/الجهاز يرفض اليوم المدار بالفترات حتى ربط الهدف الدقيق في E2b2c؛ لا يغلق طفلًا مختلفًا، ولا يعد هذا إثبات جهاز أو اكتمال AC31/32.
+
+Backend22 حالة فريدة ناجحة، Web22/22 وtypecheck/lint/build، Flutter28/28 وanalyze، WebE2E3/3 في33.2s، ورحلة iOS واحدة نهائية6s:240دقيقة ثم تصحيح الإدارة وrefresh210 مع تقرير ومجاميع مالية ثابتة. إعادات الفاشل/التقوية/الصور متداخلة لا تجمع. [Web390](evidence/e2b2b/work-periods-web-390.png)، [1440](evidence/e2b2b/work-periods-web-1440.png)، [iOS](evidence/e2b2b/own-periods-ios.png)، [التصحيح](evidence/e2b2b/corrected-periods-ios.png) فعلية مراجعة. migration100 أمامية طبقت في قاعدتين معزولتين وEF بلاpending؛ seed اختياري deterministic يحفظ التصحيح/reset المحجوز يحفظ الأكاديمية الثانية. [المحاولات والأوامر والقيود](PROGRESS.md). لاFullRegression/npm audit جديد أو جهاز مادي/Android/WebAuthn؛ كل المالي المتبقي آخرًا ثمH.
+
+## E2b2a — نسخة وتدقيق الحفظ اليدوي قبل تعدد الفترات — 2026-10-16
+
+Code `cf9cda7a41e7ef446b7750403affd11c4546f8f6`: CAS بمصدر حقيقي، طلب/مفتاح ثابتان عند فقد الرد، conflict→إعادة قراءة، قبل/بعد immutable بمعاملة واحدة، عزل فرع/أكاديمية/Read فقط، rollback لمفتاح أخفاه النطاق، وحظر حفظ مصدر الشهر المعتمد حتى no-op/السبب دون إعادة تطبيق replay. تقرير اليوم وخصمه مرة واحدة. migration99 أمامية وEF بلاpending؛ القاعدتان معزولتان، reset المحجوز يحفظ الأدلة الأجنبية، لا بيانات العرض اليدوي.
+
+Backend22/22 في1m36s، ثم2/2 في12s لتقوية الشهر المغلق ضمن نفس الحالات؛ Web18/18 في3.10s وtypecheck/lint/build. E2E3/3 في20.4s، ورحلةiOS قائمة واحدة15s علىAPI5201 (آخر تقوية للشهر اختبرت بعدNative بالخادم). [390](evidence/e2b2a/staff-history-web-390.png)، [1440](evidence/e2b2a/staff-history-web-1440.png)، [iOS](evidence/e2b2a/overnight-review-ios.png) فعلية مراجعة. لا FullRegression/Flutter unit/analyze/npm audit جديد أو اختبار جهاز مادي/Android/إثبات آمن مدعى.
+
+CI الأساس38847080617 فشل في حالتيReporting بسبب افتراض مالك واحد بعد fixture متعدد الأدوار؛ بقية896 integration ناجحة وfrontend/flutter/e2e ناجحة. أصلح تحديد حساب الديمو بالاسم المعتمد، والحالتان نجحتا ضمن22 دون تقليلassertions. أول المستهلكين2/4 ثمإصلاح2/2، وأولE2E2/3 ثم1/1 ثم3/3؛ لا تجمع الإعادات. [المحاولات والأوامر والحدود](PROGRESS.md). AC32 ما زالpartial؛ التاليE2b2b للفترات المحفوظة ثمE2c وبقيةغيرالمالي، كل المالي المتبقي آخرًا، H أخيرًا.
+
+## E2b1 — انصراف بعد منتصف الليل على يوم الحضور الأصلي — 2026-10-16
+
+Code `759f555d02800d0578388fc626641a9990833f03`: الطلب الجديد يثبت الهدف ونسخته خادميًا، ويغلق المصدر نفسه بعد مراجعة مستقلة؛ WorkDate هو يوم البداية وCheckOutDate يوم الانصراف. لا سجل/خصم جديد، ولا قبول لمصدر آخر أو تغير أثناءPending أو فترة متداخلة/وقت مستقبلي/تعديل شهر معتمد. Web/Flutter/CSV يعرضون التاريخ الصريح، مع حفظ أصل الطلب وسجل القرار. migration98 أمامية فقط وEF بلاpending؛ seed اختياري حتمي يحفظ قبول المراجع، وreset المحجوز يحفظ الأكاديمية الأخرى.
+
+Backend14/14 ثمIDOR1/1 متداخل، والمستهلكون4/4 منفصلة: **18حالة فريدة**. Web15/15/typecheck/lint/build؛ Flutter23/23 ثم9/9 متداخلة لبطاقة المصدر المفتوح بالمقاسات/اللغتين/الثيمين/200% وanalyze. E2E النهائي2/2 في20.3s، ورحلةNative واحدة معادة14s علىiPhone17Pro/iOS26.2، المصدر والتقرير ومجاميع المال مطابقة. صورWeb390/1440 وNative402 فعلية مراجعة فيevidence/e2b1؛ [الأوامر والمحاولات والحدود](PROGRESS.md). AC32 ما زالpartial: تعدد الفترات E2b2، الإثبات الخادمي E2c، الجهاز المادي وAndroid والقبول الموحد لم تنفذ. لا ساعاتUTC تاريخية مختلقة أو اكتمال خطة/جاهزية إصدار مدعاة، وكل المتبقي المالي آخرًا.
+
+## E2a — طلب إثبات حضور وقرار مستقل فوق المصدر القائم — 2026-10-16
+
+الإصلاح المرئي النهائي `30a71b0549010197e8e910d2d6b9d4eb89e58567`: عزل نموذج المراجعة عن grid العام ومنع تمدد الزر، مع assertions هندسية390/1440. آخر Web19/19 وtypecheck/lint/build، والرحلة الكاملة1/1 في14.3s؛ صورWeb المرفقة هي الأحدث. نتائج الخادم/الموبايل أدناه لم يتغير مصدرها.
+
+Code `2d79870054f1ae52fec48140cef370489a564a92`: موظف موثوق يرسلPending بوقت مدعى ووقت استلام خادمي؛ staffRead/Edit مخول آخر يقبل/يرفض بversion/key. لاself حتىبدورثانٍ، ولاCoach/Guardianreview أوتجاوزtenant/branch/CSRF؛ أصل وقرارثابتانEF/SQL، rollbackذري عندمفتاحمنفرعمخفي. قبوليربطDailyStaffAttendanceالقائم وbefore/after، لاoverwrite/فترةمفتوحةأخرى/شهرمعتمد أوحضورطفل/خصم/تحصيل. migration97 أمامية، seedFootballاختياريdeterministic يحفظقرارالمراجع وresetالمحجوزيحفظالأكاديميةالثانية؛ EFبلاpending.
+
+Backend10/10 في52s؛ Flutter30/30 ثم7/7متداخلةبعدإصلاحمسافات/analyze؛ Web19/19/typecheck/lint/build. E2E1/1 في17.1s علىالمصدرالنهائي، Nativeرحلةفريدةواحدةمعادة12s علىiPhone17Pro/iOS26.2 بقاعدةمعزولة، قبولمستقل/إعادةقراءة/سجلوتقريرومجاميعالمالثابتة. صورWeb390/1440 وNative402 فعليةمراجعة فيevidence/e2a؛ [الأوامر والمحاولات والدليل](PROGRESS.md). AC31implemented_pending_verification لا قبولموحد؛ AC28–30/32/33باقية: لاWebAuthn/challenge/serverproof أووردياتمتعددة/منتصفليل أوجهازمادي/Android. التاليE2b ثمE2c وغيرالمالي، وكلالمالياتالمتبقيةآخرًا. main/العرض/.envمحفوظة، أثرالديموالقديممفتوح، لاrelease-ready.
+
+## E1e — نوع المجموعة الحالي وقرار بديل الحصة — 2026-10-16
+
+Code `585f115ea6fb612d42bc20674a2f402fbcd3baed`: metadata مخولة للقائمة/التفاصيل/الكشف من RegistrationFormat وآخرSequence للبديل؛ restoreالأصلي يلغي الشارة، ولا تخمين أسماء أو تسريب السبب/الأجر/منح حضور. Backend6/6، Flutter31/31/analyze، Web31/31، EF بلاpending model أوmigration. رحلةiOS9s بنوعGroup فعلي وصورتين مراجعتين402px؛ Private/البديل مثبتان بخادم/widget، لا جهاز. [المحاولات والأوامر والحدود](PROGRESS.md). AC34/47 جزئيان؛ الحالي ليسsnapshotخدمة مالية/تاريخية، وبقية البوابة والخطة باقية. التاليE2 استثناء حضور وظيفي للمراجعة، كل المالي المتبقي آخرًا؛ CI الأساسWeb/Flutter/E2E ناجحة وbackend جاري، والجديد مستقل.
+
+## E1d1 — يوم الإداري وقرارات المالك بمصادرها — 2026-10-16
+
+Code `172c67d4a8a2f12aa8f29e8b2fb276dd57b69f85`، fixture الساعة `dc79112`. Admin يقرأ المسموح فقط: يوم فعلي مرتب/كشف حصة محدد/queue مطابق عبر كل الفترات. Owner يرى أولويات حقيقية→مدرب/مجموعة/ملاحظة scoped، وحل الملاحظة يعيد Home ويظهر ردها للأسرة؛ null rating ليس0، وaccess audit موسوم بكل الفروع/أحدث50. KPI DayPass القديم محفوظ مع queue grain مستقل، لا مالية جديدة أو migration. EF بلا pending model changes.
+
+Flutter36/36 وanalyze، Backend4/4، Web14/14، استعادة E2E clock/التصحيح3/3، ورحلة iOS مترابطة12s فعلية على قاعدة معزولة. الصور8 فعلية402px روجعت، والقص في زري النقدي/الإلكتروني أصلح. اختبار360/390/430/200% للـAdminHome/الأولويات widget، لا كل التفاصيل أو جهاز مادي. [الأوامر والنتائج والمحاولات والصور والحدود](PROGRESS.md). CI الأساس:backend/frontend/flutter ناجحة، العامة120/120، Football14/16 بسبب fixture مستقبلية عند منتصف الليل؛ لم تخفف حماية المنتج. CI الجديد مستقل بعدpush.
+
+AC40/47 و09.3 **جزئية**؛ الاعتماد/الإسناد في صفحة الدفعNative ما زالا عبرWeb. التاليE1e سياق الحصة/البديل المخول ثم بقية غير المالي، وكل المتبقي المالي آخرًا. أثر الديمو القديم مفتوح؛ لا دعوى اكتمال V2/V3 أو تنظيف قاعدة المراجعة أو Production.
+
+## E1c — مجموعة/حصة/ملف وحفظ مخول ينعكس على الأسرة — 2026-10-16
+
+Code `40ff1a581ca563468ec8f3266575d8bfc8f2ddda`. Flutter42/42 وanalyze، Backend5/5، Web31/31 وEF بلا pending model؛ لا migration/مالية جديدة. بحث محلي لا يسقط التغييرات، counters للكشف كاملًا، خمس حالات وحفظ ثابت للمخول، draft/lease/version/retry/تصحيح الماضي محفوظة. المجموعة والملف يعيدان فحص الإسناد، وتقييم البديل يحمل موعد الحصة الفعلي. لا منح Coach للحضور/الطب/صور محجوبة.
+
+رحلتان Native فريدتان على محاكيiPhone17Pro المعزول: Coach readonly/بحث/ملف/مجموعة9s؛ Admin حفظ→إعادة فتح→Coach readonly→Guardian سجل مطابق6s. الصور402 فيevidence/e1c فعلية مراجعة؛ لا جهاز مادي/Android أو بوابة المقاسات كلها أو صور قبل إعادة التصميم مدعاة. [الأوامر والسجلات والمحاولات والحدود](PROGRESS.md). AC34/47 جزئيان؛ التاليE1d تشغيلي، المالي المتبقي آخرًا. CI الأساس flutter فشل اختبار عنوان قديم وأصلح دون تخفيف؛ الجديد يراجع بعدpush.
+
+## E1b — رئيسية الأسرة وحالات كل طفل — 2026-10-15
+
+Code `5aab6fb1e1e4df24c214e6890fab2997e5a25a5f`، تجهيز الاختبارات الآمن `1a92f8aeb681216897b0a7581cfec71d12c95c12`. Flutter45/45 وBackend5/5، analyze/EF/typecheck/lint/build ناجحة، رحلةNative واحدة معادة نجحت وصور402 فعلية روجعت. تقرير منشور لكل رياضة مستقل عن power كرة القدم؛ موعد فعلي لا حصة انتهت اليوم؛ فتح تجديد الطفل يحفظ enrollment context؛ التغذية الفعلية باقية بتفاصيلها. الخدمات القديمة محفوظة، ولا schema/مالية جديدة.
+
+CI الأساس Football14/16 (OTP429)، أصلح fixture دون تخفيف حماية المنتج ثم Football16/16 محليًا، لا ادعاء نجاحCI الجديد قبل اكتماله. **أول محاولة محلية أخطأت rewrite5080 وأضافت6موظفين/حسابات اصطناعية إلى قاعدة العرض؛ لم تحذف.** [الدليل والقيود](PROGRESS.md)، [الأثر الموثق](LOCAL_DEMO_TEST_INCIDENT_2026-10-15.md). AC35/47 وبقية V2/V3 جزئية؛ الإعلانات والتنبيه العاجل والجهاز الحقيقي والبوابة الشاملة باقية، والماليات المتبقية آخرًا.
+
+## E1a — رئيسية المدرب وحصته الفعلية — 2026-10-15
+
+Code `7589ee23c7cd513dcdb5fc99939d2f6bbfc113ee`: حصة أقرب مستقلة عن المجموعات، من readmodel الخادم نفسه واليوم الفعلي للأكاديمية؛ فتحها للعرض/التقييم لا يمنح حضور اللاعبين. الفراغ/retry/logout وحالات الهاتف20/20، Backend2/2 ثم نفسهما2/2، analyze/EF بلا ملاحظات أو migration. رحلة Native فعلية واحدة iPhone17Pro/iOS26.2 مع API5190/Football معزولة وOTP Demo نجحت؛ [الصور والمحاولات والأوامر](PROGRESS.md). لا physical device أو جولة كل الأدوار أو قبول موحد؛ AC34 جزئي وAC35 بعده، وبقية الماليات مؤجلة لآخر التنفيذ. المصدر الحالي للحفظ/التعارض والحضور بقي دون إعادة بناء.
+
+## D1 — مسودة مباراة مستقلة و«حفظ وإضافة أخرى» — 2026-10-15
+
+Code `90875230a707f7ed9bce0eb23ab6d185836e4a2b`. تنفيذ غير مالي بعد توجيه صلاح بنقل **كل المتبقي المالي لآخر الخطة**. مصدر المباراة/نتيجتها/roster المنشور لا يتغير؛ النسخة تطلب موعدًا ومراجعة roster وتبدأ بلا نتيجة/نشر/مشارك/إشعار/دفع. أول نشر يثبت roster بمراجعة حديثة، ويظهر في feed الأسرة والمدرب المسند فقط. Add مستقل عن Read وبنطاق الفرع والرياضة والأكاديمية؛ تزامن/CSRF/replay/CAS وحفظ بعد إعادة الفتح وإضافة أخرى مثبتة.
+
+Backend النهائي7/7 في36s، Web6/6 وFlutter إعادة استخدام6/6 ومعمارية1/1؛ typecheck/lint/build وEF بلا pending model. E2E النهائي1/1 في12.1s بعد96migration؛ صورWeb390/1440 فعلية روجعت، بما فيها إصلاح desktop modal المكسور بوراثة grid والتحقق من تركيبه. [المحاولات/الأوامر/الديمو/الصور](PROGRESS.md). ليست جولة كاملة أو تصميم Flutter جديدًا أو اختبار جهاز؛ AC25 ينتظر قبولًا موحدًا وAC26/بقية الخطة جزئية. Migration96 أمامية فقط، لا مالية جديدة أو .env/main/بيانات عرض يدوية/Production.
+
+## C2C3E3b1 — تصحيح افتتاح ثابت مع حفظ الأصل والمدفوعات — 2026-10-15
+
+Code `ffdca586a934ee0977ad51f443a03242a0ee63a7`: Owner يراجع إجماليًا جديدًا ويسجل فرقًا موقعًا بسند ثابت لا يعدل PayrollStatement أو دفعاته. 1200 أصل، صرف300، تصحيح−200، سلفة500/تخصيص200، تصحيح+300 →افتتاح1300/مسدد500/متبقٍ800؛ مع شهر3000:4300/500/3800 وخروج مال800 فقط. حساب/CSV/Flutter ذاتي ومستهلكو الصرف/السلف مطابقون، وcutoff القديم لا يتغير. لا مرجع/ملاحظة/مراجع داخلي في القراءة الذاتية، ولا صلاحية تصحيح للـAdmin/Coach. منع الأقل من المسدد/تكرار المفتاح/quote القديم والتزامن والصرف الزائد وSQL/EF العبث/النوع/الهوية/الزمن وCSRF/tenant مثبت.
+
+مستهلكون29/29 في2m7s ثم3/3 في14s بعد حقل مبلغ مطلوب وقفل المفتاح (متداخلة)، reset1/1 في17s؛ Web25/25 وFlutter6/6/analyze، وحدة مالية15/15 ومعمارية1/1، typecheck/lint/build وEF بلا pending model. E2E نهائي6/6 في40.4s بعد95migration على قاعدة جديدة، بعد جولة5/5 لم تشمل ملف الكشف الجمع؛ لا ادعاء تجاوزها. صور390/1440 فعلية روجعت؛ [السجلات والمحاولات](PROGRESS.md)، [بيانات ورحلة العرض](OPENING_CORRECTION_DEMO.md).
+
+Migrationأمامية واحدة `20261015162045_V3ReviewedOpeningCorrections`، لا تعديل قديمة أو reset للعرض/.env/main/Production. التصحيح الأقل من المسدد ونهاية الخدمة السالبة والسلف إلىPrivateFinal والدفتر/F10 والجهاز الفعلي والقبول الموحد باقية؛ هذه مطابقة F04 جزئية لا اكتمال V2/V3. CI الأساس Web/Flutter/E2E ناجحة وbackend جاري؛ لا نسخها إلى HEAD جديد أو ادعاء عطل إنترنت.
+
+## C2C3E3a — عمولة بعد نهاية عقد لا راتب مصطنع — 2026-10-15
+
+اختبار إضافي `7bf0c8b22742cf1215d97d9129541786f1d1ffdb`:2/2 في14s، Admin لنفس هوية المدرب مع Pay لا يستطيع صرف مستحق نفسه عبرAPI أوSQL حتى برصيد صحيح، وقراءة canPay=false. أعداد متداخلة لا تجمع.
+
+Code `28739800766de496e7a9b37a37c3bedb6abba1ab`: Review0 ثم مصدر PrivateFinal50، صرف20/30، وتحصيل لاحق يصحح فرق50 آخر فقط بمصدر جديد؛ الراتب السابق3000 المسدد ثابت. API/Web/CSV/Owner/Flutter own تجمع مرة واحدة، وتحجب الداخلي/الصرف الذاتي وتفصل آخر عمولة عن الأساسي والرصيد الخارجي. FK/حراس deferred/immutability وCSRF/tenant/Owner/quote/replay والتزامن ومنع زيادة الصرف مثبتة. لا اعتماد مصدر عارٍ أو خدمة جديدة لموظف موقوف.
+
+تكامل28/28، شهري/عقد7/7، reset1/1، لاحق2/2 ثم واجهة الموقوف2/2 (متداخلة)؛ Web39/39، Flutter11/11/analyze، Unit196/196 ومعمارية1/1، tools/build/model ناجحة. E2E10/10 في52.3s بعد94migration على قاعدة جديدة؛ صور Web390/1440 مراجعة. فصل خيارات الموقوف اختبر بعد الجولة بالخادم/الويب والبناء؛ لم تُعَد الجولة بعده. [السجلات والمحاولات والصور والحدود](PROGRESS.md)، [الديمو](POST_CONTRACT_DEMO.md). ليست F10 أو full regression أو اختبار جهاز فعلي. نهاية الخدمة السالبة/تصحيح الافتتاح/تخصيص السلف لهذا المصدر والدفتر وبقية الخطة باقية؛ لا Production/main أو بيانات حقيقية.
+
+## C2C3E2 — زيادة عمولة بعد كشف معتمد — 2026-10-15
+
+استحقاق50 من تحصيل1000 لواحدة من8/2000 بنسبة40%؛ كشف3050 معتمد/مسدد. اكتمال تخصيص2000 يضيف فرق50 فقط بعد Review0 وتأكيد Owner لشهر آخر؛ القديم3050 ثابت، التالي أساسي3000+50. أول استحقاق بعد اعتماد3000 بلا عمولة سابقة يعمل أيضًا، ولا حركة مالية للمراجعة أو تكرار صرف/مصروف. المصدر/quote والعقد والسلسلة/SQL وtenant/Owner/CSRF والتزامن محمية، وإغلاق العقد يحجب الراتب المصطنع. Flutter يعرض التصحيح الموجب بلا تعديل أو ملاحظة داخلية.
+
+التكامل النهائي15/15 بعد93migration، ثم المتأثرة5/5 متداخلة؛ Web22/22، Flutter10/10 وanalyze، وحدة12/12 ومعمارية1/1، typecheck/lint/build وEF بلا pending model. E2E9/9 في1m، وصور390/1440 فعلية؛ [السجلات والرحلة والحدود](PROGRESS.md). migrationأمامية واحدة، وإعادة استخدام Football/Private seed القائم دون صرف آلي أو reset للعرض. ليست F10 أو جولة قبولV2/V3 موحدة أو اختبار جهاز فعلي؛ نهاية الخدمة وتسوية الافتتاح والدفتر والخارجي والتكلفة/الربحية والموبايل باقية. main/المتطلبات/.env وProduction محفوظة.
+
+## C2C3E1 — افتتاح موثق لا يعاد كراتب شهر — 2026-10-15
+
+افتتاح1200 + شهر3000 =4200؛ سلفة مصروفة500 يخصص منها300، ثم صرف افتتاح200 →مسدد500، متبقٍ3700، خروج مال700 فقط والسلفة غير المخصصة200. بعد صرف1000 من الشهر: مسدد1500 ومتبقٍ2700 وخروج1700؛ الشهر نفسه يبقى3000. API/Web/CSV وقراءة الموبايل الذاتية متطابقة، والسند والملاحظة الداخلية محجوبان عن الموظف. اعتماد الصفر مثبت لا افتراضي، والرصيد لا يتداخل مع legacy أو شهر معتمد؛ الماضي وquote القديم والزيادة والتكرار/CSRF وtenant/branch/self محمية في الخادم وSQL/EF. لا مصروف/تحصيل جديد من التسوية ولا مقاصة حساب خارجي.
+
+المستهلكون والتكامل33/33 في2m42s ثم4/4، وثبات المصروف/التحصيل1/1 متداخل؛ Web19/19، Flutter9/9 وanalyze؛ وحدة12/12 ومعمارية1/1، typecheck/lint/build وEF بلا pending model. E2E7/8 (محدد قائمة) ثم1/1، ونهائي8/8 في44.9s على قاعدة جديدة بعد92migration؛ [الصور والرحلة والسجلات والمحاولات](PROGRESS.md). Demo افتتاح1200 اختياري معلوم الهوية بلا صرف، idempotent ومحفوظ أمام reset المحجوز. Migration `20261015125514_V3ReviewedPayrollOpening` فقط، لا تعديل قديمة/.env أوmain. F04/AC14/22 تبقى جزئية؛ تصحيح موجب ونهاية خدمة وتسوية افتتاح معتمد وF07/F10 والجولة الموحدة وجهاز Flutter الفعلي غير منجزة هنا.
+
+## C2C3D — مدة عقد العمل مصدر مؤرخ — 2026-10-15
+
+Code `e52d2249053f96c478269a8a4fd02c837ef133b2` مرفوع؛ [CI38730397964](https://github.com/salah1seleem/academy-management-platform/actions/runs/38730397964) in_progress، لا قبول شامل مفترض. CI السابق38712944419 ناجح كاملًا؛ main محفوظ والخريطة18/48 بلا حذف أو تكرار.
+
+المعتمد الحالي3000 محفوظ، وعقد الشهر التالي المنتهي يوم15 يحسب3000×15/أيام الشهر؛1500 فينوفمبر. المسودة وتنبيه انتهاء العقد لدى المالك وEmployeeDetail وquote ينعكسون من العقد الساري؛ المصدر الخام والكشف والصرف لا يكتبون ثانية. Initial مع إنشاء الموظف، LegacyBaseline من المراجعة، Change متسلسل، مع noPast/finalized وexpectedRevision/replay/CSRF/tenant/livegrant/self، وحراسة SQL/EF وثبات reset المعروف. Web سجل ومراجعة وحفظ، وFlutter «عقدي وتغييراته» ذاتي read-only دون ملاحظات داخلية. المصدر نفسه لاتفاق/تنفيذ الخاص وCorrection.
+
+التكامل19/19 ثم6/6 ثم12/12 متداخل، وحفظ بيانات الملف1/1؛ Web25/25 وFlutter10/10 وanalyze، وحدة12/12 ومعمارية1/1؛ typecheck/lint/build وEF بلا pending model. E2E6/7 (محدد status ملتبس) ثم1/1 ثم7/7 في39.9s على قاعدة جديدة بعد91migration، ثم1/1 بعد تنسيق الزر؛ صور390/1440 والمحاولات/SHA/CI في [PROGRESS](PROGRESS.md). الجديدة `20261015104526_V3DatedEmploymentContracts` فقط على اختبار؛ Demo اختياري يحفظ الموجود ويرفضProduction، بلا تغيير.env أوmain أو بيانات عرض أو إرسال/دفع حقيقي. ليست الجولة الموحدة/F10 أو جهازFlutter/PG17Production؛ الافتتاح ونهاية الخدمة والدفتر والخارجي وبقية الخريطة باقية. F04/AC14/22 جزئية.
+
+## C2C3C — تصحيح عمولة مراجع لا يعيد كتابة الكشف — 2026-10-15
+
+Code `a52623c6835d7bbd142017b607ac94b386a9601e` مرفوع، [CI38712738840](https://github.com/salah1seleem/academy-management-platform/actions/runs/38712738840) **in_progress**؛ لا قبول شامل قبل انتهاء البوابات. main مؤكد محفوظ؛ مصفوفة18/48 بلا missing/duplicate.
+
+بعد3100معتمدًا/مسددًا، Credit400 لحصة من8/2000/40% ينشئ Review0 ثمCorrection−20 في شهر راتب غير معتمد يختاره المالك صراحة. الأصل والراتب الأساسي والتحصيل والصرف تبقى؛ الشهر التالي2980، subtotal الخاص−20 محتسب مرة واحدة. قيد مصدر ثابت بنفس review/snapshot/actor وسلسلة متزامنة، quote قابل للإبطال، replay/CSRF/tenant/Owner-only وSQL/EF؛ لا راتب أو خصم تلقائي خارج العقد، ولا مقاصة دين خارجي أو دفتر مالي جديد. Web يحفظ فعليًا وFlutter يقرأ شهره وقيمته فقط.
+
+تكامل3/3 ثم17/17 ثم النهائي4/4 متداخلة؛ Web24/24 وFlutter8/8 وanalyze؛ وحدة12/12 ومعمارية1/1 وtypecheck/lint/build وEF بلا pending model. E2E5/6 (تاريخ اتفاق fixture رجعي رفضه الخادم)، ثم1/1، ثم بعد إصلاح تنسيق الحقول النهائي6/6 في43.2s على قاعدة معزولة جديدة بكل90migration. صور Web390/1440 وأسماء القواعد والمحاولات والسجلات وSHA/CI في [PROGRESS](PROGRESS.md). الجديدة `20261015085300_V3ReviewedPrivateCorrections` فقط، بلا تغيير migrations القديمة/.env/متطلبات/main أو قاعدة العرض. ليست قبولV2/V3 كاملًا أوF10 أو جهازFlutter/بصمة/PG17Production. الافتتاح والعقد المؤرخ ونهاية الخدمة والتصحيح الموجب وF07/F10 وبقية الخريطة باقية؛ F04/AC14/22 جزئية.
+
+## C2C3B — السلفة لا تصرف أو تخصم مرتين — 2026-10-15
+
+Code `637eeb2e133978c5c56551fcf5344807caaf062a` مرفوع؛ [CI38705926897](https://github.com/salah1seleem/academy-management-platform/actions/runs/38705926897) in_progress عند الفحص، لا قبول شامل مفترض. main محفوظ وخريطة18/48 بلا missing/duplicate.
+
+PayrollAdvance خروج مال مسجل، وتخصيصه فيPayrollDisbursement القائم تسوية لا صرف جديد. تستعمل الرواتب/المالك/الحساب/CSV نفس المصادر؛ فصلDirectPaid وAdvanceApplied وRecordedAdvanceTotal/UnallocatedAdvances وCashOutRecorded. لاPayrollAdjustment أو مصروف/قبض/PayrollSettlement مكرر، ولا مقاصة تلقائية أو بنك فعلي. Grant مستقل معPay/CRUD، منعAdminself عبرCoach، وعزل/سحب/مرجع اختياري وقيودSQL/EF. F04/AC14/22 **جزئية**: التصحيح بعد الاعتماد/الصرف والافتتاح/العقد المؤرخ والدفتر باقية.
+
+Backend21/21 للمستهلكين، النهائي خمس سلف+reset6/6، ثمSQL/تزامن2/2 بعد89migrations من الصفر؛ متداخلة. وحدة12/12 ومعمارية1/1؛ Web32/32 وFlutter8/8 وanalyze؛ typecheck/lint/build وEF بلا pending model. E2E أولًا4/5 (محددlabel)، ثم1/1، ثم النهائي5/5 في38.5s على `academy_v3_advances_final_20261015` الجديدة. مرجع3000: سلفة750→تخصيص500→صرف1000→تخصيص250؛ المسدد1750، المتبقي1250، الخصومات0، وخروج المال1750 لا2500. مرجعشهرين6000→1750→4250، وتكرار/تزامن لم ينفقا الرصيد مرتين. CSVcutoff قبلالتخصيص يحتفظبالسلفةغيرالمخصصة750 والمسدد0. [390](evidence/c2c3b/payroll-advances-390.png)/[1440](evidence/c2c3b/payroll-advances-1440.png) Web فعليتان مراجعتان؛ لا اختبارجهازFlutter أوFullRegression/F10 موحد مدعى.
+
+Migrationالجديدة `20261015074148_V3PayrollAdvances` فقط؛ opt-in `Demo__PayrollAdvanceSeedEnabled=true` معلومالهوية، سلفةحتى500 للمدربالرابع ومصدرالتخصيص مرةواحدة، مع حفظالموجود ورفضProduction/resetالمعزول. .env والمتطلبات/main وقاعدةالمراجعة محفوظة. السجلات والمحاولات وCodeSHA/CI والاستئناف في [PROGRESS](PROGRESS.md).
+
+## C2C3A — حساب معتمد متعدد الأشهر وCSV بنفس cutoff — 2026-10-15
+
+Code مرفوع `7968116085aa89e3c71890dfe0340381286481b6`؛ [CI38699435887](https://github.com/salah1seleem/academy-management-platform/actions/runs/38699435887) **in_progress** وقت الفحص، لا قبول نهائي مفترض. main محفوظ وخريطة18/48 بلا omission/duplicate.
+
+تجميع نفس مصادر الكشوف والدفعات، لا كتابة مالية من قراءة الحساب. 25 شهرًا:75000−2500=72500 (72000سابق+500حالي)، مع مسددLegacy مستبعد لا معاد ترحيله؛ توقيت ثابت يمنع احتساب دفع لاحق فيCSV سابق. صاحب القراءة لا يكتسب الصرف/الاعتماد، وCoach/Admin يريان حسابهما المرتبط فقط. افتتاح وسلف غير موثقين، لا صفرًا. F04/V2-08/V3-AC14/22 **جزئية**؛ لا دفتر عام أوF10 كامل أو تسوية شهر مغلق.
+
+تكامل17/17 ثم النهائي خمس الحساب+reset6/6 في33s (متداخلة)، وحدة12/12 ومعمارية1/1، Web20/20، Flutter7/7 وanalyze؛ typecheck/lint/build وEF بلا pending model، دون migration جديدة. E2E متأثر4/4 في25.7s، ثم1/1 في12.9s لأحدث الواجهة:7200→2500→4700→صرف3600 من الشهر السابق→1100. CSV المقروء قبل الدفعة يظل4700؛ OwnMobile API مطابق ويحجب الملاحظات/المراجع. تاريخ مستقبلي مرفوض، اعتماد/دفع لاحق مستبعد، DST والعزل والـIDOR/scope/revocation/CSV injection وتهيئةDemo المحروسة مثبتة. [390](evidence/c2c3a/payroll-account-390.png) و[1440](evidence/c2c3a/payroll-account-1440.png) Web حقيقيتان مراجعتان، ليستا صور جهازFlutter. الرحلة ليست قبولV2/V3 الموحد.
+
+قاعدة اختبار فقط `academy_v3_c2c2_migration_20261015`؛ opt-in `Demo__PayrollAccountSeedEnabled=true` يجهز كشفي المدرب الرابع الآن دون دفع مفبرك ويحفظ المصادر القائمة. تصحيحات fixtures/seed والملاحظات/السجلات والـSHA/CI في [PROGRESS](PROGRESS.md). التالية سلفة وتخصيص صريح وتصحيح فترة مفتوحة، لا إعادة بناء الحساب أو نسخ متبقيه.
+
+## C2C2 — اعتماد المستحق وصرفه جزئيًا — 2026-10-15
+
+Code SHA `6c8a64edcfad3521c92e9fc2f9238c4f36feaf10` مرفوع؛ [CI38692947752](https://github.com/salah1seleem/academy-management-platform/actions/runs/38692947752) in_progress وقت التوثيق، لا passed مفترض. main محفوظ وخريطة18/48 لا تعني اكتمال التنفيذ أو القبول الموحد.
+
+V3-AC09/14/22 وF04 تظل **جزئية**: مصدر كشف شهري معتمد بصلاحية مستقلة عن الصرف/الراتب/الخاص، ودليل بنوده/hash، وتسجيل دفعات/مدفوع/متبقٍ متسلسل. 3000+600=3600، صرف2500→1100، ثم1100→0؛ لا PayrollSettlement/Receipt/مصروف مكرر. المصدر القديم لا يمحى أو يعاد ترحيله. منع مستقبل/مصدر stale/تجاوز/تزامن/replay/عزل أكاديمية وفرع وself عبر دور ثانٍ وCRUD وحده وسحب الإذن، وثباتSQL/EF والكشف بعد refundReview مثبتة.
+
+تكامل المستهلكين26/26 ثم المتأثر7/7 ثم الخمس الجديدة5/5؛ مجموعات متداخلة. وحدة12/12 ومعمارية1/1، Web27/27، Flutter7/7 وanalyze؛ typecheck/lint/build وEF بلا pending model. Football E2E3/3 في25.1s ثم الصورة1/1 في12.5s، وصور [390](evidence/c2c2/payroll-statement-390.png)/[1440](evidence/c2c2/payroll-statement-1440.png) فعلية مراجعة. المالك/Payroll/Native API ذاتي يقرؤون المدفوع والمتبقي نفسيهما؛ لا بيانات source/note/reference مالية داخلية في تطبيق الموظف، ولا أدوات اعتماد/صرف له. ليس اختبار Flutter جهاز فعلي أو الجولة الموحدة.
+
+النهائي أضاف حالة SQL لنقل/تصفير خصم بعد الاعتماد: الستة الجديدة+reset7/7 في35s، وحارس المصدر1/1 على قاعدةmigrations جديدة بالكامل في12s. القديم والجديد مقفولان، والمصدر2950 لا يعاد كتابته. هذه إعادة المتأثر بعد حراسة داخلية، لا جولةE2E/Full Regression أخرى؛ لا تجمع الأعداد المتداخلة.
+
+Migration `20261015054545_V3ApprovedPayrollDisbursements` على اختبار فقط ومن الصفر في قاعدةfinal. seed اختياري محروس لشهر موظف مستحق معروف، بلا صرف/reset تلقائي. تصحيحCI locator317083a أعاد الرحلة1/1؛ CI إصلاحه Web/Flutter/E2E success وBackend جارٍ وقت الفحص. عودة التفويض الحساس بعد toggle اكتشفتها assertions وأصلح المنتج؛ OTP429 بقيت حمايته واستخدمت قاعدة جديدة دون حذف القديمة. السجلات والمحاولات والحدود في [PROGRESS](PROGRESS.md). أرصدة وسلف/تسوية بعد الصرف/دفتر وF10 باقية، لا قبول محاسبي كامل.
+
+## C2C1 — أساسي مؤرخ وصلاحية اعتماد مستقلة — 2026-10-15
+
+Code SHA `26b98c3fe13070c41b295dfbca79cb1384c08e03` مرفوع على الفرع نفسه؛ [CI38681653081](https://github.com/salah1seleem/academy-management-platform/actions/runs/38681653081) بدأ **in_progress**، وليس passed. main محفوظ وخريطة18/48 مكتملة معرفيًا فقط، لا اكتمال تنفيذ أو قبول موحد.
+
+V3-AC09/14/22 وF04 **جزئية**: مصدر SalaryVersion ثابت وموعد شهر وموافق/نسخة/hash، PaidSnapshot محفوظ، LegacyBaseline من شهر المراجعة فقط؛ لا مصروف أو صرف من الاعتماد. قائم على Payroll لا موديول مالي مكرر. الراتب الحالي وقائمة الموظفين والكشف واتفاق الخاص يقرأون المصدر الساري؛ Web تعديل الملف read-only ومسار اعتماد مستقل؛ Flutter قراءة ذاتية دون actor/note. سياق Admin+Coach لنفس الشخص لا يعتمد أجره، ولا تكفي CRUD أو صلاحية صرف/خاص.
+
+تكامل **27/27 في1m49s** (`V3SalaryHistoryTests` + Payroll + C1/C2 + التفويض والسحب وreset المحدد)، وحدة **12/12**، Web أربعة ملفات **28/28**، Flutter ثلاثة ملفات **9/9**؛ typecheck/lint/build/analyze وEF بلا pending model. E2E **2/2 في24.2s** ثم رحلة الصورة **1/1 في15.7s**: زيادة مستقبلية500 مع بقاء الحالي وقراءة شهرها وMobile API ذاتي، وإعادة ترحيل الخاص المتأثر. [390](evidence/c2c1/salary-history-390.png) و[1440](evidence/c2c1/salary-history-1440.png) Web فعلية، عنوان داخل viewport وشبكة1/2 دون overflow. لا Flutter Simulator/device integration أو Full Regression في هذه الشريحة.
+
+Migration `20261015033834_V3DatedSalaryHistory` على قواعد اختبار معلومة؛ all migrations من الصفر في قاعدةE2E جديدة، ولا reset للمراجعة/العميل. حارس Initial صار مصدر إنشاء خادميًا داخل المعاملة بعد فشل ربط ساعة الاختبار/SQL وتجربةxmin/savepoints؛ أصلح projection تحميل actor وredirect308، وفصل fixture الحسابات وحفظ seed اليدوي. المجموعة قبل إصلاح استقلالseed26/27 ثم الفاشل/السحب/reset3/3 ثم27/27 النهائي؛ لا تخفيف assertions أو حذف مصادر. التفاصيل والسجلات الفعلية في [PROGRESS](PROGRESS.md).
+
+المتبقي: كشف شهري معتمد/دفعات جزئية/رصيد وسلفة وتصحيح ما بعد الصرف وتأريخ عقد، F07/F10، باقي18V2/48V3 والقبول الموحد. SHA وCI يسجلان بعد الرفع؛ لا green مفترض أو release-ready.
+
+## C2B — فرق عمولة الخاص إلى Payroll القائم — 2026-10-15
+
+**متابعة CI الأساس:** checkpointC2A2610c6a انتهى **820/822 Backend**، وWeb/Flutter/E2E success. أصلح تكامل fixture الإيصال الناقص، ولقطة الرياضة/اللاعب/الباقة من المصدر بدل نص كرة القدم الثابت. لا تغيير مالي/تقرير أو تخفيف assertions. إعادة الفاشلين ومستهلكي الإصلاح **4/4 في23s** على `academy_v3_c2b_regression_20261015` الجديدة بعد migrations كاملة، ويختبر الخاص receipt/reportلاعبين اصطناعيين لا يخلط الرياضة، ومطابقة Owner/Payroll. سجلci-fixture-regression؛ CI C2B38672602556 بدأ ولم يكتمل عند هذه الكتابة.
+
+**النسخة النهائية:** E2E **5/5 في29.5s** بعد تنسيق المراجعة، جميع migrations من الصفر على قاعدةC2B الجديدة. مراجعة [390](evidence/c2b/private-posting-390.png)/[1440](evidence/c2b/private-posting-1440.png)، computedgrid/flex وعدمoverflow مثبتة. Web27/27، Flutter11/11، typecheck بعدnext-env وlint/build/analyze وEF بلاpendingmodel. سجل `/tmp/academy-v3-c2b-e2e-fresh-final.log`؛ لا تخفيف OTP أو إعادة Full Regression. الآتي سجل المحاولات لا نتيجة معلقة جديدة.
+
+مطابقة Payroll/Owner summary لنفس الفرع والشهر: **1/1 في9s** بعد عزل فرع اصطناعي وإكمال Receipt لكل Collection جديد في fixture، دون حذف سجلات سابقة أو تعديل تقرير لتجاوز بيانات اختبار ناقصة؛ الأولى500 محفوظة في سجلowner-match والنهائيowner-match-final. المثال الخاص بقي100 ثم200 وصافي3200، وإضافات وصافي لوحة المالك يساويان تقرير الرواتب.
+
+إعادة مصادر الخاص كاملة بعد إصلاح fixture: **8/8 في33s**، تشمل C2A وC2B؛ `private-final.log`. ليست8 اختبارات جديدة إضافة إلى15؛ المجموعتان متداخلتان.
+
+بعد شرط AcademyId الصريح الأخير في subtotal: Backendمطابقة/عزل **2/2 في13s**، وإعادة E2Eللرحلة المتأثرة **1/1 في16.7s** (`scope-final`/`e2e-postscope`).5/5 قبل هذه الحراسة الدفاعية؛ الواجهة لم تتغير.
+
+- الوحدة `PrivateCompensationCalculatorTests`: **6/6**. التكامل المحدد `V3_private_` + `PayrollIntegrationTests` + `V3_payroll_`: **15/15 في54s**، ثم حراسة null وتوافق reset مصدر Payroll الجديد **2/2 في21s** (حراسة null متداخلة). لا Full Regression. قاعدة `academy_v3_fixture_20261014` فقط.
+- `V3PrivatePostingTests`:8حصص/2000/تنفيذ2/1000تحصيل/40%=ترحيل100، ثم200 عند اكتمال التحصيل بفرق100 فقط. راتب3000 →3100 →3200؛ لا تغيير الأساسي ولا عدد قبض/إيصالات بسبب الترحيل. الضغط المتزامن بالمفتاح نفسه201+200، والقديم المتغير409، وتفاصيل المصدر/الاتفاق40/cutoff ثابتة.
+- credit400 بعد ترحيل100 للحصة: فرق−20 لا يخصم تلقائيًا؛ Review0 بلا PayrollAdjustment ثم تأكيد Reversal−20، أصل100 محفوظ وصافي الراتب3080. بعد صرف3100 يبقى snapshotالصرف3100 والاستثناء0 دون خصم أو ترحيل مستقبل. null من تعارض حضور يبقى null، لا استحقاق0. SQL يرفض مراجعة null غير حقيقية وتسلسلًا مزورًا وحذف المصدر/تعديل حركة راتبه؛ EF يمنع الكتابة على المصدر.
+- CSRF400، مفتاح قصير422، quoteمتغير409، أكاديمية ثانية404، الإداري رغم تفويض الاتفاق/الصرف403، المدرب403. قراءة Flutter الذاتية تعكس المرحّل200/فرق0، دون طفل أو فاتورة/رصيد أسرة. لا منح تلقائية من Coach أو CRUD. اختبار reset لا يمس إلا tenantFootball المحجوز: التشغيل العادي يحفظ المصدر، resetالصريح المحروس يزيله ويحفظ مصادر الأكاديمية الأخرى وcounts30/6؛ لا reset للعرض/عميل.
+- Web4ملفات **27/27**، تشمل معاينة/تأكيد وbodyبلا مبلغ أو تاريخ، منع الكتابة للحالات المغلقة/null، رفض quoteقديم، ومصدر subtotalلا يكرر الصافي. typecheck/lint/productionbuild ناجحة. Flutter **11/11** للاتفاقات/الخاص/المدرب وanalyze بلا ملاحظات؛ لا اختبار جهاز فعلي أو Flutter integration جديد.
+- Football E2E: أول4/5 لترتيب toast/modal، ثم **5/5 في23.9s**. بعد ضبط CSS الشبكة،3/5 لأن OTPالمدرب وصل429 من إعادة اختبار متقاربة في القاعدة نفسها؛ لم تخفف حماية OTP أو assertions. أنشئت قاعدة منفصلة جديدة `academy_v3_c2b_e2e_20261015` دون حذف القديمة/تعديل بياناتها، وطُبقت كل migrations من الصفر ثم **5/5 في29.5s** كما صدر هذا السجل؛ الصور فعلية وليست اجتيازًا مفترضًا.
+
+Migration `20261015014116_V3PrivateCompensationPosting` تضيف سجل مصدر لا دفترًا عامًا. طُبقت على قواعد الاختبار الثلاث فقط؛ تعديل حراسة SQL أثناء تطوير migration الجديدة طابق دالتها في القاعدتين الأوليين، ثم تحقق النشر من الصفر في الثالثة. EF بلا pending model. لا نشر أو رسالة/دفعة حقيقية أو تغيير متطلبات/main/.env. AC16 نفذ مثاله المحدد واختبر، **implemented_pending_verification** للجولة الموحدة. عدم اكتمال كشف الرصيد/الدفعات الجزئية/تسوية ما بعد الصرف/تأريخ الأساسي/الدفتر وF10 والتفويض المستقل يبقي AC13–15 وF03/F04 **partial**؛ اقرأ [D3-017](DECISIONS_AND_CONFLICTS.md).
+
+## C2A — تنفيذ خاص معتمد وتقييم عمولة مرتبط بالمصدر — 2026-10-15
+
+**إعادة النسخة النهائية:** Backend3/3 للمتأثر بعد حراسة تعارض الحضور اللاحق (null+requiresReview، لا صفر)، Web28/28، Flutter19/19 وanalyze/typecheck/lint/build. Football E2E **4/4 في19.7s** بعد مرجع المطالبة القصير وحراسة التعارض، وصور390/1440 فعلية مراجعة بلا overflow.115/115 أدناه مجموعة المستهلكين قبل الحراسة، لا ادعاء إعادتها كاملة بعد آخر تعديل. التفاصيل والمحاولات والاستئناف فيPROGRESS.
+
+- `PrivateCompensationCalculatorTests`: **6/6**؛ minor units والتناسب و0 وPerSession وDelivered. expected مستقلة:8/2000/2/1000/40%=100+100، ثم200 وفرق100.
+- `dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~V3_private_|FullyQualifiedName~V3_agreement_|FullyQualifiedName~PayrollIntegrationTests|FullyQualifiedName~V2ReceivablesTests'`: **115/115 في7m43s** على academy_v3_fixture_20261014، دون skipped. ليست Full Regression. تشمل التكرار/العزل/الغياب/المستقبل/CSRF/المدرب غير المسند/Owner-only،40→30 وcredit400 وثبات SQL/EF؛ راتب3000 وبلا سداد/PayrollAdjustment محفوظان. إعادة توافق seed وحدود reset المحروس مع Football القديم: **3/3 في27s**، دون تخفيف counts30/6 القديمة؛ قاعدة اختبار فقط.
+- Web coach-private-services/coach-agreements/structure-record/payroll/staff-access: **27/27**؛ typecheck/lint وproduction build ناجحة. next-env يعاد إلى مسارات dev الأصلية بعد البناء.
+- Flutter coach_agreements/staff_amounts/v2_role_workspaces: **18/18** وanalyze بلا ملاحظات. API ذاتي يزيل الطفل/المطالبة/صافي الأسرة؛ لا إدخال نسبة أو اعتماد في الموبايل. لا اختبار Simulator/جهاز فعلي لهذه الإضافة.
+- Football E2E:4/4 في18.4s قبل إضافة مرجع المطالبة القصير للفصل بين باقتين لنفس الطفل. إعادة النسخة النهائية وصورها تسجل فيPROGRESS. الاختبار يثبت ربط مطالبة → تأكيد → اعتماد حصة → replay بنفسId → قراءة مدرب عبرBearerOTP Demo دون بيانات الأسرة؛ يحتوي إنشاء المدرب390/1440 والمتابعة القديمة.
+- Migration `20261015001813_V3PrivateServiceEvidence` على قواعد اختبار فقط؛ EF بلا pending changes. السجلات `/tmp/academy-v3-c2a-{consumers,seed-compatibility,web,flutter,analyze,build,e2e-final,typecheck-restored,lint}.log`.
+
+المحاولات:1/3 تكامل ثم إصلاح طول PlayerCode وxmin ومفتاح طلب تخصيص fixture، ثم3/3 و115/115. E2E3/4 كشف مصدر seed بتوقيت لاحق لساعة الديمو؛ صار مصدر اليوم السابق، وقاعدة اختبار جديدة بدل تعديل الصف الثابت.3/4 أخرى مهلة قراءة body بعد نجاح الحفظ؛ صار التحقق من HTTP201 والحالة المحفوظة وreplayAPI بنفسId.1/1 ثم3/4 لاختيار أول صف بدل fixture مع زيادة الصفوف عند إعادة التشغيل؛ المحدد صار تاريخ/رقم المصدر، مع إبقاء assertions50/50/250، ثم4/4. لا خفض assertion أو ادعاء عطل شبكة.
+
+**الحد:** AC13–16/F03 ما زالت partial. تقييم الاستحقاق ومصدره محفوظان، لكن فرق100 لم يرحل إلى Payroll/دفتر ولم يُصرف. ربط الاشتراك المحصل مباشرة والحجز المالي المسبق/العكس والتفويض المستقل وبقية V2/V3 باقية كماPROGRESS.
+
+## B3b2 — السياق الإداري المستقل
+
+Code SHA `9fdb815af29d70b9b10ccf17cbabfee891eabd7b` مرفوع. [CI38637100984](https://github.com/salah1seleem/academy-management-platform/actions/runs/38637100984) بدأ وهوin_progress عند checkpoint؛ نتائج التشغيل البعيد مستقلة عن الاختبارات المحلية أدناه. مراجعة Git/check/المتطلبات: لا تعديلات خارج الشريحة، لا تغيير baseline، وmain المحلي/البعيد محفوظ.
+
+Migration `20261014202341_V3CorrelatedAdministrativeContexts` على fixture/E2E المعزولتين، وEF has-pending-model-changes ناجح. تحفظ فهرس تفرد العضويات الأساسية وتضيف ارتباط user/academy مركبًا وحارس هوية السياق؛ لا ترحيل آلي لصلاحيات أو بيانات عملاء ولا downgrade فعلي.
+
+`dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~MobileAuthenticationTests|FullyQualifiedName~TenantAuthenticationTests|FullyQualifiedName~Group_filter_returns_only_group_players' --no-restore --nologo -v minimal`، باتصال `academy_v3_fixture_20261014`: **69/69 في221s**. ست حالات جديدة تغطي Owner/CSRF/tenant/حالة افتراضية/منع إنشاء موظف مكرر/رفض worker وحارسSQL23514؛ قويA/رياضة1 وضعيفB/رياضة2، قراءة وCSV/منع كتابة وIDOR وسحب فوري؛ دخول Web pending قبل الاختيار؛ حفظ معلق بعد الإيقاف/all-sports وبعد إيقاف الأساس؛ Mobile token rotation واختيار صريح وإصدار3→4 عند تعديل المنح ورفض refresh بعد الإيقاف؛ seed متكرر وحفظ السحب ورفض Production. كان68/68 قبل إضافة بوابة pending الخادمية، ثم أعيدت المجموعة المتأثرة69/69 بعد آخر تغيير، فلا تجمع العددين.
+
+Web **38/38** في11 ملفًا، typecheck/lint ناجحان؛ الاختيار الصريح والرفض يحفظان المدخلات، الإنشاء لا يفعّل، التفعيل/الإيقاف مؤكدان بالنسخة، ودخول متعدد السياقات يفتح الاختيار. Flutter **19/19** فيaccess_context/auth_controller/widget معanalyze؛ ثلاثة اختبارات سياق جديدة تشمل الاسم والنطاق والإصدار وعرض دورين إداريين مميزين. لا تشغيل simulator أو اختبار جهاز خادمي بهذه الشريحة.
+
+E2E `v3-access-contexts.spec.ts v3-custom-role-templates.spec.ts v2-staff-access.spec.ts` على5186/3106 وقاعدةE2E: **3/3 في36s** مع production build. إنشاء ومراجعة وتفعيل من UI، دخول بلا بيانات قبل الاختيار، نطاق الضعيف ومنع كتابة، ثم نطاق القوي وكتابة صحيحة؛ القوالب وتفويض V2 السابقان بقيا يعملان. صور390/1440 تحتevidence/b3b2، مراجعة فعلية وأبعاد بلا overflow. المحاولة الأولى2/3: عنوان الاختبار «اللاعبون» لا يطابق العنوان الفعلي «قائمة اللاعبين»؛ صُحح locator إلى الاسم الفعلي دون حذف assertion. أخطاء إعداد الاختبار الأولى كانت تغيير مفتاح BranchId بدل إنشاء مجموعة مستقلة، وLIKE علىjsonb، ومسارoptions غير موجود؛ صححت fixtures/قراءةJSON/المسار، لا منطق المنتج أو assertions الأمن. أمر EF الأول افتقدConnectionStrings، وأمر npm نُفذ منmobile بدلالجذر؛ صحح السياق فقط، بلا تثبيت أو تغيير إعدادات.
+
+الدليل يخص السياقات الإدارية التشغيلية. الأفعال المالية الحساسة المستقلة وrelation_scope المخصص وبقية48قبول والانحدار النهائي باقية؛ لا CI أخضر لهذا الكود قبل تشغيله عن بُعد.
+
+## B3b1 — القوالب المخصصة
+
+Migration `20261014185336_V3ReusableStaffPermissionTemplates` مطبقة على قاعدتي الاختبار V3 فقط؛ has-pending-model-changes نجح. `dotnet test ... --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family' --no-restore` **18/18 في63s**. الاختبارات الأربع الجديدة في V3StaffRoleTemplateTests تشمل owner/tenant/CSRF، رفض مصفوفة ناقصة أو write بلاread، اسم مكرر، stale revision، مصدر أجنبي، الاسم لا يغير Role، حفظ مصدر/تخصيص/نطاق، عدم تغيير الجلسة بتعديل/أرشفة تعريف ثم التغيير الفعلي عند اعتماد نسخة جديدة، immutability عبرEF وSQL23514، وseed متكرر يحفظ الأرشفة ولا يمنح تلقائيًا.
+
+Web staff-access/staff-role-templates **10/10** مع typecheck/lint. E2E v2-staff-access/v3-staff-templates/v3-custom-role-templates **3/3 في34.9s** مع production build؛ صور390/1440 محفوظة. الرحلة الجديدة فشلت أولًا لأن اختبارGET سبق اكتمالPUT؛ أضيف انتظار response204 وعودة القائمة قبل فحص المصدر، دون حذف assertion أو تغيير منطق الحفظ. إعادة1/1 نجحت، ثم كشفت مراجعة الصورة قص أعمدة المصفوفة على الموبايل، فعولج العرض لا المنح، وأعيد3/3 مع assertion يمنع overflow داخل المصفوفة أيضًا. مراجعة390 النهائية تمت.
+
+بعد مراجعة السجل أضيفت حالة المصدر/الإصدار/التخصيص الفعلية من الخادم إلى `AppliedTemplate` داخل audit After مع إبقاء TemplateKey والجسم القديم للتوافق. أضيف assertion على التخصيص والمصدر، وأعيدت القوالب ومستهلك القالب السابق **5/5 في17s**؛ لا جمعها مع18 كعدد فريد. EF بلا pending model بعد التغيير.
+
+Code SHA `fe52bfe6bab7eb8962c136db0c15a5143f7715f0`؛ CI [38623096545](https://github.com/salah1seleem/academy-management-platform/actions/runs/38623096545): Frontend/Flutter/E2E success وBackend in_progress عند آخر فحص. CI السابق B1/B2/c0d339e أصبحsuccess؛ B3a فشل كما التحديث أدناه. لا Full Regression محلي أو Flutter/device جديد أو اكتمال V2/V3. قوالب قابلة لإعادة الاستخدام فقط؛ المنح المتعددة حسب الدور/العلاقة والأفعال الحساسة باقية كما PROGRESS.
+
+### نتيجة CI وإصلاح تداخل بيانات الاختبارات
+
+CI B3a [38609005372](https://github.com/salah1seleem/academy-management-platform/actions/runs/38609005372): المعمارية1/1 والوحدة190/190؛ التكامل799/800؛ بقية الوظائفFrontend/Flutter/E2E success. الفاشل Group_filter_returns_only_group_players رأى طفل الأسرة الاصطناعية الإضافي في مجموعة السباحة المشتركة، كما أثبت log. أصلح `5aad08c616d8f8ec82fd0c08d060e9365b64a6a1` مصدر التداخل، لا الاختبار القديم: مجموعة سباحة مستقلة للأسرة مع assertions تمنع تغيير المجموعة المشتركة أو خلط الفلتر.
+
+إعادة على قاعدة V3 السابقة18/19 احتوت خمسة أعضاء سبق أن تركتهم التشغيلات القديمة؛ لم يُحذف أحد. قاعدة جديدة `academy_v3_fixture_20261014` مع migrations القائمة: الاختبار القديم1/1، ثم الأسرة1/1، ثم `dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~StructurePeopleEnrollmentTests|FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family' --no-build --no-restore --nologo -v minimal` **36/36 في98s** بعد رحلة الأسرة. EF has-pending-model-changes ناجح؛ لا migration أخرى. نجاح الاختبارات المستهدفة لا يساوي اجتياز CI الكامل على الإصلاح؛ يلزم فحص تشغيل HEAD الجديد في الاستئناف.
+
+## B3a — نطاق الرياضة التشغيلي، 14 أكتوبر 2026
+
+Code SHA `70f217fa57e58844b58a7dad35f02aa956fee9e4` مرفوع. CI [38609005372](https://github.com/salah1seleem/academy-management-platform/actions/runs/38609005372) **in_progress** عند الفحص، ولا تعادل النتائج المحلية نجاح CI. بعد مراجعة نطاق HR أضيف منع الحضور الوظيفي اليومي المشترك من التفويض الرياضي الضيق وأعيد الاختبار المتأثر **1/1**؛ لم تمس بقية نتائج الاختبارات أو assertions.
+
+نفس قاعدتي الاختبار المعزولتين B2؛ لا reset أو تغيير لقاعدة المراجعة. Migrations `20261014165922_V3MembershipSportScope` و`20261014170814_V3PlanSportScopeLookup` مطبقتان على الاثنتين؛ `has-pending-model-changes --no-build` نجح.
+
+الأمر النهائي المستهدف `dotnet test tests/integration/Academy.IntegrationTests --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~V3_mixed_sport_family|FullyQualifiedName~Family_request_and_proof_require_every_branch|FullyQualifiedName~Branch_admin_cannot_publish_outside_scope|FullyQualifiedName~IMP_06_branch_admin_can_publish|FullyQualifiedName~Scoped_admin_collects_linked_family_across_branches' --no-restore` باستخدام اتصال قاعدة V3: **18/18 في61s**. يشمل 8 اختبارات V3 جديدة: نطاق/IDOR/CSV/كتابة صحيحة ومرفوضة، مدخلات أجنبية وتوافق عميل قديم، منع المجالات المشتركة وworker، كائن tracked وهوية طفل متعدد الرياضات، دور ثان لا يوسع الدور المختار وتعارض مدرب عبر الرياضات، سحب scope/action قبل حفظ أمر، seed آمن متكرر، طلب أسرة وإثبات متعدد الرياضات. الستة القديمة وأربعة مستهلكين اجتازوا دون خفض assertions.
+
+مجموعة إضافية محددة للحصص والحجز/إنشاء المجموعة **7/7**، تضم 3 حالات V3 متداخلة أعيدت بعد توسيع التحقق؛ لا تجمع الأرقام كاختبارات فريدة. Web: staff-access / sport-operations-settings / facilities **12/12**؛ typecheck/lint ناجحان. متصفح mobile-chromium: v2-staff-access / v3-staff-templates **2/2 في25.9s** مع production build على5186/3106. تحقق حفظ ثم reload ثم دخول إداري مستقل ثم سحب الرياضة من المالك وانعكاسه في نفس الجلسة. صور فعلية [390](evidence/b3a/staff-scope-390.png) و[1440](evidence/b3a/staff-scope-1440.png)، assertions تمنع overflow. مراجعة لقطة390 الكاملة؛ ليست صور كل أدوار V3.
+
+أول محاولة خادم كشفت دورة EF بين الباقة ونشرها بسبب فلاتر الرياضة؛ أصلحت بـlookup SQL tenant-parameterized، لا تعطيل حماية الأكاديمية. اختبار tracked أولي حاول تغيير مفتاح EF ثابت، فعدل السيناريو لاختبار تغيير حالة كائن مخفي وهوية مشتركة باستخدام عضوية فعلية مفوضة، مع بقاء رفض الكتابة وعدم الحفظ. أخطاء compilation في سيناريوهات الاختبار صُححت قبل النتائج النهائية. لا إخفاء فشل أو وصف تشغيل aborted بأنه ناجح.
+
+القيود: تفويض رياضي ضيق ليس كل وظائف الإدارة أو دورًا مخصصًا متعدد المنح. توجد عمليات مشتركة ممنوعة صراحة حتى تطبيق مساراتها، والمالك والتفويض السابق الواسع لم يتغيرا. لا Full Regression موحد أو Flutter/device جديد أو ledger/F10 أو إعلانات أو بيانات V3 الشاملة. CI اللاحق نتيجة مستقلة؛ التشغيلات السابقة كانت Backend جاريًا ولا توصف خضراء بالكامل.
+
+## خط أساس 2026-10-14
+
+- Starting HEAD: `3d5a60d5026a5b8cd54bcf3f1f43abcf1ea6934e` على `codex/15-native-mobile-app`، شجرة نظيفة ومطابقةorigin. main لم يُغيّر.
+- سلامة ZIP: حسابSHA-256 لجميع8 ملفات فيmanifest وطولbytes؛ **8/8** مطابقة. مرجعV2 مطابق لنسخة المستودع. المعرفات:V2-00..17=18، مصفوفةV2=85، V3-AC01..48=48. المرجع الحسابي يحوي29قيمة expected ولم ينفذ على المنتج بعد.
+- CI للأساس: [run38570922252](https://github.com/salah1seleem/academy-management-platform/actions/runs/38570922252): backend/frontend/flutter success؛ e2e failure. logs تؤكد timeout دخولowner.football ضمنprofileLegacyRegression؛ النقل إلىtests/e2e/football يبقي نفس الرحلة والتوقعات. لا Passed للإعادة قبل تشغيلها.
+- V3-AC01: قراءة ومطابقة المصادر والجرد مثبتة فيPROGRESS؛ لا تعني تنفيذ بقية48حالة.
+
+## تنفيذ B1
+
+B1 commit: `ee102e8844af289d5d7002c21503d99873ef3378`، مرفوع. CI38588910233: frontend/flutter/e2e success؛ backend كانin_progress عند الفحص، لا ادعاءCIكامل.
+
+### B1 — تحقق فعلي على قاعدة academy_v3_dev_20261014
+
+قاعدةPG16 جديدة معزولة، طبقت عليهاmigrationsالقائمة فقط، دونresetأو بيانات عميل. الأوامر: `dotnet test tests/integration/Academy.IntegrationTests/Academy.IntegrationTests.csproj --no-restore --filter FullyQualifiedName~V2StaffScopeTests` **6/6**؛ `npm test -- src/features/staff-access.test.tsx` **4/4**؛ `npm run typecheck` و`npm run lint` وproductionbuild ناجحة. `npx playwright test ... v2-feedback-followup.spec.ts` علىfootballconfig **1/1**؛ `npm test -- v3-staff-templates.spec.ts v2-staff-access.spec.ts` علىports5186/3106 **2/2** معproductionbuild.
+
+الصور390/1440 في`tests/e2e/test-results/v3-staff-templates-Owner-a-2bbbd-nd-reopens-the-saved-grants-mobile-chromium/`؛ روجعت390 فعليًا وفحصoverflowبالاختبار. محاولةBackendالأولى5/6 بسببContainsعلىjsonbفيtest، صُحح بقراءةJSONوالتأكد منTemplateKey، ثم6/6. محاولةtypecheck/buildالأولى كشفتrenderقديمًا unreachable فحذفناه؛ E2Eالأولى0/2 بسبب عنوانين متطابقين وتوقع201لعقدإنشاء200؛ صحح العنوان والتوقع وفقAPIثم2/2. لم تُحذفassertionsحفظ/عزل/أثر. القوالب ليستroleengineV3كاملًا. CIبعدpushبوابة مستقلة.
+
+F10 / الدفتر / الإعلانات / إثبات الجهاز / بيانات3أكاديميات / النهائي الموحد / صورV3 / الأجهزة الحقيقية: **لم تنفذ**. لا تكامل خارجي مهيأ يعلن ناجحًا. نتائجV2 القديمة موثقة فيdocs/delivery/V2_EXECUTION.md وليست نتائجV3.
+
+الإعادة النهائية للمتصفح **2/2 في32.3s** على قاعدة ثانية نظيفة `academy_v3_e2e_20261014` حتى لا تلوث فروع اختبارات التكامل صور العرض. البحث عن فرع والقائمة محدودة الارتفاع؛ أعدناWeb4/4 وtypecheck/lint بعد التغيير. روجعت لقطة390 النهائية. الصور تتضمن شاشةصلاحياتB1فقط؛ بقيةصورV3لمتنفذ.
+
+## B2 — تشغيل سباحة معزول في المرافق
+
+Code commit: `13c500331040684ba6fd3f33f639e79d5f921e4c` مرفوع؛ migrationالوحيدة لهذه الدفعة`20261014152943_V3SportScopedSwimmingPolicies`. النسخ المرئية الدائمة: [360](evidence/b2/sport-settings-360.png)، [390](evidence/b2/sport-settings-390.png)، [430](evidence/b2/sport-settings-430.png)، [Desktop](evidence/b2/sport-settings-1440.png)، [صلاحيات390](evidence/b2/staff-template-390.png)، [صلاحياتDesktop](evidence/b2/staff-template-1440.png). نسخ من لقطات التطبيق الفعلية، لا mockups أو صور مرجع، ولا تستبدل أدلة الصلاحيات.
+
+القاعدة `academy_v3_dev_20261014` للاختبارات و`academy_v3_e2e_20261014` للمتصفح فقط؛ PG16 محلي، لا قاعدة مراجعة/عملاء. migration `20261014152943_V3SportScopedSwimmingPolicies` طبقت على الاثنتين، بما فيها backfill المسبح القديم فيE2E. `dotnet ef migrations has-pending-model-changes ... --no-build` نجح: لا تغييرات معلقة.
+
+Backend: فلتر `V3_swimming|Resource_capacity_requires|Last_capacity_is_atomic|Shared_adjacent_bookings|Coach_conflicts_are_checked|Facility_tenant_branch_role|Day_pass_` **10/10**؛ بعد حراسةseed واختبارها، `V3_swimming|Day_pass_` **6/6**؛ المستهلكون `Resource_timetable_preview|Generated_sessions_reserve|Visit_entry_retry|Visit_demo_seed|Observation_expected6|Observation_demo_seed` **6/6**. ليست أعدادًا تجمع كاختبارات فريدة. تشمل رفضtenant/football/coach/guardian/CSRF، version409، تعطيلAوبقاءB، quoteوعروضالولي بعدالإيقاف، حفظ التاريخ وعدمإنشاءمال، وseedلايعيدالتفعيل.
+
+Web: `npm test -- src/features/sport-operations-settings.test.tsx src/features/facilities.test.tsx src/features/staff-access.test.tsx` **11/11**، typecheck/lint ناجحان. E2E: `npm test -- v3-sport-settings.spec.ts v3-staff-templates.spec.ts` **2/2 في24s** معproductionbuild على5186/3106. الرحلة: رياضةGeneral→Swimming؛ حفظ فرع؛ reload؛ فرع آخرoff؛ إنشاءPoolوحارةواعتماد؛ حجزOpenSwim؛ إيقاف؛ POSTآخر403؛ الحجزالأولباقدونحذف؛ رابطالمرافقيحفظالفرع.
+
+صور360/390/430/1440 تحت `tests/e2e/test-results/v3-sport-settings-Owner-co-24939-y-and-disables-new-bookings-mobile-chromium/`، مع overflow assertions؛ فحص390/1440فعليًا، وإصلاحselectخامفيالواجهةبمقاس48pxوتباعدمقروء، ثم إعادة2/2. محاولةE2Eالأولى تعثرتgetByLabelلـselect؛ الثانيةstatusغيرفريد بسببnoticeعام؛ استُخدمrolecomboboxوstatusخاصبنصالحفظ، ثم1/1و2/2 دونحذفassertions. lint كشفeffectloadوعولجباستدعاءfetchداخلeffectبـAbortController؛ typecheckكشفmockfetchوعولجبـstubGlobal. أمرmigrationالأولافتقدمتغيرconnectionوتصححعلىقاعدةالاختبار؛ لا مشكلةشبكة أو retryبلاسبب.
+
+لا اختبار جهاز/Flutter جديد فيB2 ولا دور رياضة مترابط أو ledger أو3أكاديمياتDemo كاملة؛ هذه فجوات محفوظة. CIالجديد بعدpush مستقل عن النتائج المحلية.
+
+## B3b3A — تفويضات الرواتب الحساسة، 2026-10-15
+
+الدليل البرمجي: PayrollSensitiveAccess وStaffAccessEndpoints وPayrollEndpoints؛ الاختبارات الجديدة الأربعة في V3PayrollSensitiveTests. الأوامر:
+
+- `ACADEMY_TEST_CONNECTION_STRING=...academy_v3_fixture_20261014... dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~V2StaffScopeTests|FullyQualifiedName~PayrollIntegrationTests'`: **33/33**.
+- بعد تكامل سجل التدقيق: فلتر `V3_payroll_review|V3_sensitive_grants|V3_pending_sensitive|V3_inflight_payment|PayrollIntegrationTests|OwnerReviewOperationsTests` (FullyQualifiedName لكل جزء): **27/27**. لا تعتبر المجموعتين اختبارات فريدة مجتمعة.
+- `npm run test --workspace apps/web -- src/features/payroll.test.tsx src/features/staff-access.test.tsx src/features/staff-access-contexts.test.tsx src/features/staff-role-templates.test.tsx src/features/staff-access-audit.test.tsx`: **25/25**؛ typecheck/lint ناجحان.
+- `flutter test test/staff_amounts_test.dart`: **2/2**؛ لا تغيير Dart أو اختبار بصمة/جهاز فعلي.
+- `npm run test:e2e -- v3-payroll-sensitive.spec.ts v3-access-contexts.spec.ts` بقاعدة academy_v3_e2e_20261014 ومنافذ5186/3106: **2/2 في53.4s**، مع production build. [390](evidence/b3b3a/payroll-grants-390.png) و[1440](evidence/b3b3a/payroll-grants-1440.png) روجعتا فعليًا.
+- `dotnet ef migrations has-pending-model-changes ... --no-build`: لا تغييرات؛ لا migration لهذه الشريحة.
+
+يثبت السيناريو رفض CRUD وحده، فصل الاعتماد/الصرف، منع الطلب الذاتي وIDOR وفرع آخر وأكاديمية ثانية، رفض المنح المجهولة/المكررة والنطاق غير المدعوم، replay متزامن بلا مضاعفة، وسحب الإذن/الفرع أثناء طلب صرف HTTP منتظر قفل المنح بلا كتابة. القيمة الفعلية 3100+150=3250 محفوظة في PayrollSettlement، وليست دفعًا مصرفيًا حقيقيًا. تقرير التدقيق يميز تغيير التفويض واسم منفذه.
+
+محاولات الفشل والإصلاح والاستئناف وحدود B3b3A في PROGRESS. هذه أدلة مستهدفة فقط؛ لم تنفذ البوابة الموحدة أو F10 أو اعتماد إصدار V2/V3. CI البعيد بوابة منفصلة عن النتائج المحلية.
+
+## C1 — اتفاقات أجر الخاص، 2026-10-15
+
+المنفذ: CoachAgreementEndpoints وCoachCompensationAgreement/Approval ومحرر CoachAgreements في ملف المدرب وCoachAgreementsPage داخل Flutter. Migration `20261014231750_V3CoachPrivateAgreements` على قاعدتي fixture/e2e المعزولتين فقط؛ EF بلا pending model.
+
+أوامر ونتائج فعلية:
+- `dotnet test tests/integration/Academy.IntegrationTests --no-restore --filter 'FullyQualifiedName~V3_agreement|FullyQualifiedName~PayrollIntegrationTests'` مع academy_v3_fixture_20261014: **11/11**. مجموعة13/13 السابقة تشمل مستهلكي التفويض كذلك ولا تجمع كاختبارات فريدة.
+- `npm run test --workspace apps/web -- src/features/coach-agreements.test.tsx src/features/structure-record.test.tsx src/features/staff-access.test.tsx src/features/payroll.test.tsx`: **23/23**، typecheck/lint ناجحان.
+- `flutter test test/coach_agreements_test.dart test/staff_amounts_test.dart test/v2_role_workspaces_test.dart`: **17/17**؛ flutter analyze بلا ملاحظات.
+- `npm run test:e2e -- v3-coach-agreements.spec.ts v3-payroll-sensitive.spec.ts` بقاعدة academy_v3_e2e_20261014 ومنافذ5186/3106: **2/2 في30.8s** معproduction build. يتضمن OTP Demo202 ثمverify200 وقراءة المدرب عبرBearer؛ لا اختبار جهاز/Flutter حي.
+- [390](evidence/c1/coach-agreements-390.png) و[1440](evidence/c1/coach-agreements-1440.png) Web فعلية مراجعة؛ لا overflow. next-env أُعيد إلى المسارات الأصلية بعدbuild ثمtypecheck.
+
+الخمسة الجديدة تثبت المصدر/العزل/الصفر الصريح/التكرار/نسخ40→30/عدم الرجعية/انتهاء الخليفة/cutoff/ثباتEFوSQL/سحب الربط/دورAdmin+Coach/seed والمحافظة على البيانات وProduction rejection. الراتب3000 لم يزد ولم يسدد بسبب الاتفاق. لا استحقاق خاص أو دفتر أوF10 ناجح في هذه الدفعة؛ مصدر النسبة أصبح جاهزًا للربط فيC2 وليس المنتج المالي كاملًا. المحاولات المصححة وحدود/استئناف الدفعة فيPROGRESS.

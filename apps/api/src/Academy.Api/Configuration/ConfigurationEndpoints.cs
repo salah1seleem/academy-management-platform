@@ -1,0 +1,134 @@
+using System.Security.Claims;
+using Academy.Api.Auth;
+using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.Tenancy;
+using Microsoft.EntityFrameworkCore;
+
+namespace Academy.Api.Configuration;
+
+public static class ConfigurationEndpoints
+{
+    public static void MapVersionedConfiguration(this WebApplication app)
+    {
+        var api = app.MapGroup("/api/v1/manage/configuration").RequireAuthorization(AcademyPermissions.AcademySettingsManage);
+        api.MapGet("/", List);
+        api.MapPut("/owner-home", OwnerHome).AddEndpointFilter<CsrfFilter>();
+        api.MapPut("/collection-target", CollectionTarget).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/drafts", Draft).AddEndpointFilter<CsrfFilter>();
+        api.MapPost("/{id:guid}/transition", Change).AddEndpointFilter<CsrfFilter>();
+        app.MapGet("/api/v1/academy/features", async (CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService config) =>
+        {
+            var t = (await tenant.ResolveAsync())!;
+            var version = await db.AcademyConfigurationVersions.AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.State == ConfigurationState.Active);
+            var enabled = new List<string>(); foreach (var f in AcademyFeatures.All) if (await config.Enabled(t.AcademyId, f)) enabled.Add(f);
+            return Results.Ok(new { revision = version?.Revision ?? 0, features = enabled });
+        }).RequireAuthorization(AcademyPermissions.TenantAccess);
+    }
+    private static async Task<IResult> List(CurrentTenant tenant, FoundationDbContext db)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        return Results.Ok(new
+        {
+            academyCurrency=await db.Academies.Where(a=>a.Id==t.AcademyId).Select(a=>a.DefaultCurrency).SingleAsync(),
+            canManageMediaRetention=await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t),
+            entitlements = await db.AcademyFeatureEntitlements.Where(x => x.AcademyId == t.AcademyId && x.IsActive).Select(x => new { x.Feature, x.Enabled, x.PlanCode }).ToListAsync(),
+            versions = (await db.AcademyConfigurationVersions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.Revision).Take(50).ToListAsync()).Select(x => new { x.Id, x.Revision, x.State, x.ContentHash, x.Version, x.EffectiveAtUtc, settings = AcademyRuntimeSettings.Read(x.Payload) }),
+            history = await db.ConfigurationTransitions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId).OrderByDescending(x => x.CreatedAtUtc).Take(100).Select(x => new { x.ConfigurationId, x.From, x.To, x.CreatedAtUtc }).ToListAsync()
+        });
+    }
+    private static async Task<IResult> Draft(AcademyRuntimeSettings body, ClaimsPrincipal actor, CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService service)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        if (body.Features is null || body.Features.Count > AcademyFeatures.All.Length || body.TimeZone?.Length > 80 || body.Currency?.Length != 3) return Results.Problem(statusCode: 422, title: "إعدادات غير صالحة");
+        var homeErrors = body.OwnerHome?.Validate() ?? [];
+        if(homeErrors.Length>0)return Results.ValidationProblem(new Dictionary<string,string[]>{{"ownerHome",homeErrors}},statusCode:422);
+        var audienceErrors = Academy.Api.Help.HelpAudiencePolicy.Validate(body.HelpAudiences);
+        if (audienceErrors.Length > 0) return Results.ValidationProblem(new Dictionary<string, string[]> { { "helpAudiences", audienceErrors } }, statusCode: 422);
+        await using var tx = await db.Database.BeginTransactionAsync(); await Lock(db, t.AcademyId);
+        if (body.FeedbackFollowUpDays is < 1 or > 30) return Results.UnprocessableEntity(new { message = "مهلة متابعة الملاحظات بين يوم و30 يومًا." });
+        if (t.Role != AcademyRole.AcademyOwner && body.FeedbackFollowUpDays != (await service.Active(t.AcademyId))?.FeedbackFollowUpDays) return Results.Forbid();
+        if(body.MonthlyCollectionTarget.HasValue&&(body.MonthlyCollectionTarget<=0||body.MonthlyCollectionTarget>1_000_000_000||decimal.Round(body.MonthlyCollectionTarget.Value,2)!=body.MonthlyCollectionTarget))return Results.UnprocessableEntity(new{message="أدخل هدف تحصيل شهري موجبًا بدقتين عشريتين."});
+        if(t.Role!=AcademyRole.AcademyOwner&&body.MonthlyCollectionTarget!=(await service.Active(t.AcademyId))?.MonthlyCollectionTarget)return Results.Forbid();
+        if(t.Role!=AcademyRole.AcademyOwner&&!OwnerHomeSettings.Same(body.OwnerHome,(await service.Active(t.AcademyId))?.OwnerHome))return Results.Forbid();
+        if(body.MediaRetention!=(await service.Active(t.AcademyId))?.MediaRetention&&!await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t))return Results.Forbid();
+        if(body.MediaRetention is {Days:<1 or >3650})return Results.UnprocessableEntity(new{message="مدة الاحتفاظ بين يوم و3650 يومًا، أو اتركها دون حذف آلي."});
+        if (t.Role != AcademyRole.AcademyOwner && !Academy.Api.Help.HelpAudiencePolicy.Same(body.HelpAudiences, (await service.Active(t.AcademyId))?.HelpAudiences)) return Results.Forbid();
+        if (t.Role != AcademyRole.AcademyOwner && body.CashEnabled != ((await service.Active(t.AcademyId))?.CashEnabled ?? false)) return Results.Forbid();
+        var row = await service.CreateDraft(t.AcademyId, Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!), body);
+        await tx.CommitAsync(); return Results.Ok(new { row.Id, row.Revision });
+    }
+    private static async Task<IResult> Change(Guid id, ConfigurationChange body, ClaimsPrincipal actor, CurrentTenant tenant, FoundationDbContext db, AcademyConfigurationService service, TimeProvider clock)
+    {
+        var t = (await tenant.ResolveAsync())!; var user = Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await using var tx = await db.Database.BeginTransactionAsync(); await Lock(db, t.AcademyId);
+        var row = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
+        if (row is null) return Results.NotFound();
+        if (row.Version != body.Version) return Results.Problem(statusCode: 409, title: "تغير إصدار الإعدادات؛ حدّث الصفحة");
+        var valid = (row.State, body.Target) is (ConfigurationState.Draft, ConfigurationState.Validated) or (ConfigurationState.Validated, ConfigurationState.Staged) or (ConfigurationState.Staged, ConfigurationState.Active) or (ConfigurationState.Active, ConfigurationState.Suspended) or (ConfigurationState.Suspended, ConfigurationState.Staged);
+        if (!valid) return Results.Problem(statusCode: 409, title: "انتقال حالة الإعدادات غير مسموح");
+        if (body.Target == ConfigurationState.Suspended && t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled) return Results.Forbid();
+        if (body.Target == ConfigurationState.Suspended && t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).FeedbackFollowUpDays != null) return Results.Forbid();
+        if(body.Target==ConfigurationState.Suspended&&t.Role!=AcademyRole.AcademyOwner&&AcademyRuntimeSettings.Read(row.Payload).MonthlyCollectionTarget!=null)return Results.Forbid();
+        if(body.Target==ConfigurationState.Suspended&&t.Role!=AcademyRole.AcademyOwner&&!OwnerHomeSettings.Same(AcademyRuntimeSettings.Read(row.Payload).OwnerHome,null))return Results.Forbid();
+        if (body.Target is ConfigurationState.Validated or ConfigurationState.Active or ConfigurationState.Staged)
+        {
+            var errors = await service.Validate(row); if (errors.Length > 0) return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = errors }, statusCode: 422);
+        }
+        if (body.Target == ConfigurationState.Staged) row.EffectiveAtUtc = body.EffectiveAtUtc ?? clock.GetUtcNow();
+        if (body.Target == ConfigurationState.Active)
+        {
+            if (row.EffectiveAtUtc > clock.GetUtcNow()) return Results.Problem(statusCode: 409, title: "لم يحن موعد سريان الإعدادات");
+            var previous = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.State == ConfigurationState.Active);
+            if (t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).FeedbackFollowUpDays != (previous == null ? null : AcademyRuntimeSettings.Read(previous.Payload).FeedbackFollowUpDays)) return Results.Forbid();
+            if(t.Role!=AcademyRole.AcademyOwner&&AcademyRuntimeSettings.Read(row.Payload).MonthlyCollectionTarget!=(previous==null?null:AcademyRuntimeSettings.Read(previous.Payload).MonthlyCollectionTarget))return Results.Forbid();
+            if(t.Role!=AcademyRole.AcademyOwner&&!OwnerHomeSettings.Same(AcademyRuntimeSettings.Read(row.Payload).OwnerHome,previous==null?null:AcademyRuntimeSettings.Read(previous.Payload).OwnerHome))return Results.Forbid();
+            if(AcademyRuntimeSettings.Read(row.Payload).MediaRetention!=(previous==null?null:AcademyRuntimeSettings.Read(previous.Payload).MediaRetention)&&!await Academy.Api.Operations.PrivateMediaLifecycle.FullOwner(db,t))return Results.Forbid();
+            if (t.Role != AcademyRole.AcademyOwner && !Academy.Api.Help.HelpAudiencePolicy.Same(AcademyRuntimeSettings.Read(row.Payload).HelpAudiences, previous is null ? null : AcademyRuntimeSettings.Read(previous.Payload).HelpAudiences)) return Results.Forbid();
+            if (t.Role != AcademyRole.AcademyOwner && AcademyRuntimeSettings.Read(row.Payload).CashEnabled != (previous is not null && AcademyRuntimeSettings.Read(previous.Payload).CashEnabled)) return Results.Forbid();
+            if (previous is not null) await service.Transition(previous, ConfigurationState.Superseded, user);
+        }
+        await service.Transition(row, body.Target, user); await tx.CommitAsync(); return Results.NoContent();
+    }
+    private static Task<int> Lock(FoundationDbContext db, Guid id) => db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + id}, 0))");
+    public sealed record TargetWrite(decimal? Amount,int ExpectedRevision,Guid? BranchId=null,DateOnly? From=null,DateOnly? To=null);
+    public sealed record OwnerHomeWrite(int ExpectedRevision,bool QuickActionsAtTop,int? CoachAssignmentTarget,OwnerHighlightPortraits? HighlightPortraits=null);
+    private static async Task<IResult> OwnerHome(OwnerHomeWrite body,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,AcademyConfigurationService service,TimeProvider clock)
+    {
+        var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
+        await using var tx=await db.Database.BeginTransactionAsync();await Lock(db,t.AcademyId);service.DiscardRequestCache(t.AcademyId);
+        var active=await db.AcademyConfigurationVersions.SingleOrDefaultAsync(v=>v.AcademyId==t.AcademyId&&v.State==ConfigurationState.Active);
+        if(active==null||active.Revision!=body.ExpectedRevision)return Results.Conflict(new{message="تغيرت الإعدادات؛ حدّث الصفحة قبل الحفظ."});
+        var settings=AcademyRuntimeSettings.Read(active.Payload);
+        var home=(settings.OwnerHome??new()) with{QuickActionsAtTop=body.QuickActionsAtTop,CoachAssignmentTarget=body.CoachAssignmentTarget,HighlightPortraits=body.HighlightPortraits??settings.OwnerHome?.HighlightPortraits};
+        var result=await ActivateOwnerSettings(active,settings with{OwnerHome=home},Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!),db,service,clock);
+        if(result is IStatusCodeHttpResult{StatusCode:200})await tx.CommitAsync();return result;
+    }
+    private static async Task<IResult> CollectionTarget(TargetWrite body,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,AcademyConfigurationService service,TimeProvider clock)
+    {
+        var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
+        if(body.Amount is <=0 or >1_000_000_000||body.Amount.HasValue&&decimal.Round(body.Amount.Value,2)!=body.Amount)return Results.UnprocessableEntity(new{message="أدخل هدفًا موجبًا بدقتين عشريتين أو اتركه فارغًا."});
+        if(body.BranchId==Guid.Empty||body.From.HasValue!=body.To.HasValue||body.BranchId.HasValue&&!body.From.HasValue||body.From?.Year<2000||body.To<body.From)return Results.UnprocessableEntity(new{message="اختر فترة صحيحة للهدف."});
+        await using var tx=await db.Database.BeginTransactionAsync();await Lock(db,t.AcademyId);service.DiscardRequestCache(t.AcademyId);
+        var active=await db.AcademyConfigurationVersions.SingleOrDefaultAsync(v=>v.AcademyId==t.AcademyId&&v.State==ConfigurationState.Active);
+        if(active==null||active.Revision!=body.ExpectedRevision)return Results.Conflict(new{message="تغيرت الإعدادات؛ حدّث الصفحة قبل حفظ الهدف."});
+        if(body.BranchId.HasValue&&!await db.Branches.AnyAsync(b=>b.AcademyId==t.AcademyId&&b.Id==body.BranchId&&b.IsActive))return Results.NotFound();
+        var settings=AcademyRuntimeSettings.Read(active.Payload);var next=settings;
+        if(body.From is {} from&&body.To is {} to){
+            var home=settings.OwnerHome??new();var targets=(home.Targets??[]).Where(x=>x.BranchId!=body.BranchId||x.From!=from||x.To!=to).ToList();
+            if(body.Amount is {} amount)targets.Add(new(body.BranchId,from,to,amount));
+            next=settings with{OwnerHome=home with{Targets=targets.ToArray()}};
+        }else next=settings with{MonthlyCollectionTarget=body.Amount}; // Existing monthly contract remains supported.
+        var result=await ActivateOwnerSettings(active,next,Guid.Parse(actor.FindFirstValue(ClaimTypes.NameIdentifier)!),db,service,clock);
+        if(result is IStatusCodeHttpResult{StatusCode:200})await tx.CommitAsync();return result;
+    }
+    private static async Task<IResult> ActivateOwnerSettings(AcademyConfigurationVersion active,AcademyRuntimeSettings next,Guid user,FoundationDbContext db,AcademyConfigurationService service,TimeProvider clock)
+    {
+        var homeErrors=next.OwnerHome?.Validate()??[];if(homeErrors.Length>0)return Results.UnprocessableEntity(new{message="راجع إعدادات الرئيسية.",errors=homeErrors});
+        if(AcademyRuntimeSettings.Read(active.Payload).Serialize()==next.Serialize())return Results.Ok(new{revision=active.Revision});
+        var draft=await service.CreateDraft(active.AcademyId,user,next);
+        var errors=await service.Validate(draft);if(errors.Length>0)return Results.UnprocessableEntity(new{message="راجع إعدادات الأكاديمية قبل الحفظ.",errors});
+        await service.Transition(draft,ConfigurationState.Validated,user);draft.EffectiveAtUtc=clock.GetUtcNow();await service.Transition(draft,ConfigurationState.Staged,user);
+        await service.Transition(active,ConfigurationState.Superseded,user);await service.Transition(draft,ConfigurationState.Active,user);return Results.Ok(new{revision=draft.Revision});
+    }
+}
+public sealed record ConfigurationChange(ConfigurationState Target, uint Version, DateTimeOffset? EffectiveAtUtc = null);

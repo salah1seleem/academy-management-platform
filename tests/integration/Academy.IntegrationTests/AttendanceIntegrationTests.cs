@@ -1,0 +1,315 @@
+using System.Net;
+using System.Net.Http.Json;
+using Academy.Api.Auth;
+using Academy.Api.Slice2;
+using Academy.Api.Slice3;
+using Academy.Api.Slice4;
+using Academy.Infrastructure.Attendance;
+using Academy.Infrastructure.Persistence;
+using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Academy.IntegrationTests;
+
+[Collection("Tenant authentication database")]
+public sealed class AttendanceIntegrationTests : IAsyncLifetime
+{
+    private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
+    private Factory factory = null!;
+
+    public Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); return Task.CompletedTask; }
+    public async Task DisposeAsync() => await factory.DisposeAsync();
+
+    [Fact] public async Task Session_generation_creates_expected_occurrence()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var f = await GenerationFixture(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
+        Assert.Equal(1, await generator.GenerateAsync(f.Academy, owner, f.Date, f.Date));
+        var session = Assert.Single(await db.TrainingSessions.Where(x => x.AcademyId == f.Academy).ToListAsync());
+        Assert.Equal(f.Group, session.TrainingGroupId); Assert.Equal(f.Date, session.SessionDate);
+        Assert.Equal(TrainingSessionSource.RecurringSchedule, session.Source); Assert.Equal(new TimeOnly(17, 0), session.StartTime);
+    }
+
+    [Fact] public async Task Session_generation_rerun_is_idempotent()
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var f = await GenerationFixture(db); var generator = scope.ServiceProvider.GetRequiredService<TrainingSessionGenerator>(); var owner = await OwnerId(scope);
+        Assert.Equal(1, await generator.GenerateAsync(f.Academy, owner, f.Date, f.Date)); Assert.Equal(0, await generator.GenerateAsync(f.Academy, owner, f.Date, f.Date));
+        Assert.Single(await db.TrainingSessions.Where(x => x.AcademyId == f.Academy).ToListAsync());
+    }
+
+    [Fact] public async Task Academy_A_cannot_access_Academy_B_session()
+    { using var client = factory.CreateClient(); await StaffLogin(client, DemoSeed.OwnerEmail); Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/attendance/sessions/{Slice4DemoSeed.AcademyBSessionId}")).StatusCode); }
+
+    [Fact] public async Task Coach_cannot_access_unassigned_group_session()
+    { using var client = factory.CreateClient(); await StaffLogin(client, DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/attendance/sessions/{Slice4DemoSeed.TodaySwimmingSessionId}")).StatusCode); }
+
+    [Fact] public async Task Player_has_at_most_one_attendance_per_session()
+    {
+        var scenario = await Scenario(SubscriptionPlanType.Sessions); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var actor = await OwnerId(scope); var now = DateTimeOffset.UtcNow;
+        db.PlayerAttendances.AddRange(Attendance(scenario, actor, now), Attendance(scenario, actor, now)); await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact] public async Task Present_on_Duration_does_not_change_balance()
+    { var s = await Scenario(SubscriptionPlanType.Duration); var result = await Save(s, AttendanceStatus.Present); Assert.False(result.SessionConsumed); Assert.Null(result.RemainingSessions); }
+
+    [Fact] public async Task Present_on_Sessions_decrements_exactly_one()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); var result = await Save(s, AttendanceStatus.Present); Assert.True(result.SessionConsumed); Assert.Equal(before - 1, await Balance(s)); await Save(s, AttendanceStatus.Absent); }
+
+    [Fact] public async Task Present_on_Combined_decrements_exactly_one()
+    { var s = await Scenario(SubscriptionPlanType.Combined); var before = await Balance(s); var result = await Save(s, AttendanceStatus.Present); Assert.True(result.SessionConsumed); Assert.Equal(before - 1, await Balance(s)); await Save(s, AttendanceStatus.Absent); }
+
+    [Fact] public async Task Absent_does_not_decrement_balance()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Absent); Assert.Equal(before, await Balance(s)); }
+
+    [Fact] public async Task Three_consecutive_actual_absences_notify_linked_guardians_once()
+    {
+        var scenario = await Scenario(SubscriptionPlanType.Sessions);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var service = scope.ServiceProvider.GetRequiredService<AttendanceService>();
+        var actor = await OwnerId(scope);
+        var group = await db.TrainingGroups.SingleAsync(x => x.Id == scenario.GroupId);
+        var child = await db.SportEnrollments.Where(x => x.Id == scenario.EnrollmentId).Select(x => new { x.PlayerId, x.Player.ArabicName }).SingleAsync();
+        var linked = await db.GuardianPlayerLinks.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == child.PlayerId && x.IsActive && x.Guardian.IsActive).Select(x => x.Guardian.UserId).Distinct().ToArrayAsync();
+        Assert.NotEmpty(linked);
+        var before = await db.AcademyNotices.Select(x => x.Id).ToArrayAsync();
+        var sessions = Enumerable.Range(0, 5).Select(i => new TrainingSession { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId,
+            TrainingGroupId = group.Id, BranchId = group.BranchId, SportId = group.SportId, AgeCategoryId = group.AgeCategoryId,
+            SessionDate = new DateOnly(2026, 9, 22), StartTime = new TimeOnly(12, 54 + i), EndTime = new TimeOnly(12, 55 + i),
+            Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, CreatedByUserId = actor }).ToArray();
+        try
+        {
+            db.TrainingSessions.AddRange(sessions.Take(4)); await db.SaveChangesAsync();
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[0].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.NotRecorded)]);
+            for (var i = 1; i < 3; i++) await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[i].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            Assert.Empty(await db.AcademyNotices.Where(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")).ToArrayAsync());
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[3].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            var localNow = TimeZoneInfo.ConvertTime(scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo"));
+            Assert.Equal(new DateOnly(2026, 9, 22), DateOnly.FromDateTime(localNow.DateTime));
+            Assert.True(TimeOnly.FromDateTime(localNow.DateTime) >= sessions[3].StartTime);
+            var recent = await db.TrainingSessions.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Status != TrainingSessionStatus.Cancelled &&
+                    (x.SessionDate < new DateOnly(2026, 9, 22) || x.SessionDate == new DateOnly(2026, 9, 22) && x.StartTime <= TimeOnly.FromDateTime(localNow.DateTime)) &&
+                    FoundationDbContext.IsSessionAssigned(DemoSeed.NogoomAcademyId, scenario.EnrollmentId, x.Id))
+                .OrderByDescending(x => x.SessionDate).ThenByDescending(x => x.StartTime).ThenByDescending(x => x.Id).Take(4).Select(x => x.Id).ToArrayAsync();
+            Assert.Equal(sessions[3].Id, recent[0]);
+            Assert.Equal(3, await db.PlayerAttendances.CountAsync(x => x.SportEnrollmentId == scenario.EnrollmentId && recent.Take(3).Contains(x.TrainingSessionId) && x.Status == AttendanceStatus.Absent));
+            var notices = await db.AcademyNotices.Where(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")).ToArrayAsync();
+            Assert.Equal(linked.Length, notices.Length);
+            Assert.All(notices, x => { Assert.Equal(DemoSeed.NogoomAcademyId, x.AcademyId); Assert.Contains(x.UserId, linked); Assert.Contains(child.ArabicName, x.Message); });
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[3].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            db.TrainingSessions.Add(sessions[4]); await db.SaveChangesAsync();
+            await service.SavePlayersAsync(DemoSeed.NogoomAcademyId, sessions[4].Id, actor, [new(scenario.EnrollmentId, AttendanceStatus.Absent)]);
+            Assert.Equal(notices.Length, await db.AcademyNotices.CountAsync(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")));
+            var recorded=await db.AcademyNotices.Where(n=>!before.Contains(n.Id)&&n.TargetKind=="Attendance"&&n.TargetId==child.PlayerId).ToArrayAsync();
+            Assert.Equal(linked.Length*4,recorded.Length);
+            Assert.All(recorded,n=>{Assert.Contains(child.ArabicName,n.Message);Assert.Contains("2026-09-22",n.Message);Assert.DoesNotContain("{",n.Message);Assert.Contains(n.UserId,linked);});
+        }
+        finally
+        {
+            var sessionIds = sessions.Select(x => x.Id).ToArray();
+            await db.AcademyNotices.Where(x => !before.Contains(x.Id) && x.Message.Contains("آخر 3 حصص")).ExecuteDeleteAsync();
+            await db.PlayerAttendances.Where(x => sessionIds.Contains(x.TrainingSessionId)).ExecuteDeleteAsync();
+            await db.TrainingSessions.Where(x => sessionIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact] public async Task NotRecorded_does_not_decrement_balance()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.NotRecorded); Assert.Equal(before, await Balance(s)); }
+
+    [Fact] public async Task Present_saved_twice_consumes_once()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Present); await Save(s, AttendanceStatus.Present); Assert.Equal(before - 1, await Balance(s)); Assert.Equal(1, await MovementCount(s)); await Save(s, AttendanceStatus.Absent); }
+
+    [Fact] public async Task Retried_HTTP_request_consumes_once()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); using var client = factory.CreateClient(); await StaffLogin(client, DemoSeed.OwnerEmail); var csrf = await Csrf(client); (await Put(client, s.SessionId, s.EnrollmentId, 2, csrf)).EnsureSuccessStatusCode(); (await Put(client, s.SessionId, s.EnrollmentId, 2, csrf)).EnsureSuccessStatusCode(); Assert.Equal(before - 1, await Balance(s)); await Save(s, AttendanceStatus.Absent); }
+
+    [Fact] public async Task Concurrent_Present_requests_consume_once()
+    {
+        var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s);
+        async Task Record() { await using var scope = factory.Services.CreateAsyncScope(); var actor = await OwnerId(scope); await scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(DemoSeed.NogoomAcademyId, s.SessionId, actor, [new(s.EnrollmentId, AttendanceStatus.Present)]); }
+        await Task.WhenAll(Task.Run(Record), Task.Run(Record)); Assert.Equal(before - 1, await Balance(s)); Assert.Equal(1, await MovementCount(s)); await Save(s, AttendanceStatus.Absent);
+    }
+
+    [Fact] public async Task Absent_to_Present_consumes_once()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Absent); await Save(s, AttendanceStatus.Present); Assert.Equal(before - 1, await Balance(s)); await Save(s, AttendanceStatus.Absent); }
+
+    [Fact] public async Task Present_to_Absent_restores_one()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Present); await Save(s, AttendanceStatus.Absent); Assert.Equal(before, await Balance(s)); Assert.Equal(2, await MovementCount(s)); }
+
+    [Fact] public async Task Present_to_NotRecorded_restores_one()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Present); await Save(s, AttendanceStatus.NotRecorded); Assert.Equal(before, await Balance(s)); Assert.Equal(2, await MovementCount(s)); }
+
+    [Fact] public async Task Repeated_Present_to_Absent_does_not_over_restore()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Present); await Save(s, AttendanceStatus.Absent); await Save(s, AttendanceStatus.Absent); Assert.Equal(before, await Balance(s)); Assert.Equal(2, await MovementCount(s)); }
+
+    [Fact] public async Task Zero_balance_never_becomes_negative()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var original = await SetBalance(s, 0); try { await Save(s, AttendanceStatus.Present); Assert.Equal(0, await Balance(s)); } finally { await SetBalance(s, original); } }
+
+    [Fact] public async Task Zero_balance_Present_is_recorded_with_warning()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var original = await SetBalance(s, 0); try { var result = await Save(s, AttendanceStatus.Present); Assert.False(result.SessionConsumed); Assert.Contains("رصيد", result.Warning); Assert.Equal(AttendanceStatus.Present, await AttendanceStatusOf(s)); } finally { await SetBalance(s, original); } }
+
+    [Fact] public async Task Attendance_for_player_in_unrelated_group_is_rejected()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var unrelated = await db.SportEnrollments.Where(x => x.PlayerId == Slice2DemoSeed.OmarPlayerId && x.SportId == Slice2DemoSeed.SwimmingId).Select(x => x.Id).SingleAsync(); var actor = await OwnerId(scope); await Assert.ThrowsAsync<AttendanceNotFoundException>(() => scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(DemoSeed.NogoomAcademyId, s.SessionId, actor, [new(unrelated, AttendanceStatus.Present)])); }
+
+    [Fact] public async Task Attendance_for_unrelated_tenant_is_rejected()
+    { await using var scope = factory.Services.CreateAsyncScope(); var actor = await OwnerId(scope); await Assert.ThrowsAsync<AttendanceNotFoundException>(() => scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(DemoSeed.NogoomAcademyId, Slice4DemoSeed.AcademyBSessionId, actor, [new(Guid.NewGuid(), AttendanceStatus.Present)])); }
+
+    [Fact] public async Task Staff_attendance_does_not_affect_player_balance()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var membership = await db.AcademyMemberships.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.User.Email == DemoSeed.CoachEmail).Select(x => x.Id).SingleAsync(); var actor = await OwnerId(scope); await scope.ServiceProvider.GetRequiredService<AttendanceService>().SaveStaffAsync(DemoSeed.NogoomAcademyId, s.SessionId, actor, [new(membership, AttendanceStatus.Present)]); Assert.Equal(before, await Balance(s)); }
+
+    [Fact] public async Task Cancelled_session_blocks_new_attendance()
+    { await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var enrollment = await db.SportEnrollments.Where(x => x.PlayerId == Slice2DemoSeed.OtherPlayerId && x.SportId == Slice2DemoSeed.FootballId).Select(x => x.Id).SingleAsync(); var actor = await OwnerId(scope); await Assert.ThrowsAsync<AttendanceConflictException>(() => scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(DemoSeed.NogoomAcademyId, Slice4DemoSeed.CancelledFootballSessionId, actor, [new(enrollment, AttendanceStatus.Present)])); }
+
+    [Fact] public async Task Guardian_sees_only_linked_child_attendance()
+    { using var client = await GuardianClient(); Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/guardian/children/{Slice2DemoSeed.OmarPlayerId}/attendance")).StatusCode); Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/guardian/children/{Slice2DemoSeed.OtherPlayerId}/attendance")).StatusCode); }
+
+    [Fact] public async Task Admin_history_player_context_returns_only_that_player()
+    { using var client = factory.CreateClient(); await StaffLogin(client, DemoSeed.AdminEmail); var rows = await client.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/v1/attendance/history?playerId={Slice2DemoSeed.OmarPlayerId}"); Assert.All(rows.EnumerateArray(), row => Assert.Equal("عمر أحمد محمود", row.GetProperty("player").GetString())); }
+
+    [Fact] public async Task Guardian_cannot_mutate_attendance()
+    { using var client = await GuardianClient(); var csrf = await Csrf(client); var response = await Put(client, Slice4DemoSeed.TodayFootballSessionId, Guid.NewGuid(), 2, csrf); Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode); }
+
+    [Fact] public async Task Coach_cannot_access_financial_collections()
+    { using var client = factory.CreateClient(); await StaffLogin(client, DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/subscriptions/collections")).StatusCode); }
+
+    [Fact] public async Task Session_movement_audit_matches_balance_changes()
+    { var s = await Scenario(SubscriptionPlanType.Sessions); var before = await Balance(s); await Save(s, AttendanceStatus.Present); await Save(s, AttendanceStatus.Absent); await using var scope = factory.Services.CreateAsyncScope(); var rows = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().SubscriptionSessionMovements.Where(x => x.PlayerAttendance.TrainingSessionId == s.SessionId).OrderBy(x => x.OccurredAtUtc).ToListAsync(); Assert.Collection(rows, consume => { Assert.Equal(-1, consume.Quantity); Assert.Equal(before, consume.BalanceBefore); Assert.Equal(before - 1, consume.BalanceAfter); }, restore => { Assert.Equal(1, restore.Quantity); Assert.Equal(before - 1, restore.BalanceBefore); Assert.Equal(before, restore.BalanceAfter); Assert.Equal(rows[0].Id, restore.ReversesMovementId); }); }
+
+    [Fact] public async Task Approved_scheduled_expiry_respects_timing_enablement_newer_period_and_repeated_ticks()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var fixture=await NoticeFixture(db,scope.ServiceProvider);var f=(Academy:fixture.Academy,Group:fixture.Group);var actor=fixture.Actor;var guardian=fixture.Guardian;var enrollment=fixture.Enrollment;var plan=fixture.Plan;
+        var expiring=new Academy.Infrastructure.Operations.NoticeTemplate{Id=Guid.NewGuid(),AcademyId=f.Academy,Key="Expiring",Message="اقترب انتهاء {اسم_اللاعب} في {التاريخ}",TimingDays=2};db.NoticeTemplates.Add(expiring);await db.SaveChangesAsync();
+        var service=scope.ServiceProvider.GetRequiredService<Academy.Api.Operations.CollectionService>();
+        var first=await db.SubscriptionPeriods.Where(p=>p.AcademyId==f.Academy).SingleAsync();var through=first.EndDate!.Value.AddDays(-3);
+        static DateTimeOffset Noon(DateOnly date)=>new(date.Year,date.Month,date.Day,10,0,0,TimeSpan.Zero);
+        Assert.Equal(0,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(through)));
+        expiring.TimingDays=7;await db.SaveChangesAsync();
+        Assert.Equal(1,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(through)));
+        Assert.Equal(0,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(through)));
+        var near=await db.AcademyNotices.SingleAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="Expiring");Assert.Equal(guardian,near.UserId);Assert.Equal(first.Id,near.TargetId);Assert.Contains("لاعب جدولة اصطناعي",near.Message);Assert.DoesNotContain("{",near.Message);
+        await using(var tx=await db.Database.BeginTransactionAsync()){await service.CreateCashAsync(f.Academy,actor,enrollment,plan,"schedule-renewed","Cash");await tx.CommitAsync();}
+        var latest=await db.SubscriptionPeriods.Where(p=>p.AcademyId==f.Academy&&p.Id!=first.Id).SingleAsync();
+        Assert.Equal(0,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(first.EndDate.Value.AddDays(1))));
+        var expired=new Academy.Infrastructure.Operations.NoticeTemplate{Id=Guid.NewGuid(),AcademyId=f.Academy,Key="Expired",Message="انتهى اشتراك {اسم_اللاعب}",IsActive=false};db.NoticeTemplates.Add(expired);await db.SaveChangesAsync();
+        Assert.Equal(0,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(latest.EndDate!.Value.AddDays(1))));
+        expired.IsActive=true;await db.SaveChangesAsync();
+        Assert.Equal(1,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(latest.EndDate.Value.AddDays(1))));
+        Assert.Equal(0,await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,Noon(latest.EndDate.Value.AddDays(1))));
+        var ended=await db.AcademyNotices.SingleAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="Expired");Assert.Equal(latest.Id,ended.TargetId);Assert.Equal(guardian,ended.UserId);
+        Assert.Equal(2,await db.Collections.CountAsync(c=>c.AcademyId==f.Academy));Assert.Equal(0,await db.PlayerAttendances.CountAsync(a=>a.AcademyId==f.Academy));
+    }
+
+    [Fact] public async Task Approved_absence_threshold_two_handles_backfilled_record_once_without_inferred_absence()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var f=await NoticeFixture(db,scope.ServiceProvider);
+        var configuration=scope.ServiceProvider.GetRequiredService<Academy.Api.Configuration.AcademyConfigurationService>();
+        var active=await db.AcademyConfigurationVersions.SingleAsync(c=>c.AcademyId==f.Academy&&c.State==ConfigurationState.Active);
+        var settings=AcademyRuntimeSettings.Read(active.Payload) with{ConsecutiveAbsenceAlert=2};
+        await using(var tx=await db.Database.BeginTransactionAsync()){
+            var draft=await configuration.CreateDraft(f.Academy,f.Actor,settings);Assert.Empty(await configuration.Validate(draft));
+            await configuration.Transition(draft,ConfigurationState.Validated,f.Actor);await configuration.Transition(draft,ConfigurationState.Staged,f.Actor);await configuration.Transition(active,ConfigurationState.Superseded,f.Actor);await configuration.Transition(draft,ConfigurationState.Active,f.Actor);await tx.CommitAsync();
+        }
+        var group=await db.TrainingGroups.SingleAsync(g=>g.Id==f.Group);var date=await AttendanceCalendar.TodayAsync(f.Academy,db,scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        TrainingSession Session(int minute)=>new(){Id=Guid.NewGuid(),AcademyId=f.Academy,TrainingGroupId=f.Group,BranchId=group.BranchId,SportId=group.SportId,AgeCategoryId=group.AgeCategoryId,SessionDate=date,StartTime=new(1,minute),EndTime=new(1,minute+1),CreatedByUserId=f.Actor,Source=TrainingSessionSource.Manual,Status=TrainingSessionStatus.Scheduled};
+        var first=Session(0);var second=Session(2);db.TrainingSessions.AddRange(first,second);await db.SaveChangesAsync();
+        var attendance=scope.ServiceProvider.GetRequiredService<AttendanceService>();
+        await attendance.SavePlayersAsync(f.Academy,second.Id,f.Actor,[new(f.Enrollment,AttendanceStatus.Absent)]);
+        Assert.Equal(0,await db.AcademyNotices.CountAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="Absence"));
+        await attendance.SavePlayersAsync(f.Academy,first.Id,f.Actor,[new(f.Enrollment,AttendanceStatus.Absent)]);
+        var alert=await db.AcademyNotices.SingleAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="Absence");Assert.Equal(f.Guardian,alert.UserId);Assert.Contains("2",alert.Message);
+        await attendance.SavePlayersAsync(f.Academy,first.Id,f.Actor,[new(f.Enrollment,AttendanceStatus.Absent)]);
+        var third=Session(4);db.TrainingSessions.Add(third);await db.SaveChangesAsync();await attendance.SavePlayersAsync(f.Academy,third.Id,f.Actor,[new(f.Enrollment,AttendanceStatus.Absent)]);
+        Assert.Equal(1,await db.AcademyNotices.CountAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="Absence"));
+        Assert.Equal(3,await db.AcademyNotices.CountAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="RecordedAbsence"));
+    }
+
+    [Fact] public async Task Approved_scheduled_exhaustion_does_not_alert_old_session_period_after_live_renewal_with_equal_clock()
+    {
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var f=await NoticeFixture(db,scope.ServiceProvider,SubscriptionPlanType.Sessions);
+        var original=await db.SubscriptionPeriods.Where(p=>p.AcademyId==f.Academy).SingleAsync();var group=await db.TrainingGroups.SingleAsync(g=>g.Id==f.Group);
+        var now=new DateTimeOffset(original.StartDate.Year,original.StartDate.Month,original.StartDate.Day,12,0,0,TimeSpan.Zero);
+        var attendance=new AttendanceService(db,new NoticeClock(now));
+        for(var i=0;i<10;i++){
+            var session=new TrainingSession{Id=Guid.NewGuid(),AcademyId=f.Academy,TrainingGroupId=f.Group,BranchId=group.BranchId,SportId=group.SportId,AgeCategoryId=group.AgeCategoryId,SessionDate=original.StartDate,StartTime=new(1,i*2),EndTime=new(1,i*2+1),CreatedByUserId=f.Actor,Source=TrainingSessionSource.Manual,Status=TrainingSessionStatus.Scheduled};db.TrainingSessions.Add(session);await db.SaveChangesAsync();
+            await attendance.SavePlayersAsync(f.Academy,session.Id,f.Actor,[new(f.Enrollment,AttendanceStatus.Present)]);
+        }
+        Assert.Equal(0,await db.SubscriptionPeriods.Where(p=>p.Id==original.Id).Select(p=>p.RemainingSessions).SingleAsync());
+        await using(var tx=await db.Database.BeginTransactionAsync()){
+            await scope.ServiceProvider.GetRequiredService<Academy.Api.Operations.CollectionService>().CreateCashAsync(f.Academy,f.Actor,f.Enrollment,f.Plan,"schedule-session-renewal","Cash");await tx.CommitAsync();
+        }
+        var renewed=await db.SubscriptionPeriods.Where(p=>p.AcademyId==f.Academy&&p.Id!=original.Id).SingleAsync();Assert.Equal(original.StartDate,renewed.StartDate);Assert.Equal(original.CreatedAtUtc,renewed.CreatedAtUtc);Assert.Equal(10,renewed.RemainingSessions);
+        await Academy.Api.Operations.NotificationSchedule.ProcessAcademy(db,f.Academy,now);
+        Assert.Equal(0,await db.AcademyNotices.CountAsync(n=>n.AcademyId==f.Academy&&n.EventKey=="Expired"));
+    }
+    private sealed class NoticeClock(DateTimeOffset now):TimeProvider{public override DateTimeOffset GetUtcNow()=>now;}
+
+    private async Task<(Guid Academy,Guid Group,Guid Actor,Guid Guardian,Guid Player,Guid Enrollment,Guid Plan)> NoticeFixture(FoundationDbContext db,IServiceProvider services,SubscriptionPlanType type=SubscriptionPlanType.Duration)
+    {
+        var f=await GenerationFixture(db);await Academy.Api.Configuration.AcademyConfigurationService.SeedDemo(db,[f.Academy]);
+        var group=await db.TrainingGroups.SingleAsync(g=>g.Id==f.Group);var actor=Guid.NewGuid();var guardian=Guid.NewGuid();var player=Guid.NewGuid();var enrollment=Guid.NewGuid();var plan=Guid.NewGuid();var profile=Guid.NewGuid();
+        db.Users.AddRange(new Academy.Infrastructure.Identity.ApplicationUser{Id=actor,UserName="notice-owner-"+actor,DisplayName="مالك عرض مستقل",SecurityStamp=Guid.NewGuid().ToString()},new Academy.Infrastructure.Identity.ApplicationUser{Id=guardian,UserName="notice-family-"+guardian,DisplayName="ولي أمر عرض مستقل",SecurityStamp=Guid.NewGuid().ToString()});
+        db.AcademyMemberships.AddRange(new(){Id=Guid.NewGuid(),AcademyId=f.Academy,UserId=actor,Role=AcademyRole.AcademyOwner},new(){Id=Guid.NewGuid(),AcademyId=f.Academy,UserId=guardian,Role=AcademyRole.Guardian});
+        db.GuardianProfiles.Add(new(){Id=profile,AcademyId=f.Academy,UserId=guardian,DisplayName="أسرة عرض مستقلة",ContactPhone="01599123456"});
+        db.Players.Add(new(){Id=player,AcademyId=f.Academy,ArabicName="لاعب جدولة اصطناعي",PlayerCode="NOTICE-1",DateOfBirth=new(2016,1,1)});
+        db.SportEnrollments.Add(new(){Id=enrollment,AcademyId=f.Academy,PlayerId=player,BranchId=group.BranchId,SportId=group.SportId,TrainingGroupId=group.Id});
+        db.GuardianPlayerLinks.Add(new(){Id=Guid.NewGuid(),AcademyId=f.Academy,PlayerId=player,GuardianId=profile,CreatedByUserId=actor});
+        db.SubscriptionPlans.Add(new(){Id=plan,AcademyId=f.Academy,SportId=group.SportId,ArabicName="باقة جدولة اصطناعية",PlanType=type,DurationDays=type==SubscriptionPlanType.Duration?10:null,SessionCount=type==SubscriptionPlanType.Sessions?10:null,Price=100,Currency="EGP"});
+        await db.SaveChangesAsync();
+        var service=services.GetRequiredService<Academy.Api.Operations.CollectionService>();
+        await using(var tx=await db.Database.BeginTransactionAsync()){await service.CreateCashAsync(f.Academy,actor,enrollment,plan,"schedule-initial","Cash");await tx.CommitAsync();}
+        return(f.Academy,f.Group,actor,guardian,player,enrollment,plan);
+    }
+    private async Task<ScenarioData> Scenario(SubscriptionPlanType type)
+    {
+        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var playerId = type == SubscriptionPlanType.Combined ? Slice2DemoSeed.OmarPlayerId : type == SubscriptionPlanType.Duration ? Slice2DemoSeed.OmarPlayerId : Slice2DemoSeed.OtherPlayerId;
+        var sportId = type == SubscriptionPlanType.Combined ? Slice2DemoSeed.SwimmingId : Slice2DemoSeed.FootballId;
+        var enrollment = await db.SportEnrollments.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.PlayerId == playerId && x.SportId == sportId);
+        var group = await db.TrainingGroups.SingleAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Id == enrollment.TrainingGroupId); var actor = await OwnerId(scope);
+        var date = new DateOnly(2026, 9, 22); var starts = await db.TrainingSessions.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.TrainingGroupId == group.Id && x.SessionDate == date).Select(x => x.StartTime).ToListAsync(); var start = new TimeOnly(1, 0); while (starts.Contains(start)) start = start.AddMinutes(1);
+        var session = new TrainingSession { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, TrainingGroupId = group.Id, BranchId = group.BranchId, SportId = group.SportId, AgeCategoryId = group.AgeCategoryId, SessionDate = date, StartTime = start, EndTime = start.AddHours(1), Status = TrainingSessionStatus.Scheduled, Source = TrainingSessionSource.Manual, CreatedByUserId = actor, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+        db.TrainingSessions.Add(session); await db.SaveChangesAsync(); return new(session.Id, enrollment.Id, group.Id);
+    }
+
+    private async Task<AttendanceSaveResult> Save(ScenarioData scenario, AttendanceStatus status)
+    { await using var scope = factory.Services.CreateAsyncScope(); var actor = await OwnerId(scope); return (await scope.ServiceProvider.GetRequiredService<AttendanceService>().SavePlayersAsync(DemoSeed.NogoomAcademyId, scenario.SessionId, actor, [new(scenario.EnrollmentId, status)])).Single(); }
+    private async Task<int> Balance(ScenarioData s) { await using var scope = factory.Services.CreateAsyncScope(); return await EligiblePeriod(scope, s).Select(x => x.RemainingSessions!.Value).FirstAsync(); }
+    private async Task<int> SetBalance(ScenarioData s, int value) { await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var period = await EligiblePeriod(scope, s).FirstAsync(); var old = period.RemainingSessions ?? 0; period.RemainingSessions = value; await db.SaveChangesAsync(); return old; }
+    private async Task<int> MovementCount(ScenarioData s) { await using var scope = factory.Services.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().SubscriptionSessionMovements.CountAsync(x => x.PlayerAttendance.TrainingSessionId == s.SessionId); }
+    private async Task<AttendanceStatus> AttendanceStatusOf(ScenarioData s) { await using var scope = factory.Services.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().PlayerAttendances.Where(x => x.TrainingSessionId == s.SessionId && x.SportEnrollmentId == s.EnrollmentId).Select(x => x.Status).SingleAsync(); }
+    private IQueryable<SubscriptionPeriod> EligiblePeriod(AsyncServiceScope scope, ScenarioData s) => scope.ServiceProvider.GetRequiredService<FoundationDbContext>().SubscriptionPeriods.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.SportEnrollmentId == s.EnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.Status != SubscriptionPeriodStatus.Frozen && x.StartDate <= new DateOnly(2026, 9, 22) && (x.EndDate == null || x.EndDate >= new DateOnly(2026, 9, 22))).OrderBy(x => x.StartDate);
+    private static PlayerAttendance Attendance(ScenarioData s, Guid actor, DateTimeOffset now) => new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, TrainingSessionId = s.SessionId, TrainingGroupId = s.GroupId, SportEnrollmentId = s.EnrollmentId, Status = AttendanceStatus.NotRecorded, RecordedByUserId = actor, CreatedAtUtc = now, UpdatedAtUtc = now };
+    private static async Task<Guid> OwnerId(AsyncServiceScope scope) => await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Users.Where(x => x.Email == DemoSeed.OwnerEmail).Select(x => x.Id).SingleAsync();
+    private static async Task<(Guid Academy, Guid Group, DateOnly Date)> GenerationFixture(FoundationDbContext db)
+    {
+        // Academy-wide generation must not inherit unrelated test rosters or coach conflicts.
+        // Keep the production capacity guard intact; own the whole academy under test.
+        var academy = Guid.NewGuid(); var branch = Guid.NewGuid(); var sport = Guid.NewGuid(); var age = Guid.NewGuid(); var group = Guid.NewGuid(); var date = new DateOnly(2040, 1, 3);
+        db.Academies.Add(new() { Id = academy, ArabicName = "أكاديمية توليد اصطناعية", Slug = "generation-" + academy.ToString("N"), TimeZone = "Africa/Cairo", DefaultCurrency = "EGP" });
+        db.Branches.Add(new() { Id = branch, AcademyId = academy, ArabicName = "فرع اصطناعي" });
+        db.Sports.Add(new() { Id = sport, AcademyId = academy, ArabicName = "رياضة اصطناعية" });
+        db.AgeCategories.Add(new() { Id = age, AcademyId = academy, ArabicName = "فئة اصطناعية" });
+        db.TrainingGroups.Add(new() { Id = group, AcademyId = academy, BranchId = branch, SportId = sport, AgeCategoryId = age, ArabicName = "مجموعة توليد اصطناعية", Capacity = 1 });
+        db.RecurringSchedules.Add(new() { Id = Guid.NewGuid(), AcademyId = academy, TrainingGroupId = group, DayOfWeek = date.DayOfWeek, ValidFrom = date, ValidTo = date, StartTime = new(17, 0), EndTime = new(18, 0) });
+        await db.SaveChangesAsync(); return (academy, group, date);
+    }
+
+    private async Task<HttpClient> GuardianClient() { var client = factory.CreateClient(); var request = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, await Csrf(client)); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); (await Post(client, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, await Csrf(client))).EnsureSuccessStatusCode(); return client; }
+    private async Task StaffLogin(HttpClient client, string email) { if (email == DemoSeed.CoachEmail) await MobileCoachTestSession.SignInAsync(client, factory.Services); else (await Post(client, "/api/v1/auth/login", new { email, password = "Demo-Only-123!" }, await Csrf(client))).EnsureSuccessStatusCode(); }
+    private static async Task<string> Csrf(HttpClient client) => (await client.GetFromJsonAsync<CsrfDto>("/api/v1/auth/csrf"))!.Token;
+    private static Task<HttpResponseMessage> Put(HttpClient client, Guid session, Guid enrollment, int status, string csrf) { var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/attendance/sessions/{session}/players") { Content = JsonContent.Create(new { items = new[] { new { sportEnrollmentId = enrollment, status } } }) }; request.Headers.Add("X-CSRF-TOKEN", csrf); return client.SendAsync(request); }
+    private static Task<HttpResponseMessage> Post(HttpClient client, string path, object body, string csrf) { var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; request.Headers.Add("X-CSRF-TOKEN", csrf); return client.SendAsync(request); }
+    private sealed record ScenarioData(Guid SessionId, Guid EnrollmentId, Guid GroupId); private sealed record CsrfDto(string Token); private sealed record Challenge(Guid ChallengeId);
+    private sealed class Factory(string connection) : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            var clock = new ScenarioTimeProvider(DateTimeOffset.Parse("2026-09-22T10:00:00Z"));
+            builder.ConfigureServices(s => { s.AddSingleton<TimeProvider>(clock); s.PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme, o => o.TimeProvider = clock); });
+            builder.UseEnvironment("Demo"); builder.UseSetting("ConnectionStrings:Default", connection); builder.UseSetting("Demo:SeedProfile", "LegacyRegression"); builder.UseSetting("Demo:SeedEnabled", "true"); builder.UseSetting("Demo:FixedOtpEnabled", "true"); builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); builder.UseSetting("Demo:ReferenceDate", "2026-09-28"); builder.UseSetting("Payments:InternalTest:Enabled", "true"); builder.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456");
+        }
+    }
+}

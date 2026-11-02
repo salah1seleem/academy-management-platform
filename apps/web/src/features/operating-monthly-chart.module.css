@@ -1,0 +1,12 @@
+.chart{margin:0;padding:12px 14px 8px;border:1px solid var(--line,var(--staff-border,#898584));min-width:0}
+.chart figcaption{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px}
+.chart figcaption span{display:flex;align-items:center;gap:6px}
+.chart i{display:inline-block;width:10px;height:10px}
+.income{fill:var(--cash-positive,#16803c);background:var(--cash-positive,#16803c)}
+.expenses{fill:var(--cash-negative,#c8102e);background:var(--cash-negative,#c8102e)}
+.chart>small{display:block;font-size:10px;color:var(--muted,var(--staff-text-secondary,#898584));margin-block:6px}
+.chart svg{display:block;width:100%;height:100px;overflow:visible}
+.chart line{stroke:var(--line,var(--staff-border,#898584));stroke-width:1}
+.months{display:grid;direction:ltr;gap:6px;text-align:center}
+.months>a{font-size:11px;padding-block:10px;color:var(--ink,var(--staff-text,#1b1a17));text-decoration:none;min-width:0}
+.months>a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

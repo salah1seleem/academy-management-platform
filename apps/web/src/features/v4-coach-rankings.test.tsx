@@ -1,0 +1,6 @@
+import {cleanup,fireEvent,render,screen} from "@testing-library/react";
+import {afterEach,expect,it,vi} from "vitest";
+import {CoachRatingLeaders,CoachRatingStars} from "./coach-rating-leaders";
+afterEach(()=>{cleanup();vi.restoreAllMocks();});
+it("family star choices have exact numeric values and accessible names",()=>{const change=vi.fn();render(<CoachRatingStars value={3} onChange={change}/>);expect(screen.getByRole("radio",{name:"3 من 5"})).toBeChecked();fireEvent.click(screen.getByRole("radio",{name:"5 من 5"}));expect(change).toHaveBeenCalledWith(5);});
+it("ranking keeps the real sample size and preserves drilldown scope",async()=>{global.fetch=vi.fn(async()=>Response.json({minimumReviews:3,insufficientSampleCount:2,highest:[{id:"c",name:"مدرب اصطناعي",averageRating:4.33,reviewCount:3}],lowest:[]})) as typeof fetch;render(<CoachRatingLeaders branchId="b" from="2026-10-01" to="2026-10-19"/>);const link=await screen.findByRole("link",{name:"مدرب اصطناعي"});expect(link).toHaveAttribute("href",expect.stringContaining("coachId=c"));expect(link).toHaveAttribute("href",expect.stringContaining("from=2026-10-01"));expect(link).toHaveAttribute("href",expect.stringContaining("branchId=b"));expect(screen.getByText("لا توجد عينة تقييم كافية في الفترة المختارة.")).toBeInTheDocument();expect(screen.getByText("· 3 تقييمات",{exact:false})).toBeInTheDocument();});

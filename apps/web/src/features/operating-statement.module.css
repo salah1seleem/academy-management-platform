@@ -1,0 +1,20 @@
+.report{--line:var(--staff-border);--ink:var(--staff-text);--muted:var(--staff-text-secondary);--cash-positive:var(--staff-success);--cash-negative:var(--staff-danger);display:grid;gap:12px;min-width:0}
+.report :global(.page-header){margin-bottom:0;padding-bottom:12px}
+.report :global(.page-header h1){font-size:24px;font-weight:500}
+.report :global(.report-filters){border-radius:0;box-shadow:none;border:1px solid var(--line);background:var(--staff-surface);padding:12px}
+.report :global(.statement-basis){border:1px solid var(--line);background:var(--staff-surface-muted);color:var(--ink);font-size:12px}
+.report :global(.statement-basis summary){cursor:pointer}
+.report :global(.operating-statement-grid){gap:12px}
+.report :global(.operating-statement-lines){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.report :global(.operating-statement-lines)>a{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:4px;padding:10px;border:1px solid var(--line);color:var(--ink);text-decoration:none;min-width:0}
+.report :global(.operating-statement-lines)>a>span{font-size:12px;color:var(--muted);line-height:1.3}
+.report :global(.operating-statement-lines)>a>bdi{font-size:16px;font-weight:600}
+.report :global(.operating-statement-total){grid-column:1/-1;font-size:14px;color:var(--ink);border-color:var(--line)}
+.report :global(.operating-result){border:1px solid var(--cash-positive);border-inline-start-width:4px;background:var(--staff-surface);color:var(--cash-positive);border-radius:0;padding:12px 14px;margin:0}
+.report :global(.operating-result.deficit){background:var(--staff-surface);border-color:var(--cash-negative);color:var(--cash-negative)}
+.report :global(.operating-result h2){font-size:24px;font-weight:600}
+.report :global(.operating-result)>span{font-size:11px;color:var(--muted)}
+.report :global(.statement-reconciliation){gap:6px}
+.report :global(.statement-reconciliation)>a{border-radius:0;box-shadow:none;background:var(--staff-surface-muted);color:var(--ink);border:1px solid var(--line)}
+.report :global(a:focus-visible){outline:2px solid var(--staff-primary-600);outline-offset:2px}
+@media(max-width:600px){.report :global(.operating-statement-lines){grid-template-columns:repeat(2,minmax(0,1fr))}}

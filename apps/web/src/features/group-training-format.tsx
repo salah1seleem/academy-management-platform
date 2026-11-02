@@ -1,0 +1,10 @@
+"use client";
+import { FormEvent, useState } from "react";
+import { csrfRequest } from "./dashboard-api";
+export const trainingFormatName = (format?: string) => format === "Private" ? "خاص" : format === "SemiPrivate" ? "شبه خاص" : "جماعي";
+export const registrationMatchesProduct = (format = "Group", product = "Group") => format === "Group" ? product === "Group" || product === "Season" : format === product;
+export function GroupTrainingFormat({ id, format = "Group", reviewed, onSaved }: { id: string; format?: string; reviewed?: string | null; onSaved: () => void }) {
+  const [value, setValue] = useState(format); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  async function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); setBusy(true); setError(""); try { await csrfRequest(`/api/v1/manage/groups/${id}/training-format`, "PUT", { registrationFormat: { Group: 1, Private: 2, SemiPrivate: 3 }[value], capacityReviewed: data.has("reviewed") }); onSaved(); } catch (c) { setError(c instanceof Error ? c.message : "تعذر حفظ نمط التدريب."); } finally { setBusy(false); } }
+  return <details className="placement-level"><summary>نمط التدريب · {trainingFormatName(format)}</summary><form className="form-shell" onSubmit={event => void save(event)}><label>نمط المجموعة<select value={value} onChange={event => setValue(event.target.value)}><option value="Group">جماعي · يشمل العروض الموسمية</option><option value="Private">خاص</option><option value="SemiPrivate">شبه خاص</option></select></label><label className="placement-choice"><input type="checkbox" name="reviewed" defaultChecked={Boolean(reviewed)} /><span>راجعت السعة المناسبة لهذا النمط</span></label><p className="muted">لا نستنتج السعة من اسم النمط. الخاص وشبه الخاص يحتاجان حجز مورد ومدرب معًا. تغيير سعة المجموعة يلغي مراجعتها، وتغيير النمط ممنوع مع أعضاء قائمين.</p>{error && <p role="alert">{error}</p>}<div className="form-actions"><button className="secondary-button" disabled={busy}>اعتماد نمط التدريب</button></div></form></details>;
+}

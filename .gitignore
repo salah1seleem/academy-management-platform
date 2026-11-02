@@ -1,0 +1,68 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+
+# Node
+node_modules/
+.next/
+.next*/
+.next-e2e/
+.next-v5*/
+.next-refinement*/
+out/
+coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+*.pfx
+*.key
+secrets/
+
+# Local-only data and sensitive artifacts
+reference-archives/
+local-uploads/
+uploads/
+dumps/
+*.dump
+*.sql.gz
+
+# Logs / temporary files
+*.log
+tmp/
+apps/web/.next-approved-design/
+
+# Isolated platform preview build output
+apps/web/.next-platform-*/
+
+# Private delivery workbooks and artifact inspection sidecars
+outputs/
+*.xlsx.inspect.ndjson
+
+# Production credential files must remain outside version control.
+*.p8
+*.p12
+*.pem
+appsettings.Production.local.json
+infra/digitalocean/app.local.yaml
+infra/digitalocean/app.local.yml
+
+# Local promotional renders and private deployment backups
+output/
+backups/
+
+# Private child reference photographs remain local.
+**/reference-child-*.jpg

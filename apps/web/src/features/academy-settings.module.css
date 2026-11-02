@@ -1,0 +1,17 @@
+.settings { font-family:AcademyArabic,sans-serif; }
+.panel { border:1px solid var(--staff-border,#293653); background:var(--staff-surface,#121a36); padding:20px; margin-block:16px; }
+.panel h2 { font-size:17px; margin:0 0 18px; }
+.panel dl { display:grid; gap:16px; }
+.panel dl > div { display:flex; justify-content:space-between; gap:20px; padding-block:10px; border-bottom:1px solid var(--staff-border,#293653); }
+.panel dt { color:var(--staff-text-secondary); }
+.panel dd { margin:0; font-weight:600; }
+.panel details { margin-top:18px; font-size:13px; }
+.panel details p { line-height:1.9; }
+.panel a { display:inline-block; margin-top:10px; }
+.toggle { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.toggle input { width:22px; height:22px; flex-shrink:0; }
+.settings :global(.record-tabs) { flex-wrap:nowrap; overflow-x:auto; border-bottom:1px solid var(--staff-border); gap:4px; }
+.settings :global(.record-tabs button) { white-space:nowrap; border-radius:0; font-family:inherit; }
+.settings :global(.record-tabs) { background:transparent; border-radius:0; padding:0; }
+.settings :global(.record-tabs button) { color:var(--staff-text-secondary); background:transparent; padding:12px 16px; }
+.settings :global(.record-tabs button[aria-selected=true]) { color:var(--staff-text); background:var(--staff-surface); border-color:var(--staff-primary-700); }

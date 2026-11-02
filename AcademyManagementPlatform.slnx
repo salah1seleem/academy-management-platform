@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/api/" />
+  <Folder Name="/apps/api/src/">
+    <Project Path="apps/api/src/Academy.Api/Academy.Api.csproj" />
+    <Project Path="apps/api/src/Academy.Infrastructure/Academy.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/architecture/">
+    <Project Path="tests/architecture/Academy.ArchitectureTests/Academy.ArchitectureTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/integration/">
+    <Project Path="tests/integration/Academy.IntegrationTests/Academy.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/unit/">
+    <Project Path="tests/unit/Academy.UnitTests/Academy.UnitTests.csproj" />
+  </Folder>
+</Solution>

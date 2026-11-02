@@ -1,0 +1,57 @@
+# معمارية Native Mobile v1.0
+
+الحالة: **A وUI وB وC منفذة؛ مراحل D–H غير مكتملة**. أساس Phase B المعتمد `cb7ff342164d02530a6f222d5bebd957b833752e` محفوظ دون reset/rebase؛ الفرع `codex/15-native-mobile-app`. التفويض في [ملحق النطاق](../requirements/NATIVE_MOBILE_AUTHORIZATION_2026-10-04.md). لا يعاد تنفيذ A أو UI.
+
+## تطبيق واحد وخادم قائم
+
+Flutter iOS/Android عميل أصلي في `apps/mobile`، لا WebView ولا استبدال Next.js. يتصل بنفس ASP.NET Core API/PostgreSQL؛ لا backend ثانٍ أو deployment لكل دور. منطق التجديد والتحصيل والإيصال والخصم والحضور والتقييم يبقى على الخادم. الويب يستمر بجلسة cookie وCSRF، والموبايل يرسل bearer مستقلًا. مرحلة C تنفذ المصادقة وrole shell؛ شاشات الأعمال تأتي لاحقًا.
+
+الهيكل: `lib/app` للتطبيق وتوجيه الدور، `core/{api,auth,storage,theme,widgets}` و`features/{auth,guardian}`؛ Coach وOwner يضافان عند تنفيذهما دون هياكل فارغة. لا تختزن الواجهات قواعد الصلاحيات أو الأرقام المالية. Flutter **3.47.2 stable**/Dart **3.13.2**، و`flutter_secure_storage 11.2.0` و`flutter_svg 2.3.0` مع lockfile. التخزين الآمن مثبت ومختبر على iOS؛ SVG يعرض أصول Demo محلية allowlisted فقط ولا يجلب مرجع وسائط خارجيًا مع bearer. Cairo محلي مع OFL. build iOS Simulator ناجح؛ Android SDK غير متاح ولم يُختبر Android.
+
+## العقد المنفذ: `/api/v1/mobile/auth`
+
+| Endpoint | المدخل/النتيجة |
+|---|---|
+| `POST /otp/request` | `phoneNumber` ← `202 {challengeId,demo}` لهوية فعالة لها Guardian/Coach/AcademyOwner |
+| `POST /otp/verify` | `challengeId,phoneNumber,code,deviceName` ← credentials وعضويات مخولة فقط |
+| `POST /refresh` | `refreshToken` ← access/refresh جديدان؛ القديمان باطلان |
+| `GET /memberships` | bearer صالح ← قائمة العضويات الحالية للمستخدم نفسه |
+| `POST /select-role` | bearer + `membershipId` ← جلسة محدّثة وتدوير الرمزين |
+| `POST /logout` | bearer ← إلغاء الجهاز الحالي، `204` |
+| `POST /revoke-all` | bearer ← إلغاء جلسات الموبايل لكل أجهزة المستخدم نفسه، `204` |
+
+الـcredentials تتضمن `accessToken`, `refreshToken`, `accessExpiresAtUtc`, `refreshExpiresAtUtc`, `membershipId`, `displayName`, `memberships[{id,academyId,academyName,role}]`. الاسم بالعربية؛ رموز الأدوار عقد API وتترجمها الواجهة. `400` إدخال غير صالح، `401` فشل تحقق/جلسة، `403` اختيار أو صلاحية ممنوعة، `429` throttling، `501` SMS غير منفذ. استجابات credentials موسومة `no-store`؛ يمنع تسجيل tokens/OTP أو نسخها إلى analytics.
+
+الأرقام المحلية و`+20` و`0020` والأرقام العربية/الفارسية تطبع إلى صيغة موحدة. الهاتف وحده لا يثبت هوية أو علاقة طفل. طلب OTP لا ينشئ مستخدمًا أو وصاية. الهوية المجهولة أو غير المؤهلة تُرفض برسالة عامة، لا قائمة أدوار قبل التحقق. fixed OTP يعمل في Demo فقط؛ تشغيل Seed/FixedOtp خارج Demo يرفض startup. Production بلا SMS يرجع `501` ولا يختلق إرسال رسالة.
+
+OTP صالح خمس دقائق، يُستهلك مرة واحدة. إعادة الطلب تلغي التحدي السابق. خمسة أخطاء تقفل التحدي، وثلاثة طلبات لهاتف خلال 15 دقيقة، إضافةً إلى 30 طلب auth لكل IP/دقيقة. قفل transaction-scoped في PostgreSQL يسلسل محاولات الهاتف، فلا يفوز تحققان متزامنان. محدد IP الحالي in-process لنسخة خادم واحدة؛ التوسع والإعداد الصحيح للـtrusted proxy ومعايير SMS abuse بوابات إنتاج لاحقة.
+
+## الجلسة والأدوار
+
+الـaccess token opaque عشوائي 256-bit، مدته عشر دقائق، والـrefresh عشوائي مستقل بعمر مطلق ثلاثين يومًا لا يتجدد بلا حد. تُخزن SHA-256 فقط لكليهما في `MobileSessions` مع الجهاز والمستخدم والعضوية المختارة وsecurity stamp والتوقيت والإلغاء. قاعدة البيانات تُراجع في كل طلب؛ لا JWT طويل العمر بصلاحيات قديمة. الدور/الأكاديمية يُستنتجان من عضوية فعالة للمستخدم نفسه، مع فحص المستخدم والأكاديمية وsecurity stamp. المدرب لا يحصل على طب الطفل، وولي الأمر لا يحصل على لاعب غير مرتبط.
+
+عضوية مؤهلة واحدة تُختار تلقائيًا؛ أكثر من عضوية تُصدر جلسة دون tenant، ولا يسمح لها إلا بقائمة العضويات والاختيار والإلغاء. لا اختيار لأعلى صلاحية ولا اتحاد للأدوار. بعد الاختيار تصل `membership_id` و`academy_id` من الخادم؛ `CurrentTenant` يعيد فحصهما، ولا يثق في header أو ID مقدم من العميل. تغيير الدور لاحقًا يدور credentials، ويبطل القديم. تغيير العضوية إلى دور غير مدعوم يرفض جلسة الموبايل.
+
+Refresh يسلسل الرمز والجلسة داخل transaction ثم يعيد فحص العضويات؛ فوز واحد فقط للطلبين المتزامنين. إعادة استعمال refresh سابق تفشل ولا تعيد credentials جديدة. إلغاء الجلسة يمنع access وrefresh فورًا. إذا فُقد رد ناجح بعد التدوير ولم يصل الرمز الجديد للجهاز، فالاسترداد الآمن الحالي هو OTP جديد؛ لا نافذة replay مخفية.
+
+Flutter الآن يخزن refresh في Keychain/Keystore-backed secure storage فقط، وaccess في الذاكرة. عند التشغيل يقرأ refresh ويجدده ثم يوجه للدور؛ لا SharedPreferences للأسرار. استخدام refresh واحد جارٍ داخل العميل، وتحديث التخزين ذرّيًا قبل استبدال الحالة، ورفض retry آلي لعملية مالية دون مفتاح idempotency محفوظ. Logout يمسح التخزين والـcache حتى إن فشلت الشبكة مع عرض أن الإلغاء البعيد لم يتأكد؛ تغيير الحساب يمسح بيانات الأطفال السابقة. التطبيق يحترم 401/403 وينهي الجلسة/يعيد اختيار الدور، ولا يعرض بيانات cache لحساب آخر.
+
+## توافق الويب وmigration
+
+policy scheme يختار mobile عند وجود Authorization؛ bearer خاطئ **لا** يرجع إلى cookie صالح. تخطي CSRF محصور في principal مصادق عليه بواسطة mobile handler، وليس وجود header. Cookies تبقى محمية بـCSRF. Native لا يستخدم `/session/academy` لإنشاء cookie؛ يستخدم `select-role`.
+
+Migration `20261003214541_NativeMobileSessions` تضيف جدولَي sessions/challenges وتغير uniqueness إلى `(AcademyId,UserId,Role)`. لا تعديل لـmigrations السابقة ولا حذف بيانات. مسارات guardian registration وcoach attendance/seed صارت تختار الدور المعني. Cookies الجديدة تحفظ membership، وsecurity stamp refresh يحتفظ بها؛ legacy cookie بلا membership يُرفض عند تعدد الأدوار بدل الخطأ أو تصعيد الصلاحية. اختيار academy في الويب يرفض حالة تعدد غير محسومة بدل اختيار أعلى دور. Downgrade بعد إنشاء multi-role ليس إجراء تشغيل عاديًا: unique القديم لا يقبل ذلك؛ يلزم قرار ترحيل بيانات صريح، لا حذف تلقائي.
+
+## التصميم والبيانات والتشغيل المتبقي
+
+الويب يستخدم الآن [نظام Sports Academy](../ui/DASHBOARD_UI_SYSTEM.md). توسعات DTO للقراءة مقيدة بالـtenant نفسه ولا تغير جلسات Phase A أو أوامر الأعمال. هوية اللاعب وروابطه في endpoints الموظفين لا تصبح متاحة للـGuardian أو Coach لمجرد إضافة حقول العرض.
+
+Guardian المنفذ يتبع صور المحادثة: خلفية داكنة وبطاقات وتبويبات واضحة وRTL، مع الإجراءات الثلاثة. Navigator داخلي معزول بعمر `membershipId` ويُهدم عند logout أو تبديل العضوية. التقرير يعرض نتيجة الخادم ويحفظ المركز وradar الستة وبقية المعايير دون ملعب، ولا يحول missing إلى صفر. طلبات التسجيل/التجديد تستخدم idempotency key ثابتًا للعملية، والكتابة لا تُعاد تلقائيًا بعد عطل مبهم. Coach/Owner يستخدمان teal/white في F/G. الوجبات ستتغير وفق التصحيح المباشر في E؛ لا تُستورد صور المرجع أو علاماته أو أطفاله.
+
+Phase B يستخدم tenant عرض محجوزًا ذا علامة مخزنة، وreset CLI صريح داخل transaction، لا HTTP endpoint ولا drop database. تبقى الهويات العامة وعضويات الأكاديميات الأخرى؛ reset ينظف سجلات tenant العرض فقط. profile الاختبارات `LegacyRegression` منفصل عن `Football` الافتراضي. `POST /api/v1/manage/coaches` يحمي Owner/Admin وCSRF، ويطبّع الهاتف ويقفل إنشاء هويته المتزامن، ويحفظ الهوية/عضوية Coach/الإسناد ذريًا دون إعادة كتابة بيانات شخص موجود أو منح وصاية. تفاصيل التشغيل والحدود في [الدليل](MOBILE_DEMO_GUIDE.md).
+
+Flutter/auth في C وGuardian في D منفذان؛ وجبات مصورة مع مصدر وحصة وقواعد معلوماتية غير طبية في E؛ Coach/Owner في F/G؛ regression وCI ومراجعة المقاسات النهائية في H. نجاح D لا يجعل التطبيق كاملًا أو Production Ready.
+
+اختبارات Phase A تعمل على قواعد PostgreSQL 17 مستقلة؛ لا reset لقاعدة العرض أو قواعد أخرى. HTTPS إلزامي للنشر الحقيقي، وHTTP loopback للديمو فقط؛ reverse proxy الموثوق وتخزين الأسرار وSMS والتوقيع والمتاجر والخصوصية والنسخ الاحتياطي والمراقبة وبوابة الأمان غير منجزة. يُمنع الادعاء بجاهزية الإنتاج أو حسابات المتاجر.
+
+مرجع التصميم التقني: [ASP.NET Core authentication policy schemes](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/policyschemes?view=aspnetcore-10.0). الحالة والاختبارات المنفذة في [STATUS](../delivery/STATUS.md).

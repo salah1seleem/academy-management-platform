@@ -1,0 +1,49 @@
+{
+  "package": "Academity_Codex_Handoff_V3",
+  "authored_date": "2026-10-14",
+  "application_execution_performed": false,
+  "reference_arithmetic_checks": 29,
+  "planned_acceptance_cases": 48,
+  "files": [
+    {
+      "path": "Academity_Codex_Start_V3_AR.md",
+      "bytes": 4826,
+      "sha256": "6593ad926bbde8165aa1d6cc1ab2d76c7d40403c402500b27a612cd17980ccff"
+    },
+    {
+      "path": "README_AR.md",
+      "bytes": 2603,
+      "sha256": "11087d200e7a8950225aafc46924311078f7c60be1d4358a3dd39fd6aa18e291"
+    },
+    {
+      "path": "reference-v2/Academity_Master_Plan_V2_AR.md",
+      "bytes": 117924,
+      "sha256": "e43554ccc6738324903a1a0291fd02c87ca1005caa0fafea978b1b471624a25d"
+    },
+    {
+      "path": "specifications/Academity_Finance_Basics_V3_AR.md",
+      "bytes": 29733,
+      "sha256": "f31219adf386ba922f7517160c4e3ccdce5921a765638347bbe0792599f8979a"
+    },
+    {
+      "path": "specifications/Academity_Master_Plan_V3_AR.md",
+      "bytes": 58708,
+      "sha256": "d200e4d2de9025e89b5fce64b1f253ba24989cdfb780307c11e16a3a759cf7df"
+    },
+    {
+      "path": "specifications/Acceptance_And_Demo_V3_AR.md",
+      "bytes": 19459,
+      "sha256": "77303d31e14fccfdea89d521a1d5d202caf5c10a5a36b4fb45371e01894cc048"
+    },
+    {
+      "path": "specifications/SOURCES_V3.md",
+      "bytes": 4520,
+      "sha256": "35bccf78f2f1fd68273bf6f27795290556d7e232eb357525dc15742248af5a99"
+    },
+    {
+      "path": "verification/finance_golden_v3.json",
+      "bytes": 4166,
+      "sha256": "841681e6da4113fca01f912d30cc5b30e5295e8e3b106d6b62d225dc5cc3ff21"
+    }
+  ]
+}

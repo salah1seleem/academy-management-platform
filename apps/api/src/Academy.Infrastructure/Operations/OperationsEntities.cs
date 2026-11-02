@@ -1,0 +1,232 @@
+using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Subscriptions;
+
+namespace Academy.Infrastructure.Operations;
+
+public sealed class PrivateAsset : TenantEntity
+{
+    public Guid UploadedByUserId { get; set; }
+    public required string ContentType { get; set; }
+    public required string StorageName { get; set; }
+    public long Length { get; set; }
+    public Guid? PlayerId { get; set; }
+    public Guid? TrainingGroupId { get; set; }
+    public Guid? TrainingSessionId { get; set; }
+    public required string Purpose { get; set; }
+    public string? Caption { get; set; }
+    public int MediaPolicyVersion { get; set; }
+    public DateOnly? MediaEventOn { get; set; }
+    public bool NoRecognizableChildren { get; set; }
+    public DateTimeOffset? RetainUntilUtc { get; set; }
+    public bool DeleteOnExpiry { get; set; }
+}
+public sealed class AcademyTransferSettings : TenantEntity
+{
+    public string? InstaPayAddress { get; set; }
+    public string? WalletNumber { get; set; }
+    public string? RecipientName { get; set; }
+}
+// Snapshot of the group roster at upload; later joiners do not inherit old child media.
+public sealed class PrivateAssetAudience : TenantEntity
+{
+    public Guid AssetId { get; set; }
+    public Guid PlayerId { get; set; }
+    public Guid? SportEnrollmentId { get; set; }
+    public bool IsSubject { get; set; }
+}
+public sealed class PaymentProof : TenantEntity
+{
+    public Guid PaymentRequestId { get; set; }
+    public Guid AssetId { get; set; }
+    public Guid SubmittedByUserId { get; set; }
+    public required string Status { get; set; }
+    public string? ReviewReason { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+}
+public sealed class DiscountRule : TenantEntity
+{
+    public required string ArabicName { get; set; }
+    public decimal Percentage { get; set; }
+    public RenewalDiscountType Type { get; set; } = RenewalDiscountType.Percentage;
+    public decimal? FixedAmount { get; set; }
+    public decimal? MaximumAmount { get; set; }
+    public string Currency { get; set; } = "EGP";
+    public Guid? BranchId { get; set; }
+    public Guid? SportId { get; set; }
+    public Guid? SubscriptionPlanId { get; set; }
+    public DateOnly? StartsOn { get; set; }
+    public DateOnly? EndsOn { get; set; }
+    public int Priority { get; set; }
+    public int Revision { get; set; }
+    public bool IsSiblingOffer { get; set; }
+    public required string Reason { get; set; }
+}
+public sealed class DiscountRuleVersion : TenantEntity
+{
+    public Guid DiscountRuleId { get; set; }
+    public int Revision { get; set; }
+    public required string Payload { get; set; }
+    public Guid? ActorUserId { get; set; }
+    public static DiscountRuleVersion Create(DiscountRule r, Guid? actor, DateTimeOffset now) => new()
+    {
+        Id = Guid.NewGuid(), AcademyId = r.AcademyId, DiscountRuleId = r.Id, Revision = r.Revision, ActorUserId = actor,
+        CreatedAtUtc = now, UpdatedAtUtc = now,
+        Payload = System.Text.Json.JsonSerializer.Serialize(new { r.ArabicName, type = r.Type.ToString(), percentage = r.Percentage.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), fixedAmount = r.FixedAmount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), maximumAmount = r.MaximumAmount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), r.Currency, r.BranchId, r.SportId, r.SubscriptionPlanId, r.StartsOn, r.EndsOn, r.Priority, r.IsSiblingOffer, r.IsActive, r.Reason }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+    };
+}
+public sealed class PlayerDiscountLink : TenantEntity
+{
+    public Guid PlayerId { get; set; }
+    public Guid DiscountRuleId { get; set; }
+}
+public sealed class CollectionRefund : TenantEntity
+{
+    public Guid CollectionId { get; set; }
+    public Guid PlayerId { get; set; }
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public string? Reason { get; set; }
+    public Guid PerformedByUserId { get; set; }
+    public required string IdempotencyKey { get; set; }
+    // Null preserves honestly unknown payout methods on historical records.
+    public string? PayoutMethod { get; set; }
+}
+public sealed class ProductSale : TenantEntity
+{
+    public Guid? VariantId { get; set; }
+    public Guid? SportEnrollmentId { get; set; }
+    public string? SizeSnapshot { get; set; }
+    public string? ColorSnapshot { get; set; }
+    public int? ShirtNumberSnapshot { get; set; }
+    public Guid SportId { get; set; }
+    public Guid? BranchId { get; set; }
+    public Guid ProductId { get; set; }
+    public Guid RequestedByUserId { get; set; }
+    public Guid? PlayerId { get; set; }
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public required string ProductName { get; set; }
+    public required string SportName { get; set; }
+    public string? BranchName { get; set; }
+    public required string Status { get; set; }
+    public string? PaymentMethod { get; set; }
+    public Guid? ProofAssetId { get; set; }
+    public Guid? ConfirmedByUserId { get; set; }
+    public DateTimeOffset? ConfirmedAtUtc { get; set; }
+    public string? ReviewReason { get; set; }
+    public required string IdempotencyKey { get; set; }
+}
+public sealed class AcademyNotice : TenantEntity
+{
+    public Guid? SubjectPlayerId {get;set;}
+    public string? DeduplicationKey {get;set;}
+    public string? EventKey { get; set; }
+    public string? AudienceRole { get; set; }
+    public string? TargetKind { get; set; }
+    public Guid? TargetId { get; set; }
+    public DateTimeOffset? UrgentUntilUtc { get; set; }
+    public Guid? MatchId { get; set; }
+    public Guid UserId { get; set; }
+    public required string Message { get; set; }
+    public bool IsRead { get; set; }
+}
+public sealed class AcademyNews : TenantEntity
+{
+    public required string Title { get; set; }
+    public required string Body { get; set; }
+    public Guid? ImageAssetId { get; set; }
+    public int VisibleDays { get; set; } = 7;
+    public DateTimeOffset? PublishedAtUtc { get; set; }
+    public string Kind { get; set; } = "News";
+    public DateTimeOffset? StartsAtUtc { get; set; }
+    public DateTimeOffset? EndsAtUtc { get; set; }
+    public Guid[] TargetBranchIds { get; set; } = [];
+    public string[] AudienceRoles { get; set; } = ["AcademyAdmin", "Coach", "Guardian"];
+    public Guid? CreationRequestId { get; set; }
+    public string? CreationHash { get; set; }
+}
+public sealed class StaffGrant : TenantEntity
+{
+    public Guid MembershipId { get; set; }
+    public required string Permission { get; set; }
+    public bool Allowed { get; set; }
+}
+public sealed class StaffWorkSchedule : TenantEntity
+{
+    public Guid MembershipId { get; set; }
+    public DayOfWeek DayOfWeek { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public int LateThresholdMinutes { get; set; }
+    public decimal LateDeduction { get; set; }
+}
+public sealed class StaffDailyAttendance : TenantEntity
+{
+    public Guid MembershipId { get; set; }
+    public DateOnly WorkDate { get; set; }
+    public required string Status { get; set; }
+    public TimeOnly? CheckIn { get; set; }
+    public TimeOnly? CheckOut { get; set; }
+    public DateOnly? CheckOutDate { get; set; }
+    public int LateMinutes { get; set; }
+    public decimal SuggestedDeduction { get; set; }
+    public decimal ApprovedDeduction { get; set; }
+    public string? DeductionReason { get; set; }
+    public Guid RecordedByUserId { get; set; }
+}
+
+public sealed class BranchCheckInSiteAudit : TenantEntity
+{
+    public Guid BranchId { get; set; }
+    public Guid ActorUserId { get; set; }
+    public double? BeforeLatitude { get; set; }
+    public double? BeforeLongitude { get; set; }
+    public double? AfterLatitude { get; set; }
+    public double? AfterLongitude { get; set; }
+    // Historical site-only changes retain null, never a fabricated old policy.
+    public string? BeforePolicy { get; set; }
+    public string? AfterPolicy { get; set; }
+}
+
+// Feedback is child-linked and private to academy management; it is never a public coach score.
+public sealed class GuardianFeedback : TenantEntity
+{
+    public string? ReportedSubject { get; set; }
+    public string? ReportedUrgency { get; set; }
+    public DateOnly? IncidentOn { get; set; }
+    public Guid? IncidentTrainingSessionId { get; set; }
+    public string? IncidentSessionEvidence { get; set; }
+    public string? Subject { get; set; }
+    public string? Urgency { get; set; }
+    public Guid? TriagedByMembershipId { get; set; }
+    public DateTimeOffset? TriagedAtUtc { get; set; }
+    // A new opaque assignment on every owner-reviewed brief; never a family-facing projection.
+    public Guid? InvestigationId { get; set; }
+    public Guid? InvestigatorMembershipId { get; set; }
+    public string? InvestigationBrief { get; set; }
+    public Guid PlayerId { get; set; }
+    public Guid GuardianUserId { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid? CoachMembershipId { get; set; }
+    public Guid TrainingGroupId { get; set; }
+    public required string Kind { get; set; }
+    public int? Score { get; set; }
+    public required string Message { get; set; }
+    public DateOnly PeriodMonth { get; set; }
+    public required string Status { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+    // Immutable intake policy evidence; null means legacy/unconfigured, not an inferred SLA.
+    public string? FollowUpPolicyEvidence { get; set; }
+    // A one-time owner/published-policy follow-up deadline, not a resolution promise.
+    public DateOnly? DueOn { get; set; }
+    public Guid? DueSetByUserId { get; set; }
+    public DateTimeOffset? DueSetAtUtc { get; set; }
+    public string? OwnerResponse { get; set; }
+    public Guid? RespondedByUserId { get; set; }
+    public DateTimeOffset? RespondedAtUtc { get; set; }
+}

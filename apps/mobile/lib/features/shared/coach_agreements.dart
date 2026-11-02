@@ -1,0 +1,186 @@
+import 'package:flutter/material.dart';
+
+import '../../core/auth/auth_controller.dart';
+import '../../core/theme/appearance.dart';
+import '../../core/theme/ui_text.dart';
+import '../guardian/guardian_ui.dart';
+
+// Read-only approved terms for the selected coach membership. Never accepts an
+// employee/coach ID from navigation and offers no rate, salary or approval edit.
+class CoachAgreementsPage extends StatelessWidget {
+  final AuthController auth;
+  const CoachAgreementsPage({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(
+      context,
+      'اتفاقات أجر الخاص',
+      'Private coaching agreements',
+    ),
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/staff/payroll/agreements',
+      builder: (context, value) {
+        final items = rows(obj(value)['items']);
+        return gList([
+          GLink(
+            localized(
+              context,
+              'تنفيذ الخاص وعمولاته',
+              'Private delivery and compensation',
+            ),
+            Icons.fact_check_outlined,
+            () => openPage(context, CoachPrivateServicesPage(auth: auth)),
+          ),
+          UiText(
+            localized(
+              context,
+              'شروط معتمدة للعرض فقط. الاتفاق ليس رصيدًا مستحقًا أو إثبات سداد.',
+              'Approved terms only. An agreement is not earned compensation or payment.',
+            ),
+          ),
+          if (items.isEmpty)
+            EmptyMessage(
+              localized(
+                context,
+                'لا يوجد اتفاق خاص معتمد لحسابك.',
+                'No approved private agreement for your account.',
+              ),
+            ),
+          for (final a in items)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.verified_outlined),
+                      const SizedBox(width: 8),
+                      Expanded(child: UiText('${a['branch']} · ${a['sport']}')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  UiText(
+                    a['variableMethod'] == 'Percent'
+                        ? '${a['variableValue']}%'
+                        : '${a['variableValue']} ${a['currency']} ${localized(context, 'لكل حصة', 'per session')}',
+                  ),
+                  UiText(
+                    a['eligibility'] == 'DeliveredCollected'
+                        ? localized(
+                            context,
+                            'تنفيذ معتمد وتحصيل صافٍ',
+                            'Approved delivery and net collection',
+                          )
+                        : localized(
+                            context,
+                            'تنفيذ معتمد ولو لم يحصل',
+                            'Approved delivery even if uncollected',
+                          ),
+                  ),
+                  UiText(
+                    a['baseCoverage'] == 'IncludesPrivate'
+                        ? localized(
+                            context,
+                            'الخاص مشمول بالأساسي',
+                            'Private work included in base salary',
+                          )
+                        : localized(
+                            context,
+                            'الخاص إضافي إلى الأساسي',
+                            'Private work additional to base salary',
+                          ),
+                  ),
+                  const SizedBox(height: 8),
+                  UiText(
+                    '${a['effectiveFrom']} — ${a['effectiveTo'] ?? localized(context, 'دون نهاية محددة', 'Open-ended')}',
+                  ),
+                  UiText(
+                    '${localized(context, 'نسخة معتمدة', 'Approved version')} ${a['version']}',
+                  ),
+                ],
+              ),
+            ),
+        ]);
+      },
+    ),
+  );
+}
+
+class CoachPrivateServicesPage extends StatelessWidget {
+  final AuthController auth;
+  const CoachPrivateServicesPage({super.key, required this.auth});
+  @override
+  Widget build(BuildContext context) => GuardianPage(
+    title: localized(
+      context,
+      'تنفيذ الخاص وعمولاته',
+      'Private delivery and compensation',
+    ),
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/staff/payroll/private-services',
+      builder: (context, value) {
+        final items = rows(obj(value)['items']);
+        return gList([
+          UiText(
+            localized(
+              context,
+              'تقييم الخدمات منفصل عن المرحّل إلى كشف الرواتب. الترحيل ليس صرفًا، والمعلق على التحصيل ليس مبلغًا مستحقًا.',
+              'Service assessments are separate from posted payroll. Posting is not payment; contingent compensation is not yet due.',
+            ),
+          ),
+          if (items.isEmpty)
+            EmptyMessage(
+              localized(
+                context,
+                'لا تنفيذ خاص معتمد بعد.',
+                'No approved private delivery yet.',
+              ),
+            ),
+          for (final row in items)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText('${row['branch']} · ${row['sport']}'),
+                  UiText('${row['serviceDate']}'),
+                  UiText(
+                    '${localized(context, 'المرحّل إلى الرواتب — ليس سدادًا', 'Posted to payroll — not paid')}: ${row['postedAmount'] ?? 0} ${row['currency']}',
+                  ),
+                  UiText(
+                    '${localized(context, 'فرق التقييم', 'Assessment difference')}: ${row['pendingDelta'] ?? localized(context, 'يتطلب مراجعة', 'Needs review')} ${row['pendingDelta'] == null ? '' : row['currency']}',
+                  ),
+                  for (final correction in rows(row['corrections'] ?? const []))
+                    UiText(
+                      '${localized(context, 'تصحيح عمولة — ليس صرفًا', 'Commission correction — not a payment')}: ${correction['delta']} ${row['currency']} · ${correction['dueDate']}',
+                    ),
+                  if (row['requiresReview'] == true)
+                    UiText(
+                      localized(
+                        context,
+                        'تعارض يتطلب مراجعة — العمولة غير محسوبة',
+                        'Needs review — compensation not calculated',
+                      ),
+                    )
+                  else ...[
+                    UiText(
+                      '${localized(context, 'مستوفية للشروط', 'Eligible compensation')}: ${row['earned']} ${row['currency']}',
+                    ),
+                    UiText(
+                      '${localized(context, 'معلقة على التحصيل', 'Contingent on collection')}: ${row['contingent']} ${row['currency']}',
+                    ),
+                  ],
+                  UiText(
+                    row['variableMethod'] == 'Percent'
+                        ? '${row['variableValue']}%'
+                        : '${row['variableValue']} ${row['currency']} ${localized(context, 'للحصة', 'per session')}',
+                  ),
+                ],
+              ),
+            ),
+        ]);
+      },
+    ),
+  );
+}

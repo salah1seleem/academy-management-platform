@@ -1,0 +1,83 @@
+using Academy.Infrastructure.Tenancy;
+
+namespace Academy.Infrastructure.Structure;
+
+public abstract class TenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid AcademyId { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+    public uint Version { get; set; }
+}
+
+public sealed class Branch : TenantEntity
+{
+    public required string ArabicName { get; set; }
+    public string? EnglishName { get; set; }
+    public string? Address { get; set; }
+    public double? CheckInLatitude { get; set; }
+    public double? CheckInLongitude { get; set; }
+    // Enabled alone never suffices: a reviewed point, live scope and signed proof are required.
+    public bool StaffCheckInEnabled { get; set; } = true;
+    public int StaffCheckInRadiusMeters { get; set; } = 50;
+    public int StaffCheckInMaxAccuracyMeters { get; set; } = 30;
+    public int StaffCheckInMaxAgeSeconds { get; set; } = 30;
+    public int StaffCheckInChallengeSeconds { get; set; } = 120;
+    public bool StaffCheckInCoachRequired { get; set; }
+    public bool StaffCheckInAdminRequired { get; set; }
+    public bool StaffCheckInOwnerRequired { get; set; }
+    public Guid? StaffCheckInReviewerMembershipId { get; set; }
+}
+
+public enum SportKind { General, Football, Swimming }
+public sealed class Sport : TenantEntity
+{
+    public SportKind Kind { get; set; }
+    public required string ArabicName { get; set; }
+    public string? EnglishName { get; set; }
+}
+
+public sealed class AgeCategory : TenantEntity
+{
+    public required string ArabicName { get; set; }
+    public int? MinimumBirthYear { get; set; }
+    public int? MaximumBirthYear { get; set; }
+}
+
+public sealed class TrainingGroup : TenantEntity
+{
+    public Academy.Infrastructure.People.TrainingRegistrationFormat RegistrationFormat { get; set; } = Academy.Infrastructure.People.TrainingRegistrationFormat.Group;
+    public Guid? FormatReviewedByUserId { get; set; }
+    public DateTimeOffset? FormatReviewedAtUtc { get; set; }
+    public Guid? TrainingLevelId { get; set; }
+    public required string ArabicName { get; set; }
+    public string? EnglishName { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid SportId { get; set; }
+    public Guid AgeCategoryId { get; set; }
+    public int? Capacity { get; set; }
+    public Branch Branch { get; set; } = null!;
+    public Sport Sport { get; set; } = null!;
+    public AgeCategory AgeCategory { get; set; } = null!;
+}
+
+public sealed class RecurringSchedule : TenantEntity
+{
+    public DateOnly? ValidFrom { get; set; }
+    public DateOnly? ValidTo { get; set; }
+    public Guid TrainingGroupId { get; set; }
+    public DayOfWeek DayOfWeek { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public TrainingGroup TrainingGroup { get; set; } = null!;
+}
+
+public sealed class StaffGroupAssignment : TenantEntity
+{
+    public Guid AcademyMembershipId { get; set; }
+    public Guid TrainingGroupId { get; set; }
+    public AcademyMembership AcademyMembership { get; set; } = null!;
+    public TrainingGroup TrainingGroup { get; set; } = null!;
+}

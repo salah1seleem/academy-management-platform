@@ -1,0 +1,228 @@
+using Academy.Infrastructure.People;
+using Academy.Infrastructure.Structure;
+
+namespace Academy.Infrastructure.Subscriptions;
+
+public enum SubscriptionPlanType { Duration = 1, Sessions = 2, Combined = 3 }
+public enum SubscriptionOrigin { Collected = 1, ImportedHistorical = 2, ApprovedWaiver = 3 }
+public enum SubscriptionPeriodStatus { Scheduled = 1, Active = 2, Expired = 3, Cancelled = 4, Frozen = 5 }
+public enum RenewalRequestStatus { PendingPayment = 1, PaymentInProgress = 2, Paid = 3, Failed = 4, Cancelled = 5, Expired = 6 }
+public enum PaymentRequestStatus { Created = 1, Pending = 2, Confirmed = 3, Failed = 4, Cancelled = 5, Expired = 6 }
+public enum PaymentEventOutcome { Success = 1, Failed = 2, Cancelled = 3 }
+public enum SubscriptionAdjustmentType { FreezeStarted = 1, FreezeEnded = 2, DaysAdded = 3, DaysDeducted = 4, Cancelled = 5, SessionsAdded = 6 }
+public enum RenewalDiscountType { Percentage = 1, FixedAmount = 2 }
+
+public sealed class BeneficiaryRenewalReference : TenantEntity
+{
+    public Guid SportEnrollmentId { get; set; }
+    public required string CodeHash { get; set; }
+    public required string CodeHint { get; set; }
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+    public DateTimeOffset? RevokedAtUtc { get; set; }
+    public Guid GeneratedByUserId { get; set; }
+    public SportEnrollment SportEnrollment { get; set; } = null!;
+}
+
+public sealed class SubscriptionPlan : TenantEntity
+{
+    public AcademyServiceKind ServiceKind { get; set; } = AcademyServiceKind.Training;
+    public TrainingFormat TrainingFormat { get; set; } = TrainingFormat.Group;
+    public int? DurationMonths { get; set; }
+    public decimal? ReferenceMonthlyPrice { get; set; }
+    public int? ChargedMonths { get; set; }
+    public Guid SportId { get; set; }
+    public required string ArabicName { get; set; }
+    public string? EnglishName { get; set; }
+    public SubscriptionPlanType PlanType { get; set; }
+    public decimal Price { get; set; }
+    public required string Currency { get; set; }
+    public int? DurationDays { get; set; }
+    public int? SessionCount { get; set; }
+    public int DisplayOrder { get; set; }
+    public bool AllBranches { get; set; } = true;
+    public int Revision { get; set; }
+    public ICollection<PlanBranchPublication> BranchPublications { get; set; } = [];
+    public Sport Sport { get; set; } = null!;
+}
+
+public sealed class SubscriptionPeriod : TenantEntity, IPlanTermsSnapshot
+{
+    public int? DurationMonthsSnapshot { get; set; }
+    public AcademyServiceKind? ServiceKindSnapshot { get; set; }
+    public TrainingFormat? TrainingFormatSnapshot { get; set; }
+    public string? PlanNameSnapshot { get; set; }
+    public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
+    public int? DurationDaysSnapshot { get; set; }
+    public int? SessionCountSnapshot { get; set; }
+    public int? PlanRevisionSnapshot { get; set; }
+    public Guid SportEnrollmentId { get; set; }
+    public Guid SportId { get; set; }
+    public Guid SubscriptionPlanId { get; set; }
+    public Guid? CollectionId { get; set; }
+    public SubscriptionOrigin Origin { get; set; } = SubscriptionOrigin.Collected;
+    public Guid? ImportJobId { get; set; }
+    public Guid? FreeTrainingApprovalId { get; set; }
+    public FreeTrainingApproval? FreeTrainingApproval { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public int? InitialSessions { get; set; }
+    public int? RemainingSessions { get; set; }
+    public SubscriptionPeriodStatus Status { get; set; }
+    public DateOnly? FrozenFromDate { get; set; }
+    public decimal? PriceSnapshot { get; set; }
+    public required string CurrencySnapshot { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public SportEnrollment SportEnrollment { get; set; } = null!;
+    public SubscriptionPlan SubscriptionPlan { get; set; } = null!;
+    public PaymentCollection Collection { get; set; } = null!;
+}
+
+public sealed class SubscriptionAdjustment : TenantEntity
+{
+    public Guid SubscriptionPeriodId { get; set; }
+    public SubscriptionAdjustmentType AdjustmentType { get; set; }
+    public DateOnly EffectiveDate { get; set; }
+    public int? DaysDelta { get; set; }
+    public int? SessionsDelta { get; set; }
+    public int? OldRemainingSessions { get; set; }
+    public int? NewRemainingSessions { get; set; }
+    public DateOnly? OldEndDate { get; set; }
+    public DateOnly? NewEndDate { get; set; }
+    public required string Reason { get; set; }
+    public Guid PerformedByUserId { get; set; }
+    public Guid? RelatedAdjustmentId { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public DateTimeOffset PerformedAtUtc { get; set; }
+    public SubscriptionPeriod SubscriptionPeriod { get; set; } = null!;
+    public SubscriptionAdjustment? RelatedAdjustment { get; set; }
+}
+
+public sealed class RenewalRequest : TenantEntity, IPlanTermsSnapshot
+{
+    public Guid? VipRewardUseId {get;set;}
+    public Guid? DiscountRuleIdSnapshot { get; set; }
+    public int? DiscountRuleRevisionSnapshot { get; set; }
+    public int? DurationMonthsSnapshot { get; set; }
+    public AcademyServiceKind? ServiceKindSnapshot { get; set; }
+    public TrainingFormat? TrainingFormatSnapshot { get; set; }
+    public string? PlanNameSnapshot { get; set; }
+    public SubscriptionPlanType? PlanTypeSnapshot { get; set; }
+    public int? DurationDaysSnapshot { get; set; }
+    public int? SessionCountSnapshot { get; set; }
+    public int? PlanRevisionSnapshot { get; set; }
+    public string? RegistrationPayloadHash { get; set; }
+    public Guid SportEnrollmentId { get; set; }
+    public Guid SportId { get; set; }
+    public Guid SubscriptionPlanId { get; set; }
+    public Guid RequestedByUserId { get; set; }
+    public DateTimeOffset RequestedAtUtc { get; set; }
+    public decimal OriginalAmount { get; set; }
+    public RenewalDiscountType? DiscountType { get; set; }
+    public decimal? DiscountValue { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public string? DiscountReason { get; set; }
+    public Guid? DiscountAppliedByUserId { get; set; }
+    public DateTimeOffset? DiscountAppliedAtUtc { get; set; }
+    public decimal AmountExpected { get; set; }
+    public required string Currency { get; set; }
+    public RenewalRequestStatus Status { get; set; }
+    public Guid? PaymentRequestId { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public SportEnrollment SportEnrollment { get; set; } = null!;
+    public SubscriptionPlan SubscriptionPlan { get; set; } = null!;
+}
+
+public sealed class RenewalDiscountAdjustment : TenantEntity
+{
+    public Guid? PreviousDiscountRuleId { get; set; }
+    public int? PreviousDiscountRuleRevision { get; set; }
+    public Guid RenewalRequestId { get; set; }
+    public RenewalDiscountType? PreviousDiscountType { get; set; }
+    public decimal? PreviousDiscountValue { get; set; }
+    public RenewalDiscountType? NewDiscountType { get; set; }
+    public decimal? NewDiscountValue { get; set; }
+    public decimal PreviousDiscountAmount { get; set; }
+    public decimal NewDiscountAmount { get; set; }
+    public decimal PreviousFinalAmount { get; set; }
+    public decimal NewFinalAmount { get; set; }
+    public required string Reason { get; set; }
+    public Guid PerformedByUserId { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public RenewalRequest RenewalRequest { get; set; } = null!;
+}
+
+public sealed class PaymentRequest : TenantEntity
+{
+    public Guid RenewalRequestId { get; set; }
+    public required string Provider { get; set; }
+    public required string ProviderEnvironment { get; set; }
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public PaymentRequestStatus Status { get; set; }
+    public required string ProviderReference { get; set; }
+    public required string CheckoutReference { get; set; }
+    public DateTimeOffset? ConfirmedAtUtc { get; set; }
+    public DateTimeOffset? LastProviderEventAtUtc { get; set; }
+    public RenewalRequest RenewalRequest { get; set; } = null!;
+}
+
+public sealed class PaymentProviderEvent : TenantEntity
+{
+    public string? EnvelopeHash { get; set; }
+    public Guid PaymentRequestId { get; set; }
+    public required string Provider { get; set; }
+    public required string ProviderEventId { get; set; }
+    public required string EventType { get; set; }
+    public required string RawStatus { get; set; }
+    public PaymentEventOutcome Outcome { get; set; }
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public DateTimeOffset ReceivedAtUtc { get; set; }
+    public DateTimeOffset? ProcessedAtUtc { get; set; }
+    public required string ProcessingResult { get; set; }
+    public PaymentRequest PaymentRequest { get; set; } = null!;
+}
+
+public sealed class PaymentCollection : TenantEntity
+{
+    public Guid SportEnrollmentId { get; set; }
+    public Guid RenewalRequestId { get; set; }
+    public Guid PaymentRequestId { get; set; }
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public required string PaymentMethod { get; set; }
+    public required string Provider { get; set; }
+    public required string ProviderReference { get; set; }
+    public DateTimeOffset ConfirmedAtUtc { get; set; }
+    public required string ConfirmedBy { get; set; }
+    public SportEnrollment SportEnrollment { get; set; } = null!;
+    public RenewalRequest RenewalRequest { get; set; } = null!;
+    public PaymentRequest PaymentRequest { get; set; } = null!;
+}
+
+public sealed class Receipt : TenantEntity
+{
+    public Guid? DiscountRuleIdSnapshot { get; set; }
+    public int? DiscountRuleRevisionSnapshot { get; set; }
+    public string? DiscountReason { get; set; }
+    public Guid CollectionId { get; set; }
+    public required string ReceiptNumber { get; set; }
+    public Guid PlayerId { get; set; }
+    public Guid SportEnrollmentId { get; set; }
+    public Guid SubscriptionPlanId { get; set; }
+    public required string PlayerNameSnapshot { get; set; }
+    public required string SportNameSnapshot { get; set; }
+    public required string PlanNameSnapshot { get; set; }
+    public decimal OriginalAmount { get; set; }
+    public RenewalDiscountType? DiscountType { get; set; }
+    public decimal? DiscountValue { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal FinalAmount { get; set; }
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public DateTimeOffset PaidAtUtc { get; set; }
+    public required string PaymentMethod { get; set; }
+    public required string ProviderReference { get; set; }
+    public PaymentCollection Collection { get; set; } = null!;
+}

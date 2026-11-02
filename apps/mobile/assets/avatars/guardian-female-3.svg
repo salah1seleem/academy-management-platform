@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="480" viewBox="0 0 384 480">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#F0EDFB"/><stop offset="1" stop-color="#D3D1EA"/></linearGradient><linearGradient id="shirt" x2=".8" y2="1"><stop stop-color="#436E96"/><stop offset="1" stop-color="#203958"/></linearGradient></defs>
+<path fill="url(#bg)" d="M0 0h384v480H0z"/><circle cx="192" cy="192" r="137" fill="#FFFFFF" opacity=".55"/>
+<path d="M-20 386 Q160 299 414 356M-20 409 Q162 322 414 380" stroke="#FFFFFF" opacity=".45" stroke-width="3" fill="none"/>
+<path d="M130 193 Q111 87 192 85 Q277 86 255 247 L132 247Z" fill="#52372E"/><path d="M52 480 L68 339 Q75 278 151 266 L234 266 Q308 278 316 339 L332 480" fill="url(#shirt)"/>
+<path d="M157 238 L157 272 Q192 310 227 272 L227 238" fill="#B97D59"/><path d="M157 244 Q191 266 227 244 L227 255 Q192 279 157 256Z" fill="#C68D70"/>
+<ellipse cx="137" cy="175" rx="14" ry="22" fill="#B97D59"/><ellipse cx="248" cy="175" rx="14" ry="22" fill="#B97D59"/>
+<path d="M133 150 Q133 102 192 103 Q251 102 251 150 L245 199 Q235 247 192 252 Q149 247 139 199Z" fill="#B97D59"/><path d="M131 157 Q116 120 138 99 Q174 75 209 90 Q253 82 256 133 L250 164 Q226 140 221 120 Q179 137 131 157Z" fill="#52372E"/>
+<path d="M153 164 Q166 157 177 163M208 163 Q221 157 232 164" stroke="#24364D" stroke-width="5" stroke-linecap="round" fill="none"/>
+<ellipse cx="167" cy="181" rx="4.5" ry="6" fill="#24364D"/><ellipse cx="219" cy="181" rx="4.5" ry="6" fill="#24364D"/>
+<path d="M191 181 L186 201 Q192 205 200 201" stroke="#C88C70" stroke-width="3" fill="none" stroke-linecap="round"/>
+<path d="M175 218 Q192 230 210 217" stroke="#9F5D53" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M146 269 L164 293 L191 310 L219 293 L239 269" stroke="#B2DAD6" stroke-width="7" fill="none" stroke-linejoin="round"/>
+<path d="M107 326 L98 480 M278 326 L287 480" stroke="#FFFFFF" opacity=".12" stroke-width="4" fill="none"/><path d="M170 348h44" stroke="#FFFFFF" opacity=".65" stroke-width="5" stroke-linecap="round"/>
+<rect x="234" y="322" width="32" height="41" rx="7" fill="#FFFFFF" opacity=".68"/><path d="M243 333h14M243 342h14" stroke="#436E96" stroke-width="3"/></svg>

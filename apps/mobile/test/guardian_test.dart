@@ -1,0 +1,525 @@
+import 'package:academy_mobile/app/app.dart';
+import 'package:academy_mobile/core/api/api_client.dart';
+import 'package:academy_mobile/core/auth/auth_controller.dart';
+import 'package:academy_mobile/core/theme/appearance.dart';
+import 'package:academy_mobile/features/guardian/guardian_ui.dart';
+import 'package:academy_mobile/features/guardian/guardian_payments.dart';
+import 'package:academy_mobile/features/guardian/guardian_report.dart';
+import 'package:academy_mobile/features/guardian/guardian_content.dart';
+import 'package:academy_mobile/features/guardian/enrollment_requests.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'support/visibility.dart';
+
+import 'auth_controller_test.dart';
+
+Json child(String id) => {
+  'id': id,
+  'arabicName': 'لاعب $id',
+  'dateOfBirth': '2018-03-12',
+  'sports': [
+    {
+      'id': 'e$id',
+      'sport': 'كرة القدم',
+      'period': {'status': 'Active'},
+    },
+  ],
+};
+Json home() => {
+  'academyName': 'أكاديمية الاختبار',
+  'guardianName': 'حساب تجريبي',
+  'today': '2026-09-28',
+  'children': [child('أ'), child('ب')],
+};
+Json plan() => {
+  'id': 'plan',
+  'arabicName': 'شهري',
+  'price': 100,
+  'currency': 'EGP',
+  'durationDays': 30,
+};
+Future<AuthController> logged(Handler handler) async {
+  final auth = AuthController(
+    FakeApi(
+      (m, p, b, t) => p.contains('/auth/')
+          ? Future.value(credentials())
+          : handler(m, p, b, t),
+    ),
+    MemoryStore(),
+  )..restoring = false;
+  await auth.verify('phone', 'challenge', 'otp');
+  return auth;
+}
+
+Widget shell(Widget page) => MaterialApp(
+  locale: const Locale('ar'),
+  localizationsDelegates: GlobalMaterialLocalizations.delegates,
+  supportedLocales: const [Locale('ar')],
+  theme: guardianTheme(),
+  home: page,
+);
+void main() {
+  testWidgets(
+    'Enrollment packages follow sport and branch publication and clear stale selection',
+    (tester) async {
+      final auth = await logged(
+        (m, p, b, t) async => {
+          'children': [],
+          'sports': [
+            {'id': 'swim', 'name': 'السباحة'},
+          ],
+          'branches': [
+            {'id': 'a', 'name': 'مدينة نصر'},
+            {'id': 'b', 'name': 'التجمع'},
+          ],
+          'plans': [
+            {
+              'id': 'p',
+              'sportId': 'swim',
+              'arabicName': 'سباحة الفرع فقط',
+              'price': '600.00',
+              'currency': 'EGP',
+              'allBranches': false,
+              'branchIds': ['a'],
+            },
+            {
+              'id': 'day',
+              'sportId': 'swim',
+              'arabicName': 'زيارة يومية ليست تدريبًا',
+              'serviceKind': 'DayPass',
+              'price': '100.00',
+              'currency': 'EGP',
+              'allBranches': true,
+            },
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        shell(EnrollmentForm(auth: auth, environment: 'Demo', newChild: true)),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>).first,
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('السباحة').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('مدينة نصر').last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byType(DropdownButtonFormField<String>).at(2),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(2));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('زيارة يومية ليست تدريبًا'), findsNothing);
+      await tester.tap(find.textContaining('سباحة الفرع فقط').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('سباحة الفرع فقط'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byType(DropdownButtonFormField<String>).at(1),
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('التجمع').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('سباحة الفرع فقط'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'An uncertain renewal retries only explicitly with the same idempotency key and body',
+    (tester) async {
+      var attempts = 0;
+      final bodies = <Object?>[];
+      final auth = await logged((m, p, b, t) async {
+        if (p.endsWith('/renewals')) {
+          attempts++;
+          bodies.add(b);
+          if (attempts == 1) throw const ApiFailure(0, 'انقطع الاتصال');
+          return {'paymentId': 'payment'};
+        }
+        return {
+          'player': 'طفل',
+          'sport': 'كرة القدم',
+          'plan': 'شهري',
+          'status': 'Pending',
+          'isCurrent': true,
+          'originalAmount': 100,
+          'discountAmount': 0,
+          'finalAmount': 100,
+          'currency': 'EGP',
+        };
+      });
+      await tester.pumpWidget(
+        shell(
+          RenewalReview(
+            auth: auth,
+            environment: 'Demo',
+            childName: 'طفل',
+            enrollmentId: 'enrollment',
+            plan: plan(),
+          ),
+        ),
+      );
+      await tester.tap(find.text('متابعة إلى الدفع'));
+      await tester.pumpAndSettle();
+      expect(attempts, 1);
+      await tester.tap(find.text('متابعة إلى الدفع'));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+      expect(bodies.first, bodies.last);
+      final api = auth.transport as FakeApi;
+      final used = [
+        for (var i = 0; i < api.paths.length; i++)
+          if (api.paths[i].endsWith('/renewals')) api.keys[i],
+      ];
+      expect(used.first, isNotNull);
+      expect(used.first, used.last);
+      expect(find.text('محاكاة دفع ناجح'), findsOneWidget);
+    },
+  );
+  testWidgets('Enrollment submission validates before any write', (
+    tester,
+  ) async {
+    final writes = <String>[];
+    final auth = await logged((m, p, b, t) async {
+      if (m != 'GET') writes.add(p);
+      return {
+        'children': [],
+        'sports': [
+          {'id': 'sport', 'name': 'كرة القدم'},
+        ],
+        'branches': [
+          {'id': 'branch', 'name': 'مدينة نصر'},
+        ],
+      };
+    });
+    await tester.pumpWidget(
+      shell(EnrollmentForm(auth: auth, environment: 'Demo')),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('متابعة إلى الدفع'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('متابعة إلى الدفع'));
+    await tester.pumpAndSettle();
+    expect(writes, isEmpty);
+  });
+  for (final size in [
+    const Size(360, 800),
+    const Size(390, 844),
+    const Size(412, 915),
+  ]) {
+    testWidgets(
+      'Guardian home selects one sibling workspace and preserves three enrollment actions at $size',
+      (tester) async {
+        tester.platformDispatcher.accessibilityFeaturesTestValue =
+            const FakeAccessibilityFeatures(disableAnimations: true);
+        addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+        );
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final auth = await logged(
+          (m, p, b, t) async => p.endsWith('/home') ? home() : [],
+        );
+        final prefs = Appearance();
+        await prefs.completeRoleIntro('Guardian', 'general');
+        await tester.pumpWidget(
+          AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
+        await tester.drag(find.byType(PageView), const Offset(310, 0));
+        await tester.pumpAndSettle();
+        await expandChildDetails(tester);
+        expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('child-workspace-ب')),
+          160,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('guardian-home-scroll')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        expect(find.byKey(const ValueKey('child-workspace-أ')), findsNothing);
+        expect(find.byKey(const ValueKey('child-workspace-ب')), findsOneWidget);
+        final rail = find.byKey(
+          ValueKey(
+            'guardian-home-actions-${auth.session!.selected!.academyId}:${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}',
+          ),
+        );
+        final vertical = find
+            .descendant(
+              of: find.byKey(const ValueKey('guardian-home-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        tester.state<ScrollableState>(vertical).position.jumpTo(0);
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(rail, 150, scrollable: vertical);
+        for (final title in [
+          'اشتراك جديد',
+          'تجديد الاشتراك',
+          'تجديد اشتراك لغيره',
+          'تقييم المدربين',
+          'شكوى أو اقتراح',
+        ]) {
+          final action = find.byKey(ValueKey('guardian-action-$title'));
+          await revealTestTarget(tester, action);
+          expect(action, findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'Logout destroys private deep routes and back cannot reopen them',
+    (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final auth = await logged(
+        (m, p, b, t) async => p.endsWith('/home')
+            ? home()
+            : p.endsWith('/enrollments')
+            ? []
+            : [],
+      );
+      final prefs = Appearance();
+      await prefs.completeRoleIntro('Guardian', 'general');
+      await tester.pumpWidget(
+        AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('تجديد الاشتراك'),
+        220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('تجديد الاشتراك'));
+      await tester.pumpAndSettle();
+      expect(find.text('اختر الطفل والرياضة'), findsOneWidget);
+      await auth.logout();
+      await tester.pumpAndSettle();
+      expect(find.text('رقم الهاتف'), findsOneWidget);
+      expect(find.text('اختر الطفل والرياضة'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('رقم الهاتف'), findsOneWidget);
+    },
+  );
+  testWidgets('Read failure is retryable and reveals no stale child data', (
+    tester,
+  ) async {
+    var fail = true;
+    final auth = await logged((m, p, b, t) async {
+      if (p.endsWith('/home')) {
+        if (fail) throw const ApiFailure(403, 'ليس لديك صلاحية.');
+        return home();
+      }
+      return [];
+    });
+    final prefs = Appearance();
+    await prefs.completeRoleIntro('Guardian', 'general');
+    await tester.pumpWidget(
+      AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('لاعب أ'), findsNothing);
+    fail = false;
+    await tester.tap(find.text('إعادة المحاولة'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('child-أ')),
+        matching: find.text('لاعب أ'),
+      ),
+      findsOneWidget,
+    );
+  });
+  testWidgets(
+    'Report preserves server score zero, position, missing values and every criterion',
+    (tester) async {
+      final auth = await logged(
+        (m, p, b, t) async => {
+          'player': 'لاعب التقرير',
+          'footballPosition': 'AMF',
+          'isFootballReport': true,
+          'reportingPeriod': 'أسبوعي',
+          'evaluationDate': '2026-09-28',
+          'overallScore': 74,
+          'performanceMean': {
+            'value': 0,
+            'scoredCriteria': 1,
+            'applicableCriteria': 2,
+          },
+          'age': 8,
+          'heightCm': null,
+          'weightKg': 25,
+          'preferredFoot': 'Right',
+          'completenessPercentage': 50,
+          'axes': [
+            {'axis': 'Passing', 'value': 0},
+            {'axis': 'Speed', 'value': null},
+          ],
+          'criteria': [
+            {'name': 'تمرير دقيق', 'score': 0},
+            {'name': 'سرعة الجري', 'score': null},
+          ],
+          'generalNotes': 'ملاحظة المدرب',
+          'evaluator': 'مدرب',
+        },
+      );
+      await tester.pumpWidget(shell(PlayerReport(auth: auth, id: 'report')));
+      await tester.pumpAndSettle();
+      expect(find.text('0'), findsWidgets);
+      expect(find.text('التقييم المركب · 74'), findsOneWidget);
+      expect(find.text('متوسط الأداء'), findsOneWidget);
+      expect(find.text('AMF'), findsOneWidget);
+      expect(find.text('التمرير: 0'), findsOneWidget);
+      expect(find.text('السرعة: غير متاح'), findsNothing);
+      expect(find.text('سرعة الجري'), findsNothing);
+      await tester.scrollUntilVisible(find.text('ملاحظة المدرب'), 250);
+      expect(find.text('ملاحظة المدرب'), findsOneWidget);
+      expect(find.text('مخطط الملعب'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'Nutrition shows null as unavailable and no commercial controls',
+    (tester) async {
+      final auth = await logged(
+        (m, p, b, t) async => {
+          'arabicName': 'شوفان',
+          'arabicDescription': 'معلومات',
+          'servingDescription': 'حصة',
+          'dataStatus': 'DemoUnreviewed',
+        },
+      );
+      await tester.pumpWidget(shell(MealDetails(auth: auth, id: 'meal')));
+      await tester.pumpAndSettle();
+      expect(find.text('غير متاح'), findsNWidgets(4));
+      await tester.scrollUntilVisible(find.textContaining('تقديرية'), 200);
+      expect(find.textContaining('تقديرية'), findsOneWidget);
+      for (final forbidden in [
+        'السعر',
+        'الكمية',
+        'أضف للسلة',
+        'شراء',
+        'تقييم',
+      ]) {
+        expect(find.text(forbidden), findsNothing);
+      }
+    },
+  );
+  testWidgets('Demo payment is hidden in Production', (tester) async {
+    final auth = await logged(
+      (m, p, b, t) async => {
+        'player': 'طفل',
+        'sport': 'كرة القدم',
+        'plan': 'شهري',
+        'status': 'Pending',
+        'isCurrent': true,
+        'originalAmount': 100,
+        'discountAmount': 10,
+        'finalAmount': 90,
+        'currency': 'EGP',
+      },
+    );
+    await tester.pumpWidget(
+      shell(CheckoutPage(auth: auth, environment: 'Production', id: 'payment')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('محاكاة دفع ناجح'), findsNothing);
+    expect(
+      find.text(
+        'لم تضبط الأكاديمية حسابات التحويل بعد. تواصل مع الإدارة قبل الدفع.',
+      ),
+      findsOneWidget,
+    );
+  });
+  testWidgets(
+    'Authenticated name search uses a scoped reference and never grants child access',
+    (tester) async {
+      final calls = <String>[];
+      Object? sent;
+      final auth = await logged((m, p, b, t) async {
+        calls.add(p);
+        sent = b;
+        if (p.endsWith('/search')) {
+          return [
+            {
+              'name': 'مستفيد',
+              'sport': 'كرة القدم',
+              'branch': 'فرع تجريبي',
+              'reference': 'scoped-reference',
+            },
+          ];
+        }
+        return {
+          'playerDisplayName': 'مستفيد',
+          'plans': [plan()],
+        };
+      });
+      await tester.pumpWidget(
+        shell(ExternalRenewal(auth: auth, environment: 'Demo')),
+      );
+      await tester.enterText(find.byType(TextField), 'مستفيد');
+      await tester.tap(find.text('بحث عن لاعب'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('مستفيد').last);
+      await tester.pumpAndSettle();
+      expect(calls, [
+        '/api/v1/guardian/subscriptions/external/search',
+        '/api/v1/guardian/subscriptions/external/resolve',
+      ]);
+      expect(sent, {'reference': 'scoped-reference'});
+      expect(find.textContaining('لا يمنحك'), findsOneWidget);
+    },
+  );
+  test(
+    'Reference date age and missing score are not recomputed business totals',
+    () {
+      expect(ageOn('2018-10-10', '2026-09-28'), 7);
+      expect(ageOn('2018-03-12', '2026-09-28'), 8);
+      expect(textOf(0), '0');
+      expect(textOf(null), 'غير متاح');
+    },
+  );
+  test('Command keys are opaque unique and within server limit', () {
+    final keys = List.generate(100, (_) => commandKey());
+    expect(keys.toSet().length, 100);
+    expect(keys.every((x) => x.length <= 100), true);
+  });
+  testWidgets('Unknown media reference never makes an external image request', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      shell(const DemoImage('https://untrusted.example/child.png')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsNothing);
+    expect(find.byIcon(Icons.image_not_supported_outlined), findsOneWidget);
+  });
+}

@@ -1,0 +1,106 @@
+{
+  "fixture_id": "academity-v3-finance-golden-01",
+  "status": "reference_fixture_not_application_test_result",
+  "currency": "EGP",
+  "timezone": "Africa/Cairo",
+  "period_local": {
+    "start_inclusive": "2026-10-01T00:00:00",
+    "end_exclusive": "2026-11-01T00:00:00"
+  },
+  "assumptions": [
+    "Synthetic isolated test namespace; no other business transactions.",
+    "No tax, depreciation, opening debts or additional costs in this fixture.",
+    "Duration package explicitly allocates equal consideration to three monthly service periods.",
+    "Private lessons are four separate invoices; three fully paid, one unpaid.",
+    "Private commission contract requires delivered, approved and collected service; unpaid commission is contingent, not payable.",
+    "The same employee is independently the facility-rental debtor; no automatic netting.",
+    "Agency presentation is explicitly approved for the separate agency arrangement.",
+    "All private receipts settle through the gateway; other receipts go directly to the bank.",
+    "Amounts are decimal strings, never binary floating-point source amounts."
+  ],
+  "inputs": {
+    "owner_capital_bank": "20000.00",
+    "subscription_receipt": "3000.00",
+    "subscription_earned_current_period": "1000.00",
+    "private_lesson_count_delivered": 4,
+    "private_lesson_unit_net": "500.00",
+    "private_fully_paid_invoice_count": 3,
+    "coach_private_commission_percent": "40.00",
+    "coach_base_salary_earned": "3000.00",
+    "coach_salary_paid": "2500.00",
+    "rental_lanes": 1,
+    "rental_eligible_hours": "20.00",
+    "rental_hourly_rate": "200.00",
+    "rental_receipt": "3000.00",
+    "agency_receipt": "5000.00",
+    "agency_academy_share_percent": "30.00",
+    "agency_partner_paid": "0.00",
+    "operating_expense_accrued": "1000.00",
+    "operating_expense_paid": "600.00",
+    "gateway_fee_actual": "45.00"
+  },
+  "expected": {
+    "customer_partner_gross_receipts_excluding_owner_capital": "12500.00",
+    "gateway_gross_private_receipts": "1500.00",
+    "gateway_net_bank_settlement": "1455.00",
+    "gateway_fee_expense": "45.00",
+    "total_bank_inflows_excluding_owner_capital_after_gateway_fees": "12455.00",
+    "bank_payments_coach_and_supplier": "3100.00",
+    "bank_balance_closing": "29355.00",
+    "subscription_earned_revenue": "1000.00",
+    "subscription_deferred_liability": "2000.00",
+    "private_earned_revenue": "2000.00",
+    "private_receivable": "500.00",
+    "coach_private_commission_earned_payable": "600.00",
+    "coach_private_commission_contingent_not_payable": "200.00",
+    "coach_total_compensation_earned": "3600.00",
+    "coach_employee_payable_closing": "1100.00",
+    "rental_revenue": "4000.00",
+    "rental_receivable_same_person_as_coach": "1000.00",
+    "agency_fee_revenue": "1500.00",
+    "agency_partner_liability": "3500.00",
+    "agency_partner_amount_not_an_expense": "3500.00",
+    "supplier_payable": "400.00",
+    "total_earned_revenue": "8500.00",
+    "total_accrued_expenses": "4645.00",
+    "operating_result": "3855.00",
+    "total_receivables": "1500.00",
+    "total_liabilities": "7000.00",
+    "equity_including_current_result": "23855.00",
+    "total_assets": "30855.00",
+    "total_liabilities_plus_equity": "30855.00"
+  },
+  "other_independent_golden_cases": {
+    "private_package_proportional": {
+      "entitled_sessions": 8,
+      "package_net": "2000.00",
+      "delivered_sessions": 2,
+      "collected_net": "1000.00",
+      "commission_percent": "40.00",
+      "expected_commission_initial": "100.00",
+      "expected_commission_after_full_payment": "200.00",
+      "expected_increment_only": "100.00"
+    },
+    "v2_renewal_potential_not_debt": {
+      "potential": "12700.00",
+      "overdue": "0.00"
+    },
+    "v2_equal_allocation": {
+      "expense": "100000.00",
+      "groups": 100,
+      "per_group": "1000.00"
+    },
+    "v2_group_result": {
+      "expected": "4000.00"
+    },
+    "v2_compound_payroll": {
+      "expected": "6210.00"
+    },
+    "ninety_minutes_at_hourly_120": {
+      "expected": "180.00"
+    },
+    "recurring_weekly_slot_monthly_price_700": {
+      "expected_monthly_charge": "700.00"
+    }
+  }
+}

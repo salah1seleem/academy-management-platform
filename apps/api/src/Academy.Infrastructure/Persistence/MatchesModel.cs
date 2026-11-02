@@ -1,0 +1,92 @@
+using Academy.Infrastructure.Operations;
+using Academy.Infrastructure.People;
+using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Tenancy;
+using Microsoft.EntityFrameworkCore;
+
+namespace Academy.Infrastructure.Persistence;
+
+public sealed partial class FoundationDbContext
+{
+    public DbSet<AcademyTournament> AcademyTournaments => Set<AcademyTournament>();
+    public DbSet<MatchTeam> MatchTeams => Set<MatchTeam>();
+    public DbSet<MatchTeamPlayer> MatchTeamPlayers => Set<MatchTeamPlayer>();
+    public DbSet<AcademyMatch> AcademyMatches => Set<AcademyMatch>();
+    public DbSet<MatchParticipant> MatchParticipants => Set<MatchParticipant>();
+    public DbSet<MatchCoachAssignment> MatchCoachAssignments => Set<MatchCoachAssignment>();
+    public DbSet<TournamentRegistration> TournamentRegistrations => Set<TournamentRegistration>();
+    public DbSet<TournamentPayment> TournamentPayments => Set<TournamentPayment>();
+    public DbSet<MatchGoalSlot> MatchGoalSlots => Set<MatchGoalSlot>();
+    public DbSet<MatchResultChange> MatchResultChanges => Set<MatchResultChange>();
+    public DbSet<MatchTeamPermissionAudit> MatchTeamPermissionAudits => Set<MatchTeamPermissionAudit>();
+    public DbSet<ImportedHistoricalMatch> ImportedHistoricalMatches => Set<ImportedHistoricalMatch>();
+    private static void ConfigureMatches(ModelBuilder b)
+    {
+        Tenant<AcademyTournament>(b); Tenant<MatchTeam>(b); Tenant<MatchTeamPlayer>(b); Tenant<AcademyMatch>(b); Tenant<MatchParticipant>(b); Tenant<TournamentPayment>(b);
+        Tenant<MatchCoachAssignment>(b); Tenant<TournamentRegistration>(b);
+        Tenant<MatchGoalSlot>(b);Tenant<MatchResultChange>(b);Tenant<MatchTeamPermissionAudit>(b);
+        Tenant<ImportedHistoricalMatch>(b);
+        var imported=b.Entity<ImportedHistoricalMatch>();
+        imported.Property(x=>x.SourceSystem).HasMaxLength(160);imported.Property(x=>x.SourceReference).HasMaxLength(80);imported.Property(x=>x.OriginalPayload).HasColumnType("jsonb");
+        imported.Property(x=>x.SourceFingerprint).HasMaxLength(64);
+        imported.HasIndex(x=>new{x.AcademyId,x.SourceSystem,x.SourceReference}).IsUnique();
+        imported.HasOne<AcademyImportJob>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.JobId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        imported.HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        imported.HasOne<Academy.Infrastructure.Identity.ApplicationUser>().WithMany().HasForeignKey(x=>x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyMatch>().Property(x=>x.ResultFingerprint).HasMaxLength(64);b.Entity<AcademyMatch>().Property(x=>x.CreationHash).HasMaxLength(64);
+        b.Entity<AcademyMatch>().HasIndex(x=>new{x.AcademyId,x.CreatedByMembershipId,x.CreationRequestId}).IsUnique();
+        b.Entity<AcademyMatch>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.CreatedByMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchGoalSlot>().HasIndex(x=>new{x.AcademyId,x.MatchId,x.Ordinal}).IsUnique();
+        b.Entity<MatchGoalSlot>().Property(x=>x.Kind).HasMaxLength(12);
+        b.Entity<MatchGoalSlot>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchGoalSlot>().HasOne<Player>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.PlayerId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchGoalSlot>().ToTable(t=>t.HasCheckConstraint("CK_MatchGoalSlot_Value","\"Ordinal\" BETWEEN 1 AND 100 AND ((\"Kind\"='Player' AND \"PlayerId\" IS NOT NULL) OR (\"Kind\" IN ('Unknown','OwnGoal') AND \"PlayerId\" IS NULL))"));
+        b.Entity<MatchResultChange>().HasIndex(x=>new{x.AcademyId,x.MatchId,x.Revision}).IsUnique();
+        b.Entity<MatchResultChange>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchResultChange>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ActorMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchResultChange>().Property(x=>x.Before).HasColumnType("jsonb");b.Entity<MatchResultChange>().Property(x=>x.After).HasColumnType("jsonb");
+        b.Entity<MatchTeamPermissionAudit>().HasOne<MatchTeam>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.TeamId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeamPermissionAudit>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ActorMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyNotice>().Property(x=>x.DeduplicationKey).HasMaxLength(64);
+        b.Entity<AcademyNotice>().HasIndex(x=>new{x.AcademyId,x.UserId,x.DeduplicationKey}).IsUnique();
+        b.Entity<AcademyNotice>().HasOne<Player>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.SubjectPlayerId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+
+        b.Entity<TournamentRegistration>().HasIndex(x=>new{x.AcademyId,x.TournamentId,x.EnrollmentId}).IsUnique();
+        b.Entity<TournamentRegistration>().HasOne<AcademyTournament>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.TournamentId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TournamentRegistration>().HasOne<SportEnrollment>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.EnrollmentId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TournamentRegistration>().HasOne<MatchTeam>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.TeamId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TournamentRegistration>().HasOne<AcademyImportJob>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.ImportJobId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.MatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.CoachMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.AssignedByMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchCoachAssignment>().HasIndex(x=>new{x.AcademyId,x.MatchId,x.Sequence}).IsUnique();
+        b.Entity<MatchCoachAssignment>().Property(x=>x.Source).HasMaxLength(30);b.Entity<MatchCoachAssignment>().Property(x=>x.Note).HasMaxLength(300);
+        b.Entity<MatchCoachAssignment>().ToTable(t=>t.HasCheckConstraint("CK_MatchCoachAssignment_Identity","\"Sequence\">0 AND \"IsActive\" AND \"Source\" IN ('DraftSelection','FirstPublication','Reassignment','LegacyReview','DemoFixture')"));
+        b.Entity<AcademyTournament>().Property(x => x.Name).HasMaxLength(120); b.Entity<AcademyTournament>().Property(x => x.Fee).HasPrecision(18, 2);
+        b.Entity<AcademyTournament>().HasOne<Sport>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeam>().Property(x => x.Name).HasMaxLength(120);
+        b.Entity<MatchTeam>().HasOne<Sport>().WithMany().HasForeignKey(x => new { x.AcademyId, x.SportId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeam>().HasOne<Branch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.BranchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeam>().HasOne<AgeCategory>().WithMany().HasForeignKey(x => new { x.AcademyId, x.AgeCategoryId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeam>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x => new { x.AcademyId, x.CoachMembershipId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeamPlayer>().HasIndex(x => new { x.AcademyId, x.TeamId, x.EnrollmentId }).IsUnique();
+        b.Entity<MatchTeamPlayer>().HasOne<MatchTeam>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TeamId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchTeamPlayer>().HasOne<SportEnrollment>().WithMany().HasForeignKey(x => new { x.AcademyId, x.EnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyMatch>().HasOne<AcademyTournament>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TournamentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyMatch>().HasOne<MatchTeam>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TeamId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyMatch>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.CopiedFromMatchId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyMatch>().HasOne<AcademyMembership>().WithMany().HasForeignKey(x=>new{x.AcademyId,x.CopiedByMembershipId}).HasPrincipalKey(x=>new{x.AcademyId,x.Id}).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AcademyMatch>().Property(x=>x.CopyRequestKey).HasMaxLength(100);b.Entity<AcademyMatch>().Property(x=>x.CopyRequestHash).HasMaxLength(64);
+        b.Entity<AcademyMatch>().HasIndex(x=>new{x.AcademyId,x.CopiedByMembershipId,x.CopyRequestKey}).IsUnique().HasFilter("\"CopiedFromMatchId\" IS NOT NULL");
+        b.Entity<AcademyMatch>().ToTable(t=>t.HasCheckConstraint("CK_Match_Copy","(\"CopiedFromMatchId\" IS NULL AND \"CopiedByMembershipId\" IS NULL AND \"CopyRequestKey\" IS NULL AND \"CopyRequestHash\" IS NULL) OR (\"CopiedFromMatchId\" IS NOT NULL AND \"CopiedFromMatchId\"<>\"Id\" AND \"CopiedByMembershipId\" IS NOT NULL AND \"CopyRequestKey\" IS NOT NULL AND length(\"CopyRequestKey\") BETWEEN 8 AND 100 AND \"CopyRequestHash\" IS NOT NULL AND length(\"CopyRequestHash\")=64)"));
+        b.Entity<MatchParticipant>().HasIndex(x => new { x.AcademyId, x.MatchId, x.PlayerId }).IsUnique();
+        b.Entity<MatchParticipant>().HasOne<AcademyMatch>().WithMany().HasForeignKey(x => new { x.AcademyId, x.MatchId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<MatchParticipant>().HasOne<Player>().WithMany().HasForeignKey(x => new { x.AcademyId, x.PlayerId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TournamentPayment>().Property(x => x.Amount).HasPrecision(18, 2);
+        b.Entity<TournamentPayment>().HasIndex(x => new { x.AcademyId, x.RequestedByUserId, x.IdempotencyKey }).IsUnique();
+        b.Entity<TournamentPayment>().HasIndex(x => new { x.AcademyId, x.EnrollmentId, x.TournamentId }).IsUnique();
+        b.Entity<TournamentPayment>().HasOne<AcademyTournament>().WithMany().HasForeignKey(x => new { x.AcademyId, x.TournamentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TournamentPayment>().HasOne<SportEnrollment>().WithMany().HasForeignKey(x => new { x.AcademyId, x.EnrollmentId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TournamentPayment>().HasOne<PrivateAsset>().WithMany().HasForeignKey(x => new { x.AcademyId, x.ProofAssetId }).HasPrincipalKey(x => new { x.AcademyId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+    }
+}

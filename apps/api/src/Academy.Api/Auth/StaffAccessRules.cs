@@ -1,0 +1,96 @@
+namespace Academy.Api.Auth;
+
+public static class StaffAccessRules
+{
+    public static readonly string[] Modules = ["academy", "players", "subscriptions", "payments", "attendance", "evaluations", "catalog", "nutrition", "medical", "media", "finance", "reports", "payroll", "settings", "staff", "news", "matches", "facilities", "followups"];
+    public static string? ForPermission(string permission) => permission switch {
+        AcademyPermissions.FollowUpRead or AcademyPermissions.FollowUpManage => "followups",
+        AcademyPermissions.FacilitiesRead or AcademyPermissions.FacilitiesManage => "facilities",
+        AcademyPermissions.StructureManage or AcademyPermissions.CoachGroupsRead => "academy",
+        AcademyPermissions.PeopleManage => "players",
+        AcademyPermissions.SubscriptionPlanManage or AcademyPermissions.SubscriptionRead or AcademyPermissions.SubscriptionRenewManage or AcademyPermissions.SubscriptionAdjustmentManage or AcademyPermissions.SubscriptionDiscountManage => "subscriptions",
+        AcademyPermissions.PaymentRead or AcademyPermissions.CollectionRead or AcademyPermissions.EnrollmentRequestRead or AcademyPermissions.EnrollmentRequestManage => "payments",
+        AcademyPermissions.AttendanceRead or AcademyPermissions.AttendanceManage => "attendance",
+        AcademyPermissions.EvaluationRead or AcademyPermissions.EvaluationManage or AcademyPermissions.EvaluationCriteriaManage => "evaluations",
+        AcademyPermissions.SportCatalogRead or AcademyPermissions.SportCatalogManage => "catalog",
+        AcademyPermissions.NutritionRead or AcademyPermissions.NutritionManage => "nutrition",
+        AcademyPermissions.MedicalRecordRead or AcademyPermissions.MedicalRecordManage => "medical",
+        AcademyPermissions.PlayerMediaRead or AcademyPermissions.PlayerMediaManage => "media",
+        AcademyPermissions.ReportsFinancialRead or AcademyPermissions.OwnerDashboardRead => "finance",
+        AcademyPermissions.ReportsAttendanceRead or AcademyPermissions.ReportsExport => "reports",
+        AcademyPermissions.PayrollRead or AcademyPermissions.PayrollManage => "payroll",
+        AcademyPermissions.AcademySettingsManage => "settings",
+        AcademyPermissions.StaffProvision => "staff",
+        _ => null
+    };
+    public static string? ForPath(string path)
+    {
+        path = path.TrimEnd('/');
+        if(path is "/api/v1/me/profile" or "/api/v1/me/profile/photo")return null;
+        if (path.StartsWith("/api/v1/communication/groups/", StringComparison.Ordinal)) return "academy";
+        if (path.StartsWith("/api/v1/communication/teams/", StringComparison.Ordinal)) return "matches";
+        if (path.StartsWith("/api/v1/manage/coach-tasks", StringComparison.Ordinal) || path.StartsWith("/api/v1/my-coach-tasks", StringComparison.Ordinal)) return "followups";
+        if(path=="/api/v1/news")return null; // Audience-filtered own feed; no publishing access.
+        if(path == "/api/v1/academy/experience") return null; // Shared identity, not the protected /manage/academy/experience write.
+        if (path == "/api/v1/my-followups" || path.StartsWith("/api/v1/my-followups/", StringComparison.Ordinal)) return "followups";
+        // Lesson IDs are not product endpoint names (e.g. player-attendance).
+        // Help reads authorize each lesson against ForPermission instead.
+        if (path.StartsWith("/api/v1/help/", StringComparison.Ordinal)) return null;
+        if(Academy.Api.Operations.StaffPasskeys.IsOwnPath(path))return null; // Own key management, never staff CRUD.
+        // A technical recommendation edits the player-level review, not observations.
+        if (path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.Contains("/promotion", StringComparison.Ordinal)) return "players";
+        if (path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.EndsWith("/decision", StringComparison.Ordinal)) return "players";
+        if (path.StartsWith("/api/v1/manage/family-renewals", StringComparison.Ordinal)) return "payments";
+        if (path.StartsWith("/api/v1/facilities")) return "facilities";
+        if (path.StartsWith("/api/v1/manage/training-levels")) return "academy";
+        if (path.StartsWith("/api/v1/finance/")) return "finance";
+        if (path.StartsWith("/api/v1/people/players/") && (path.EndsWith("/refunds") || path.Contains("/refunds/"))) return "finance";
+        if (path.StartsWith("/api/v1/reports/owner-summary") || path.StartsWith("/api/v1/reports/financial")) return "finance";
+        if (path.StartsWith("/api/v1/reports/")) return "reports";
+        if (path.Contains("/payroll") || path.Contains("/employees")) return "payroll";
+        if (path.Contains("/attendance")) return "attendance";
+        if (path.Contains("/staff") || path == "/api/v1/staff") return "staff";
+        if (path.Contains("/academy/experience") || path.Contains("/academy/policy-audit") || path.Contains("/configuration") || path.Contains("/payment-settings")) return "settings";
+        if (path.Contains("/nutrition")) return "nutrition";
+        if (path.Contains("/medical")) return "medical";
+        if (path.Contains("/catalog") || path.Contains("/product-sales")) return "catalog";
+        if (path.Contains("/media") || path.Contains("/assets")) return "media";
+        if (path.Contains("/news")) return "news";
+        if (path.Contains("/matches") || path.Contains("/tournament")) return "matches";
+        if (path.Contains("/evaluation")) return "evaluations";
+        if (path.Contains("/attendance")) return "attendance";
+        if (path.Contains("/payment") || path.Contains("/enrollment-request") || path.Contains("/collections")) return "payments";
+        if (path.Contains("/subscription") || path.Contains("/renewal") || path.Contains("/discount")) return "subscriptions";
+        if (path.Contains("/people")) return "players";
+        if (path.Contains("/structure") || path.Contains("/branches") || path.Contains("/sports") || path.Contains("/age-categories") || path.Contains("/groups") || path.Contains("/coaches") || path.Contains("/sessions") || path.Contains("/schedules")) return "academy";
+        return null;
+    }
+    public static string Operation(string method, string path)
+    {
+        if (path.StartsWith("/api/v1/communication/", StringComparison.Ordinal) && path.EndsWith("/preview", StringComparison.Ordinal)) return "Read";
+        if (path.StartsWith("/api/v1/communication/", StringComparison.Ordinal) && path.EndsWith("/send", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/subscriptions/periods/", StringComparison.Ordinal) && (path.EndsWith("/sessions", StringComparison.Ordinal) || path.EndsWith("/days", StringComparison.Ordinal))) return "Edit";
+        // Coach task assignment uses an explicit named grant within the existing
+        // follow-up Read/Edit module; generic follow-up Add remains prohibited.
+        if (method == "POST" && (path.StartsWith("/api/v1/manage/coach-tasks", StringComparison.Ordinal) || path.StartsWith("/api/v1/my-coach-tasks", StringComparison.Ordinal))) return "Edit";
+        if(method=="POST"&&path.StartsWith("/api/v1/assets/",StringComparison.Ordinal)&&path.EndsWith("/withdraw",StringComparison.Ordinal))return "Edit";
+        if(method=="POST"&&path.StartsWith("/api/v1/evaluations/badges/",StringComparison.Ordinal)&&(path.EndsWith("/revoke",StringComparison.Ordinal)||path.EndsWith("/retire",StringComparison.Ordinal)))return "Edit";
+        if(method=="POST"&&path.StartsWith("/api/v1/evaluations/lessons/",StringComparison.Ordinal)&&path.EndsWith("/archive",StringComparison.Ordinal))return "Edit";
+        if(method=="POST"&&path.StartsWith("/api/v1/evaluations/certificates/",StringComparison.Ordinal)&&path.EndsWith("/withdraw",StringComparison.Ordinal))return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.Contains("/promotion", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/technical-reviews/", StringComparison.Ordinal) && path.EndsWith("/decision", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/skills/plans/", StringComparison.Ordinal) && path.EndsWith("/reviews", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/skills/curricula/", StringComparison.Ordinal) && path.EndsWith("/retire", StringComparison.Ordinal)) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/evaluations/development-goals/enrollments/", StringComparison.Ordinal)) return "Add";
+        if (method == "POST" && path.StartsWith("/api/v1/attendance/sessions/") && path.EndsWith("/corrections")) return "Edit";
+        if (method == "POST" && path.StartsWith("/api/v1/manage/structure/sessions/") && path.EndsWith("/coach-override/preview")) return "Read";
+        if (method == "POST" && path.StartsWith("/api/v1/facilities/visits/") && path.EndsWith("/exit")) return "Edit";
+        // Timetable service rechecks Add for the first schedule or Edit for an existing one under locks.
+        if (method is "GET" or "HEAD" || path.EndsWith("/collection-result") || path.EndsWith("/family-collection-result") || path.EndsWith("/families/options") || path.EndsWith("/quote") || path.EndsWith("registration-quote") || path.EndsWith("/search") || path.EndsWith("/resolve") || path.EndsWith("/timetable/preview") || path.EndsWith("/timetable") || path.EndsWith("/placement/preview") || path.EndsWith("/placement") || path.EndsWith("/placement-recommendations")) return "Read";
+        if (method == "DELETE" || path.EndsWith("/delete")) return "Delete";
+        if (method is "PUT" or "PATCH") return "Edit";
+        var last = path.TrimEnd('/').Split('/').Last();
+        if (last is "review" or "confirm" or "approve" or "reject" or "publish" or "cancel" or "freeze" or "resume" or "proof" or "transition" || Guid.TryParse(last, out _)) return "Edit";
+        return "Add";
+    }
+}

@@ -1,0 +1,27 @@
+.form { display: grid; gap: 1rem; max-width: 48rem; }
+.incidentEvidence { display: grid; gap: .75rem; min-width: 0; padding: 1rem; margin-block: .8rem; border: 1px solid var(--border, #dce5e9); border-radius: 14px; background: var(--surface-subtle, #f8fafc); line-height: 1.8; overflow-wrap: anywhere; }
+.incidentEvidence h3 { margin: 0; font-size: 1rem; white-space: normal; }
+.incidentEvidence p { margin: 0; font-size: .9rem; }
+.incidentEvidence bdi { display: inline-block; direction: ltr; white-space: nowrap; }
+.incidentEvidence small { color: var(--muted, #60717b); font-size: .8rem; }
+.form label { display: grid; gap: .5rem; font-weight: 600; }
+.form select, .form textarea { width: 100%; min-height: 48px; border: 1px solid var(--border, #ced7dd); border-radius: 12px; padding: .75rem; font: inherit; background: var(--surface, white); color: inherit; }
+.form button { justify-self: start; }
+.hint { color: var(--muted, #60717b); line-height: 1.8; font-size: .9rem; }
+.history { display: grid; gap: 1rem; padding: 0; list-style: none; }
+.history li { border-inline-start: 3px solid var(--staff-primary-700, var(--primary, #be123c)); background: var(--surface-subtle, #f8fafc); padding: 1rem; border-radius: 12px; overflow-wrap: anywhere; }
+.historyHead { display: flex; gap: .75rem; flex-wrap: wrap; justify-content: space-between; }
+.history time { display: block; margin-top: .5rem; color: var(--muted, #60717b); font-size: .85rem; }
+.investigation { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 14px; min-height: 0; width: 100%; max-width: 64rem; margin-inline: auto; padding: 20px; border: 1px solid var(--border, #e2e8f0); border-radius: 20px; background: var(--surface, #fff); box-shadow: 0 8px 28px #17243b08; overflow-wrap: anywhere; }
+.investigation > *, .investigation p, .investigation h2, .investigation h3 { margin-block: 0; }
+.investigation h2 { font-size: 1.25rem; line-height: 1.6; }
+.investigation h3 { font-size: 1rem; }
+.investigation p { line-height: 1.8; font-size: .95rem; }
+.investigation > p:first-of-type { color: var(--muted, #60717b); font-size: .85rem; }
+.investigation .form { width: 100%; max-width: none; gap: 12px; }
+.investigation article, .investigation blockquote { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border, #e2e8f0); border-inline-start: 3px solid var(--staff-primary-700, #be123c); border-radius: 14px; background: var(--surface-subtle, #f8fafc); margin-inline: 0; }
+.investigation button { min-height: 44px; border: 1px solid transparent; border-radius: 12px; padding: 10px 16px; background: var(--staff-primary-700, #be123c); color: #fff; font: inherit; font-weight: 700; line-height: 1.5; cursor: pointer; }
+.investigation button:hover { filter: brightness(.94); color: #fff; }
+.investigation button:disabled { opacity: .55; cursor: not-allowed; }
+.investigation a { color: var(--staff-primary-700, #9f1239); font-weight: 600; text-underline-offset: 4px; }
+@media (max-width: 480px) { .investigation { padding: 16px; gap: 12px; border-radius: 16px; } .investigation button { width: 100%; } }
