@@ -57,7 +57,8 @@ class _GuardianChildActionsState extends State<GuardianChildActions> {
 
   String appointment(Object? date, Object? time) {
     final clock = RegExp(r'^\d{1,2}:\d{2}').stringMatch(textOf(time));
-    return [shortArabicDate(date), if (clock != null) clock].join('\n');
+    final label = shortArabicDate(date);
+    return clock == null ? label : '$label\n$clock';
   }
 
   @override
