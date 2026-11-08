@@ -33,6 +33,13 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
+var bootstrapPlatform = args.Contains("--bootstrap-platform-admin");
+if (bootstrapPlatform && args.Any(a => a is "--migrate-only" or "--reset-football-demo"))
+{
+    Console.Error.WriteLine("لا تجمع تهيئة المسؤول مع أوامر المهاجرات أو إعادة الضبط.");
+    Environment.ExitCode = 1;
+    return;
+}
 var builder = WebApplication.CreateBuilder(args);
 // Existing private video limit is 50 MiB; allow multipart overhead at transport level.
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 55 * 1024 * 1024);
@@ -236,6 +243,18 @@ builder.Services.AddScoped<IEvaluationReportCalculator, EvaluationReportCalculat
 builder.Services.AddHealthChecks().AddDbContextCheck<FoundationDbContext>("postgresql", tags: ["ready"]);
 
 var app = builder.Build();
+// Explicit interactive one-shot command; never starts HTTP, workers, migrations or demo seed.
+if (bootstrapPlatform)
+{
+    try
+    {
+        DemoSeed.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<DemoOptions>>().Value);
+        InternalTestPaymentGateway.ValidateEnvironment(app.Environment, app.Services.GetRequiredService<IOptions<InternalTestPaymentOptions>>().Value);
+        await PlatformAdministratorBootstrap.RunInteractive(app.Services, app.Environment);
+    }
+    catch (InvalidOperationException exception) { Console.Error.WriteLine(exception.Message); Environment.ExitCode = 1; }
+    return;
+}
 // A one-shot deployment process: no web listener, workers, seed or reset.
 if (args.Contains("--migrate-only"))
 {
