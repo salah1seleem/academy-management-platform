@@ -13,12 +13,14 @@ class NutritionLibrary extends StatefulWidget {
   final AuthController auth;
   final String playerId, today;
   final String? playerName;
+  final bool showToday;
   const NutritionLibrary({
     super.key,
     required this.auth,
     required this.playerId,
     required this.today,
     this.playerName,
+    this.showToday = false,
   });
   @override
   State<NutritionLibrary> createState() => _NutritionLibraryState();
@@ -41,6 +43,7 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
             child: Card(
               clipBehavior: Clip.antiAlias,
               child: ExpansionTile(
+                initiallyExpanded: widget.showToday,
                 leading: Icon(
                   Icons.today_rounded,
                   color: Theme.of(context).colorScheme.primary,

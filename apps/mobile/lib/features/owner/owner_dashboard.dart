@@ -15,6 +15,8 @@ import '../guardian/guardian_ui.dart';
 import '../shared/experience_ui.dart';
 import '../shared/role_navigation.dart';
 import 'owner_reports.dart';
+import 'owner_branch_rail.dart';
+import '../../core/theme/academy_brand.dart';
 import 'owner_operations.dart';
 import 'home_destinations.dart';
 import 'owner_cockpit.dart';
@@ -345,13 +347,22 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                           widget.header!,
                           const SizedBox(height: 10),
                         ],
-
                         NativeOperationActions(
                           key: ValueKey('owner-rail-$identity'),
                           auth: widget.auth,
                           compact: true,
                           carousel: true,
                         ),
+                        if (ready(3))
+                          OwnerBranchRail(
+                            branches: rows(options['branches'] ?? <Json>[]),
+                            branchId: branch,
+                            academy: BrandScope.maybeOf(context)?.name ?? '',
+                            onChanged: (id) => setState(() {
+                              branch = id;
+                              data = load();
+                            }),
+                          ),
                         SubscriptionHomePanel(
                           key: ValueKey('owner-subscriptions-$identity'),
                           auth: widget.auth,

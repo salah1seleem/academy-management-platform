@@ -160,6 +160,27 @@ int? ageOn(Object? birth, Object? today) {
 String trainingTimeRange(Object? start, Object? end) =>
     'من ${trainingTimeOf(start)} إلى ${trainingTimeOf(end)}';
 
+const _arabicMonthNames = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
+
+String shortArabicDate(Object? value) {
+  final date = DateTime.tryParse(day(value));
+  if (date == null) return 'غير محدد';
+  return '${date.day} ${_arabicMonthNames[date.month - 1]}';
+}
+
 String sessionDateLabel(Object? value) {
   final d = DateTime.tryParse('$value');
   if (d == null) return 'موعد غير محدد';
@@ -172,21 +193,7 @@ String sessionDateLabel(Object? value) {
     'السبت',
     'الأحد',
   ];
-  const months = [
-    'يناير',
-    'فبراير',
-    'مارس',
-    'أبريل',
-    'مايو',
-    'يونيو',
-    'يوليو',
-    'أغسطس',
-    'سبتمبر',
-    'أكتوبر',
-    'نوفمبر',
-    'ديسمبر',
-  ];
-  return '${days[d.weekday - 1]} ${d.day} ${months[d.month - 1]} ${d.year}';
+  return '${days[d.weekday - 1]} ${d.day} ${_arabicMonthNames[d.month - 1]} ${d.year}';
 }
 
 String commandKey() => List.generate(
@@ -1054,4 +1061,13 @@ class Facts extends StatelessWidget {
           .toList(),
     ),
   );
+}
+
+String childContextLine(Json child, Json? enrollment, String today) {
+  final age = ageOn(child['dateOfBirth'], today);
+  return [
+    if (age != null) '$age سنة',
+    enrollment?['sport']?.toString() ?? '',
+    enrollment?['branch']?.toString() ?? '',
+  ].where((value) => value.isNotEmpty).join(' · ');
 }

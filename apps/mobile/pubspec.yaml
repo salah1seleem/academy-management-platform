@@ -39,6 +39,9 @@ flutter:
     - assets/avatars/
     - assets/branding/
     - assets/onboarding/
+    - assets/demo/branch-madinaty.webp
+    - assets/demo/branch-rehab.webp
+    - assets/demo/branch-shorouk.webp
     - assets/demo/catalog-football.svg
     - assets/demo/catalog-iacademy-ball.png
     - assets/demo/catalog-iacademy-kit.png

@@ -24,6 +24,7 @@ import '../shared/player_goals.dart';
 
 import 'guardian_profile_header.dart';
 import 'daily_nutrition.dart';
+import 'guardian_child_actions.dart';
 
 class ChildProfile extends StatefulWidget {
   final AuthController auth;
@@ -183,6 +184,18 @@ class _ChildProfileState extends State<ChildProfile> {
                       evaluationCount: stats?['evaluationCount'] as int?,
                       monthlyStars: data['monthlyStars'] as int?,
                     ),
+                  if (tab == 'card') ...[
+                    const SizedBox(height: 8),
+                    GuardianChildActions(
+                      auth: auth,
+                      playerId: playerId,
+                      playerName: textOf(player['arabicName']),
+                      nutritionDate: widget.nutritionDate ?? today,
+                      enrollmentId: selected?['id']?.toString(),
+                      nextSession: rows(selected?['upcoming'] ?? <Json>[])
+                          .firstOrNull,
+                    ),
+                  ],
                   if (tab != 'card')
                     GCard(
                       key: const ValueKey('profile-compact-identity'),
@@ -207,13 +220,12 @@ class _ChildProfileState extends State<ChildProfile> {
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                                if (selected != null)
-                                  UiText(
-                                    '${selected['sport']} · ${selected['branch']}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
-                                  ),
+                                UiText(
+                                  childContextLine(player, selected, today),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                                 if (selected?['group'] != null)
                                   UiText(
                                     textOf(selected!['group']),
