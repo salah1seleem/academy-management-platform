@@ -55,10 +55,10 @@ class _GuardianChildActionsState extends State<GuardianChildActions> {
     return matches.firstOrNull;
   }
 
-  String appointment(Object? date, Object? time) => [
-    day(date),
-    textOf(time).split(':').take(2).join(':'),
-  ].where((value) => value.isNotEmpty).join(' · ');
+  String appointment(Object? date, Object? time) {
+    final clock = RegExp(r'^\d{1,2}:\d{2}').stringMatch(textOf(time));
+    return [shortArabicDate(date), if (clock != null) clock].join('\n');
+  }
 
   @override
   Widget build(BuildContext context) {

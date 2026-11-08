@@ -108,6 +108,7 @@ void main() {
           }
         }
         expect(find.text('4 حصص متبقية'), findsOneWidget);
+        expect(find.textContaining('معايير · آخر تقييم منشور'), findsNothing);
         expect(t.takeException(), isNull);
         auth.dispose();
       },
@@ -151,8 +152,7 @@ void main() {
         final stops = (hero.decoration! as BoxDecoration).gradient!.colors;
         for (final text in [
           'لاعب اصطناعي للاختبار',
-          '8 سنة',
-          'كرة القدم · مدينة نصر',
+          '8 سنة · كرة القدم · مدينة نصر',
         ]) {
           for (final background in stops) {
             expect(

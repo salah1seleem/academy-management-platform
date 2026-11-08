@@ -1287,23 +1287,13 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
               value: (score / 100).clamp(0, 1),
               minHeight: 3,
             ),
-            const SizedBox(height: 6),
-            Tooltip(
-              message: 'متوسط حسابي لمعايير التقييم المنشور نفسه من100. المعايير غير المقيمة لا تدخل بصفر.',
-              child: UiText(
-                '$scored من $applicable معايير · آخر تقييم منشور',
-                style: TextStyle(
-                  fontSize: 10,
-                  height: 1.3,
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            ),
-            if (scored < applicable)
+            if (scored < applicable) ...[
+              const SizedBox(height: 6),
               UiText(
                 'التقييم غير مكتمل',
                 style: TextStyle(fontSize: 11, color: colors.error),
               ),
+            ],
           ] else ...[
             const UiText(
               'بيانات الأداء غير كافية لحساب المتوسط',
@@ -1370,7 +1360,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                       runSpacing: 4,
                       children: [
                         UiText(
-                          'بداية الاشتراك: ${day(sport['period']['startDate'])}',
+                          'بداية الاشتراك: ${shortArabicDate(sport['period']['startDate'])}',
                           style: TextStyle(
                             fontSize: 10,
                             height: 1.4,
@@ -1378,7 +1368,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                           ),
                         ),
                         UiText(
-                          'نهاية الاشتراك: ${day(sport['period']['endDate'])}',
+                          'نهاية الاشتراك: ${shortArabicDate(sport['period']['endDate'])}',
                           style: TextStyle(
                             fontSize: 10,
                             height: 1.4,
