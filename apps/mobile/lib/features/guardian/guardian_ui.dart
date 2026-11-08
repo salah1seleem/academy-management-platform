@@ -1060,7 +1060,7 @@ String childContextLine(Json child, Json? enrollment, String today) {
   final age = ageOn(child['dateOfBirth'], today);
   return [
     if (age != null) '$age سنة',
-    textOf(enrollment?['sport']),
-    textOf(enrollment?['branch']),
+    enrollment?['sport']?.toString() ?? '',
+    enrollment?['branch']?.toString() ?? '',
   ].where((value) => value.isNotEmpty).join(' · ');
 }

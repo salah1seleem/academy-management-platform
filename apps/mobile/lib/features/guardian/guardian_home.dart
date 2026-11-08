@@ -1167,7 +1167,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
     );
     return Container(
       key: ValueKey('child-${c['id']}'),
-      height: widget.cardHeight,
+      constraints: BoxConstraints(minHeight: widget.cardHeight ?? 0),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: colors.surface,
