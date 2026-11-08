@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Academy.Api.Auth;
+using Academy.Api.Configuration;
 using Academy.Api.Slice3;
 using Academy.Api.Slice4;
 using Academy.Api.Operations;
@@ -96,7 +97,7 @@ public static partial class ReportingEndpoints
             complaintCount = feedback.FirstOrDefault(x => x.kind == "Complaint")?.count ?? 0 });
     }
 
-    private static async Task<IResult> OwnerSummary(DateOnly? from, DateOnly? to, bool? allDates, bool? includeSubscriptionAnalytics, Guid? branchId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider realClock, HttpContext context, IAuthorizationService authorization)
+    private static async Task<IResult> OwnerSummary(DateOnly? from, DateOnly? to, bool? allDates, bool? includeSubscriptionAnalytics, Guid? branchId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider realClock, HttpContext context, IAuthorizationService authorization, AcademyConfigurationService configuration)
     {
         var current = (await tenant.ResolveAsync())!; var academyId = current.AcademyId;
         var localToday = await AttendanceCalendar.TodayAsync(academyId, db, realClock);
@@ -197,8 +198,9 @@ public static partial class ReportingEndpoints
             var ratings = feedback.FirstOrDefault(f => f.CoachMembershipId == coach.Id && f.Kind == "Rating");
             return new { coach.Id, coach.name, coach.gender, photoReference=coachPhotos.GetValueOrDefault(coach.Id), branches=groups.Where(g=>assigned.Contains(g.Id)).Select(g=>g.BranchId).Distinct().ToArray(), sports=groups.Where(g=>assigned.Contains(g.Id)).Select(g=>g.sport).Distinct().Order().ToArray(), groupCount = assigned.Length, sessionCount = assigned.Sum(id => sessionCounts.GetValueOrDefault(id)), publishedEvaluations = evaluations.GetValueOrDefault(coach.UserId), parentRating = ratings is null ? (decimal?)null : (decimal)ratings.scoreTotal / ratings.count, parentRatingCount = ratings?.count ?? 0, complaintCount = feedback.FirstOrDefault(f => f.CoachMembershipId == coach.Id && f.Kind == "Complaint")?.count ?? 0 };
         }).Where(x => x.groupCount > 0 || !branchId.HasValue).OrderByDescending(x => x.parentRating.HasValue).ThenByDescending(x => x.parentRating).ThenBy(x => x.name).ToArray();
-        var ownerHomePayload=await db.AcademyConfigurationVersions.AsNoTracking().Where(v=>v.AcademyId==academyId&&v.State==ConfigurationState.Active).Select(v=>v.Payload).SingleAsync();
-        var coachAssignmentTarget=AcademyRuntimeSettings.Read(ownerHomePayload).OwnerHome?.CoachAssignmentTarget;
+        // Owner-home preferences are optional, including before the first configuration is activated.
+        // Keep configuration integrity/database failures visible through the shared scoped reader.
+        var coachAssignmentTarget=(await configuration.Active(academyId))?.OwnerHome?.CoachAssignmentTarget;
         var underAssignedCoaches=coachPerformance.Where(c=>coachAssignmentTarget.HasValue&&c.groupCount<coachAssignmentTarget.Value).Select(c=>new{c.Id,c.name,c.groupCount,target=coachAssignmentTarget!.Value}).ToArray();
         var groupAttention = groups.Select(group => {
             var attendanceRows = groupAttendance.Where(a => a.TrainingGroupId == group.Id).ToArray();
