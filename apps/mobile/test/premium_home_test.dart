@@ -88,7 +88,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('التقييم المركب'), findsOneWidget);
-      expect(find.textContaining('2026-09-30'), findsOneWidget);
+      expect(find.text('بداية الاشتراك: 1 سبتمبر'), findsOneWidget);
+      expect(find.text('نهاية الاشتراك: 30 سبتمبر'), findsOneWidget);
       expect(
         tester.getSize(find.byKey(const ValueKey('child-p1'))).height,
         greaterThan(350),

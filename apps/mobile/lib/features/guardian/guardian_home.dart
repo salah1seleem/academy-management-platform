@@ -1293,6 +1293,10 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                 'التقييم غير مكتمل',
                 style: TextStyle(fontSize: 11, color: colors.error),
               ),
+              UiText(
+                '$scored من $applicable معايير',
+                style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+              ),
             ],
           ] else ...[
             const UiText(
