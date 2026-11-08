@@ -14,6 +14,7 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/academy_brand.dart';
 import 'guardian_ui.dart';
 import 'guardian_profile.dart';
+import 'guardian_child_actions.dart';
 import 'coach_feedback.dart';
 import 'guardian_payments.dart';
 import 'guardian_report.dart';
@@ -239,6 +240,7 @@ class _GuardianHomeState extends State<GuardianHome>
                       selectedEnrollments[player] = enrollment;
                     }),
                     today: textOf(home['today']),
+                    nutritionDate: nutritionToday,
                     onSelected: (id) => setState(() => selectedPlayer = id),
                     onOpenEnrollment: (id, enrollmentId) => open(
                       ChildProfile(
@@ -820,6 +822,7 @@ class GuardianChildCarousel extends StatefulWidget {
     required this.children,
     this.selectedPlayerId,
     required this.today,
+    this.nutritionDate,
     required this.onSelected,
     required this.onOpen,
     this.onOpenEnrollment,
@@ -833,6 +836,7 @@ class GuardianChildCarousel extends StatefulWidget {
   final List<Json> children;
   final String? selectedPlayerId;
   final String today;
+  final String? nutritionDate;
   final ValueChanged<String> onSelected, onOpen;
   final void Function(String playerId, String? enrollmentId)? onOpenEnrollment;
   @override
@@ -924,6 +928,7 @@ class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
                       auth: widget.auth,
                       childData: c,
                       today: widget.today,
+                      nutritionDate: widget.nutritionDate,
                       selectedEnrollmentId:
                           widget.selectedEnrollments[textOf(c['id'])],
                       onEnrollmentChanged: widget.onEnrollmentSelected == null
@@ -986,6 +991,7 @@ class PremiumChildCard extends StatefulWidget {
   final AuthController auth;
   final Json childData;
   final String today;
+  final String? nutritionDate;
   final VoidCallback onTap;
   final ValueChanged<String?>? onOpenEnrollment;
   final String? selectedEnrollmentId;
@@ -995,6 +1001,7 @@ class PremiumChildCard extends StatefulWidget {
     required this.auth,
     required this.childData,
     required this.today,
+    this.nutritionDate,
     required this.onTap,
     this.showSubscription = true,
     this.cardHeight,
@@ -1198,7 +1205,9 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                     ),
                     const SizedBox(height: 3),
                     UiText(
-                      '${ageOn(c['dateOfBirth'], widget.today) ?? '—'} سنة',
+                      childContextLine(c, sport, widget.today),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.3,
@@ -1249,16 +1258,6 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
               },
             ),
             const SizedBox(height: 14),
-          ] else if (sport != null) ...[
-            UiText(
-              '${sport['sport']} · ${sport['branch'] ?? ''}',
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.3,
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
           ],
           LayoutBuilder(
             builder: (context, bounds) =>
@@ -1417,6 +1416,17 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                 ),
               ),
             ),
+          const SizedBox(height: 8),
+          GuardianChildActions(
+            auth: widget.auth,
+            playerId: textOf(c['id']),
+            playerName: name,
+            nutritionDate: widget.nutritionDate ?? widget.today,
+            enrollmentId: sport?['id']?.toString(),
+            nextSession: sport?['nextSession'] is Map
+                ? obj(sport!['nextSession'])
+                : null,
+          ),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: () {

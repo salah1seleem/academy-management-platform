@@ -1,9 +1,6 @@
-import 'owner_welcome_banner.dart';
-import '../shared/modern_home.dart';
 import 'inventory_preview.dart';
 import '../../core/api/api_client.dart';
 import '../shared/subscription_home.dart';
-import 'owner_quick_operations.dart';
 import 'owner_honors_section.dart';
 import '../admin/native_structure_operations.dart';
 
@@ -15,6 +12,8 @@ import '../guardian/guardian_ui.dart';
 import '../shared/experience_ui.dart';
 import '../shared/role_navigation.dart';
 import 'owner_reports.dart';
+import 'owner_branch_rail.dart';
+import '../../core/theme/academy_brand.dart';
 import 'owner_operations.dart';
 import 'home_destinations.dart';
 import 'owner_cockpit.dart';
@@ -187,20 +186,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                           await data;
                         },
                         child: gList([
-                          const RoleHomeIntro(
-                            title: 'نظرة اليوم',
-                            subtitle: 'أهم الأرقام والقرارات في مكان واحد',
-                          ),
                           if (widget.header != null) ...[
                             widget.header!,
                             const SizedBox(height: 10),
                           ],
-                          NativeOperationActions(
-                            key: ValueKey('owner-rail-$identity'),
-                            auth: widget.auth,
-                            compact: true,
-                            carousel: true,
-                          ),
                           SubscriptionHomePanel(
                             key: ValueKey('owner-subscriptions-$identity'),
                             auth: widget.auth,
@@ -340,18 +329,20 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         await data;
                       },
                       child: gList([
-                        const OwnerWelcomeBanner(),
                         if (widget.header != null) ...[
                           widget.header!,
                           const SizedBox(height: 10),
                         ],
-
-                        NativeOperationActions(
-                          key: ValueKey('owner-rail-$identity'),
-                          auth: widget.auth,
-                          compact: true,
-                          carousel: true,
-                        ),
+                        if (ready(3))
+                          OwnerBranchRail(
+                            branches: rows(options['branches'] ?? <Json>[]),
+                            branchId: branch,
+                            academy: BrandScope.maybeOf(context)?.name ?? '',
+                            onChanged: (id) => setState(() {
+                              branch = id;
+                              data = load();
+                            }),
+                          ),
                         SubscriptionHomePanel(
                           key: ValueKey('owner-subscriptions-$identity'),
                           auth: widget.auth,

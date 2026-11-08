@@ -255,14 +255,11 @@ class GuardianProfileHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   UiText(
-                    '${ageOn(player['dateOfBirth'], today) ?? '—'} سنة',
+                    childContextLine(player, enrollment, today),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 12, color: heroSecondary),
                   ),
-                  if (enrollment != null)
-                    UiText(
-                      '${enrollment!['sport']} · ${enrollment!['branch']}',
-                      style: TextStyle(fontSize: 12, color: heroSecondary),
-                    ),
                   if (enrollment != null)
                     UiText(
                       textOf(enrollment!['group']),
