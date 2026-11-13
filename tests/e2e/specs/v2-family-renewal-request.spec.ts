@@ -10,6 +10,7 @@ test("One family transfer is approved atomically and exposes both child receipts
   const owner = await browser.newContext({ baseURL: info.project.use.baseURL }); const staff = await owner.newPage();
   expect((await write(owner.request, "/api/v1/auth/login", { email: "owner.nogoom@example.test", password: "Demo-Only-123!" })).ok()).toBe(true);
   const prior = await owner.request.get("/api/v1/payment-settings").then(r => r.json());
+  let requestId: string | undefined;
   try {
     expect((await write(owner.request, "/api/v1/payment-settings", { instaPayAddress: "family-demo@example.test", walletNumber: null, recipientName: "حساب اصطناعي — لا تحول إليه", isActive: true }, "PUT")).ok()).toBe(true);
     const phoneNumber = "01000000014"; const challenge = await write(page.request, "/api/v1/auth/guardian/otp/request", { phoneNumber }); expect(challenge.ok()).toBe(true);
@@ -21,6 +22,7 @@ test("One family transfer is approved atomically and exposes both child receipts
     await page.goto("/guardian/renew-family"); const options = await page.request.get("/api/v1/guardian/subscriptions/family/options").then(r => r.json()); expect(options.items).toHaveLength(2);
     for (const e of options.items) { await page.getByRole("checkbox", { name: `تجديد ${e.player} · ${e.sport}`, exact: true }).check(); await page.getByRole("combobox", { name: `الباقة لـ${e.player} · ${e.sport}`, exact: true }).selectOption("51000000-0000-0000-0000-000000000001"); }
     await page.getByRole("button", { name: "مراجعة إجمالي 2 تسجيل" }).click(); await expect(page.getByRole("region", { name: "ملخص تجديد الأسرة" })).toBeVisible(); await page.getByRole("button", { name: "متابعة الدفع للأسرة" }).click(); await expect(page).toHaveURL(/\/guardian\/family-renewals\/[a-f0-9-]+$/); const id = page.url().split("/").at(-1)!;
+    requestId = id;
     await expect(page.getByText("family-demo@example.test", { exact: true })).toBeVisible(); expect(await page.request.get("/api/v1/guardian/subscriptions/receipts").then(r => r.json())).toEqual(before);
     const sendProof = page.getByRole("button", { name: "إرسال إثبات الأسرة", exact: true });
     const proofInput = page.getByLabel("صورة إثبات الأسرة");
@@ -131,7 +133,19 @@ test("One family transfer is approved atomically and exposes both child receipts
     await expect(page.getByRole("link", { name: "العودة للطلبات", exact: true })).toHaveAttribute("href", "/guardian/family-renewals");
     await expect(staff.getByRole("link", { name: "العودة لطلبات الدفع" })).toHaveAttribute("href", "/dashboard/subscriptions/payments?type=Renewal&allDates=true");
     await staff.reload(); await expect(staff.getByRole("button", { name: "قبول وتجديد كل التسجيلات" })).toHaveCount(0); expect(await page.request.get("/api/v1/guardian/subscriptions/receipts").then(r => r.json())).toEqual(after); await page.screenshot({ path: info.outputPath("family-approved-390.png"), fullPage: true, animations: "disabled" });
-  } finally { await write(owner.request, "/api/v1/payment-settings", { ...prior, isActive: prior.isActive ?? prior.configured }, "PUT"); await owner.close(); }
+  } finally {
+    try {
+      if (requestId) {
+        const detail = await page.request.get(`${root}/${requestId}`).then(response => response.json());
+        if (detail.status === "Pending") {
+          expect((await write(page.request, `${root}/${requestId}/cancel`, { revision: detail.revision })).ok()).toBe(true);
+        }
+      }
+    } finally {
+      await write(owner.request, "/api/v1/payment-settings", { ...prior, isActive: prior.isActive ?? prior.configured }, "PUT");
+      await owner.close();
+    }
+  }
 });
 
 test("Family rejection and cancellation remain outside collections and receipts", async ({ page, browser }, info) => {

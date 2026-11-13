@@ -5,7 +5,7 @@ test("Arabic mobile owner login is tenant-scoped and logout invalidates the sess
   await page.goto("/login");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-  await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "تسجيل دخول الأكاديمية" })).toBeVisible();
 
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
@@ -29,7 +29,7 @@ test("Arabic mobile owner login is tenant-scoped and logout invalidates the sess
 
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: "تسجيل الخروج" }).click();
-  await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "تسجيل دخول الأكاديمية" })).toBeVisible();
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "تسجيل دخول الأكاديمية" })).toBeVisible();
 });

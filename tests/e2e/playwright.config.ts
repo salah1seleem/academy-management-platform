@@ -16,7 +16,7 @@ const regressionSeeds = [
   "CashRegisters", "CollectionFunds", "Facilities", "ResourceTimetable",
   "UnassignedEnrollment", "Observation", "Visit", "CoachOverride",
   "GroupPlacement", "PastAttendance", "AttendanceDraft",
-  "ProviderQuarantine",
+  ...(process.env.ACADEMY_E2E_PROVIDER_QUARANTINE === "false" ? [] : ["ProviderQuarantine"]),
   "SettlementComparisons",
   "FamilyRenewal",
   "FreeTraining",

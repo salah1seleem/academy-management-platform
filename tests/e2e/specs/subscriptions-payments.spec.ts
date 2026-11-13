@@ -34,6 +34,7 @@ test("Guardian failed payment does not report a renewal", async ({ page }) => {
 test("Guardian renews for another player without gaining profile access", async ({ page }) => {
   await guardianLogin(page);
   await page.getByRole("link", { name: "تجديد اشتراك لغيره" }).click();
+  await page.getByRole("link", { name: "لديّ كود تجديد" }).click();
   await page.getByLabel("كود التجديد").fill("RNW-DEMO-NG-0003-7K9M");
   await page.getByRole("button", { name: "تحقّق من الكود" }).click();
   await expect(page.getByRole("region", { name: "المستفيد" })).toBeVisible();
@@ -60,5 +61,5 @@ test("Owner sees approved and rejected payment requests and confirmed collection
   await page.getByRole("button", { name: "مسح", exact: true }).click(); await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue("");
   await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Approved"); await expect(page.getByRole("table", {name:"طلبات الدفع",exact:true}).getByRole("row").filter({ hasText: "مقبول" }).first()).toBeVisible(); await page.getByRole("combobox", { name: "الحالة", exact: true }).selectOption("Rejected"); await expect(page.getByRole("table", {name:"طلبات الدفع",exact:true}).getByRole("row").filter({ hasText: "مرفوض" }).first()).toBeVisible();
   await page.goto("/dashboard/subscriptions/collections");
-  await expect(page.getByText(/إجمالي التحصيل المؤكد/)).toBeVisible(); await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
+  await expect(page.getByText("الإجمالي قبل ردّ المبالغ")).toBeVisible(); await expect(page.getByText(/DEMO-|RC-/).first()).toBeVisible();
 });

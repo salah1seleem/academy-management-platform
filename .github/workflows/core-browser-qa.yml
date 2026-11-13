@@ -29,6 +29,7 @@ jobs:
       ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_core_qa;Username=academy;Password=academy_ci_only
       ACADEMY_E2E_API_CONFIGURATION: Release
       ACADEMY_E2E_API_NO_BUILD: "true"
+      ACADEMY_E2E_PROVIDER_QUARANTINE: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -38,6 +39,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Install private media inspection tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet build apps/api/src/Academy.Api --configuration Release -m:1
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
