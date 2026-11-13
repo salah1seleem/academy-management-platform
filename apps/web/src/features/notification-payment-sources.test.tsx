@@ -45,7 +45,7 @@ it('retains the confirmed renewal receipt and isolates the long player code dire
  global.fetch=vi.fn(async path=>new Response(JSON.stringify(String(path)==='/api/v1/subscriptions/payments/exact-single'?{id:'exact-single',player:'لاعب اصطناعي',playerCode:code,sport:'كرة القدم',plan:'باقة اصطناعية',status:'Confirmed',renewalStatus:'Paid',originalAmount:1000,discountAmount:0,finalAmount:1000,currency:'EGP',createdAtUtc:'2026-10-22T10:00:00Z',isCurrent:true,canCollect:false,provider:'Manual',renewalId:'exact-renewal',receiptId:'exact-receipt'}:String(path).endsWith('/proof')?{url:'/api/v1/assets/synthetic-proof',status:'Accepted'}:{groups:[]}),{status:200}));
  render(<AdminPaymentDetail id="exact-single"/>);
  expect((await screen.findByText(code)).closest('bdi')).toHaveAttribute('dir','ltr');
- expect(screen.getByRole('link',{name:'عرض الإيصال'})).toHaveAttribute('href','/dashboard/subscriptions/receipts/exact-receipt');
+ expect(screen.getByRole('link',{name:'عرض الإيصال'})).toHaveAttribute('href','/dashboard/subscriptions/receipts/exact-receipt?renewalPayment=exact-single');
  expect(screen.queryByRole('button',{name:'تأكيد تحصيل إلكتروني'})).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'قبول وتفعيل الاشتراك'})).not.toBeInTheDocument();
  expect(vi.mocked(fetch).mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);

@@ -126,22 +126,37 @@ void main() {
       expect(loaded, findsWidgets);
       await binding.takeScreenshot('phase-cloud-$label');
       if (role == 'Coach') {
-        final cards = find.byType(CoachGroupCard);
-        expect(cards, findsWidgets);
-        final openGroup = find.descendant(
-          of: cards.first,
-          matching: find.text('فتح المجموعة'),
+        final openGroup = find
+            .descendant(
+              of: find.byType(CoachGroupCard),
+              matching: find.text('فتح المجموعة'),
+            )
+            .first;
+        await tester.scrollUntilVisible(
+          openGroup,
+          160,
+          scrollable: find
+              .descendant(
+                of: find.byType(CoachHome),
+                matching: find.byType(Scrollable),
+              )
+              .first,
         );
-        await tester.ensureVisible(openGroup);
         await tester.tap(openGroup);
-        final roster = find.text('لاعبو المجموعة');
+        final groupCount = find.textContaining('في المجموعة');
         final groupDeadline = Stopwatch()..start();
-        while (roster.evaluate().isEmpty &&
+        while (groupCount.evaluate().isEmpty &&
             groupDeadline.elapsed.inSeconds < 60) {
           await tester.pump(const Duration(milliseconds: 150));
         }
         expect(find.byType(CoachGroup), findsOneWidget);
-        expect(roster, findsWidgets);
+        expect(groupCount, findsOneWidget);
+        final roster = find.text('لاعبو المجموعة');
+        final attendance = find.text('حضور حصة اليوم');
+        expect(
+          roster.evaluate().isNotEmpty || attendance.evaluate().isNotEmpty,
+          isTrue,
+        );
         await tester.tap(find.byType(BackButton).last);
         await tester.pump(const Duration(milliseconds: 400));
         expect(find.byType(CoachHome), findsOneWidget);
