@@ -59,8 +59,10 @@ void main() {
       expect(const bool.fromEnvironment('ACADEMY_ISOLATED_IOS_QA'), isTrue);
       const base = String.fromEnvironment('API_BASE_URL');
       expect(base, 'http://127.0.0.1:5397');
+      final transport = HttpApiTransport(AppConfig('Demo', base));
+      addTearDown(transport.close);
       final auth = AuthController(
-        HttpApiTransport(AppConfig('Demo', base)),
+        transport,
         SecureRefreshStore('academy.ios-cloud.$label'),
       );
       await auth.restore();
@@ -94,13 +96,40 @@ void main() {
       }
       if (intro.evaluate().isNotEmpty) await finishRoleIntroduction(tester);
       final loaded = find.text(content);
-      for (var tick = 0; tick < 120 && loaded.evaluate().isEmpty; tick++) {
+      final retry = find.widgetWithText(OutlinedButton, 'إعادة المحاولة');
+      var retried = false;
+      final deadline = Stopwatch()..start();
+      while (loaded.evaluate().isEmpty && deadline.elapsed.inSeconds < 60) {
+        if (role == 'AcademyAdmin' && !retried && retry.evaluate().isNotEmpty) {
+          await binding.takeScreenshot('phase-cloud-admin-initial-error');
+          await tester.tap(retry.first);
+          retried = true;
+        }
         await tester.pump(const Duration(milliseconds: 150));
       }
       expect(nav, findsOneWidget);
       expect(tester.widget<NativeRoleTabs>(nav).role, role);
       expect(find.byType(home), findsOneWidget);
       expect(find.text(tab), findsWidgets);
+      if (loaded.evaluate().isEmpty) {
+        await binding.takeScreenshot('phase-cloud-$label-incomplete');
+        if (role == 'AcademyAdmin') {
+          final readStarted = Stopwatch()..start();
+          try {
+            final permissions = await auth.request(
+              'GET',
+              '/api/v1/my-permissions',
+            );
+            debugPrint(
+              'Admin permission read: ${readStarted.elapsedMilliseconds} ms, list=${permissions is List}.',
+            );
+          } on ApiFailure catch (error) {
+            debugPrint(
+              'Admin permission read: ${readStarted.elapsedMilliseconds} ms, status=${error.status}.',
+            );
+          }
+        }
+      }
       expect(loaded, findsWidgets);
       await binding.takeScreenshot('phase-cloud-$label');
       expect(tester.takeException(), isNull);

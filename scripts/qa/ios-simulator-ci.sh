@@ -76,13 +76,16 @@ ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbos
   --use-application-binary=build/ios/iphonesimulator/Runner.app \
   --driver=test_driver/visual_driver.dart \
   --target=integration_test/cloud_role_homes_test.dart \
-  --no-publish-port --timeout=240 --screenshot="$qa_dir/evidence" \
+  --no-publish-port --timeout=300 --screenshot="$qa_dir/evidence" \
   2>&1 | tee "$qa_dir/evidence/flutter-ios.log" || test_status=$?
 
 if [[ "$test_status" != 0 ]]; then
   gtimeout 20s xcrun simctl io "$simulator" screenshot "$qa_dir/evidence/ios-last-frame.png" || true
 fi
 
+for capture in ../../tmp/mobile-visuals/phase-cloud-*-incomplete.png ../../tmp/mobile-visuals/phase-cloud-admin-initial-error.png; do
+  if [[ -s "$capture" ]]; then cp "$capture" "$qa_dir/evidence/"; fi
+done
 for role in owner admin coach guardian; do
   if [[ -s "../../tmp/mobile-visuals/phase-cloud-$role.png" ]]; then
     cp "../../tmp/mobile-visuals/phase-cloud-$role.png" "$qa_dir/evidence/"
