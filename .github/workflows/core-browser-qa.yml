@@ -29,7 +29,7 @@ jobs:
             config: regression
             provider_quarantine: 'true'
           - group: football-staff-and-receipts
-            specs: '/(coach-provisioning|v3-overnight-staff-attendance|v4-vip-rewards)\.spec\.ts$'
+            specs: '/(coach-provisioning|v3-overnight-staff-attendance|v3-opening-correction|v3-payroll-account|v3-payroll-opening|v4-vip-rewards)\.spec\.ts$'
             config: football
           - group: staff-verification
             specs: '/v3-staff-(passkeys|verified-attendance)\.spec\.ts$'
