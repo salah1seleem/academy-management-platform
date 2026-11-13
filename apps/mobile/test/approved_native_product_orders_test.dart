@@ -277,8 +277,9 @@ void main() {
       if (mode == 'cancel' || mode == 'storage') {
         expect(writes, isEmpty);
         expect(await store.read(), isNull);
-        if (mode == 'storage')
+        if (mode == 'storage') {
           expect(find.textContaining('تعذر حفظ مرجع المراجعة'), findsOneWidget);
+        }
       } else {
         final verify = find.text('التحقق من القرار');
         await reach(t, verify);
@@ -314,8 +315,9 @@ void main() {
         if (!verify) return source;
         reads++;
         if (mode == 'denied' && reads > 1) throw const ApiFailure(403, 'مرفوض');
-        if (mode == 'saved' && reads == 2)
+        if (mode == 'saved' && reads == 2) {
           throw const ApiFailure(503, 'تعذرت القراءة');
+        }
         return {
           ...source,
           if (mode == 'saved' || mode == 'changed')

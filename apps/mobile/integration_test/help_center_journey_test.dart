@@ -85,8 +85,6 @@ void main() {
             home: NativeMore(
               auth: auth,
               role: entry.$2,
-              environment: 'Demo',
-              account: const SizedBox.shrink(),
             ),
           ),
         );

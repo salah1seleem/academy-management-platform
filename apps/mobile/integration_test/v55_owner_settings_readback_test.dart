@@ -125,7 +125,6 @@ void main() {
                         to: '2026-09-30',
                         branchId: branch,
                         branchName: 'فرع الشروق',
-                        initialAmount: oldAmount,
                       ),
                     ),
                   );

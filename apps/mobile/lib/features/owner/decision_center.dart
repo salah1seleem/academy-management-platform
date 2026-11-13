@@ -295,8 +295,9 @@ class _PlayerDecisionState extends State<_PlayerDecision> {
         },
       ),
     );
-    if (!mounted || id == null || expected != followUpContext(widget.auth))
+    if (!mounted || id == null || expected != followUpContext(widget.auth)) {
       return;
+    }
     setState(() => revision++);
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: UiText('تم حفظ مهمة المتابعة.')));

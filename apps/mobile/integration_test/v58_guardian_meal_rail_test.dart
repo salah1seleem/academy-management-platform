@@ -58,7 +58,7 @@ void main() {
         ),
       );
       final expectedMeal = obj(
-        dailyNutritionMeals(source).firstWhere((m) => m.$3 is Map).$3,
+        dailyNutritionMeals(source).first.$3,
       );
       final expectedDetail = obj(
         await auth.request(

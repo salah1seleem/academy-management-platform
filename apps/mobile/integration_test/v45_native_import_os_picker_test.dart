@@ -31,6 +31,7 @@ class PickerImportTransport extends HttpApiTransport {
     bool commit,
     Map<String, String> fields,
     String token, {
+    bool correctionRows = false,
     String? idempotencyKey,
     String? validRowsFromHash,
   }) async {
@@ -41,6 +42,7 @@ class PickerImportTransport extends HttpApiTransport {
       token,
       idempotencyKey: idempotencyKey,
       validRowsFromHash: validRowsFromHash,
+      correctionRows: correctionRows,
     );
     if (validRowsFromHash != null) return result;
     if (commit) {

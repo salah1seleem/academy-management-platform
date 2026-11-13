@@ -895,8 +895,9 @@ class _NativePaymentRequestsState extends State<NativePaymentRequests> {
                           enableSuggestions: false,
                           onSubmitted: search,
                           onChanged: (_) {
-                            if (referenceError != null)
+                            if (referenceError != null) {
                               setState(() => referenceError = null);
+                            }
                           },
                           decoration: InputDecoration(
                             labelText: ui(context, 'رقم الطلب'),

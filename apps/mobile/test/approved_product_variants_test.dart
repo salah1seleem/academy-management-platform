@@ -429,8 +429,9 @@ void main() {
           find.text(outcome == 'Confirmed' ? 'المبلغ المدفوع' : 'مبلغ الطلب'),
           findsOneWidget,
         );
-        if (outcome == 'Rejected')
+        if (outcome == 'Rejected') {
           expect(find.text('راجع صورة التحويل مع الإدارة'), findsOneWidget);
+        }
         expect(find.text('استبدال إثبات الدفع'), findsNothing);
         await t.tap(find.byTooltip("رجوع"));
         await t.pumpAndSettle();
@@ -463,8 +464,9 @@ void main() {
       };
       final auth = await authenticate('Guardian', (m, p, b, token) async {
         final order = {...row, 'status': status};
-        if (Uri.parse(p).path.endsWith('/product-sales'))
+        if (Uri.parse(p).path.endsWith('/product-sales')) {
           return ++listReads == 1 ? [] : [order];
+        }
         return order;
       });
       await t.pumpWidget(app(GuardianProductOrders(auth: auth)));

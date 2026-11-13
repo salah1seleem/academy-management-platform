@@ -232,8 +232,7 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                         widget.playerName,
                         if (meals.isEmpty)
                           'لا توجد اقتراحات اليوم'
-                        else if (activity != null)
-                          activity,
+                        else ?activity,
                       ].join(' · '),
                       style: Theme.of(context).textTheme.labelSmall,
                       maxLines: 1,

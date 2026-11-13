@@ -77,6 +77,7 @@ class _ReadOnlyLive extends HttpApiTransport {
     bool commit,
     Map<String, String> fields,
     String token, {
+    bool correctionRows = false,
     String? idempotencyKey,
     String? validRowsFromHash,
   }) async => deny('workbook');

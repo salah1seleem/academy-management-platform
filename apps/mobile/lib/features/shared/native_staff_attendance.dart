@@ -585,7 +585,7 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage>
                   ),
                   if (branchReady) ...[
                     UiText(
-                      'النطاق ${textOf(selected!['radiusMeters'])} مترًا · الدقة حتى ${textOf(selected['maxAccuracyMeters'])} مترًا · قراءة خلال ${textOf(selected['maxAgeSeconds'])} ثانية',
+                      'النطاق ${textOf(selected['radiusMeters'])} مترًا · الدقة حتى ${textOf(selected['maxAccuracyMeters'])} مترًا · قراءة خلال ${textOf(selected['maxAgeSeconds'])} ثانية',
                     ),
                     if (selected['attendanceRequired'] == true)
                       const UiText('التسجيل مطلوب لفئتك في هذا الفرع.'),

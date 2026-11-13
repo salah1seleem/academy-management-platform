@@ -434,8 +434,9 @@ class _NativeProductOrderReviewState
     if (decision != true ||
         !current ||
         !proofReady ||
-        visibleProof != source['proofUrl'])
+        visibleProof != source['proofUrl']) {
       return;
+    }
     await run(() async {
       final body = <String, dynamic>{
         'accept': accept,
@@ -501,11 +502,12 @@ class _NativeProductOrderReviewState
               if (current) setState(() => data = updated);
               await _clear();
             } catch (_) {
-              if (current)
+              if (current) {
                 setState(() {
                   data = null;
                   visibleProof = null;
                 });
+              }
               rethrow;
             }
             if (updated['status'] == 'Pending' &&
@@ -532,11 +534,12 @@ class _NativeProductOrderReviewState
           _fingerprint(saved, status, saved['reviewReason']) == fingerprint;
       if (sameDecision) {
         await _clear();
-        if (current)
+        if (current) {
           setState(() {
             data = saved;
             message = 'حُفظت المراجعة وأُعيدت قراءة الطلب نفسه.';
           });
+        }
         return;
       }
       if (readOnly && !recorded && status == 'Pending') {

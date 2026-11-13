@@ -43,8 +43,9 @@ class _OwnerGroupMergeState extends State<OwnerGroupMerge> {
         busy ||
         source == null ||
         target == null ||
-        commit && preview == null)
+        commit && preview == null) {
       return;
+    }
     setState(() {
       error = null;
       busy = true;
@@ -65,6 +66,7 @@ class _OwnerGroupMergeState extends State<OwnerGroupMerge> {
       );
       if (!current) return;
       if (commit) {
+        if (!mounted) return;
         if (result['id'] is! String || (result['id'] as String).isEmpty) {
           throw const FormatException();
         }
@@ -186,11 +188,12 @@ class _OwnerGroupMergeState extends State<OwnerGroupMerge> {
                         today.day,
                       ),
                     );
-                    if (current && date != null)
+                    if (current && date != null) {
                       change(
                         () =>
                             effective = date.toIso8601String().substring(0, 10),
                       );
+                    }
                   },
             icon: const Icon(Icons.calendar_month_outlined),
             label: UiText('بدء الدمج · $effective'),

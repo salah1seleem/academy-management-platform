@@ -500,8 +500,9 @@ void main() {
           if (path.endsWith('/discount-rules/')) return {'items': []};
           if (path.endsWith('/subscriptions/plans')) {
             listReads++;
-            if (listReads == 2)
+            if (listReads == 2) {
               throw const ApiFailure(503, 'تعذر تحميل الباقات.');
+            }
             return [
               {
                 'id': 'plan',

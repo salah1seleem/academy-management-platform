@@ -49,8 +49,9 @@ void main() {
         body,
         token,
       ) async {
-        if (path.startsWith('/api/v1/manage/configuration'))
+        if (path.startsWith('/api/v1/manage/configuration')) {
           methods.add(method);
+        }
         return data;
       });
       await t.pumpWidget(f.app(OwnerHomeSettingsPage(auth: auth)));
