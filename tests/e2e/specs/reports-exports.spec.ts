@@ -11,17 +11,23 @@ test.describe("Slice 8A operational reporting journeys", () => {
     const summary = page.getByRole("region", { name: "ملخص الأكاديمية", exact: true });
     await expect(summary.getByRole("heading", { name: "التحصيل الأسبوعي", exact: true })).toBeVisible();
     const subscriptions = page.getByRole("region", {name:"اشتراكات الأكاديمية", exact:true});
-    const calendarForCounts = await (await page.request.get("/api/v1/academy/calendar")).json();
-    const stored = await (await page.request.get(`/api/v1/subscriptions/home?asOf=${calendarForCounts.today}`)).json();
+    const calendar = await (await page.request.get("/api/v1/academy/calendar")).json();
+    const subscriptionPeriod = new URLSearchParams({ from: calendar.trailingMonthFrom, asOf: calendar.today });
+    const response = await page.request.get(`/api/v1/subscriptions/home?${subscriptionPeriod}`);
+    expect(response.ok()).toBe(true);
+    const stored = await response.json();
     for (const state of ["active", "expiring", "expired"] as const) {
       const link = subscriptions.locator(`a[data-state="${state}"]`);
       await expect(link).toBeVisible();
-      await expect(link).toHaveAttribute("href", new RegExp(`state=${state}`));
+      const target = new URL((await link.getAttribute("href"))!, page.url());
+      expect(target.pathname).toBe("/dashboard/players/subscriptions");
+      expect(target.searchParams.get("state")).toBe(state);
+      expect(target.searchParams.get("from")).toBe(calendar.trailingMonthFrom);
+      expect(target.searchParams.get("asOf")).toBe(calendar.today);
       await expect(link.locator("b")).toHaveText(new Intl.NumberFormat("ar-EG").format(stored[state]));
     }
     const requests=page.locator("section").filter({has:page.getByRole("heading",{name:"طلبات الدفع",exact:true})});
     await expect(requests.getByRole("link",{name:"عرض الكل",exact:true})).toHaveAttribute("href",/subscriptions\/payments/);
-    const calendar=await (await page.request.get("/api/v1/academy/calendar")).json();
     const totalLink = summary.getByRole("link").first();
     const ledger = new URL((await totalLink.getAttribute("href"))!, page.url());
     expect(ledger.pathname).toBe("/dashboard/reports/financial");
