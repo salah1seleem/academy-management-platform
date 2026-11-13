@@ -1,0 +1,53 @@
+name: iOS Simulator QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["codex/qa-off-mac"]
+    paths:
+      - .github/workflows/ios-simulator-qa.yml
+      - scripts/qa/ios-simulator-ci.sh
+      - apps/mobile/integration_test/cloud_role_homes_test.dart
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  role-homes:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.2
+          cache: true
+      - name: Prepare PostgreSQL 17
+        run: |
+          if ! brew list --versions postgresql@17 >/dev/null; then
+            brew install postgresql@17
+          fi
+          echo "$(brew --prefix postgresql@17)/bin" >> "$GITHUB_PATH"
+      - name: Resolve locked Flutter dependencies
+        working-directory: apps/mobile
+        run: flutter pub get --enforce-lockfile
+      - name: Exercise four roles on one iOS simulator
+        run: bash scripts/qa/ios-simulator-ci.sh
+      - name: Preserve iOS results and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-qa
+          path: ${{ runner.temp }}/academy-ios-qa/evidence/
+          if-no-files-found: warn
+          retention-days: 7
