@@ -2,6 +2,7 @@ import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/shared/notification_inbox.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'v2_role_workspaces_test.dart' show authenticate, app;
 
@@ -70,7 +71,9 @@ void main() {
       await t.tap(find.text('عرض الاشتراك وتعديلاته'));
       await t.pumpAndSettle();
       expect(find.text('باقة الطفل المقصود'), findsOneWidget);
-      expect(find.textContaining('إضافة أيام · 2026-10-21'), findsOneWidget);
+      expect(find.text('إضافة أيام'), findsOneWidget);
+      final date = DateFormat.yMMMd('ar')..useNativeDigits = false;
+      expect(find.text(date.format(DateTime(2026, 10, 21))), findsOneWidget);
       expect(
         calls,
         contains(

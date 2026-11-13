@@ -209,7 +209,7 @@ void main() {
         shell(CoachAttendance(auth: auth, sessionId: 's')),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('يتولى الإداري'), findsOneWidget);
+      expect(find.text('كشف الحضور للعرض فقط.'), findsOneWidget);
       expect(find.text('حفظ الحضور'), findsNothing);
       expect(find.byType(ChoiceChip), findsNothing);
       expect(writes, 0);

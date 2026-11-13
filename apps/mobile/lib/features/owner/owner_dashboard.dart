@@ -405,17 +405,23 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       ),
       if ((operations['openSafetyFeedback'] as num? ?? 0) > 0)
         OutlinedButton.icon(
-          onPressed: () => openPage(
-            context,
-            OwnerFeedbackInbox(
-              auth: widget.auth,
-              initialFilters: {
-                if (branch.isNotEmpty) 'branchId': branch,
-                'safetyOnly': 'true',
-                'status': 'Unresolved',
-              },
-            ),
-          ),
+          onPressed: () async {
+            final expected = contextKey;
+            await openPage(
+              context,
+              OwnerFeedbackInbox(
+                auth: widget.auth,
+                initialFilters: {
+                  if (branch.isNotEmpty) 'branchId': branch,
+                  'safetyOnly': 'true',
+                  'status': 'Unresolved',
+                },
+              ),
+            );
+            if (mounted && expected == contextKey) {
+              await _loadSection(_OwnerSection.collections);
+            }
+          },
           icon: const Icon(Icons.health_and_safety_outlined),
           label: UiText(
             'بلاغات سلامة تحتاج مراجعتك · ${operations['openSafetyFeedback']}',

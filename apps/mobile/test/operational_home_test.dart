@@ -278,7 +278,13 @@ void main() {
       await tester.tap(find.text('راجع طلبات الدفع'));
       await tester.pumpAndSettle();
       final q = Uri.parse(path!).queryParameters;
-      expect(q, {'branchId': 'b1', 'allDates': 'true', 'status': 'Pending'});
+      expect(q, {
+        'branchId': 'b1',
+        'allDates': 'true',
+        'status': 'Pending',
+        'page': '1',
+        'pageSize': '25',
+      });
       expect(tester.takeException(), isNull);
     },
   );
@@ -357,7 +363,7 @@ void main() {
   );
 
   testWidgets(
-    'Resolving a source note refreshes the Owner Home on return without financial writes',
+    'Resolving a safety report refreshes the Owner Home on return without financial writes',
     (tester) async {
       var open = true;
       var reads = 0;
@@ -372,6 +378,10 @@ void main() {
           return {'id': 'n1'};
         }
         if (p.contains('/manage/feedback')) {
+          expect(Uri.parse(p).queryParameters, {
+            'status': 'Unresolved',
+            'safetyOnly': 'true',
+          });
           return open
               ? [
                   {
@@ -393,6 +403,7 @@ void main() {
           'to': '2026-09-28',
           'operations': {
             ...operations(complaints: open ? 1 : 0),
+            'openSafetyFeedback': open ? 1 : 0,
             'pendingPaymentQueueBacklog': 0,
             'groupAttention': [],
             'coachPerformance': [],
@@ -403,11 +414,10 @@ void main() {
         shell(OwnerDashboard(auth: auth, accountPage: const SizedBox())),
       );
       await tester.pumpAndSettle();
-      await reach(tester, find.text('كل القرارات'));
-      await tester.tap(find.text('كل القرارات'));
-      await tester.pumpAndSettle();
-      await reach(tester, find.text('شكاوى تحتاج متابعة'));
-      await tester.tap(find.text('شكاوى تحتاج متابعة'));
+      final alert = find.text('بلاغات سلامة تحتاج مراجعتك · 1');
+      await reach(tester, alert);
+      expect(reads, 1);
+      await tester.tap(alert);
       await tester.pumpAndSettle();
       await reach(tester, find.text('الرد والحل'));
       await tester.tap(find.text('الرد والحل'));
@@ -419,17 +429,11 @@ void main() {
       await tester.tap(find.text('إرسال الرد وحل الملاحظة'));
       await tester.pumpAndSettle();
       expect(body, {'response': 'رد اصطناعي بعد مراجعة الموعد'});
+      expect(find.text('لا توجد ملاحظات في هذا القسم.'), findsOneWidget);
       await tester.tap(find.byType(BackButton).last);
       await tester.pumpAndSettle();
-      expect(reads, 3);
-      await reach(
-        tester,
-        find.text('لا توجد أولويات معلقة حسب القواعد الحالية.'),
-      );
-      expect(find.text('شكاوى تحتاج متابعة'), findsNothing);
-      await tester.tap(find.byType(BackButton).last);
-      await tester.pumpAndSettle();
-      expect(reads, 4);
+      expect(reads, 2);
+      expect(alert, findsNothing);
       await auth.logout();
       await tester.pumpAndSettle();
       expect(find.text('تحصيل اليوم'), findsNothing);

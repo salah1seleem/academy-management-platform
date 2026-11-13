@@ -23,14 +23,12 @@ Widget frame(bool light, Widget body) => MaterialApp(
 void main() {
   for (final light in [true, false]) {
     final good = light ? const Color(0xff16803c) : OceanPalette.positive;
-    final bad =
-        (light ? AcademyTheme.light() : AcademyTheme.dark()).colorScheme.error;
     final negative = light ? const Color(0xffc8102e) : OceanPalette.negative;
     final warn = light ? const Color(0xffb45309) : OceanPalette.warning;
     for (final result in [
-      ('فوز', 3, 1, Icons.check_circle_outline, good),
-      ('خسارة', 1, 3, Icons.arrow_downward, bad),
-      ('تعادل', 1, 1, Icons.remove, warn),
+      ('فوز', 3, 1, good),
+      ('خسارة', 1, 3, negative),
+      ('تعادل', 1, 1, warn),
     ]) {
       testWidgets(
         'Published match result preserves classification and approved state ink ${result.$1}, light=$light',
@@ -56,8 +54,9 @@ void main() {
               ),
             ),
           );
-          expect(find.text(result.$1), findsOneWidget);
-          expect(t.widget<Icon>(find.byIcon(result.$4)).color, result.$5);
+          final state = find.widgetWithText(UiText, result.$1);
+          expect(state, findsOneWidget);
+          expect(t.widget<UiText>(state).style?.color, result.$4);
           // Each score is associated with its team in the current RTL card.
           for (final score in [
             ('فريق اصطناعي', result.$2),
@@ -66,8 +65,8 @@ void main() {
             expect(
               find.byWidgetPredicate(
                 (w) =>
-                    w is UiText &&
-                    w.semanticsLabel == '${score.$1}: ${score.$2}',
+                    w is Semantics &&
+                    w.properties.label == '${score.$1}: ${score.$2}',
               ),
               findsOneWidget,
             );

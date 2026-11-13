@@ -126,12 +126,18 @@ void main() {
                 find.widgetWithText(FilledButton, 'ملف ليلى والتقرير'),
               )
               .dy;
+          final shortcuts = find.ancestor(
+            of: find.text('مكتبة التغذية').last,
+            matching: find.byType(IntrinsicHeight),
+          );
+          final shortcutBottom = t.getBottomLeft(shortcuts).dy;
           final coachBottom = t
               .getBottomLeft(
-                find.widgetWithText(TextButton, 'المدرب مدرب العرض').last,
+                find.widgetWithText(TextButton, 'المدرب  مدرب العرض').last,
               )
               .dy;
-          expect(footerTop - coachBottom, lessThan(32));
+          expect(shortcutBottom, greaterThan(coachBottom));
+          expect(footerTop - shortcutBottom, inInclusiveRange(0, 32));
         }
         for (final name in ['التنفس', 'الحرة', 'الظهر', 'الانطلاق', 'التحمل']) {
           expect(find.text('$name · 80'), findsOneWidget);
