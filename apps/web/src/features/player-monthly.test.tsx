@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PlayerMonthly } from "./player-monthly";
 
@@ -78,13 +78,17 @@ it("shows an empty month without reporting a player score or redundant paginatio
 });
 
 it("reports export rejection without navigating away from the selected month", async () => {
+  let rejectExport!: (response: Response) => void;
+  const exportReply = new Promise<Response>(resolve => { rejectExport = resolve; });
   global.fetch = vi.fn(async path => String(path).includes("format=csv")
-    ? Response.json({ message: "يتجاوز الشهر حد التصدير." }, { status: 409 })
+    ? exportReply
     : Response.json(report)) as typeof fetch;
   nativeReplace(null, "", "/guardian/children/child/monthly?month=2026-10&page=1");
   render(<PlayerMonthly playerId="child" />);
   const link = await screen.findByRole("link", { name: "تنزيل CSV" });
   fireEvent.click(link);
+  expect(link).toHaveAttribute("aria-busy", "true");
+  await act(async () => { rejectExport(Response.json({ message: "يتجاوز الشهر حد التصدير." }, { status: 409 })); });
   expect(await screen.findByRole("alert")).toHaveTextContent("يتجاوز الشهر حد التصدير.");
   expect(location.search).toBe("?month=2026-10&page=1");
   expect(screen.getByText("عدد التمريرات")).toBeVisible();

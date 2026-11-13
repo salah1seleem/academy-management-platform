@@ -114,7 +114,7 @@ it("verifies an unconfirmed stop by reading the same credential without replay",
   fireEvent.click(screen.getByRole("button", { name: "تأكيد الإيقاف" }));
   expect(screen.getByRole("button", { name: "جارٍ إيقاف الوسيلة…" })).toBeDisabled();
   const check = await screen.findByRole("button", { name: "تحقّق من حالة «هاتف العمل»" });
-  expect(check).toHaveFocus();
+  await waitFor(() => expect(check).toHaveFocus());
   expect(screen.getByRole("button", { name: "إيقاف هاتف العمل" })).toBeDisabled();
   fireEvent.click(check);
   expect(await screen.findByRole("alert")).toHaveTextContent("تعذر التحقق من الحالة");
