@@ -1,0 +1,57 @@
+name: Core Browser QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["codex/qa-core-release"]
+
+permissions:
+  contents: read
+
+jobs:
+  core-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: academy_core_qa
+          POSTGRES_USER: academy
+          POSTGRES_PASSWORD: academy_ci_only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U academy -d academy_core_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_core_qa;Username=academy;Password=academy_ci_only
+      ACADEMY_E2E_API_CONFIGURATION: Release
+      ACADEMY_E2E_API_NO_BUILD: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: dotnet tool restore
+      - run: dotnet build apps/api/src/Academy.Api --configuration Release -m:1
+      - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run core browser journeys
+        run: >-
+          npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/core
+          authentication.spec.ts core-expense-post-recovery.spec.ts core-player-import-recovery.spec.ts
+          enrollment-request-review.spec.ts subscriptions-payments.spec.ts v2-family-renewal-request.spec.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-browser-results
+          path: tests/e2e/test-results/core/
+          if-no-files-found: warn
+          retention-days: 7
