@@ -3,7 +3,7 @@ name: iOS Simulator QA
 on:
   workflow_dispatch:
   push:
-    branches: ["codex/qa-off-mac"]
+    branches: ["codex/qa-off-mac", "codex/qa-staging-release"]
     paths:
       - .github/workflows/ios-simulator-qa.yml
       - scripts/qa/ios-simulator-ci.sh
