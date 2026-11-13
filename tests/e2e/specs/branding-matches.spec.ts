@@ -6,14 +6,21 @@ async function login(page: Page) { await page.goto("/login"); await page.getByLa
 async function write(page: Page, path: string, data: unknown, method="POST", key?: string) { const token = await page.request.get("/api/v1/auth/csrf").then(r=>r.json()); return page.request.fetch(path,{method,data,headers:{"X-CSRF-TOKEN":token.token,...(key?{"Idempotency-Key":key}:{})}}); }
 test("Compact stored-data dashboard has matched filter heights, drill-downs and no hero/latest", async ({page}, info) => {
   await page.setViewportSize({width:1440,height:1000}); await login(page);
-  const kpis=page.locator('[aria-label="مؤشرات الأكاديمية"]');
-  await expect(kpis.getByRole("link")).toHaveCount(4);
-  for(const link of await kpis.getByRole("link").all())await expect(link).toHaveAttribute("href",/\/dashboard\//);
+  const summary = page.getByRole("region", { name: "ملخص الأكاديمية", exact: true });
+  for (const title of ["مؤشرات الفترة", "الوضع الحالي"]) {
+    const links = summary.getByRole("group", { name: title, exact: true }).getByRole("link");
+    await expect(links.first()).toBeVisible();
+    for (const link of await links.all()) await expect(link).toHaveAttribute("href", /^\/dashboard\//);
+  }
   await expect(page.getByText("أحدث التحصيلات",{exact:true})).toHaveCount(0);
   await expect(page.locator(".sports-welcome")).toHaveCount(0);
-  const from=await page.getByLabel("من تاريخ").boundingBox(), to=await page.getByLabel("إلى تاريخ").boundingBox(); expect(to!.height).toBe(from!.height);
+  await summary.getByRole("button", { name: "الفترة المخصصة", exact: true }).click();
+  const from = await summary.getByLabel("من تاريخ").boundingBox();
+  const to = await summary.getByLabel("إلى تاريخ").boundingBox();
+  expect(to!.height).toBe(from!.height);
+  await summary.getByRole("button", { name: "الفترة المخصصة", exact: true }).click();
   const subscription=page.getByRole("region", {name:"اشتراكات الأكاديمية",exact:true});
-  await expect(subscription.getByRole("link")).toHaveCount(4);
+  await expect(subscription.getByRole("link")).toHaveCount(5);
   await expect(subscription.locator('a[href*="state=all"]')).toHaveCount(1);
   await page.screenshot({path:info.outputPath("owner-dashboard-desktop.png"),fullPage:true});
   await page.setViewportSize({width:390,height:844}); await page.screenshot({path:info.outputPath("owner-dashboard-mobile.png"),fullPage:true});

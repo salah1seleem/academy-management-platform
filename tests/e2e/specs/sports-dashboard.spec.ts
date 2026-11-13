@@ -35,7 +35,7 @@ for (const role of ["owner", "admin"] as const) for (const size of sizes) {
           expect(overlap).toBe(false);
         }
         const widgets = info.outputPath(`${role}-${size.width}-widgets.png`);
-        await page.locator('[aria-label="مؤشرات الأكاديمية"]').screenshot({ path: widgets, scale: "css", animations: "disabled" });
+        await page.getByRole("region", { name: "ملخص الأكاديمية", exact: true }).screenshot({ path: widgets, scale: "css", animations: "disabled" });
         await info.attach("real-data widgets", { path: widgets, contentType: "image/png" });
       }
     }

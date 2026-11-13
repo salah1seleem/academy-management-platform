@@ -18,7 +18,9 @@ test("Guardian reviews siblings and multi-sport plans without creating payments"
   const options = await page.request.get(`${root}/options`).then(r => r.json());
   const enrollments = options.items.filter((e: { playerId: string; sport: string; plans: unknown[] }) => family.includes(e.playerId) && e.plans.length && (e.playerId === family[0] || e.sport === "كرة القدم")); expect(enrollments).toHaveLength(3);
   const receipts = await page.request.get("/api/v1/guardian/subscriptions/receipts"); expect(receipts.ok()).toBe(true); const before = await receipts.json();
-  await page.goto("/guardian"); await page.getByRole("link", { name: "مراجعة تجديد الأبناء معًا", exact: true }).click();
+  await page.goto("/guardian");
+  await page.getByText("متابعة التطور وخدمات الأسرة", { exact: true }).click();
+  await page.getByRole("link", { name: "مراجعة تجديد الأبناء معًا", exact: true }).click();
   for (const e of enrollments) {
     await page.getByRole("checkbox", { name: `تجديد ${e.player} · ${e.sport}`, exact: true }).check();
     await page.getByRole("combobox", { name: `الباقة لـ${e.player} · ${e.sport}`, exact: true }).selectOption(e.plans[0].id);

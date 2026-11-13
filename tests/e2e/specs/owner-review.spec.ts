@@ -13,9 +13,10 @@ async function login(page: Page, role: "admin" | "owner") {
 
 test("Admin has no financial dashboard or report without an explicit grant", async ({ page }) => {
   await login(page, "admin");
-  await expect(page.getByRole("navigation", { name: "إجراءات نطاقك" })).toBeVisible();
-  await expect(page.getByText("تحصيل اليوم", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "إجراءات نطاقك" }).getByRole("link", { name: "التقرير المالي" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "إجراءات سريعة" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "التحصيلات ومصادرها" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "تقرير الأرباح والخسائر" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "إجراءات سريعة" }).getByRole("link", { name: "التقرير المالي" })).toHaveCount(0);
   expect((await page.request.get("/api/v1/reports/financial")).status()).toBe(403);
   expect((await page.request.get("/api/v1/reports/owner-summary")).status()).toBe(403);
 });

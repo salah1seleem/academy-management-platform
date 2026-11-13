@@ -8,5 +8,6 @@ test("A golden season saves five service months for four monthly payments", asyn
   for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await page.evaluate(() => scrollTo(0, 0)); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); await page.screenshot({ path: info.outputPath(`season-${width}.png`), fullPage: true, animations: "disabled" }); }
   const saved = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith("/subscriptions/plans")); await page.getByRole("button", { name: "حفظ الباقة" }).click(); expect((await saved).status()).toBe(201); await page.waitForURL("**/subscriptions/plans");
   const plans = await (await page.request.get("/api/v1/subscriptions/plans")).json(); const plan = plans.find((p: { arabicName: string }) => p.arabicName === name); expect(plan.durationMonths).toBe(5); expect(plan.durationDays).toBeNull(); expect(plan.trainingFormat).toBe("Season");
-  await page.goto(`/dashboard/subscriptions/plans/${plan.id}`); await expect(page.getByText("5 شهر تقويمي · 4 أشهر مدفوعة")).toBeVisible();
+  await page.goto(`/dashboard/subscriptions/plans/${plan.id}`); await expect(page.getByText("٥ أشهر تقويمية", { exact: true })).toBeVisible();
+  await expect(page.getByText("الأشهر المدفوعة", { exact: true }).locator("..").getByRole("definition")).toHaveText("4");
 });

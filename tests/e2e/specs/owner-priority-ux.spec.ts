@@ -8,7 +8,7 @@ test("Owner opens stored operational signals and private family feedback", async
   await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   await expect(page.getByRole("heading", { name: "مركز القرارات الذكية" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^المدربون ·/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "المدربون", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "تقرير الأرباح والخسائر" })).toBeVisible();
   await page.getByRole("link", { name: "كل القرارات", exact: true }).click();
   await expect(page.getByRole("heading", { name: "مركز القرارات", exact:true })).toBeVisible();

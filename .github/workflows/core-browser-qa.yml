@@ -18,8 +18,13 @@ jobs:
         include:
           - group: payments-and-import
             specs: '/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|subscriptions-payments|v2-family-renewal-request)\.spec\.ts$'
+            provider_quarantine: 'false'
           - group: attendance-and-cash
             specs: '/(attendance|v2-attendance-draft|v2-cash-collections|v2-cash-family|v2-cash-receipt-void|v2-cash-registers|v2-admin-cross-branch-cash|v2-cross-branch-cash|v2-pending-cash|v2-collection-funds|v2-receivable-credit|v2-platform|v2-session-lifecycle|reports-exports)\.spec\.ts$'
+            provider_quarantine: 'false'
+          - group: operations-and-pricing
+            specs: '/(owner-review|owner-priority-ux|sports-dashboard|branding-matches|v2-provider-quarantine|v2-family-renewal-quote|v2-staff-family-quote|v2-plan-publication|v2-season-plans|staff-payroll-ux)\.spec\.ts$'
+            provider_quarantine: 'true'
     services:
       postgres:
         image: postgres:17
@@ -37,7 +42,7 @@ jobs:
       ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_core_qa;Username=academy;Password=academy_ci_only
       ACADEMY_E2E_API_CONFIGURATION: Release
       ACADEMY_E2E_API_NO_BUILD: "true"
-      ACADEMY_E2E_PROVIDER_QUARANTINE: "false"
+      ACADEMY_E2E_PROVIDER_QUARANTINE: ${{ matrix.provider_quarantine }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
