@@ -179,7 +179,10 @@ public sealed partial class V2ReceivablesTests
         var original=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/reports/financial?from={sourceDate:yyyy-MM-dd}&to={sourceDate:yyyy-MM-dd}&search={player}");
         Assert.Equal(f.Amount,original.GetProperty("netAmount").GetDecimal());Assert.Equal(0,original.GetProperty("totalRefunds").GetDecimal());
         var csvResponse=await owner.GetAsync("/api/v1/reports/financial/export?"+filter);csvResponse.EnsureSuccessStatusCode();var csv=await csvResponse.Content.ReadAsStringAsync();
-        Assert.Contains("استرداد اشتراك",csv);Assert.Contains("-40.25",csv);Assert.Contains(refund.CreatedAtUtc.ToString("O"),csv);
+        Assert.Contains("استرداد اشتراك", csv);
+        Assert.Contains("-40.25", csv);
+        var localPayout = TimeZoneInfo.ConvertTime(refund.CreatedAtUtc, zone);
+        Assert.Contains(localPayout.ToString("O", System.Globalization.CultureInfo.InvariantCulture), csv);
         var period=$"from={date:yyyy-MM-dd}&to={date:yyyy-MM-dd}&branchId={branch}";
         var summary=(await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/owner-summary?"+period)).GetProperty("collections");
         var periodReport=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?"+period);
