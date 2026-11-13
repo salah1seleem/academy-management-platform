@@ -17,7 +17,7 @@ test("Overnight staff checkout keeps the original workday across mobile, Web rev
   const before=await (await page.request.get("/api/v1/reports/owner-summary")).json();
   const key=crypto.randomUUID(),body={branchId,operation:"CheckOut",claimedAtUtc:own.nowUtc,reason:"انصراف وردية ليلية اصطناعية بعد منتصف الليل",targetAttendanceId:own.openAttendance.id};
   const sent=await page.request.post("/api/v1/staff/attendance-exceptions/",{headers:{...mobile,"Idempotency-Key":key},data:body}); expect(sent.status(),await sent.text()).toBe(201); const claim=await sent.json(); expect(claim.workDate).toBe(workDate); expect(claim.attendanceId).toBeNull();
-  await page.goto(`/dashboard/attendance/staff/exceptions/${claim.id}`); await expect(page.getByText(/يوم بدء الحضور:/)).toBeVisible();
+  await page.goto(`/dashboard/attendance/staff/exceptions/${claim.id}`); await expect(page.getByText(/يرتبط الانصراف بيوم بدء الحضور/)).toBeVisible();
   await page.getByRole("button",{name:"قبول وتسجيل إداري"}).click(); await expect(page.getByText("مقبول إداريًا",{exact:true})).toBeVisible();
   const saved=await (await page.request.get(`/api/v1/manage/staff-attendance-exceptions/${claim.id}`)).json(); expect(saved.currentAttendance.checkOutDate).toBe(today); expect(saved.request.attendanceId).toBe(own.openAttendance.id);
   const replay=await page.request.post("/api/v1/staff/attendance-exceptions/",{headers:{...mobile,"Idempotency-Key":key},data:body}); expect((await replay.json()).status).toBe("Approved");

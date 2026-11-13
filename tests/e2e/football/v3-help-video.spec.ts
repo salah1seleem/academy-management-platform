@@ -7,7 +7,7 @@ test("Platform uploads, previews, publishes and archives real private video; Gua
   const database = /(?:^|;)Database=([^;]+)/i.exec(process.env.ConnectionStrings__Default ?? "")?.[1];
   expect(database?.startsWith("academy_v3_help_video_") || process.env.CI === "true" && database === "academy_e2e").toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/platform/login"); await page.getByLabel("البريد الإلكتروني").fill("platform.demo@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "دخول المنصة", exact: true }).click(); await page.waitForURL("**/platform");
+  await page.goto("/platform/login"); await page.getByLabel("البريد الإلكتروني").fill("platform.demo@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تسجيل الدخول", exact: true }).click(); await page.waitForURL("**/platform");
   await page.goto("/platform/help"); await expect(page.getByRole("heading", { name: "شرح عملي، وإصدار موثوق", exact: true })).toBeVisible();
   const baseURL = new URL(page.url()).origin;
   const ownerContext = await browser.newContext({ baseURL }), ownerPage = await ownerContext.newPage(), owner = ownerPage.request;

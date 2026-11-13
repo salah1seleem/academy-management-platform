@@ -20,17 +20,30 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   await page.getByLabel("براعم 2018 — مجموعة أ").check();
   const mobile = page.getByLabel("رقم الهاتف المصري");
   const save = page.getByRole("button", { name: "حفظ المدرب", exact: true });
+  const coachPath = "/api/v1/manage/coaches";
+  const csrf = await page.request.get("/api/v1/auth/csrf").then(response => response.json());
+  let writes = 0;
+  page.on("request", request => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === coachPath) writes++;
+  });
   for (const invalid of [phone.slice(1), `${phone}1`, `013${phone.slice(3)}`, `+971${phone.slice(1)}`]) {
     await mobile.fill(invalid);
-    const rejected = page.waitForResponse(response => response.url().endsWith("/api/v1/manage/coaches") && response.request().method() === "POST");
     await save.click();
-    expect((await rejected).status()).toBe(400);
     await expect(page.getByRole("alert").filter({ hasText: "اكتب رقم موبايل مصريًا" })).toBeVisible();
+    await expect(mobile).toBeFocused();
+    await expect(mobile).toHaveAttribute("aria-invalid", "true");
+    expect(writes).toBe(0);
+    const rejected = await page.request.post(coachPath, {
+      headers: { "X-CSRF-TOKEN": csrf.token },
+      data: { displayName: `مدرب رحلة عرض ${width}`, phoneNumber: invalid, isActive: true },
+    });
+    expect(rejected.status()).toBe(400);
   }
   await mobile.fill(width === 390 ? `+20 ${phone}` : phone);
-  const created = page.waitForResponse(response => response.url().endsWith("/api/v1/manage/coaches") && response.request().method() === "POST");
+  const created = page.waitForResponse(response => response.url().endsWith(coachPath) && response.request().method() === "POST");
   await save.click();
   const response = await created; expect(response.status()).toBe(201);
+  expect(writes).toBe(1);
   const { membershipId } = await response.json();
   await expect(page).toHaveURL(/\/academy\/coaches$/);
   await page.getByLabel("بحث المدربون").fill(`مدرب رحلة عرض ${width}`);

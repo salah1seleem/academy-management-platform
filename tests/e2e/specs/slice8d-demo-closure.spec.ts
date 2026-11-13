@@ -92,10 +92,10 @@ test.describe.serial("Slice 8D demo closure journeys", () => {
     await page.getByLabel("قيمة الخصم").fill("10");
     await page.getByLabel("سبب الخصم").fill("خصم إخوة تجريبي");
     await page.getByRole("button", { name: "حفظ الخصم" }).click();
-    await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(finalAmount);
+    await expect(page.getByText("المبلغ المطلوب", { exact: true }).locator("..")).toContainText(finalAmount);
     await page.goto(originalPaymentUrl);
-    await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click();
-    await expect(page.getByText("الإجمالي", { exact: true }).locator("..")).toContainText(finalAmount);
+    await page.getByRole("link", { name: "فتح طلب الدفع الحالي", exact: true }).click();
+    await expect(page.getByText("المبلغ المطلوب", { exact: true }).locator("..")).toContainText(finalAmount);
     await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click();
     await page.getByRole("link", { name: "عرض الإيصال" }).click();
     await expect(page.getByText("المبلغ المدفوع", { exact: true }).locator("..")).toContainText(finalAmount);

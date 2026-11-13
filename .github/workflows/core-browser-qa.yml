@@ -18,13 +18,22 @@ jobs:
         include:
           - group: payments-and-import
             specs: '/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|subscriptions-payments|v2-family-renewal-request)\.spec\.ts$'
+            config: regression
             provider_quarantine: 'false'
           - group: attendance-and-cash
             specs: '/(attendance|v2-attendance-draft|v2-cash-collections|v2-cash-family|v2-cash-receipt-void|v2-cash-registers|v2-admin-cross-branch-cash|v2-cross-branch-cash|v2-pending-cash|v2-collection-funds|v2-receivable-credit|v2-platform|v2-session-lifecycle|reports-exports)\.spec\.ts$'
+            config: regression
             provider_quarantine: 'false'
           - group: operations-and-pricing
             specs: '/(owner-review|owner-priority-ux|sports-dashboard|branding-matches|v2-provider-quarantine|v2-family-renewal-quote|v2-staff-family-quote|v2-plan-publication|v2-season-plans|staff-payroll-ux)\.spec\.ts$'
+            config: regression
             provider_quarantine: 'true'
+          - group: football-staff-and-receipts
+            specs: '/(coach-provisioning|v3-overnight-staff-attendance|v4-vip-rewards)\.spec\.ts$'
+            config: football
+          - group: staff-verification
+            specs: '/v3-staff-(passkeys|verified-attendance)\.spec\.ts$'
+            config: passkeys
     services:
       postgres:
         image: postgres:17
@@ -59,10 +68,21 @@ jobs:
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Build Football demo web
+        if: ${{ matrix.config != 'regression' }}
+        env:
+          API_INTERNAL_URL: http://127.0.0.1:5190
+        run: npm run build:web
       - name: Run core browser journeys
         env:
+          CORE_BROWSER_CONFIG: ${{ matrix.config }}
           CORE_BROWSER_SPECS: ${{ matrix.specs }}
-        run: npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/core "$CORE_BROWSER_SPECS"
+        run: |
+          config_path=tests/e2e/playwright.config.ts
+          if [[ "$CORE_BROWSER_CONFIG" != regression ]]; then
+            config_path="tests/e2e/playwright.$CORE_BROWSER_CONFIG.config.ts"
+          fi
+          npx playwright test --config "$config_path" --output tests/e2e/test-results/core "$CORE_BROWSER_SPECS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
