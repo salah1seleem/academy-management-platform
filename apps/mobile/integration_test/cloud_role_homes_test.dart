@@ -7,6 +7,7 @@ import 'package:academy_mobile/features/admin/admin_home.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
 import 'package:academy_mobile/features/guardian/guardian_home.dart';
 import 'package:academy_mobile/features/owner/owner_dashboard.dart';
+import 'package:academy_mobile/features/owner/owner_quick_operations.dart';
 import 'package:academy_mobile/features/shared/role_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -126,15 +127,25 @@ void main() {
       expect(loaded, findsWidgets);
       if (role == 'AcademyAdmin') {
         final subscriptionHero = find.text('اشتراكات نطاقك');
+        final operations = find.byType(NativeOperationActions);
+        final pendingOperations = find.descendant(
+          of: operations,
+          matching: find.byType(CircularProgressIndicator),
+        );
         final deadline = Stopwatch()..start();
-        while (subscriptionHero.hitTestable().evaluate().isEmpty &&
+        while ((subscriptionHero.hitTestable().evaluate().isEmpty ||
+                pendingOperations.evaluate().isNotEmpty) &&
             deadline.elapsed.inSeconds < 60) {
           await tester.pump(const Duration(milliseconds: 150));
         }
-        if (subscriptionHero.hitTestable().evaluate().isEmpty) {
+        if (subscriptionHero.hitTestable().evaluate().isEmpty ||
+            pendingOperations.evaluate().isNotEmpty) {
           await binding.takeScreenshot('phase-cloud-admin-incomplete');
         }
         expect(subscriptionHero.hitTestable(), findsOneWidget);
+        expect(operations, findsOneWidget);
+        expect(pendingOperations, findsNothing);
+        expect(find.text('إعادة تحميل الإجراءات'), findsNothing);
       }
       await binding.takeScreenshot('phase-cloud-$label');
       if (role == 'AcademyAdmin') {
