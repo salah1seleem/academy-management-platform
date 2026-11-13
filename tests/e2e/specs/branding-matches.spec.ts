@@ -24,8 +24,10 @@ test("Compact stored-data dashboard has matched filter heights, drill-downs and 
   await expect(subscription.locator('a[href*="state=all"]')).toHaveCount(1);
   await page.screenshot({path:info.outputPath("owner-dashboard-desktop.png"),fullPage:true});
   await page.setViewportSize({width:390,height:844}); await page.screenshot({path:info.outputPath("owner-dashboard-mobile.png"),fullPage:true});
-  await subscription.locator('a[href*="state=all"]').click(); await expect(page).toHaveURL(/players\/subscriptions\?.*state=all/);
-  await expect(page.getByRole("heading",{name:/اشتراكات/})).toBeVisible();
+  await subscription.getByRole("link", { name: /قائمة اللاعبين دون تكرار/ }).click();
+  await expect(page).toHaveURL(url => url.pathname === "/dashboard/players/subscriptions" &&
+    url.searchParams.get("state") === "all" && url.searchParams.get("uniquePlayers") === "true");
+  await expect(page.getByRole("heading", { name: "قائمة اللاعبين", exact: true })).toBeVisible();
 });
 test("Published match reaches only its guardian and a separate tournament proof produces one receipt", async ({page}) => {
   test.setTimeout(90_000);

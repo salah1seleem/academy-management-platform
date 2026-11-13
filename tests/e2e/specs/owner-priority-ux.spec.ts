@@ -11,8 +11,9 @@ test("Owner opens stored operational signals and private family feedback", async
   await expect(page.getByRole("heading", { name: "المدربون", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "تقرير الأرباح والخسائر" })).toBeVisible();
   await page.getByRole("link", { name: "كل القرارات", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "مركز القرارات", exact:true })).toBeVisible();
-  await page.getByRole("link", {name:"المتابعات والإسناد",exact:true}).click();
+  await expect(page.getByRole("heading", { name: "مركز القرارات الذكية", exact: true, level: 1 })).toBeVisible();
+  const activeFollowups = page.locator("section").filter({ has: page.getByRole("heading", { name: "متابعات مفتوحة", exact: true }) });
+  await activeFollowups.getByRole("link", { name: "عرض المتابعات", exact: true }).click();
   await expect(page.getByRole("heading", { name: "المتابعات واتخاذ القرار" })).toBeVisible();
   await expect(page.getByRole("link",{name:"إنشاء متابعة",exact:true})).toBeVisible();
   await page.screenshot({ path: info.outputPath("owner-operations.png"), fullPage: true, animations: "disabled" });

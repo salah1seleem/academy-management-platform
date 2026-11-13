@@ -88,8 +88,11 @@ it("reports export rejection without navigating away from the selected month", a
   const link = await screen.findByRole("link", { name: "تنزيل CSV" });
   fireEvent.click(link);
   expect(link).toHaveAttribute("aria-busy", "true");
-  await act(async () => { rejectExport(Response.json({ message: "يتجاوز الشهر حد التصدير." }, { status: 409 })); });
+  const rejection = new Response(null, { status: 409 });
+  vi.spyOn(rejection, "json").mockResolvedValue({ message: "يتجاوز الشهر حد التصدير." });
+  await act(async () => { rejectExport(rejection); });
   expect(await screen.findByRole("alert")).toHaveTextContent("يتجاوز الشهر حد التصدير.");
+  expect(link).not.toHaveAttribute("aria-busy", "true");
   expect(location.search).toBe("?month=2026-10&page=1");
   expect(screen.getByText("عدد التمريرات")).toBeVisible();
   expect(global.fetch).toHaveBeenCalledWith("/api/v1/guardian/children/child/monthly?enrollmentId=e&month=2026-10&format=csv", expect.anything());
