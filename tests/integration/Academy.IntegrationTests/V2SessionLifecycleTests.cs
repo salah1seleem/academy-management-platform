@@ -25,7 +25,17 @@ public sealed partial class V2PlanPublicationTests
     [Fact]
     public async Task Session_lifecycle_OTP_over_active_cookie_is_not_consumed_and_logout_then_OTP_creates_a_working_guardian_session()
     {
-        using var owner=await Staff();var request=await Write(owner,"/api/v1/auth/guardian/otp/request",new{phoneNumber=DemoSeed.GuardianPhone});request.EnsureSuccessStatusCode();var challenge=(await request.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid();var body=new{challengeId=challenge,phoneNumber=DemoSeed.GuardianPhone,code="246810"};Assert.Equal(HttpStatusCode.Conflict,(await Write(owner,"/api/v1/auth/guardian/otp/verify",body)).StatusCode);Assert.Equal("AcademyOwner",(await owner.GetFromJsonAsync<JsonElement>("/api/v1/me")).GetProperty("role").GetString());
+        using var owner = await Staff();
+        var phone = new { phoneNumber = DemoSeed.GuardianPhone };
+        const string requestPath = "/api/v1/auth/guardian/otp/request";
+        Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, requestPath, phone)).StatusCode);
+        using var guest = factory.CreateClient();
+        using var request = await Write(guest, requestPath, phone);
+        request.EnsureSuccessStatusCode();
+        var challenge = (await request.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid();
+        var body = new { challengeId = challenge, phoneNumber = DemoSeed.GuardianPhone, code = "246810" };
+        Assert.Equal(HttpStatusCode.Conflict, (await Write(owner, "/api/v1/auth/guardian/otp/verify", body)).StatusCode);
+        Assert.Equal("AcademyOwner", (await owner.GetFromJsonAsync<JsonElement>("/api/v1/me")).GetProperty("role").GetString());
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Null(await db.GuardianOtpChallenges.Where(c=>c.Id==challenge).Select(c=>c.ConsumedAtUtc).SingleAsync());
         (await Write(owner,"/api/v1/auth/logout",new{})).EnsureSuccessStatusCode();(await Write(owner,"/api/v1/auth/guardian/otp/verify",body)).EnsureSuccessStatusCode();Assert.Equal("Guardian",(await owner.GetFromJsonAsync<JsonElement>("/api/v1/me")).GetProperty("role").GetString());Assert.Equal(HttpStatusCode.OK,(await owner.GetAsync("/api/v1/guardian/home")).StatusCode);Assert.Equal(HttpStatusCode.Forbidden,(await owner.GetAsync("/api/v1/manage/staff")).StatusCode);(await Write(owner,"/api/v1/auth/logout",new{})).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Unauthorized,(await Write(owner,"/api/v1/auth/guardian/otp/verify",body)).StatusCode);
     }

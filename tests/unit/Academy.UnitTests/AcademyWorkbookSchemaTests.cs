@@ -18,9 +18,15 @@ public sealed class AcademyWorkbookSchemaTests
     [Fact] public void Guardian_phone_is_the_key_even_if_two_guardians_have_identical_names()
     {
         var book=Sample();book=Change(book,"أولياء الأمور",2,1,book.Sheet("أولياء الأمور").Rows[1][1].Value);var parsed=FriendlyImportInput.Parse(book);Assert.Empty(parsed.Errors);Assert.NotEqual(parsed.Players["PL01"]["Guardian"],parsed.Players["PL03"]["Guardian"]);
-        var bad=Change(book,"اللاعبون",1,3,"01200009999");Assert.Throws<ImportFileException>(()=>FriendlyImportInput.Parse(bad));
-        var duplicate=Change(book,"أولياء الأمور",2,2,book.Sheet("أولياء الأمور").Rows[1][2].Value);Assert.Throws<ImportFileException>(()=>FriendlyImportInput.Parse(duplicate));
-        var photo=Change(book,"اللاعبون",1,6,"https://example.test/child.jpg");Assert.Throws<ImportFileException>(()=>FriendlyImportInput.Parse(photo));
+        var bad = FriendlyImportInput.Parse(Change(book, "اللاعبون", 1, 3, "01200009999"));
+        Assert.Contains(bad.PlayerCellErrors, issue => issue is { Row: 2, Column: "هاتف ولي الأمر كنص *" });
+        Assert.DoesNotContain("PL01", bad.Players.Keys);
+        Assert.Contains("PL03", bad.Players.Keys);
+        var duplicate = FriendlyImportInput.Parse(Change(book, "أولياء الأمور", 2, 2, book.Sheet("أولياء الأمور").Rows[1][2].Value));
+        Assert.Contains(duplicate.Errors, issue => issue.Sheet == "أولياء الأمور" && issue.Row == 3 && issue.Message.Contains("الهاتف مكرر"));
+        var photo = FriendlyImportInput.Parse(Change(book, "اللاعبون", 1, 6, "https://example.test/child.jpg"));
+        Assert.Contains(photo.PlayerCellErrors, issue => issue is { Row: 2, Column: "الصورة الرمزية اختياري" });
+        Assert.DoesNotContain("PL01", photo.Players.Keys);
     }
     [Fact] public void Xlsx_reader_accepts_native_excel_dates_without_executing_formulas()
     {

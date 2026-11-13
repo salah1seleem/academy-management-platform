@@ -17,7 +17,8 @@ public sealed partial class V2PlanPublicationTests
     [Fact]
     public async Task Import_calendar_worker_resolves_periods_on_the_academy_day_at_publication()
     {
-        var midnight = new DateTimeOffset(2026, 11, 11, 22, 0, 0, TimeSpan.Zero);
+        // Use a boundary beyond the dated roster changes in the shared demo database.
+        var midnight = new DateTimeOffset(2036, 11, 11, 22, 0, 0, TimeSpan.Zero);
         var clock = factory.VisitClock;
         clock.Now = midnight.AddSeconds(-1);
         await using var host = factory.WithWebHostBuilder(builder =>
@@ -31,17 +32,17 @@ public sealed partial class V2PlanPublicationTests
         var registration = fixture.Book.Sheet("Enrollments");
         var dates = new[]
         {
-            ("2026-11-12", "2026-12-11", "5"),
-            ("2026-10-13", "2026-11-11", "5"),
-            ("2026-11-13", "2026-12-12", "5"),
-            ("2026-10-15", "2026-11-13", "0"),
-            ("2026-10-14", "2026-11-12", "2"),
+            ("2036-11-12", "2036-12-11", "5"),
+            ("2036-10-13", "2036-11-11", "5"),
+            ("2036-11-13", "2036-12-12", "5"),
+            ("2036-10-15", "2036-11-13", "0"),
+            ("2036-10-14", "2036-11-12", "2"),
         };
         var rows = registration.Rows.Select((row, index) => index == 0 ? row : EditPeriod(row, dates[index - 1])).ToArray();
         var book = new ImportWorkbook(fixture.Book.Sheets.Select(sheet => sheet.Name == registration.Name ? sheet with { Rows = rows } : sheet).ToArray());
         var brokenRows = rows.ToArray();
-        brokenRows[1] = EditPeriod(rows[1], ("2026-11-12", "2026-11-11", "5"));
-        brokenRows[2] = EditPeriod(rows[2], ("2026-10-13", "", "5"));
+        brokenRows[1] = EditPeriod(rows[1], ("2036-11-12", "2036-11-11", "5"));
+        brokenRows[2] = EditPeriod(rows[2], ("2036-10-13", "", "5"));
         var broken = new ImportWorkbook(book.Sheets.Select(sheet => sheet.Name == registration.Name ? sheet with { Rows = brokenRows } : sheet).ToArray());
         var rejected = (await (await PreviewFile(owner, ImportXlsx.Write(broken))).Content.ReadFromJsonAsync<ImportPreviewResult>())!;
         Assert.False(rejected.CanApprove);
@@ -49,7 +50,7 @@ public sealed partial class V2PlanPublicationTests
         Assert.Contains(rejected.Errors, issue => issue.Sheet == "Enrollments" && issue.Row == 3 && issue.Column == "EndDate");
 
         var preview = await ImportCheck(owner, book);
-        Assert.Equal(new DateOnly(2026, 11, 11), preview.CutoffDate);
+        Assert.Equal(new DateOnly(2036, 11, 11), preview.CutoffDate);
         var key = Guid.NewGuid().ToString("N");
         var id = await ImportId(await ImportStage(owner, book, preview, key));
         await using var scope = host.Services.CreateAsyncScope();
@@ -68,9 +69,9 @@ public sealed partial class V2PlanPublicationTests
                            select new { period.Status, period.StartDate, period.EndDate, period.PriceSnapshot, period.SportEnrollmentId }).ToArrayAsync();
         Assert.Equal(new[] { SubscriptionPeriodStatus.Active, SubscriptionPeriodStatus.Expired, SubscriptionPeriodStatus.Scheduled, SubscriptionPeriodStatus.Expired, SubscriptionPeriodStatus.Active },
             saved.Select(row => row.Status).ToArray());
-        Assert.Equal(new DateOnly(2026, 11, 12), saved[0].StartDate);
-        Assert.Equal(new DateOnly(2026, 12, 11), saved[0].EndDate);
-        Assert.Equal(new DateOnly(2026, 11, 11), await verified.AcademyImportJobs.Where(row => row.Id == id).Select(row => row.CutoffDate).SingleAsync());
+        Assert.Equal(new DateOnly(2036, 11, 12), saved[0].StartDate);
+        Assert.Equal(new DateOnly(2036, 12, 11), saved[0].EndDate);
+        Assert.Equal(new DateOnly(2036, 11, 11), await verified.AcademyImportJobs.Where(row => row.Id == id).Select(row => row.CutoffDate).SingleAsync());
         Assert.All(saved, row => Assert.Equal(540m, row.PriceSnapshot));
         var enrollments = saved.Select(row => row.SportEnrollmentId).ToArray();
         Assert.False(await verified.Collections.AnyAsync(row => enrollments.Contains(row.SportEnrollmentId)));

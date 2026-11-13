@@ -266,9 +266,9 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         var branch = await db.SportEnrollments.Where(x => x.Id == enrollment).Select(x => x.BranchId).SingleAsync();
         var other = await db.Branches.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Id != branch && x.IsActive)
             .OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
-        var period = await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollment && p.EndDate != null && p.Status != SubscriptionPeriodStatus.Cancelled)
-            .OrderByDescending(p => p.EndDate).FirstAsync();
-        var oldEnd = period.EndDate;
+        var periods = await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollment && p.EndDate != null && p.Status != SubscriptionPeriodStatus.Cancelled)
+            .OrderByDescending(p => p.EndDate).ToListAsync();
+        var originalPeriods = periods.Select(p => (Period: p, p.EndDate, p.Status)).ToArray();
         var now = DateTimeOffset.UtcNow;
         var available = Guid.NewGuid();
         var unavailable = Guid.NewGuid();
@@ -290,7 +290,8 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
                     BranchId = publication, CreatedAtUtc = now, UpdatedAtUtc = now
                 });
             }
-            period.EndDate = new DateOnly(2027, 1, 30);
+            periods[0].EndDate = new DateOnly(2027, 1, 30);
+            foreach (var period in periods.Skip(1)) period.Status = SubscriptionPeriodStatus.Cancelled;
             await db.SaveChangesAsync();
             var quote = await ReadQuote(owner, enrollment, available);
             Assert.Equal(new DateOnly(2027, 1, 31), quote.Start);
@@ -300,7 +301,11 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         }
         finally
         {
-            period.EndDate = oldEnd;
+            foreach (var (period, endDate, status) in originalPeriods)
+            {
+                period.EndDate = endDate;
+                period.Status = status;
+            }
             await db.SaveChangesAsync();
             await db.PlanBranchPublications.Where(x => createdPlans.Contains(x.SubscriptionPlanId)).ExecuteDeleteAsync();
             await db.SubscriptionPlans.Where(x => createdPlans.Contains(x.Id)).ExecuteDeleteAsync();
@@ -322,11 +327,14 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
             p.EndDate != null && p.Status == SubscriptionPeriodStatus.Active)
             .OrderByDescending(p => p.EndDate).FirstAsync();
         var original = (active.StartDate, active.EndDate, active.UpdatedAtUtc);
+        var otherPeriods = await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollment && p.Id != active.Id && p.Status != SubscriptionPeriodStatus.Cancelled).ToListAsync();
+        var originalStatuses = otherPeriods.Select(p => (Period: p, p.Status)).ToArray();
         var today = new DateOnly(2026, 9, 28);
         try
         {
             active.StartDate = today.AddDays(-30);
             active.EndDate = today.AddDays(14);
+            foreach (var period in otherPeriods) period.Status = SubscriptionPeriodStatus.Cancelled;
             await db.SaveChangesAsync();
             var payment = await Created();
             await Simulate(payment.PaymentId, "Success");
@@ -351,6 +359,7 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         finally
         {
             (active.StartDate, active.EndDate, active.UpdatedAtUtc) = original;
+            foreach (var (period, status) in originalStatuses) period.Status = status;
             await db.SaveChangesAsync();
         }
     }
