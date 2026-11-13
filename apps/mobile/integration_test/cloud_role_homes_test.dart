@@ -4,6 +4,7 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/storage/refresh_store.dart';
 import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:academy_mobile/features/admin/admin_home.dart';
+import 'package:academy_mobile/features/admin/admin_home_overview.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
 import 'package:academy_mobile/features/guardian/guardian_home.dart';
 import 'package:academy_mobile/features/owner/owner_dashboard.dart';
@@ -124,6 +125,31 @@ void main() {
         }
       }
       expect(loaded, findsWidgets);
+      if (role == 'AcademyAdmin') {
+        final subscriptionHero = find.text('اشتراكات نطاقك');
+        final deadline = Stopwatch()..start();
+        while (subscriptionHero.hitTestable().evaluate().isEmpty &&
+            deadline.elapsed.inSeconds < 60) {
+          await tester.pump(const Duration(milliseconds: 150));
+        }
+        if (subscriptionHero.hitTestable().evaluate().isEmpty) {
+          await binding.takeScreenshot('phase-cloud-admin-incomplete');
+        }
+        expect(subscriptionHero.hitTestable(), findsOneWidget);
+        final payments = find.byKey(const ValueKey('admin-home-payments-task'));
+        final scrollable = find
+            .descendant(
+              of: find.byType(AdminHome),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        await tester.scrollUntilVisible(payments, 180, scrollable: scrollable);
+        expect(tester.widget<AdminHomeTask>(payments).count, isNotNull);
+        final position = tester.state<ScrollableState>(scrollable).position;
+        position.jumpTo(position.minScrollExtent);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(subscriptionHero.hitTestable(), findsOneWidget);
+      }
       await binding.takeScreenshot('phase-cloud-$label');
       if (role == 'Coach') {
         final openGroup = find
