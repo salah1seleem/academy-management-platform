@@ -18,7 +18,13 @@ test("Employee approved account spans prior/current months, scoped mobile, match
   const challenge=await page.request.post("/api/v1/mobile/auth/otp/request",{data:{phoneNumber:phone}});expect(challenge.status()).toBe(202);const verify=await page.request.post("/api/v1/mobile/auth/otp/verify",{data:{phoneNumber:phone,challengeId:(await challenge.json()).challengeId,code:"246810",deviceName:"حساب اصطناعي"}});expect(verify.status()).toBe(200);const token=(await verify.json()).accessToken;
   const mine=await page.request.get("/api/v1/staff/payroll/account",{headers:{Authorization:`Bearer ${token}`}});expect(mine.status()).toBe(200);const own=await mine.json();expect(own).toMatchObject({totalDue:7200,totalPaid:2500,remaining:4700,priorRemaining:3600,currentRemaining:1100,openingBalanceVerified:false,advancesVerified:false});expect(own.items).toHaveLength(2);expect(JSON.stringify(own)).not.toContain("مصدر داخلي");expect(own.items[0].payments[0]).not.toHaveProperty("reference");
   await page.locator(`a[href="/dashboard/payroll/${employee}/statement?month=${prior}"]`).click();await expect(page.getByRole("heading",{name:"كشف المستحقات والصرف",exact:true})).toBeVisible();await page.getByLabel("مبلغ الصرف").fill("3600");await page.getByRole("button",{name:"مراجعة الصرف"}).click();const response=page.waitForResponse(r=>r.request().method()==="POST"&&r.url().endsWith("/statement/disbursements"));await page.getByRole("button",{name:"تأكيد تسجيل الصرف"}).click();expect((await response).status()).toBe(201);await expect(page.getByRole("dialog")).toHaveCount(0);await expect(page.getByText("تم تسجيل الصرف وتحديث المتبقي.")).toBeVisible();
-  await page.getByRole("link",{name:"حساب الموظف والأشهر السابقة"}).click();await expect(page.getByLabel("مجاميع الحساب")).toContainText("1,100");await expect(page.getByText(/الأشهر السابقة ·/)).toContainText("0");
+  const returnToAccount = page.getByRole("link", { name: "حساب الموظف والأشهر السابقة", exact: true });
+  await expect(returnToAccount).toBeHidden();
+  await page.getByText("نطاق الكشف وحساب الموظف", { exact: true }).click();
+  await expect(returnToAccount).toHaveAttribute("href", `/dashboard/payroll/${employee}/account`);
+  await returnToAccount.click();
+  await expect(page.getByLabel("مجاميع الحساب")).toContainText("1,100");
+  await expect(page.getByText(/الأشهر السابقة ·/)).toContainText("0");
   const frozen=await page.request.get(exportPath!);expect(await frozen.text()).toContain('"7200.00","2500.00","4700.00"');
   const fresh=await(await page.request.get(`/api/v1/manage/payroll/${employee}/account`)).json();expect(fresh).toMatchObject({totalDue:7200,totalPaid:6100,remaining:1100,priorRemaining:0});
 });
