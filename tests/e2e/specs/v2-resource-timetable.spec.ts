@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test("Owner previews and publishes a resource-bound group timetable on desktop and mobile without financial effects", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
   async function post(path: string, data: unknown) { const r = await page.request.post(`/api/v1/${path}`, { headers: { "X-CSRF-TOKEN": csrf.token }, data }); expect(r.ok(), await r.text()).toBeTruthy(); return r.json(); }
   const options = await page.request.get("/api/v1/manage/structure/options").then(r => r.json()), facilities = await page.request.get("/api/v1/facilities").then(r => r.json());

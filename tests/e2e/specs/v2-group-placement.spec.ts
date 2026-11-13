@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 test("Owner reviews an eligible bulk placement and unpaid child stays waiting; Guardian receives the new session", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const group = "5a000000-0000-0000-0000-000000000001", player = "5a000000-0000-0000-0000-000000000010", unpaid = "5a000000-0000-0000-0000-000000000030";
   // Exercise the normal edit path for these exact synthetic fixtures from the first seed run.
   // No reset: preserve placement, money, household links and all other records.

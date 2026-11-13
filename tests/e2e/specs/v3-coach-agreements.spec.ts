@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("Owner versions private coaching terms from the coach profile; mobile coach reads approved own terms without creating payables", async ({ page }, info) => {
   test.setTimeout(90_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const stamp = Date.now(), phone = `010${String(stamp).slice(-8)}`;
   const headers = { "X-CSRF-TOKEN": (await (await page.request.get("/api/v1/auth/csrf")).json()).token };
   const coachResponse = await page.request.post("/api/v1/manage/staff", { headers, data: { name: `مدرب اتفاق عرض ${stamp}`, email: `coach.agreement.${stamp}@example.test`, phone, temporaryPassword: "Demo-Only-123!", role: "Coach" } }); expect(coachResponse.status()).toBe(200); const coach = (await coachResponse.json()).id;

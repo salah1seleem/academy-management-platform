@@ -1,7 +1,7 @@
 import { expect,test } from "@playwright/test";
 
 test("Admin recovers offline attendance and reviews a concurrent correction without duplicate balance debit",async({page},info)=>{
-  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.nogoom@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button',{name:'دخول آمن'}).click(); await page.waitForURL('**/dashboard');
+  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.nogoom@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button',{name:'تسجيل الدخول'}).click(); await page.waitForURL('**/dashboard');
   const id=(n:number)=>'5a000000-0000-0000-0000-'+String(n).padStart(12,'0');
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const csrf=async()=>({'X-CSRF-TOKEN':(await page.request.get('/api/v1/auth/csrf').then(r=>r.json())).token});

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 test('Approved compensation books a real session and is visible to its linked Guardian through release', async ({ page, request }, info) => {
   const id = (n: number) => '5a000000-0000-0000-0000-' + String(n).padStart(12, '0');
-  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.nogoom@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'دخول آمن' }).click(); await page.waitForURL('**/dashboard');
+  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.nogoom@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'تسجيل الدخول' }).click(); await page.waitForURL('**/dashboard');
   const before = await page.request.get(`/api/v1/people/players/${id(80)}`).then(r => r.json());
   await page.goto(`/dashboard/players/${id(80)}?tab=training`); await page.getByText('التعويضات والحصص البديلة', { exact: true }).click();
   let grants = await page.request.get(`/api/v1/people/enrollments/${id(81)}/compensations`).then(r => r.json());

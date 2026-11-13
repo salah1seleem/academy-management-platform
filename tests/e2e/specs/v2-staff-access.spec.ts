@@ -5,7 +5,7 @@ test("Owner sets an explicit branch and read-only module matrix; Admin cannot wr
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const stamp = Date.now(); const name = `إداري تحقق الصلاحيات ${stamp}`; const email = `scope.e2e.${stamp}@example.test`;
   const token = (await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const created = await page.request.post("/api/v1/manage/staff/", { headers: { "X-CSRF-TOKEN": token }, data: { name, email, phone: `010${String(stamp).slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "اختبار اصطناعي" } });
@@ -30,7 +30,7 @@ test("Owner sets an explicit branch and read-only module matrix; Admin cannot wr
   try {
     await admin.goto(`${test.info().project.use.baseURL}/login`);
     await admin.getByLabel("البريد الإلكتروني").fill(email); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await admin.getByRole("button", { name: "دخول آمن" }).click(); await admin.waitForURL("**/dashboard");
+    await admin.getByRole("button", { name: "تسجيل الدخول" }).click(); await admin.waitForURL("**/dashboard");
     expect((await admin.request.get("/api/v1/people/players")).status()).toBe(200);
     const options = await (await admin.request.get("/api/v1/manage/structure/options")).json(); expect(options.branches).toHaveLength(1);
     const csrf = (await (await admin.request.get("/api/v1/auth/csrf")).json()).token;

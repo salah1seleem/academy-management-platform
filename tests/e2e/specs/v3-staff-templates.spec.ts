@@ -5,7 +5,7 @@ test("Owner applies a branch/sport scoped template and Admin scope stays live on
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const stamp = Date.now(); const name = `إداري قالب اصطناعي ${stamp}`;
   const token = (await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const created = await page.request.post("/api/v1/manage/staff/", { headers: { "X-CSRF-TOKEN": token }, data: { name, email: `v3.template.${stamp}@example.test`, phone: `011${String(stamp).slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "تجربة قالب فقط" } });
@@ -46,7 +46,7 @@ test("Owner applies a branch/sport scoped template and Admin scope stays live on
     await admin.goto("/login");
     await admin.getByLabel("البريد الإلكتروني").fill(`v3.template.${stamp}@example.test`);
     await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await admin.getByRole("button", { name: "دخول آمن" }).click(); await admin.waitForURL("**/dashboard");
+    await admin.getByRole("button", { name: "تسجيل الدخول" }).click(); await admin.waitForURL("**/dashboard");
     const options = await (await admin.request.get("/api/v1/manage/structure/options")).json();
     expect(options.sports.map((s: { id: string }) => s.id)).toEqual(saved.selectedSports);
     expect(options.branches.map((b: { id: string }) => b.id)).toEqual(saved.selectedBranches);

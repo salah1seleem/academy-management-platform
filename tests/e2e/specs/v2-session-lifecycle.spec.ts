@@ -4,7 +4,7 @@ test("Active dashboard identity cannot be overwritten; explicit logout then logi
   async function login(email: string) {
     await page.getByLabel("البريد الإلكتروني").fill(email);
     await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await page.getByRole("button", { name: "دخول آمن" }).click();
+    await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   }
   await page.goto("/login"); await login("owner.nogoom@example.test"); await page.waitForURL("**/dashboard");
   await page.goto("/login"); await login("admin.nogoom@example.test");

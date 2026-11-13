@@ -3,7 +3,7 @@ import { guardianLogin } from "../support/auth";
 
 test("Owner previews and saves a manual statement comparison without changing the original receipt", async ({ page }, info) => {
   const root = "/api/v1/finance/settlement-comparisons", route = "/dashboard/finance/settlement-comparisons";
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const fixtureResponse = await page.request.get(`${root}/85000020-0000-0000-0000-000000000001`); expect(fixtureResponse.ok(), await fixtureResponse.text()).toBe(true); const fixture = await fixtureResponse.json();
   const before = await page.request.get(`/api/v1/subscriptions/receipts/${fixture.receiptId}`).then(r => r.json());
   await page.goto(route); await page.getByRole("button", { name: "مسح الفلاتر" }).click(); await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue(""); await expect(page.getByText("مطابق يدويًا", { exact: true }).first()).toBeVisible();

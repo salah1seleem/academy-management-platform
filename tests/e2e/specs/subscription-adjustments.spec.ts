@@ -7,7 +7,7 @@ const footballPeriod = "53000000-0000-0000-0000-000000000501";
 const swimmingPeriod = "53000000-0000-0000-0000-000000000503";
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
-  await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**");
+  await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard**");
 }
 
 async function openPeriod(page: Page, id: string) { await page.goto(`/dashboard/subscriptions/periods/${id}`); await expect(page.getByRole("heading", { name: "تفاصيل الاشتراك" })).toBeVisible(); }

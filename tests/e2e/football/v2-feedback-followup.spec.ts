@@ -5,7 +5,7 @@ test("Owner opens an overdue synthetic family follow-up on mobile", async ({ pag
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   const overdue = await (await page.request.get('/api/v1/manage/feedback?overdue=true')).json();
   expect(overdue.length).toBeGreaterThan(0);

@@ -2,7 +2,7 @@ import { expect,test } from "@playwright/test";
 import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Dated base salary keeps current month unchanged across Owner UI, payroll and Coach own API",async({page},info)=>{
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const options=await(await page.request.get("/api/v1/manage/sessions/options")).json();const coach=options.coaches.find((c:{name:string})=>c.name==="محمود طارق سليمان").id;
   const employee=(await(await page.request.get(`/api/v1/manage/payroll/coaches/${coach}/agreements`)).json()).employeeId;expect(employee).toBeTruthy();
   const root=`/api/v1/manage/employees/${employee}/salary-versions`;

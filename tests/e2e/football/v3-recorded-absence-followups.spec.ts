@@ -5,7 +5,7 @@ test('Recorded absences use saved registers; follow-up closure is not a register
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');
-  await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'دخول آمن' }).click();
+  await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
   await page.waitForURL('**/dashboard');
   const groupId = 'f6814615-520c-adaa-123b-6d8aed2c2eee'; // Explicit optional synthetic fixture, not a first search result.
   const options = await (await page.request.get('/api/v1/manage/owner-followups/options')).json();

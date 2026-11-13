@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 async function login(page:import('@playwright/test').Page){
   await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');
   await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');
-  await page.getByRole('button',{name:'دخول آمن'}).click();
+  await page.getByRole('button',{name:'تسجيل الدخول'}).click();
 }
 
 for(const width of [1440,390])test(`Owner reference dashboard real workload, pies, actions and filters at ${width}`,async({page},info)=>{

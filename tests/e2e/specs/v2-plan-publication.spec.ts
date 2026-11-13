@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("A swimming plan is published to one branch, appears in New Player and quotes exactly the saved price", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const options = await (await page.request.get("/api/v1/manage/structure/options")).json();
   const sport = options.sports.find((s: { arabicName: string }) => s.arabicName === "السباحة"); const [a, b] = options.branches; expect(sport).toBeTruthy(); expect(b).toBeTruthy();
   await page.goto("/dashboard/subscriptions/plans/new"); const name = `سباحة تحقق المتصفح ${Date.now()}`;

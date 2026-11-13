@@ -1,7 +1,7 @@
 import { expect,test } from "@playwright/test";
 
 test("Owner reviews and approves a closed-day correction without changing attendance when the request is only pending",async({page},info)=>{
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const session="5a000000-0000-0000-0000-000000000131",enrollment="5a000000-0000-0000-0000-000000000141";
   const path=`/api/v1/attendance/sessions/${session}/players`;
   const before=await page.request.get(path).then(r=>r.json());expect(before.canManageAttendance).toBe(false);expect(before.canRequestCorrection).toBe(true);const child=before.players.find((p:{sportEnrollmentId:string})=>p.sportEnrollmentId===enrollment);expect(child).toBeTruthy();const target=child.attendanceStatus==="Absent"?"Excused":"Absent";

@@ -4,7 +4,7 @@ test("Owner creates a cashier shift, transfers conserved float and closes with e
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const root = "/api/v1/finance/cash-registers";
   const options = await page.request.get(`${root}/options`).then(r => r.json());
   const me = await page.request.get("/api/v1/me").then(r => r.json());

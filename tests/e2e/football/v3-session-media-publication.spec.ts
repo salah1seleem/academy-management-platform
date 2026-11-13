@@ -6,7 +6,7 @@ import{join}from'node:path';
 for(const width of [360,390]){
 test('Actual session media is reviewed, read by its family, administratively withdrawn, and republished only as a new reviewed copy · '+width,async({page,browser},info)=>{
  test.setTimeout(90_000);await page.setViewportSize({width,height:844});
- await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+ await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
  const family=await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:390,height:844}});
  try{
   const write=async(ctx:typeof family.request,path:string,data:object)=>{const csrf=await(await ctx.get('/api/v1/auth/csrf')).json();const r=await ctx.post(path,{data,headers:{'X-CSRF-TOKEN':csrf.token}});expect(r.ok(),await r.text()).toBe(true);return r.json();};

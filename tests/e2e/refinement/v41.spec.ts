@@ -14,7 +14,7 @@ async function mobile(api:APIRequestContext,phone:string){
   const v=await api.post('/api/v1/mobile/auth/otp/verify',{data:{phoneNumber:phone,challengeId:(await r.json()).challengeId,code:'246810',deviceName:'قبول V41 اصطناعي'}});expect(v.status()).toBe(200);
   const token=(await v.json()).accessToken as string;mobileSessions.set(phone,token);return token;
 }
-test.beforeEach(async({page})=>{await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');});
+test.beforeEach(async({page})=>{await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');});
 
 test('V41 canonical persisted demo finances, target, coherent owner desktop scope and drill downs',async({page,browser},info)=>{
   const api=page.request, calendar=await json(api,'/api/v1/academy/calendar');

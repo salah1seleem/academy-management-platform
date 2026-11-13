@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('Owner creates, publishes, reviews and achieves a technical goal; linked Guardian sees only published history and money is unchanged', async ({ page, browser }, info) => {
   test.setTimeout(90_000); await page.setViewportSize({ width:390,height:844 });
-  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button',{name:'دخول آمن'}).click(); await page.waitForURL('**/dashboard');
+  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button',{name:'تسجيل الدخول'}).click(); await page.waitForURL('**/dashboard');
   const guardian = await browser.newContext({baseURL:new URL(page.url()).origin});
   try {
     const post = async(path:string,data:object) => {const csrf=await(await guardian.request.get('/api/v1/auth/csrf')).json();const r=await guardian.request.post(path,{data,headers:{'X-CSRF-TOKEN':csrf.token}});expect(r.ok(),await r.text()).toBe(true);return r.json();};

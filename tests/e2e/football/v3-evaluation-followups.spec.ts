@@ -7,7 +7,7 @@ test('Owner reviews actual saved draft evidence; only source publication removes
   await page.goto('/login');
   await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');
   await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');
-  await page.getByRole('button', { name: 'دخول آمن' }).click();
+  await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
   await page.waitForURL('**/dashboard');
   const options = await (await page.request.get('/api/v1/manage/owner-followups/options')).json();
   // FootballDemoSeed.Id("group/2"): other journeys can add valid candidates.

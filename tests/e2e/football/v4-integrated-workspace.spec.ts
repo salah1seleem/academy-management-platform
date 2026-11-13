@@ -2,7 +2,7 @@ import {expect,test,type APIRequestContext} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 
 async function write(api:APIRequestContext,path:string,data:unknown,elevated=false,put=false){const csrf=await(await api.get(elevated?'/api/v1/platform/auth/csrf':'/api/v1/auth/csrf')).json();const r=await api.fetch(path,{method:put?'PUT':'POST',data,headers:{'X-CSRF-TOKEN':csrf.token,'Idempotency-Key':randomUUID()}});expect(r.ok(),`${path}: ${r.status()} ${await r.text()}`).toBe(true);return r;}
-test.beforeEach(async({page})=>{await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');});
+test.beforeEach(async({page})=>{await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');});
 
 test('V4 owner cockpit, member ordering, finance and drill-down use the same authorized sources',async({page},info)=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

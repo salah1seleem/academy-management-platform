@@ -4,7 +4,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 // Football config enables only reserved synthetic sources in an explicit test DB.
 test("Owner reviews actual private delivery against one existing invoice; coach reads compensation without family billing data", async ({ page }, info) => {
   test.setTimeout(90_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const opts = await (await page.request.get("/api/v1/manage/sessions/options")).json();
   const coach = opts.coaches.find((c: { name: string }) => c.name === "محمود طارق سليمان").id;
   const root = `/api/v1/manage/payroll/coaches/${coach}/private-services`;

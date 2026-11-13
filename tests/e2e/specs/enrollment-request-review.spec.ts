@@ -330,7 +330,9 @@ test("One enrollment proof creates one matching receipt and collection after app
     await expect(dialog).toContainText("تُفعّل الباقة");
     await page.screenshot({ path: info.outputPath("paid-approval-390.png"), fullPage: true });
     await dialog.getByRole("button", { name: "تأكيد القبول", exact: true }).click();
-    await expect(page.getByText("تم تفعيل الباقة وتسجيل التحصيل.")).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: /^مقبول$/ })).toBeVisible();
+    await expect(page.getByText("المبلغ المحصّل", { exact: false })).toBeVisible();
+    await expect(page.getByRole("link", { name: "عرض الإيصال" })).toBeVisible();
     const payment = await family.request.get(proofPath).then(r => r.json());
     expect(payment.status).toBe("Approved");
     expect(payment.paymentRequestId).toBeTruthy();

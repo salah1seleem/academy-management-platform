@@ -4,7 +4,7 @@ import { guardianLogin } from "../support/auth";
 test("Role-aware written help searches, drills down and revokes without changing financial results", async ({ page, browser }, info) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto("/login");
-  await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const base = new URL(page.url()).origin, owner = page.request;
   const platformContext = await browser.newContext({ baseURL: base }), platform = platformContext.request;
   async function write(api: APIRequestContext, path: string, data: unknown, elevated = false, put = false) {
@@ -46,7 +46,7 @@ test("Role-aware written help searches, drills down and revokes without changing
     expect((await guardian.request.get("/api/v1/help/lessons/owner-dashboard")).status()).toBe(404);
     const adminContext = await browser.newContext({ baseURL: base }); const admin = await adminContext.newPage();
     try {
-      await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill("admin.football@example.test"); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "دخول آمن" }).click(); await admin.waitForURL("**/dashboard"); await admin.goto("/dashboard/help");
+      await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill("admin.football@example.test"); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "تسجيل الدخول" }).click(); await admin.waitForURL("**/dashboard"); await admin.goto("/dashboard/help");
       await expect(admin.getByRole("link", { name: /حضور اللاعبين/ })).toBeVisible(); await expect(admin.getByRole("link", { name: /قراءة لوحة المالك/ })).toHaveCount(0);
     } finally { await adminContext.close(); }
     // Owner changes the real audience through the versioned settings UI.

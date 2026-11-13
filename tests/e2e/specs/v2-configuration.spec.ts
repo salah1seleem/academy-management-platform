@@ -4,7 +4,7 @@ test("Owner previews and activates a version; disabled feature rejects API; reac
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   type Version = { id: string; revision: number; state: string; version: number; settings: { features: Record<string, boolean> } };
   const versions = async (): Promise<Version[]> => (await page.request.get("/api/v1/manage/configuration").then(r => r.json())).versions;

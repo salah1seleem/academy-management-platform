@@ -8,7 +8,7 @@ test("Branch Admin collects a two-branch family once and recovers a lost respons
     await page.goto("/login");
     await page.getByLabel("البريد الإلكتروني").fill(email);
     await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await page.getByRole("button", { name: "دخول آمن" }).click();
+    await page.getByRole("button", { name: "تسجيل الدخول" }).click();
     await page.waitForURL("**/dashboard**");
   }
   async function write(path: string, data: unknown, method = "POST") {

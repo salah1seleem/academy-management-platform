@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 test('Owner publishes a follow-up policy, family submits, captured deadline survives disabling', async ({page, browser}, info) => {
   await page.setViewportSize({width:390,height:844});
-  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button',{name:'دخول آمن'}).click(); await page.waitForURL('**/dashboard');
+  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button',{name:'تسجيل الدخول'}).click(); await page.waitForURL('**/dashboard');
   const post = async (path:string,data:object) => {
     const csrf = (await (await page.request.get('/api/v1/auth/csrf')).json()).token;
     const r = await page.request.post(path,{data,headers:{'X-CSRF-TOKEN':csrf}}); expect(r.ok(),await r.text()).toBe(true); return r;

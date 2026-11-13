@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 test("Guardian and Owner distinguish parallel registration formats without duplicate player or unintended collection", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const player = "5a000000-0000-0000-0000-000000000020"; const privateId = "5a000000-0000-0000-0000-000000000041";
   await page.goto(`/dashboard/players/${player}?tab=subscriptions`); await expect(page.getByRole("link", { name: "تسجيل الاشتراك", exact: true })).toHaveAttribute("href", `/dashboard/subscriptions/renew/new?enrollmentId=${privateId}`);
   const offer = await page.request.get(`/api/v1/subscriptions/admin-renewals/enrollments/${privateId}`).then(r => r.json()); expect(offer.plans).toHaveLength(1); expect(offer.plans[0].trainingFormat).toBe("Private");

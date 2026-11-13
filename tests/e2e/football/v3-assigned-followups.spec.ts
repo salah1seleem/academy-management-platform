@@ -5,7 +5,7 @@ test("Owner delegates a scoped follow-up; administrator updates, closes and lose
   const login = async (p: Page, email: string) => {
     await p.goto('/login'); await p.getByLabel('البريد الإلكتروني').fill(email);
     await p.getByLabel('كلمة المرور').fill('Demo-Only-123!');
-    await p.getByRole('button', { name: 'دخول آمن' }).click(); await p.waitForURL('**/dashboard');
+    await p.getByRole('button', { name: 'تسجيل الدخول' }).click(); await p.waitForURL('**/dashboard');
   };
   await login(page, 'owner.football@example.test');
   const headers = { 'X-CSRF-TOKEN': (await (await page.request.get('/api/v1/auth/csrf')).json()).token };

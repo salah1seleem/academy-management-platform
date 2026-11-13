@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 test("A golden season saves five service months for four monthly payments", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const options = await (await page.request.get("/api/v1/manage/structure/options")).json(); const sport = options.sports.find((s: { arabicName: string }) => s.arabicName.includes("سباحة"));
   await page.goto("/dashboard/subscriptions/plans/new"); const name = `موسم ذهبي تحقق ${Date.now()}`;
   await page.getByLabel("الاسم العربي", { exact: true }).fill(name); await page.getByRole("combobox", { name: "الرياضة", exact: true }).selectOption(sport.id);

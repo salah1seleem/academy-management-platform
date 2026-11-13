@@ -3,7 +3,7 @@ import { selectStaffAccess } from "../support/staff-access";
 
 test("Owner creates and activates a scoped context; the same admin explicitly switches without combining grants", async ({ page, browser }, info) => {
   test.setTimeout(90_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const stamp = Date.now(); const name = `إداري سياقات ${stamp}`; const email = `contexts.${stamp}@example.test`; const contextName = `متابعة السباحة ${stamp}`;
   const token = (await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const created = await page.request.post("/api/v1/manage/staff/", { headers: { "X-CSRF-TOKEN": token }, data: { name, email, phone: `010${String(stamp).slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin" } }); expect(created.ok()).toBeTruthy(); const primary = (await created.json()).id;
@@ -26,7 +26,7 @@ test("Owner creates and activates a scoped context; the same admin explicitly sw
   const contexts = await (await page.request.get(`/api/v1/manage/staff/${primary}/contexts`)).json(); const added = contexts.items.find((c: { name: string }) => c.name === contextName); expect(added.isActive).toBe(true);
   const browserContext = await browser.newContext({ baseURL: test.info().project.use.baseURL }); const admin = await browserContext.newPage();
   try {
-    await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill(email); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "دخول آمن" }).click(); await admin.waitForURL("**/dashboard/context");
+    await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill(email); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "تسجيل الدخول" }).click(); await admin.waitForURL("**/dashboard/context");
     expect((await admin.request.get("/api/v1/me")).status()).toBe(403); expect((await admin.request.get("/api/v1/people/players")).status()).toBe(403);
     await expect(admin.getByRole("button", { name: "فتح مساحة العمل" })).toBeDisabled();
     await admin.getByRole("radio", { name: new RegExp(contextName) }).check();

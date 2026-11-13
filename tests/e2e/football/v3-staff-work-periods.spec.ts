@@ -3,7 +3,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Admin preserves two shifts and an overnight period; own mobile history and reports exclude gaps and never multiply deductions",async({page},info)=>{
   test.setTimeout(90_000);
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const headers={"X-CSRF-TOKEN":(await(await page.request.get("/api/v1/auth/csrf")).json()).token,"Idempotency-Key":crypto.randomUUID()};const stamp=Date.now(),phone=`015${String(stamp).slice(-8)}`,name=`مدرب فترات اصطناعي ${stamp}`;
   const r=await page.request.post("/api/v1/manage/coaches",{headers,data:{displayName:name,phoneNumber:phone,email:`periods.${stamp}@example.test`,isActive:true,groupIds:[]}});expect(r.ok(),await r.text()).toBe(true);const member=await r.json(),root=`/api/v1/manage/staff-attendance/${member.membershipId}`;
   const options=await(await page.request.get("/api/v1/manage/structure/options")).json();const e=await page.request.post("/api/v1/manage/employees/",{headers,data:{name,phone,jobTitle:"عرض فترات العمل",branchId:options.branches[0].id,membershipId:member.membershipId,monthlySalary:0,contractStart:"2026-09-01",isActive:true}});expect(e.ok(),await e.text()).toBe(true);

@@ -3,7 +3,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Staff second shift and exact-period checkout flow through independent review, own history and one report row", async ({ page }, info) => {
   test.setTimeout(90_000);
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const headers={"X-CSRF-TOKEN":(await(await page.request.get("/api/v1/auth/csrf")).json()).token,"Idempotency-Key":crypto.randomUUID()};
   const stamp=Date.now(), phone=`015${String(stamp).slice(-8)}`, name=`مدرب طلب فترة اصطناعي ${stamp}`;
   const made=await page.request.post("/api/v1/manage/coaches",{headers,data:{displayName:name,phoneNumber:phone,email:`period-claim.${stamp}@example.test`,isActive:true,groupIds:[]}});expect(made.ok(),await made.text()).toBe(true);const member=await made.json(),root=`/api/v1/manage/staff-attendance/${member.membershipId}`;

@@ -2,7 +2,7 @@ import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 import { cairoDateRange } from "../support/attendance";
 
-async function staffLogin(page: Page, email: string) { await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**"); }
+async function staffLogin(page: Page, email: string) { await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard**"); }
 
 test.describe("Slice 8A operational reporting journeys", () => {
   test("Journey A — owner dashboard uses stored financial and subscription metrics", async ({ page }) => {

@@ -3,7 +3,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Staff claim is pending until independent Web review, rereads in mobile/report, rejects checkout without financial effect", async ({ page }, info) => {
   test.setTimeout(120_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const csrf = (await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const stamp = Date.now(), phone = `015${String(stamp).slice(-8)}`, name = `موظف مراجعة حضور اصطناعي ${stamp}`;
   const post = async (path: string, data: unknown) => { const r = await page.request.post(path, { headers: { "X-CSRF-TOKEN": csrf, "Idempotency-Key": crypto.randomUUID() }, data }); expect(r.ok(), await r.text()).toBe(true); return r.json(); };

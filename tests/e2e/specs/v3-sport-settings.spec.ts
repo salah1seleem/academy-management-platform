@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("Owner configures swimming per branch, retains saved history and disables new bookings", async ({ page }, info) => {
   test.setTimeout(60_000);
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const headers = { "X-CSRF-TOKEN": (await (await page.request.get("/api/v1/auth/csrf")).json()).token };
   const created = await page.request.post("/api/v1/manage/sports", { headers, data: { arabicName: `رياضة اختبار إعداد ${Date.now()}` } });
   expect(created.status()).toBe(201); const sport = await created.json();

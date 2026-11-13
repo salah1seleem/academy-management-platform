@@ -4,7 +4,7 @@ test("Owner sees only server-authorized refund availability including allocated 
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const player = "36000000-0000-0000-0000-000000000001";
   const data = await page.request.get(`/api/v1/people/players/${player}/refunds`).then(r => r.json());
   const available = data.collections.find((c: { available: string; allocated: number }) => Number(c.available) > 0 && c.allocated > 0);

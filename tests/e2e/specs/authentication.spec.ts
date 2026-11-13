@@ -9,7 +9,7 @@ test("Arabic mobile owner login is tenant-scoped and logout invalidates the sess
 
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
 
   await expect(page.getByRole("heading", { name: "الرئيسية", exact: true, level: 1 })).toBeVisible();
   const me = await (await page.request.get("/api/v1/me")).json();

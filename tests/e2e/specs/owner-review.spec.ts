@@ -7,7 +7,7 @@ async function login(page: Page, role: "admin" | "owner") {
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill(`${role}.nogoom@example.test`);
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
 }
 

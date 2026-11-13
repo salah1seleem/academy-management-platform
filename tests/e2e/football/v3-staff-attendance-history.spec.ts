@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("Manual staff attendance protects a stale editor and keeps a selected-day before/after trail without duplicating the report", async ({ page }, info) => {
   test.setTimeout(90_000); // Multiple real writes, reloads and navigation steps; no fixed waits or relaxed assertions.
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button",{name:"دخول آمن"}).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button",{name:"تسجيل الدخول"}).click(); await page.waitForURL("**/dashboard");
   const headers={"X-CSRF-TOKEN":(await (await page.request.get("/api/v1/auth/csrf")).json()).token,"Idempotency-Key":crypto.randomUUID()};
   const stamp=Date.now(),phone=`015${String(stamp).slice(-8)}`,name=`مدرب سجل حضور اصطناعي ${stamp}`;
   const memberResponse=await page.request.post("/api/v1/manage/coaches",{headers,data:{displayName:name,phoneNumber:phone,email:`history.${stamp}@example.test`,isActive:true,groupIds:[]}}); expect(memberResponse.ok(),await memberResponse.text()).toBe(true); const member=await memberResponse.json();

@@ -3,7 +3,7 @@ import { guardianLogin } from "../support/auth";
 
 test("Paid player registration posts once to the selected cashier shift and reaches the linked guardian", async ({ page }, info) => {
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard"); page.on("dialog", d => d.accept());
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard"); page.on("dialog", d => d.accept());
   async function write(path: string, data: unknown, method = "POST") {
     const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
     const response = await page.request.fetch(path, { method, data, headers: { "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": crypto.randomUUID() } });

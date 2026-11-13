@@ -1,6 +1,6 @@
 import{expect,test}from'@playwright/test';
 test('Manual level reviews save dated snapshots, family sees the same history without private notes and no group or money changes',async({page,browser},info)=>{
- test.setTimeout(90_000);await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+ test.setTimeout(90_000);await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
  const guardian=await browser.newContext({baseURL:new URL(page.url()).origin});try{
   const write=async(c:typeof page.request,path:string,body:object)=>{const csrf=await(await c.get('/api/v1/auth/csrf')).json();const r=await c.post(path,{data:body,headers:{'X-CSRF-TOKEN':csrf.token}});expect(r.ok(),await r.text()).toBe(true);return r.json();};
   const phoneNumber='01099900109',challenge=await write(guardian.request,'/api/v1/auth/guardian/otp/request',{phoneNumber});await write(guardian.request,'/api/v1/auth/guardian/otp/verify',{phoneNumber,challengeId:challenge.challengeId,code:'246810'});

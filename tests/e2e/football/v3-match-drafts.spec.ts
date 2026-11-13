@@ -2,7 +2,7 @@ import {expect,test} from "@playwright/test";
 import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Copy completed match to reviewed draft, publish to authorized mobile roles, and save-add-another without inherited state",async({page},info)=>{
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const csrf=(await(await page.request.get("/api/v1/auth/csrf")).json()).token;
   const items=await(await page.request.get("/api/v1/manage/matches/")).json();const source=items.find((x:{team:string;copiedFromMatchId?:string})=>!x.copiedFromMatchId&&x.team.includes("منتخب 2018"));expect(source).toBeTruthy();
   const change=await page.request.put(`/api/v1/manage/matches/${source.id}`,{headers:{"X-CSRF-TOKEN":csrf},data:{...source,matchDate:"2026-09-27",ourScore:3,opponentScore:1,goalSlots:Array.from({length:3},(_,i)=>({ordinal:i+1,kind:"Unknown",playerId:null})),resultFinalized:true,benchPlayerIds:[],publish:true}});expect(change.ok(),await change.text()).toBe(true);

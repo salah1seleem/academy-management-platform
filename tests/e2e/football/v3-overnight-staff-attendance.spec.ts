@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Overnight staff checkout keeps the original workday across mobile, Web review, daily view and CSV", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button",{name:"دخول آمن"}).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button",{name:"تسجيل الدخول"}).click(); await page.waitForURL("**/dashboard");
   const csrf=(await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const headers={"X-CSRF-TOKEN":csrf,"Idempotency-Key":crypto.randomUUID()};
   const stamp=Date.now(),phone=`015${String(stamp).slice(-8)}`,name=`مدرب وردية ليلية اصطناعي ${stamp}`;

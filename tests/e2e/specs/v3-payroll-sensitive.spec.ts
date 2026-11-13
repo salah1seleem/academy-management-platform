@@ -5,7 +5,7 @@ test("Owner independently delegates review and payment; employee requests only a
   test.setTimeout(90_000);
   async function login(p: Page, email: string) {
     await p.goto("/login"); await p.getByLabel("البريد الإلكتروني").fill(email); await p.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await p.getByRole("button", { name: "دخول آمن" }).click(); await p.waitForURL("**/dashboard");
+    await p.getByRole("button", { name: "تسجيل الدخول" }).click(); await p.waitForURL("**/dashboard");
   }
   await login(page, "owner.nogoom@example.test");
   const stamp = Date.now(); const headers = { "X-CSRF-TOKEN": (await (await page.request.get("/api/v1/auth/csrf")).json()).token };

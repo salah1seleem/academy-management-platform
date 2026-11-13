@@ -4,7 +4,7 @@ import { guardianLogin } from "../support/auth";
 test("Branch Admin collects for a foreign enrollment and reload recovers a lost committed reply without double collection", async ({ page }, info) => {
   async function login(email: string) {
     await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**");
+    await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard**");
   }
   async function write(path: string, data: unknown, method = "POST") {
     const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());

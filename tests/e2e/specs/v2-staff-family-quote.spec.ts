@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 test("Owner finds a trusted family and reviews both children without creating a payment or receipt", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard**");
   await page.goto("/dashboard/subscriptions/renew/new"); await page.getByRole("link", { name: "مراجعة تجديد عدة أبناء" }).click();
   await page.getByLabel("اسم ولي الأمر أو رقم هاتفه").fill("01000000014"); await page.getByRole("button", { name: "البحث عن الأسرة" }).click(); await page.getByRole("button", { name: "اختيار أسرة التجديد الاصطناعية", exact: true }).click();
   await expect(page.getByRole("checkbox")).toHaveCount(2);

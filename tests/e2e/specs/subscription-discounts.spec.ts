@@ -8,7 +8,7 @@ let originalAmount = 0;
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email);
-  await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard**");
+  await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard**");
 }
 
 async function startRenewal(page: Page) {
@@ -51,6 +51,6 @@ test.describe.serial("Slice 8C subscription discount journeys", () => {
 
   test("Journey D — Guardian cannot mutate discounts and Coach cannot enter the dashboard", async ({ page }) => {
     await guardianLogin(page); const guardianStatus = await page.evaluate(async path => { const csrf = await fetch("/api/v1/auth/csrf").then(r => r.json()) as { token: string }; return fetch(`${path}/discount`, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ type: "Percentage", value: 10, reason: "مرفوض", expectedVersion: 1 }) }).then(r => r.status); }, `/api/v1/subscriptions/renewals/${renewalDetail.split("/").pop()}`); expect(guardianStatus).toBe(403);
-    await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("coach.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await expect(page.locator("main").getByRole("alert")).toContainText("بيانات الدخول غير صحيحة");
+    await page.context().clearCookies(); await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("coach.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await expect(page.locator("main").getByRole("alert")).toContainText("بيانات الدخول غير صحيحة");
   });
 });

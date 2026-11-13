@@ -5,7 +5,7 @@ test("staff navigation leaves scrolled mobile content unobstructed and keeps key
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   await page.goto("/dashboard/players");
   await expect(page.getByRole("link", { name: "عرض", exact: true }).first()).toBeVisible();
@@ -51,7 +51,7 @@ for (const width of [360, 390, 430, 768, 1440]) {
     await page.goto("/login");
     await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
     await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await page.getByRole("button", { name: "دخول آمن" }).click();
+    await page.getByRole("button", { name: "تسجيل الدخول" }).click();
     await page.waitForURL("**/dashboard");
     const menu = page.getByRole("button", { name: "فتح القائمة" });
     if (await menu.isVisible()) await menu.click();

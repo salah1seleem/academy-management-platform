@@ -5,7 +5,7 @@ test("Owner opens stored operational signals and private family feedback", async
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   await expect(page.getByRole("heading", { name: "مركز القرارات الذكية" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^المدربون ·/ })).toBeVisible();

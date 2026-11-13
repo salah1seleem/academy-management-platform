@@ -3,7 +3,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Match coach remains independent of team changes, explicit review is audited and reaches only the assigned coach", async ({page},info)=>{
   test.setTimeout(90_000);
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const headers={"X-CSRF-TOKEN":(await(await page.request.get("/api/v1/auth/csrf")).json()).token};
   const options=await(await page.request.get("/api/v1/manage/matches/options")).json();expect(options.coachHistoryEnabled).toBe(true);
   const sourceTeam=options.teams.find((t:{name:string})=>t.name.includes("منتخب 2018"));expect(sourceTeam).toBeTruthy();

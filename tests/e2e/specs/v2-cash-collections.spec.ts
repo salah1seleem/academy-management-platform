@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("Cashier reviews a price, collects once, sees the receipt and closes an exact shift", async ({ page }, info) => {
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard"); page.on("dialog", d => d.accept());
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard"); page.on("dialog", d => d.accept());
   const root = "/api/v1/finance/cash-registers";
   const options = await page.request.get(`${root}/options`).then(r => r.json()); const me = await page.request.get("/api/v1/me").then(r => r.json()); const member = options.members.find((m: { name: string }) => m.name === me.displayName); expect(member).toBeTruthy();
   async function write(path: string, body: unknown, method = "POST") {

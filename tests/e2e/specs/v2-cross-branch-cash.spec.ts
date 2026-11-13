@@ -3,7 +3,7 @@ import { guardianLogin } from "../support/auth";
 
 test("Owner collects at another branch without moving the child; guardian receipt and financial filters agree", async ({ page }, info) => {
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard"); page.on("dialog", d => d.accept());
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard"); page.on("dialog", d => d.accept());
   const root = "/api/v1/finance/cash-registers", enrollmentId = "84000018-0000-0000-0000-000000000002", planId = "84000018-0000-0000-0000-000000000004";
   const homeBranchId = "31000000-0000-0000-0000-000000000001", collectingBranchId = "31000000-0000-0000-0000-000000000002";
   const options = await page.request.get(`${root}/options`).then(r => r.json()), me = await page.request.get("/api/v1/me").then(r => r.json());

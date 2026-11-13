@@ -2,7 +2,7 @@ import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 
 async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill(email); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await expect(page).toHaveURL(/\/dashboard(?:\/|$)/);
 }
 

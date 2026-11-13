@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 async function owner(page: import("@playwright/test").Page) {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
 }
 
 async function command(page: import("@playwright/test").Page, path: string, data: unknown, key?: string) {
@@ -64,7 +64,7 @@ test("Additional amounts UX: configure a reason, accept one request and reject a
   try {
     const staffPage = await staffContext.newPage(); await staffPage.goto("/login");
     await staffPage.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await staffPage.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-    await staffPage.getByRole("button", { name: "دخول آمن" }).click(); await staffPage.waitForURL("**/dashboard");
+    await staffPage.getByRole("button", { name: "تسجيل الدخول" }).click(); await staffPage.waitForURL("**/dashboard");
     const own = await (await staffPage.request.get("/api/v1/staff/payroll/")).json(); expect(own.configured).toBe(true);
     const before = await (await page.request.get("/api/v1/manage/payroll/?month=2026-10-01")).json();
     const beforeAddition = before.items.find((e: { employeeId: string }) => e.employeeId === own.employee.id).additions;

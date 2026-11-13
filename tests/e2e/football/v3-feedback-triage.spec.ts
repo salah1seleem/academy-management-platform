@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 test('Family safety intake reaches the owner human queue, survives reclassification and resolves only after explicit review', async ({ page, browser }, info) => {
   test.setTimeout(90_000); await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'دخول آمن' }).click(); await page.waitForURL('**/dashboard');
+  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'تسجيل الدخول' }).click(); await page.waitForURL('**/dashboard');
   const financial = await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   const family = await browser.newContext({ baseURL: new URL(info.project.use.baseURL!).origin, viewport: { width: 390, height: 844 } });
   try {

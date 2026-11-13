@@ -1,7 +1,7 @@
 import {expect,test} from "@playwright/test";
 
 test("Ended coach commission is approved separately, paid partially and synchronized with own mobile account",async({page},info)=>{
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const get=async(path:string)=>{const r=await page.request.get(path);expect(r.ok(),await r.text()).toBe(true);return r.json();};
   const employee=(await get("/api/v1/manage/employees")).items.find((e:{name:string})=>e.name==="مدرب عقد منتهٍ — عرض اصطناعي");expect(employee).toBeTruthy();
   const coach=employee.membershipId,root=`/api/v1/manage/payroll/coaches/${coach}/private-services`,delivery=(await get(root)).items[0];

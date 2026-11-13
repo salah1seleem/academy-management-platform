@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("Owner collects a family in one shift, opens both receipts and replays without double collection", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const root = "/api/v1/finance/cash-registers";
   async function write(path: string, body: unknown, method = "POST") { const { token } = await page.request.get("/api/v1/auth/csrf").then(r => r.json()); const r = await page.request.fetch(path, { method, data: body, headers: { "X-CSRF-TOKEN": token, "Idempotency-Key": crypto.randomUUID() } }); expect(r.ok(), await r.text()).toBe(true); return r.json(); }
   // Own family: a failed proof journey in another test must not leave a pending payment here.

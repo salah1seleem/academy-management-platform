@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 test('Owner follows overdue notes, replies from each actual source and only the linked guardian receives the response', async ({ page, browser }, info) => {
   test.setTimeout(90_000); await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');
-  await page.getByRole('button', { name: 'دخول آمن' }).click(); await page.waitForURL('**/dashboard');
+  await page.getByRole('button', { name: 'تسجيل الدخول' }).click(); await page.waitForURL('**/dashboard');
   const options = await (await page.request.get('/api/v1/manage/owner-followups/options')).json();
   const groupId = '428e9073-f93c-14ae-d9d5-c38e50278314';
   const candidate = options.candidates.find((c: { condition: string; source: { groupId: string } }) => c.condition === 'GroupOverdueFeedback' && c.source.groupId === groupId);

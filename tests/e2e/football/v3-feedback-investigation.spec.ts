@@ -5,7 +5,7 @@ test('Owner reviews a minimal brief, scoped administrator returns private findin
   test.setTimeout(90_000); await page.setViewportSize({ width: 390, height: 844 });
   const origin = new URL(info.project.use.baseURL!).origin;
   const family = await browser.newContext({ baseURL: origin }); const delegated = await browser.newContext({ baseURL: origin, viewport: { width: 390, height: 844 } });
-  const login = async (p: Page, email: string) => { await p.goto('/login'); await p.getByLabel('البريد الإلكتروني').fill(email); await p.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await p.getByRole('button', { name: 'دخول آمن' }).click(); await p.waitForURL('**/dashboard'); };
+  const login = async (p: Page, email: string) => { await p.goto('/login'); await p.getByLabel('البريد الإلكتروني').fill(email); await p.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await p.getByRole('button', { name: 'تسجيل الدخول' }).click(); await p.waitForURL('**/dashboard'); };
   try {
     const postFamily = async (path: string, data: object, key?: string) => {
       const token = (await (await family.request.get('/api/v1/auth/csrf')).json()).token;

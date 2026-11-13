@@ -12,7 +12,7 @@ test("Platform uploads, previews, publishes and archives real private video; Gua
   const baseURL = new URL(page.url()).origin;
   const ownerContext = await browser.newContext({ baseURL }), ownerPage = await ownerContext.newPage(), owner = ownerPage.request;
   const guardianContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } }), guardian = await guardianContext.newPage();
-  await ownerPage.goto("/login"); await ownerPage.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await ownerPage.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await ownerPage.getByRole("button", { name: "دخول آمن", exact: true }).click(); await ownerPage.waitForURL("**/dashboard");
+  await ownerPage.goto("/login"); await ownerPage.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await ownerPage.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await ownerPage.getByRole("button", { name: "تسجيل الدخول", exact: true }).click(); await ownerPage.waitForURL("**/dashboard");
   const academy = "30000000-0000-0000-0000-000000000003", platform = page.request;
   async function write(c: APIRequestContext, path: string, data: unknown, elevated = false, put = false) {
     const csrf = await (await c.get(elevated ? "/api/v1/platform/auth/csrf" : "/api/v1/auth/csrf")).json();

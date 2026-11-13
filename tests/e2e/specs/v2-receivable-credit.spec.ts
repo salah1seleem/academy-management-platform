@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 test("Owner applies verified receivable credit once without cash; Guardian sees the same reduced balance", async ({ page }, info) => {
   const source = "85000017-0000-0000-0000-000000000004", target = "85000017-0000-0000-0000-000000000005";
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const before = await page.request.get(`/api/v1/finance/receivables/${target}`).then(r => r.json());
   const sourceBefore = await page.request.get(`/api/v1/finance/receivables/${source}`).then(r => r.json());
   const branchId = sourceBefore.balance.branchId as string;

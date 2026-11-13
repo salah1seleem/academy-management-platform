@@ -3,7 +3,7 @@ import { todaySession } from '../support/attendance';
 
 test('Admin issues a printable card, resolves it for the selected session without recording attendance, and linked Guardian sees QR', async ({ page }, info) => {
   const id = (n: number) => '5a000000-0000-0000-0000-' + String(n).padStart(12, '0');
-  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('admin.nogoom@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'دخول آمن' }).click(); await page.waitForURL('**/dashboard');
+  await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('admin.nogoom@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'تسجيل الدخول' }).click(); await page.waitForURL('**/dashboard');
   await page.goto(`/dashboard/players/${id(110)}`); const panel = page.getByRole('region', { name: 'بطاقة اللاعب', exact: true }); await expect(panel).toBeVisible();
   const cardPath = `/api/v1/attendance/players/${id(110)}/card`; const cardResponse = await page.request.get(cardPath); expect(cardResponse.ok(), await cardResponse.text()).toBe(true); let card = await cardResponse.json();
   if (!card.active) { await panel.getByRole('button', { name: 'إصدار بطاقة', exact: true }).click(); await expect(panel.getByAltText('QR بطاقة اللاعب — معرّف مبهم')).toBeVisible(); card = await page.request.get(cardPath).then(r => r.json()); }

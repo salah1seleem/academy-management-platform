@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("Owner configures a scoped fixed discount without mandatory description and uses its exact quote", async ({ page }, info) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const options = await (await page.request.get("/api/v1/discount-rules/options")).json();
   const plan = options.plans.find((p: { id: string }) => p.id === "a2030000-0000-0000-0000-000000000001"); expect(plan).toBeTruthy(); const branch = plan.branchIds[0];
   const name = `خصم متصفح اصطناعي ${Date.now()}`;

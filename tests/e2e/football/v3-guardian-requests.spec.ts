@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
 test('Family request reaches its own owner inbox and reply without becoming a payment or complaint',async({page,browser},info)=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+  await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
   const summary=async()=> (await(await page.request.get('/api/v1/reports/owner-summary?from=2026-09-01&to=2026-09-28')).json()).operations;
   const before=await summary();const money=await(await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   const family=await browser.newContext({baseURL:new URL(info.project.use.baseURL!).origin,viewport:{width:390,height:844}});

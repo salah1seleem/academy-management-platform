@@ -4,7 +4,7 @@ test("Owner posts an opening balance, corrects it without cash and drills into i
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const options = await (await page.request.get("/api/v1/finance/receivables/options")).json();
   const enrollment = options.enrollments[0]; expect(enrollment).toBeTruthy();
   await page.goto("/dashboard/finance/receivables");

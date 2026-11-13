@@ -3,7 +3,7 @@ import { endedFootballSession } from "../support/ended-football-session";
 
 test("Reviewed private correction preserves paid statement and posts only to the explicitly selected payroll month", async ({ page }, info) => {
   test.setTimeout(120_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const csrf = (await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const post = async (path: string, data: unknown) => { const r = await page.request.post(path, { headers: { "X-CSRF-TOKEN": csrf, "Idempotency-Key": crypto.randomUUID() }, data }); expect(r.ok(), await r.text()).toBe(true); return r.json(); };
   const get = async (path: string) => { const r = await page.request.get(path); expect(r.ok(), await r.text()).toBe(true); return r.json(); };

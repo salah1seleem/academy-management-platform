@@ -1,6 +1,6 @@
 import{expect,test}from'@playwright/test';
 test('Owner configures new-upload retention, publishes to family, and permanently erases only the chosen file with consistent storage and financial reports',async({page,browser},info)=>{
- test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+ test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
  const family=await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:390,height:844}});
  const write=async(ctx:typeof page.request,path:string,data:unknown)=>{const csrf=await(await ctx.get('/api/v1/auth/csrf')).json();const r=await ctx.post(path,{data,headers:{'X-CSRF-TOKEN':csrf.token}});expect(r.ok(),await r.text()).toBe(true);return r.status()===204?null:r.json();};
  const configuration=await(await page.request.get('/api/v1/manage/configuration')).json();const original=configuration.versions.find((v:{state:string})=>v.state==='Active').settings;

@@ -6,7 +6,7 @@ for (const journey of [
 ]) {
   test(`Admin timetable: ${journey.title}, exact persistence, time and list handoff`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: journey.width, height: 900 });
-    await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+    await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
     const options = await page.request.get("/api/v1/manage/structure/options").then(r => r.json());
     const original = options.groups[0];
     const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());

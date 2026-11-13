@@ -4,7 +4,7 @@ test("Owner sees a stored group cost share without treating it as a collection",
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   await page.goto("/dashboard/finance/operating-expenses");
   await expect(page.getByRole("heading", { name: "المصروفات التشغيلية" })).toBeVisible();
@@ -21,7 +21,7 @@ test("Owner can prepare a shared branch cost without selecting a fake group", as
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   await page.goto("/dashboard/finance/operating-expenses");
   await page.getByRole("button", { name: "تسجيل مصروف", exact: true }).click();

@@ -3,7 +3,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Player and coach file matches retain context, clear all dates, open the selected match and share cancellation with guardian", async ({ page }, info) => {
   test.setTimeout(90_000); // Shared Demo OTP helper may wait 31s on a real 429.
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const options = await (await page.request.get("/api/v1/manage/matches/options")).json();
   const team = options.teams.find((t: { name: string }) => t.name.includes("منتخب 2018")); expect(team).toBeTruthy();
   const roster = await (await page.request.get(`/api/v1/manage/matches/teams/${team.id}/roster`)).json();

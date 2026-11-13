@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 test("Owner persists a source-linked operational follow-up through its full lifecycle without changing money or group", async ({page}, info)=>{
   test.setTimeout(90_000);
-  await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+  await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
   await page.goto('/dashboard/operations/follow-ups');await expect(page.getByRole('heading',{name:'المتابعات واتخاذ القرار',exact:true})).toBeVisible();
   const options=await page.evaluate(async()=>{const r=await fetch('/api/v1/manage/owner-followups/options');if(!r.ok)throw new Error('Options failed');return r.json();});
   const candidate=options.candidates.find((c:{condition:string;activeFollowUpId:string|null})=>c.condition==='GroupLowOccupancy'&&!c.activeFollowUpId);expect(candidate).toBeTruthy();

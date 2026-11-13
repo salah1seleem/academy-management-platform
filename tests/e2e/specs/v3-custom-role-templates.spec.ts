@@ -4,7 +4,7 @@ import { selectStaffAccess, openRoleTemplates } from "../support/staff-access";
 test("Owner copies a template, reviews a scoped application and explicitly reapplies updates without live escalation", async ({ page, browser }, info) => {
   test.setTimeout(90_000);
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const stamp = Date.now(); const name = `إداري قالب مخصص ${stamp}`; const roleName = `منسق متابعة ${stamp}`; const email = `custom.role.${stamp}@example.test`;
   const token = (await (await page.request.get("/api/v1/auth/csrf")).json()).token;
   const created = await page.request.post("/api/v1/manage/staff/", { headers: { "X-CSRF-TOKEN": token }, data: { name, email, phone: `010${String(stamp).slice(-8)}`, temporaryPassword: "Demo-Only-123!", role: "AcademyAdmin", jobTitle: "قالب اصطناعي" } });
@@ -37,7 +37,7 @@ test("Owner copies a template, reviews a scoped application and explicitly reapp
   const applied = await (await page.request.get(`/api/v1/manage/staff/${member}/access`)).json(); expect(applied.source.appliedRevision).toBe(1); expect(applied.source.customized).toBe(false);
   const context = await browser.newContext({ baseURL: test.info().project.use.baseURL }); const admin = await context.newPage();
   try {
-    await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill(email); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "دخول آمن" }).click(); await admin.waitForURL("**/dashboard");
+    await admin.goto("/login"); await admin.getByLabel("البريد الإلكتروني").fill(email); await admin.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await admin.getByRole("button", { name: "تسجيل الدخول" }).click(); await admin.waitForURL("**/dashboard");
     expect((await admin.request.get("/api/v1/people/players")).status()).toBe(200);
     expect((await admin.request.get("/api/v1/manage/staff/role-templates")).status()).toBe(403);
     await openRoleTemplates(page);

@@ -104,10 +104,11 @@ test("Platform imports 48 valid players and adds only the two corrected rows on 
   const corrected = ownImportWorkbook(await readFile((await correctionFile.path())!), { "PL!49": "PL49", "PL!50": "PL50" });
   await upload(clean, "academy-valid-players.xlsx");
   const cleanBatch = await publish();
-  await expect(page.getByText(/تم إنشاء 48 تسجيل/)).toBeVisible();
+  await expect(page.getByRole("status").getByText("التسجيلات الجديدة 48", { exact: true })).toBeVisible();
   await upload(corrected, "corrected-players.xlsx");
   const correctedBatch = await publish(true);
-  await expect(page.getByText(/تم إنشاء 2 تسجيل، والتعرف على 0 تسجيل سابق/)).toBeVisible();
+  await expect(page.getByRole("status").getByText("التسجيلات الجديدة 2", { exact: true })).toBeVisible();
+  await expect(page.getByText(/تسجيلات سبق استيرادها/)).toHaveCount(0);
   async function records(id: string): Promise<{ id: string; legacyEnrollmentId: string }[]> {
     const response = await page.request.get(`${academy}/import/jobs/${id}/records`);
     expect(response.ok()).toBe(true);

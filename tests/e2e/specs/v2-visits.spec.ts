@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 test('Owner records participant and linked non-training companion entry, then individual exits without changing attendance', async ({page},info)=>{
-  await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.nogoom@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+  await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.nogoom@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
   const board=await page.request.get('/api/v1/facilities/board').then(r=>r.json());const now=new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Cairo',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(board.refreshedAtUtc));const booking=board.bookings.find((b:{groupName:string;startTime:string;endTime:string})=>b.groupName==='بوابة الدخول — محاكاة تجريبية'&&b.startTime.slice(0,5)<=now&&now<b.endTime.slice(0,5));expect(booking).toBeTruthy();
   const path=`/api/v1/facilities/bookings/${booking.id}/visits`;const initial=await page.request.get(path).then(r=>r.json());
   // Resume only this synthetic rehearsal if a previous failed run left an open visit;

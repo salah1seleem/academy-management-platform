@@ -8,7 +8,7 @@ test("Demo Admin uses accordion, searches, opens, edits and changes a branch sta
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: "إدارة الأكاديمية", exact: true }).click();
   await expect(page.getByRole("button", { name: "إدارة الأكاديمية", exact: true })).toHaveAttribute("aria-expanded", "true");

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("Guardian reviews siblings and multi-sport plans without creating payments", async ({ page, browser }, info) => {
   const staffContext=await browser.newContext({baseURL:info.project.use.baseURL}); const staff=await staffContext.newPage();
-  await staff.goto("/login"); await staff.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await staff.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await staff.getByRole("button",{name:"دخول آمن"}).click(); await staff.waitForURL("**/dashboard");
+  await staff.goto("/login"); await staff.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await staff.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await staff.getByRole("button",{name:"تسجيل الدخول"}).click(); await staff.waitForURL("**/dashboard");
   const stamp=Date.now(), phone=`012${String(stamp).slice(-8)}`,token=(await (await staff.request.get("/api/v1/auth/csrf")).json()).token,headers={"X-CSRF-TOKEN":token};
   const structure=await (await staff.request.get("/api/v1/manage/structure/options")).json();
   const swimming=structure.groups.find((g:{id:string})=>g.id==="34000000-0000-0000-0000-000000000002");

@@ -35,7 +35,7 @@ test("Owner cannot use tenant session to change platform entitlements", async ({
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL("**/dashboard");
   expect((await page.request.get("/api/v1/platform/academies")).status()).toBe(401);
   await page.goto("/platform");

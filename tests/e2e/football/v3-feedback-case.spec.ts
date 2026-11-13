@@ -18,7 +18,7 @@ test('Private complaint lifecycle survives close and reopen, while the family re
     const group = options.groups[0]; expect(group).toBeTruthy();
     const made = await post(`/api/v1/guardian/children/${child}/feedback`, { trainingGroupId: group.id, coachMembershipId: null, kind: 'Complaint', score: null, message: 'شكوى اصطناعية لرحلة المعالجة الخاصة دون أي تواصل خارجي' }, randomUUID());
     const id = made.id, path = `/api/v1/manage/feedback/${id}`;
-    await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'دخول آمن' }).click(); await page.waitForURL('**/dashboard');
+    await page.goto('/login'); await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test'); await page.getByLabel('كلمة المرور').fill('Demo-Only-123!'); await page.getByRole('button', { name: 'تسجيل الدخول' }).click(); await page.waitForURL('**/dashboard');
     const financial = await (await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
     await page.goto(`/dashboard/feedback/${id}`);
     const read = async () => (await page.request.get(path)).json();

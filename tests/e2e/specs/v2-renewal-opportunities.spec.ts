@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("FIN-01 forecast drills down to 20 expired paid players and exports 12700 without debt", async ({ page }, info) => {
   test.setTimeout(90_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const branch = "a2030100-0001-0000-0000-000000000001";
   const summary = page.waitForResponse(r => r.url().includes("/reports/owner-summary?") && r.url().includes(branch));
   const options=await (await page.request.get("/api/v1/manage/structure/options")).json();

@@ -3,7 +3,7 @@ import { mobileDemoToken } from "../support/mobile-demo-session";
 
 test("Private payroll source: partial allocation, later delta, explicit review/reversal and coach read reflect the same persisted amounts", async ({ page }, info) => {
   test.setTimeout(120_000);
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", {name:"دخول آمن"}).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", {name:"تسجيل الدخول"}).click(); await page.waitForURL("**/dashboard");
   const options = await (await page.request.get("/api/v1/manage/sessions/options")).json();
   const coach = options.coaches.find((c:{name:string})=>c.name==="محمود طارق سليمان").id;
   const root = `/api/v1/manage/payroll/coaches/${coach}/private-services`;

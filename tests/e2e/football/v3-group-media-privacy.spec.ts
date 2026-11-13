@@ -1,7 +1,7 @@
 import{expect,test}from'@playwright/test';
 test('Guardian explicitly allows then withdraws group media; owner reviews the event audience and upload; both roles retain truthful finance',async({page,browser},info)=>{
  test.setTimeout(90_000);await page.setViewportSize({width:390,height:844});
- await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
+ await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'تسجيل الدخول'}).click();await page.waitForURL('**/dashboard');
  const family=await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:390,height:844}});
  try{
   const write=async(path:string,data:object)=>{const csrf=await(await family.request.get('/api/v1/auth/csrf')).json();const r=await family.request.post(path,{data,headers:{'X-CSRF-TOKEN':csrf.token}});expect(r.ok(),await r.text()).toBe(true);return r.json();};

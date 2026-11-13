@@ -4,7 +4,7 @@ import { guardianLogin } from "../support/auth";
 
 test("Owner follows a durable signed mismatch; a correct event confirms once without deleting the discrepancy", async ({ page }, info) => {
   const root = "/api/v1/finance/provider-quarantine", issueId = "85000010-0000-0000-0000-000000000003", paymentId = "85000010-0000-0000-0000-000000000002";
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   await page.goto("/dashboard/finance/provider-quarantine"); await page.getByRole("button", { name: "مسح الفلاتر" }).click();
   await expect(page.getByLabel("من تاريخ")).toHaveValue(""); await expect(page.getByLabel("إلى تاريخ")).toHaveValue("");
   await page.goto(`/dashboard/finance/provider-quarantine/${issueId}`); await expect(page.getByRole("heading", { name: "تفاصيل اختلاف الدفع" })).toBeVisible();

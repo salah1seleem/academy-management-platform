@@ -1,7 +1,7 @@
 import {expect,test} from "@playwright/test";
 
 test("Employee approved account spans prior/current months, scoped mobile, matching frozen export and paying the original source",async({page},info)=>{
-  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"دخول آمن"}).click();await page.waitForURL("**/dashboard");
+  await page.goto("/login");await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");await page.getByRole("button",{name:"تسجيل الدخول"}).click();await page.waitForURL("**/dashboard");
   const csrf=(await(await page.request.get("/api/v1/auth/csrf")).json()).token,stamp=Date.now().toString(),phone=`0108${stamp.slice(-7)}`;
   const post=async(path:string,data:unknown)=>{const r=await page.request.post(path,{headers:{"X-CSRF-TOKEN":csrf,"Idempotency-Key":crypto.randomUUID()},data});expect(r.ok(),await r.text()).toBe(true);return r.json();};
   const coach=(await post("/api/v1/manage/staff",{name:"مدرب حساب شهري اصطناعي",email:`account.${stamp}@example.test`,phone,temporaryPassword:"Demo-Only-123!",role:"Coach",jobTitle:"مدرب عرض"})).id;
