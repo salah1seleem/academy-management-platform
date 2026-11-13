@@ -164,14 +164,26 @@ public sealed partial class V2PlanPublicationTests
         var f = await Fixture(false); using var owner = await Staff(); var plan = await CreatePlan(owner, f.A); var body = FixedRule(f.A, plan); var id = await AddRule(owner, body);
         var results = await Task.WhenAll(Write(owner, $"/api/v1/discount-rules/{id}", body with { FixedAmount = 200, ExpectedRevision = 1 }, true), Write(owner, $"/api/v1/discount-rules/{id}", body with { FixedAmount = 300, ExpectedRevision = 1 }, true));
         Assert.Single(results, x => x.IsSuccessStatusCode); Assert.Single(results, x => x.StatusCode == HttpStatusCode.Conflict);
-        var email = $"discount.{Guid.NewGuid():N}@example.test"; var created = await Write(owner, "/api/v1/manage/staff", new StaffWrite("إداري خصومات اصطناعي", email, "010" + Random.Shared.Next(10000000, 99999999), "Demo-Only-123!", AcademyRole.AcademyAdmin, null)); created.EnsureSuccessStatusCode(); var member = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var email = $"discount.{Guid.NewGuid():N}@example.test";
+        var phone = $"010{Random.Shared.Next(10000000, 100000000)}";
+        var normalizedPhone = EgyptPhoneNormalizer.Normalize(phone);
+        while (await db.Users.AnyAsync(user => user.PhoneNumber == normalizedPhone))
+        {
+            phone = $"010{Random.Shared.Next(10000000, 100000000)}";
+            normalizedPhone = EgyptPhoneNormalizer.Normalize(phone);
+        }
+        using var created = await Write(owner, "/api/v1/manage/staff", new StaffWrite("إداري خصومات اصطناعي", email, phone, "Demo-Only-123!", AcademyRole.AcademyAdmin, null));
+        Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync());
+        var member = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         (await Write(owner, $"/api/v1/manage/staff/{member}/access", new StaffAccessWrite(false, [f.B], StaffAccessRules.Modules.Select(m => new StaffActionValue(m, true, m != "followups", true, false)).ToArray()), true)).EnsureSuccessStatusCode(); using var admin = await Staff(email);
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/v1/discount-rules/{id}/versions")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, "/api/v1/discount-rules/", FixedRule(f.A, plan))).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, "/api/v1/discount-rules/", body with { BranchId = null, SubscriptionPlanId = null })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, "/api/v1/discount-rules/", body with { BranchId = f.B, SubscriptionPlanId = null, IsSiblingOffer = true })).StatusCode);
         using var foreign = await Staff("owner.future@example.test"); Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync($"/api/v1/discount-rules/{id}/versions")).StatusCode);
-        await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var version = await db.DiscountRuleVersions.FirstAsync(x => x.DiscountRuleId == id);
+        var version = await db.DiscountRuleVersions.FirstAsync(x => x.DiscountRuleId == id);
         version.Payload = "{}"; await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync()); db.Entry(version).State = EntityState.Unchanged;
         var error = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"DiscountRuleVersions\" WHERE \"Id\" = {version.Id}")); Assert.Equal("23514", error.SqlState);
     }
