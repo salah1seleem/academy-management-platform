@@ -1,0 +1,138 @@
+.screen {
+  min-width: 0;
+}
+
+.screen :global(.page-header) h1 {
+  font-size: clamp(1.3rem, 3vw, 1.75rem);
+  overflow-wrap: anywhere;
+}
+
+.screen :global(.confirmation-dialog) {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.screen :global(.confirmation-dialog) h2 { font-size: 1.125rem; }
+.screen :global(.confirmation-dialog) p { font-size: .9375rem; }
+.screen :global(.confirmation-dialog .button) { font-size: .875rem; }
+
+.page {
+  display: grid;
+  gap: 1rem;
+  max-width: 48rem;
+  min-width: 0;
+  font-size: .9375rem;
+  overflow-wrap: anywhere;
+}
+
+.links,
+.listHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+}
+
+.links > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--staff-primary-800);
+  text-underline-offset: .2em;
+}
+
+.links :global(.workspace-context-help) summary {
+  min-height: 44px;
+  font-size: .875rem;
+  white-space: normal;
+}
+
+.listHeader {
+  justify-content: space-between;
+}
+
+.panel,
+.notice,
+.list li {
+  min-width: 0;
+  padding: .875rem;
+  border: 1px solid var(--staff-border);
+  border-radius: var(--staff-radius-md);
+  background: var(--staff-surface);
+}
+
+.panel,
+.list li,
+.form {
+  display: grid;
+  gap: .65rem;
+}
+
+.page h2,
+.page p,
+.list {
+  margin: 0;
+}
+
+.page h2 {
+  font-size: 1.1rem;
+}
+
+.page .panel:not(section):not(div) {
+  color: var(--staff-text-secondary);
+}
+
+.list {
+  list-style: none;
+  display: grid;
+  gap: .75rem;
+  padding: 0;
+}
+
+.list p {
+  color: var(--staff-text-secondary);
+  font-size: .875rem;
+}
+
+.active,
+.inactive {
+  font-size: .875rem;
+  font-weight: 700;
+}
+
+.active,
+.notice {
+  color: var(--staff-success);
+}
+
+.inactive {
+  color: var(--staff-text-secondary);
+}
+
+.fieldError {
+  color: var(--staff-danger);
+}
+
+.form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: .5rem .75rem;
+  border: 1px solid var(--staff-border-strong);
+  border-radius: var(--staff-radius-sm);
+  color: var(--staff-text);
+  background: var(--staff-bg);
+}
+
+.form input[aria-invalid="true"] {
+  border-color: var(--staff-danger);
+}
+
+.page :global(.button) {
+  min-height: 44px;
+  justify-self: start;
+  padding: .45rem .75rem;
+  font-size: inherit;
+  white-space: normal;
+}

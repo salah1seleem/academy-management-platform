@@ -30,19 +30,49 @@ public static class StaffVerifiedAttendance
     {
         var g=app.MapGroup(Path).RequireAuthorization(AcademyPermissions.TenantAccess);
         g.MapGet("",Read);
+        g.MapGet("/attempts/{id:guid}", ReadAttempt);
         g.MapPost("/options",Options).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("staff-passkey");
         g.MapPost("/complete",Complete).AddEndpointFilter<CsrfFilter>().RequireRateLimiting("staff-passkey");
     }
+    private static async Task<IResult> ReadAttempt(Guid id, bool? includeState, HttpContext http, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        var membership = (await tenant.ResolveAsync())!;
+        var actor = Actor(http);
+        if (!Staff(membership) || !await StaffPasskeys.Live(db, membership, actor)) return Results.Forbid();
+        var query = db.StaffPasskeyChallenges.AsNoTracking()
+            .Where(c => c.Id == id && c.AcademyId == membership.AcademyId && c.MembershipId == membership.MembershipId
+                && c.UserId == actor && (c.Purpose == "CheckIn" || c.Purpose == "CheckOut"))
+            .Select(c => new { c.ResultJson, c.ConsumedAtUtc, c.ExpiresAtUtc });
+        var attempt = await query.SingleOrDefaultAsync(ct);
+        if (attempt?.ResultJson is string saved) return ConfirmedAttempt(saved);
+        if (attempt is null || includeState != true) return Results.NotFound();
+        if (attempt.ConsumedAtUtc.HasValue) return ClosedAttempt();
+        if (attempt.ExpiresAtUtc > Now(clock))
+            return Results.Ok(new { attendanceRecorded = false, attemptState = "Pending" });
+
+        // A signed completion can still be committing when its challenge expires.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await StaffPasskeys.Lock(db, $"staff-passkeys:{membership.AcademyId}:{membership.MembershipId}");
+        if (!await StaffPasskeys.Live(db, membership, actor)) return Results.Forbid();
+        var final = await query.SingleOrDefaultAsync(ct);
+        return final?.ResultJson is string completed ? ConfirmedAttempt(completed) : ClosedAttempt();
+    }
+    private static IResult ConfirmedAttempt(string result) =>
+        Results.Ok(PublicResult(JsonSerializer.Deserialize<AttendanceReceipt>(result, Json)!));
+    private static IResult ClosedAttempt() =>
+        Results.Ok(new { attendanceRecorded = false, attemptState = "Closed" });
     private static async Task<bool> Allowed(FoundationDbContext db,TenantMembership t,Employee e,Guid branch)
     {
         if(t.Role==AcademyRole.AcademyAdmin&&!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&(m.AllBranches||db.MembershipBranchAccesses.Any(a=>a.MembershipId==m.Id&&a.IsActive&&a.BranchId==branch)&&db.MembershipBranchAccesses.Any(a=>a.MembershipId==m.Id&&a.IsActive&&a.BranchId==e.BranchId))))return false;
         return e.BranchId==branch||await db.StaffGroupAssignments.AnyAsync(a=>a.AcademyId==t.AcademyId&&a.AcademyMembershipId==t.MembershipId&&a.IsActive&&a.TrainingGroup.IsActive&&a.TrainingGroup.BranchId==branch);
     }
-    private static async Task<IResult> Read(CurrentTenant tenant,FoundationDbContext db,TimeProvider clock,IConfiguration configuration,IHostEnvironment env)
+    private static async Task<IResult> Read(HttpContext http,CurrentTenant tenant,FoundationDbContext db,TimeProvider clock,IConfiguration configuration,IHostEnvironment env)
     {
+        http.Response.Headers.CacheControl = "no-store";
         var t=(await tenant.ResolveAsync())!;if(!Staff(t))return Results.Forbid();
         var e=await db.Employees.AsNoTracking().SingleOrDefaultAsync(x=>x.AcademyId==t.AcademyId&&x.MembershipId==t.MembershipId&&x.IsActive);
-        if(e is null)return Results.Ok(new{configured=false,profileMissing=true});
+        if(e is null)return Results.Ok(new{t.MembershipId,configured=false,profileMissing=true});
         var assigned=await db.StaffGroupAssignments.Where(a=>a.AcademyMembershipId==t.MembershipId&&a.IsActive&&a.TrainingGroup.IsActive).Select(a=>a.TrainingGroup.BranchId).ToArrayAsync();
         var candidates=await db.Branches.AsNoTracking().Where(b=>b.IsActive&&(b.Id==e.BranchId||assigned.Contains(b.Id))).ToArrayAsync();var sites=new List<object>();
         foreach(var b in candidates)if(await Allowed(db,t,e,b.Id))sites.Add(new{id=b.Id,name=b.ArabicName,enabled=b.StaffCheckInEnabled,configured=b.StaffCheckInEnabled&&b.CheckInLatitude.HasValue&&b.CheckInLongitude.HasValue,radiusMeters=b.StaffCheckInRadiusMeters,maxAccuracyMeters=b.StaffCheckInMaxAccuracyMeters,maxAgeSeconds=b.StaffCheckInMaxAgeSeconds,challengeSeconds=b.StaffCheckInChallengeSeconds,attendanceRequired=StaffAttendancePolicy.Read(b).Required(t.Role)});
@@ -50,7 +80,7 @@ public static class StaffVerifiedAttendance
         var ids=open.Select(a=>a.Id).ToArray();var periods=await db.StaffWorkPeriods.AsNoTracking().Where(p=>ids.Contains(p.AttendanceId)&&p.EndTime==null).ToArrayAsync();
         var recent=await db.StaffPasskeyChallenges.AsNoTracking().Where(c=>c.MembershipId==t.MembershipId&&c.ResultJson!=null).OrderByDescending(c=>c.CreatedAtUtc).Take(5).Select(c=>c.ResultJson!).ToArrayAsync();
         var cfg=StaffPasskeys.Configuration(configuration,env);
-        return Results.Ok(new{configured=cfg!=null,rpId=cfg?.RPID,nativeIosOriginConfigured=StaffPasskeys.NativeIosOriginConfigured(cfg),hasCredential=cfg!=null&&await db.StaffPasskeys.AnyAsync(k=>k.MembershipId==t.MembershipId&&k.IsActive&&k.RpId==cfg.RPID),nowUtc=clock.GetUtcNow(),branches=sites,hasOpenAttendance=open.Length>0,requiresSourceReview=open.Length>1||open.Length==1&&(periods.Length!=1||periods[0].StartUtc==null),recent=recent.Select(s=>PublicResult(JsonSerializer.Deserialize<AttendanceReceipt>(s,Json)!))});
+        return Results.Ok(new{t.MembershipId,configured=cfg!=null,rpId=cfg?.RPID,nativeIosOriginConfigured=StaffPasskeys.NativeIosOriginConfigured(cfg),hasCredential=cfg!=null&&await db.StaffPasskeys.AnyAsync(k=>k.MembershipId==t.MembershipId&&k.IsActive&&k.RpId==cfg.RPID),nowUtc=clock.GetUtcNow(),branches=sites,hasOpenAttendance=open.Length>0,requiresSourceReview=open.Length>1||open.Length==1&&(periods.Length!=1||periods[0].StartUtc==null),recent=recent.Select(s=>PublicResult(JsonSerializer.Deserialize<AttendanceReceipt>(s,Json)!))});
     }
     private static string? LocationError(StaffAttendanceIntent b,Branch site,DateTimeOffset now)
     {

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:academy_mobile/core/theme/academy_brand.dart';
 import 'package:academy_mobile/features/shared/role_agenda.dart';
 import 'package:academy_mobile/features/shared/role_navigation.dart';
 import 'package:flutter/material.dart';
@@ -165,6 +166,117 @@ void main() {
     },
   );
   testWidgets(
+    'shared session labels makeup only for the booked child and refresh clears it',
+    (t) async {
+      var released = false;
+      final auth = await authenticate('Guardian', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        if (path == '/api/v1/guardian/home') return family;
+        if (!path.endsWith('/profile')) return [];
+        final id = path.contains('/a/') ? 'a' : 'b';
+        return {
+          'player': {'id': id},
+          'enrollments': [
+            {
+              'id': 'enrollment-$id',
+              'sport': 'كرة القدم',
+              'branch': 'فرع العرض',
+              'upcoming': [training('shared')],
+            },
+          ],
+          'compensations': [
+            if (id == 'a')
+              {
+                'sportEnrollmentId': 'enrollment-a',
+                'bookings': [
+                  {
+                    'trainingSessionId': 'session-shared',
+                    'state': released ? 'Cancelled' : 'Reserved',
+                  },
+                ],
+              },
+          ],
+        };
+      });
+      await t.pumpWidget(app(RoleAgenda(auth: auth, guardian: true)));
+      await t.pumpAndSettle();
+      expect(find.text('حصة تعويضية لـ ابن أول اصطناعي'), findsOneWidget);
+      expect(find.text('مجموعة shared'), findsOneWidget);
+      released = true;
+      await t.tap(find.byTooltip('تحديث المواعيد'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('حصة تعويضية'), findsNothing);
+      expect(find.text('مجموعة shared'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets(
+    'coach sees the exact roster action and retries only the failed schedule source',
+    (t) async {
+      var trainingReads = 0, matchReads = 0;
+      final auth = await authenticate('Coach', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        expect(method, 'GET');
+        if (path.contains('my-matches')) {
+          matchReads++;
+          throw StateError('test match error');
+        }
+        if (path.endsWith('/players')) {
+          expect(path, '/api/v1/attendance/sessions/session-a/players');
+          return {
+            'session': {...training('a'), 'status': 'Scheduled'},
+            'players': [],
+            'canManageAttendance': false,
+          };
+        }
+        expect(path, '/api/v1/attendance/sessions?upcomingOnly=true');
+        trainingReads++;
+        return [
+          {
+            ...training('a'),
+            'resource': 'المسبح الرئيسي · حارة 3',
+            'isSubstitute': true,
+          },
+          {...training('cancelled'), 'status': 'Cancelled'},
+        ];
+      });
+      await t.pumpWidget(app(RoleAgenda(auth: auth, guardian: false)));
+      await t.pumpAndSettle();
+      expect(find.text('مدرب بديل'), findsOneWidget);
+      expect(find.text('المسبح الرئيسي · حارة 3'), findsOneWidget);
+      expect(find.text('مجموعة cancelled'), findsNothing);
+      await t.tap(find.widgetWithText(ChoiceChip, 'الحصص'));
+      await t.pumpAndSettle();
+      expect(find.text('تعذر تحميل المباريات — أعد المحاولة'), findsNothing);
+      await t.tap(find.widgetWithText(ChoiceChip, 'الكل'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('تعذر تحميل المباريات — أعد المحاولة'));
+      await t.pumpAndSettle();
+      expect(trainingReads, 1);
+      expect(matchReads, 2);
+      await t.ensureVisible(find.text('كشف الحضور'));
+      await t.tap(find.text('كشف الحضور'));
+      await t.pumpAndSettle();
+      expect(find.text('كشف الحضور للعرض فقط.'), findsOneWidget);
+      expect(find.text('حفظ الحضور'), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets(
     'one failed source leaves the other visible and retry does not fall back to unscoped matches',
     (t) async {
       var wrongScope = true;
@@ -193,6 +305,60 @@ void main() {
       auth.dispose();
     },
   );
+  for (final guardian in [true, false]) {
+    testWidgets(
+      'a swimming academy without competitions renders only training for ${guardian ? 'families' : 'coaches'}',
+      (t) async {
+        final calls = <String>[];
+        final auth = await authenticate(guardian ? 'Guardian' : 'Coach', (
+          m,
+          p,
+          b,
+          token,
+        ) async {
+          calls.add('$m $p');
+          if (p == '/api/v1/academy/experience') {
+            return {
+              'onboarding': {
+                'sportTheme': 'swimming',
+                'features': ['nutrition'],
+              },
+            };
+          }
+          if (p == '/api/v1/me/profile') return {};
+          if (p == '/api/v1/guardian/home') return family;
+          if (p.endsWith('/profile')) {
+            return profile(p.contains('/b/') ? 'b' : 'a');
+          }
+          if (p.contains('/attendance/')) return [training('a')];
+          throw StateError('Unexpected request');
+        });
+        final brand = AcademyBrand(auth);
+        await t.pumpWidget(
+          app(
+            BrandScope(
+              brand: brand,
+              child: RoleAgenda(auth: auth, guardian: guardian),
+            ),
+          ),
+        );
+        await t.pumpAndSettle();
+        expect(
+          find.text(guardian ? 'جدول التدريب' : 'الحصص خلال 14 يومًا'),
+          findsOneWidget,
+        );
+        expect(find.text('مجموعة a'), findsOneWidget);
+        expect(find.text('المباريات'), findsNothing);
+        expect(find.text('سجل المباريات والإلغاءات'), findsNothing);
+        expect(find.text('تعذر تحميل المباريات — أعد المحاولة'), findsNothing);
+        expect(calls.any((call) => call.contains('/my-matches')), isFalse);
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+        brand.dispose();
+        auth.dispose();
+      },
+    );
+  }
   testWidgets('late agenda responses cannot reveal records after logout', (
     t,
   ) async {
@@ -215,7 +381,7 @@ void main() {
   });
   for (final role in ['Guardian', 'Coach']) {
     testWidgets(
-      '$role bottom navigation opens the combined agenda without reading finances',
+      '$role bottom navigation opens the role workspace without reading finances',
       (t) async {
         final calls = <String>[];
         final auth = await authenticate(role, (m, p, b, token) async {
@@ -234,9 +400,7 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        await t.tap(
-          find.text(role == 'Guardian' ? 'الحصص' : 'الحضور\nوالتقييم'),
-        );
+        await t.tap(find.text(role == 'Guardian' ? 'الحصص' : 'المجموعات'));
         await t.pumpAndSettle();
         expect(
           find.byType(role == 'Guardian' ? RoleAgenda : CoachGroupsPage),

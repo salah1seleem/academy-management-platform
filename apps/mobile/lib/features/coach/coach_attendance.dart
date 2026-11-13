@@ -1,5 +1,6 @@
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show Intl;
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
@@ -17,11 +18,17 @@ class CoachAttendance extends StatefulWidget {
   final AuthController auth;
   final String sessionId;
   final String? title;
+  final List<Widget> groupHeader;
+  final Json? initialRoster;
+  final Set<String> groupEnrollmentIds;
   const CoachAttendance({
     super.key,
     required this.auth,
     required this.sessionId,
     this.title,
+    this.groupHeader = const [],
+    this.initialRoster,
+    this.groupEnrollmentIds = const {},
   });
   @override
   State<CoachAttendance> createState() => _CoachAttendanceState();
@@ -41,6 +48,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
   String? error, message;
   bool busy = false;
   bool blocked = false;
+  bool reviewed = false;
   AttendanceDraft? draft;
   final conflicts = <String, Json?>{};
   final search = TextEditingController();
@@ -52,7 +60,12 @@ class _CoachAttendanceState extends State<CoachAttendance> {
     super.initState();
     identity = currentIdentity;
     widget.auth.addListener(authChanged);
-    load();
+    final initial = widget.initialRoster;
+    if (initial == null) {
+      load();
+    } else {
+      applyRoster(initial);
+    }
   }
 
   void authChanged() {
@@ -60,6 +73,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
     setState(() {
       identity = currentIdentity;
       draft = null;
+      reviewed = false;
       conflicts.clear();
       statuses.clear();
       data = null;
@@ -85,21 +99,21 @@ class _CoachAttendanceState extends State<CoachAttendance> {
     ),
   );
 
+  void applyRoster(Json roster) {
+    statuses.clear();
+    for (final player in rows(roster['players'])) {
+      statuses[textOf(player['sportEnrollmentId'])] =
+          player['attendanceStatus'] as String? ?? 'NotRecorded';
+    }
+    data = roster;
+    error = null;
+  }
+
   Future<bool> load() async {
     try {
       final next = await read();
       if (!mounted || blocked) return false;
-      statuses.clear();
-      for (final player in rows(next['players'])) {
-        statuses[textOf(player['sportEnrollmentId'])] =
-            player['attendanceStatus'] as String? ?? 'NotRecorded';
-      }
-      if (mounted) {
-        setState(() {
-          data = next;
-          error = null;
-        });
-      }
+      setState(() => applyRoster(next));
       return true;
     } on ApiFailure catch (e) {
       if (mounted) {
@@ -125,8 +139,9 @@ class _CoachAttendanceState extends State<CoachAttendance> {
         conflicts.isNotEmpty) {
       return;
     }
-    final retry = draft != null;
+    final hasDraft = draft != null;
     final current = draft ?? AttendanceDraft(data!, statuses);
+    if (!hasDraft && current.changes.isEmpty) return;
     setState(() {
       busy = true;
       error = null;
@@ -134,59 +149,55 @@ class _CoachAttendanceState extends State<CoachAttendance> {
     });
     try {
       current.validate();
-      if (retry) {
+      Iterable<Json> remaining = current.changes.values;
+      if (hasDraft) {
         final latest = await read();
         if (!mounted || blocked) return;
         current.validate(latest: latest);
         final changed = current.conflicts(latest);
         if (changed.isNotEmpty) {
           setState(() {
+            reviewed = false;
             conflicts.addAll(changed);
-            error = 'تغير الكشف على جهاز آخر؛ راجع التعارض قبل إعادة الإرسال.';
+            error = 'تغير كشف الحضور. راجع الحالات المتعارضة.';
           });
           return;
         }
-        if (current.confirmed(latest)) {
-          if (await load() && mounted) {
-            setState(() {
-              draft = null;
-              message = 'تأكدت المزامنة من الخادم دون إعادة الإرسال.';
-            });
-          }
-          return;
-        }
-      }
-      if (current.changes.isEmpty) {
-        if (await load() && mounted) {
+        remaining = current.remaining(latest);
+        if (remaining.isEmpty) {
           setState(() {
+            applyRoster(latest);
             draft = null;
-            message = 'لا توجد تغييرات جديدة للحفظ.';
+            reviewed = false;
+            message = current.changes.isEmpty
+                ? 'تم تحديث الكشف بحالات الخادم.'
+                : 'الحضور محفوظ بالفعل دون إعادة الإرسال.';
           });
+          return;
         }
-        return;
+        if (!reviewed) {
+          setState(() => reviewed = true);
+          return;
+        }
       }
       await widget.auth.request(
         'PUT',
         '/api/v1/attendance/sessions/${widget.sessionId}/players',
-        body: current.body,
+        body: current.bodyFor(remaining),
       );
-      final synchronized = await load();
-      if (mounted && synchronized) {
-        setState(() {
-          draft = null;
-          message = 'تم حفظ الحضور ويمكن تصحيحه بأمان.';
-        });
-      } else if (mounted && !blocked) {
-        setState(() {
-          blocked = current.lease == null || current.scope == null;
-          draft = blocked ? null : current;
-          if (blocked) {
-            data = null;
-            statuses.clear();
-            error = 'افتح كشفًا جديدًا بعد تسجيل الدخول لتأكيد الحفظ.';
-          }
-        });
+      if (!mounted || blocked) return;
+      final latest = await read();
+      if (!mounted || blocked) return;
+      current.validateAccess(latest);
+      if (!current.confirmed(latest)) {
+        throw const ApiFailure(409, 'لم تظهر كل التغييرات في الكشف المحدث.');
       }
+      setState(() {
+        applyRoster(latest);
+        draft = null;
+        reviewed = false;
+        message = 'تم حفظ الحضور.';
+      });
     } on ApiFailure catch (e) {
       if (mounted && !blocked) {
         setState(() {
@@ -195,6 +206,7 @@ class _CoachAttendanceState extends State<CoachAttendance> {
               current.scope == null ||
               [401, 403, 404, 410].contains(e.status);
           draft = blocked ? null : current;
+          reviewed = false;
           if (blocked) {
             data = null;
             statuses.clear();
@@ -207,6 +219,50 @@ class _CoachAttendanceState extends State<CoachAttendance> {
       if (mounted) setState(() => busy = false);
     }
   }
+
+  Future<void> discardDraft() async {
+    if (busy) return;
+    setState(() => busy = true);
+    final loaded = await load();
+    if (!mounted) return;
+    setState(() {
+      busy = false;
+      if (loaded) {
+        draft = null;
+        reviewed = false;
+        conflicts.clear();
+      }
+    });
+  }
+
+  Widget evaluationButton(Json player, Json session) => OutlinedButton.icon(
+    icon: const Icon(Icons.assessment_outlined, size: 17),
+    label: UiText(widget.groupHeader.isEmpty ? 'تقييم اللاعب' : 'تقييم'),
+    onPressed: busy || draft != null
+        ? null
+        : () => openPage(
+            context,
+            CoachEvaluation(
+              auth: widget.auth,
+              enrollment: {
+                'id': player['sportEnrollmentId'],
+                'playerId': player['playerId'],
+                'player': player['arabicName'],
+                'group': session['group'],
+                'sport': session['sport'],
+                'sportId': session['sportId'],
+                'criteriaState': session['criteriaState'],
+                'criteriaSessionId': widget.sessionId,
+                if (!widget.groupEnrollmentIds.contains(
+                  textOf(player['sportEnrollmentId']),
+                )) ...{
+                  'sessionId': widget.sessionId,
+                  'evaluationDate': session['sessionDate'],
+                },
+              },
+            ),
+          ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -222,27 +278,72 @@ class _CoachAttendanceState extends State<CoachAttendance> {
               (p['attendanceStatus'] ?? 'NotRecorded'),
         )
         .length;
+    final unsavedLabel = localized(
+      context,
+      Intl.plural(
+        pending,
+        locale: 'ar',
+        one: 'تغيير واحد لم يُحفظ',
+        two: 'تغييران لم يُحفظا',
+        few: '$pending تغييرات لم تُحفظ',
+        many: '$pending تغييرًا لم يُحفظ',
+        other: '$pending تغيير لم يُحفظ',
+      ),
+      pending == 1 ? '1 unsaved change' : '$pending unsaved changes',
+    );
+    final canSave = data?['canManageAttendance'] == true;
+    final checking = draft != null && !reviewed;
+    final actionLabel = busy
+        ? (checking ? 'جارٍ التحقق…' : 'جارٍ الحفظ…')
+        : draft != null
+        ? (reviewed ? 'إعادة إرسال التغييرات' : 'تحقق من الحفظ')
+        : 'حفظ الحضور';
+    final statusNotice = draft != null
+        ? (reviewed ? 'تغييرات غير مسجلة' : 'الحفظ غير مؤكد')
+        : pending == 0
+        ? message
+        : null;
     return AppScaffold(
       title: widget.title ?? 'تسجيل الحضور',
-      bottomBar: data?['canManageAttendance'] != true
+      bottomBar: !canSave
           ? null
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              child: FilledButton.icon(
-                icon: busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.cloud_done_outlined),
-                onPressed: busy || conflicts.isNotEmpty ? null : save,
-                label: UiText(
-                  busy
-                      ? 'جارٍ الحفظ…'
-                      : draft != null
-                      ? 'مراجعة وإعادة المزامنة'
-                      : 'حفظ الحضور',
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (statusNotice != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: UiText(
+                          statusNotice,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  FilledButton.icon(
+                    icon: busy
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            checking
+                                ? Icons.fact_check_outlined
+                                : Icons.save_outlined,
+                          ),
+                    onPressed:
+                        busy ||
+                            conflicts.isNotEmpty ||
+                            (draft == null && pending == 0)
+                        ? null
+                        : save,
+                    label: UiText(actionLabel),
+                  ),
+                ],
               ),
             ),
       child: data == null
@@ -265,12 +366,15 @@ class _CoachAttendanceState extends State<CoachAttendance> {
           : ListView(
               padding: const EdgeInsets.all(18),
               children: [
+                ...widget.groupHeader,
                 AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       UiText(
-                        textOf(session['group']),
+                        widget.groupHeader.isEmpty
+                            ? textOf(session['group'])
+                            : 'حضور حصة اليوم',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
@@ -318,46 +422,49 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                     ],
                   ),
                 ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final state in const [
-                      'Present',
-                      'Absent',
-                      'NotRecorded',
-                      'Late',
-                      'Excused',
-                    ])
-                      Chip(
-                        key: ValueKey('attendance-count-$state'),
-                        avatar: Icon(attendanceIcon(state), size: 18),
-                        label: UiText(
-                          '${label(state)} · ${players.where((p) => statuses[textOf(p['sportEnrollmentId'])] == state).length}',
+                if (widget.groupHeader.isEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final state in const [
+                        'Present',
+                        'Absent',
+                        'NotRecorded',
+                        'Late',
+                        'Excused',
+                      ])
+                        Chip(
+                          key: ValueKey('attendance-count-$state'),
+                          avatar: Icon(attendanceIcon(state), size: 18),
+                          label: UiText(
+                            '${label(state)} · ${players.where((p) => statuses[textOf(p['sportEnrollmentId'])] == state).length}',
+                          ),
                         ),
+                    ],
+                  ),
+                if (widget.groupHeader.isEmpty || pending > 0)
+                  Semantics(
+                    liveRegion: true,
+                    child: UiText(
+                      localized(
+                        context,
+                        pending == 0
+                            ? 'الحالات المعروضة مؤكدة من الخادم'
+                            : unsavedLabel,
+                        pending == 0
+                            ? 'Displayed states are confirmed by the server'
+                            : '$pending unsaved changes',
                       ),
-                  ],
-                ),
-                Semantics(
-                  liveRegion: true,
-                  child: UiText(
-                    localized(
-                      context,
-                      pending == 0
-                          ? 'الحالات المعروضة مؤكدة من الخادم'
-                          : '$pending تغييرات لم تُحفظ بعد',
-                      pending == 0
-                          ? 'Displayed states are confirmed by the server'
-                          : '$pending unsaved changes',
                     ),
                   ),
-                ),
-                if (data!['lastSynchronizedAtUtc'] != null)
+                if (widget.groupHeader.isEmpty &&
+                    data!['lastSynchronizedAtUtc'] != null)
                   UiText(
-                    '${localized(context, 'آخر مزامنة مؤكدة', 'Last confirmed synchronization')}: ${synchronizedTime(data!['lastSynchronizedAtUtc'])}',
+                    '${localized(context, 'آخر تحديث للكشف', 'Roster last refreshed')}: ${synchronizedTime(data!['lastSynchronizedAtUtc'])}',
                   ),
-                if (message != null)
-                  UiText(message!, style: const TextStyle(color: Colors.green)),
+                if (!canSave && message != null && pending == 0)
+                  Semantics(liveRegion: true, child: UiText(message!)),
                 if (error != null) ErrorNotice(error!),
                 if (draft != null)
                   AppCard(
@@ -365,23 +472,11 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const UiText(
-                          'بانتظار المزامنة',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const UiText(
-                          'المسودة في هذه الصفحة فقط لمدة 15 دقيقة؛ لا تغادر قبل المراجعة.',
+                          'تبقى التغييرات في هذه الصفحة لمدة 15 دقيقة كحد أقصى.',
                         ),
                         TextButton(
-                          onPressed: busy
-                              ? null
-                              : () async {
-                                  setState(() {
-                                    draft = null;
-                                    conflicts.clear();
-                                  });
-                                  await load();
-                                },
-                          child: const UiText('تجاهل المسودة وفتح كشف محدث'),
+                          onPressed: busy ? null : discardDraft,
+                          child: const UiText('تجاهل التغييرات وتحديث الكشف'),
                         ),
                       ],
                     ),
@@ -418,8 +513,12 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                     ),
                   ),
                 if (data!['canManageAttendance'] != true)
-                  const UiText(
-                    'الحضور للعرض فقط؛ يتولى الإداري المصرح له التسجيل.',
+                  UiText(
+                    session['status'] == 'Cancelled'
+                        ? 'أُلغيت الحصة.'
+                        : data!['isPast'] == true
+                        ? 'كشف حضور يوم سابق.'
+                        : 'كشف الحضور للعرض فقط.',
                   ),
                 const SizedBox(height: 12),
                 TextField(
@@ -428,8 +527,8 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                   decoration: InputDecoration(
                     labelText: localized(
                       context,
-                      'بحث بالاسم أو كود اللاعب',
-                      'Search name or player code',
+                      'الاسم أو الكود',
+                      'Name or player code',
                     ),
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: search.text.isEmpty
@@ -449,8 +548,8 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                 UiText(
                   localized(
                     context,
-                    '${filtered.length} من ${players.length} لاعب',
-                    '${filtered.length} of ${players.length} players',
+                    'النتائج: ${filtered.length} من ${players.length}',
+                    'Results: ${filtered.length} of ${players.length}',
                   ),
                 ),
                 if (filtered.isEmpty)
@@ -516,31 +615,10 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                                     ),
                                   ),
                           ),
-                          if (data!['canEvaluate'] == true)
-                            OutlinedButton.icon(
-                              icon: const Icon(Icons.assessment_outlined),
-                              label: const UiText('تقييم اللاعب'),
-                              onPressed: busy || draft != null
-                                  ? null
-                                  : () => Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => CoachEvaluation(
-                                          auth: widget.auth,
-                                          enrollment: {
-                                            'id': player['sportEnrollmentId'],
-                                            'player': player['arabicName'],
-                                            'group': obj(
-                                              data!['session'],
-                                            )['group'],
-                                            'sessionId': widget.sessionId,
-                                            'evaluationDate': obj(
-                                              data!['session'],
-                                            )['sessionDate'],
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                            ),
+                          if ((widget.groupHeader.isEmpty ||
+                                  data!['canManageAttendance'] != true) &&
+                              data!['canEvaluate'] == true)
+                            evaluationButton(player, session),
                           if (data!['canManageAttendance'] != true)
                             Chip(
                               avatar: Icon(
@@ -583,6 +661,9 @@ class _CoachAttendanceState extends State<CoachAttendance> {
                                                     .key,
                                           ),
                                   ),
+                                if (widget.groupHeader.isNotEmpty &&
+                                    data!['canEvaluate'] == true)
+                                  evaluationButton(player, session),
                                 PopupMenuButton<String>(
                                   enabled: !busy && draft == null,
                                   tooltip: localized(

@@ -24,11 +24,18 @@ it("ties totals, prior/current drilldowns and CSV to the server cutoff, with no 
   expect(screen.getByText(/الأشهر السابقة ·/)).toHaveTextContent("2,000");expect(screen.getByText(/الشهر المختار ·/)).toHaveTextContent("1,100");
   expect(screen.getAllByRole("link",{name:"كشف الشهر والصرف"}).map(a=>a.getAttribute("href"))).toEqual(["/dashboard/payroll/worker/statement?month=2026-10-01","/dashboard/payroll/worker/statement?month=2026-09-01"]);
   expect(screen.getByRole("link",{name:"تنزيل نفس الكشف CSV"})).toHaveAttribute("href","/api/v1/manage/payroll/worker/account/export?asOf=2026-10-15&cutoffUtc=2026-10-15T10%3A02%3A00Z");
-  expect(screen.getByText(/ليست رصيدًا افتتاحيًا موثقًا/)).toBeVisible();expect(screen.getByText(/مسدد بالمسار السابق مستبعد/)).toBeVisible();expect(screen.queryByRole("button",{name:/صرف|اعتماد/})).not.toBeInTheDocument();expect(vi.mocked(fetch).mock.calls.every(([,o])=>!o?.method)).toBe(true);
+  expect(screen.getByText(/ليست رصيدًا افتتاحيًا موثقًا/)).toBeVisible();
+  const scope = screen.getByText(/سجل الرواتب يعرض الأشهر المسددة بالمسار السابق/);
+  expect(scope).toHaveTextContent("(1)");
+  expect(scope.nextElementSibling).toBe(screen.getByLabelText("مجاميع الحساب"));
+  expect(screen.queryByRole("button",{name:/صرف|اعتماد/})).not.toBeInTheDocument();expect(vi.mocked(fetch).mock.calls.every(([,o])=>!o?.method)).toBe(true);
 });
 it("filters by date, never treats an empty approved list as zero wages, and returns to actual today",async()=>{
   global.fetch=vi.fn(input=>reply(String(input).includes("asOf=")?{...value,asOf:"2026-09-30",items:[],currentMonthApproved:false,totalDue:0,totalPaid:0,remaining:0}:value)) as typeof fetch;
-  render(<PayrollAccount id="worker"/>);await screen.findByLabelText("مجاميع الحساب");fireEvent.change(screen.getByLabelText("حتى تاريخ"),{target:{value:"2026-09-30"}});fireEvent.click(screen.getByRole("button",{name:/^عرض$/}));await screen.findByText(/لا مصادر معتمدة حتى هذا التاريخ/);expect(screen.getByText(/غيابه لا يعني/)).toBeVisible();fireEvent.click(screen.getByRole("button",{name:"حتى اليوم"}));await screen.findByLabelText("أشهر حساب الموظف");expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toBe("/api/v1/manage/payroll/worker/account");
+  render(<PayrollAccount id="worker"/>);await screen.findByLabelText("مجاميع الحساب");fireEvent.change(screen.getByLabelText("حتى تاريخ"),{target:{value:"2026-09-30"}});fireEvent.click(screen.getByRole("button",{name:/^عرض$/}));await screen.findByText(/لا مصادر معتمدة حتى هذا التاريخ/);expect(screen.getByText(/غيابه لا يعني/)).toBeVisible();
+  expect(screen.getByText("المسدد من المصادر المعتمدة").parentElement).toHaveTextContent("0 جنيه");
+  expect(screen.getByText(/المجاميع أدناه تخص المصادر المعتمدة فقط/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button",{name:"حتى اليوم"}));await screen.findByLabelText("أشهر حساب الموظف");expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toBe("/api/v1/manage/payroll/worker/account");
 });
 it("hides stale employee totals and the export on permission or date failure",async()=>{
   global.fetch=vi.fn(()=>reply({title:"no"},403)) as typeof fetch;render(<PayrollAccount id="worker"/>);await screen.findByText(/تعذر تحميل كشف الحساب/);expect(screen.queryByLabelText("مجاميع الحساب")).not.toBeInTheDocument();expect(screen.queryByRole("link",{name:/CSV/})).not.toBeInTheDocument();

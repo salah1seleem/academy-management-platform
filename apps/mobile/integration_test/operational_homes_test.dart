@@ -107,7 +107,7 @@ void main() {
           '/api/v1/manage/payment-requests?status=Pending&allDates=true',
         ),
       );
-      await waitFor(find.text('${queue['pending']} طلب بانتظار المراجعة'));
+      await waitFor(find.text('طلبات معلّقة (${queue['pending']})'));
       await capture('admin-queue');
       await tester.pumpWidget(const SizedBox());
       await admin.logout();

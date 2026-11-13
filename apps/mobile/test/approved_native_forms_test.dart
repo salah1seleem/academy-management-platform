@@ -424,6 +424,7 @@ void main() {
               : '900.00',
         );
         expect(registration!['existingPlayerId'], 'existing-player');
+        expect(quotes.last['existingPlayerId'], registration!['existingPlayerId']);
         expect(registration!['groupId'], optional ? null : 'group');
         expect(registration!['ageOverrideConfirmed'], ageCase);
         expect(registration!['paymentMethod'], 'Online');
@@ -450,7 +451,15 @@ void main() {
           ];
           expect(keys.every((k) => k == keys.first && k != null), isTrue);
         }
-        expect(find.text('تم حفظ الاشتراك'), findsOneWidget);
+        expect(
+          find.text(waived ? 'تم التسجيل واعتماد الإعفاء.' : 'تم حفظ الاشتراك'),
+          findsOneWidget,
+        );
+        expect(find.text('عرض الاشتراك'), findsOneWidget);
+        expect(
+          find.text('عرض الإيصال'),
+          waived ? findsNothing : findsOneWidget,
+        );
         if (waived) {
           final transport = auth.transport as FakeApi;
           expect(
@@ -459,6 +468,154 @@ void main() {
           );
           expect(find.text('تم التسجيل واعتماد الإعفاء.'), findsOneWidget);
         }
+        await t.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
+
+  for (final unavailable in [false, true]) {
+    testWidgets(
+      'New registration clears a stale review and reloads its options ($unavailable)',
+      (t) async {
+        var listReads = 0, submissions = 0, quotes = 0;
+        final auth = await fixtures.authenticate('AcademyOwner', (
+          method,
+          path,
+          body,
+          token,
+        ) async {
+          if (path.endsWith('/structure/options')) {
+            return {
+              'branches': [
+                {'id': 'branch', 'arabicName': 'فرع اصطناعي'},
+              ],
+              'sports': [
+                {'id': 'sport', 'arabicName': 'رياضة تجريبية'},
+              ],
+              'groups': [],
+              'categories': [],
+            };
+          }
+          if (path.endsWith('/discount-rules/')) return {'items': []};
+          if (path.endsWith('/subscriptions/plans')) {
+            listReads++;
+            if (listReads == 2)
+              throw const ApiFailure(503, 'تعذر تحميل الباقات.');
+            return [
+              {
+                'id': 'plan',
+                'sportId': 'sport',
+                'arabicName': 'باقة اختبار',
+                'isActive': !unavailable || listReads == 1,
+                'allBranches': true,
+                'trainingFormat': 'Group',
+                'price': listReads == 1 ? 900 : 950,
+                'currency': 'EGP',
+              },
+              if (listReads > 1)
+                {
+                  'id': 'other',
+                  'sportId': 'sport',
+                  'arabicName': 'باقة بديلة',
+                  'isActive': true,
+                  'allBranches': true,
+                  'trainingFormat': 'Group',
+                  'price': 950,
+                  'currency': 'EGP',
+                },
+            ];
+          }
+          if (path.endsWith('/registration-quote')) {
+            quotes++;
+            return {
+              'originalAmount': listReads == 1 ? '900.00' : '950.00',
+              'discountAmount': '0.00',
+              'finalAmount': listReads == 1 ? '900.00' : '950.00',
+              'currency': 'EGP',
+            };
+          }
+          if (path.endsWith('/registrations')) {
+            submissions++;
+            expect(obj(body)['expectedAmount'], '900.00');
+            throw ApiFailure(
+              unavailable ? 422 : 409,
+              unavailable
+                  ? 'الباقة لم تعد متاحة لهذا التسجيل.'
+                  : 'تغيّر المبلغ المستحق.',
+              code: unavailable
+                  ? 'registration_plan_unavailable'
+                  : 'registration_price_changed',
+            );
+          }
+          throw StateError('Unexpected $method $path');
+        });
+        await t.pumpWidget(
+          fixtures.app(
+            NativeNewEnrollment(
+              auth: auth,
+              player: const {
+                'id': 'existing',
+                'arabicName': 'لاعب اصطناعي',
+                'dateOfBirth': '2020-01-01',
+              },
+            ),
+          ),
+        );
+        await t.pumpAndSettle();
+        await text(t, 'اسم ولي الأمر', 'ولي أمر اصطناعي');
+        await text(t, 'رقم الهاتف', '01000000000');
+        await choose(t, 'الفرع', 'فرع اصطناعي');
+        await choose(t, 'الرياضة', 'رياضة تجريبية');
+        await choose(t, 'الباقة', 'باقة اختبار · 900 ج.م');
+        await tap(t, 'حساب المبلغ المستحق');
+        await choose(t, 'طريقة التحصيل', 'تحويل إلكتروني تم استلامه');
+        await tap(t, 'أؤكد استلام المبلغ النهائي فعليًا');
+        await tap(t, 'مراجعة الاشتراك');
+        await t.ensureVisible(find.text('تأكيد وإنشاء الاشتراك'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('تأكيد وإنشاء الاشتراك'));
+        await t.pump(const Duration(milliseconds: 500));
+        await t.tap(find.text('تأكيد'));
+        await t.pumpAndSettle();
+        expect(submissions, 1);
+        expect(find.text('تأكيد وإنشاء الاشتراك'), findsNothing);
+        expect(find.text('المبلغ النهائي'), findsNothing);
+        await tap(t, 'إعادة تحميل خيارات الاشتراك');
+        expect(listReads, 3);
+        expect(find.text('ولي أمر اصطناعي'), findsOneWidget);
+        expect(find.text('01000000000'), findsOneWidget);
+        if (unavailable) {
+          expect(find.text('باقة اختبار · 900 ج.م'), findsNothing);
+          await choose(t, 'الباقة', 'باقة بديلة · 950 ج.م');
+        } else {
+          expect(find.text('باقة اختبار · 950 ج.م'), findsOneWidget);
+        }
+        await tap(t, 'حساب المبلغ المستحق');
+        expect(
+          find.widgetWithText(FilledButton, 'مراجعة الاشتراك'),
+          findsOneWidget,
+        );
+        expect(
+          t
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'مراجعة الاشتراك'),
+              )
+              .onPressed,
+          isNull,
+        );
+        await tap(t, 'أؤكد استلام المبلغ النهائي فعليًا');
+        await tap(t, 'حساب المبلغ المستحق');
+        expect(
+          t
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'مراجعة الاشتراك'),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(quotes, 3);
+        expect(submissions, 1);
         await t.pumpWidget(const SizedBox());
         auth.dispose();
       },

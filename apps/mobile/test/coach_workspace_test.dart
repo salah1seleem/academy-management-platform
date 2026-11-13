@@ -1,12 +1,11 @@
 import 'support/visibility.dart';
 
-import 'package:academy_mobile/features/owner/owner_quick_operations.dart';
+import 'package:academy_mobile/features/coach/coach_attendance.dart';
 
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
-import 'package:academy_mobile/features/shared/directory_cards.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -42,7 +41,24 @@ Object? homeResponse(String path, {List<Object?>? sessions}) {
   }
   if (path == '/api/v1/coach/groups') {
     return [
-      {'id': 'g1', 'arabicName': 'مجموعة الناشئين'},
+      {
+        'id': 'g1',
+        'arabicName': 'مجموعة الناشئين',
+        'branchName': 'فرع مدينتي',
+        'playerCount': 1,
+        'recurring': [
+          {
+            'dayOfWeek': 'Saturday',
+            'startTime': '18:00:00',
+            'endTime': '19:00:00',
+          },
+          {
+            'dayOfWeek': 'Monday',
+            'startTime': '18:00:00',
+            'endTime': '19:00:00',
+          },
+        ],
+      },
     ];
   }
   if (path == '/api/v1/attendance/sessions?nearestOnly=true') {
@@ -88,9 +104,67 @@ Widget app(
 );
 
 void main() {
+  testWidgets('Refreshing coach home reads the latest clock-in policy', (
+    tester,
+  ) async {
+    var enabled = true;
+    var open = false;
+    var reads = 0;
+    final auth = await coach((method, path, body, token) async {
+      if (path == '/api/v1/staff/passkeys/attendance') {
+        reads++;
+        return {
+          'branches': [
+            {'enabled': enabled},
+          ],
+          'hasOpenAttendance': open,
+        };
+      }
+      return homeResponse(path);
+    });
+    await tester.pumpWidget(app(auth));
+    await tester.pumpAndSettle();
+    final action = find.text('حضور وانصراف');
+    final groups = find.text('مجموعات مسندة');
+    expect(action, findsOneWidget);
+    expect(groups, findsOneWidget);
+
+    Future<void> refresh() async {
+      final indicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator).first,
+      );
+      await indicator.onRefresh();
+      await tester.pumpAndSettle();
+    }
+
+    enabled = false;
+    await refresh();
+    expect(reads, 2);
+    expect(action, findsNothing);
+    expect(groups, findsOneWidget);
+
+    open = true;
+    await refresh();
+    expect(reads, 3);
+    expect(action, findsOneWidget);
+    expect(find.text('لديك تسجيل حضور مفتوح'), findsOneWidget);
+
+    open = false;
+    await refresh();
+    expect(reads, 4);
+    expect(action, findsNothing);
+
+    enabled = true;
+    await refresh();
+    expect(reads, 5);
+    expect(action, findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    auth.dispose();
+  });
+
   for (final allowed in [false, true]) {
     testWidgets(
-      'Today group evaluation stays independent; attendance grant=$allowed',
+      'Group roster shows evaluation and only dated delegated attendance (grant=$allowed)',
       (tester) async {
         tester.view.physicalSize = const Size(390, 844);
         tester.view.devicePixelRatio = 1;
@@ -118,36 +192,68 @@ void main() {
               ],
             };
           }
-          if (path.startsWith('/api/v1/attendance/sessions?from=')) {
-            return [session('today', '2026-10-15', '18:00:00')];
+          if (path == '/api/v1/attendance/sessions?groupId=g1') {
+            return [
+              {
+                ...session('foreign', '2026-10-15', '17:00:00'),
+                'trainingGroupId': 'g2',
+              },
+              session('today', '2026-10-15', '18:00:00'),
+            ];
+          }
+          if (path == '/api/v1/attendance/sessions/today/players') {
+            return {
+              'canManageAttendance': allowed,
+              'canEvaluate': true,
+              'session': session('today', '2026-10-15', '18:00:00'),
+              'players': [
+                {
+                  'sportEnrollmentId': 'e1',
+                  'arabicName': 'آدم التجريبي',
+                  'playerCode': 'TEST-1',
+                  'attendanceStatus': 'NotRecorded',
+                },
+              ],
+            };
           }
           return homeResponse(path);
         });
         await tester.pumpWidget(app(auth));
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(
-          find.text('حصص اليوم · 1'),
-          200,
-          scrollable: find.byType(Scrollable).first,
+        final group = find.byKey(const ValueKey('coach-group-g1'));
+        final open = find.descendant(
+          of: group,
+          matching: find.text('فتح المجموعة'),
         );
-        final evaluate = find.widgetWithText(TextButton, 'التقييم');
-        await tester.scrollUntilVisible(
-          evaluate,
-          180,
-          scrollable: find.byType(Scrollable).first,
-        );
+        await revealTestTarget(tester, open);
+        expect(find.textContaining('السبت، الاثنين'), findsOneWidget);
+        await tester.tap(open);
+        await tester.pumpAndSettle();
+        final player = find.text('آدم التجريبي');
+        await revealTestTarget(tester, player);
+        expect(player, findsOneWidget);
+        expect(find.text('لاعب مجموعة أخرى'), findsNothing);
+        final evaluate = find.text('تقييم');
+        await revealTestTarget(tester, evaluate);
+        expect(evaluate, findsOneWidget);
         expect(
-          find.widgetWithText(OutlinedButton, 'تسجيل الحضور'),
+          find.byType(CoachAttendance),
           allowed ? findsOneWidget : findsNothing,
         );
-        await tester.ensureVisible(evaluate);
-        await tester.pumpAndSettle();
-        await tester.tap(evaluate);
-        await tester.pumpAndSettle();
-        expect(find.byType(NativeEvaluationPicker), findsOneWidget);
-        expect(find.text('آدم التجريبي'), findsOneWidget);
-        expect(find.text('لاعب مجموعة أخرى'), findsNothing);
-        expect(paths.any((path) => path.endsWith('/players')), false);
+        if (allowed) {
+          await revealTestTarget(tester, find.text('حاضر'));
+          expect(find.text('حاضر'), findsOneWidget);
+          expect(find.text('غائب'), findsOneWidget);
+          expect(find.text('حفظ الحضور'), findsOneWidget);
+        }
+        expect(
+          paths.contains('/api/v1/attendance/sessions/today/players'),
+          allowed,
+        );
+        expect(
+          paths.contains('/api/v1/attendance/sessions/foreign/players'),
+          false,
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
         auth.dispose();
@@ -243,6 +349,7 @@ void main() {
         180,
         scrollable: find.byType(Scrollable).first,
       );
+      await revealTestTarget(tester, nearestOpen);
       await tester.tap(nearestOpen);
       await tester.pumpAndSettle();
       expect(
@@ -250,8 +357,8 @@ void main() {
         isNot(contains('/api/v1/attendance/sessions/nearest/players')),
       );
       expect(find.text('مجموعة الناشئين'), findsWidgets);
+      await revealTestTarget(tester, find.text('آدم التجريبي'));
       expect(find.text('آدم التجريبي'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'التقييم الشهري'), findsOneWidget);
       expect(find.text('تسجيل الحضور'), findsNothing);
       expect(find.widgetWithText(FilledButton, 'تقييم'), findsOneWidget);
       expect(find.text('حفظ الحضور'), findsNothing);
@@ -271,29 +378,15 @@ void main() {
       );
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('لا توجد حصة قادمة مجدولة.'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('لا توجد حصة قادمة مجدولة.'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('مجموعاتي'),
-        -200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.text('مجموعاتي'));
+      expect(find.text('لا توجد حصة قادمة مجدولة.'), findsNothing);
+      await revealTestTarget(tester, find.text('فتح المجموعة'));
+      await tester.tap(find.text('فتح المجموعة'));
       await tester.pumpAndSettle();
-      await revealTestTarget(tester, find.byType(GroupDirectoryCard));
-      await tester.tap(find.byType(GroupDirectoryCard));
-      await tester.pumpAndSettle();
+      await revealTestTarget(tester, find.text('آدم التجريبي'));
       expect(find.text('آدم التجريبي'), findsOneWidget);
+      expect(find.text('لاعب واحد في المجموعة'), findsOneWidget);
       expect(find.text('فتح الحصة الأقرب'), findsNothing);
-      expect(
-        find.text('رفع صور وفيديوهات للحصة'),
-        findsNothing,
-        reason: 'Session media needs an actual session; empty groups do not bypass publication context.',
-      );
+      expect(find.text('رفع صور وفيديوهات المجموعة'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       auth.dispose();
@@ -312,12 +405,13 @@ void main() {
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
+      await revealTestTarget(tester, find.text('إعادة تحميل الحصة القادمة'));
       expect(find.text('تعذر الاتصال'), findsOneWidget);
       fail = false;
       await tester.tap(find.text('إعادة تحميل الحصة القادمة'));
       await tester.pumpAndSettle();
-      await revealTestTarget(tester, find.text('المجموعات المسندة'));
-      expect(find.text('المجموعات المسندة'), findsOneWidget);
+      await revealTestTarget(tester, find.text('مجموعات مسندة'));
+      expect(find.text('مجموعات مسندة'), findsOneWidget);
       expect(find.text('تعذر الاتصال'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

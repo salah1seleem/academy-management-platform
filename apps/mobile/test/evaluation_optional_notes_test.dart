@@ -46,6 +46,7 @@ void main() {
                   {
                     'criterionId': 'zero',
                     'name': 'التوازن',
+                    'notes': 'ملاحظة المعيار المحفوظة',
                     'score': scoreRows == null
                         ? 0
                         : (scoreRows[0] as Map)['score'],
@@ -85,14 +86,22 @@ void main() {
             scrollable: find.byType(Scrollable).first,
           );
           expect(t.widget<TextField>(notes).controller!.text, note ?? '');
-          await t.ensureVisible(find.text('نشر التقييم بدون ولي الأمر'));
-          await t.tap(find.text('نشر التقييم بدون ولي الأمر'));
+          final editedNote = note?.isNotEmpty == true ? '' : 'ملاحظة محدثة';
+          await t.enterText(notes, editedNote);
+          await t.pump();
+          await t.tap(find.text('مراجعة النشر'));
+          await t.pumpAndSettle();
+          await t.tap(find.text('اعتماد داخلي'));
           await t.pumpAndSettle();
           expect(puts, 1);
           expect(publishes, 1);
-          expect(saved!['generalNotes'], note ?? '');
+          expect(saved!['generalNotes'], editedNote);
           expect(saved!['scores'], [
-            {'criterionId': 'zero', 'score': 0, 'notes': null},
+            {
+              'criterionId': 'zero',
+              'score': 0,
+              'notes': 'ملاحظة المعيار المحفوظة',
+            },
             {'criterionId': 'untouched', 'score': null, 'notes': null},
           ]);
           expect(find.text('حُفظ التقييم للاستخدام الداخلي.'), findsOneWidget);

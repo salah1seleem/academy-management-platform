@@ -10,13 +10,19 @@ public static partial class EgyptPhoneNormalizer
         value = string.Concat(value.Select(c => c is >= '٠' and <= '٩' ? (char)('0' + c - '٠')
             : c is >= '۰' and <= '۹' ? (char)('0' + c - '۰') : c));
         if (value.Any(c => !char.IsAsciiDigit(c) && c is not ('+' or '-' or '(' or ')') && !char.IsWhiteSpace(c))) return null;
-        var digits = NonDigits().Replace(value, string.Empty);
-        if (digits.StartsWith("00", StringComparison.Ordinal)) digits = digits[2..];
-        if (digits.StartsWith('0')) digits = $"20{digits[1..]}";
-        if (digits.Length != 12 || !digits.StartsWith("201", StringComparison.Ordinal)) return null;
-        return $"+{digits}";
+        var match = MobileNumber().Match(Separators().Replace(value, string.Empty));
+        return match.Success ? $"+20{match.Groups[1].Value}" : null;
     }
 
-    [GeneratedRegex("[^0-9]")]
-    private static partial Regex NonDigits();
+    public static string? NormalizeForNewMobile(string? value)
+    {
+        var normalized = Normalize(value);
+        return normalized is not null && normalized[4] is '0' or '1' or '2' or '5' ? normalized : null;
+    }
+
+    [GeneratedRegex(@"[\s()\-]")]
+    private static partial Regex Separators();
+
+    [GeneratedRegex(@"\A(?:(?:\+|00)?200?|0)(1[0-9]{9})\z")]
+    private static partial Regex MobileNumber();
 }

@@ -58,18 +58,21 @@ class AppScaffold extends StatelessWidget {
   final Widget child;
   final List<Widget>? actions;
   final Widget? bottomBar;
+  final VoidCallback? onBack;
   const AppScaffold({
     super.key,
     required this.title,
     required this.child,
     this.actions,
     this.bottomBar,
+    this.onBack,
   });
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: title,
     actions: actions,
     bottom: bottomBar,
+    onBack: onBack,
     child: child,
   );
 }

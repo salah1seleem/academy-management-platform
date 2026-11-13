@@ -1,0 +1,101 @@
+.detail {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 62rem;
+}
+
+.identity, .statuses, .amounts, .fields, .preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem 1rem;
+}
+
+.identity {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.identity h2, .identity p, .notice, .history > p {
+  margin: 0;
+}
+
+.identity p, .history > p, .amounts dt, .preview dt {
+  color: var(--staff-text-muted);
+}
+
+.statuses > span {
+  display: flex;
+  gap: .4rem;
+  align-items: center;
+  font-size: .85rem;
+}
+
+.amounts, .preview {
+  margin: 0;
+  border-block: 1px solid var(--staff-border);
+  padding-block: .8rem;
+}
+
+.amounts > div, .preview > div {
+  flex: 1 0 auto;
+}
+
+.amounts dd, .preview dd {
+  margin: .2rem 0 0;
+  font-weight: 700;
+}
+
+.total dd {
+  font-size: 1.15rem;
+}
+
+.detail .editor {
+  background: var(--staff-surface);
+  color: var(--staff-text);
+  display: grid;
+  gap: .8rem;
+  border: 1px solid var(--staff-border);
+  padding: .8rem;
+}
+
+.editor h2, .editor p {
+  margin: 0;
+}
+
+.fields > label {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+}
+
+.fieldError {
+  color: var(--staff-danger);
+}
+
+.notice {
+  padding: .65rem .8rem;
+  border-inline-start: 3px solid var(--staff-primary-600);
+  background: var(--staff-primary-50);
+  color: var(--staff-text);
+}
+
+.history {
+  border-block-start: 1px solid var(--staff-border);
+  padding-block-start: .75rem;
+}
+
+.detail .history article {
+  color: var(--staff-text);
+  background: var(--staff-surface-muted);
+  border-color: var(--staff-border);
+}
+
+.detail .history article > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: .35rem .65rem;
+}
+
+.detail .history small {
+  color: var(--staff-text-muted);
+}

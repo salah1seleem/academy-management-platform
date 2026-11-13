@@ -66,7 +66,7 @@ describe("training timetable UX", () => {
     const saved = vi.fn(); window.addEventListener("academy-save-success", saved);
     global.fetch = vi.fn(input => response(String(input).includes("csrf") ? { token: "token" } : {})) as typeof fetch;
     await csrfRequest("/api/v1/manage/example", "PUT", {});
-    expect(saved.mock.calls[0][0].detail).toBe("تم حفظ التعديلات بنجاح.");
+    expect(saved.mock.calls[0][0].detail).toBe("تم حفظ التعديلات.");
     window.removeEventListener("academy-save-success", saved);
   });
   it("does not treat a read-only registration quote as a saved change", async () => {

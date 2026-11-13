@@ -10,6 +10,7 @@ const routes = [
   "/dashboard/academy/groups/sessions",
   "/dashboard/account/attendance",
   "/dashboard/account/verification",
+  "/dashboard/activities",
   "/dashboard/attendance/corrections",
   "/dashboard/attendance/corrections/[id]",
   "/dashboard/attendance/history",
@@ -175,7 +176,7 @@ function exists(path: string) {
 /** A deterministic in-app return target also works when a record is opened directly. */
 export function dashboardParentPath(path: string): string | null {
   if (path === "/dashboard/payroll") return "/dashboard/finance?tab=payroll";
-  if (path === "/dashboard/reports/financial") return "/dashboard/finance?tab=collections";
+  if (path === "/dashboard/reports/financial" || path === "/dashboard/reports/receipts") return "/dashboard/finance?tab=collections";
   if (!path.startsWith("/dashboard/") || !exists(path)) return path === "/dashboard" ? null : "/dashboard";
   let parent = path;
   while (parent.includes("/")) {

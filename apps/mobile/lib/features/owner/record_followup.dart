@@ -19,8 +19,15 @@ String recordKey(Json s) =>
     '${s['id']}/${s['branchId'] ?? ''}/${s['sportId'] ?? ''}';
 
 class OwnerRecordFollowUpCreate extends StatefulWidget {
-  const OwnerRecordFollowUpCreate({super.key, required this.auth});
+  const OwnerRecordFollowUpCreate({
+    super.key,
+    required this.auth,
+    this.selectedSource,
+    this.initialNote,
+  });
   final AuthController auth;
+  final Json? selectedSource;
+  final String? initialNote;
   @override
   State<OwnerRecordFollowUpCreate> createState() =>
       _OwnerRecordFollowUpCreateState();
@@ -39,6 +46,14 @@ class _OwnerRecordFollowUpCreateState extends State<OwnerRecordFollowUpCreate> {
   Json? selected;
   String? attemptSignature, attemptId;
   late final identity = followUpContext(widget.auth);
+  @override
+  void initState() {
+    super.initState();
+    selected = widget.selectedSource;
+    if (selected != null) selection = recordKey(selected!);
+    note = widget.initialNote ?? '';
+  }
+
   Future<void> save() async {
     if (busy || selected == null || identity != followUpContext(widget.auth)) {
       return;

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest';
 import { GuardianPlayerGoals, PlayerGoalEditor, PlayerGoals } from './player-goals';
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/guardian/children/p', useRouter: () => ({ push }) }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); push.mockClear(); });
 const enrollment = { id: 'enrollment', playerId: 'child', player: 'لاعب اصطناعي', sport: 'كرة القدم', level: null };
 const goal = { id: 'goal', sportEnrollmentId: 'enrollment', title: 'تمرير دقيق اصطناعي', target: 'نراجع الخطوة الفنية القادمة', reviewOn: '2026-10-31', state: 'Published', version: 7, revision: 2 };
@@ -36,9 +36,61 @@ it('published targets are not editable; a review saves the real version without 
 it('read-only and revoked views do not retain a child goal or editing controls', async () => {
   let allowed = true; global.fetch = vi.fn(async () => allowed ? Response.json({ enrollment, item: goal, canEdit: false, history: [] }) : Response.json({}, { status: 404 })) as typeof fetch;
   render(<PlayerGoalEditor id="goal" />); await screen.findByText(goal.title); expect(screen.queryByRole('button', { name: 'حفظ المراجعة' })).not.toBeInTheDocument();
-  allowed = false; fireEvent.focus(window); await waitFor(() => expect(screen.queryByText(goal.title)).not.toBeInTheDocument()); expect(await screen.findByText(/الهدف أو اللاعب غير متاح/)).toBeVisible();
+  allowed = false; fireEvent.focus(window); await waitFor(() => expect(screen.queryByText(goal.title)).not.toBeInTheDocument()); expect(await screen.findByText(/تعذر تحميل بيانات الهدف/)).toBeVisible();
 });
 it('Guardian sees only the linked published goal and public review, never training edit controls', async () => {
   global.fetch = vi.fn(async path => String(path).includes('/help') ? Response.json({items:[]}) : Response.json({hasMore:false,items:[{goal,sport:'كرة القدم',reviews:[{revision:3,action:'Reviewed',note:'مراجعة منشورة للأسرة',actorName:'مدرب اصطناعي',createdAtUtc:'2026-10-18T06:00:00Z'}]},{goal:{...goal,id:'draft',state:'Draft',title:'مسودة غير منشورة'},sport:'كرة القدم',reviews:[]}]})) as typeof fetch;
-  render(<GuardianPlayerGoals playerId="child"/>); expect(await screen.findByText(goal.title)).toBeVisible();expect(screen.getByText('مراجعة منشورة للأسرة')).toBeVisible();expect(screen.queryByText('مسودة غير منشورة')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'حفظ المراجعة'})).not.toBeInTheDocument();expect(screen.getByRole('link',{name:'العودة لملف اللاعب'})).toHaveAttribute('href','/guardian/children/child');
+  render(<GuardianPlayerGoals playerId="child"/>); expect(await screen.findByText(goal.title)).toBeVisible();expect(screen.getByText('مراجعة منشورة للأسرة')).toBeVisible();expect(screen.queryByText('مسودة غير منشورة')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'حفظ المراجعة'})).not.toBeInTheDocument();expect(screen.getByRole('link',{name:'العودة إلى ملف اللاعب'})).toHaveAttribute('href','/guardian/children/child');
+});
+it('keeps edits through a re-read and confirms the exact saved draft before publishing', async () => {
+  const updatedTitle = 'الهدف الفني بعد التعديل';
+  let saved = { ...goal, state: 'Draft' };
+  const writes: Record<string, unknown>[] = [];
+  global.fetch = vi.fn(async (path, init) => {
+    if (String(path).endsWith('/csrf')) return Response.json({ token: 'csrf' });
+    if (init?.method === 'PUT' || init?.method === 'POST') {
+      const body = JSON.parse(init.body as string);
+      writes.push(body);
+      saved = init.method === 'PUT' ? { ...saved, title: body.title, version: 8 } : { ...saved, state: 'Published', version: 9 };
+      return Response.json({ id: 'goal' });
+    }
+    return Response.json({ enrollment, asOfDate: '2026-10-18', item: saved, canEdit: true });
+  }) as typeof fetch;
+  render(<PlayerGoalEditor id="goal" />);
+  fireEvent.change(await screen.findByLabelText('عنوان الهدف'), { target: { value: updatedTitle } });
+  fireEvent.focus(window);
+  expect(await screen.findByLabelText('عنوان الهدف')).toHaveValue(updatedTitle);
+  expect(screen.getByRole('button', { name: 'مراجعة النشر' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'حفظ المسودة' }));
+  const publish = await waitFor(() => {
+    const button = screen.getByRole('button', { name: 'مراجعة النشر' });
+    expect(button).toBeEnabled();
+    return button;
+  });
+  fireEvent.click(publish);
+  expect(await screen.findByRole('dialog', { name: 'نشر الهدف للأسرة؟' })).toHaveTextContent(updatedTitle);
+  expect(writes).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'إلغاء' }));
+  expect(writes).toHaveLength(1);
+  fireEvent.click(publish);
+  fireEvent.click(await screen.findByRole('button', { name: 'نشر الهدف للأسرة' }));
+  await screen.findByLabelText('نتيجة المراجعة');
+  expect(writes[1]).toMatchObject({ action: 'Published', version: 8 });
+});
+
+it('does not show an internal review and retries a failed family read', async () => {
+  let failed = false;
+  global.fetch = vi.fn(async path => {
+    if (!String(path).includes('/development-goals')) return Response.json({});
+    if (!failed) { failed = true; return Response.json({}, { status: 503 }); }
+    return Response.json({ items: [{ goal, sport: 'كرة القدم', reviews: [
+      { revision: 3, action: 'Edited', note: 'تفاصيل داخلية', actorName: 'مدرب اصطناعي', createdAtUtc: '2026-10-18' },
+      { revision: 2, action: 'Published', note: 'ملاحظة عامة', actorName: 'مدرب اصطناعي', createdAtUtc: '2026-10-18' },
+    ] }] });
+  }) as typeof fetch;
+  render(<GuardianPlayerGoals playerId="child" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'إعادة المحاولة' }));
+  expect(await screen.findByText('ملاحظة عامة')).toBeVisible();
+  expect(screen.queryByText('تفاصيل داخلية')).not.toBeInTheDocument();
+  expect(screen.queryByText('المراجعات السابقة')).not.toBeInTheDocument();
 });

@@ -5,13 +5,16 @@ const arabicDate = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
   timeZone: "UTC",
 });
 
-const arabicDateTime = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
+const dateTimeOptions = {
   year: "numeric",
   month: "short",
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
-});
+} as const;
+const arabicDateTime = new Intl.DateTimeFormat("ar-EG-u-nu-latn", dateTimeOptions);
+const receiptDateTime = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { ...dateTimeOptions, timeZone: "UTC" });
+const offsetTimestamp = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?)(?:Z|[+-]\d{2}:\d{2})$/;
 
 export const planTypeLabels: Record<string, string> = {
   Duration: "بالمدة",
@@ -49,16 +52,17 @@ export const discountTypeLabels: Record<string, string> = {
   FixedAmount: "مبلغ ثابت",
 };
 
-export function formatMoneyAr(amount: unknown, currency: unknown = "EGP") {
+export function formatMoneyAr(amount: unknown, currency: unknown = "EGP", showFraction = false) {
   const value = typeof amount === "number" ? amount : Number(amount ?? 0);
   const code = typeof currency === "string" && currency ? currency : "EGP";
+  const precision = { maximumFractionDigits: 2, ...(showFraction && !Number.isInteger(value) ? { minimumFractionDigits: 2 } : {}) };
   if (code === "EGP") {
-    return `${new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 2 }).format(value)} جنيه`;
+    return `${new Intl.NumberFormat("ar-EG-u-nu-latn", precision).format(value)} جنيه`;
   }
   try {
-    return new Intl.NumberFormat("ar-EG-u-nu-latn", { style: "currency", currency: code, currencyDisplay: "name", maximumFractionDigits: 2 }).format(value);
+    return new Intl.NumberFormat("ar-EG-u-nu-latn", { style: "currency", currency: code, currencyDisplay: "name", ...precision }).format(value);
   } catch {
-    return `${new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 2 }).format(value)} ${code}`;
+    return `${new Intl.NumberFormat("ar-EG-u-nu-latn", precision).format(value)} ${code}`;
   }
 }
 
@@ -89,6 +93,24 @@ export function formatDateTimeAr(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : arabicDateTime.format(date);
+}
+
+function formatReceiptClock(date: Date) {
+  return receiptDateTime.format(date).replace(/\s(?=[صم]$)/u, "\u00a0");
+}
+
+export function formatReceiptTimestampAr(utcValue: unknown, academyValue: unknown) {
+  if (typeof utcValue !== "string" || !offsetTimestamp.test(utcValue)) return null;
+  const utc = new Date(utcValue);
+  if (!Number.isFinite(utc.valueOf())) return null;
+  if (typeof academyValue === "string") {
+    const wallTime = offsetTimestamp.exec(academyValue)?.[1];
+    if (wallTime && Date.parse(academyValue) === utc.valueOf()) {
+      // Format the clock fields supplied with the academy offset without a second conversion.
+      return { text: formatReceiptClock(new Date(`${wallTime}Z`)), zone: "بتوقيت الأكاديمية" };
+    }
+  }
+  return { text: formatReceiptClock(utc), zone: "بالتوقيت العالمي" };
 }
 
 export function statusLabel(value?: string | null) {

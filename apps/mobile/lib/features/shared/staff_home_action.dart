@@ -4,6 +4,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'native_staff_attendance.dart';
+import 'staff_attendance_exceptions.dart' show staffContext;
 
 class StaffHomeAttendanceAction extends StatefulWidget {
   const StaffHomeAttendanceAction({super.key, required this.auth});
@@ -13,15 +14,42 @@ class StaffHomeAttendanceAction extends StatefulWidget {
       _StaffHomeAttendanceActionState();
 }
 
-class _StaffHomeAttendanceActionState extends State<StaffHomeAttendanceAction> {
-  String? get identity => widget.auth.session?.selected == null
-      ? null
-      : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+class _StaffHomeAttendanceActionState extends State<StaffHomeAttendanceAction>
+    with WidgetsBindingObserver {
+  String? get identity => staffContext(widget.auth);
   late final opened = identity;
   late Future<Object?> data = widget.auth.request(
     'GET',
     NativeStaffAttendanceFlow.root,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void refresh() {
+    if (!mounted || opened == null || identity != opened) return;
+    setState(() {
+      data = widget.auth.request('GET', NativeStaffAttendanceFlow.root);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        (ModalRoute.of(context)?.isCurrent ?? true)) {
+      refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.auth,
@@ -30,7 +58,10 @@ class _StaffHomeAttendanceActionState extends State<StaffHomeAttendanceAction> {
       return FutureBuilder(
         future: data,
         builder: (context, s) {
-          if (s.data is! Map<String, dynamic>) return const SizedBox.shrink();
+          if (s.connectionState != ConnectionState.done ||
+              s.data is! Map<String, dynamic>) {
+            return const SizedBox.shrink();
+          }
           final d = obj(s.data);
           if (!rows(d['branches'] ?? <Json>[])
                   .any((b) => b['enabled'] == true) &&
@@ -43,14 +74,7 @@ class _StaffHomeAttendanceActionState extends State<StaffHomeAttendanceAction> {
                 context,
                 NativeStaffAttendancePage(auth: widget.auth),
               );
-              if (mounted && identity == opened) {
-                setState(() {
-                  data = widget.auth.request(
-                    'GET',
-                    NativeStaffAttendanceFlow.root,
-                  );
-                });
-              }
+              refresh();
             },
             child: Row(
               children: [

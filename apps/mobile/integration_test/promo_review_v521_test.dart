@@ -292,11 +292,11 @@ void main() {
         playerName: 'يوسف',
       ),
     );
-    await wait(find.text('خطة اليوم'));
+    await wait(find.text('اقتراحات اليوم'));
     await snap('nutrition-tabs');
-    await tap(find.text('خطة اليوم'));
+    await tap(find.text('اقتراحات اليوم'));
     await snap('nutrition-plan');
-    await tap(find.text('خطة اليوم'));
+    await tap(find.text('اقتراحات اليوم'));
     await tap(find.text('الغداء'));
     final meals = rows(
       await t.runAsync(

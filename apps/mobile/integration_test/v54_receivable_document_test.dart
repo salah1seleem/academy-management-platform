@@ -171,14 +171,15 @@ void main() {
         await t.tap(find.text(textOf(credit['description'])));
         await wait(find.byType(ReceivableDocumentPage));
         await wait(find.text('رصيد لصالح العميل'));
-        expect(
-          t.widget<MoneyText>(find.byType(MoneyText).first).value,
-          '-100.00',
-        );
+        expect(t.widget<MoneyText>(find.byType(MoneyText).first).value, 100);
         await binding.takeScreenshot(
           'phase-approved-owner-receivable-credit-document',
         );
-        await scroll(find.text(receivableDemoCollection));
+        final reference = find.text('مرجع التحصيل المخصص');
+        await scroll(reference.hitTestable());
+        await t.tap(reference);
+        await t.pumpAndSettle();
+        await scroll(find.text(receivableDemoCollection).hitTestable());
         await binding.takeScreenshot(
           'phase-approved-owner-receivable-source-movements',
         );
@@ -220,7 +221,7 @@ void main() {
         );
         await wait(find.byKey(const ValueKey('guardian-home-scroll')));
         await t.scrollUntilVisible(
-          find.text('أرصدة الأسرة'),
+          find.text('إيصالاتي'),
           400,
           scrollable: find
               .descendant(
@@ -231,30 +232,8 @@ void main() {
           maxScrolls: 100,
         );
         await t.pumpAndSettle();
-        final familyAction = find.text('أرصدة الأسرة');
-        if (familyAction.hitTestable().evaluate().isEmpty) {
-          await t.drag(
-            find
-                .descendant(
-                  of: find.byKey(const ValueKey('guardian-home-scroll')),
-                  matching: find.byType(Scrollable),
-                )
-                .first,
-            const Offset(0, -200),
-          );
-          await t.pumpAndSettle();
-        }
-        await binding.takeScreenshot(
-          'phase-approved-guardian-receivable-footer-link',
-        );
-        expect(familyAction.hitTestable(), findsOneWidget);
-        await t.tap(familyAction);
-        await wait(find.text('إجمالي المستحقات'));
-        expect(find.text('1,040 ج.م'), findsOneWidget);
-        expect(find.text('عرض المستند وحركاته'), findsNothing);
-        await binding.takeScreenshot(
-          'phase-approved-guardian-receivable-own-summary',
-        );
+        expect(find.text('أرصدة الأسرة'), findsNothing);
+        expect(find.text('إيصالاتي'), findsOneWidget);
         final after = obj(
           await owner.request(
             'GET',

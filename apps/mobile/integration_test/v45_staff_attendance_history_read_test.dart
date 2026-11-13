@@ -103,7 +103,7 @@ void main() {
         AcademyApp(auth: auth, environment: 'Demo', appearance: appearance),
       );
       await wait(find.byType(NativeRoleTabs));
-      await wait(find.text('المجموعات المسندة'));
+      await wait(find.text('تدريباتي'));
       await tap('حضور وانصراف');
       await wait(find.byType(NativeStaffAttendancePage));
       await wait(find.text('كيف يُثبت حضورك؟'));

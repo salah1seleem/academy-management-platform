@@ -6,10 +6,11 @@ class RoleHomeIntro extends StatelessWidget {
   const RoleHomeIntro({
     super.key,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     this.trailing,
   });
-  final String title, subtitle;
+  final String title;
+  final String? subtitle;
   final Widget? trailing;
   @override
   Widget build(BuildContext context) => Padding(
@@ -22,8 +23,10 @@ class RoleHomeIntro extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               UiText(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 3),
-              UiText(subtitle, style: Theme.of(context).textTheme.bodySmall),
+              if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                const SizedBox(height: 3),
+                UiText(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+              ],
             ],
           ),
         ),

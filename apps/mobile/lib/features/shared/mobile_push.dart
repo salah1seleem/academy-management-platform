@@ -123,6 +123,11 @@ class _MobilePushBridgeState extends State<MobilePushBridge>
   Future<void> sync() async {
     if (!mounted || busy || widget.auth.busy) return;
     final auth = widget.auth;
+    if (auth.roleSessionUnconfirmed) {
+      pending = null;
+      pushIntent(auth).value = null;
+      return;
+    }
     if (auth.session == null) {
       if (account != null) {
         pushIntent(auth).value = null;
@@ -155,6 +160,10 @@ class _MobilePushBridgeState extends State<MobilePushBridge>
       }
       if (auth.session?.selected != null) await service.register(auth);
     } catch (_) {
+      if (auth.roleSessionUnconfirmed) {
+        pending = null;
+        pushIntent(auth).value = null;
+      }
       /* Keep inbox accessible; retry on foreground/token change. */
     } finally {
       busy = false;

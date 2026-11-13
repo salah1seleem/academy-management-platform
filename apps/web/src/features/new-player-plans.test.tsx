@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import NewPlayerPage from "../app/dashboard/players/new/page";
 
@@ -53,6 +53,65 @@ it("explains when the chosen sport has no active packages without allowing colle
   fireEvent.change(screen.getByLabelText("الرياضة"), { target: { value: "tennis" } });
   expect(screen.getByText(/لا توجد باقات نشطة لهذه الرياضة/)).toBeVisible();
   expect(screen.getByRole("button", { name: "تسجيل وتأكيد التحصيل" })).toBeDisabled();
+});
+
+it("keeps the form out of the way until options load and offers retry after failure", async () => {
+  const baseFetch = vi.mocked(fetch).getMockImplementation()!;
+  let attempts = 0;
+  vi.mocked(fetch).mockImplementation((input, init) => {
+    if (String(input).endsWith("/subscriptions/plans") && ++attempts === 1) return Promise.resolve(new Response(null, { status: 503 }));
+    return baseFetch(input, init);
+  });
+  render(<NewPlayerPage />);
+  expect(screen.getByRole("status")).toHaveTextContent("جارٍ تحميل خيارات التسجيل");
+  expect(screen.queryByLabelText("الباقة")).not.toBeInTheDocument();
+  expect(await screen.findByRole("alert")).toHaveTextContent("تعذر تحميل الفروع والمجموعات والباقات.");
+  fireEvent.click(screen.getByRole("button", { name: "إعادة تحميل النموذج" }));
+  expect(await screen.findByRole("option", { name: /اشتراك شهري/ })).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("ignores the previous quote and registers a group package without assigning a group", async () => {
+  let replyToOldQuote!: (response: Response) => void;
+  const oldQuote = new Promise<Response>(resolve => { replyToOldQuote = resolve; });
+  const quoteRequests: string[] = [];
+  const registrations: Record<string, unknown>[] = [];
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  global.fetch = vi.fn(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/registration-quote")) {
+      quoteRequests.push(JSON.parse(String(init?.body)).guardianPhone);
+      return quoteRequests.length === 1 ? oldQuote : Response.json({ originalAmount: 800, discountAmount: 0, finalAmount: 800, currency: "EGP" });
+    }
+    if (url.endsWith("/registrations")) {
+      registrations.push(JSON.parse(String(init?.body)));
+      return Response.json({ playerId: "player-1" }, { status: 201 });
+    }
+    if (url.endsWith("/auth/csrf")) return Response.json({ token: "test-token" });
+    if (url.includes("structure/options")) return Response.json({ branches: [{ id: "b", arabicName: "فرع اختبار" }], sports: [{ id: "s", arabicName: "سباحة" }], categories: [], groups: [] });
+    if (url.endsWith("/subscriptions/plans")) return Response.json([{ id: "p", arabicName: "باقة جماعي", sportId: "s", price: 800, currency: "EGP", isActive: true, trainingFormat: "Group" }]);
+    return Response.json({});
+  });
+  render(<NewPlayerPage />);
+  await screen.findByRole("option", { name: /باقة جماعي/ });
+  for (const [label, value] of [["اسم اللاعب بالعربية", "لاعب اختبار"], ["تاريخ الميلاد", "2016-01-01"], ["اسم ولي الأمر", "ولي أمر اختبار"], ["رقم الهاتف", "01000000001"], ["الفرع", "b"], ["الباقة", "p"]]) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  }
+  expect(screen.getByLabelText("المجموعة")).not.toBeRequired();
+  expect(screen.getByLabelText("الفئة العمرية")).not.toBeRequired();
+  fireEvent.click(screen.getByRole("button", { name: "حساب المبلغ المستحق" }));
+  await waitFor(() => expect(quoteRequests).toEqual(["01000000001"]));
+  expect(screen.getByRole("button", { name: "جارٍ حساب المبلغ…" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("رقم الهاتف"), { target: { value: "01000000002" } });
+  await act(async () => replyToOldQuote(Response.json({ originalAmount: 900, discountAmount: 0, finalAmount: 900, currency: "EGP" })));
+  expect(screen.queryByText(/المبلغ المطلوب تحصيله/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("طريقة التحصيل")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "حساب المبلغ المستحق" }));
+  expect(await screen.findByText("المبلغ المطلوب تحصيله: 800 جنيه")).toBeVisible();
+  fireEvent.change(screen.getByLabelText("طريقة التحصيل"), { target: { value: "Online" } });
+  fireEvent.click(screen.getByRole("button", { name: "تسجيل وتأكيد التحصيل" }));
+  await waitFor(() => expect(registrations).toHaveLength(1));
+  expect(registrations[0]).toMatchObject({ groupId: null, guardianPhone: "01000000002", expectedAmount: 800 });
 });
 
 it.each([[2,'100',900],[1,'15',850],[1,'100',0]])('exceptional type %s value %s uses canonical quote and confirms the actual financial effect',async(type,value,final)=>{

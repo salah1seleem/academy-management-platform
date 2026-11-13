@@ -30,6 +30,8 @@ public sealed partial class OwnerReviewOperationsTests
         var otherBranch=Guid.NewGuid();db.Branches.Add(new Branch{Id=otherBranch,AcademyId=DemoSeed.NogoomAcademyId,ArabicName="فرع محتوى اصطناعي "+otherBranch.ToString("N")[..8],CreatedAtUtc=now,UpdatedAtUtc=now});await db.SaveChangesAsync();
         var body=new NewsWrite("خبر اختبار عمليات "+Guid.NewGuid(),"تفاصيل اصطناعية للمستلمين المخولين فقط",image,7,true,true,"Event",[otherBranch],["Guardian"],now.AddMinutes(-1),now.AddDays(6),RequestId:Guid.NewGuid());
         var created=await ContentWrite(owner,"/api/v1/content/news/",body);created.EnsureSuccessStatusCode();var row=await created.Content.ReadFromJsonAsync<JsonElement>();var id=row.GetProperty("id").GetGuid();
+        var exact = $"/api/v1/news?kind=Event&page=2&item={id}";
+        Assert.Equal(0, (await guardian.GetFromJsonAsync<JsonElement>(exact)).GetProperty("items").GetArrayLength());
         Assert.DoesNotContain(body.Title,await guardian.GetStringAsync("/api/v1/news"));Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/assets/{image}")).StatusCode);
         body=body with{TargetBranchIds=[Slice2DemoSeed.CityBranchId],AudienceRoles=["Coach"],ExpectedVersion=row.GetProperty("version").GetUInt32()};
         var edited=await ContentWrite(owner,$"/api/v1/content/news/{id}",body,HttpMethod.Put);edited.EnsureSuccessStatusCode();row=await edited.Content.ReadFromJsonAsync<JsonElement>();
@@ -38,14 +40,24 @@ public sealed partial class OwnerReviewOperationsTests
         body=body with{AudienceRoles=["Guardian"],StartsAtUtc=now.AddDays(2),EndsAtUtc=now.AddDays(6),ExpectedVersion=row.GetProperty("version").GetUInt32()};
         edited=await ContentWrite(owner,$"/api/v1/content/news/{id}",body,HttpMethod.Put);edited.EnsureSuccessStatusCode();row=await edited.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Scheduled",row.GetProperty("state").GetString());Assert.DoesNotContain(body.Title,await guardian.GetStringAsync("/api/v1/news"));Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/assets/{image}")).StatusCode);
+        Assert.Equal(0, (await guardian.GetFromJsonAsync<JsonElement>(exact)).GetProperty("items").GetArrayLength());
         body=body with{StartsAtUtc=now.AddMinutes(-1),ExpectedVersion=row.GetProperty("version").GetUInt32()};
         edited=await ContentWrite(owner,$"/api/v1/content/news/{id}",body,HttpMethod.Put);edited.EnsureSuccessStatusCode();row=await edited.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Contains(body.Title,await guardian.GetStringAsync("/api/v1/news"));Assert.Equal(HttpStatusCode.OK,(await guardian.GetAsync($"/api/v1/assets/{image}")).StatusCode);
         Assert.DoesNotContain(body.Title,await coach.GetStringAsync("/api/v1/news"));Assert.Equal(HttpStatusCode.NotFound,(await coach.GetAsync($"/api/v1/assets/{image}")).StatusCode);
         using var foreign=factory.CreateClient();(await Send(foreign,"/api/v1/auth/login",new{email=DemoSeed.FutureOwnerEmail,password="Demo-Only-123!"})).EnsureSuccessStatusCode();
+        Assert.Contains(body.Title, await guardian.GetStringAsync("/api/v1/news?kind=Event&page=1"));
+        Assert.DoesNotContain(body.Title, await guardian.GetStringAsync("/api/v1/news?kind=News&page=1"));
+        Assert.DoesNotContain(body.Title, await foreign.GetStringAsync("/api/v1/news?kind=Event&page=1"));
+        var selected = await guardian.GetFromJsonAsync<JsonElement>(exact);
+        Assert.Equal(1, selected.GetProperty("page").GetInt32());
+        Assert.Equal(id, Assert.Single(selected.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
+        Assert.Equal(0, (await coach.GetFromJsonAsync<JsonElement>(exact)).GetProperty("items").GetArrayLength());
+        Assert.Equal(0, (await foreign.GetFromJsonAsync<JsonElement>(exact)).GetProperty("items").GetArrayLength());
         Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync($"/api/v1/content/news/{id}")).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync($"/api/v1/assets/{image}")).StatusCode);
         var archived=await ContentWrite(owner,$"/api/v1/content/news/{id}",new{expectedVersion=row.GetProperty("version").GetUInt32()},HttpMethod.Delete);archived.EnsureSuccessStatusCode();
         Assert.DoesNotContain(body.Title,await guardian.GetStringAsync("/api/v1/news"));Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/assets/{image}")).StatusCode);
+        Assert.Equal(0, (await guardian.GetFromJsonAsync<JsonElement>(exact)).GetProperty("items").GetArrayLength());
     }
     [Fact] public async Task Approved_content_creation_replays_once_rejects_stale_and_uses_local_publication_days()
     {

@@ -40,7 +40,16 @@ export function OwnerFollowUps() {
  ]}/><small>أولوية العرض من التأخر ونقص إسناد التدريب، لا عقوبة أو إرسال تلقائي. إغلاق المتابعة لا يغير المصدر أو المال.</small></section>}</>;
 }
 
-export function OwnerFollowUpCreateForm(){const incoming=useSearchParams();return incoming.get("source")==="record"?<RecordFollowUpCreateForm/>:<GroupFollowUpCreateForm/>;}
+export function OwnerFollowUpCreateForm(){
+ const incoming=useSearchParams();
+ if (incoming.get("source")!=="record") return <GroupFollowUpCreateForm/>;
+ const id=incoming.get("sourceId"), decision=incoming.get("decision");
+ const note=decision==="Absence"?"تواصل مع الأسرة بشأن الغياب عن آخر ثلاث حصص."
+  :decision==="Expiring"?"تواصل مع الأسرة قبل انتهاء الاشتراك."
+  :decision==="Expired"?"تواصل مع الأسرة لبحث تجديد الاشتراك.":"";
+ return <RecordFollowUpCreateForm key={id??"record"} prefill={id?{id,branchId:incoming.get("branchId"),sportId:incoming.get("sportId"),note}:undefined}/>;
+}
+
 function GroupFollowUpCreateForm(){
  const router=useRouter(),[data,setData]=useState<Options|null>(null),[selected,setSelected]=useState(""),[owner,setOwner]=useState(""),[due,setDue]=useState(""),[note,setNote]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const [sourceBranch,setSourceBranch]=useState("");

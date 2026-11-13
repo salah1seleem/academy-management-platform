@@ -1,0 +1,199 @@
+.page,
+.report {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+.staff {
+  --report-border: var(--staff-border);
+  --report-surface: var(--staff-surface);
+  --report-text: var(--staff-text);
+  --report-muted: var(--staff-text-secondary);
+  --report-accent: var(--staff-text);
+  --report-accent-surface: var(--staff-surface-muted);
+  --report-radius: 4px;
+}
+
+.header {
+  color: white;
+  padding: .5rem .25rem 0;
+}
+
+.header h1 {
+  margin: .35rem 0 0;
+  font-size: clamp(1.45rem, 4vw, 2rem);
+}
+
+.header a {
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  text-underline-offset: .25em;
+}
+
+.summary,
+.section {
+  border: 1px solid var(--report-border, var(--border));
+  border-radius: var(--report-radius, 1rem);
+  background: var(--report-surface, white);
+  color: var(--report-text, var(--text));
+  padding: clamp(.9rem, 3vw, 1.25rem);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.identity :global(.player-avatar) {
+  inline-size: clamp(48px, 15vw, 64px);
+  block-size: clamp(48px, 15vw, 64px);
+  flex: 0 0 auto;
+  background: var(--report-accent-surface, var(--primary-soft));
+  color: var(--report-accent, var(--primary));
+  font-size: min(1.7rem, 28px);
+}
+
+.identity h2,
+.section h2,
+.criteria h3 {
+  margin: 0;
+}
+
+.identity p,
+.meta,
+.coverage,
+.empty,
+.criteria p {
+  margin: .35rem 0 0;
+  color: var(--report-muted, var(--muted));
+}
+
+.meta {
+  margin-block-start: .75rem;
+}
+
+.scores,
+.axes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: .65rem;
+  margin: .8rem 0 0;
+}
+
+.scores > div,
+.axes > div,
+.criteria li {
+  border: 1px solid var(--report-border, var(--border));
+  border-radius: var(--report-radius, .7rem);
+  padding: .65rem .75rem;
+  overflow-wrap: anywhere;
+}
+
+.scores dt,
+.axes dt {
+  color: var(--report-muted, var(--muted));
+}
+
+.scores dd,
+.axes dd {
+  margin: .15rem 0 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.scores dd {
+  font-size: 1.35rem;
+  color: var(--report-accent, var(--primary));
+}
+
+.staff .scores > div:first-child dd {
+  font-size: 1.65rem;
+}
+
+.scores small {
+  font-size: .8rem;
+}
+
+.coverage {
+  margin-block-start: .65rem;
+}
+
+.chartLayout {
+  display: grid;
+  gap: .75rem;
+  align-items: center;
+}
+
+.radar {
+  width: min(100%, 17rem);
+  height: auto;
+  justify-self: center;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.radar svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chartLabel {
+  fill: var(--report-muted, var(--muted));
+  font-size: 12px;
+}
+
+.criteria {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: .6rem;
+  list-style: none;
+  padding: 0;
+  margin: .8rem 0 0;
+}
+
+.criteria li > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .25rem .75rem;
+}
+
+.criteria h3 {
+  font-size: 1rem;
+}
+
+.criteria strong {
+  color: var(--report-accent, var(--primary));
+}
+
+.criteria small,
+.unscored {
+  color: var(--report-muted, var(--muted));
+  font-size: .85rem;
+}
+
+.criteria p,
+.notes p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notes p {
+  margin: .55rem 0 0;
+}
+
+@media (min-width: 46rem) {
+  .chartLayout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  }
+}

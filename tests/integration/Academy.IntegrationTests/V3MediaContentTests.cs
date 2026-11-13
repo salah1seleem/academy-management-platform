@@ -17,7 +17,14 @@ public sealed partial class BrandingMatchesTests
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var count=await db.PrivateAssets.CountAsync();var config=scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();var previous=config["Media:FFprobePath"];var storage=config["Media:PrivateRoot"]!;
         try
         {
-            config["Media:FFprobePath"]=Path.Combine(storage,"no-such-inspector");var r=await PrivacyUpload(owner,group,day,noChildren:true);Assert.Equal(HttpStatusCode.ServiceUnavailable,r.StatusCode);Assert.Contains("لم يُنشر",(await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());Assert.Equal(count,await db.PrivateAssets.CountAsync());Assert.True(!Directory.Exists(storage)||!Directory.EnumerateFiles(storage,"*",SearchOption.AllDirectories).Any());
+            config["Media:FFprobePath"] = Path.Combine(storage, "no-such-inspector");
+            using var response = await PrivacyUpload(owner, group, day, noChildren: true);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Contains("لم يُنشر", problem.GetProperty("message").GetString());
+            Assert.Equal("media_inspection_unavailable", problem.GetProperty("code").GetString());
+            Assert.Equal(count, await db.PrivateAssets.CountAsync());
+            Assert.True(!Directory.Exists(storage) || !Directory.EnumerateFiles(storage, "*", SearchOption.AllDirectories).Any());
         }
         finally{config["Media:FFprobePath"]=previous;}
     }

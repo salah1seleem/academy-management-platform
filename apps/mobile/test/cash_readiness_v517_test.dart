@@ -107,4 +107,58 @@ void main() {
       auth.dispose();
     },
   );
+  testWidgets(
+    'A refresh invalidates the previous shift and an unknown state blocks picking a shift',
+    (t) async {
+      bool? enabled = true;
+      String? chosen = 'shift';
+      var reads = 0;
+      final auth = await authenticate('AcademyOwner', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        expect(method, 'GET');
+        reads++;
+        return {
+          'cashEnabled': enabled,
+          'sessions': [
+            {'id': 'shift', 'name': 'ورديتي', 'branch': 'فرع اصطناعي'},
+          ],
+        };
+      });
+      await t.pumpWidget(
+        app(
+          GuardianPage(
+            title: 'التحصيل',
+            child: StatefulBuilder(
+              builder: (context, setState) => CashCollectionChoice(
+                auth: auth,
+                path: '/api/v1/manage/payments/payment/cash-options',
+                value: chosen,
+                onChange: (id) => setState(() => chosen = id),
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('ورديتي · فرع اصطناعي'), findsOneWidget);
+      enabled = null;
+      await t.tap(find.text('تحديث حالة النقدي'));
+      await t.pumpAndSettle();
+      expect(chosen, isNull);
+      expect(find.text('تعذر التحقق من حالة النقدي'), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+      enabled = true;
+      await t.tap(find.text('تحديث حالة النقدي'));
+      await t.pumpAndSettle();
+      expect(chosen, isNull);
+      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+      expect(reads, 3);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
 }

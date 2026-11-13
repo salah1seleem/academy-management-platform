@@ -7,9 +7,11 @@ import 'package:geolocator/geolocator.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/staff_passkey_provider.dart';
+import '../../core/storage/refresh_store.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'staff_attendance_exceptions.dart';
+import 'staff_passkeys.dart' show StaffPasskeyPage;
 import 'staff_work_periods.dart';
 
 class StaffLocationSample {
@@ -60,18 +62,34 @@ class PlatformStaffLocation implements StaffLocationSource {
   }
 }
 
-// Own operations on the existing server path. No source writes or local biometric fallback.
+typedef _AttendanceAttempt = ({String challengeId, String operation});
+
+RefreshStore? _attendanceStore(AuthController auth) {
+  final transport = auth.transport;
+  final membership = auth.session?.selected;
+  if (transport is! HttpApiTransport || membership == null) return null;
+  final config = transport.config;
+  return SecureRefreshStore(
+    'academy.staff-clock.${config.environment}.${config.api.origin}.'
+    '${membership.academyId}.${membership.id}',
+  );
+}
+
 class NativeStaffAttendanceFlow extends ChangeNotifier {
   static const root = '/api/v1/staff/passkeys/attendance';
   final AuthController auth;
   final StaffPasskeyProvider provider;
   final StaffLocationSource location;
+  final RefreshStore? _attemptStore;
   late final String? identity = staffContext(auth);
   Json? data;
-  bool busy = false, disposed = false;
+  bool busy = false, disposed = false, waitingForResult = false;
   String error = '', message = '';
   String? _pending;
-  bool get hasPending => _pending != null;
+  _AttendanceAttempt? _restored;
+  bool get canRetry => _pending != null;
+  bool get hasPending => canRetry || _restored != null;
+  String? get restoredOperation => _restored?.operation;
   bool get current =>
       !disposed &&
       identity != null &&
@@ -93,8 +111,10 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     this.auth, {
     StaffPasskeyProvider? provider,
     StaffLocationSource? location,
+    RefreshStore? attemptStore,
   }) : provider = provider ?? IosStaffPasskeyProvider(),
-       location = location ?? PlatformStaffLocation() {
+       location = location ?? PlatformStaffLocation(),
+       _attemptStore = attemptStore ?? _attendanceStore(auth) {
     identity;
     auth.addListener(changedContext);
   }
@@ -102,6 +122,8 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     if (!current) {
       data = null;
       _pending = null;
+      _restored = null;
+      waitingForResult = false;
       error = '';
       message = '';
       unawaited(provider.cancel());
@@ -121,11 +143,7 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     }
   }
 
-  Future<void> load() async {
-    if (busy || !current) return;
-    busy = true;
-    error = '';
-    emit();
+  Future<void> _readState() async {
     try {
       final value = obj(await auth.request('GET', root));
       check();
@@ -133,16 +151,168 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     } catch (_) {
       if (current) {
         data = null;
-        error = 'تعذر قراءة حالة حضورك؛ أعد المحاولة.';
+        if (error.isEmpty) {
+          error = message.isEmpty
+              ? 'تعذر قراءة حالة حضورك؛ أعد المحاولة.'
+              : 'العملية مؤكدة. تعذر تحديث الحالة؛ أعد القراءة قبل التسجيل.';
+        }
       }
+    }
+  }
+
+  Future<_AttendanceAttempt?> _readAttempt() async {
+    try {
+      final value = await _attemptStore?.read();
+      if (value == null) return null;
+      final reference = obj(jsonDecode(value));
+      final challengeId = reference['challengeId'];
+      final operation = reference['operation'];
+      if (validId(challengeId) &&
+          (operation == 'CheckIn' || operation == 'CheckOut')) {
+        return (
+          challengeId: challengeId as String,
+          operation: operation as String,
+        );
+      }
+    } catch (_) {
+      // The device store can be unavailable while the session is still usable.
+    }
+    return null;
+  }
+
+  Future<void> _remember(_AttendanceAttempt attempt) async {
+    if (!validId(attempt.challengeId)) return;
+    try {
+      await _attemptStore?.write(
+        jsonEncode({
+          'challengeId': attempt.challengeId,
+          'operation': attempt.operation,
+        }),
+      );
+    } catch (_) {
+      // Keep the signed request in memory so the open screen can still retry.
+    }
+  }
+
+  Future<void> _forget(_AttendanceAttempt attempt) async {
+    if ((await _readAttempt())?.challengeId != attempt.challengeId ||
+        !current) {
+      return;
+    }
+    try {
+      await _attemptStore?.clear();
+    } catch (_) {
+      // A later screen can re-read the same result from the server.
+    }
+  }
+
+  _AttendanceAttempt _reference(Json body) => (
+    challengeId: body['challengeId'] as String,
+    operation: obj(body['intent'])['operation'] as String,
+  );
+
+  Future<void> _confirm(Json saved, _AttendanceAttempt attempt) async {
+    if (saved['attendanceRecorded'] != true ||
+        saved['operation'] != attempt.operation ||
+        !validId(saved['attendanceId']) ||
+        !validId(saved['workPeriodId']) ||
+        saved['trustSource'] != 'ServerVerified' ||
+        DateTime.tryParse(textOf(saved['confirmedAtUtc'])) == null) {
+      throw const FormatException();
+    }
+    await _forget(attempt);
+    check();
+    _pending = null;
+    _restored = null;
+    message = attempt.operation == 'CheckIn'
+        ? 'تم تسجيل حضورك بوقت الخادم المؤكد.'
+        : 'تم تسجيل انصرافك للفترة نفسها بوقت الخادم المؤكد.';
+  }
+
+  Future<void> load() async {
+    if (busy || !current) return;
+    busy = true;
+    error = '';
+    waitingForResult = false;
+    emit();
+    try {
+      if (!hasPending) {
+        final reference = await _readAttempt();
+        if (!current) return;
+        _restored = reference;
+      }
+      final pending = _pending;
+      final attempt = pending == null
+          ? _restored
+          : _reference(obj(jsonDecode(pending)));
+      if (attempt != null &&
+          await _verify(attempt, restored: pending == null)) {
+        return;
+      }
+      await _readState();
     } finally {
       busy = false;
       emit();
     }
   }
 
+  Future<bool> _verify(
+    _AttendanceAttempt attempt, {
+    required bool restored,
+  }) async {
+    final id = Uri.encodeComponent(attempt.challengeId);
+    final path = '$root/attempts/$id${restored ? '?includeState=true' : ''}';
+    try {
+      final result = obj(await auth.request('GET', path));
+      check();
+      if (restored && result['attendanceRecorded'] == false) {
+        if (result['attemptState'] == 'Pending') {
+          waitingForResult = true;
+          return true;
+        }
+        if (result['attemptState'] == 'Closed') {
+          await _finishWithoutRecording(attempt, 'انتهت المحاولة دون تسجيل.');
+          return true;
+        }
+      }
+      await _confirm(result, attempt);
+    } on ApiFailure catch (failure) {
+      if (!current) return true;
+      if (failure.status == 401 || failure.status == 403) {
+        data = null;
+        _pending = null;
+        _restored = null;
+        error = 'تعذر التحقق من المحاولة في الجلسة الحالية.';
+        return true;
+      }
+      if (failure.status == 404 && restored) {
+        await _finishWithoutRecording(attempt, 'لم تعد هذه المحاولة متاحة.');
+        return true;
+      }
+      error = failure.status == 404
+          ? 'لم تُحفظ نتيجة مؤكدة لهذه المحاولة بعد. يمكنك إعادة إرسال الطلب نفسه.'
+          : 'تعذر التحقق من نتيجة التسجيل. أعد المحاولة.';
+    } catch (_) {
+      if (!current) return true;
+      error = 'تعذر التحقق من نتيجة التسجيل. أعد المحاولة.';
+    }
+    return false;
+  }
+
+  Future<void> _finishWithoutRecording(
+    _AttendanceAttempt attempt,
+    String notice,
+  ) async {
+    await _readState();
+    if (!current || data == null) return;
+    await _forget(attempt);
+    if (!current) return;
+    _restored = null;
+    message = notice;
+  }
+
   Future<void> submit(String branch, String operation) async {
-    if (busy || !current) return;
+    if (busy || !current || _restored != null) return;
     if (_pending == null &&
         ((operation == 'CheckIn' && data?['hasOpenAttendance'] == true) ||
             (operation == 'CheckOut' &&
@@ -153,8 +323,12 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     if (_pending == null &&
         (!enabled ||
             !['CheckIn', 'CheckOut'].contains(operation) ||
-            !rows(data?['branches'] ?? const [])
-                .any((b) => b['id'] == branch && b['configured'] == true))) {
+            !rows(data?['branches'] ?? const []).any(
+              (b) =>
+                  b['id'] == branch &&
+                  b['configured'] == true &&
+                  b['enabled'] != false,
+            ))) {
       return;
     }
     busy = true;
@@ -186,49 +360,42 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
           obj(options['options']),
         );
         check();
-        _pending = jsonEncode({
+        final body = <String, dynamic>{
           'challengeId': options['challengeId'],
           'intent': intent,
           'credential': credential,
-        });
+        };
+        _pending = jsonEncode(body);
+        await _remember(_reference(body));
+        check();
       }
       final body = jsonDecode(_pending!) as Json;
+      final attempt = _reference(body);
       final saved = obj(
         await auth.request('POST', '$root/complete', body: body),
       );
       check();
-      if (saved['attendanceRecorded'] != true ||
-          saved['operation'] != obj(body['intent'])['operation'] ||
-          !validId(saved['attendanceId']) ||
-          !validId(saved['workPeriodId']) ||
-          saved['trustSource'] != 'ServerVerified' ||
-          DateTime.tryParse(textOf(saved['confirmedAtUtc'])) == null) {
-        throw const FormatException();
-      }
-      _pending = null;
-      message = saved['operation'] == 'CheckIn'
-          ? 'تم تسجيل حضورك بوقت الخادم المؤكد.'
-          : 'تم تسجيل انصرافك للفترة نفسها بوقت الخادم المؤكد.';
-      try {
-        final latest = obj(await auth.request('GET', root));
-        check();
-        data = latest;
-      } catch (_) {
-        if (current) {
-          data = null;
-          error = 'العملية مؤكدة، لكن تعذر تحديث العرض؛ حدّث الحالة قبل عملية جديدة.';
-        }
-      }
+      await _confirm(saved, attempt);
+      await _readState();
     } on ApiFailure catch (f) {
       if (current) {
-        if (f.status >= 400 && f.status < 500) {
+        if (f.status >= 400 &&
+            f.status < 500 &&
+            f.status != 429 &&
+            f.status != 408) {
+          final pending = _pending;
+          if (pending != null && f.status != 401 && f.status != 403) {
+            await _forget(_reference(obj(jsonDecode(pending))));
+            if (!current) return;
+          }
           _pending = null;
           error = f.status == 409
               ? f.message
               : 'لم تقبل العملية؛ حدّث الحالة أو اطلب مراجعة الإدارة.';
+          await _readState();
         } else {
           error = hasPending
-              ? 'لم نتأكد من نتيجة الإرسال؛ أعد إرسال الطلب نفسه أو حدّث الحالة، دون افتراض نجاحه.'
+              ? 'تعذر تأكيد التسجيل. تحقّق من النتيجة قبل بدء عملية أخرى.'
               : 'تعذر الاتصال؛ لم يعتمد حضور دون اتصال.';
         }
       }
@@ -237,7 +404,7 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     } catch (_) {
       if (current) {
         error = hasPending
-            ? 'لم نتأكد من رد الخادم؛ احتفظ بالطلب نفسه وأعد المحاولة.'
+            ? 'تعذر تأكيد التسجيل. تحقّق من النتيجة قبل بدء عملية أخرى.'
             : 'تعذر تأكيد الموقع أو التوقيع؛ اطلب مراجعة عند الحاجة.';
       }
     } finally {
@@ -257,6 +424,7 @@ class NativeStaffAttendanceFlow extends ChangeNotifier {
     disposed = true;
     data = null;
     _pending = null;
+    _restored = null;
     unawaited(provider.cancel());
     super.dispose();
   }
@@ -266,26 +434,63 @@ class NativeStaffAttendancePage extends StatefulWidget {
   final AuthController auth;
   final StaffPasskeyProvider? provider;
   final StaffLocationSource? location;
+  final RefreshStore? attemptStore;
   const NativeStaffAttendancePage({
     super.key,
     required this.auth,
     this.provider,
     this.location,
+    this.attemptStore,
   });
   @override
   State<NativeStaffAttendancePage> createState() =>
       _NativeStaffAttendancePageState();
 }
 
-class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
+class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage>
+    with WidgetsBindingObserver {
   late final flow = NativeStaffAttendanceFlow(
     widget.auth,
     provider: widget.provider,
     location: widget.location,
-  )..load();
+    attemptStore: widget.attemptStore,
+  );
   String? branch;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    flow.addListener(reconcileBranch);
+    unawaited(flow.load());
+  }
+
+  void reconcileBranch() {
+    final sites = rows(flow.data?['branches'] ?? const []);
+    if (!sites.any((site) => site['id'] == branch && ready(site))) {
+      branch = null;
+    }
+  }
+
+  static bool ready(Json site) =>
+      site['configured'] == true && site['enabled'] != false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(flow.load());
+    }
+  }
+
+  Future<void> openRelated(Widget page) async {
+    await openPage(context, page);
+    if (mounted) await flow.load();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    flow.removeListener(reconcileBranch);
     flow.dispose();
     super.dispose();
   }
@@ -300,38 +505,55 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
         final d = flow.data,
             sites = rows(d?['branches'] ?? const []),
             selected = sites.where((s) => s['id'] == branch).firstOrNull;
+        final open = d?['hasOpenAttendance'] == true;
+        final branchReady = selected != null && ready(selected);
+        final hasReadyBranch = sites.any(ready);
         return gList([
-          const GCard(
-            child: ExpansionTile(
-              title: UiText('كيف يُثبت حضورك؟'),
-              childrenPadding: EdgeInsetsDirectional.only(
-                start: 16,
-                end: 16,
-                bottom: 16,
+          if (flow.busy)
+            const Center(
+              child: CircularProgressIndicator(
+                semanticsLabel: 'جارٍ التحقق من حالة الدوام',
               ),
-              children: [
-                UiText(
-                  'الموقع عند الضغط فقط، ثم توقيع يتحقق منه الخادم. لا نخزن بصمات أو صور وجوه؛ قد يستخدم الجهاز بصمة أو رمزًا. لا يضمن التوقيع سلامة GPS أو هاتفًا ماديًا وحيدًا.',
-                ),
-                UiText(
-                  'لا يسجل حضور اللاعبين ولا ينشئ خصمًا أو راتبًا تلقائيًا.',
-                ),
-              ],
             ),
-          ),
-          if (!flow.provider.enabled ||
-              d?['nativeIosOriginConfigured'] != true ||
-              d?['rpId'] != flow.provider.rpId)
-            const EmptyMessage(
-              'إعداد الحضور الآمن غير مكتمل. يمكنك طلب إثبات حضور للمراجعة أو الرجوع للإدارة.',
-            ),
-          if (d?['profileMissing'] == true)
-            const EmptyMessage('يلزم ربط ملف موظف فعال بحسابك.'),
-          if (d?['configured'] == true && d?['hasCredential'] != true)
-            const EmptyMessage(
-              'أضف وسيلة تحقق من صفحة وسائل التحقق الخاصة بي بعد إكمال الإعداد.',
-            ),
-          if (sites.isNotEmpty)
+          if (flow.message.isNotEmpty)
+            Semantics(liveRegion: true, child: UiText(flow.message)),
+          if (flow.error.isNotEmpty)
+            Semantics(liveRegion: true, child: UiText(flow.error)),
+          if (!flow.hasPending) ...[
+            if (d?['profileMissing'] == true)
+              const EmptyMessage('يلزم ربط ملف موظف فعال بحسابك.')
+            else if (d != null && !hasReadyBranch)
+              EmptyMessage(
+                sites.any((site) => site['enabled'] == true)
+                    ? 'يلزم إعداد موقع الفرع قبل التسجيل. يمكنك طلب المراجعة.'
+                    : open
+                    ? 'التسجيل الذاتي موقوف وفترة دوامك ما زالت مفتوحة. اطلب مراجعة الإدارة لإثبات الانصراف.'
+                    : 'التسجيل الذاتي موقوف للفروع المتاحة. يمكنك طلب المراجعة.',
+              )
+            else if (d != null &&
+                (!flow.provider.enabled ||
+                    d['configured'] != true ||
+                    d['nativeIosOriginConfigured'] != true ||
+                    d['rpId'] != flow.provider.rpId))
+              const EmptyMessage(
+                'إعداد الحضور الآمن غير مكتمل. يمكنك طلب إثبات حضور للمراجعة.',
+              )
+            else if (d?['configured'] == true &&
+                d?['hasCredential'] != true) ...[
+              const UiText('أضف وسيلة تحقق قبل تسجيل الحضور أو الانصراف.'),
+              GLink('وسائل التحقق', Icons.verified_user_outlined, () async {
+                await openPage(
+                  context,
+                  StaffPasskeyPage(
+                    auth: widget.auth,
+                    provider: widget.provider,
+                  ),
+                );
+                if (mounted) await flow.load();
+              }),
+            ],
+          ],
+          if (flow.enabled && hasReadyBranch && flow.restoredOperation == null)
             GCard(
               child: Column(
                 children: [
@@ -347,7 +569,7 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
                       for (final s in sites)
                         DropdownMenuItem(
                           value: textOf(s['id']),
-                          enabled: s['configured'] == true,
+                          enabled: ready(s),
                           child: UiText(
                             '${textOf(s['name'])}${s['enabled'] == false
                                 ? ' — موقوف'
@@ -361,70 +583,87 @@ class _NativeStaffAttendancePageState extends State<NativeStaffAttendancePage> {
                         ? null
                         : (v) => setState(() => branch = v),
                   ),
-                  if (selected != null)
+                  if (branchReady) ...[
                     UiText(
-                      'النطاق ${textOf(selected['radiusMeters'])} مترًا · الدقة حتى ${textOf(selected['maxAccuracyMeters'])} مترًا · قراءة خلال ${textOf(selected['maxAgeSeconds'])} ثانية',
+                      'النطاق ${textOf(selected!['radiusMeters'])} مترًا · الدقة حتى ${textOf(selected['maxAccuracyMeters'])} مترًا · قراءة خلال ${textOf(selected['maxAgeSeconds'])} ثانية',
                     ),
+                    if (selected['attendanceRequired'] == true)
+                      const UiText('التسجيل مطلوب لفئتك في هذا الفرع.'),
+                    if (selected['attendanceRequired'] == false)
+                      const UiText('التسجيل اختياري لفئتك في هذا الفرع.'),
+                  ],
                   if (d?['requiresSourceReview'] == true)
                     const UiText(
-                      'الفترة المفتوحة تحتاج مراجعة المصدر؛ لا نسجل انصرافًا تخمينيًا.',
+                      'راجع الإدارة لتأكيد فترة الدوام المفتوحة قبل الانصراف.',
                     ),
                 ],
               ),
             ),
-          if (flow.busy) const Center(child: CircularProgressIndicator()),
-          if (flow.message.isNotEmpty) UiText(flow.message),
-          if (flow.error.isNotEmpty) UiText(flow.error),
-          if (flow.hasPending)
-            FilledButton(
-              onPressed: flow.busy ? null : () => flow.submit('', ''),
-              child: const UiText('إعادة إرسال الطلب نفسه'),
-            )
-          else if (flow.enabled)
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed:
-                      flow.busy ||
-                          selected?['configured'] != true ||
-                          d?['hasOpenAttendance'] == true
-                      ? null
-                      : () => flow.submit(branch!, 'CheckIn'),
-                  icon: const Icon(Icons.fingerprint),
-                  label: const UiText('تسجيل حضوري'),
+          if (flow.hasPending) ...[
+            if (flow.restoredOperation case final String operation)
+              GCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(
+                      operation == 'CheckIn'
+                          ? 'محاولة الحضور السابقة'
+                          : 'محاولة الانصراف السابقة',
+                    ),
+                    if (flow.waitingForResult)
+                      const UiText(
+                        'لم يظهر تسجيل مؤكد بعد. تحقّق مرة أخرى بعد انتهاء المحاولة.',
+                      ),
+                  ],
                 ),
-                OutlinedButton.icon(
-                  onPressed:
-                      flow.busy ||
-                          selected?['configured'] != true ||
-                          d?['hasOpenAttendance'] != true ||
-                          d?['requiresSourceReview'] == true
-                      ? null
-                      : () => flow.submit(branch!, 'CheckOut'),
-                  icon: const Icon(Icons.logout),
-                  label: const UiText('تسجيل انصرافي'),
-                ),
-              ],
+              ),
+            FilledButton.icon(
+              onPressed: flow.busy ? null : flow.load,
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const UiText('التحقق من نتيجة التسجيل'),
             ),
-          TextButton.icon(
-            onPressed: flow.busy ? null : flow.load,
-            icon: const Icon(Icons.refresh),
-            label: const UiText('تحديث حالة الحضور'),
-          ),
+            if (flow.canRetry)
+              TextButton(
+                onPressed: flow.busy ? null : () => flow.submit('', ''),
+                child: const UiText('إعادة إرسال الطلب نفسه'),
+              ),
+          ] else ...[
+            if (flow.enabled && hasReadyBranch)
+              FilledButton.icon(
+                onPressed:
+                    flow.busy ||
+                        !branchReady ||
+                        (open && d?['requiresSourceReview'] == true)
+                    ? null
+                    : () => flow.submit(branch!, open ? 'CheckOut' : 'CheckIn'),
+                icon: Icon(open ? Icons.logout : Icons.verified_user_outlined),
+                label: UiText(open ? 'تسجيل انصرافي' : 'تسجيل حضوري'),
+              ),
+            TextButton.icon(
+              onPressed: flow.busy ? null : flow.load,
+              icon: const Icon(Icons.refresh),
+              label: const UiText('تحديث حالة الحضور'),
+            ),
+          ],
           GLink(
-            'سجل الحضور',
+            'سجل دوامي',
             Icons.history,
-            () => openPage(context, StaffWorkPeriodsPage(auth: widget.auth)),
+            () => openRelated(StaffWorkPeriodsPage(auth: widget.auth)),
           ),
           GLink(
             'طلب إثبات حضور للمراجعة',
             Icons.fact_check_outlined,
-            () => openPage(
-              context,
-              StaffAttendanceExceptionPage(auth: widget.auth),
-            ),
+            () => openRelated(StaffAttendanceExceptionPage(auth: widget.auth)),
+          ),
+          const ExpansionTile(
+            title: UiText('طريقة التسجيل والخصوصية'),
+            childrenPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              UiText(
+                'يُطلب الموقع عند التسجيل، ثم يتحقق الخادم من توقيع الجهاز. قد يستخدم الجهاز بصمة أو رمزًا. التوقيع وحده لا يضمن سلامة الموقع أو أن الوسيلة محصورة في هاتف واحد.',
+              ),
+              UiText('الدوام الوظيفي مستقل عن حضور اللاعبين والرواتب.'),
+            ],
           ),
         ]);
       },

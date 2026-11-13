@@ -24,7 +24,7 @@ public static class OperatingExpenseEndpoints
         var api = app.MapGroup("/api/v1/finance/operating-expenses").RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         api.MapGet("/options", async (OperatingExpenseService service) => await Run(service.Options));
         api.MapGet("/allocations", async (Guid? groupId, DateOnly? from, DateOnly? to, OperatingExpenseService service) => await Run(() => service.Allocations(groupId, from, to)));
-        api.MapGet("/", async (DateOnly? from, DateOnly? to, int? page, Guid? branchId, string? status, bool? unpaid, string? category, bool? paid, int? pageSize, OperatingExpenseService service) => await Run(() => service.List(from, to, page, branchId, status, unpaid,category,paid,pageSize)));
+        api.MapGet("/", async (DateOnly? from, DateOnly? to, int? page, Guid? branchId, string? status, bool? unpaid, string? category, bool? paid, int? pageSize, string? dateBasis, Guid? sportId, OperatingExpenseService service) => await Run(() => service.List(from, to, page, branchId, status, unpaid, category, paid, pageSize, dateBasis, sportId)));
         api.MapGet("/{id:guid}", async (Guid id, OperatingExpenseService service) => await Run(() => service.Detail(id)));
         api.MapPost("/", async (OperatingExpenseWrite body, HttpRequest request, OperatingExpenseService service) => await Run(() => service.Create(body, request.Headers["Idempotency-Key"].ToString()))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/{id:guid}/approve", async (Guid id, OperatingExpenseService service) => await Run(() => service.Approve(id))).AddEndpointFilter<CsrfFilter>();
@@ -64,20 +64,35 @@ public sealed class OperatingExpenseService(FoundationDbContext db, CurrentTenan
     public async Task<object> Options()
     {
         var (t, _) = await Owner();
-        return new { canApprove=t.Role==AcademyRole.AcademyOwner, canRecord=t.Role==AcademyRole.AcademyOwner||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="finance"&&g.IsActive&&g.Read&&g.Add&&g.Edit)&&await StaffWorkflowAccess.Allows(db,t.MembershipId,"/api/v1/finance/operating-expenses","POST"), currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(), categories = Categories.OrderBy(x => x).ToArray() };
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(t.TimeZone)).DateTime);
+        return new { today, canApprove=t.Role==AcademyRole.AcademyOwner, canRecord=t.Role==AcademyRole.AcademyOwner||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="finance"&&g.IsActive&&g.Read&&g.Add&&g.Edit)&&await StaffWorkflowAccess.Allows(db,t.MembershipId,"/api/v1/finance/operating-expenses","POST"), currency = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.DefaultCurrency).SingleAsync(), categories = Categories.OrderBy(x => x).ToArray() };
     }
 
-    public async Task<object> List(DateOnly? from, DateOnly? to, int? page, Guid? branchId = null, string? status = null, bool? unpaid = null,string? category=null,bool? paid=null,int? pageSize=null)
+    public async Task<object> List(DateOnly? from, DateOnly? to, int? page, Guid? branchId = null, string? status = null, bool? unpaid = null, string? category = null, bool? paid = null, int? pageSize = null, string? dateBasis = null, Guid? sportId = null)
     {
         var (t, _) = await Owner();
         if (page is < 1 or > 10000 || from > to) throw new OperatingExpenseRejected("راجع فترة التقرير والصفحة.", 422);
         if(category!=null&&!Categories.Contains(category)||unpaid==true&&paid==true||pageSize is <1 or >100)throw new OperatingExpenseRejected("راجع فئة المصروف وحالة السداد وحجم الصفحة.",422);
         if (branchId.HasValue && !await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == branchId)) throw new OperatingExpenseRejected("الفرع غير متاح.", 404);
+        if (sportId.HasValue && !await db.Sports.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == sportId)) throw new OperatingExpenseRejected("الرياضة غير متاحة.", 404);
         if (status is not null && (!Enum.TryParse<OperatingExpenseStatus>(status, out var parsed) || !Enum.IsDefined(parsed))) throw new OperatingExpenseRejected("حالة المصروف غير صالحة.", 422);
+        if (dateBasis is not (null or "payment") || dateBasis == "payment" && unpaid == true) throw new OperatingExpenseRejected("راجع نطاق تاريخ السداد.", 422);
         var query = db.OperatingExpenses.AsNoTracking().Where(x => x.AcademyId == t.AcademyId);
-        if (from.HasValue) query = query.Where(x => x.PeriodTo >= from.Value);
-        if (to.HasValue) query = query.Where(x => x.PeriodFrom <= to.Value);
+        if (dateBasis == "payment")
+        {
+            var currency = await db.Academies.Where(x => x.Id == t.AcademyId).Select(x => x.DefaultCurrency).SingleAsync();
+            query = query.Where(x => x.PaidOn != null && x.Currency == currency);
+            if (from.HasValue) query = query.Where(x => x.PaidOn >= from.Value);
+            if (to.HasValue) query = query.Where(x => x.PaidOn <= to.Value);
+        }
+        else
+        {
+            if (from.HasValue) query = query.Where(x => x.PeriodTo >= from.Value);
+            if (to.HasValue) query = query.Where(x => x.PeriodFrom <= to.Value);
+        }
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        if (sportId.HasValue) query = query.Where(e => e.SportId == sportId ||
+            e.TrainingGroupId.HasValue && db.TrainingGroups.Any(g => g.Id == e.TrainingGroupId && g.SportId == sportId));
         if (status is not null) { var selected = Enum.Parse<OperatingExpenseStatus>(status); query = query.Where(x => x.Status == selected); }
         if (unpaid == true) query = query.Where(x => x.PaidOn == null && (x.Status == OperatingExpenseStatus.Approved || x.Status == OperatingExpenseStatus.Posted));
         if(paid==true)query=query.Where(x=>x.PaidOn!=null&&(x.Status==OperatingExpenseStatus.Approved||x.Status==OperatingExpenseStatus.Posted));

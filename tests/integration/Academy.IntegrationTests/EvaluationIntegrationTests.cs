@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Api.Slice2;
+using Academy.Api.Slice4;
 using Academy.Api.Slice5;
 using Academy.Infrastructure.Evaluations;
 using Academy.Infrastructure.Persistence;
@@ -42,6 +43,110 @@ public sealed partial class EvaluationIntegrationTests : IAsyncLifetime
 
     [Fact] public async Task Cross_tenant_sport_criterion_creation_is_rejected()
     { await using var scope = factory.Services.CreateAsyncScope(); var sport = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Sports.Where(x => x.AcademyId == DemoSeed.FutureAcademyId).Select(x => x.Id).FirstAsync(); using var client = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.NotFound, (await Post(client, "/api/v1/evaluations/criteria", new { sportId = sport, arabicName = "معيار مرفوض", displayOrder = 1, isActive = true, weight = 1, footballAxis = "Passing" })).StatusCode); }
+
+    [Fact]
+    public async Task Criteria_options_only_return_sports_for_the_current_academy()
+    {
+        using var client = await Staff(DemoSeed.AdminEmail);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var foreignSports = await scope.ServiceProvider.GetRequiredService<FoundationDbContext>().Sports
+            .Where(sport => sport.AcademyId == DemoSeed.FutureAcademyId)
+            .Select(sport => sport.Id).ToArrayAsync();
+        var result = await client.GetFromJsonAsync<JsonElement>("/api/v1/evaluations/options?criteriaOnly=true");
+        Assert.False(result.TryGetProperty("enrollments", out _));
+        var sports = result.GetProperty("sports").EnumerateArray().ToDictionary(
+            sport => sport.GetProperty("id").GetGuid(),
+            sport => sport.GetProperty("supportsFootballAxis").GetBoolean());
+        Assert.True(sports[Slice2DemoSeed.FootballId]);
+        Assert.False(sports[Slice2DemoSeed.SwimmingId]);
+        Assert.NotEmpty(foreignSports);
+        Assert.All(foreignSports, id => Assert.DoesNotContain(id, sports.Keys));
+    }
+
+    [Fact]
+    public async Task Criterion_edit_and_status_use_the_saved_version()
+    {
+        using var client = await Staff(DemoSeed.AdminEmail);
+        var write = new { sportId = Slice2DemoSeed.SwimmingId, arabicName = "معيار اختبار انسياب الحركة", displayOrder = 91, isActive = true, weight = 1.25m, footballAxis = (string?)null, version = 0 };
+        var created = await Post(client, "/api/v1/evaluations/criteria", write);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        async Task<JsonElement> Current()
+        {
+            var rows = await client.GetFromJsonAsync<JsonElement>($"/api/v1/evaluations/criteria?sportId={write.sportId}");
+            return rows.EnumerateArray().Single(row => row.GetProperty("id").GetGuid() == id);
+        }
+        var original = (await Current()).GetProperty("version").GetInt32();
+        (await Put(client, $"/api/v1/evaluations/criteria/{id}", write with { version = original, weight = 1.5m })).EnsureSuccessStatusCode();
+        var edited = await Current();
+        Assert.Equal(1.5m, edited.GetProperty("weight").GetDecimal());
+        var updatedVersion = edited.GetProperty("version").GetInt32();
+        Assert.NotEqual(original, updatedVersion);
+        Assert.Equal(HttpStatusCode.Conflict, (await Put(client, $"/api/v1/evaluations/criteria/{id}/status", new { version = original, isActive = false })).StatusCode);
+        (await Put(client, $"/api/v1/evaluations/criteria/{id}/status", new { version = updatedVersion, isActive = false })).EnsureSuccessStatusCode();
+        Assert.False((await Current()).GetProperty("isActive").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Authorized_session_roster_reports_the_evaluation_criteria_state()
+    {
+        using var coach = await Staff(DemoSeed.CoachEmail);
+        using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        var path = $"/api/v1/attendance/sessions/{Slice4DemoSeed.TodayFootballSessionId}/players";
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await coach.GetAsync($"/api/v1/attendance/sessions/{Slice4DemoSeed.AcademyBSessionId}/players")).StatusCode);
+        async Task<string?> State()
+        {
+            var roster = await coach.GetFromJsonAsync<JsonElement>(path);
+            Assert.True(roster.GetProperty("canEvaluate").GetBoolean());
+            var session = roster.GetProperty("session");
+            Assert.Equal(Slice2DemoSeed.FootballId, session.GetProperty("sportId").GetGuid());
+            return session.GetProperty("criteriaState").GetString();
+        }
+        Assert.Equal("Ready", await State());
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var active = await db.EvaluationCriteria
+            .Where(row => row.AcademyId == DemoSeed.NogoomAcademyId && row.SportId == Slice2DemoSeed.FootballId && row.IsActive)
+            .Select(row => row.Id).ToArrayAsync();
+        Assert.NotEmpty(active);
+        var rows = db.EvaluationCriteria.Where(row => row.AcademyId == DemoSeed.NogoomAcademyId && active.Contains(row.Id));
+        await rows.ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false));
+        try { Assert.Equal("Inactive", await State()); }
+        finally { await rows.ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, true)); }
+    }
+
+    [Fact]
+    public async Task Evaluation_history_for_one_enrollment_uses_the_academy_calendar_and_scope()
+    {
+        using var staff = await Staff(DemoSeed.AdminEmail);
+        using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var enrollment = await db.PlayerEvaluations.Where(row => row.Id == Slice5DemoSeed.CurrentFootballEvaluationId)
+            .Select(row => row.SportEnrollmentId).SingleAsync();
+        var foreignEnrollment = await db.PlayerEvaluations.Where(row => row.Id == Slice5DemoSeed.AcademyBEvaluationId)
+            .Select(row => row.SportEnrollmentId).SingleAsync();
+        var calendar = await staff.GetFromJsonAsync<JsonElement>("/api/v1/academy/calendar");
+        var date = calendar.GetProperty("today").GetString();
+        var response = await Post(staff, "/api/v1/evaluations", new
+        {
+            sportEnrollmentId = enrollment,
+            evaluationDate = date,
+            reportingPeriod = "اختبار تاريخ الأكاديمية"
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var id = (await response.Content.ReadFromJsonAsync<Created>())!.Id;
+        var path = $"/api/v1/evaluations?sportEnrollmentId={enrollment}";
+        var own = (await staff.GetFromJsonAsync<JsonElement>(path)).EnumerateArray().ToArray();
+        Assert.All(own, row => Assert.Equal(enrollment, row.GetProperty("sportEnrollmentId").GetGuid()));
+        var created = Assert.Single(own, row => row.GetProperty("id").GetGuid() == id);
+        Assert.Equal(date, created.GetProperty("evaluationDate").GetString());
+        Assert.Equal("Draft", created.GetProperty("status").GetString());
+        Assert.Empty((await other.GetFromJsonAsync<JsonElement>(path)).EnumerateArray());
+        Assert.Empty((await staff.GetFromJsonAsync<JsonElement>($"/api/v1/evaluations?sportEnrollmentId={foreignEnrollment}")).EnumerateArray());
+    }
 
     [Fact] public async Task Coach_sees_assigned_group_players_only()
     {

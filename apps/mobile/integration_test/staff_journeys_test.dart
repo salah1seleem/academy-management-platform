@@ -63,7 +63,7 @@ void main() {
     await capture('coach-home');
     // Groups are a distinct section; the list can build its rows lazily.
     await tester.scrollUntilVisible(
-      find.text('المجموعات المسندة'),
+      find.text('تدريباتي'),
       320,
       scrollable: find.byType(Scrollable).first,
     );

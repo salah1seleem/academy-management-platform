@@ -194,10 +194,10 @@ void main() {
           continue;
         }
         await capture('tasks', mode);
-        await reveal(find.widgetWithText(FilledButton, 'مراجعة الطلبات'));
-        await t.tap(find.widgetWithText(FilledButton, 'مراجعة الطلبات'));
+        await reveal(find.widgetWithText(FilledButton, 'عرض الطلبات'));
+        await t.tap(find.widgetWithText(FilledButton, 'عرض الطلبات'));
         await wait(find.byType(NativePaymentRequests));
-        await wait(find.text('${payment['pending']} طلب بانتظار المراجعة'));
+        await wait(find.text('طلبات معلّقة (${payment['pending']})'));
         await capture('payments', mode);
         await t.tap(find.byTooltip('رجوع').last);
         await wait(find.byType(AdminHome));

@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Infrastructure.Tenancy;
+using Academy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 namespace Academy.IntegrationTests;
 public sealed partial class BrandingMatchesTests
 {
@@ -19,4 +22,31 @@ public sealed partial class BrandingMatchesTests
         foreach(var c in new[]{coach,admin})Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync("/api/v1/reports/operating-statement?"+range)).StatusCode);
         var export=await owner.GetAsync("/api/v1/reports/operating-statement?"+range+"&format=csv");Assert.Equal(HttpStatusCode.OK,export.StatusCode);Assert.Contains("أساس النقدي",await export.Content.ReadAsStringAsync());
     }
+    [Fact]
+    public async Task Dashboard_history_keeps_selected_cash_scope_and_compares_equal_adjacent_dates()
+    {
+        using var owner = await Staff();
+        using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var branch = await db.Branches.Where(b => b.AcademyId == DemoSeed.NogoomAcademyId)
+            .OrderBy(b => b.Id).Select(b => b.Id).FirstAsync();
+        const string endpoint = "/api/v1/reports/operating-statement";
+        var report = await owner.GetFromJsonAsync<JsonElement>(
+            $"{endpoint}?from=2026-09-01&to=2026-09-28&branchId={branch}&includeHistory=true");
+        var previous = await owner.GetFromJsonAsync<JsonElement>(
+            $"{endpoint}?from=2026-08-04&to=2026-08-31&branchId={branch}");
+        var previousSurplus = previous.GetProperty("surplus").GetDecimal();
+        var currentSurplus = report.GetProperty("surplus").GetDecimal();
+        Assert.Equal(previousSurplus, report.GetProperty("previousSurplus").GetDecimal());
+        var percentage = report.GetProperty("surplusChangePercentage");
+        if (previousSurplus == 0) Assert.Equal(JsonValueKind.Null, percentage.ValueKind);
+        else Assert.Equal(Math.Round((currentSurplus - previousSurplus) * 100 / Math.Abs(previousSurplus), 1), percentage.GetDecimal());
+        Assert.Equal(new[] {"2026-07-01", "2026-08-01", "2026-09-01"},
+            report.GetProperty("monthly").EnumerateArray().Select(m => m.GetProperty("from").GetString()));
+        Assert.Equal("2026-09-28", report.GetProperty("to").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(
+            $"{endpoint}?from=2026-09-01&to=2026-09-28&branchId={branch}&includeHistory=true")).StatusCode);
+    }
+
 }

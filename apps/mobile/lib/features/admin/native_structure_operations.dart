@@ -380,9 +380,11 @@ class NativeGroupPlacement extends StatefulWidget {
     super.key,
     required this.auth,
     required this.groupId,
+    this.initialEnrollmentId,
   });
   final AuthController auth;
   final String groupId;
+  final String? initialEnrollmentId;
   @override
   State<NativeGroupPlacement> createState() => _NativeGroupPlacementState();
 }
@@ -392,14 +394,14 @@ class _NativeGroupPlacementState
   @override
   AuthController get auth => widget.auth;
   final search = TextEditingController();
-  final selected = <String>{};
+  late final selected = <String>{?widget.initialEnrollmentId};
   Json? preview, frozen, recorded;
   bool uncertain = false, completed = false;
   String key = commandKey();
   int offset = 0, searchRevision = 0;
   Timer? debounce;
   String get candidatePath =>
-      '/api/v1/manage/groups/${widget.groupId}/placement-candidates?${Uri(queryParameters: {'search': search.text.trim(), 'offset': '0'}).query}';
+      '/api/v1/manage/groups/${widget.groupId}/placement-candidates?${Uri(queryParameters: {'search': search.text.trim(), 'offset': '0', 'enrollmentId': ?widget.initialEnrollmentId}).query}';
   void refresh() {
     if (uncertain || completed) return;
     setState(() {

@@ -53,7 +53,7 @@ class IosStaffPasskeyProvider implements StaffPasskeyProvider {
         uv != 'required' ||
         options['challenge'] is! String) {
       throw const StaffPasskeyProblem(
-        'إعداد التوقيع الآمن لا يطابق هذه المحاولة؛ اطلب مراجعة الإدارة.',
+        'تعذر بدء التحقق على هذا الجهاز. تواصل مع المسؤول أو اطلب مراجعة حضورك.',
       );
     }
     // Do not ask a platform for an unbound/discoverable assertion on this own-only route.
@@ -61,7 +61,7 @@ class IosStaffPasskeyProvider implements StaffPasskeyProvider {
         (options['allowCredentials'] is! List ||
             (options['allowCredentials'] as List).isEmpty)) {
       throw const StaffPasskeyProblem(
-        'لا توجد وسيلة محددة لحسابك؛ أضف وسيلة أو اطلب مراجعة.',
+        'لا توجد وسيلة متاحة لهذا الحساب. أضف وسيلة أو اطلب مراجعة حضورك.',
       );
     }
   }
@@ -120,21 +120,21 @@ class IosStaffPasskeyProvider implements StaffPasskeyProvider {
       if ((result['response'] as Map)['userHandle'] is! String ||
           ((result['response'] as Map)['userHandle'] as String).isEmpty) {
         throw const StaffPasskeyProblem(
-          'لم يقدم الجهاز هوية الوسيلة؛ اطلب مراجعة بدل اختلاق إثبات.',
+          'لم يتعرّف الجهاز على وسيلة مرتبطة بحسابك. أعد المحاولة أو اطلب مراجعة حضورك.',
         );
       }
       return result;
     } on PasskeyAuthCancelledException {
-      throw const StaffPasskeyProblem('تم إلغاء التحقق؛ لم يسجل حضور.');
+      throw const StaffPasskeyProblem('تم إلغاء التحقق على الجهاز.');
     } on DomainNotAssociatedException {
       throw const StaffPasskeyProblem(
-        'نطاق الخدمة غير مرتبط بهذا التطبيق؛ راجع المسؤول أو اطلب إثبات حضور.',
+        'وسائل التحقق غير متاحة على هذا الجهاز. تواصل مع المسؤول أو اطلب مراجعة حضورك.',
       );
     } on StaffPasskeyProblem {
       rethrow;
     } catch (_) {
       throw const StaffPasskeyProblem(
-        'تعذر استخدام وسيلة التحقق على الجهاز؛ أعد المحاولة أو اطلب مراجعة.',
+        'تعذر استخدام وسيلة التحقق على الجهاز. أعد المحاولة أو اطلب مراجعة حضورك.',
       );
     }
   }

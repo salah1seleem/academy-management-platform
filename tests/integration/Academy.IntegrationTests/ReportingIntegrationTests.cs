@@ -47,12 +47,139 @@ public sealed class ReportingIntegrationTests : IAsyncLifetime
     [Fact] public async Task Financial_report_filters_by_branch() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, $"/api/v1/reports/financial?from=2026-01-01&to=2026-12-31&branchId={Slice2DemoSeed.CityBranchId}"); Assert.All(j.GetProperty("items").EnumerateArray(), x => Assert.Equal("فرع مدينة نصر", x.GetProperty("branch").GetString())); }
     [Fact] public async Task Financial_report_filters_by_plan() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, $"/api/v1/reports/financial?from=2026-01-01&to=2026-12-31&planId={Slice3DemoSeed.SwimmingMonthlyId}"); Assert.All(j.GetProperty("items").EnumerateArray(), x => Assert.Equal("اشتراك سباحة شهري", x.GetProperty("plan").GetString())); }
     [Fact] public async Task Academy_b_collection_never_appears() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, "/api/v1/reports/financial?from=2026-01-01&to=2026-12-31"); Assert.DoesNotContain("أكاديمية المستقبل", j.ToString()); }
-    [Fact] public async Task Coach_cannot_access_financial_report() { using var c = await Staff(DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/v1/reports/financial")).StatusCode); }
+    [Fact] public async Task Coach_cannot_access_financial_report() { using var c = await Staff(DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/v1/reports/financial")).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/v1/reports/receipts")).StatusCode); }
     [Fact] public async Task Guardian_cannot_access_financial_report() { using var c = await Guardian(); Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/v1/reports/financial")).StatusCode); }
     [Fact] public async Task Financial_export_contains_filtered_confirmed_rows_only() { using var c = await Staff(DemoSeed.OwnerEmail); var csv = await c.GetStringAsync($"/api/v1/reports/financial/export?from=2026-01-01&to=2026-12-31&sportId={Slice2DemoSeed.SwimmingId}"); Assert.Contains("السباحة", csv); Assert.DoesNotContain("فاشل", csv); }
     [Fact] public async Task Financial_export_rows_correspond_to_report() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, "/api/v1/reports/financial?from=2026-01-01&to=2026-12-31"); var csv = await c.GetStringAsync("/api/v1/reports/financial/export?from=2026-01-01&to=2026-12-31"); Assert.Equal(j.GetProperty("totalCount").GetInt32(), csv.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length - 1); }
     [Fact] public async Task Receipt_amount_equals_collection() { await using var s = Scope(); var db = Db(s); var r = await db.Receipts.Include(x => x.Collection).FirstAsync(x => x.AcademyId == DemoSeed.NogoomAcademyId); Assert.Equal(r.Collection.Amount, r.Amount); }
     [Fact] public async Task Guardian_can_read_own_authorized_receipt() { var id = await ReceiptId(guardianLinked: true); using var c = await Guardian(); Assert.Equal(HttpStatusCode.OK, (await c.GetAsync($"/api/v1/guardian/subscriptions/receipts/{id}")).StatusCode); }
+    [Fact]
+    public async Task Guardian_receipt_tabs_show_linked_child_payments_and_reject_foreign_children()
+    {
+        var receiptId = await ReceiptId(guardianLinked: true);
+        using var guardian = await Guardian();
+        await using var scope = Scope();
+        var db = Db(scope);
+        var playerId = await db.Receipts.Where(r => r.Id == receiptId).Select(r => r.PlayerId).SingleAsync();
+        var otherAcademyPlayerId = await db.Players.Where(p => p.AcademyId != DemoSeed.NogoomAcademyId)
+            .Select(p => p.Id).FirstAsync();
+        var feed = await Get(guardian, $"/api/v1/guardian/subscriptions/receipts?page=1&playerId={playerId}");
+        Assert.Equal(25, feed.GetProperty("pageSize").GetInt32());
+        Assert.Contains(feed.GetProperty("children").EnumerateArray(), child => child.GetProperty("id").GetGuid() == playerId);
+        var ids = await db.Receipts.Where(r => r.AcademyId == DemoSeed.NogoomAcademyId && r.PlayerId == playerId)
+            .OrderByDescending(r => r.PaidAtUtc).ThenByDescending(r => r.Id).Take(25).Select(r => r.Id).ToArrayAsync();
+        Assert.Equal(ids, feed.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("id").GetGuid()));
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await guardian.GetAsync($"/api/v1/guardian/subscriptions/receipts?page=1&playerId={otherAcademyPlayerId}")).StatusCode);
+    }
+    [Fact]
+    public async Task Guardian_receipt_codes_distinguish_equal_linked_names_without_exposing_other_players()
+    {
+        const string path = "/api/v1/guardian/subscriptions/receipts?page=1&allIssued=true";
+        using var guardian = await Guardian();
+        await using var scope = Scope();
+        var db = Db(scope);
+        var firstId = Slice2DemoSeed.OmarPlayerId;
+        var secondId = Slice2DemoSeed.MariamPlayerId;
+        var first = await db.Players.SingleAsync(player => player.Id == firstId);
+        var second = await db.Players.SingleAsync(player => player.Id == secondId);
+        var unlinked = await db.Players.SingleAsync(player => player.Id == Slice2DemoSeed.OtherPlayerId);
+        var foreign = await db.Players.SingleAsync(player => player.Id == Slice2DemoSeed.AcademyBPlayerId);
+        var original = (first.ArabicName, second.ArabicName, unlinked.ArabicName);
+        var baseline = await Get(guardian, path);
+        var baselineChildren = baseline.GetProperty("children").EnumerateArray().ToDictionary(child => child.GetProperty("id").GetGuid());
+        Assert.Equal(JsonValueKind.Null, baselineChildren[firstId].GetProperty("playerCode").ValueKind);
+        Assert.Equal(JsonValueKind.Null, baselineChildren[secondId].GetProperty("playerCode").ValueKind);
+        first.ArabicName = "لاعب أمان اختبار";
+        second.ArabicName = "  لاعب   ا\u0654مان اختبار  ";
+        unlinked.ArabicName = first.ArabicName;
+        await db.SaveChangesAsync();
+        try
+        {
+            var feed = await Get(guardian, path);
+            var children = feed.GetProperty("children").EnumerateArray().ToDictionary(child => child.GetProperty("id").GetGuid());
+            foreach (var player in new[] { first, second })
+            {
+                Assert.Equal(player.PlayerCode, children[player.Id].GetProperty("playerCode").GetString());
+                var scoped = await Get(guardian, $"{path}&playerId={player.Id}");
+                var rows = scoped.GetProperty("items").EnumerateArray().ToArray();
+                Assert.NotEmpty(rows);
+                Assert.All(rows, row => Assert.Equal(player.PlayerCode, row.GetProperty("playerCode").GetString()));
+                var expected = await db.Receipts.Where(row => row.PlayerId == player.Id)
+                    .OrderByDescending(row => row.PaidAtUtc).ThenByDescending(row => row.Id).Take(25).Select(row => row.Id).ToArrayAsync();
+                Assert.Equal(expected, rows.Select(row => row.GetProperty("id").GetGuid()));
+            }
+            Assert.DoesNotContain(unlinked.Id, children.Keys);
+            Assert.DoesNotContain(foreign.Id, children.Keys);
+            Assert.DoesNotContain(unlinked.PlayerCode, feed.ToString());
+            Assert.DoesNotContain(foreign.PlayerCode, feed.ToString());
+            foreach (var player in new[] { unlinked, foreign })
+                Assert.Equal(HttpStatusCode.NotFound, (await guardian.GetAsync($"{path}&playerId={player.Id}")).StatusCode);
+        }
+        finally
+        {
+            (first.ArabicName, second.ArabicName, unlinked.ArabicName) = original;
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Guardian_issued_receipts_include_own_confirmed_tournament_only()
+    {
+        using var guardian = await Guardian();
+        await using var scope = Scope();
+        var db = Db(scope);
+        var academy = DemoSeed.NogoomAcademyId;
+        var actor = await db.GuardianProfiles.Where(g => g.Id == Slice2DemoSeed.MainGuardianId).Select(g => g.UserId).SingleAsync();
+        var enrollment = await db.SportEnrollments.FirstAsync(e => e.AcademyId == academy && e.PlayerId == Slice2DemoSeed.OmarPlayerId);
+        var child = await db.Players.SingleAsync(player => player.Id == enrollment.PlayerId);
+        var sibling = await db.Players.SingleAsync(player => player.Id == Slice2DemoSeed.MariamPlayerId);
+        var siblingName = sibling.ArabicName;
+        var tournament = Guid.NewGuid();
+        var pendingTournament = Guid.NewGuid();
+        var confirmed = Guid.NewGuid();
+        var pending = Guid.NewGuid();
+        var now = new DateTimeOffset(2026, 11, 5, 13, 0, 0, TimeSpan.Zero);
+        db.AcademyTournaments.AddRange(new[] { tournament, pendingTournament }.Select(id => new AcademyTournament
+        {
+            Id = id, AcademyId = academy, SportId = enrollment.SportId,
+            Name = "بطولة اختبار الإيصالات", Fee = 250, Currency = "EGP", CreatedAtUtc = now, UpdatedAtUtc = now
+        }));
+        db.TournamentPayments.AddRange(new TournamentPayment
+        {
+            Id = confirmed, AcademyId = academy, TournamentId = tournament, EnrollmentId = enrollment.Id,
+            RequestedByUserId = actor, TournamentName = "بطولة اختبار الإيصالات", Amount = 250, Currency = "EGP",
+            IdempotencyKey = confirmed.ToString(), Status = "Confirmed", PaymentMethod = "Online",
+            ConfirmedByUserId = actor, ConfirmedAtUtc = now, ReceiptNumber = "TRN-ISSUED-TEST", CreatedAtUtc = now, UpdatedAtUtc = now
+        }, new TournamentPayment
+        {
+            Id = pending, AcademyId = academy, TournamentId = pendingTournament, EnrollmentId = enrollment.Id,
+            RequestedByUserId = actor, TournamentName = "بطولة اختبار الإيصالات", Amount = 250, Currency = "EGP",
+            IdempotencyKey = pending.ToString(), Status = "Pending", CreatedAtUtc = now, UpdatedAtUtc = now
+        });
+        sibling.ArabicName = child.ArabicName;
+        await db.SaveChangesAsync();
+        try
+        {
+            var path = $"/api/v1/guardian/subscriptions/receipts?page=1&playerId={enrollment.PlayerId}";
+            var legacy = await Get(guardian, path);
+            Assert.DoesNotContain(legacy.GetProperty("items").EnumerateArray(), row => row.GetProperty("id").GetGuid() == confirmed);
+            var feed = await Get(guardian, path + "&allIssued=true");
+            var receipt = Assert.Single(feed.GetProperty("items").EnumerateArray(), row => row.GetProperty("id").GetGuid() == confirmed);
+            Assert.Equal("Tournament", receipt.GetProperty("source").GetString());
+            Assert.Equal("TRN-ISSUED-TEST", receipt.GetProperty("receiptNumber").GetString());
+            Assert.Equal(child.PlayerCode, receipt.GetProperty("playerCode").GetString());
+            Assert.DoesNotContain(feed.GetProperty("items").EnumerateArray(), row => row.GetProperty("id").GetGuid() == pending);
+            Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/guardian/tournament-payments/{confirmed}")).StatusCode);
+        }
+        finally
+        {
+            sibling.ArabicName = siblingName;
+            await db.SaveChangesAsync();
+            await db.TournamentPayments.Where(p => p.TournamentId == tournament || p.TournamentId == pendingTournament).ExecuteDeleteAsync();
+            await db.AcademyTournaments.Where(t => t.Id == tournament || t.Id == pendingTournament).ExecuteDeleteAsync();
+        }
+    }
     [Fact] public async Task Guardian_cannot_read_another_payers_receipt() { using var c = await Guardian(); Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/v1/guardian/subscriptions/receipts/{Guid.NewGuid()}")).StatusCode); }
     [Fact] public async Task Academy_b_receipt_is_unavailable() { using var c = await Staff(DemoSeed.FutureOwnerEmail); var id = await ReceiptId(); Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/v1/subscriptions/receipts/{id}")).StatusCode); }
     [Fact] public async Task Attendance_filters_by_month_and_year() { using var c = await Staff(DemoSeed.OwnerEmail); var j = await Get(c, "/api/v1/reports/attendance?month=9&year=2026"); Assert.All(j.GetProperty("items").EnumerateArray(), x => Assert.StartsWith("2026-09", x.GetProperty("date").GetString())); }

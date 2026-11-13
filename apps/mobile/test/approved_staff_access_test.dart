@@ -57,6 +57,60 @@ Map<String, dynamic> access() => {
 };
 void main() {
   testWidgets(
+    'Staff directory loads safely and searches both records by Egyptian phone',
+    (t) async {
+      await t.binding.setSurfaceSize(const Size(390, 1000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+        if (p == '/api/v1/manage/staff') {
+          return {
+            'members': [
+              {
+                'id': 'admin',
+                'name': 'حساب إداري اصطناعي',
+                'role': 'AcademyAdmin',
+                'isActive': true,
+                'phoneNumber': '+201099900100',
+              },
+            ],
+          };
+        }
+        return {
+          'items': [
+            {
+              'id': 'employee',
+              'name': 'سجل موظف اصطناعي',
+              'phone': '+201099900100',
+              'jobTitle': 'إداري',
+              'monthlySalary': 1200,
+              'currency': 'EGP',
+              'membershipId': 'admin',
+            },
+          ],
+        };
+      });
+      await t.pumpWidget(app(NativeStaffManagement(auth: auth)));
+      await t.pumpAndSettle();
+      final search = find.widgetWithText(
+        TextField,
+        'بحث بالاسم أو الهاتف أو الوظيفة',
+      );
+      await t.enterText(search, '٠١٠٩٩٩٠٠١٠٠');
+      await t.pumpAndSettle();
+      expect(find.text('سجل موظف اصطناعي'), findsOneWidget);
+      expect(find.text('حساب إداري اصطناعي'), findsOneWidget);
+      expect(find.text('إداري · \u2066+201099900100\u2069'), findsOneWidget);
+      await t.enterText(search, 'لا يوجد');
+      await t.pumpAndSettle();
+      expect(find.text('لا توجد نتائج مطابقة.'), findsOneWidget);
+      expect(find.text('سجل موظف اصطناعي'), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets(
     'Attendance-only grant persists its exact branch/sport and does not grant finance, refunds or exceptional discounts',
     (t) async {
       await t.binding.setSurfaceSize(const Size(390, 844));

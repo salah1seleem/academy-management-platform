@@ -433,7 +433,7 @@ void main() {
       );
       expect(pending['sportEnrollmentId'], first['sportEnrollmentId']);
       expect(pending['periodId'], isNull);
-      await choose('طريقة التحصيل', 'تحويل إلكتروني تم استلامه');
+      await choose('طريقة التحصيل', 'تحويل إلكتروني');
       await tap('تأكيد التحصيل وإصدار الإيصال');
       await confirm();
       await waitFor(find.text('تم التحصيل'));

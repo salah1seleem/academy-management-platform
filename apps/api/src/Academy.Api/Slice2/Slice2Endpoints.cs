@@ -264,6 +264,9 @@ public static class Slice2Endpoints
         {
             var phone = EgyptPhoneNormalizer.Normalize(request.GuardianPhone);
             if (phone is null || string.IsNullOrWhiteSpace(request.GuardianName)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["guardian"] = ["اسم ولي الأمر ورقم هاتف صحيح مطلوبان."] });
+            if (EgyptPhoneNormalizer.NormalizeForNewMobile(phone) is null &&
+                !await db.GuardianProfiles.AnyAsync(x => x.AcademyId == t.AcademyId && x.IsActive && x.ContactPhone == phone))
+                return Results.UnprocessableEntity(new { message = "اكتب رقم موبايل ولي الأمر بصيغة مصرية صحيحة." });
             var user = await users.Users.SingleOrDefaultAsync(x => x.PhoneNumber == phone);
             if (user is null) { user = new ApplicationUser { Id = Guid.NewGuid(), UserName = phone, PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = request.GuardianName.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; var result = await users.CreateAsync(user); if (!result.Succeeded) return Results.ValidationProblem(new Dictionary<string, string[]> { ["guardian"] = result.Errors.Select(x => x.Description).ToArray() }); }
             var membership = await db.AcademyMemberships.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.UserId == user.Id && x.Role == AcademyRole.Guardian);
@@ -286,7 +289,15 @@ public static class Slice2Endpoints
             db.AcademyPolicyAudits.Add(new Academy.Infrastructure.Operations.AcademyPolicyAudit{Id=enrollment.Id,AcademyId=t.AcademyId,ActorUserId=actorId,Policy="تأكيد تسجيل خارج الفئة العمرية",Before=false,After=true,CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
         if (request.DiscountRuleId is Guid ruleId) {
             if (!await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == ruleId && x.IsActive && !x.IsSiblingOffer&&!db.VipRewards.Any(v=>v.DiscountRuleId==x.Id))) return Results.NotFound();
-            if (!await db.PlayerDiscountLinks.AnyAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == player.Id && x.DiscountRuleId == ruleId)) db.PlayerDiscountLinks.Add(new Academy.Infrastructure.Operations.PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, DiscountRuleId = ruleId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"player-rule:{t.AcademyId}:{player.Id}:{ruleId}"}, 0))");
+            var ruleLink = await db.PlayerDiscountLinks.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.PlayerId == player.Id && x.DiscountRuleId == ruleId);
+            if (ruleLink is null)
+                db.PlayerDiscountLinks.Add(new Academy.Infrastructure.Operations.PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = t.AcademyId, PlayerId = player.Id, DiscountRuleId = ruleId, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+            else if (!ruleLink.IsActive)
+            {
+                ruleLink.IsActive = true;
+                ruleLink.UpdatedAtUtc = clock.UtcNow;
+            }
         }
         await db.SaveChangesAsync();
         RenewalFinancialSnapshot? registrationPrice = null;

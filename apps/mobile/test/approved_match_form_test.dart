@@ -71,6 +71,104 @@ Future<void> save(WidgetTester t) async {
 }
 
 void main() {
+  testWidgets(
+    'Published match saves a partial scorer list and finalizes once',
+    (t) async {
+      await t.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final players = [
+        {'playerId': 'p1', 'name': 'آدم التجريبي', 'isBench': false},
+        {'playerId': 'p2', 'name': 'كريم التجريبي', 'isBench': false},
+      ];
+      final initial = <String, dynamic>{
+        'id': 'scheduled-match',
+        'teamId': 'team',
+        'tournamentId': 'tournament',
+        'opponent': 'منافس اصطناعي',
+        'venue': 'ملعب اختبار',
+        'matchDate': '2026-11-05',
+        'startTime': '17:00:00',
+        'publishedAtUtc': '2026-11-01T12:00:00Z',
+        'isActive': true,
+        'resultRevision': 0,
+        'players': players,
+      };
+      final writes = <Map<String, dynamic>>[];
+      final auth = await authenticate('AcademyAdmin', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        if (method == 'PUT') {
+          expect(path, '/api/v1/manage/matches/scheduled-match');
+          writes.add(body as Map<String, dynamic>);
+          return {'id': 'scheduled-match'};
+        }
+        return {...initial, ...writes.single};
+      });
+      await t.pumpWidget(
+        app(
+          NativeMatchEditor(
+            auth: auth,
+            options: {
+              ...options,
+              'teams': [
+                {
+                  ...(options['teams'] as List).single as Map<String, dynamic>,
+                  'sportKind': 'Football',
+                },
+              ],
+            },
+            match: initial,
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      final ourScore = find.widgetWithText(TextFormField, 'نتيجة فريقنا');
+      final theirScore = find.widgetWithText(TextFormField, 'نتيجة المنافس');
+      await revealTestTarget(t, ourScore);
+      await t.enterText(ourScore, '4');
+      await revealTestTarget(t, theirScore);
+      await t.enterText(theirScore, '1');
+      await t.pumpAndSettle();
+      final addGoal = find.text('إضافة هداف');
+      for (var index = 1; index <= 2; index++) {
+        await revealTestTarget(t, addGoal);
+        await t.tap(addGoal);
+        await t.pumpAndSettle();
+        final field = find.byKey(ValueKey('goal-$index-team-Unknown-null'));
+        await revealTestTarget(t, field);
+        t.widget<DropdownButtonFormField<String>>(field).onChanged!('p$index');
+        await t.pumpAndSettle();
+      }
+      expect(find.text('حفظ ونشر النتيجة'), findsNothing);
+      final publishSwitch = find.widgetWithText(
+        SwitchListTile,
+        'نشر النتيجة وإشعار أولياء أمور الهدافين',
+      );
+      await revealTestTarget(t, publishSwitch);
+      expect(t.widget<SwitchListTile>(publishSwitch).value, isFalse);
+      await t.tap(publishSwitch);
+      await t.pumpAndSettle();
+      final publish = find.text('حفظ ونشر النتيجة');
+      await revealTestTarget(t, publish);
+      await t.tap(publish);
+      await t.pumpAndSettle();
+      expect(writes, hasLength(1));
+      expect(writes.single['resultFinalized'], isTrue);
+      expect(writes.single['goalSlots'], [
+        {'ordinal': 1, 'kind': 'Player', 'playerId': 'p1'},
+        {'ordinal': 2, 'kind': 'Player', 'playerId': 'p2'},
+        {'ordinal': 3, 'kind': 'Unknown', 'playerId': null},
+        {'ordinal': 4, 'kind': 'Unknown', 'playerId': null},
+      ]);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
   for (final fault in ['success', 'lostRead', 'wrongDate', 'wrongPublish']) {
     final loseRead = fault != 'success';
     testWidgets(
@@ -141,6 +239,7 @@ void main() {
             160,
             scrollable: find.byType(Scrollable).first,
           );
+          await revealTestTarget(t, retry);
           await t.tap(retry);
           await t.pumpAndSettle();
         }

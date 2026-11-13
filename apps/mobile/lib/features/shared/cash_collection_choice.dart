@@ -35,8 +35,8 @@ class _CashCollectionChoiceState extends State<CashCollectionChoice> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheet) => SizedBox(
-        height: MediaQuery.sizeOf(sheet).height * .8,
+      builder: (sheet) => FractionallySizedBox(
+        heightFactor: .8,
         child: Column(
           children: [
             Padding(
@@ -67,8 +67,9 @@ class _CashCollectionChoiceState extends State<CashCollectionChoice> {
     path: widget.path,
     builder: (context, result) {
       final data = obj(result), sessions = rows(data['sessions']);
-      if (data['cashEnabled'] == false || sessions.isEmpty) {
+      if (data['cashEnabled'] != true || sessions.isEmpty) {
         final disabled = data['cashEnabled'] == false;
+        final unknown = data['cashEnabled'] is! bool;
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Column(
@@ -80,7 +81,9 @@ class _CashCollectionChoiceState extends State<CashCollectionChoice> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: UiText(
-                      disabled
+                      unknown
+                          ? 'تعذر التحقق من حالة النقدي'
+                          : disabled
                           ? 'التحصيل النقدي غير مفعّل'
                           : 'لا توجد وردية مفتوحة لك',
                       style: Theme.of(context).textTheme.titleMedium,
@@ -90,7 +93,9 @@ class _CashCollectionChoiceState extends State<CashCollectionChoice> {
               ),
               const SizedBox(height: 10),
               UiText(
-                disabled
+                unknown
+                    ? 'حدّث الحالة قبل اختيار وردية التحصيل.'
+                    : disabled
                     ? data['canPrepare'] == true
                           ? 'فعّل النقدي من إعدادات الأكاديمية، ثم افتح ورديتك من الصناديق والعهد في لوحة الإدارة.'
                           : 'اطلب من المالك تفعيل النقدي وتجهيز وردية باسمك لهذا الفرع.'
@@ -117,21 +122,32 @@ class _CashCollectionChoiceState extends State<CashCollectionChoice> {
           ),
         );
       }
-      return DropdownButtonFormField<String>(
-        key: ValueKey('cash-shift-$revision'),
-        initialValue: sessions.any((s) => s['id'] == widget.value)
-            ? widget.value
-            : null,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'وردية التحصيل'),
-        items: [
-          for (final s in sessions)
-            DropdownMenuItem(
-              value: textOf(s['id']),
-              child: UiText('${s['name']} · ${s['branch']}'),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            key: ValueKey('cash-shift-$revision'),
+            initialValue: sessions.any((s) => s['id'] == widget.value)
+                ? widget.value
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'وردية التحصيل'),
+            items: [
+              for (final s in sessions)
+                DropdownMenuItem(
+                  value: textOf(s['id']),
+                  child: UiText('${s['name']} · ${s['branch']}'),
+                ),
+            ],
+            onChanged: widget.onChange,
+          ),
+          if (widget.onChange != null)
+            TextButton.icon(
+              onPressed: reload,
+              icon: const Icon(Icons.refresh),
+              label: const UiText('تحديث حالة النقدي'),
             ),
         ],
-        onChanged: widget.onChange,
       );
     },
   );

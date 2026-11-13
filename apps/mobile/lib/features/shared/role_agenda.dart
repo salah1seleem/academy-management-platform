@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
+import '../../core/theme/academy_brand.dart';
 import '../../core/theme/ui_text.dart';
 import '../coach/coach_attendance.dart';
+import '../coach/session_context.dart';
 import '../guardian/guardian_profile.dart';
+import '../guardian/compensation_card.dart';
 import '../guardian/family_child_filter.dart';
 import '../guardian/guardian_ui.dart';
 import 'matches.dart';
@@ -18,6 +21,8 @@ class RoleAgenda extends StatefulWidget {
   State<RoleAgenda> createState() => _RoleAgendaState();
 }
 
+enum _AgendaSource { training, matches }
+
 class _RoleAgendaState extends State<RoleAgenda> {
   String? identity() => widget.auth.session?.selected == null
       ? null
@@ -26,10 +31,12 @@ class _RoleAgendaState extends State<RoleAgenda> {
   List<Json> children = [], sessions = [], matches = [];
   String? playerId = '';
   String filter = 'all';
+  bool? matchesEnabled;
   bool loading = true,
       homeError = false,
       trainingError = false,
       matchError = false;
+  _AgendaSource? retrying;
   int generation = 0;
   bool current(int attempt) =>
       mounted &&
@@ -38,20 +45,34 @@ class _RoleAgendaState extends State<RoleAgenda> {
       openedIdentity == identity();
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final brand = BrandScope.maybeOf(context);
+    if (brand?.loading == true) return;
+    final enabled = brand?.features.contains('matches') ?? true;
+    if (matchesEnabled == enabled) return;
+    matchesEnabled = enabled;
+    filter = 'all';
     load();
   }
 
-  Future<void> load({String? child}) async {
+  Future<void> load({String? child, _AgendaSource? retry}) async {
+    if (retry != null && loading) return;
     final attempt = ++generation;
     setState(() {
       loading = true;
+      retrying = retry;
       homeError = false;
-      sessions = [];
-      matches = [];
+      if (retry != _AgendaSource.matches) {
+        sessions = [];
+        trainingError = false;
+      }
+      if (retry != _AgendaSource.training) {
+        matches = [];
+        matchError = false;
+      }
     });
-    if (widget.guardian && child == null) {
+    if (widget.guardian && child == null && retry == null) {
       try {
         final data = obj(
           await widget.auth.request('GET', '/api/v1/guardian/home'),
@@ -93,7 +114,7 @@ class _RoleAgendaState extends State<RoleAgenda> {
                 'GET',
                 '/api/v1/attendance/sessions?upcomingOnly=true',
               ),
-            ),
+            ).where((session) => session['status'] != 'Cancelled').toList(),
             false,
           );
         }
@@ -111,6 +132,9 @@ class _RoleAgendaState extends State<RoleAgenda> {
           );
           if (obj(data['player'])['id'] != id) throw StateError('scope');
           for (final e in rows(data['enrollments'])) {
+            final makeups = makeupSessionIds(
+              compensationForEnrollment(data, e['id']),
+            );
             for (final s in rows(e['upcoming'])) {
               final key = textOf(s['id']), previous = unique[key];
               unique[key] = {
@@ -123,6 +147,11 @@ class _RoleAgendaState extends State<RoleAgenda> {
                       []),
                   textOf(child['arabicName']),
                 }.toList(),
+                'makeupChildren': <String, String>{
+                  ...?previous?['makeupChildren'] as Map<String, String>?,
+                  if (makeups.contains(s['id']))
+                    id: textOf(child['arabicName']),
+                },
                 'childIds': <String>{
                   ...((previous?['childIds'] as List?)?.cast<String>() ?? []),
                   id,
@@ -138,6 +167,7 @@ class _RoleAgendaState extends State<RoleAgenda> {
     }
 
     Future<(List<Json>, bool)> games() async {
+      if (matchesEnabled != true) return (<Json>[], false);
       try {
         final data = rows(
           await widget.auth.request(
@@ -173,7 +203,14 @@ class _RoleAgendaState extends State<RoleAgenda> {
       }
     }
 
-    final result = await Future.wait([training(), games()]);
+    final result = await Future.wait([
+      retry == _AgendaSource.matches
+          ? Future.value((sessions, trainingError))
+          : training(),
+      retry == _AgendaSource.training
+          ? Future.value((matches, matchError))
+          : games(),
+    ]);
     if (!current(attempt)) return;
     setState(() {
       sessions = result[0].$1;
@@ -181,6 +218,7 @@ class _RoleAgendaState extends State<RoleAgenda> {
       matches = result[1].$1;
       matchError = result[1].$2;
       loading = false;
+      retrying = null;
     });
   }
 
@@ -198,6 +236,8 @@ class _RoleAgendaState extends State<RoleAgenda> {
         if (openedIdentity == null || openedIdentity != identity()) {
           return const SizedBox.shrink();
         }
+        final showTrainingError = filter != 'matches' && trainingError;
+        final showMatchError = filter != 'training' && matchError;
         final events =
             <({bool match, Json data})>[
               if (filter != 'matches')
@@ -220,8 +260,20 @@ class _RoleAgendaState extends State<RoleAgenda> {
                 child: UiText(
                   localized(
                     context,
-                    'حصصك ومبارياتك في مكان واحد',
-                    'Training and matches in one place',
+                    widget.guardian
+                        ? (matchesEnabled == true
+                              ? 'الحصص والمباريات'
+                              : 'جدول التدريب')
+                        : filter == 'matches'
+                        ? 'المباريات المنشورة'
+                        : 'الحصص خلال 14 يومًا',
+                    widget.guardian
+                        ? (matchesEnabled == true
+                              ? 'Training and matches'
+                              : 'Training schedule')
+                        : filter == 'matches'
+                        ? 'Published matches'
+                        : 'Training over the next 14 days',
                   ),
                 ),
               ),
@@ -244,23 +296,24 @@ class _RoleAgendaState extends State<RoleAgenda> {
               onSelected: (id) => load(child: id),
             ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final f in [
-                ('all', 'الكل', 'All'),
-                ('training', 'الحصص', 'Training'),
-                ('matches', 'المباريات', 'Matches'),
-              ])
-                ChoiceChip(
-                  label: UiText(localized(context, f.$2, f.$3)),
-                  selected: filter == f.$1,
-                  onSelected: (_) => setState(() => filter = f.$1),
-                ),
-            ],
-          ),
-          if (loading)
+          if (matchesEnabled == true)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final f in [
+                  ('all', 'الكل', 'All'),
+                  ('training', 'الحصص', 'Training'),
+                  ('matches', 'المباريات', 'Matches'),
+                ])
+                  ChoiceChip(
+                    label: UiText(localized(context, f.$2, f.$3)),
+                    selected: filter == f.$1,
+                    onSelected: (_) => setState(() => filter = f.$1),
+                  ),
+              ],
+            ),
+          if (loading && retrying == null)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
@@ -276,7 +329,11 @@ class _RoleAgendaState extends State<RoleAgenda> {
               () => load(),
             )
           else ...[
-            if (trainingError)
+            if (loading)
+              const LinearProgressIndicator(
+                semanticsLabel: 'جارٍ تحديث المواعيد',
+              ),
+            if (showTrainingError)
               GLink(
                 localized(
                   context,
@@ -284,9 +341,9 @@ class _RoleAgendaState extends State<RoleAgenda> {
                   'Could not load training — retry',
                 ),
                 Icons.refresh,
-                () => load(),
+                () => load(retry: _AgendaSource.training),
               ),
-            if (matchError)
+            if (showMatchError)
               GLink(
                 localized(
                   context,
@@ -294,35 +351,36 @@ class _RoleAgendaState extends State<RoleAgenda> {
                   'Could not load matches — retry',
                 ),
                 Icons.refresh,
-                () => load(),
+                () => load(retry: _AgendaSource.matches),
               ),
             if (widget.guardian && children.isEmpty)
               const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
             for (var i = 0; i < events.length; i++) ...[
               if (i == 0 || eventDate(events[i]) != eventDate(events[i - 1]))
-                widget.guardian
-                    ? GuardianAgendaDay(date: eventDate(events[i]))
-                    : Heading(eventDate(events[i])),
+                GuardianAgendaDay(date: eventDate(events[i])),
               eventCard(context, events[i]),
             ],
             if (events.isEmpty &&
-                !trainingError &&
-                !matchError &&
+                !loading &&
+                !showTrainingError &&
+                !showMatchError &&
                 (!widget.guardian || children.isNotEmpty))
-              const EmptyMessage('لا توجد مواعيد قادمة في القائمة المعروضة.'),
-            UiText(
-              localized(
-                context,
-                widget.guardian
-                    ? 'تُعرض أقرب 3 حصص لكل تسجيل والمباريات المنشورة للابن المختار. راجع المواعيد الدورية من تفاصيل التدريب.'
-                    : 'تُعرض الحصص القادمة خلال 14 يومًا ومبارياتك المنشورة القادمة.',
-                widget.guardian
-                    ? 'Nearest 3 sessions per enrollment and published matches for the selected child. Recurring times are in training details.'
-                    : 'Training in the next 14 days and your upcoming published matches.',
+              EmptyMessage(switch (filter) {
+                'training' => 'لا توجد حصص قادمة.',
+                'matches' => 'لا توجد مباريات منشورة قادمة.',
+                _ => 'لا توجد مواعيد قادمة.',
+              }),
+            if (widget.guardian && filter != 'matches')
+              UiText(
+                localized(
+                  context,
+                  'أقرب 3 حصص لكل تسجيل. المواعيد الدورية في تفاصيل التدريب.',
+                  'Nearest 3 sessions per enrollment. Recurring times are in training details.',
+                ),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (!widget.guardian || playerId != null)
+            if (matchesEnabled == true &&
+                (!widget.guardian || playerId != null))
               GLink(
                 localized(
                   context,
@@ -398,7 +456,9 @@ class _RoleAgendaState extends State<RoleAgenda> {
         onTap: onTap,
       );
     }
+    final resource = d['resource'];
     return GCard(
+      key: ValueKey('coach-agenda-${d['id']}'),
       onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,14 +472,6 @@ class _RoleAgendaState extends State<RoleAgenda> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                UiText(
-                  localized(
-                    context,
-                    event.match ? 'مباراة' : 'حصة تدريب',
-                    event.match ? 'Match' : 'Training',
-                  ),
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
                 UiText(
                   event.match
                       ? '${d['team']} × ${d['opponent']}'
@@ -439,16 +491,28 @@ class _RoleAgendaState extends State<RoleAgenda> {
                       ? '${d['tournament']} · ${d['venue']}'
                       : '${d['sport']} · ${d['branch']}',
                 ),
-                if (!event.match && d['childrenNames'] is List)
-                  UiText(
-                    (d['childrenNames'] as List).join('، '),
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                if (!event.match) ...[
+                  if (resource is String && resource.trim().isNotEmpty)
+                    UiText(resource),
+                  SessionContextBadges(session: d),
+                ],
                 if (event.match && d['coachName'] != null)
                   UiText('مدرب المباراة: ${d['coachName']}'),
                 if (event.match &&
                     d['coachAssignmentSource'] == 'LegacyCurrentTeam')
                   const UiText('إسناد قديم غير موثق؛ يلزم مراجعة الإدارة.'),
+                const SizedBox(height: 6),
+                UiText(
+                  localized(
+                    context,
+                    event.match ? 'تفاصيل المباراة' : 'كشف الحضور',
+                    event.match ? 'Match details' : 'Attendance register',
+                  ),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -503,6 +567,8 @@ class GuardianAgendaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final makeup = (data['makeupChildren'] as Map<String, String>?) ?? {};
+    final allMakeup = makeup.length == (data['childIds'] as List?)?.length;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Semantics(
@@ -562,6 +628,17 @@ class GuardianAgendaCard extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          if (!isMatch && makeup.isNotEmpty)
+                            UiText(
+                              allMakeup
+                                  ? 'حصة تعويضية'
+                                  : 'حصة تعويضية لـ ${makeup.values.join('، ')}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: colors.primary,
+                              ),
+                            ),
                           UiText(
                             childNames.join('، '),
                             style: TextStyle(

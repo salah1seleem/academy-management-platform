@@ -83,9 +83,10 @@ class _NativeFamilyRenewalRequestState
 
   int refresh = 0;
   bool busy = false;
+  bool needsCancellationCheck = false;
   String? error;
   Future<void> cancel(Json data) async {
-    if (!current || busy) return;
+    if (!current || busy || needsCancellationCheck) return;
     final requestedId = widget.id;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -116,7 +117,11 @@ class _NativeFamilyRenewalRequestState
         ],
       ),
     );
-    if (confirmed != true || !current || busy || widget.id != requestedId) {
+    if (confirmed != true ||
+        !current ||
+        busy ||
+        needsCancellationCheck ||
+        widget.id != requestedId) {
       return;
     }
     setState(() {
@@ -132,15 +137,19 @@ class _NativeFamilyRenewalRequestState
       if (current) setState(() => refresh++);
     } catch (e) {
       if (current) {
-        setState(
-          () => error = e is ApiFailure
-              ? e.message
-              : localized(
+        final failure = e is ApiFailure ? e : null;
+        final status = failure?.status ?? 0;
+        setState(() {
+          needsCancellationCheck =
+              status == 0 || status == 409 || status >= 500;
+          error = needsCancellationCheck
+              ? localized(
                   context,
-                  'تعذر تأكيد الإلغاء. حدّث الطلب قبل المحاولة.',
-                  'Could not confirm cancellation. Refresh before retrying.',
-                ),
-        );
+                  'تعذر تأكيد الإلغاء. تحقّق من حالة الطلب.',
+                  'Cancellation is unconfirmed. Check the request status.',
+                )
+              : failure?.message;
+        });
       }
     } finally {
       if (current) setState(() => busy = false);
@@ -240,7 +249,8 @@ class _NativeFamilyRenewalRequestState
                     ),
                   if (d['status'] == 'Pending' &&
                       !widget.staff &&
-                      d['proofUrl'] == null)
+                      d['proofUrl'] == null &&
+                      !needsCancellationCheck)
                     TransferPayment(
                       auth: widget.auth,
                       proofPath:
@@ -259,21 +269,38 @@ class _NativeFamilyRenewalRequestState
                       onConfirmed: () => setState(() => refresh++),
                     ),
                   if (error != null)
-                    UiText(
-                      error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    Semantics(
+                      liveRegion: true,
+                      child: UiText(
+                        error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
                   if (d['status'] == 'Pending' && !widget.staff)
                     OutlinedButton(
-                      onPressed: busy ? null : () => cancel(d),
+                      onPressed: busy
+                          ? null
+                          : needsCancellationCheck
+                          ? () => setState(() {
+                              needsCancellationCheck = false;
+                              error = null;
+                              refresh++;
+                            })
+                          : () => cancel(d),
                       child: UiText(
-                        localized(
-                          context,
-                          'إلغاء طلب التجديد',
-                          'Cancel renewal request',
-                        ),
+                        needsCancellationCheck
+                            ? localized(
+                                context,
+                                'التحقق من حالة الطلب',
+                                'Check request status',
+                              )
+                            : localized(
+                                context,
+                                'إلغاء طلب التجديد',
+                                'Cancel renewal request',
+                              ),
                       ),
                     ),
                 ]);

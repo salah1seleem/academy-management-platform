@@ -148,11 +148,13 @@ void main() {
       expect(find.text('55'), findsOneWidget);
       expect(find.text('50'), findsOneWidget);
       expect(find.text('305'), findsNothing);
-      expect(find.textContaining('قرب الانتهاء ضمن'), findsOneWidget);
+      expect(find.text('إجمالي الاشتراكات السارية'), findsOneWidget);
       await t.tap(find.text('255'));
       expect(total, 1);
       await t.tap(find.text('200'));
       expect(status, 'current');
+      await t.tap(find.text('55'));
+      expect(status, 'expiring');
       await t.tap(find.text('قائمة اللاعبين · 300 لاعب'));
       expect(people, 1);
       expect(t.takeException(), isNull);

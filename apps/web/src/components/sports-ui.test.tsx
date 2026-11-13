@@ -1,14 +1,15 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AttendanceChoice, IdentityMark, ProgressTrack, SportsHero, SportsQuickActions } from "./sports-ui";
+import { MoneyValue } from "./money-value";
 
 afterEach(cleanup);
 describe("sports dashboard presentation", () => {
   it("uses the supplied academy, identity and report reference date", () => {
     render(<SportsHero name="صلاح التجريبي" academy="أكاديمية النجوم" date="2026-09-28" />);
     expect(screen.getByRole("heading", { name: "أهلًا، صلاح التجريبي" })).toBeVisible();
-    expect(screen.getByText(/ملخص أداء أكاديمية النجوم/)).toBeVisible();
-    expect(screen.getByText(/مرجع التقرير/)).toBeVisible();
+    expect(screen.getByText("أكاديمية النجوم")).toBeVisible();
+    expect(screen.getByText(/تاريخ التقرير/)).toBeVisible();
     expect(screen.queryByText(/زيادة|مقارنة|%/)).not.toBeInTheDocument();
   });
   it("keeps coach shortcuts operational with no financial or people management links", () => {
@@ -37,5 +38,9 @@ describe("sports dashboard presentation", () => {
     render(<IdentityMark name="عمر خالد" detail="NG-001" />);
     expect(screen.getByText("عمر خالد")).toBeVisible(); expect(screen.getByText("NG-001")).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+  it("keeps the amount and currency available as a financial report link name", () => {
+    render(<a href="/dashboard/reports/financial"><MoneyValue amount={1250} currency="EGP" /></a>);
+    expect(screen.getByRole("link", { name: "1,250 جنيه" })).toBeVisible();
   });
 });

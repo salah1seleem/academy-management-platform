@@ -79,7 +79,7 @@ void main() {
           expect(
             find.descendant(
               of: first,
-              matching: find.text('النظام الغذائي ليوم 2026-10-22'),
+              matching: find.text('اقتراح ليوم 2026-10-22'),
             ),
             findsOneWidget,
           );
@@ -136,7 +136,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('family-meal-0')),
-          matching: find.text('النظام الغذائي ليوم 2026-10-22'),
+          matching: find.text('اقتراح ليوم 2026-10-22'),
         ),
         findsOneWidget,
       );
@@ -153,7 +153,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('family-meal-1')),
-          matching: find.text('النظام الغذائي ليوم 2026-10-22'),
+          matching: find.text('اقتراح ليوم 2026-10-22'),
         ),
         findsOneWidget,
       );

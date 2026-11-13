@@ -151,6 +151,95 @@ public sealed class TenantAuthenticationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Guardian_otp_can_open_only_one_session_when_two_clients_verify_it()
+    {
+        using var first = factory.CreateClient();
+        using var second = factory.CreateClient();
+        using var third = factory.CreateClient();
+        var challengeId = await RequestGuardianOtp(first, DemoSeed.GuardianPhone);
+        var body = new { challengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" };
+        var results = await Task.WhenAll(GuardianOtpPost(first, "verify", body), GuardianOtpPost(second, "verify", body));
+        Assert.Single(results, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(results, response => response.StatusCode == HttpStatusCode.Unauthorized);
+        var sessions = await Task.WhenAll(first.GetAsync("/api/v1/me"), second.GetAsync("/api/v1/me"));
+        Assert.Single(sessions, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GuardianOtpPost(third, "verify", body)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Guardian_otp_rejects_another_phone_expiry_and_an_exhausted_challenge()
+    {
+        using var client = factory.CreateClient();
+        var expired = await RequestGuardianOtp(client, DemoSeed.GuardianPhone);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            await db.GuardianOtpChallenges.Where(x => x.Id == expired)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ExpiresAtUtc, DateTimeOffset.UtcNow.AddSeconds(-1)));
+        }
+        var valid = await RequestGuardianOtp(client, DemoSeed.GuardianPhone);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GuardianOtpPost(client, "verify",
+            new { challengeId = expired, phoneNumber = DemoSeed.GuardianPhone, code = "246810" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GuardianOtpPost(client, "verify",
+            new { challengeId = valid, phoneNumber = DemoSeed.OwnerPhone, code = "246810" })).StatusCode);
+        for (var attempt = 0; attempt < 5; attempt++)
+            Assert.Equal(HttpStatusCode.Unauthorized, (await GuardianOtpPost(client, "verify",
+                new { challengeId = valid, phoneNumber = DemoSeed.GuardianPhone, code = "123456" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GuardianOtpPost(client, "verify",
+            new { challengeId = valid, phoneNumber = DemoSeed.GuardianPhone, code = "246810" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(DemoSeed.OwnerPhone)]
+    [InlineData("+201099991234")]
+    public async Task Guardian_otp_never_signs_in_a_phone_without_a_guardian_membership(string phone)
+    {
+        using var client = factory.CreateClient();
+        var challengeId = await RequestGuardianOtp(client, phone);
+        var verify = await GuardianOtpPost(client, "verify", new { challengeId, phoneNumber = phone, code = "246810" });
+        Assert.Equal(HttpStatusCode.Unauthorized, verify.StatusCode);
+        Assert.Equal("رمز التحقق غير صحيح أو منتهي.", (await verify.Content.ReadFromJsonAsync<ProblemResponse>())!.Detail);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Guardian_web_otp_is_not_available_outside_demo()
+    {
+        using var host = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("Demo:FixedOtpEnabled", "false");
+            builder.UseSetting("Demo:SeedEnabled", "false");
+        });
+        using var client = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var availability = await client.GetAsync("/api/v1/auth/guardian/otp/availability");
+        Assert.True(availability.Headers.CacheControl!.NoStore);
+        Assert.False((await availability.Content.ReadFromJsonAsync<OtpAvailability>())!.Enabled);
+        Assert.Equal(HttpStatusCode.NotImplemented, (await GuardianOtpPost(client, "request",
+            new { phoneNumber = DemoSeed.GuardianPhone })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotImplemented, (await GuardianOtpPost(client, "verify",
+            new { challengeId = Guid.NewGuid(), phoneNumber = DemoSeed.GuardianPhone, code = "246810" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
+    }
+
+    private static async Task<Guid> RequestGuardianOtp(HttpClient client, string phoneNumber)
+    {
+        var response = await GuardianOtpPost(client, "request", new { phoneNumber });
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<ChallengeResponse>())!.ChallengeId;
+    }
+
+    private static async Task<HttpResponseMessage> GuardianOtpPost(HttpClient client, string action, object body)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/auth/guardian/otp/{action}") { Content = JsonContent.Create(body) };
+        request.Headers.Add("X-CSRF-TOKEN", await Csrf(client));
+        return await client.SendAsync(request);
+    }
+
+    private sealed record OtpAvailability(bool Enabled);
+
+    [Fact]
     public void Fixed_demo_otp_is_refused_outside_Demo()
     {
         var environment = new StubEnvironment { EnvironmentName = Environments.Production };

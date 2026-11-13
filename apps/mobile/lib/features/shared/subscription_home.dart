@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/ui_text.dart';
+import '../../core/theme/academy_home_skin.dart';
 import '../guardian/guardian_ui.dart';
 import '../owner/home_destinations.dart';
 import 'subscription_identity_card.dart';
@@ -24,13 +25,16 @@ class SubscriptionHomePanel extends StatefulWidget {
     this.branchId = '',
     this.asOf,
     this.from,
+    this.academyToday,
     this.dateFilters,
     this.onBranchChanged,
+    this.inlineOwnerScope = false,
   });
   final AuthController auth;
   final String branchId;
-  final String? asOf, from;
+  final String? asOf, from, academyToday;
   final Widget? dateFilters;
+  final bool inlineOwnerScope;
   final ValueChanged<String>? onBranchChanged;
   @override
   State<SubscriptionHomePanel> createState() => _SubscriptionHomePanelState();
@@ -138,21 +142,29 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
     String state = '',
     String? dimension,
     String? value,
+    String? scopeLabel,
     bool uniquePlayers = false,
-  }) => openPage(
-    context,
-    HomeSubscriptionPlayers(
-      auth: widget.auth,
-      state: state,
-      uniquePlayers: uniquePlayers,
-      filters: {
-        ...filters,
-        if (data?['asOf'] != null) 'asOf': textOf(data!['asOf']),
-        'dimension': ?dimension,
-        'key': ?value,
-      },
-    ),
-  );
+  }) {
+    final destination = {
+      ...filters,
+      if (data?['asOf'] != null) 'asOf': textOf(data!['asOf']),
+      'dimension': ?dimension,
+      'key': ?value,
+    };
+    if (dimension == 'months') destination.remove('from');
+    openPage(
+      context,
+      HomeSubscriptionPlayers(
+        auth: widget.auth,
+        state: state,
+        uniquePlayers: uniquePlayers,
+        scopeLabel: scopeLabel,
+        academyToday: widget.academyToday,
+        filters: destination,
+      ),
+    );
+  }
+
   Future<Json> breakdown(String dimension) {
     final query = Uri(
       queryParameters: {
@@ -171,6 +183,14 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
       ),
     );
   }
+
+  VoidCallback _toggleBreakdown(List<String> dimensions) =>
+      () => setState(() {
+        showBreakdown = !showBreakdown;
+        if (showBreakdown && selected.isEmpty && dimensions.isNotEmpty) {
+          selected = dimensions.first;
+        }
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -195,6 +215,7 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
     }
     final d = data!,
         owner = widget.auth.session!.selected!.role == 'AcademyOwner';
+    final from = DateTime.tryParse('${d['from'] ?? widget.from}');
     final order = rows(d['sports']).length <= 1
         ? ['groups', 'days', 'ages', 'branches', 'packages', 'months']
         : [
@@ -212,39 +233,40 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: UiText(
-                '${branch.isEmpty ? 'كل الفروع' : rows(d['branches']).where((b) => b['id'] == branch).firstOrNull?['name'] ?? 'الفرع المحدد'} · ${rows(d['sports']).length == 1
-                    ? textOf(rows(d['sports']).first['name'])
-                    : sport.isEmpty
-                    ? 'كل الرياضات'
-                    : rows(d['sports']).where((s) => s['id'] == sport).firstOrNull?['name'] ?? 'الرياضة المحددة'}',
-                style: Theme.of(context).textTheme.bodySmall,
+        if (!widget.inlineOwnerScope || rows(d['sports']).length > 1)
+          Row(
+            children: [
+              Expanded(
+                child: UiText(
+                  '${branch.isEmpty ? 'كل الفروع' : rows(d['branches']).where((b) => b['id'] == branch).firstOrNull?['name'] ?? 'الفرع المحدد'} · ${rows(d['sports']).length == 1
+                      ? textOf(rows(d['sports']).first['name'])
+                      : sport.isEmpty
+                      ? 'كل الرياضات'
+                      : rows(d['sports']).where((s) => s['id'] == sport).firstOrNull?['name'] ?? 'الرياضة المحددة'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
-            TextButton.icon(
-              key: const ValueKey('subscription-scope-toggle'),
-              onPressed: () => setState(() => showFilters = !showFilters),
-              icon: Icon(
-                showFilters ? Icons.close_rounded : Icons.tune_rounded,
-                size: 17,
+              TextButton.icon(
+                key: const ValueKey('subscription-scope-toggle'),
+                onPressed: () => setState(() => showFilters = !showFilters),
+                icon: Icon(
+                  showFilters ? Icons.close_rounded : Icons.tune_rounded,
+                  size: 17,
+                ),
+                label: const UiText('تصفية'),
               ),
-              label: const UiText('تصفية'),
-            ),
-          ],
-        ),
-        if (widget.from?.isNotEmpty == true || widget.asOf?.isNotEmpty == true)
+            ],
+          ),
+        if (!widget.inlineOwnerScope && from != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: UiText(
-              '${widget.from?.isNotEmpty == true ? 'من ${widget.from} · ' : ''}${widget.asOf?.isNotEmpty == true ? 'حتى ${widget.asOf}' : ''}',
+              'بداية الفترة ${MaterialLocalizations.of(context).formatShortDate(from)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         if (showFilters) ...[
-          if (rows(d['branches']).length > 1)
+          if (!widget.inlineOwnerScope && rows(d['branches']).length > 1)
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -294,7 +316,7 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
                 ],
               ),
             ),
-          if (widget.dateFilters != null)
+          if (!widget.inlineOwnerScope && widget.dateFilters != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: widget.dateFilters!,
@@ -306,27 +328,77 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
           onTotal: () => open(state: 'active'),
           onPlayers: () => open(uniquePlayers: true),
           onStatus: (state) => open(state: state),
+          newSubscriptions: widget.inlineOwnerScope
+              ? d['newSubscriptions'] as num?
+              : null,
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: TextButton.icon(
+        if (owner)
+          OutlinedButton(
             key: const ValueKey('subscription-breakdown-toggle'),
-            onPressed: () => setState(() {
-              showBreakdown = !showBreakdown;
-              if (showBreakdown && selected.isEmpty && dimensions.isNotEmpty) {
-                selected = dimensions.first;
-              }
-            }),
-            icon: Icon(
-              showBreakdown
-                  ? Icons.expand_less_rounded
-                  : Icons.bar_chart_rounded,
-              size: 18,
+            onPressed: _toggleBreakdown(dimensions),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
+              backgroundColor: academyAccent(context).withValues(alpha: .09),
+              side: BorderSide(
+                color: academyAccent(context).withValues(alpha: .42),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
-            label: const UiText('تحليل الاشتراكات'),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.bar_chart_rounded,
+                  color: academyAccent(context),
+                  size: 25,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const UiText(
+                        'تحليل الاشتراكات',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      UiText(
+                        'توزيع الاشتراكات ونموها',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  showBreakdown
+                      ? Icons.expand_less_rounded
+                      : Icons.chevron_left_rounded,
+                ),
+              ],
+            ),
+          )
+        else
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              key: const ValueKey('subscription-breakdown-toggle'),
+              onPressed: _toggleBreakdown(dimensions),
+              icon: Icon(
+                showBreakdown
+                    ? Icons.expand_less_rounded
+                    : Icons.bar_chart_rounded,
+                size: 18,
+              ),
+              label: const UiText('تحليل الاشتراكات'),
+            ),
           ),
-        ),
         if (showBreakdown) ...[
           const UiText(
             'فرز الاشتراكات بحسب',
@@ -387,6 +459,10 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Heading(subscriptionDimensions[selected]!),
+                      if (selected == 'months' && items.isNotEmpty)
+                        const UiText(
+                          'التسجيلات التي بدأت اشتراكاتها حتى كل تاريخ.',
+                        ),
                       if (items.isEmpty)
                         const EmptyMessage('لا توجد اشتراكات في هذا النطاق.'),
                       for (final item in items)
@@ -394,6 +470,7 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
                           onTap: () => open(
                             dimension: selected,
                             value: textOf(item['key']),
+                            scopeLabel: textOf(item['name']),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -414,7 +491,8 @@ class _SubscriptionHomePanelState extends State<SubscriptionHomePanel> {
                                     ),
                                   ],
                                 ),
-                                if (item['detail'] != null)
+                                if (selected != 'months' &&
+                                    item['detail'] != null)
                                   UiText(
                                     textOf(item['detail']),
                                     style: const TextStyle(fontSize: 10),

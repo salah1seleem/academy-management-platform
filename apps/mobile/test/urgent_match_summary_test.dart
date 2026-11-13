@@ -219,7 +219,7 @@ void main() {
       );
       await t.tap(find.text('عرض التحديثات والمواعيد'));
       await t.pumpAndSettle();
-      await t.tap(find.text('تمت القراءة'));
+      await t.tap(find.text('تحديد كمقروء'));
       await t.pumpAndSettle();
       expect(find.text('لا توجد تنبيهات.'), findsOneWidget);
       Navigator.of(t.element(find.byType(NotificationInbox))).pop();
@@ -305,7 +305,7 @@ void main() {
         await t.pumpAndSettle();
         await t.tap(find.byTooltip('التنبيهات'));
         await t.pumpAndSettle();
-        await t.tap(find.text('تمت القراءة'));
+        await t.tap(find.text('تحديد كمقروء'));
         await t.pumpAndSettle();
         Navigator.of(t.element(find.byType(NotificationInbox))).pop();
         await t.pumpAndSettle();
@@ -352,7 +352,7 @@ void main() {
       try {
         await t.pumpWidget(app(NotificationInbox(auth: auth)));
         await t.pumpAndSettle();
-        await t.tap(find.text('تمت القراءة'));
+        await t.tap(find.text('تحديد كمقروء'));
         await t.pump();
         await auth.logout();
         pending.complete(null);

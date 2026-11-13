@@ -81,9 +81,14 @@ public sealed partial class V2ReceivablesTests
         var user=await db.Users.Where(u=>u.PhoneNumber==DemoSeed.GuardianPhone).Select(u=>u.Id).SingleAsync();
         var e=await db.SportEnrollments.Where(e=>e.AcademyId==DemoSeed.NogoomAcademyId&&e.IsActive&&e.Player.IsActive&&db.GuardianPlayerLinks.Any(l=>l.PlayerId==e.PlayerId&&l.IsActive&&l.Guardian.UserId==user)).FirstAsync();
         var p=new SportCatalogItem{Id=Guid.NewGuid(),AcademyId=e.AcademyId,SportId=e.SportId,ArabicName="زي تجريبي "+Guid.NewGuid(),ImageReference="/demo-assets/catalog-football.svg",DisplayPrice=100,Currency="EGP",StockQuantity=2};db.Add(p);await db.SaveChangesAsync();
+        var availablePath=$"/api/v1/guardian/catalog/{p.Id}/variants?enrollmentId={e.Id}";
+        var initial=await guardian.GetFromJsonAsync<JsonElement>(availablePath);
+        Assert.False(initial.GetProperty("usesVariants").GetBoolean());
+        Assert.Equal(2,initial.GetProperty("stockQuantity").GetInt32());
+        Assert.Equal(100m,initial.GetProperty("unitPrice").GetDecimal());
         (await Inventory(owner,p.Id,new(0,true,true,[new("M",7,1),new("M",8,1)]))).EnsureSuccessStatusCode();
         var csrf=(await owner.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();var shirt=new HttpRequestMessage(HttpMethod.Put,$"/api/v1/people/enrollments/{e.Id}/shirt-number"){Content=JsonContent.Create(new ProductVariants.ShirtWrite(7))};shirt.Headers.Add("X-CSRF-TOKEN",csrf);(await owner.SendAsync(shirt)).EnsureSuccessStatusCode();
-        var choices=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/catalog/{p.Id}/variants?enrollmentId={e.Id}");Assert.Equal(7,choices.GetProperty("assignedShirtNumber").GetInt32());
+        var choices=await guardian.GetFromJsonAsync<JsonElement>(availablePath);Assert.Equal(7,choices.GetProperty("assignedShirtNumber").GetInt32());
         Assert.Equal(HttpStatusCode.NotFound,(await guardian.GetAsync($"/api/v1/guardian/catalog/{p.Id}/variants?enrollmentId={Guid.NewGuid()}")).StatusCode);
         var variant=choices.GetProperty("variants").EnumerateArray().Single(v=>v.GetProperty("shirtNumber").GetInt32()==7).GetProperty("id").GetGuid();
         var body=new SaleWrite(p.Id,1,e.PlayerId,null,e.BranchId,ExpectedAmount:100,VariantId:variant,SportEnrollmentId:e.Id);
@@ -98,6 +103,9 @@ public sealed partial class V2ReceivablesTests
         var winner=ids[Array.FindIndex(reviewed,r=>r.IsSuccessStatusCode)];(await Post(owner,$"{SalesRoot}/{winner}/review",new{accept=true})).EnsureSuccessStatusCode();
         var loser=ids.Single(id=>id!=winner);(await Post(owner,$"{SalesRoot}/{loser}/review",new{accept=false,reason="مراجعة الرصيد الاصطناعي"})).EnsureSuccessStatusCode();
         var balances=await db.ProductStockVariants.AsNoTracking().Where(v=>v.ProductId==p.Id).ToArrayAsync();Assert.Equal(0,balances.Single(v=>v.ShirtNumber==7).Quantity);Assert.Equal(1,balances.Single(v=>v.ShirtNumber==8).Quantity);
+        var remaining=await guardian.GetFromJsonAsync<JsonElement>(availablePath);
+        Assert.Equal(1,remaining.GetProperty("stockQuantity").GetInt32());
+        Assert.Equal(8,remaining.GetProperty("variants").EnumerateArray().Single().GetProperty("shirtNumber").GetInt32());
         var detail=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/product-sales/{winner}");Assert.Equal(7,detail.GetProperty("shirtNumberSnapshot").GetInt32());Assert.Equal("M",detail.GetProperty("sizeSnapshot").GetString());Assert.Equal(e.Id,detail.GetProperty("sportEnrollmentId").GetGuid());
         Assert.Single(await db.ProductSales.Where(s=>s.ProductId==p.Id&&s.Status=="Confirmed").ToArrayAsync());
         var otherPhone=await db.GuardianProfiles.Where(g=>g.AcademyId==e.AcademyId&&g.UserId!=user&&g.User.IsActive&&g.User.PhoneNumber!=null&&db.AcademyMemberships.Any(m=>m.UserId==g.UserId&&m.AcademyId==e.AcademyId&&m.IsActive&&m.Role==Academy.Infrastructure.Tenancy.AcademyRole.Guardian)).Select(g=>g.User.PhoneNumber).FirstAsync();

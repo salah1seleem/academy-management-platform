@@ -8,6 +8,7 @@ using Academy.Api.Slice6;
 using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,34 @@ public sealed class GuardianCoreIntegrationTests : IAsyncLifetime
     [Fact] public async Task Request_creation_has_no_financial_effect() { await using var beforeScope = factory.Services.CreateAsyncScope(); var before = await FinancialCounts(beforeScope.ServiceProvider.GetRequiredService<FoundationDbContext>()); using var c = await Guardian(); (await Create(c, new { requestType = 2, newChildArabicName = $"طفل مالي {Guid.NewGuid():N}", newChildDateOfBirth = "2020-01-01", sportId = Slice2DemoSeed.SwimmingId, preferredBranchId = Slice2DemoSeed.FifthBranchId })).EnsureSuccessStatusCode(); await using var afterScope = factory.Services.CreateAsyncScope(); Assert.Equal(before, await FinancialCounts(afterScope.ServiceProvider.GetRequiredService<FoundationDbContext>())); }
     [Fact] public async Task Guardian_sees_only_own_requests() { using var c = await Guardian(); var rows = await c.GetFromJsonAsync<JsonElement>("/api/v1/guardian/enrollment-requests"); Assert.DoesNotContain(rows.EnumerateArray(), x => x.GetProperty("id").GetGuid() == Slice6DemoSeed.AcademyBRequestId); }
     [Fact] public async Task Academy_b_request_is_invisible_to_academy_a_admin() { using var c = await Staff(DemoSeed.AdminEmail); var rows = await c.GetFromJsonAsync<JsonElement>("/api/v1/enrollment-requests"); Assert.DoesNotContain(rows.EnumerateArray(), x => x.GetProperty("id").GetGuid() == Slice6DemoSeed.AcademyBRequestId); }
+
+    [Fact]
+    public async Task Staff_request_date_range_uses_the_academy_day_at_both_boundaries()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var guardian = await db.GuardianProfiles.SingleAsync(x => x.Id == Slice2DemoSeed.MainGuardianId);
+        var first = new DateTimeOffset(2026, 11, 12, 22, 0, 0, TimeSpan.Zero);
+        var marker = $"طلب لاختبار تاريخ الأكاديمية {Guid.NewGuid():N}";
+        var requests = new[] { first.AddSeconds(-1), first, first.AddDays(1).AddSeconds(-1), first.AddDays(1) }
+            .Select(stamp => new NewEnrollmentRequest {
+                Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, RequestedByGuardianUserId = guardian.UserId,
+                RequestType = NewEnrollmentRequestType.NewChild, NewChildArabicName = marker, NewChildDateOfBirth = new DateOnly(2018, 1, 1),
+                SportId = Slice2DemoSeed.FootballId, PreferredBranchId = Slice2DemoSeed.CityBranchId,
+                IdempotencyKey = $"test-slice6-{Guid.NewGuid():N}", CreatedAtUtc = stamp, UpdatedAtUtc = stamp
+            }).ToArray();
+        db.NewEnrollmentRequests.AddRange(requests);
+        await db.SaveChangesAsync();
+        using var admin = await Staff(DemoSeed.AdminEmail);
+        var api = $"/api/v1/enrollment-requests?search={Uri.EscapeDataString(marker)}";
+        var rows = await admin.GetFromJsonAsync<JsonElement>(api + "&from=2026-11-13&to=2026-11-13");
+        Assert.Equal(new[] { requests[2].Id, requests[1].Id }, rows.EnumerateArray().Select(x => x.GetProperty("id").GetGuid()));
+        Assert.All(rows.EnumerateArray(), row => Assert.Equal("2026-11-13", row.GetProperty("createdOn").GetString()));
+        var through = await admin.GetFromJsonAsync<JsonElement>(api + "&to=2026-11-13");
+        Assert.Equal(3, through.GetArrayLength());
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync(api + "&from=2026-11-14&to=2026-11-13")).StatusCode);
+    }
+
     [Fact] public async Task Coach_cannot_approve_requests() { using var c = await Staff(DemoSeed.CoachEmail); var r = await Post(c, $"/api/v1/enrollment-requests/{Slice6DemoSeed.PendingRequestId}/approve", new { trainingGroupId = Slice2DemoSeed.FootballGroupId }); Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode); }
     [Fact] public async Task Admin_can_place_request_under_review() { var id = await NewChildRequest(); using var c = await Staff(DemoSeed.AdminEmail); var r = await Post(c, $"/api/v1/enrollment-requests/{id}/review", new { }); Assert.Equal(HttpStatusCode.OK, r.StatusCode); }
     [Fact] public async Task Admin_approval_for_existing_child_creates_one_enrollment() { var setup = await PendingExistingWithGroup(); using var c = await Staff(DemoSeed.AdminEmail); (await Post(c, $"/api/v1/enrollment-requests/{setup.requestId}/approve", new { trainingGroupId = setup.groupId })).EnsureSuccessStatusCode(); await using var s = factory.Services.CreateAsyncScope(); Assert.Equal(1, await s.ServiceProvider.GetRequiredService<FoundationDbContext>().SportEnrollments.CountAsync(x => x.PlayerId == setup.playerId && x.SportId == Slice2DemoSeed.BasketballId)); }
@@ -52,6 +81,55 @@ public sealed class GuardianCoreIntegrationTests : IAsyncLifetime
     [Fact] public async Task Child_schedule_exposes_relevant_groups_only() { using var c = await Guardian(); var p = await c.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/children/{Slice2DemoSeed.OmarPlayerId}/profile"); var groups = p.GetProperty("enrollments").EnumerateArray().Select(x => x.GetProperty("group").GetString()).ToArray(); Assert.Contains("ناشئين 2016 — مجموعة أ", groups); Assert.DoesNotContain("براعم 2018 — مجموعة أ", groups); }
     [Fact] public async Task Guardian_cannot_mutate_attendance_or_evaluations() { using var c = await Guardian(); Assert.Equal(HttpStatusCode.Forbidden, (await Put(c, $"/api/v1/attendance/sessions/{Guid.NewGuid()}/players", new { items = Array.Empty<object>() })).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await Post(c, $"/api/v1/evaluations/{Slice5DemoSeed.DraftFootballEvaluationId}/publish", new { version = 1 })).StatusCode); }
     [Fact] public async Task Payments_attendance_and_evaluations_regression_endpoints_remain_green() { using var admin = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/subscriptions/collections")).StatusCode); Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/attendance/sessions")).StatusCode); Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/v1/evaluations")).StatusCode); }
+
+    [Fact]
+    public async Task Decision_access_tracks_payment_edit_grant()
+    {
+        using var admin = await Staff(DemoSeed.AdminEmail);
+        var endpoint = $"/api/v1/enrollment-requests/{Slice6DemoSeed.PendingRequestId}";
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var member = await db.AcademyMemberships.SingleAsync(m => m.AcademyId == DemoSeed.NogoomAcademyId
+            && m.Role == AcademyRole.AcademyAdmin && m.User.Email == DemoSeed.AdminEmail);
+        var grant = await db.StaffActionGrants.SingleOrDefaultAsync(g => g.MembershipId == member.Id && g.Module == "payments");
+        var hadGrant = grant is not null;
+        var previousActions = member.UseActionGrants;
+        var previousGrant = (Read: grant?.Read, Edit: grant?.Edit, IsActive: grant?.IsActive);
+        if (grant is null)
+        {
+            grant = new StaffActionGrant { Id = Guid.NewGuid(), AcademyId = member.AcademyId, MembershipId = member.Id, Module = "payments" };
+            db.StaffActionGrants.Add(grant);
+        }
+        member.UseActionGrants = true;
+        grant.IsActive = true;
+        grant.Read = true;
+        grant.Edit = false;
+        try
+        {
+            await db.SaveChangesAsync();
+            var readOnly = await admin.GetFromJsonAsync<JsonElement>(endpoint);
+            Assert.False(readOnly.GetProperty("canManage").GetBoolean());
+            Assert.False(readOnly.GetProperty("request").GetProperty("requiresPaymentProof").GetBoolean());
+            Assert.Equal(HttpStatusCode.Forbidden, (await Post(admin, endpoint + "/reject", new { })).StatusCode);
+            grant.Edit = true;
+            await db.SaveChangesAsync();
+            var editable = await admin.GetFromJsonAsync<JsonElement>(endpoint);
+            Assert.True(editable.GetProperty("canManage").GetBoolean());
+            Assert.Equal("Pending", editable.GetProperty("request").GetProperty("status").GetString());
+        }
+        finally
+        {
+            member.UseActionGrants = previousActions;
+            if (hadGrant)
+            {
+                grant.Read = previousGrant.Read!.Value;
+                grant.Edit = previousGrant.Edit!.Value;
+                grant.IsActive = previousGrant.IsActive!.Value;
+            }
+            else db.StaffActionGrants.Remove(grant);
+            await db.SaveChangesAsync();
+        }
+    }
 
     private async Task<Guid> NewChildRequest() { using var c = await Guardian(); var r = await Create(c, new { requestType = 2, newChildArabicName = $"طفل طلب ولي الأمر {Guid.NewGuid():N}", newChildDateOfBirth = "2017-05-01", sportId = Slice2DemoSeed.SwimmingId, preferredBranchId = Slice2DemoSeed.FifthBranchId }); r.EnsureSuccessStatusCode(); return (await r.Content.ReadFromJsonAsync<Created>())!.Id; }
     private async Task<Guid> PendingExisting(Guid player, Guid sport, Guid branch) { using var c = await Guardian(); var r = await Create(c, new { requestType = 1, existingPlayerId = player, sportId = sport, preferredBranchId = branch }); r.EnsureSuccessStatusCode(); return (await r.Content.ReadFromJsonAsync<Created>())!.Id; }

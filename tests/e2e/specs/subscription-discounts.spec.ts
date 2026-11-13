@@ -13,8 +13,8 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
 
 async function startRenewal(page: Page) {
   await guardianLogin(page); const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
-  await child.locator(".subscription-mini p").filter({ hasText: "كرة القدم" }).getByRole("link").click();
-  await page.getByText("اشتراك شهري", { exact: true }).click(); await page.getByRole("button", { name: /الدفع الإلكتروني — ادفع الآن/ }).click();
+  await child.locator(".subscription-mini > div").filter({ hasText: "كرة القدم" }).getByRole("link").click();
+  await page.getByText("اشتراك شهري", { exact: true }).click(); await page.getByRole("button", { name: /متابعة إلى طلب الدفع/ }).click();
   await page.waitForURL("**/guardian/checkout/**"); const url = page.url(); const paymentId = url.split("/").pop()!;
   const payment = await page.request.get(`/api/v1/guardian/subscriptions/payments/${paymentId}`).then(r => r.json());
   return { url, renewalId: payment.renewalId, originalAmount: payment.originalAmount as number };

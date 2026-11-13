@@ -33,7 +33,7 @@ public sealed partial class FriendlyImportHistory
                 IdempotencyKey = "history:" + collectionId.ToString("N"), PlanNameSnapshot = p.Plan.ArabicName, PlanTypeSnapshot = p.Plan.PlanType,
                 ServiceKindSnapshot = p.Plan.ServiceKind, TrainingFormatSnapshot = p.Plan.TrainingFormat, PlanRevisionSnapshot = p.Plan.Revision,
                 DurationDaysSnapshot = period.DurationDaysSnapshot, SessionCountSnapshot = p.Entitled, CreatedAtUtc = job.CreatedAtUtc, UpdatedAtUtc = job.CreatedAtUtc };
-            var payment = new PaymentRequest { Id = paymentId, AcademyId = academy, RenewalRequestId = renewalId, Provider = "HistoricalImport",
+            var payment = new PaymentRequest { Id = paymentId, AcademyId = academy, RenewalRequestId = renewalId, Provider = HistoricalReceiptCalendar.Provider,
                 ProviderEnvironment = "RecordedEvidence", ProviderReference = reference, CheckoutReference = reference, Amount = amount, Currency = p.Currency,
                 Status = PaymentRequestStatus.Confirmed, ConfirmedAtUtc = at, CreatedAtUtc = job.CreatedAtUtc, UpdatedAtUtc = job.CreatedAtUtc };
             db.RenewalRequests.Add(renewal); db.PaymentRequests.Add(payment);

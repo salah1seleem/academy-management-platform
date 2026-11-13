@@ -5,20 +5,46 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 
-class StaffPayrollStatements extends StatelessWidget {
+class StaffPayrollStatements extends StatefulWidget {
   final AuthController auth;
   const StaffPayrollStatements({super.key, required this.auth});
+
+  @override
+  State<StaffPayrollStatements> createState() => _StaffPayrollStatementsState();
+}
+
+class _StaffPayrollStatementsState extends State<StaffPayrollStatements>
+    with WidgetsBindingObserver {
+  int revision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) refresh();
+  }
+
+  void refresh() => setState(() => revision++);
+
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'مستحقاتي والصرف', 'My approved dues'),
     child: RemoteBody(
-      auth: auth,
+      key: ValueKey(revision),
+      auth: widget.auth,
       path: '/api/v1/staff/payroll/account',
       builder: (context, value) {
         final data = obj(value);
-        final items = rows(data['items']);
-        final finals = rows(data['finalSettlements'] ?? const []);
-        final opening = data['opening'] is Map ? obj(data['opening']) : null;
         if (data['configured'] == false) {
           return EmptyMessage(
             localized(
@@ -28,189 +54,201 @@ class StaffPayrollStatements extends StatelessWidget {
             ),
           );
         }
+
+        final items = rows(data['items']);
+        final finals = rows(data['finalSettlements'] ?? const []);
+        final opening = data['opening'] is Map ? obj(data['opening']) : null;
+        final hasApprovedDues =
+            items.isNotEmpty || opening != null || finals.isNotEmpty;
+        final calendar = MaterialLocalizations.of(context);
+        final date = DateTime.tryParse('${data['asOf']}');
+        final english = Localizations.localeOf(context).languageCode == 'en';
+        String copy(String ar, String en) => localized(context, ar, en);
+        String amount(Object? value) => english
+            ? '${amountText(value)} ${textOf(data['currency'])}'
+            : money(value, data['currency']);
+        Widget line(String ar, String en, Object? value) =>
+            UiText('${copy(ar, en)}: ${amount(value)}');
+        Widget title(String label) => Semantics(
+          header: true,
+          child: UiText(label, style: Theme.of(context).textTheme.titleMedium),
+        );
+        Widget card(List<Widget> children) => GCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 4,
+            children: children,
+          ),
+        );
+
         return gList([
-          UiText(
-            localized(
-              context,
-              opening == null
-                  ? 'كل المصادر المعتمدة حتى ${data['asOf'] ?? ''}. الأرصدة الافتتاحية والسلف التاريخية غير المستوردة والأشهر غير المعتمدة غير موثقة هنا، وليست صفرًا.'
-                  : 'افتتاح موثق قبل ${opening['asOf']}. داخل الإجمالي وليس راتب شهر. السلف التاريخية غير المستوردة والأشهر غير المعتمدة ليست صفرًا.',
-              opening == null
-                  ? 'All approved sources as of ${data['asOf'] ?? ''}. Opening balances, unimported historic advances and unapproved months are not verified here, not zero.'
-                  : 'Reviewed opening before ${opening['asOf']}. Included in totals, not monthly salary. Unimported advances and unapproved months are not assumed zero.',
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              onPressed: refresh,
+              icon: const Icon(Icons.refresh),
+              label: UiText(copy('تحديث المستحقات', 'Refresh dues')),
             ),
           ),
-          if (items.isNotEmpty || opening != null || finals.isNotEmpty)
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiText(
-                    localized(
-                      context,
-                      'حساب مستحقاتك',
-                      'Your approved account',
-                    ),
-                  ),
-                  UiText(
-                    '${localized(context, 'إجمالي المعتمد', 'Total approved')}: ${data['totalDue']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'إجمالي المسدد', 'Total settled')}: ${data['totalPaid']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المتبقي المعروف', 'Known remaining')}: ${data['remaining']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'من أشهر سابقة', 'Prior months')}: ${data['priorRemaining']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'من الشهر المختار', 'Selected month')}: ${data['currentRemaining']} ${data['currency']}',
-                  ),
-                ],
-              ),
-            ),
-          if (data['currentMonthApproved'] == false)
-            UiText(
-              localized(
-                context,
-                'لا كشف معتمد لهذا الشهر حتى التاريخ المختار.',
-                'No approved statement for this month as of the selected date.',
-              ),
-            ),
-          if (data['recordedAdvanceTotal'] != null)
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiText(
-                    localized(context, 'السلف المسجلة', 'Recorded advances'),
-                  ),
-                  UiText(
-                    '${localized(context, 'سبق صرفها', 'Already paid')}: ${data['recordedAdvanceTotal']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'غير المخصص', 'Unallocated')}: ${data['unallocatedAdvances']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'تخصيص من سلف سابقة', 'Applied from prior advances')}: ${data['advanceApplied']} ${data['currency']}',
-                  ),
-                  UiText(
-                    localized(
-                      context,
-                      'التخصيص يسدد المستحق وليس صرفًا جديدًا. غير المخصص لا يخصم تلقائيًا من راتبك.',
-                      'Allocation settles dues, not a new payout. Unallocated advances are not automatically deducted.',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if ((data['legacyPaidMonthsExcluded'] as num? ?? 0) > 0)
-            UiText(
-              localized(
-                context,
-                'الأشهر المسددة بالمسار السابق لم تُعَد ترحيلها إلى هذا الحساب.',
-                'Previously settled legacy months are not reposted into this account.',
-              ),
-            ),
-          if (opening != null)
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiText(localized(context, 'افتتاح موثق', 'Reviewed opening')),
-                  if (opening['originalAmount'] != null)
-                    UiText(
-                      '${localized(context, 'أصل الافتتاح', 'Original opening')}: ${opening['originalAmount']} ${data['currency']}',
-                    ),
-                  for (final c in rows(opening['corrections'] ?? const []))
-                    UiText(
-                      '${localized(context, 'تصحيح موثق — داخل الإجمالي وليس صرفًا', 'Reviewed correction — included, not cash')}: ${c['delta']} ${data['currency']}',
-                    ),
-                  UiText(
-                    '${localized(context, 'الرصيد القديم', 'Prior balance')}: ${opening['amount']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المسدد', 'Settled')}: ${opening['paid']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المتبقي', 'Remaining')}: ${opening['remaining']} ${data['currency']}',
-                  ),
-                  for (final p in rows(opening['payments']))
-                    UiText(
-                      '${p['kind'] == 'AdvanceApplication' ? localized(context, 'تخصيص سلفة سابقة — ليس صرفًا جديدًا', 'Prior advance allocation — not new cash') : localized(context, 'صرف افتتاح', 'Opening payout')}: ${p['amount']} ${data['currency']}',
-                    ),
-                ],
-              ),
-            ),
-          if (items.isEmpty && opening == null && finals.isEmpty)
+          if (hasApprovedDues)
+            card([
+              title(copy('حساب مستحقاتك', 'Your approved account')),
+              if (date != null)
+                UiText(
+                  '${copy('حتى', 'As of')} ${calendar.formatShortDate(date)}',
+                ),
+              line('إجمالي المعتمد', 'Total approved', data['totalDue']),
+              line('إجمالي المسدد', 'Total settled', data['totalPaid']),
+              line('المتبقي المعروف', 'Known remaining', data['remaining']),
+              if ((data['priorRemaining'] as num? ?? 0) != 0)
+                line('من أشهر سابقة', 'Prior months', data['priorRemaining']),
+              if (data['currentMonthApproved'] == true &&
+                  (data['priorRemaining'] as num? ?? 0) != 0)
+                line(
+                  'من الشهر الحالي',
+                  'Current month',
+                  data['currentRemaining'],
+                ),
+            ]),
+          if (!hasApprovedDues)
             EmptyMessage(
-              localized(
-                context,
+              copy(
                 'لا كشف معتمد بعد؛ هذا لا يعني أن مستحقاتك صفر.',
-                'No approved statement yet; this does not mean your dues are zero.',
+                'No approved statement yet; your dues are still unconfirmed.',
               ),
-            ),
-          for (final s in finals)
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiText(
-                    localized(
-                      context,
-                      'عمولة بعد نهاية العقد — ليست راتب شهر',
-                      'Post-contract commission — not monthly salary',
-                    ),
-                  ),
-                  UiText(
-                    '${localized(context, 'المستحق', 'Due')}: ${s['amount']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المسدد', 'Settled')}: ${s['paid']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المتبقي', 'Remaining')}: ${s['remaining']} ${data['currency']}',
-                  ),
-                  for (final p in rows(s['payments']))
-                    UiText(
-                      '${localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${data['currency']}',
-                    ),
-                ],
+            )
+          else if (data['currentMonthApproved'] == false)
+            UiText(
+              copy(
+                'كشف الشهر الحالي لم يُعتمد بعد.',
+                'This month’s statement is pending approval.',
               ),
             ),
           for (final s in items)
-            GCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiText(
-                    '${localized(context, 'كشف', 'Statement')} ${s['month']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المستحق', 'Due')}: ${s['netDue']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المسدد', 'Settled')}: ${s['paid']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'المتبقي', 'Remaining')}: ${s['remaining']} ${data['currency']}',
-                  ),
-                  UiText(
-                    '${localized(context, 'أساسي / خصومات / إضافات', 'Base / deductions / additions')}: ${s['baseDue']} / ${s['deductions']} / ${s['additions']}',
-                  ),
-                  for (final p in rows(s['payments']))
-                    ListTile(
-                      leading: const Icon(Icons.receipt_long_outlined),
-                      title: UiText(
-                        '${p['kind'] == 'AdvanceApplication' ? localized(context, 'تخصيص سلفة سابقة — ليس صرفًا جديدًا', 'Prior advance allocation — not a new payout') : localized(context, 'صرف مسجل', 'Recorded payout')}: ${p['amount']} ${data['currency']}',
-                      ),
-                    ),
-                ],
+            card([
+              title(
+                _monthLabel(
+                  calendar,
+                  s['month'],
+                  copy('كشف الشهر', 'Monthly statement'),
+                ),
+              ),
+              line('المستحق', 'Due', s['netDue']),
+              line('المسدد', 'Settled', s['paid']),
+              line('المتبقي', 'Remaining', s['remaining']),
+              line('الأساسي', 'Base pay', s['baseDue']),
+              if ((s['deductions'] as num? ?? 0) != 0)
+                line('الخصومات', 'Deductions', s['deductions']),
+              if ((s['additions'] as num? ?? 0) != 0)
+                line('الإضافات', 'Additions', s['additions']),
+              for (final p in rows(s['payments']))
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.receipt_long_outlined),
+                  title: p['kind'] == 'AdvanceApplication'
+                      ? line(
+                          'تسوية من سلفة سابقة',
+                          'Settled from prior advance',
+                          p['amount'],
+                        )
+                      : line('صرف مسجل', 'Recorded payout', p['amount']),
+                ),
+            ]),
+          if ((data['recordedAdvanceTotal'] as num? ?? 0) > 0)
+            card([
+              title(copy('السلف المسجلة', 'Recorded advances')),
+              line('سبق صرفها', 'Already paid', data['recordedAdvanceTotal']),
+              line('غير المخصص', 'Unallocated', data['unallocatedAdvances']),
+              line(
+                'المخصص من سلف سابقة',
+                'Applied from prior advances',
+                data['advanceApplied'],
+              ),
+              UiText(
+                copy(
+                  'تخصيص السلفة يسدد جزءًا من المستحق. السلفة غير المخصصة تظل منفصلة عن الراتب.',
+                  'Applying an advance settles part of the amount due. Unallocated advances remain separate from salary.',
+                ),
+              ),
+            ]),
+          if (opening != null)
+            card([
+              title(copy('افتتاح موثق', 'Reviewed opening')),
+              if (opening['originalAmount'] != null)
+                line(
+                  'أصل الافتتاح',
+                  'Original opening',
+                  opening['originalAmount'],
+                ),
+              for (final c in rows(opening['corrections'] ?? const []))
+                line(
+                  'تصحيح موثق — داخل الإجمالي وليس صرفًا',
+                  'Reviewed correction — included, not cash',
+                  c['delta'],
+                ),
+              line('الرصيد القديم', 'Prior balance', opening['amount']),
+              line('المسدد', 'Settled', opening['paid']),
+              line('المتبقي', 'Remaining', opening['remaining']),
+              for (final p in rows(opening['payments']))
+                p['kind'] == 'AdvanceApplication'
+                    ? line(
+                        'تسوية من سلفة سابقة',
+                        'Settled from prior advance',
+                        p['amount'],
+                      )
+                    : line('صرف افتتاح', 'Opening payout', p['amount']),
+            ]),
+          for (final s in finals)
+            card([
+              title(
+                copy(
+                  'عمولة بعد نهاية العقد — ليست راتب شهر',
+                  'Post-contract commission — not monthly salary',
+                ),
+              ),
+              line('المستحق', 'Due', s['amount']),
+              line('المسدد', 'Settled', s['paid']),
+              line('المتبقي', 'Remaining', s['remaining']),
+              for (final p in rows(s['payments']))
+                line('صرف مسجل', 'Recorded payout', p['amount']),
+            ]),
+          if ((data['legacyPaidMonthsExcluded'] as num? ?? 0) > 0)
+            UiText(
+              copy(
+                'الأشهر المسددة بالمسار السابق مستبعدة من إجمالي هذا الكشف.',
+                'Legacy paid months are excluded from this account total.',
               ),
             ),
+          ExpansionTile(
+            title: UiText(copy('نطاق الكشف', 'Statement scope')),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(
+                opening == null
+                    ? copy(
+                        'يعرض الكشف المستحقات المعتمدة. الأرصدة الافتتاحية والسلف التاريخية غير المستوردة تحتاج توثيقًا منفصلًا.',
+                        'This account shows approved dues. Opening balances and unimported historical advances require separate verification.',
+                      )
+                    : copy(
+                        'الرصيد الافتتاحي الموثق ضمن الإجمالي. السلف التاريخية غير المستوردة تحتاج توثيقًا منفصلًا.',
+                        'The reviewed opening balance is included in the total. Unimported historical advances require separate verification.',
+                      ),
+              ),
+            ],
+          ),
         ]);
       },
     ),
   );
+
+  static String _monthLabel(
+    MaterialLocalizations calendar,
+    Object? value,
+    String fallback,
+  ) {
+    final month = DateTime.tryParse('$value');
+    return month == null ? fallback : calendar.formatMonthYear(month);
+  }
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GuardianShell } from "../components/guardian-shell";
+import { ErrorState, LoadingState } from "../components/dashboard-shell";
 import { csrfRequest } from "./dashboard-api";
 import "./community-ads.css";
 type Ad={id:string;title:string;body:string;advertiser:string;buttonText:string;imageUrl:string|null;imageAlt:string;endsAtUtc:string;destination:string};
@@ -21,7 +22,7 @@ export function GuardianSponsoredCard(){
 }
 export function GuardianSponsorSettingsLink(){const [available,setAvailable]=useState(false);useEffect(()=>{let live=true;read<{available:boolean}>("/api/v1/guardian/community-ads/preference").then(p=>{if(live)setAvailable(p.available || (p as {inAppOptIn?:boolean}).inAppOptIn === true);}).catch(()=>{});return()=>{live=false;};},[]);return available?<p><Link href="/guardian/community/preferences">اختيار المحتوى برعاية داخل التطبيق</Link></p>:null;}
 export function GuardianSponsorSettings(){const [data,setData]=useState<{available:boolean;inAppOptIn:boolean;adultDeclared:boolean;notice:string}|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);useEffect(()=>{read<typeof data>("/api/v1/guardian/community-ads/preference").then(setData).catch(e=>setError(e.message));},[]);async function save(e:React.FormEvent){e.preventDefault();if(!data||busy)return;setBusy(true);try{await csrfRequest("/api/v1/guardian/community-ads/preference","PUT",{inAppOptIn:data.inAppOptIn,adultDeclared:data.adultDeclared},{},{announce:false});setError("تم حفظ اختيارك. لا يؤثر على إشعارات مواعيد أبنائك.");}catch(e){setError(e instanceof Error?e.message:"تعذر حفظ اختيارك.");}finally{setBusy(false);}}
-  return <GuardianShell><h1>اختيار المحتوى برعاية</h1><Link href="/guardian">العودة للرئيسية</Link>{error&&<p role="status">{error}</p>}{data&&<form className="sponsor-form" onSubmit={save}><p>{data.notice}</p>{!data.available&&<p>المحتوى برعاية غير متاح حاليًا في الأكاديمية. لا توجد موافقة تلقائية.</p>}<label className="sponsor-check"><input type="checkbox" disabled={busy||(!data.available&&!data.inAppOptIn)} checked={data.inAppOptIn} onChange={e=>setData({...data,inAppOptIn:e.target.checked})}/>أختار مشاهدة محتوى برعاية داخل التطبيق</label><label className="sponsor-check"><input type="checkbox" disabled={busy} required={data.inAppOptIn} checked={data.adultDeclared} onChange={e=>setData({...data,adultDeclared:e.target.checked})}/>أقر بأنني صاحب حساب بالغ</label><button className="primary-button" disabled={busy}>حفظ الاختيار</button></form>}</GuardianShell>;
+  return <GuardianShell><Link className="back-link" href="/guardian">العودة للرئيسية</Link><header className="guardian-page-header"><h1>اختيار المحتوى برعاية</h1></header>{error&&<p role="status" className="guardian-form">{error}</p>}{data&&<form className="guardian-form sponsor-form" onSubmit={save}><p>{data.notice}</p>{!data.available&&<p>المحتوى برعاية غير متاح حاليًا في الأكاديمية. لا توجد موافقة تلقائية.</p>}<label className="sponsor-check"><input type="checkbox" disabled={busy||(!data.available&&!data.inAppOptIn)} checked={data.inAppOptIn} onChange={e=>setData({...data,inAppOptIn:e.target.checked})}/>أختار مشاهدة محتوى برعاية داخل التطبيق</label><label className="sponsor-check"><input type="checkbox" disabled={busy} required={data.inAppOptIn} checked={data.adultDeclared} onChange={e=>setData({...data,adultDeclared:e.target.checked})}/>أقر بأنني صاحب حساب بالغ</label><button className="primary-button" disabled={busy}>حفظ الاختيار</button></form>}</GuardianShell>;
 }
 export function GuardianSponsorDetail({id}:{id:string}){
   const [ad,setAd]=useState<Ad|null>(null),[error,setError]=useState("");
@@ -32,5 +33,12 @@ export function GuardianSponsorDetail({id}:{id:string}){
     load();document.addEventListener("visibilitychange",visibility);
     return()=>{live=false;++generation;clearTimeout(lease);document.removeEventListener("visibilitychange",visibility);};
   },[id]);
-  return <GuardianShell><Link href="/guardian">العودة للرئيسية</Link>{error&&<p role="alert">{error}</p>}{ad&&<article className="sponsored-card"><small>محتوى برعاية · {ad.advertiser}</small><h1>{ad.title}</h1>{ad.imageUrl&&<Image unoptimized src={ad.imageUrl} width={560} height={200} alt={ad.imageAlt}/>}<p>{ad.body}</p><p>هذه صفحة معلومات، وليست دفعًا أو موافقة على مشاركة بياناتك.</p></article>}</GuardianShell>;
+  return <GuardianShell>
+    <Link className="back-link" href="/guardian">العودة للرئيسية</Link>
+    {ad ? <article className="sponsored-card"><small>محتوى برعاية · {ad.advertiser}</small><h1>{ad.title}</h1>{ad.imageUrl&&<Image unoptimized src={ad.imageUrl} width={560} height={200} alt={ad.imageAlt}/>}<p>{ad.body}</p><p>هذه صفحة معلومات، وليست دفعًا أو موافقة على مشاركة بياناتك.</p></article>
+      : <section className="guardian-section">
+        <h1>محتوى برعاية</h1>
+        {error ? <ErrorState message={error} /> : <LoadingState message="جارٍ تحميل المحتوى…" />}
+      </section>}
+  </GuardianShell>;
 }

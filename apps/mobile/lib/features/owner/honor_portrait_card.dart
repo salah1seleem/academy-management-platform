@@ -396,8 +396,11 @@ List<(String, Color)> coachDetails(Json coach, List<Json> branches) {
     for (final name in branchNames) (name, palette[0]),
     for (final sport in (coach['sports'] as List? ?? []))
       ('$sport', palette[1]),
-    ('${coach['groupCount']} مجموعات', palette[2]),
-    ('${coach['sessionCount']} حصص', palette[3]),
-    ('${coach['parentRatingCount'] ?? 0} تقييمات', const Color(0xFF8A3654)),
+    ('المجموعات المسندة ${coach['groupCount']}', palette[2]),
+    ('حصص المجموعات ${coach['sessionCount']}', palette[3]),
+    if (coach['parentRating'] != null)
+      ('عدد التقييمات ${coach['parentRatingCount']}', const Color(0xFF8A3654))
+    else
+      ('لا توجد تقييمات من الأسر', const Color(0xFF8A3654)),
   ];
 }

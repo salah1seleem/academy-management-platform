@@ -10,16 +10,49 @@ type Roster={items:{enrollmentId:string;playerId:string;name:string}[];quoteHash
 type Preview={teamName:string;opponent:string;venue:string;roster:Roster["items"];quoteHash:string};
 export type MatchGoal={ordinal:number;kind:"Player"|"Unknown"|"OwnGoal";playerId?:string|null};
 
-export function MatchGoals({score,players,initial=[]}:{score:number;players:{playerId:string;name:string}[];initial?:MatchGoal[]}){
-  const [state,setState]=useState({score,goals:initial});
-  const goals=state.score===score?state.goals:state.goals.slice(0,Number.isInteger(score)?Math.max(0,Math.min(100,score)):0);
-  if(state.score!==score)setState({score,goals});
-  return <fieldset className="match-roster-review"><legend>هدافو فريق الأكاديمية</legend>{Array.from({length:Number.isInteger(score)&&score>=0&&score<=100?score:0},(_,i)=>{
-    const goal=goals[i],value=goal?.kind==="Player"?goal.playerId??"Unknown":goal?.kind??"Unknown";
-    return <label key={i}>الهدف {i+1}<select aria-label={`الهدف ${i+1}`} name={`goal-${i+1}`} value={value} onChange={e=>{const next=e.target.value;setState(old=>{const changed=old.goals.slice(0,score);changed[i]={ordinal:i+1,kind:next==="Unknown"||next==="OwnGoal"?next:"Player",playerId:next==="Unknown"||next==="OwnGoal"?null:next};return {score,goals:changed};});}}>
-      <option value="Unknown">غير معروف</option><option value="OwnGoal">هدف عكسي للمنافس</option>{players.map(p=><option key={p.playerId} value={p.playerId}>{p.name}</option>)}
-    </select></label>;
-  })}</fieldset>;
+export function MatchGoals({ score, players, initial = [] }: {
+  score: number;
+  players: { playerId: string; name: string }[];
+  initial?: MatchGoal[];
+}) {
+  const maximum = Number.isInteger(score) && score >= 0 && score <= 100 ? score : 0;
+  const [state, setState] = useState({
+    maximum,
+    visible: initial.reduce((count, goal, index) => goal.kind === "Unknown" ? count : index + 1, 0),
+    goals: initial,
+  });
+  if (state.maximum !== maximum) {
+    setState({ maximum, visible: Math.min(state.visible, maximum), goals: state.goals.slice(0, maximum) });
+  }
+  if (maximum === 0) return null;
+  return <fieldset className="match-roster-review">
+    <legend>هدافو فريق الأكاديمية</legend>
+    <p>أضف الهدافين المعروفين من قائمة المباراة. بقية الأهداف تظل دون هداف.</p>
+    {Array.from({ length: Math.min(state.visible, maximum) }, (_, i) => {
+      const goal = state.goals[i];
+      const value = goal?.kind === "Player" ? goal.playerId ?? "Unknown" : goal?.kind ?? "Unknown";
+      return <label key={i}>الهدف {i + 1}
+        <select aria-label={`الهدف ${i + 1}`} name={`goal-${i + 1}`} value={value} onChange={event => {
+          const selected = event.target.value;
+          const uncredited = selected === "Unknown" || selected === "OwnGoal";
+          setState(current => {
+            const goals = current.goals.slice();
+            goals[i] = { ordinal: i + 1, kind: uncredited ? selected : "Player", playerId: uncredited ? null : selected };
+            return { ...current, goals };
+          });
+        }}>
+          <option value="Unknown">غير معروف</option>
+          <option value="OwnGoal">هدف عكسي للمنافس</option>
+          {players.map(player => <option key={player.playerId} value={player.playerId}>{player.name}</option>)}
+        </select>
+      </label>;
+    })}
+    {state.visible < maximum && <button
+      type="button"
+      disabled={!players.length}
+      onClick={() => setState(current => ({ ...current, visible: current.visible + 1 }))}
+    >إضافة هداف</button>}
+  </fieldset>;
 }
 
 export function MatchCopyDialog({id,onCancel,onCreated}:{id:string;onCancel:()=>void;onCreated:(id:string)=>Promise<void>}){
@@ -63,7 +96,7 @@ export function MatchEditor({match,template,options,busy,onSubmit,onNew}:{match:
     <div className="form-grid"><label>أهداف الأكاديمية<input name="ourScore" type="number" min="0" max="100" defaultValue={match?.ourScore??""} onChange={e=>setOurGoals(Number(e.target.value))}/></label><label>أهداف المنافس<input name="opponentScore" type="number" min="0" max="100" defaultValue={match?.opponentScore??""}/></label></div>
     {team?.sportKind==="Football"&&<MatchGoals key={teamId} score={ourGoals} initial={(match?.goalSlots??[]).slice(0,ourGoals)} players={unpublished?(roster?.items??[]):(match?.players??[]).map(p=>({playerId:p.playerId,name:p.name??options.players.find(v=>v.playerId===p.playerId)?.name??""}))}/> }
     <input type="hidden" name="resultRevision" value={match?.resultRevision??0}/>
-    <label className="match-review-check"><input name="resultFinalized" type="checkbox" defaultChecked={match?.resultFinalized??false}/>{"\u0627\u0639\u062a\u0645\u0627\u062f \u0627\u0644\u0646\u062a\u064a\u062c\u0629"}</label>
+    <label className="match-review-check"><input name="resultFinalized" type="checkbox" defaultChecked={match?.resultFinalized === true}/>نشر النتيجة وإشعار أولياء أمور الهدافين</label>
     <label className="match-review-check"><input name="active" type="checkbox" defaultChecked={match?.isActive??true}/>مباراة قائمة (ألغِ لتسجيل الإلغاء وإبلاغ المعنيين)</label>
     <div className="form-actions"><button name="action" value="draft" disabled={busy}>حفظ{match?.publishedAtUtc?" التعديل":" كمسودة"}</button><button name="action" value="another" disabled={busy}>حفظ وإضافة أخرى</button><button name="action" value="publish" className="primary-button" disabled={busy||(unpublished&&(!roster?.items.length||!!error))}>نشر وإبلاغ أولياء الأمور والمدرب</button>{(match||template)&&<button type="button" onClick={onNew}>مباراة جديدة</button>}</div>
   </form>{options.coachHistoryEnabled&&match?.publishedAtUtc&&<MatchCoachHistory id={match.id}/>}</section>;

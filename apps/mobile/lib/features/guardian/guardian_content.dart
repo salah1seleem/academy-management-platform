@@ -2,6 +2,8 @@ import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/theme/appearance.dart';
+import '../../core/widgets/app_widgets.dart' show ErrorNotice;
 import 'guardian_ui.dart';
 import 'daily_nutrition.dart';
 import '../shared/private_media.dart';
@@ -30,7 +32,7 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
   String category = 'Breakfast';
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: 'النظام الغذائي · ${widget.playerName ?? 'اليوم'}',
+    title: localized(context, 'مكتبة التغذية', 'Nutrition library'),
     child: RemoteBody(
       key: ValueKey(category),
       auth: widget.auth,
@@ -49,10 +51,12 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 title: const UiText(
-                  'خطة اليوم',
+                  'اقتراحات اليوم',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: UiText(day(widget.today)),
+                subtitle: widget.playerName == null
+                    ? null
+                    : UiText(widget.playerName!),
                 children: [
                   DailyNutritionCard(
                     auth: widget.auth,
@@ -99,7 +103,8 @@ class _NutritionLibraryState extends State<NutritionLibrary> {
                         setState(() => category = s.single),
                   ),
           ),
-          if (items.isEmpty) const EmptyMessage(),
+          if (items.isEmpty)
+            const EmptyMessage('لا توجد وجبات في هذا القسم حاليًا.'),
           LayoutBuilder(
             builder: (context, c) => Wrap(
               spacing: 12,
@@ -177,11 +182,11 @@ class MealDetails extends StatelessWidget {
             UiText(
               'الفئة العمرية: ${d['minimumAge']}–${d['maximumAge']} سنة · ${label(d['servingProfile'])}',
             ),
-          UiText(
-            d['dataStatus'] == 'DemoUnreviewed'
-                ? 'بيانات تجريبية غير مراجعة'
-                : 'بيانات مراجعة وفق المصدر المسجل',
-          ),
+          UiText(switch (d['dataStatus']) {
+            'DemoUnreviewed' => 'بيانات تجريبية غير مراجعة',
+            'Reviewed' => 'بيانات مراجعة وفق المصدر المسجل',
+            _ => 'حالة مراجعة البيانات غير محددة',
+          }),
           if (d['sourceDescription'] != null) UiText(d['sourceDescription']),
           if (d['sourceReference'] != null)
             UiText(
@@ -245,18 +250,52 @@ class GalleryPage extends StatefulWidget {
 }
 
 class _GalleryState extends State<GalleryPage> with WidgetsBindingObserver {
-  int revision = 0;
   bool foreground = true;
   String? get identity => auth.session?.selected == null
       ? null
       : '${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}';
   late final original = identity;
+  late Future<List<Json>?> publishedMedia, legacyMedia;
   AuthController get auth => widget.auth;
   String get playerId => widget.playerId;
+
+  Future<List<Json>?> read(String path) async {
+    try {
+      return rows(await auth.request('GET', path));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void load() {
+    publishedMedia = read(
+      '/api/v1/assets/gallery?playerId=${Uri.encodeQueryComponent(playerId)}',
+    );
+    legacyMedia = read(
+      '/api/v1/guardian/children/${Uri.encodeComponent(playerId)}/media',
+    );
+  }
+
+  void refresh() {
+    if (mounted && foreground && identity == original) {
+      setState(load);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    original;
+    load();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didUpdateWidget(covariant GalleryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (playerId != oldWidget.playerId || auth != oldWidget.auth) {
+      if (foreground && identity == original) load();
+    }
   }
 
   @override
@@ -266,11 +305,59 @@ class _GalleryState extends State<GalleryPage> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
+  void didChangeAppLifecycleState(AppLifecycleState state) {
     setState(() {
-      foreground = s == AppLifecycleState.resumed;
-      revision++;
+      foreground = state == AppLifecycleState.resumed;
+      if (foreground && identity == original) load();
     });
+  }
+
+  Widget galleryContent(
+    AsyncSnapshot<List<Json>?> published,
+    AsyncSnapshot<List<Json>?> legacy,
+  ) {
+    final currentReady = published.connectionState == ConnectionState.done;
+    final legacyReady = legacy.connectionState == ConnectionState.done;
+    final currentItems = currentReady ? published.data : null;
+    final oldItems = legacyReady ? legacy.data : null;
+    final currentFailed = currentReady && currentItems == null;
+    final legacyFailed = legacyReady && oldItems == null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (currentFailed || legacyFailed) ...[
+          ErrorNotice(
+            currentFailed && legacyFailed
+                ? 'تعذر تحميل الصور والفيديوهات.'
+                : 'تعذر تحميل بعض الصور والفيديوهات.',
+          ),
+          TextButton(onPressed: refresh, child: const UiText('إعادة المحاولة')),
+        ],
+        if (currentItems?.isEmpty == true && oldItems?.isEmpty == true)
+          const EmptyMessage('لا توجد صور أو فيديوهات منشورة لهذا الطفل.'),
+        for (final item in currentItems ?? const <Json>[])
+          MediaTile(auth: auth, media: item),
+        for (final item in oldItems ?? const <Json>[])
+          GCard(
+            child: Column(
+              children: [
+                DemoImage(
+                  item['thumbnailReference'] ?? item['mediaReference'],
+                  height: 210,
+                ),
+                if (item['arabicCaption'] != null)
+                  UiText(item['arabicCaption']),
+                if (item['type'] == 'Video')
+                  const UiText(
+                    'صورة مصغرة للفيديو · تشغيل وسائط الإنتاج غير متاح في الديمو',
+                  ),
+              ],
+            ),
+          ),
+        if (!currentReady || !legacyReady)
+          const Center(child: CircularProgressIndicator()),
+      ],
+    );
   }
 
   @override
@@ -289,50 +376,21 @@ class _GalleryState extends State<GalleryPage> with WidgetsBindingObserver {
             MediaMemoriesPage(auth: auth, playerId: playerId),
           ),
         ),
-        MediaStorageNotice(auth: auth),
+        FutureBuilder(
+          future: publishedMedia,
+          builder: (context, published) => FutureBuilder(
+            future: legacyMedia,
+            builder: (context, legacy) => galleryContent(published, legacy),
+          ),
+        ),
         GroupMediaConsentCard(
+          key: ValueKey(playerId),
           auth: auth,
           playerId: playerId,
           compact: widget.embedded,
-          onSaved: () => setState(() => revision++),
+          onSaved: refresh,
         ),
-        RemoteBody(
-          key: ValueKey('legacy:$revision'),
-          auth: auth,
-          path: '/api/v1/guardian/children/$playerId/media',
-          builder: (context, value) => Column(
-            children: [
-              RemoteBody(
-                key: ValueKey('private:$revision'),
-                auth: auth,
-                path: '/api/v1/assets/gallery?playerId=$playerId',
-                builder: (context, v) => Column(
-                  children: [
-                    for (final m in rows(v)) MediaTile(auth: auth, media: m),
-                  ],
-                ),
-              ),
-              if (rows(value).isEmpty) const SizedBox.shrink(),
-              for (final d in rows(value))
-                GCard(
-                  child: Column(
-                    children: [
-                      DemoImage(
-                        d['thumbnailReference'] ?? d['mediaReference'],
-                        height: 210,
-                      ),
-                      if (d['arabicCaption'] != null)
-                        UiText(d['arabicCaption']),
-                      if (d['type'] == 'Video')
-                        const UiText(
-                          'صورة مصغرة للفيديو · تشغيل وسائط الإنتاج غير متاح في الديمو',
-                        ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
+        MediaStorageNotice(auth: auth),
       ];
       return widget.embedded
           ? Column(

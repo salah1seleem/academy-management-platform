@@ -10,7 +10,44 @@ type CapacityGroup={groupId:string;name:string;branch:string;sport:string;capaci
 type Cockpit={currency:string;collections:{net:number;previous:number;previousFrom:string;previousTo:string;changePercentage:number|null;comparable:boolean;comparisonBasis:string};target:{amount:number|null;achievement:number|null;basis:string};overdue:{amount:number;families:number;asOf:string};risk:{players:number;asOf:string;basis:string};attendance:{percentage:number|null;recorded:number;attended:number;notRecorded:number;basis:string};capacity:{asOf:string;seats:number;unknownGroups:number;conditionalValue:number;unpricedGroups:number;items:CapacityGroup[];basis:string}};
 const n=(value:number)=>value.toLocaleString("ar-EG-u-nu-latn",{maximumFractionDigits:1});
 const query=(from:string,to:string,branchId:string)=>new URLSearchParams({...from?{from}:{},...to?{to}:{},...branchId?{branchId}:{},...!from&&!to?{allDates:"true"}:{}}).toString();
-function useCockpit(q:string){const [data,setData]=useState<Cockpit|null>(null),[error,setError]=useState(false);useEffect(()=>{let c:AbortController;const load=()=>{c?.abort();c=new AbortController();const signal=c.signal;setData(null);if(document.hidden)return;fetch(`/api/v1/reports/owner-cockpit?${q}`,{signal,cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error();const v=await r.json();if(!v?.target||!v?.overdue||!v?.risk||!v?.attendance||!v?.capacity||typeof v?.collections?.net!=="number")throw new Error();return v;}).then(d=>{if(!signal.aborted){setData(d);setError(false);}}).catch(()=>{if(!signal.aborted)setError(true);});};load();window.addEventListener("focus",load);document.addEventListener("visibilitychange",load);return()=>{c?.abort();window.removeEventListener("focus",load);document.removeEventListener("visibilitychange",load);};},[q]);return {data,error};}
+function useCockpit(query: string) {
+ const [data, setData] = useState<Cockpit | null>(null);
+ const [error, setError] = useState<"forbidden" | "failed" | null>(null);
+ useEffect(() => {
+  let request: AbortController;
+  async function load() {
+   request?.abort();
+   request = new AbortController();
+   const { signal } = request;
+   setData(null);
+   setError(null);
+   if (document.hidden) return;
+   try {
+    const response = await fetch(`/api/v1/reports/owner-cockpit?${query}`, { signal, cache: "no-store" });
+    if (signal.aborted) return;
+    if (response.status === 403) {
+     setError("forbidden");
+     return;
+    }
+    if (!response.ok) throw new Error();
+    const value = await response.json();
+    if (!value?.target || !value?.overdue || !value?.risk || !value?.attendance || !value?.capacity || typeof value?.collections?.net !== "number") throw new Error();
+    if (!signal.aborted) setData(value);
+   } catch {
+    if (!signal.aborted) setError("failed");
+   }
+  }
+  void load();
+  window.addEventListener("focus", load);
+  document.addEventListener("visibilitychange", load);
+  return () => {
+   request?.abort();
+   window.removeEventListener("focus", load);
+   document.removeEventListener("visibilitychange", load);
+  };
+ }, [query]);
+ return { data, error };
+}
 export function OwnerCockpit({from,to,branchId=""}:{from:string;to:string;branchId?:string}){
  const q=query(from,to,branchId),{data:d,error}=useCockpit(q),scope=branchId?`branchId=${branchId}&`:"";
  if(error)return <ErrorState message="تعذر تحميل ملخص الأكاديمية؛ لا توجد أرقام تقديرية بديلة."/>;if(!d)return <LoadingState/>;
@@ -32,4 +69,4 @@ export function OwnerCockpit({from,to,branchId=""}:{from:string;to:string;branch
  <section className="list-card intelligent-decisions"><header className="section-heading"><div><h2>مركز القرارات الذكية</h2><small>قواعد واضحة من السجلات · بلا إرسال أو خصم تلقائي</small></div></header>{decisions.length?<div className="decision-grid">{decisions.sort((a,b)=>a.priority-b.priority).map(x=><article key={x.priority}><small>أولوية {x.priority}</small><h3>{x.title}</h3><p>{x.detail}</p><Link href={x.href}>{x.action} ←</Link></article>)}</div>:<p>لا توجد إجراءات وفق هذه القواعد حاليًا.</p>}</section>
  </>;
 }
-export function CapacityReview(){const defaults=useDateFilterDefaults(),incoming=useSearchParams(),branch=incoming.get("branchId")??"",{data,error}=useCockpit(query(defaults.from,defaults.to,branch));return <><PageHeader title="أماكن التدريب المتاحة" context="عمليات الأكاديمية" secondaryActions={[{label:"العودة إلى الرئيسية",href:"/dashboard"}]}/>{error?<ErrorState message="تعذر تحميل السعة الحالية."/>:!data?<LoadingState/>:<section className="list-card"><p>{data.capacity.basis}</p><small>{data.capacity.unknownGroups} مجموعات بلا سعة موثقة · {data.capacity.unpricedGroups} مجموعات بلا سعر شهري مؤهل</small><AdminDataTable label="سعة مجموعات التدريب" rows={data.capacity.items.filter(g=>g.available>0)} rowKey={g=>g.groupId} columns={[{key:"name",header:"المجموعة",primary:true,render:g=><Link href={`/dashboard/academy/groups/${g.groupId}`}>{g.name}</Link>},{key:"scope",header:"الرياضة والفرع",render:g=><>{g.sport}<small>{g.branch}</small></>},{key:"used",header:"الإشغال / السعة",render:g=>`${g.occupied} / ${g.capacity}`},{key:"free",header:"الأماكن المتاحة",render:g=>g.available},{key:"price",header:"قيمة أساسية مشروطة",render:g=>g.conditionalValue==null?"لا باقة شهرية مؤهلة":formatMoneyAr(g.conditionalValue,data.currency)},{key:"action",header:"الإجراء",render:g=><Link href={`/dashboard/players?placement=true&groupId=${g.groupId}`}>مراجعة التسكين</Link>} ]}/></section>}</>;}
+export function CapacityReview(){const defaults=useDateFilterDefaults(),incoming=useSearchParams(),branch=incoming.get("branchId")??"",{data,error}=useCockpit(query(defaults.from,defaults.to,branch));return <><PageHeader title="أماكن التدريب المتاحة" context="عمليات الأكاديمية" secondaryActions={[{label:"العودة إلى الرئيسية",href:"/dashboard"}]}/>{error?<ErrorState message={error==="forbidden"?"حسابك لا يملك صلاحية عرض سعة التدريب في هذا النطاق.":"تعذر تحميل السعة الحالية."}/>:!data?<LoadingState/>:<section className="list-card"><p>{data.capacity.basis}</p><small>{data.capacity.unknownGroups} مجموعات بلا سعة موثقة · {data.capacity.unpricedGroups} مجموعات بلا سعر شهري مؤهل</small><AdminDataTable label="سعة مجموعات التدريب" rows={data.capacity.items.filter(g=>g.available>0)} rowKey={g=>g.groupId} columns={[{key:"name",header:"المجموعة",primary:true,render:g=><Link href={`/dashboard/academy/groups/${g.groupId}`}>{g.name}</Link>},{key:"scope",header:"الرياضة والفرع",render:g=><>{g.sport}<small>{g.branch}</small></>},{key:"used",header:"الإشغال / السعة",render:g=>`${g.occupied} / ${g.capacity}`},{key:"free",header:"الأماكن المتاحة",render:g=>g.available},{key:"price",header:"قيمة أساسية مشروطة",render:g=>g.conditionalValue==null?"لا باقة شهرية مؤهلة":formatMoneyAr(g.conditionalValue,data.currency)},{key:"action",header:"الإجراء",render:g=><Link href={`/dashboard/players?placement=true&groupId=${g.groupId}`}>مراجعة التسكين</Link>} ]}/></section>}</>;}

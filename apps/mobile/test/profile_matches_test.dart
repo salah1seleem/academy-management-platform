@@ -6,6 +6,39 @@ import 'guardian_test.dart' show logged;
 import 'coach_test.dart' show shell;
 
 void main() {
+  testWidgets(
+    'Deep link reads only the scoped match and ignores unrelated legacy rows',
+    (t) async {
+      final calls = <String>[];
+      final auth = await logged((m, p, b, token) async {
+        calls.add(p);
+        return [
+          {'id': 'other', 'team': 'فريق خارج الرابط'},
+          {
+            'id': 'match',
+            'team': 'فريق الرابط',
+            'opponent': 'المنافس',
+            'status': 'ResultDraft',
+            'ourScore': 2,
+            'opponentScore': 0,
+            'resultFinalized': true,
+            'matchDate': '2026-10-22',
+          },
+        ];
+      });
+      await t.pumpWidget(
+        shell(MatchSchedule(auth: auth, playerId: 'child-1', matchId: 'match')),
+      );
+      await t.pumpAndSettle();
+      expect(calls, ['/api/v1/my-matches?playerId=child-1&matchId=match']);
+      expect(find.text('فريق الرابط'), findsOneWidget);
+      expect(find.text('فريق خارج الرابط'), findsNothing);
+      expect(find.text('النتيجة قيد المراجعة'), findsOneWidget);
+      expect(find.text('2'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
   for (final width in [360.0, 390.0, 430.0]) {
     testWidgets(
       'child context, cancellation and bench role fit $width with large text',

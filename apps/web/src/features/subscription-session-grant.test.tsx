@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SubscriptionSessionGrant, type SessionGrantPeriod } from "./subscription-session-grant";
 import { GuardianSubscriptionStatus, SubscriptionPeriodDetail } from "./subscriptions";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/guardian/children/p", useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: vi.fn() }) }));
 
 const period: SessionGrantPeriod = { id: "period", planType: "Combined", status: "Active", startDate: "2026-10-01", endDate: "2026-10-30", initialSessions: 10, remainingSessions: 3, version: 12, canGrantSessions: true };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -86,7 +86,7 @@ describe("whole-period session grant", () => {
     rerender(<SubscriptionPeriodDetail id="second" />);
     expect(screen.queryByRole("button", { name: "إضافة حصص وتحديد نهاية الاشتراك" })).not.toBeInTheDocument();
     finish!(response({ ...period, id: "second", player: "طفل ثان", playerCode: "TEST", canGrantSessions: false, adjustments: [] }));
-    expect(await screen.findByText("طفل ثان · TEST")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "طفل ثان · TEST" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "إضافة حصص وتحديد نهاية الاشتراك" })).not.toBeInTheDocument();
   });
   it("clears the previous child's period history when the guardian selects a different period", async () => {

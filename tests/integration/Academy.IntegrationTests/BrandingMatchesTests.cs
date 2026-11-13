@@ -76,10 +76,54 @@ public sealed partial class BrandingMatchesTests : IAsyncLifetime
     [Fact] public async Task Team_rejects_foreign_enrollment_and_wrong_age_and_draft_never_leaks() {
         using var owner=await Staff();using var guardian=await Mobile(AcademyRole.Guardian);var f=await Fixtures(owner);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var team=await db.MatchTeams.SingleAsync(x=>x.Id==f.Team);var foreign=await db.SportEnrollments.Where(x=>x.AcademyId==DemoSeed.FutureAcademyId).Select(x=>x.Id).FirstAsync();Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Send(owner,$"/api/v1/manage/matches/teams/{f.Team}",new TeamWrite(team.Name,team.SportId,team.BranchId,team.AgeCategoryId,team.CoachMembershipId,[foreign],true),true)).StatusCode);var r=await Send(owner,"/api/v1/manage/matches/",new MatchWrite(f.Tournament,f.Team,"مسودة سرية",new DateOnly(2026,10,3),new TimeOnly(17,0),"ملعب",null,null,null,[],false,true));Assert.Equal(HttpStatusCode.OK,r.StatusCode);Assert.DoesNotContain("مسودة سرية",await guardian.GetStringAsync("/api/v1/my-matches"));
     }
-    [Fact] public async Task Tournament_payment_is_idempotent_and_confirmation_does_not_extend_training() {
-        using var owner=await Staff();using var guardian=await Mobile(AcademyRole.Guardian);var f=await Fixtures(owner);await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var actor=await db.Users.Where(x=>x.PhoneNumber==DemoSeed.GuardianPhone).Select(x=>x.Id).SingleAsync();var periods=await db.SubscriptionPeriods.CountAsync(x=>x.SportEnrollmentId==f.Enrollment);var key=Guid.NewGuid().ToString();var body=new TournamentPaymentWrite(f.Tournament,f.Enrollment);var first=await Send(guardian,"/api/v1/guardian/tournament-payments/",body,key:key);Assert.Equal(HttpStatusCode.Created,first.StatusCode);var id=(await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();Assert.Equal(HttpStatusCode.OK,(await Send(guardian,"/api/v1/guardian/tournament-payments/",body,key:key)).StatusCode);Assert.Equal(HttpStatusCode.Conflict,(await Send(guardian,"/api/v1/guardian/tournament-payments/",body with{TournamentId=Guid.NewGuid()},key:key)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict,(await Send(owner,$"/api/v1/manage/tournament-payments/{id}/review",new{accept=true})).StatusCode);var asset=new PrivateAsset{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,UploadedByUserId=actor,StorageName="synthetic-test-only",ContentType="image/png",Length=20,Purpose="Proof"};db.PrivateAssets.Add(asset);await db.SaveChangesAsync();Assert.Equal(HttpStatusCode.OK,(await Send(guardian,$"/api/v1/guardian/tournament-payments/{id}/proof",new{assetId=asset.Id})).StatusCode);
-        Assert.Equal(HttpStatusCode.OK,(await Send(owner,$"/api/v1/manage/tournament-payments/{id}/review",new{accept=true})).StatusCode);Assert.Equal(HttpStatusCode.OK,(await Send(owner,$"/api/v1/manage/tournament-payments/{id}/review",new{accept=true})).StatusCode);Assert.Equal(periods,await db.SubscriptionPeriods.CountAsync(x=>x.SportEnrollmentId==f.Enrollment));Assert.Equal(1,await db.TournamentPayments.CountAsync(x=>x.Id==id&&x.Status=="Confirmed"&&x.ReceiptNumber!=null));var report=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28&collectionType=Tournament");Assert.Contains(report.GetProperty("items").EnumerateArray(),x=>x.GetProperty("collectionId").GetGuid()==id);Assert.Contains("رسم بطولة",await owner.GetStringAsync("/api/v1/reports/financial/export?from=2026-09-01&to=2026-09-28&collectionType=Tournament"));using var other=await Staff(DemoSeed.FutureOwnerEmail);Assert.Equal(HttpStatusCode.NotFound,(await other.GetAsync($"/api/v1/manage/tournament-payments/{id}")).StatusCode);Assert.Equal(HttpStatusCode.NotFound,(await other.GetAsync($"/api/v1/assets/{asset.Id}")).StatusCode);
+    [Fact]
+    public async Task Tournament_payment_is_idempotent_and_confirmation_does_not_extend_training()
+    {
+        using var owner = await Staff();
+        using var guardian = await Mobile(AcademyRole.Guardian);
+        var fixture = await Fixtures(owner);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var actor = await db.Users.Where(x => x.PhoneNumber == DemoSeed.GuardianPhone).Select(x => x.Id).SingleAsync();
+        var periods = await db.SubscriptionPeriods.CountAsync(x => x.SportEnrollmentId == fixture.Enrollment);
+        const string createPath = "/api/v1/guardian/tournament-payments/";
+        var key = Guid.NewGuid().ToString();
+        var body = new TournamentPaymentWrite(fixture.Tournament, fixture.Enrollment);
+        var first = await Send(guardian, createPath, body, key: key);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var id = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await Send(guardian, createPath, body, key: key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(guardian, createPath, body with { TournamentId = Guid.NewGuid() }, key: key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(guardian, createPath, body, key: Guid.NewGuid().ToString())).StatusCode);
+        var review = $"/api/v1/manage/tournament-payments/{id}/review";
+        var proof = $"{createPath}{id}/proof";
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, review, new { accept = true })).StatusCode);
+        var assets = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        foreach (var assetId in assets)
+            db.PrivateAssets.Add(new PrivateAsset { Id = assetId, AcademyId = DemoSeed.NogoomAcademyId, UploadedByUserId = actor,
+                StorageName = $"synthetic-test-{assetId}", ContentType = "image/png", Length = 20, Purpose = "Proof" });
+        await db.SaveChangesAsync();
+        foreach (var assetId in assets)
+            (await Send(guardian, proof, new { assetId })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, review, new { accept = true, expectedProofAssetId = assets[0] })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, review, new { accept = false })).StatusCode);
+        Assert.False(await db.TournamentPayments.AnyAsync(x => x.Id == id && x.ReceiptNumber != null));
+
+        var decision = new { accept = true, expectedProofAssetId = assets[1], reason = (string?)null };
+        (await Send(owner, review, decision)).EnsureSuccessStatusCode();
+        var replay = await Send(owner, review, decision);
+        replay.EnsureSuccessStatusCode();
+        Assert.True((await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("replay").GetBoolean());
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, review, decision with { reason = "ملاحظة مختلفة" })).StatusCode);
+        Assert.Equal(periods, await db.SubscriptionPeriods.CountAsync(x => x.SportEnrollmentId == fixture.Enrollment));
+        Assert.Equal(1, await db.TournamentPayments.CountAsync(x => x.Id == id && x.Status == "Confirmed" && x.ReceiptNumber != null));
+        Assert.Equal(1, await db.AcademyNotices.CountAsync(x => x.TargetId == id && x.AudienceRole == "Guardian"));
+        var report = await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28&collectionType=Tournament");
+        Assert.Contains(report.GetProperty("items").EnumerateArray(), x => x.GetProperty("collectionId").GetGuid() == id);
+        Assert.Contains("رسم بطولة", await owner.GetStringAsync("/api/v1/reports/financial/export?from=2026-09-01&to=2026-09-28&collectionType=Tournament"));
+        using var other = await Staff(DemoSeed.FutureOwnerEmail);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/api/v1/manage/tournament-payments/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/api/v1/assets/{assets[1]}")).StatusCode);
         await AssertTournamentNoticeSource(guardian, id, actor);
     }
     [Fact] public async Task Guardian_cannot_create_matches_and_foreign_payment_reference_is_not_disclosed() {

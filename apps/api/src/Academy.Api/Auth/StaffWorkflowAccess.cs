@@ -74,7 +74,7 @@ public static class StaffWorkflowAccess
         if(!read&&path.StartsWith(StaffAttendanceExceptions.ManagePath+"/",StringComparison.Ordinal)&&path.EndsWith("/review",StringComparison.Ordinal))return ["workflow.attendance.review"];
         if(Academy.Api.Operations.StaffAttendanceExceptions.IsOwnPath(path)||Academy.Api.Operations.StaffPasskeys.IsOwnPath(path))return [];
         if(path.StartsWith("/api/v1/reports/financial",StringComparison.Ordinal)||path.StartsWith("/api/v1/reports/operating-statement",StringComparison.Ordinal))return ["workflow.reports.financial"];
-        if(read&&(path.StartsWith("/api/v1/subscriptions/collections",StringComparison.Ordinal)||path.StartsWith("/api/v1/subscriptions/payments",StringComparison.Ordinal)||path.StartsWith("/api/v1/manage/payments",StringComparison.Ordinal)||path.StartsWith("/api/v1/manage/subscriptions/payments",StringComparison.Ordinal)))return ["workflow.payments.read"];
+        if(read&&(path.StartsWith("/api/v1/subscriptions/collections",StringComparison.Ordinal)||path.StartsWith("/api/v1/subscriptions/payments",StringComparison.Ordinal)||path.StartsWith("/api/v1/subscriptions/receipts/",StringComparison.Ordinal)||path.StartsWith("/api/v1/manage/payments",StringComparison.Ordinal)||path.StartsWith("/api/v1/manage/subscriptions/payments",StringComparison.Ordinal)))return ["workflow.payments.read"];
         if(read&&path.StartsWith("/api/v1/people/",StringComparison.Ordinal))return ["workflow.players.read"];
         if(!read) {
             if(path.StartsWith("/api/v1/manage/branches",StringComparison.Ordinal))return ["workflow.branches.manage"];

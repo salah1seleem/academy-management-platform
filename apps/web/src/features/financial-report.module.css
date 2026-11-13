@@ -6,4 +6,8 @@
 .source[aria-pressed=true] { border-color:#3b6cf0; box-shadow:inset 0 -2px #3b6cf0; }
 .negative strong { color:#d24c63; }
 .sources details { margin-block:12px; font-size:12px; }
+.receiptNumber { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  :global(.admin-data-row) > [role="cell"]:has(> .receiptNumber) { grid-column: 1 / -1; }
+}
 @media(max-width:700px){.grid{display:flex;overflow-x:auto;scroll-snap-type:x proximity;padding-block-end:8px}.source{flex:0 0 150px;scroll-snap-align:start}.source strong{font-size:22px;}}

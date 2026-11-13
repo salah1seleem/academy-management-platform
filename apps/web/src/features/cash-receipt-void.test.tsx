@@ -45,8 +45,17 @@ it("does not expose a write form for a forbidden or already used receipt", async
   await screen.findByText("العكس للمالك فقط.");expect(screen.queryByLabelText("وردية صرف العكس")).not.toBeInTheDocument();
 });
 it("retains original printed amounts with a visible void status and hides the owner action after reversal", async () => {
-  global.fetch = vi.fn(async () => response({ id: "receipt", academyName: "الأكاديمية", receiptNumber: "R1", amount: 800, currency: "EGP", paidAtUtc: "2026-09-28T06:00:00Z", isVoided: true, voidedAtUtc: "2026-10-13T06:00:00Z", canReviewVoid: false }));
-  render(<ReceiptPrint endpoint="/receipt" />);await screen.findByText("إيصال معكوس — الفترة المرتبطة ملغاة");
+  global.fetch = vi.fn(async () => response({
+    id: "receipt", academyName: "الأكاديمية", receiptNumber: "R1", amount: 800, currency: "EGP",
+    paidAtUtc: "2026-11-11T21:59:00Z", paidAtAcademy: "2026-11-11T23:59:00+02:00",
+    isVoided: true, voidedAtUtc: "2026-11-11T22:01:00Z", voidedAtAcademy: "2026-11-12T00:01:00+02:00", canReviewVoid: false,
+  }));
+  const { container } = render(<ReceiptPrint endpoint="/receipt" />);
+  await screen.findByText("إيصال معكوس — الفترة المرتبطة ملغاة");
+  expect(container.querySelector(".receipt-void-notice time")).toHaveTextContent(/12 نوفمبر 2026.*12:01 ص/);
+  expect(container.querySelector("dl time")).toHaveTextContent(/11 نوفمبر 2026.*11:59 م/);
+  expect(container.querySelector(".receipt-void-notice time")?.textContent).toContain("12:01\u00a0ص");
+  expect(container.querySelector("dl time")?.textContent).toContain("11:59\u00a0م");
   expect(screen.getByText("800 جنيه")).toBeInTheDocument();expect(screen.queryByRole("link", { name: /مراجعة عكس/ })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("button", { name: "طباعة الإيصال" })).toBeEnabled());
 });

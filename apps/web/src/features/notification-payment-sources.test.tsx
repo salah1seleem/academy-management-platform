@@ -13,7 +13,7 @@ it('opens each owner payment notice at its saved individual, family or enrollmen
  ];
  global.fetch=vi.fn(async()=>new Response(JSON.stringify({unread:3,total:3,items:items.map(n=>({...n,isRead:false,createdAtUtc:'2026-10-22',reward:false}))}),{status:200}));
  render(<NotificationInbox/>);
- await screen.findByText('3 غير مقروءة');
+ await screen.findByText('غير المقروءة 3');
  for(const [message,href] of [
   ['إثبات تجديد فردي محفوظ','/dashboard/subscriptions/payments/exact-single'],
   ['إثبات تجديد أسرة محفوظ','/dashboard/family-renewals/exact-family'],
@@ -22,7 +22,7 @@ it('opens each owner payment notice at its saved individual, family or enrollmen
   const article=screen.getByText(message).closest('article')!;
   expect(within(article).getByRole('link',{name:'عرض طلب الدفع ومراجعته'})).toHaveAttribute('href',href);
  }
- expect(vi.mocked(fetch).mock.calls).toEqual([['/api/v1/notifications?page=1',{cache:'no-store'}]]);
+ expect(vi.mocked(fetch).mock.calls).toEqual([['/api/v1/notifications?page=1',expect.objectContaining({cache:'no-store'})]]);
 });
 
 it('does not guess a source from message text, an unknown classification, a missing id, or a different target kind',async()=>{

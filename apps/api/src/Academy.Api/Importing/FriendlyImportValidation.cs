@@ -20,7 +20,10 @@ public sealed partial class FriendlyImportHistory
         foreach (var r in input.Guardians.Values)
         {
             if (EgyptPhoneNormalizer.Normalize(r["Phone"]) is not { } phone) continue;
-            input.Need(r, input.Rows["علاقات أولياء الأمور"].Any(l => l["Guardian"] == r["Code"]), "Code", "ولي الأمر بلا علاقة بطفل. أضف العلاقة أو احذف الصف غير المستخدم.");
+            // Invalid V3 player rows do not produce guardian links. The split
+            // workbooks are validated again with their own complete links.
+            if (input.PlayerCellErrors.Count == 0)
+                input.Need(r, input.Rows["علاقات أولياء الأمور"].Any(l => l["Guardian"] == r["Code"]), "Code", "ولي الأمر بلا علاقة بطفل. أضف العلاقة أو احذف الصف غير المستخدم.");
             var key = "H:" + r["Code"]; var hash = ImportCommitService.Hash(new { GuardianName = r["Name"], phone });
             if (mappings.TryGetValue(key, out var old))
             {

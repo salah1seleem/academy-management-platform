@@ -1,47 +1,175 @@
 "use client";
+
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
+import { apiProblemMessage } from "../lib/api-problem";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
+import styles from "./cash-receipt-void.module.css";
 
-type Review = { id: string; receiptNumber: string; playerId: string; player: string; plan: string; amount: string; currency: string; startDate: string; endDate?: string; cashEnabled: boolean; sessions: { id: string; name: string }[]; balance?: string; quoteHash?: string };
-export function CashReceiptVoid({ receiptId }: { receiptId: string }) { return <VoidEditor key={receiptId} receiptId={receiptId} />; }
-function VoidEditor({ receiptId }: { receiptId: string }) {
-  const root = `/api/v1/finance/cash-registers/receipts/${receiptId}`, receipt = `/dashboard/subscriptions/receipts/${receiptId}`;
-  const [review, setReview] = useState<Review | null>(null), [session, setSession] = useState(""), [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [saved, setSaved] = useState(false), [error, setError] = useState("");
-  const pending = useRef<{ body: { cashSessionId: string; reason: string | null; quoteHash: string }; key: string } | null>(null);
-  useEffect(() => { let active = true; void fetch(`${root}/void-options`, { cache: "no-store" }).then(async r => { if (!r.ok) { const p = await r.json(); throw new Error(p.title ?? "العكس غير متاح لهذا الإيصال."); } return r.json(); }).then(d => { if (active) setReview(d); }).catch(e => { if (active) setError(e instanceof TypeError ? "تعذر الاتصال لتحميل المراجعة." : e.message); }); return () => { active = false; }; }, [root]);
-  function invalidate() { if (review) setReview({ ...review, quoteHash: undefined, balance: undefined }); pending.current = null; setError(""); }
-  async function submit(e: FormEvent) {
-    e.preventDefault(); if (busy || !review || !session || saved) return;
-    setBusy(true); setError("");
-    try {
-      if (!review.quoteHash) {
-        const response = await csrfRequest(`${root}/void-quote`, "POST", { cashSessionId: session, reason: reason.trim() || null }, {}, { announce: false });
-        setReview(await response.json()); return;
+type Review = {
+  id: string;
+  receiptNumber: string;
+  player: string;
+  plan: string;
+  amount: string;
+  currency: string;
+  startDate: string;
+  endDate?: string;
+  cashEnabled: boolean;
+  sessions: { id: string; name: string }[];
+};
+type Quote = { amount: string; currency: string; balance: string; quoteHash: string };
+type PendingVoid = { body: { cashSessionId: string; reason: string | null; quoteHash: string }; key: string };
+const loadFailure = "تعذر تحميل مراجعة العكس. أعد المحاولة.";
+const uncertainFailure = "تعذر تأكيد نتيجة العكس. أعد تأكيد العملية نفسها قبل أي صرف آخر.";
+
+export function CashReceiptVoid({ receiptId, returnQuery }: { receiptId: string; returnQuery?: string }) {
+  return <VoidEditor key={receiptId} receiptId={receiptId} returnQuery={returnQuery} />;
+}
+
+function VoidEditor({ receiptId, returnQuery }: { receiptId: string; returnQuery?: string }) {
+  const root = `/api/v1/finance/cash-registers/receipts/${receiptId}`;
+  const receipt = `/dashboard/subscriptions/receipts/${receiptId}${returnQuery ? `?${returnQuery}` : ""}`;
+  const [review, setReview] = useState<Review | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [session, setSession] = useState("");
+  const [reason, setReason] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [loadError, setLoadError] = useState<{ message: string; retry: boolean }>();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const pending = useRef<PendingVoid | null>(null);
+  const preview = useRef<HTMLDivElement>(null);
+  const result = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const request = new AbortController();
+    void fetch(`${root}/void-options`, { cache: "no-store", signal: request.signal }).then(async response => {
+      if (!response.ok) {
+        const message = await apiProblemMessage(response, response.status >= 500 ? loadFailure : "العكس غير متاح لهذا الإيصال.");
+        if (!request.signal.aborted) setLoadError({ message, retry: response.status >= 500 || response.status === 429 });
+        return;
       }
-      pending.current ??= { body: { cashSessionId: session, reason: reason.trim() || null, quoteHash: review.quoteHash }, key: crypto.randomUUID() };
-      await csrfRequest(`${root}/void`, "POST", pending.current.body, { "Idempotency-Key": pending.current.key });
-      pending.current = null; setUncertain(false); setSaved(true);
-    } catch (caught) {
-      if (pending.current && (!(caught instanceof DashboardRequestError) || caught.status >= 500)) setUncertain(true);
-      setError(caught instanceof DashboardRequestError ? caught.message : "تعذر تأكيد النتيجة. أعد المحاولة بنفس التفاصيل؛ لا تصرف المبلغ مرة أخرى.");
-    } finally { setBusy(false); }
+      const data = await response.json() as Review;
+      if (!data?.id || !Array.isArray(data.sessions)) throw new Error();
+      if (!request.signal.aborted) setReview(data);
+    }).catch(() => {
+      if (!request.signal.aborted) setLoadError({ message: loadFailure, retry: true });
+    });
+    return () => request.abort();
+  }, [root, revision]);
+
+  useEffect(() => {
+    if (saved) result.current?.focus();
+    else if (quote && !uncertain) preview.current?.focus();
+  }, [quote, saved, uncertain]);
+
+  function invalidate() {
+    setQuote(null);
+    setError("");
+    pending.current = null;
   }
-  return <><PageHeader title="عكس إيصال نقدي" context="المالية / إجراء المالك" action={{ label: "الإيصال الأصلي", href: receipt, tone: "secondary" }} />
-    {error && <ErrorState message={error} />}
-    {!review && !error && <LoadingState />}
-    {saved && <section className="detail-card" role="status"><h2>تم عكس الإيصال وإلغاء الفترة المرتبطة بنجاح.</h2><p>الإيصال الأصلي وتاريخ الاشتراك محفوظان؛ اللاعب وفتراته الأخرى لا تُحذف.</p><div className="form-actions"><Link className="primary-button" href={receipt}>عرض الإيصال وحركة العكس</Link><Link className="secondary-button" href={`/dashboard/finance/cash-registers/sessions/${session}`}>عرض رصيد الوردية</Link></div></section>}
-    {review && !saved && <section className="detail-card"><h2>{review.player}</h2><p>{review.plan} · <span dir="ltr">{review.receiptNumber}</span></p><div className="cash-session-stats"><div><small>القيمة الكاملة المطلوب ردّها</small><strong>{formatMoneyAr(review.amount, review.currency)}</strong></div><div><small>فترة الخدمة التي ستُلغى</small><strong>{formatDateAr(review.startDate)}</strong><small>{review.endDate ? `حتى ${formatDateAr(review.endDate)}` : "رصيد حصص"}</small></div></div>
-      <p>ردّ نقدي كامل وإلغاء فترة الاشتراك المرتبطة في عملية واحدة، وليس استردادًا جزئيًا. لا يحذف الإيصال أو يعيد فتح مديونية، ولا يلغي الفترات الأخرى.</p>
-      {!review.cashEnabled || !review.sessions.length ? <p>لا توجد وردية شخصية مخولة للصرف في فرع التحصيل وبعملته. جهّز ورديتك ثم أعد فتح الصفحة.</p> : <form className="form-shell" onSubmit={submit}>
-        <label>وردية صرف العكس<select required value={session} disabled={busy || uncertain} onChange={e => { setSession(e.target.value); invalidate(); }}><option value="">اختر ورديتك</option>{review.sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-        <label>السبب (اختياري)<textarea maxLength={500} value={reason} disabled={busy || uncertain} onChange={e => { setReason(e.target.value); invalidate(); }} /></label>
-        {review.quoteHash && <div className="detail-card" role="region" aria-label="مراجعة عكس الإيصال"><strong>سيُصرف {formatMoneyAr(review.amount, review.currency)}</strong><p>رصيد الوردية قبل العكس {formatMoneyAr(review.balance, review.currency)}</p><p>ستُلغى الفترة المرتبطة، ويظل السجل الأصلي محفوظًا.</p></div>}
+
+  async function requestQuote() {
+    if (busy || !session || pending.current) return;
+    invalidate();
+    setBusy(true);
+    try {
+      const response = await csrfRequest(`${root}/void-quote`, "POST", { cashSessionId: session, reason: reason.trim() || null }, {}, { announce: false });
+      const data = await response.json().catch(() => null) as Quote | null;
+      if (!data?.quoteHash || typeof data.balance !== "string") throw new Error();
+      setQuote(data);
+    } catch (caught) {
+      setError(caught instanceof DashboardRequestError || caught instanceof TypeError ? caught.message : "تعذر تحميل نتيجة المراجعة. أعد المحاولة.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm() {
+    if (busy || !session || !quote || saved) return;
+    setBusy(true);
+    setError("");
+    pending.current ??= { body: { cashSessionId: session, reason: reason.trim() || null, quoteHash: quote.quoteHash }, key: crypto.randomUUID() };
+    try {
+      const response = await csrfRequest(`${root}/void`, "POST", pending.current.body, { "Idempotency-Key": pending.current.key }, { announce: false });
+      const acknowledgement = await response.json();
+      if (typeof acknowledgement?.id !== "string" || !acknowledgement.id) throw new Error();
+      pending.current = null;
+      setUncertain(false);
+      setSaved(true);
+    } catch (caught) {
+      if (caught instanceof DashboardRequestError && caught.status >= 400 && caught.status < 500) {
+        if (!uncertain || caught.status === 409 || caught.status === 422) {
+          invalidate();
+          setUncertain(false);
+        }
+        setError(caught.message);
+      } else {
+        setUncertain(true);
+        setError(uncertainFailure);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void (quote ? confirm() : requestQuote());
+  }
+
+  return <>
+    <PageHeader title="عكس إيصال نقدي" context="المالية / إجراء المالك" back={{ label: "العودة إلى الإيصال", href: receipt }} />
+    {loadError && <div className={styles.loadError}>
+      <ErrorState message={loadError.message} />
+      {loadError.retry && <button type="button" className="secondary-button" onClick={() => {
+        setLoadError(undefined);
+        setRevision(value => value + 1);
+      }}>إعادة تحميل المراجعة</button>}
+    </div>}
+    {!review && !loadError && <LoadingState message="جارٍ تحميل مراجعة العكس…" />}
+    {saved && <section className="detail-card" role="status">
+      <h2 ref={result} tabIndex={-1}>تم عكس الإيصال وإلغاء الفترة المرتبطة بنجاح.</h2>
+      <Link className="primary-button" href={`/dashboard/finance/cash-registers/sessions/${session}`}>عرض رصيد الوردية</Link>
+    </section>}
+    {review && !saved && <section className="detail-card">
+      <h2>{review.player}</h2>
+      <p>{review.plan} · <bdi>{review.receiptNumber}</bdi></p>
+      <div className={`cash-session-stats ${styles.stats}`}>
+        <div><small>المبلغ المطلوب ردّه</small><strong>{formatMoneyAr(review.amount, review.currency)}</strong></div>
+        <div><small>فترة الاشتراك التي ستُلغى</small><strong className={styles.periodDate}>{formatDateAr(review.startDate)}</strong>
+          <small>{review.endDate ? `حتى ${formatDateAr(review.endDate)}` : "رصيد حصص"}</small></div>
+      </div>
+      <p>يُرد كامل المبلغ نقدًا وتُلغى الفترة المرتبطة. يظل الإيصال متاحًا في السجل.</p>
+      {!review.cashEnabled || !review.sessions.length ? <div className={styles.loadError}>
+        <p>{review.cashEnabled ? "افتح وردية صرف باسمك في فرع التحصيل وبعملة الإيصال." : "الصرف النقدي غير مفعّل لهذه الأكاديمية."}</p>
+        <Link className="secondary-button" href="/dashboard/finance/cash-registers">فتح إدارة الصناديق</Link>
+      </div> : <form className="form-shell" onSubmit={submit}>
+        <label>وردية صرف العكس<select required value={session} disabled={busy || uncertain} onChange={event => {
+          setSession(event.target.value);
+          invalidate();
+        }}><option value="">اختر ورديتك</option>{review.sessions.map(shift => <option key={shift.id} value={shift.id}>{shift.name}</option>)}</select></label>
+        <label>السبب (اختياري)<textarea className={styles.reason} maxLength={500} rows={2} value={reason} disabled={busy || uncertain} onChange={event => {
+          setReason(event.target.value);
+          invalidate();
+        }} /></label>
+        {quote && <div className="detail-card" ref={preview} tabIndex={-1} role="region" aria-label="مراجعة عكس الإيصال">
+          <strong>سيُصرف {formatMoneyAr(quote.amount, quote.currency)}</strong>
+          <p>رصيد الوردية قبل العكس {formatMoneyAr(quote.balance, quote.currency)}</p>
+        </div>}
+        {error && <ErrorState message={error} />}
         {uncertain && <p role="status">النتيجة غير مؤكدة؛ التفاصيل مقفلة حتى إعادة نفس المحاولة.</p>}
-        <div className="form-actions"><button className="primary-button" disabled={busy || !session}>{review.quoteHash ? "تأكيد الصرف وإلغاء الفترة" : "مراجعة عكس الإيصال"}</button>{review.quoteHash && !uncertain && <button className="secondary-button" type="button" disabled={busy} onClick={invalidate}>تحديث المراجعة</button>}</div>
+        <div className="form-actions">
+          <button type="submit" className="primary-button" disabled={busy || !session}>
+            {busy ? "جارٍ تنفيذ الطلب…" : uncertain ? "إعادة تأكيد العملية نفسها" : quote ? "تأكيد الصرف وإلغاء الفترة" : "مراجعة عكس الإيصال"}
+          </button>
+          {quote && !uncertain && <button className="secondary-button" type="button" disabled={busy} onClick={() => void requestQuote()}>تحديث المراجعة</button>}
+        </div>
       </form>}
     </section>}
   </>;

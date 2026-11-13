@@ -100,6 +100,8 @@ public sealed class StaffPasskeyTests : IAsyncLifetime
         (await Save(policy with{RadiusMeters=20})).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/complete",new StaffAttendanceProof(pending.GetProperty("challengeId").GetGuid(),intent,JsonSerializer.SerializeToElement(a.Verify(pending))))).StatusCode);
         var started=await Attend(c,a,Intent(site) with{Latitude=30.0501},1);(await Save(policy with{RadiusMeters=20,Enabled=false})).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",Intent(site,"CheckOut"))).StatusCode);
         var disabled=await c.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path+"/attendance");Assert.False(disabled.GetProperty("branches")[0].GetProperty("configured").GetBoolean());Assert.True(disabled.GetProperty("hasOpenAttendance").GetBoolean());
+        var disabledReceipt = await c.GetFromJsonAsync<JsonElement>($"{StaffPasskeys.Path}/attendance/attempts/{started.Command.ChallengeId}");
+        Assert.Equal(started.Receipt.GetRawText(), disabledReceipt.GetRawText());
         Assert.Equal(started.Receipt.GetRawText(),(await (await Post(c,"/attendance/complete",started.Command)).Content.ReadFromJsonAsync<JsonElement>()).GetRawText()); // same receipt survives a later policy change
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Single(await db.StaffWorkPeriods.Where(p=>p.MembershipId==s.Member).ToArrayAsync());Assert.Null(await db.StaffWorkPeriods.Where(p=>p.MembershipId==s.Member).Select(p=>p.EndUtc).SingleAsync());Assert.Equal(0,await db.StaffDailyAttendances.Where(d=>d.MembershipId==s.Member).Select(d=>d.ApprovedDeduction).SingleAsync());
         Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"Branches\" SET \"StaffCheckInRadiusMeters\"=0 WHERE \"Id\"={site}"))).SqlState);
@@ -132,6 +134,55 @@ public sealed class StaffPasskeyTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",b)).StatusCode);await using var verify=factory.Services.CreateAsyncScope();var check=verify.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.False(await check.StaffDailyAttendances.AnyAsync(x=>x.MembershipId==s.Member));
     }
     [Fact]
+    public async Task Coach_checks_in_and_out_inside_saved_50m_radius_and_outside_attempt_cannot_close_the_period()
+    {
+        var coach = await Staff(AcademyRole.Coach);
+        using var client = coach.Client;
+        using var authenticator = new Authenticator();
+        var branch = await AttendanceSite(coach.Member);
+        using var owner = factory.CreateClient();
+        await MobileCoachTestSession.SignInAsync(owner, factory.Services, DemoSeed.OwnerEmail, AcademyRole.AcademyOwner);
+        var path = $"/api/v1/manage/branches/{branch}/check-in-site";
+        var settings = await owner.GetFromJsonAsync<JsonElement>(path);
+        var policy = new StaffAttendancePolicy(true, 50, 10, 30, 60, true, false, false, null);
+        using var saved = await owner.PutAsJsonAsync(path, new CheckInSiteWrite(30.05, 31.3, policy, settings.GetProperty("version").GetUInt32()));
+        saved.EnsureSuccessStatusCode();
+        var registration = await Options(client);
+        await Finish(client, registration, authenticator.Register(registration));
+
+        var outside = Intent(branch) with { Latitude = 30.0506 }; // about 67 m
+        var uncertain = Intent(branch) with { Latitude = 30.05044 }; // about 49 m, with ±5 m accuracy
+        using var outsideStart = await Post(client, "/attendance/options", outside);
+        Assert.Equal(HttpStatusCode.Conflict, outsideStart.StatusCode);
+        Assert.Contains("خارج نطاق", (await outsideStart.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());
+        using var uncertainStart = await Post(client, "/attendance/options", uncertain);
+        Assert.Equal(HttpStatusCode.Conflict, uncertainStart.StatusCode);
+        Assert.Contains("حدود النطاق", (await uncertainStart.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());
+        var inside = Intent(branch) with { Latitude = 30.0503 }; // about 33 m, with ±5 m accuracy
+        var start = await Attend(client, authenticator, inside, 1);
+        clock.Now = clock.Now.AddMinutes(20);
+        await RenewSession(client, coach.Member);
+        using var outsideEnd = await Post(client, "/attendance/options", outside with { Operation = "CheckOut", CapturedAtUtc = clock.Now });
+        Assert.Equal(HttpStatusCode.Conflict, outsideEnd.StatusCode);
+        Assert.True((await client.GetFromJsonAsync<JsonElement>(StaffPasskeys.Path + "/attendance")).GetProperty("hasOpenAttendance").GetBoolean());
+        var end = await Attend(client, authenticator, inside with { Operation = "CheckOut", CapturedAtUtc = clock.Now }, 2);
+        Assert.Equal(start.Receipt.GetProperty("workPeriodId").GetGuid(), end.Receipt.GetProperty("workPeriodId").GetGuid());
+        foreach (var attempt in new[] { start, end })
+        {
+            using var readAttempt = await client.GetAsync($"{StaffPasskeys.Path}/attendance/attempts/{attempt.Command.ChallengeId}");
+            Assert.Equal(HttpStatusCode.OK, readAttempt.StatusCode);
+            Assert.True(readAttempt.Headers.CacheControl?.NoStore);
+            var recovered = await readAttempt.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(attempt.Receipt.GetRawText(), recovered.GetRawText());
+            Assert.False(recovered.TryGetProperty("latitude", out _));
+            Assert.False(recovered.TryGetProperty("proofHash", out _));
+        }
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var period = Assert.Single(await db.StaffWorkPeriods.Where(p => p.MembershipId == coach.Member).ToArrayAsync());
+        Assert.Equal(clock.Now, period.EndUtc);
+    }
+    [Fact]
     public async Task Changed_payload_foreign_identity_regular_verify_and_parallel_targets_cannot_record_another_operation()
     {
         var s=await Staff();using var c=s.Client;using var a=new Authenticator();var site=await AttendanceSite(s.Member);var register=await Options(c);await Finish(c,register,a.Register(register));
@@ -144,6 +195,20 @@ public sealed class StaffPasskeyTests : IAsyncLifetime
         var regular=await Options(c,"verify");Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/complete",new StaffAttendanceProof(regular.GetProperty("challengeId").GetGuid(),b,JsonSerializer.SerializeToElement(a.Verify(regular))))).StatusCode);
         var one=await AttendanceOptions(c,b);var two=await AttendanceOptions(c,b);var results=await Task.WhenAll(Post(c,"/attendance/complete",new StaffAttendanceProof(one.GetProperty("challengeId").GetGuid(),b,JsonSerializer.SerializeToElement(a.Verify(one)))),Post(c,"/attendance/complete",new StaffAttendanceProof(two.GetProperty("challengeId").GetGuid(),b,JsonSerializer.SerializeToElement(a.Verify(two)))));
         Assert.Single(results,r=>r.IsSuccessStatusCode);Assert.Single(results,r=>r.StatusCode==HttpStatusCode.Conflict);
+        var winner = results[0].IsSuccessStatusCode ? one : two;
+        var denied = results[0].IsSuccessStatusCode ? two : one;
+        static string Attempt(JsonElement challenge) => $"{StaffPasskeys.Path}/attendance/attempts/{challenge.GetProperty("challengeId").GetGuid()}";
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync(Attempt(winner))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync(Attempt(denied))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync(Attempt(regular))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await oc.GetAsync(Attempt(winner))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(Attempt(winner))).StatusCode);
+        var closed = await c.GetFromJsonAsync<JsonElement>(Attempt(denied) + "?includeState=true");
+        Assert.False(closed.GetProperty("attendanceRecorded").GetBoolean());
+        Assert.Equal("Closed", closed.GetProperty("attemptState").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync(Attempt(regular) + "?includeState=true")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await oc.GetAsync(Attempt(denied) + "?includeState=true")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(Attempt(denied) + "?includeState=true")).StatusCode);
         await using var sourceScope=factory.Services.CreateAsyncScope();var sourceDb=sourceScope.ServiceProvider.GetRequiredService<FoundationDbContext>();var newSite=new Branch{Id=Guid.NewGuid(),AcademyId=DemoSeed.NogoomAcademyId,ArabicName=$"فرع انتقال اصطناعي {s.Member:N}",CheckInLatitude=30.05,CheckInLongitude=31.3};sourceDb.Branches.Add(newSite);var employee=await sourceDb.Employees.SingleAsync(e=>e.MembershipId==s.Member);employee.BranchId=newSite.Id;await sourceDb.SaveChangesAsync();Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/options",Intent(newSite.Id,"CheckOut"))).StatusCode);
     }
     [Fact]
@@ -151,7 +216,21 @@ public sealed class StaffPasskeyTests : IAsyncLifetime
     {
         var s=await Staff();using var c=s.Client;using var a=new Authenticator();var site=await AttendanceSite(s.Member);var register=await Options(c);var key=await Finish(c,register,a.Register(register));clock.Now=new(2026,10,16,20,59,0,TimeSpan.Zero);await RenewSession(c,s.Member);
         var first=await Attend(c,a,Intent(site),1);clock.Now=clock.Now.AddMinutes(2);var closed=await Attend(c,a,Intent(site,"CheckOut"),2);Assert.Equal(first.Receipt.GetProperty("workDate").GetString(),closed.Receipt.GetProperty("workDate").GetString());
-        var next=Intent(site);var expired=await AttendanceOptions(c,next);clock.Now=clock.Now.AddSeconds(121);Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/complete",new StaffAttendanceProof(expired.GetProperty("challengeId").GetGuid(),next,JsonSerializer.SerializeToElement(a.Verify(expired,3))))).StatusCode);
+        var next = Intent(site);
+        var expired = await AttendanceOptions(c, next);
+        var challengeId = expired.GetProperty("challengeId").GetGuid();
+        var attemptPath = $"{StaffPasskeys.Path}/attendance/attempts/{challengeId}?includeState=true";
+        using var pendingRead = (await c.GetAsync(attemptPath)).EnsureSuccessStatusCode();
+        Assert.True(pendingRead.Headers.CacheControl?.NoStore);
+        var unresolved = await pendingRead.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Pending", unresolved.GetProperty("attemptState").GetString());
+        Assert.False(unresolved.GetProperty("attendanceRecorded").GetBoolean());
+        clock.Now = clock.Now.AddSeconds(121);
+        var terminal = await c.GetFromJsonAsync<JsonElement>(attemptPath);
+        Assert.Equal("Closed", terminal.GetProperty("attemptState").GetString());
+        Assert.False(terminal.GetProperty("attendanceRecorded").GetBoolean());
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(c, "/attendance/complete",
+            new StaffAttendanceProof(challengeId, next, JsonSerializer.SerializeToElement(a.Verify(expired, 3))))).StatusCode);
         next=Intent(site);var pending=await AttendanceOptions(c,next);(await Post(c,$"/credentials/{key.GetProperty("credential").GetProperty("id").GetGuid()}/revoke",new{})).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await Post(c,"/attendance/complete",new StaffAttendanceProof(pending.GetProperty("challengeId").GetGuid(),next,JsonSerializer.SerializeToElement(a.Verify(pending,3))))).StatusCode);
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();var row=await db.StaffDailyAttendances.SingleAsync(r=>r.MembershipId==s.Member);Assert.Equal(new DateOnly(2026,10,16),row.WorkDate);Assert.Equal(new DateOnly(2026,10,17),row.CheckOutDate);Assert.Equal(1,await db.StaffWorkPeriods.CountAsync(p=>p.AttendanceId==row.Id));
     }

@@ -18,7 +18,9 @@ public static class StaffPasskeys
     public static bool IsOwnPath(string path)
     {
         var p=path.TrimEnd('/');
+        const string attempts = Path + "/attendance/attempts/";
         return p is Path or Path+"/register/options" or Path+"/register/complete" or Path+"/verify/options" or Path+"/verify/complete" or Path+"/attendance" or Path+"/attendance/options" or Path+"/attendance/complete"
+            || p.StartsWith(attempts, StringComparison.Ordinal) && Guid.TryParse(p[attempts.Length..], out _)
             ||p.Length>Path.Length+20&&p.StartsWith(Path+"/credentials/",StringComparison.Ordinal)&&p.EndsWith("/revoke",StringComparison.Ordinal)&&Guid.TryParse(p[(Path.Length+13)..^7],out _);
     }
     public static void MapStaffPasskeys(this WebApplication app)

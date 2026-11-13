@@ -18,6 +18,7 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
     {
         if (!Enum.IsDefined(type)) throw new DiscountValidationException("نوع الخصم غير صحيح.");
         if (value <= 0) throw new DiscountValidationException("قيمة الخصم يجب أن تكون أكبر من صفر.");
+        if (decimal.Round(value, 2) != value) throw new DiscountValidationException("أدخل قيمة الخصم بمنزلتين عشريتين على الأكثر.");
         return ExecuteAsync(academyId, actorId, renewalId, type, value, reason, expectedVersion, key, ct);
     }
 
@@ -30,13 +31,16 @@ public sealed class SubscriptionDiscountService(FoundationDbContext db, IPayment
     {
         var normalizedReason = NormalizeReason(reason);
         if (string.IsNullOrWhiteSpace(key) || key.Length > 100)
-            throw new DiscountValidationException("Idempotency-Key مطلوب ولا يتجاوز 100 حرف.");
+            throw new DiscountValidationException("تعذر تحديد محاولة الحفظ. حدّث الصفحة وأعد المحاولة.");
 
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var replay = await db.RenewalDiscountAdjustments.AsNoTracking()
             .SingleOrDefaultAsync(x => x.AcademyId == academyId && x.PerformedByUserId == actorId && x.IdempotencyKey == key, ct);
         if (replay is not null)
         {
+            if (replay.RenewalRequestId != renewalId || replay.NewDiscountType != type ||
+                replay.NewDiscountValue != value || replay.Reason != normalizedReason)
+                throw new DiscountConflictException("استُخدم مرجع المحاولة لتعديل مختلف. راجع الطلب قبل إعادة المحاولة.");
             var replayRenewal = await db.RenewalRequests.AsNoTracking().SingleOrDefaultAsync(
                 x => x.AcademyId == academyId && x.Id == replay.RenewalRequestId, ct) ?? throw new DiscountNotFoundException();
             await transaction.CommitAsync(ct);

@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Auth;
 
-public sealed record TenantMembership(Guid AcademyId, string AcademyName, AcademyRole Role, Guid MembershipId = default, bool AdditionalContext = false);
+public sealed record TenantMembership(Guid AcademyId, string AcademyName, AcademyRole Role, Guid MembershipId = default, bool AdditionalContext = false)
+{
+    public string TimeZone { get; init; } = TimeZoneInfo.Utc.Id;
+}
 
 public sealed class CurrentTenant(IHttpContextAccessor accessor, FoundationDbContext db)
 {
@@ -30,7 +33,10 @@ public sealed class CurrentTenant(IHttpContextAccessor accessor, FoundationDbCon
         }
         // Legacy cookies without a selected role must not implicitly acquire another role.
         var memberships = await query
-            .Select(x => new TenantMembership(x.AcademyId, db.AcademyExperiences.Where(b => b.AcademyId == x.AcademyId).Select(b => b.DisplayName).FirstOrDefault() ?? x.Academy.ArabicName, x.Role, x.Id, x.PrimaryMembershipId != null))
+            .Select(x => new TenantMembership(x.AcademyId, db.AcademyExperiences.Where(b => b.AcademyId == x.AcademyId).Select(b => b.DisplayName).FirstOrDefault() ?? x.Academy.ArabicName, x.Role, x.Id, x.PrimaryMembershipId != null)
+            {
+                TimeZone = x.Academy.TimeZone,
+            })
             .Take(2).ToListAsync(cancellationToken);
         return memberships.Count == 1 ? memberships[0] : null;
     }

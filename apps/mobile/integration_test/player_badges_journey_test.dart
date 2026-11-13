@@ -199,13 +199,13 @@ void main() {
         );
         await t.ensureVisible(revoke);
         await t.tap(revoke);
-        await wait(find.text('شارة مسحوبة — مستبعدة من الملخص'));
+        await wait(find.text('شارة مسحوبة'));
         await t.pumpWidget(
           shell(PlayerBadgesPage(auth: family, playerId: child)),
         );
-        await wait(find.text('شارة مسحوبة — مستبعدة من الملخص'));
+        await wait(find.text('شارة مسحوبة'));
         await t.scrollUntilVisible(
-          find.text('شارة مسحوبة — مستبعدة من الملخص'),
+          find.text('شارة مسحوبة'),
           180,
           scrollable: find.byType(Scrollable).first,
         );

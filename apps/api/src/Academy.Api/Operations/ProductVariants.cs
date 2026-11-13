@@ -59,7 +59,7 @@ public static class ProductVariants
         var eligible=db.SportEnrollments.AsNoTracking().Where(e=>e.IsActive&&e.Player.IsActive&&e.SportId==p.SportId&&db.GuardianPlayerLinks.Any(l=>l.PlayerId==e.PlayerId&&l.IsActive&&l.Guardian.UserId==user));
         if(!await eligible.AnyAsync()||enrollmentId.HasValue&&!await eligible.AnyAsync(e=>e.Id==enrollmentId))return Results.NotFound();
         var assigned=enrollmentId.HasValue?await eligible.Where(e=>e.Id==enrollmentId).Select(e=>e.ShirtNumber).SingleAsync():null;
-        return Results.Ok(new{p.UsesVariants,p.NumberedUniform,p.StockRevision,unitPrice=p.DisplayPrice is decimal price?decimal.Round(price*(100-(p.DiscountPercentage??0))/100,2,MidpointRounding.AwayFromZero):(decimal?)null,p.Currency,assignedShirtNumber=assigned,variants=p.Variants.Where(v=>v.Quantity>0).OrderBy(v=>v.Size).ThenBy(v=>v.ShirtNumber).Select(v=>new{v.Id,v.Size,v.Color,v.ShirtNumber,v.Quantity})});
+        return Results.Ok(new{p.UsesVariants,p.NumberedUniform,p.StockRevision,p.StockQuantity,unitPrice=p.DisplayPrice is decimal price?decimal.Round(price*(100-(p.DiscountPercentage??0))/100,2,MidpointRounding.AwayFromZero):(decimal?)null,p.Currency,assignedShirtNumber=assigned,variants=p.Variants.Where(v=>v.Quantity>0).OrderBy(v=>v.Size).ThenBy(v=>v.ShirtNumber).Select(v=>new{v.Id,v.Size,v.Color,v.ShirtNumber,v.Quantity})});
     }
     private static async Task<IResult> Shirt(Guid id, ShirtWrite body, CurrentTenant tenant, FoundationDbContext db, TimeProvider clock)
     {

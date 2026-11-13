@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/ui_text.dart';
+import '../../core/widgets/arabic_number_input.dart';
 import '../admin/native_operation_form.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/experience_ui.dart';
@@ -42,6 +43,15 @@ const payrollPermissionLabels = <String, String>{
   'payroll.statement.approve': 'اعتماد كشف المستحقات',
   'payroll.advance.manage': 'السلف وتخصيصها',
 };
+
+final _egyptianStaffNumber = RegExp(r'^(?:(?:\+|00)?200?|0)(1[0-9]{9})$');
+
+String? _staffPhone(String value) {
+  final number = canonicalNumericInput(value)
+      .replaceAll(RegExp(r'[\s()\-]'), '');
+  final match = _egyptianStaffNumber.firstMatch(number);
+  return match == null ? null : '+20${match[1]}';
+}
 
 class NativeStaffManagement extends StatefulWidget {
   const NativeStaffManagement({super.key, required this.auth});
@@ -111,138 +121,157 @@ class _NativeStaffManagementState
   }
 
   @override
-  Widget build(BuildContext context) => page('الموظفون والصلاحيات', [
-    if (data == null && !busy)
-      OutlinedButton(onPressed: load, child: const UiText('إعادة المحاولة')),
-    if (data != null) ...[
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          FilledButton.icon(
-            onPressed: () => open(
-              payrollAvailable
-                  ? NativeEmployeeEditor(auth: auth, options: data!)
-                  : NativeStaffAccountCreate(auth: auth),
+  Widget build(BuildContext context) {
+    final term = search.text.trim();
+    final phone = _staffPhone(term);
+    final employees = rows(data?['items'] ?? const <Json>[])
+        .where(
+          (e) =>
+              '${e['name']} ${e['phone']} ${e['jobTitle']}'.contains(term) ||
+              phone != null && _staffPhone(textOf(e['phone'])) == phone,
+        )
+        .toList();
+    final accounts = members
+        .where(
+          (m) =>
+              '${m['name']} ${m['phoneNumber']} ${m['jobTitle']}'.contains(
+                term,
+              ) ||
+              phone != null && _staffPhone(textOf(m['phoneNumber'])) == phone,
+        )
+        .toList();
+    return page('الموظفون والصلاحيات', [
+      if (data == null && !busy)
+        OutlinedButton(onPressed: load, child: const UiText('إعادة المحاولة')),
+      if (data != null) ...[
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: () => open(
+                payrollAvailable
+                    ? NativeEmployeeEditor(auth: auth, options: data!)
+                    : NativeStaffAccountCreate(auth: auth),
+              ),
+              icon: const Icon(Icons.person_add_alt),
+              label: UiText(
+                payrollAvailable ? 'إضافة موظف' : 'إضافة حساب دخول',
+              ),
             ),
-            icon: const Icon(Icons.person_add_alt),
-            label: const UiText('إضافة موظف'),
-          ),
-          if (payrollAvailable)
-            OutlinedButton(
-              onPressed: () => open(NativeStaffAccountCreate(auth: auth)),
-              child: const UiText('إضافة حساب دخول'),
-            ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      GLink(
-        'أدوار الموظفين',
-        Icons.work_outline,
-        () => open(NativeStaffRoles(auth: auth)),
-      ),
-      if (payrollAvailable) ...[
+            if (payrollAvailable)
+              OutlinedButton(
+                onPressed: () => open(NativeStaffAccountCreate(auth: auth)),
+                child: const UiText('إضافة حساب دخول'),
+              ),
+          ],
+        ),
         const SizedBox(height: 12),
         GLink(
-          'السلف والمبالغ الإضافية',
-          Icons.account_balance_wallet_outlined,
-          () => open(OwnerPayrollRequests(auth: auth)),
+          'أدوار الموظفين',
+          Icons.work_outline,
+          () => open(NativeStaffRoles(auth: auth)),
         ),
-      ],
-      const SizedBox(height: 14),
-      TextField(
-        controller: search,
-        decoration: const InputDecoration(
-          labelText: 'بحث بالاسم أو الهاتف أو الوظيفة',
-        ),
-        onChanged: (_) => setState(() {}),
-      ),
-      if (rows(data!['items']).isNotEmpty)
-        const Heading('بيانات التوظيف والرواتب'),
-      for (final employee in rows(data!['items']).where(
-        (e) => '${e['name']} ${e['phone']} ${e['jobTitle']}'.contains(
-          search.text.trim(),
-        ),
-      ))
-        GCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              UiText(
-                textOf(employee['name']),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              UiText(
-                '${employee['jobTitle']} · ${employee['phone']}',
-                style: const TextStyle(fontSize: 12),
-              ),
-              MoneyText(
-                employee['monthlySalary'],
-                employee['currency'],
-                size: 20,
-              ),
-              OutlinedButton(
-                onPressed: () => edit(employee),
-                child: const UiText('بيانات الموظف'),
-              ),
-              if (members.any(
-                (m) =>
-                    m['id'] == employee['membershipId'] &&
-                    m['role'] == 'AcademyAdmin',
-              ))
-                TextButton(
-                  onPressed: () => open(
-                    NativeStaffAccessEditor(
-                      auth: auth,
-                      membershipId: textOf(employee['membershipId']),
-                      name: textOf(employee['name']),
-                    ),
-                  ),
-                  child: const UiText('الأفعال ونطاق الصلاحيات'),
-                ),
-            ],
+        if (payrollAvailable) ...[
+          const SizedBox(height: 12),
+          GLink(
+            'السلف والمبالغ الإضافية',
+            Icons.account_balance_wallet_outlined,
+            () => open(OwnerPayrollRequests(auth: auth)),
           ),
+        ],
+        const SizedBox(height: 14),
+        TextField(
+          controller: search,
+          decoration: const InputDecoration(
+            labelText: 'بحث بالاسم أو الهاتف أو الوظيفة',
+          ),
+          onChanged: (_) => setState(() {}),
         ),
-      const Heading('المدربون والموظفون'),
-      for (final member in members.where(
-        (m) => '${m['name']} ${m['phoneNumber']} ${m['jobTitle']}'.contains(
-          search.text.trim(),
-        ),
-      ))
-        GCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          child: ListTile(
-            minTileHeight: 64,
-            contentPadding: EdgeInsets.zero,
-            title: UiText(textOf(member['name'])),
-            subtitle: UiText(
-              '${member['jobTitle'] ?? (member['role'] == 'Coach' ? 'مدرب' : 'إداري')} · ${member['isActive'] == true ? 'فعال' : 'موقوف'}',
+        if (employees.isNotEmpty) const Heading('بيانات التوظيف والرواتب'),
+        for (final employee in employees)
+          GCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                UiText(
+                  textOf(employee['name']),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                UiText(
+                  '${employee['jobTitle']} · \u2066${employee['phone']}\u2069',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                MoneyText(
+                  employee['monthlySalary'],
+                  employee['currency'],
+                  size: 20,
+                ),
+                OutlinedButton(
+                  onPressed: () => edit(employee),
+                  child: const UiText('بيانات الموظف'),
+                ),
+                if (members.any(
+                  (m) =>
+                      m['id'] == employee['membershipId'] &&
+                      m['role'] == 'AcademyAdmin',
+                ))
+                  TextButton(
+                    onPressed: () => open(
+                      NativeStaffAccessEditor(
+                        auth: auth,
+                        membershipId: textOf(employee['membershipId']),
+                        name: textOf(employee['name']),
+                      ),
+                    ),
+                    child: const UiText('الأفعال ونطاق الصلاحيات'),
+                  ),
+              ],
             ),
-            trailing: member['role'] == 'AcademyAdmin'
-                ? const Icon(Icons.tune)
-                : const Icon(Icons.groups_outlined),
-            onTap: member['role'] == 'AcademyAdmin'
-                ? () => open(
-                    NativeStaffAccessEditor(
-                      auth: auth,
-                      membershipId: textOf(member['id']),
-                      name: textOf(member['name']),
-                    ),
-                  )
-                : () => open(
-                    NativeCoachAccessEditor(
-                      auth: auth,
-                      membershipId: textOf(member['id']),
-                      name: textOf(member['name']),
-                    ),
-                  ),
           ),
-        ),
-    ],
-  ], screen: 'staff');
+        if (accounts.isNotEmpty) const Heading('المدربون والموظفون'),
+        if (employees.isEmpty && accounts.isEmpty)
+          UiText(
+            term.isEmpty
+                ? 'لا توجد حسابات أو سجلات موظفين.'
+                : 'لا توجد نتائج مطابقة.',
+          ),
+        for (final member in accounts)
+          GCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: ListTile(
+              minTileHeight: 64,
+              contentPadding: EdgeInsets.zero,
+              title: UiText(textOf(member['name'])),
+              subtitle: UiText(
+                '${member['jobTitle'] ?? (member['role'] == 'Coach' ? 'مدرب' : 'إداري')} · ${member['isActive'] == true ? 'فعال' : 'موقوف'}',
+              ),
+              trailing: member['role'] == 'AcademyAdmin'
+                  ? const Icon(Icons.tune)
+                  : const Icon(Icons.groups_outlined),
+              onTap: member['role'] == 'AcademyAdmin'
+                  ? () => open(
+                      NativeStaffAccessEditor(
+                        auth: auth,
+                        membershipId: textOf(member['id']),
+                        name: textOf(member['name']),
+                      ),
+                    )
+                  : () => open(
+                      NativeCoachAccessEditor(
+                        auth: auth,
+                        membershipId: textOf(member['id']),
+                        name: textOf(member['name']),
+                      ),
+                    ),
+            ),
+          ),
+      ],
+    ], screen: 'staff');
+  }
 }
 
 class NativeStaffAccountCreate extends StatefulWidget {
@@ -264,7 +293,6 @@ class _NativeStaffAccountCreateState
       job = TextEditingController();
   String role = 'AcademyAdmin';
   bool uncertain = false;
-  String? savedAccountId;
   List<Json> roles = [];
   @override
   void initState() {
@@ -299,104 +327,159 @@ class _NativeStaffAccountCreateState
   }
 
   Future<void> save() async {
-    if (!form.currentState!.validate()) return;
+    if (uncertain || !form.currentState!.validate()) return;
+    final displayName = name.text.trim();
+    final accountRole = role;
     await run(() async {
-      Object? result;
+      String id;
       try {
-        if (savedAccountId == null) {
-          result = await auth.request(
+        final result = obj(
+          await auth.request(
             'POST',
             '/api/v1/manage/staff',
             body: {
-              'name': name.text.trim(),
+              'name': displayName,
               'email': email.text.trim(),
-              'phone': phone.text.trim(),
-              'temporaryPassword': password.text,
+              'phone': _staffPhone(phone.text),
+              'temporaryPassword': accountRole == 'AcademyAdmin'
+                  ? password.text
+                  : null,
               'jobTitle': job.text.trim(),
-              'role': role,
+              'role': accountRole,
             },
-          );
-          savedAccountId = textOf(obj(result)['id']);
+          ),
+        );
+        final savedId = result['id'];
+        if (savedId is! String || savedId.isEmpty) {
+          throw StateError('Unconfirmed account');
         }
+        id = savedId;
       } catch (e) {
         if (e is! ApiFailure || e.status == 0 || e.status >= 500) {
           uncertain = true;
+          throw const ApiFailure(
+            0,
+            'تعذر تأكيد إنشاء الحساب. اعرض حسابات الفريق للتحقق من وجوده.',
+          );
+        }
+        if (e.status == 409) {
+          throw const ApiFailure(
+            409,
+            'رقم الهاتف أو البريد الإلكتروني مستخدم بالفعل.',
+          );
         }
         rethrow;
       }
-      final id = savedAccountId!;
-      final saved = obj(await auth.request('GET', '/api/v1/manage/staff'));
-      if (!rows(saved['members'])
-          .any((m) => m['id'] == id && m['name'] == name.text.trim())) {
-        throw StateError('Unconfirmed account');
-      }
+      if (!mounted || !current) return;
       password.clear();
-      if (mounted && current) {
-        if (role == 'AcademyAdmin') {
-          await openPage(
-            context,
-            NativeStaffAccessEditor(
-              auth: auth,
-              membershipId: id,
-              name: name.text.trim(),
-            ),
-          );
-        }
-        if (mounted && current) Navigator.of(context).pop(true);
+      if (accountRole == 'AcademyAdmin') {
+        await openPage(
+          context,
+          NativeStaffAccessEditor(
+            auth: auth,
+            membershipId: id,
+            name: displayName,
+          ),
+        );
       }
+      if (mounted && current) Navigator.of(context).pop(true);
     });
   }
 
   @override
-  Widget build(BuildContext context) => page('حساب دخول للموظف', [
-    field('الاسم', name),
-    field('الهاتف', phone, keyboard: TextInputType.phone),
-    field(
-      'البريد الإلكتروني — اختياري',
-      email,
-      required: false,
-      keyboard: TextInputType.emailAddress,
-    ),
-    if (roles.isEmpty)
-      field('الدور الوظيفي', job, required: false)
-    else
-      choice(
-        'الدور الوظيفي',
-        job.text.isEmpty ? null : job.text,
-        [
-          for (final r in roles)
-            {
-              'id': obj(r['template'])['name'],
-              'arabicName': obj(r['template'])['name'],
-            },
-        ],
-        (v) => setState(() => job.text = v ?? ''),
+  Widget build(BuildContext context) {
+    if (uncertain) {
+      return page('حساب دخول للموظف', [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const UiText('عرض حسابات الفريق'),
+        ),
+      ], screen: 'staff');
+    }
+    return page('حساب دخول للموظف', [
+      choice('الدور', role, [
+        {'id': 'AcademyAdmin', 'arabicName': 'إداري'},
+        {'id': 'Coach', 'arabicName': 'مدرب'},
+      ], (v) => setState(() => role = v!)),
+      field('الاسم', name),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: TextFormField(
+          controller: phone,
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.telephoneNumber],
+          inputFormatters: const [ArabicNumberInputFormatter()],
+          decoration: const InputDecoration(
+            label: RequiredFieldLabel('رقم الهاتف المصري'),
+            helperText:
+                'مثل \u206601012345678\u2069 أو \u2066+201012345678\u2069',
+            errorMaxLines: 2,
+          ),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'أدخل رقم الهاتف المصري.';
+            }
+            final number = _staffPhone(value);
+            return number != null && '0125'.contains(number[4])
+                ? null
+                : 'اكتب رقم موبايل مصري صحيح.';
+          },
+        ),
+      ),
+      field(
+        'البريد الإلكتروني — اختياري',
+        email,
         required: false,
+        keyboard: TextInputType.emailAddress,
+        validate: (value) =>
+            value.isEmpty ||
+                value.length <= 200 &&
+                    RegExp(r'^[^\s@]+@[^\s@]+$').hasMatch(value)
+            ? null
+            : 'اكتب بريدًا إلكترونيًا صالحًا.',
       ),
-    choice('الدور', role, [
-      {'id': 'AcademyAdmin', 'arabicName': 'إداري بأفعال محددة'},
-      {'id': 'Coach', 'arabicName': 'مدرب لمجموعاته'},
-    ], (v) => setState(() => role = v!)),
-    TextFormField(
-      controller: password,
-      obscureText: true,
-      enableSuggestions: false,
-      autocorrect: false,
-      decoration: const InputDecoration(labelText: 'كلمة مرور الويب — اختياري'),
-      validator: (v) => v != null && v.isNotEmpty && v.length < 12
-          ? 'استخدم كلمة مرور من12حرفًا أو أكثر.'
-          : null,
-    ),
-    const SizedBox(height: 14),
-    if (uncertain)
-      const UiText(
-        'راجع قائمة الحسابات قبل إعادة الإنشاء؛ لم نؤكد نتيجة الطلب.',
-      ),
-    FilledButton(
-      onPressed: uncertain ? null : save,
-      child: const UiText('إنشاء الحساب'),
-    ),
-  ], screen: 'staff');
+      if (roles.isEmpty)
+        field('المسمى الوظيفي', job, required: false)
+      else
+        choice(
+          'المسمى الوظيفي',
+          job.text.isEmpty ? null : job.text,
+          [
+            for (final r in roles)
+              {
+                'id': obj(r['template'])['name'],
+                'arabicName': obj(r['template'])['name'],
+              },
+          ],
+          (v) => setState(() => job.text = v ?? ''),
+          required: false,
+        ),
+      if (role == 'AcademyAdmin')
+        TextFormField(
+          controller: password,
+          obscureText: true,
+          enableSuggestions: false,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'كلمة مرور الويب — اختياري',
+          ),
+          validator: (v) {
+            if (v == null || v.isEmpty) return null;
+            if (email.text.trim().isEmpty) {
+              return 'أدخل البريد الإلكتروني لدخول الويب.';
+            }
+            return v.length < 12
+                ? 'استخدم كلمة مرور من 12 خانة أو أكثر.'
+                : null;
+          },
+        ),
+      const SizedBox(height: 14),
+      FilledButton(onPressed: save, child: const UiText('إنشاء الحساب')),
+    ], screen: 'staff');
+  }
 }
 
 class NativeEmployeeEditor extends StatefulWidget {

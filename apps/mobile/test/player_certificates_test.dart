@@ -131,7 +131,7 @@ void main() {
         f.shell(PlayerCertificatesPage(auth: auth, id: 'c', playerId: 'child')),
       );
       await t.pumpAndSettle();
-      expect(find.text('الشهادة مسحوبة — لا تعد سارية'), findsOneWidget);
+      expect(find.text('الشهادة مسحوبة'), findsOneWidget);
       expect(find.text('سحب الشهادة مع حفظ سجلها'), findsNothing);
       expect(find.text('إصدار شهادة الإنجاز لولي الأمر'), findsNothing);
       t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -173,4 +173,46 @@ void main() {
       expect(find.text('ABC123'), findsOneWidget);
     });
   }
+
+  testWidgets(
+    'returning from a certificate refreshes its status in the same player list',
+    (t) async {
+      var listReads = 0;
+      final paths = <String>[];
+      final auth = await f.owner((method, path, body, token) async {
+        paths.add(path);
+        final item = {
+          ...certificate(),
+          'state': listReads == 0 ? 'Issued' : 'Withdrawn',
+        };
+        if (path.endsWith('/certificates')) {
+          listReads++;
+          return {
+            'items': [item],
+            'hasMore': false,
+          };
+        }
+        return {'certificate': item};
+      });
+      await t.pumpWidget(
+        f.shell(PlayerCertificatesPage(auth: auth, playerId: 'child')),
+      );
+      await t.pumpAndSettle();
+      expect(find.textContaining('شهادة صادرة'), findsOneWidget);
+      await t.tap(find.text('مستوى موثق'));
+      await t.pumpAndSettle();
+      expect(find.text('الشهادة مسحوبة').hitTestable(), findsOneWidget);
+      final back = find.byType(BackButton).hitTestable();
+      expect(back, findsOneWidget);
+      await t.tap(back);
+      await t.pumpAndSettle();
+      expect(find.textContaining('شهادة مسحوبة'), findsOneWidget);
+      expect(find.textContaining('شهادة صادرة'), findsNothing);
+      expect(paths, [
+        '/api/v1/guardian/children/child/certificates',
+        '/api/v1/guardian/children/child/certificates/c',
+        '/api/v1/guardian/children/child/certificates',
+      ]);
+    },
+  );
 }

@@ -1,0 +1,22 @@
+.filters { display:flex; flex-wrap:wrap; align-items:end; gap:8px; }
+.filters label { display:grid; gap:5px; flex:1 1 130px; min-width:0; }
+.filters select { width:100%; min-height:44px; }
+.filterActions { display:flex; flex-wrap:wrap; gap:8px; }
+.balanceScope { margin-block:14px 0; font-size:1rem; }
+.metrics { margin-block:8px 12px; gap:8px; }
+.metrics button { min-width:0; padding:10px; gap:5px; cursor:pointer; overflow-wrap:anywhere; }
+.metrics button[aria-pressed=true] { outline:2px solid var(--staff-focus,var(--staff-info,#5486ee)); outline-offset:-3px; }
+.tools { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-block:8px 14px; }
+.tools p { margin:0; font-size:12px; }
+.tools>div { display:flex; flex-wrap:wrap; gap:8px; }
+.documentBalance { display:grid; gap:5px; margin-block:12px; }
+.documentBalance strong { font-size:1.6rem; }
+.documentFacts { display:flex; flex-wrap:wrap; gap:8px 16px; }
+.documentFacts p { margin:0; }
+.familyTotals { display:grid; gap:.55rem; margin:0; }
+.familyTotals div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:.25rem .75rem; }
+.familyTotals div:first-child { border-block-end:1px solid var(--border); padding-block-end:.55rem; font-weight:700; }
+.familyTotals dd { margin:0; font-variant-numeric:tabular-nums; }
+.familyClaims { display:grid; gap:.6rem; margin:0; padding:0; list-style:none; }
+.familyClaims li { background:var(--background); border-radius:.75rem; padding:.75rem; overflow-wrap:anywhere; }
+.familyClaims :is(h3,p) { margin:0 0 .25rem; }

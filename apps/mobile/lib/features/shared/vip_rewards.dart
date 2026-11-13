@@ -291,7 +291,7 @@ class _NativeVipIssueState extends _VipContextState<NativeVipIssue> {
   AuthController get auth => widget.auth;
   final percentage = TextEditingController();
   final message = TextEditingController(
-    text: 'شكرًا لثقتكم بأكاديميتنا. يسعدنا تقديم مكافأة خاصة لدعم رحلة أبنائكم الرياضية.',
+    text: 'لديكم مكافأة من الأكاديمية. راجعوا نسبة الخصم وموعد الصلاحية.',
   );
   final selected = <String>{};
   final requestId = followUpRequestId();
@@ -476,7 +476,7 @@ class _NativeVipIssueState extends _VipContextState<NativeVipIssue> {
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  const Heading('مكافأة تستحقها الأسرة'),
+                  const Heading('اختر الأسر'),
                   const UiText(
                     'اختر من أعلى10أسر اليوم. المعاينة لا تنشئ استحقاقًا ولا إشعارًا.',
                   ),

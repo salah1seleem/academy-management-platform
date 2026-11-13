@@ -51,6 +51,42 @@ String amountText(Object? value) {
 String money(Object? value, Object? currency) =>
     '${amountText(value)} ${currency == 'EGP' ? 'ج.م' : textOf(currency)}';
 
+class PaymentRequestReference extends StatelessWidget {
+  const PaymentRequestReference({super.key, required this.order});
+  final Json order;
+
+  @override
+  Widget build(BuildContext context) {
+    final reference = order['reference'];
+    final date = DateTime.tryParse('${order['createdOn']}');
+    if ((reference is! String || reference.isEmpty) && date == null) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        children: [
+          if (reference is String && reference.isNotEmpty)
+            UiText(
+              "${ui(context, 'رقم الطلب')} \u2066$reference\u2069",
+              style: theme.textTheme.bodySmall,
+            ),
+          if (date != null)
+            UiText(
+              MaterialLocalizations.of(context).formatShortDate(date),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Currency stays secondary without changing the canonical amount or rounding.
 class MoneyText extends StatelessWidget {
   const MoneyText(
@@ -106,6 +142,7 @@ String label(Object? value) =>
       'Approved': 'مقبول',
       'Rejected': 'مرفوض',
       'Succeeded': 'تم الدفع',
+      'Paid': 'تم الدفع',
       'Confirmed': 'مؤكد',
       'Failed': 'فشل الدفع',
       'Present': 'حاضر',
@@ -160,27 +197,6 @@ int? ageOn(Object? birth, Object? today) {
 String trainingTimeRange(Object? start, Object? end) =>
     'من ${trainingTimeOf(start)} إلى ${trainingTimeOf(end)}';
 
-const _arabicMonthNames = [
-  'يناير',
-  'فبراير',
-  'مارس',
-  'أبريل',
-  'مايو',
-  'يونيو',
-  'يوليو',
-  'أغسطس',
-  'سبتمبر',
-  'أكتوبر',
-  'نوفمبر',
-  'ديسمبر',
-];
-
-String shortArabicDate(Object? value) {
-  final date = DateTime.tryParse(day(value));
-  if (date == null) return 'غير محدد';
-  return '${date.day} ${_arabicMonthNames[date.month - 1]}';
-}
-
 String sessionDateLabel(Object? value) {
   final d = DateTime.tryParse('$value');
   if (d == null) return 'موعد غير محدد';
@@ -193,7 +209,21 @@ String sessionDateLabel(Object? value) {
     'السبت',
     'الأحد',
   ];
-  return '${days[d.weekday - 1]} ${d.day} ${_arabicMonthNames[d.month - 1]} ${d.year}';
+  const months = [
+    'يناير',
+    'فبراير',
+    'مارس',
+    'أبريل',
+    'مايو',
+    'يونيو',
+    'يوليو',
+    'أغسطس',
+    'سبتمبر',
+    'أكتوبر',
+    'نوفمبر',
+    'ديسمبر',
+  ];
+  return '${days[d.weekday - 1]} ${d.day} ${months[d.month - 1]} ${d.year}';
 }
 
 String commandKey() => List.generate(
@@ -212,6 +242,7 @@ class GuardianPage extends StatelessWidget {
   final String title;
   final Widget child;
   final Widget? bottom;
+  final VoidCallback? onBack;
   final List<Widget>? actions;
   final bool showAppBar;
   final bool operation;
@@ -220,6 +251,7 @@ class GuardianPage extends StatelessWidget {
     required this.title,
     required this.child,
     this.bottom,
+    this.onBack,
     this.actions,
     this.showAppBar = true,
     this.operation = false,
@@ -272,9 +304,10 @@ class GuardianPage extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w800),
       ),
-      leading:
-          brand?.auth.session?.selected?.role == 'AcademyOwner' &&
-              Navigator.canPop(context)
+      leading: onBack != null && Navigator.canPop(context)
+          ? BackButton(onPressed: onBack)
+          : brand?.auth.session?.selected?.role == 'AcademyOwner' &&
+                Navigator.canPop(context)
           ? BackButton(
               onPressed: () {
                 ownerHomeAction(brand!.auth)?.call();
@@ -474,7 +507,13 @@ class EmptyMessage extends StatelessWidget {
 class StatusPill extends StatelessWidget {
   final Object? status;
   final double fontSize;
-  const StatusPill(this.status, {super.key, this.fontSize = 12});
+  final String? displayLabel;
+  const StatusPill(
+    this.status, {
+    super.key,
+    this.fontSize = 12,
+    this.displayLabel,
+  });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -483,6 +522,7 @@ class StatusPill extends StatelessWidget {
       'active',
       'approved',
       'accepted',
+      'confirmed',
       'paid',
       'completed',
       'present',
@@ -539,7 +579,7 @@ class StatusPill extends StatelessWidget {
           const SizedBox(width: 6),
           Flexible(
             child: UiText(
-              label(status),
+              displayLabel ?? label(status),
               style: TextStyle(
                 color: color,
                 fontSize: fontSize,
@@ -709,6 +749,8 @@ class RemoteBody extends StatefulWidget {
   final AuthController auth;
   final String path;
   final ScrollController? pagingController;
+  final bool autoPaginate;
+  final Widget? notFound;
   final Widget Function(BuildContext, Object?) builder;
   const RemoteBody({
     super.key,
@@ -716,6 +758,8 @@ class RemoteBody extends StatefulWidget {
     required this.path,
     required this.builder,
     this.pagingController,
+    this.autoPaginate = true,
+    this.notFound,
   });
   @override
   State<RemoteBody> createState() => _RemoteBodyState();
@@ -733,7 +777,9 @@ class _RemoteBodyState extends State<RemoteBody> {
       ? null
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   Uri get uri => Uri.parse(widget.path);
-  String? get cursorKey => uri.queryParameters.containsKey('page')
+  String? get cursorKey => !widget.autoPaginate
+      ? null
+      : uri.queryParameters.containsKey('page')
       ? 'page'
       : uri.queryParameters.containsKey('offset')
       ? 'offset'
@@ -881,7 +927,11 @@ class _RemoteBodyState extends State<RemoteBody> {
       old.pagingController?.removeListener(controllerChanged);
       widget.pagingController?.addListener(controllerChanged);
     }
-    if (old.path != widget.path || old.auth != widget.auth) future = load();
+    if (old.path != widget.path ||
+        old.auth != widget.auth ||
+        old.autoPaginate != widget.autoPaginate) {
+      future = load();
+    }
   }
 
   @override
@@ -905,6 +955,11 @@ class _RemoteBodyState extends State<RemoteBody> {
         }
         if (snapshot.hasError || fatalError != null) {
           final failure = fatalError ?? snapshot.error;
+          if (failure is ApiFailure &&
+              failure.status == 404 &&
+              widget.notFound != null) {
+            return widget.notFound!;
+          }
           final denied =
               failure is ApiFailure && [401, 403].contains(failure.status);
           return PageStatus(
@@ -1061,13 +1116,4 @@ class Facts extends StatelessWidget {
           .toList(),
     ),
   );
-}
-
-String childContextLine(Json child, Json? enrollment, String today) {
-  final age = ageOn(child['dateOfBirth'], today);
-  return [
-    if (age != null) '$age سنة',
-    enrollment?['sport']?.toString() ?? '',
-    enrollment?['branch']?.toString() ?? '',
-  ].where((value) => value.isNotEmpty).join(' · ');
 }

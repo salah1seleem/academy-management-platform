@@ -6,8 +6,25 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/arabic_number_input.dart';
 import '../shared/experience_ui.dart';
 import 'guardian_ui.dart';
+
+const _footballAxes = [
+  'Passing',
+  'Dribbling',
+  'Speed',
+  'Defending',
+  'Physical',
+  'Shooting',
+];
+
+String reportDateText(BuildContext context, Object? value) {
+  final date = DateTime.tryParse(day(value));
+  return date == null
+      ? 'تاريخ غير محدد'
+      : MaterialLocalizations.of(context).formatShortDate(date);
+}
 
 class ReportHistory extends StatelessWidget {
   final AuthController auth;
@@ -19,24 +36,33 @@ class ReportHistory extends StatelessWidget {
     child: RemoteBody(
       auth: auth,
       path: '/api/v1/guardian/children/$playerId/evaluations',
-      builder: (context, value) => gList([
-        const UiText('التقييمات المنشورة · اختر تاريخ التقرير'),
-        if (rows(value).isEmpty)
-          const EmptyMessage('لا توجد تقييمات منشورة بعد.'),
-        for (final r in rows(value))
-          GLink(
-            '${r['sport']} · ${day(r['evaluationDate'])}',
-            Icons.insights,
-            () => openPage(context, PlayerReport(auth: auth, id: r['id'])),
-            subtitle:
-                r['performanceMean'] is Map &&
-                    obj(r['performanceMean'])['value'] is num
-                ? 'متوسط الأداء ${performanceScoreText(obj(r['performanceMean'])['value'] as num)} · ${r['evaluator']}'
-                : 'تقييم منشور · ${r['evaluator']}',
-          ),
-      ]),
+      builder: (context, value) {
+        final reports = rows(value);
+        if (reports.isEmpty) {
+          return gList([const EmptyMessage('لا توجد تقييمات منشورة بعد.')]);
+        }
+        return gList([
+          for (final report in reports) _historyLink(context, report),
+        ]);
+      },
     ),
   );
+
+  Widget _historyLink(BuildContext context, Json report) {
+    final stats = report['performanceMean'];
+    final mean = stats is Map ? stats['value'] : null;
+    final evaluator = report['evaluator']?.toString().trim() ?? '';
+    final details = [
+      if (validAssessment(mean)) 'متوسط الأداء ${performanceScoreText(mean)}',
+      if (evaluator.isNotEmpty) evaluator,
+    ];
+    return GLink(
+      '${report['sport']} · ${reportDateText(context, report['evaluationDate'])}',
+      Icons.insights,
+      () => openPage(context, PlayerReport(auth: auth, id: report['id'])),
+      subtitle: details.isEmpty ? null : details.join(' · '),
+    );
+  }
 }
 
 class PlayerReport extends StatelessWidget {
@@ -50,145 +76,183 @@ class PlayerReport extends StatelessWidget {
       auth: auth,
       path: '/api/v1/guardian/evaluations/$id/report',
       builder: (context, value) {
-        final d = obj(value);
+        final report = obj(value);
+        if (report['id'] is String &&
+            textOf(report['id']).toLowerCase() != id.toLowerCase()) {
+          return gList([const EmptyMessage('هذا التقرير غير متاح.')]);
+        }
+        final football = report['isFootballReport'] == true;
+        final position = report['footballPosition']?.toString().trim() ?? '';
+        final sport = report['sport']?.toString().trim() ?? '';
+        final evaluator = report['evaluator']?.toString().trim() ?? '';
+        final period = report['reportingPeriod']?.toString().trim() ?? '';
+        final date = DateTime.tryParse(day(report['evaluationDate']));
+        final showPeriod =
+            period.isNotEmpty &&
+            (date == null ||
+                canonicalNumericInput(period) !=
+                    canonicalNumericInput(
+                      MaterialLocalizations.of(context).formatMonthYear(date),
+                    ));
+        final note = report['generalNotes']?.toString().trim() ?? '';
+        final stats = report['performanceMean'];
+        final mean = stats is Map ? stats['value'] : null;
+        final scored = stats is Map
+            ? stats['scoredCriteria'] ?? report['scoredCriteria']
+            : report['scoredCriteria'];
+        final applicable = stats is Map
+            ? stats['applicableCriteria'] ?? report['totalApplicableCriteria']
+            : report['totalApplicableCriteria'];
+        final overall = report['overallScore'];
+        final recordedAxes = {
+          if (football)
+            for (final axis in rows(report['axes'] ?? []))
+              if (validAssessment(axis['value'])) axis['axis']: axis,
+        };
+        final axes = [
+          for (final name in _footballAxes)
+            if (recordedAxes[name] case final Json axis) axis,
+        ];
+        final criteria = rows(report['criteria'] ?? [])
+            .where((item) => validAssessment(item['score']))
+            .toList();
+        final colors = Theme.of(context).colorScheme;
+
         return gList([
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            children: [
-              Chip(label: UiText(textOf(d['reportingPeriod']))),
-              Chip(label: UiText(day(d['evaluationDate']))),
-            ],
-          ),
           GCard(
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                PlayerAvatar(
-                  textOf(d['player']),
-                  auth: auth,
-                  reference: d['photoReference'],
-                  size: 54,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      UiText(
-                        textOf(d['player']),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (d['isFootballReport'] == true)
-                        UiText(
-                          textOf(d['footballPosition']),
-                          style: TextStyle(
-                            color: ExperienceColors.positive(context),
+                Row(
+                  children: [
+                    PlayerAvatar(
+                      textOf(report['player']),
+                      auth: auth,
+                      reference: report['photoReference'],
+                      size: 54,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          UiText(
+                            textOf(report['player']),
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                      UiText(
-                        d['performanceMean'] is Map &&
-                                obj(d['performanceMean'])['value'] is num
-                            ? performanceScoreText(
-                                obj(d['performanceMean'])['value'] as num,
-                              )
-                            : '—',
-                        style: const TextStyle(
-                          fontSize: 38,
-                          fontWeight: FontWeight.bold,
-                        ),
+                          if (sport.isNotEmpty) UiText(sport),
+                          if (football && position.isNotEmpty)
+                            UiText(
+                              position,
+                              style: TextStyle(
+                                color: ExperienceColors.positive(context),
+                              ),
+                            ),
+                        ],
                       ),
-                      UiText(
-                        'متوسط الأداء',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                UiText(
+                  [
+                    reportDateText(context, report['evaluationDate']),
+                    if (evaluator.isNotEmpty) evaluator,
+                  ].join(' · '),
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+                if (showPeriod) UiText(period),
+                const Divider(height: 20),
+                UiText(
+                  'متوسط الأداء',
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    UiText(
+                      validAssessment(mean)
+                          ? performanceScoreText(mean)
+                          : 'غير متاح',
+                      style: TextStyle(
+                        fontSize: validAssessment(mean) ? 30 : 17,
+                        fontWeight: FontWeight.w800,
                       ),
+                    ),
+                    if (validAssessment(mean)) const UiText('من 100'),
+                  ],
+                ),
+                if (validAssessment(overall))
+                  UiText('التقييم المركب · ${performanceScoreText(overall)}'),
+                if (scored is num && applicable is num && applicable > 0)
+                  UiText(
+                    'الدرجات المسجّلة $scored من $applicable',
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+          if (axes.isNotEmpty)
+            GCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Heading('محاور الأداء'),
+                  if (axes.length == _footballAxes.length) RadarChart(axes),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 6,
+                    children: [
+                      for (final axis in axes)
+                        UiText(
+                          '${radarAxisName(axis['axis'])}: ${performanceScoreText(axis['value'])}',
+                        ),
                     ],
                   ),
-                ),
-                if (d['isFootballReport'] == true)
-                  SizedBox(
-                    width: 122,
-                    child: RadarChart(rows(d['axes']), compact: true),
-                  ),
-              ],
-            ),
-          ),
-          if (d['performanceMean'] is Map)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: UiText(
-                '${obj(d['performanceMean'])['scoredCriteria']} من ${obj(d['performanceMean'])['applicableCriteria']} معايير منشورة · غير المقيم لا يدخل بصفر',
-                style: const TextStyle(fontSize: 11),
+                ],
               ),
             ),
-          if (d['overallScore'] is num)
-            UiText(
-              'التقييم المركب · ${performanceScoreText(d['overallScore'] as num)}',
-              style: const TextStyle(fontSize: 12),
-            ),
-          if (d['isFootballReport'] == true) ...[
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                for (final a in rows(
-                  d['axes'],
-                ).where((a) => validAssessment(a['value'])))
-                  UiText('${label(a['axis'])}: ${textOf(a['value'])}'),
-              ],
-            ),
-          ],
-          const SizedBox(height: 18),
           Facts([
-            ('العمر', textOf(d['age'])),
-            ('الطول · سم', textOf(d['heightCm'])),
-            ('الوزن · كجم', textOf(d['weightKg'])),
-            ('القدم المفضلة', label(d['preferredFoot'])),
+            ('العمر', textOf(report['age'])),
+            ('الطول · سم', textOf(report['heightCm'])),
+            ('الوزن · كجم', textOf(report['weightKg'])),
+            if (football) ('القدم المفضلة', label(report['preferredFoot'])),
           ]),
-          UiText(
-            'اكتمال التقييم ${textOf(d['completenessPercentage'])}% · القيم غير المسجلة ليست صفرًا',
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const Heading('المعايير التفصيلية'),
-          for (final c in rows(
-            d['criteria'],
-          ).where((c) => validAssessment(c['score'])))
+          const Heading('الدرجات حسب المعيار'),
+          if (criteria.isEmpty)
+            const EmptyMessage('لا توجد درجات منشورة في هذا التقرير.'),
+          for (final item in criteria)
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Expanded(child: UiText(textOf(c['name']))),
+                      Expanded(child: UiText(textOf(item['name']))),
                       UiText(
-                        textOf(c['score']),
+                        performanceScoreText(item['score']),
                         style: TextStyle(
                           fontSize: 23,
                           fontWeight: FontWeight.bold,
-                          color: scoreColor(c['score'], context: context),
+                          color: scoreColor(item['score'], context: context),
                         ),
                       ),
                     ],
                   ),
-                  if (c['notes'] != null) UiText(c['notes']),
+                  if (item['notes'] case final String text
+                      when text.trim().isNotEmpty)
+                    UiText(text),
                 ],
               ),
             ),
-          const Heading('ملاحظات المدرب'),
-          UiText(d['generalNotes'] ?? 'لا توجد ملاحظات منشورة.'),
-          UiText(
-            'المدرب: ${d['evaluator']}',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
+          if (note.isNotEmpty) ...[
+            const Heading('ملاحظات المدرب'),
+            UiText(note),
+          ],
         ]);
       },
     ),

@@ -34,21 +34,14 @@ void main() {
       'العمليات',
       'يوم الأكاديمية',
     ),
-    (
-      'coach',
-      'Coach',
-      '01099900020',
-      CoachHome,
-      'الحضور\nوالتقييم',
-      'المجموعات المسندة',
-    ),
+    ('coach', 'Coach', '01099900020', CoachHome, 'المجموعات', 'مجموعات مسندة'),
     (
       'guardian',
       'Guardian',
       '01099900100',
       GuardianHome,
       'التقييمات',
-      'رحلة أبنائك',
+      'أبنائي',
     ),
   ];
 
@@ -132,6 +125,27 @@ void main() {
       }
       expect(loaded, findsWidgets);
       await binding.takeScreenshot('phase-cloud-$label');
+      if (role == 'Coach') {
+        final cards = find.byType(CoachGroupCard);
+        expect(cards, findsWidgets);
+        final openGroup = find.descendant(
+          of: cards.first,
+          matching: find.text('فتح المجموعة'),
+        );
+        await tester.ensureVisible(openGroup);
+        await tester.tap(openGroup);
+        final roster = find.text('لاعبو المجموعة');
+        final groupDeadline = Stopwatch()..start();
+        while (roster.evaluate().isEmpty &&
+            groupDeadline.elapsed.inSeconds < 60) {
+          await tester.pump(const Duration(milliseconds: 150));
+        }
+        expect(find.byType(CoachGroup), findsOneWidget);
+        expect(roster, findsWidgets);
+        await tester.tap(find.byType(BackButton).last);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.byType(CoachHome), findsOneWidget);
+      }
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());

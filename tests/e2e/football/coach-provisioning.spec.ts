@@ -5,7 +5,7 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   await page.goto("/login");
   await page.getByLabel("البريد الإلكتروني").fill("owner.football@example.test");
   await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
-  await page.getByRole("button", { name: "دخول آمن" }).click(); await expect(page).toHaveURL(/dashboard/);
+  await page.getByRole("button", { name: "تسجيل الدخول", exact: true }).click(); await expect(page).toHaveURL(/dashboard/);
   const sports = await page.request.get("/api/v1/manage/structure/sports");
   expect((await sports.json()).map((s: { arabicName: string }) => s.arabicName)).toEqual(["كرة القدم"]);
   await page.goto("/dashboard/academy/coaches");
@@ -17,10 +17,19 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" }); await info.attach("Coach create form", { path: screenshot, contentType: "image/png" });
   const phone = `011${String(Date.now()).slice(-8)}`;
   await page.getByLabel("الاسم بالعربية").fill(`مدرب رحلة عرض ${width}`);
-  await page.getByLabel("رقم الهاتف المصري").fill(phone);
   await page.getByLabel("براعم 2018 — مجموعة أ").check();
+  const mobile = page.getByLabel("رقم الهاتف المصري");
+  const save = page.getByRole("button", { name: "حفظ المدرب", exact: true });
+  for (const invalid of [phone.slice(1), `${phone}1`, `013${phone.slice(3)}`, `+971${phone.slice(1)}`]) {
+    await mobile.fill(invalid);
+    const rejected = page.waitForResponse(response => response.url().endsWith("/api/v1/manage/coaches") && response.request().method() === "POST");
+    await save.click();
+    expect((await rejected).status()).toBe(400);
+    await expect(page.getByRole("alert").filter({ hasText: "اكتب رقم موبايل مصريًا" })).toBeVisible();
+  }
+  await mobile.fill(width === 390 ? `+20 ${phone}` : phone);
   const created = page.waitForResponse(response => response.url().endsWith("/api/v1/manage/coaches") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "حفظ المدرب", exact: true }).click();
+  await save.click();
   const response = await created; expect(response.status()).toBe(201);
   const { membershipId } = await response.json();
   await expect(page).toHaveURL(/\/academy\/coaches$/);

@@ -89,16 +89,26 @@ public static partial class AssetEndpoints
         {
             // Expensive decoding precedes locks. Live authority/audience are checked again below
             // before publishing; a permission or consent revoked during processing still wins.
-            if (purpose is "Media" or "Photo" or "SelfPhoto")
+            if (purpose is "Media" or "Photo" or "SelfPhoto" or "Proof")
             {
                 await using var original = file.OpenReadStream();
                 processed = await context.RequestServices.GetRequiredService<PrivateMediaProcessor>().Prepare(original, detected, Root(config, env), context.RequestAborted);
             }
         }
-        catch (MediaProcessingException error) { return Results.Json(new { message = error.Message }, statusCode: error.Status); }
-        using var prepared = processed;
-        await using var transaction=purpose is "Media" or "Photo" or "SelfPhoto"?await db.Database.BeginTransactionAsync():null;
-        if(purpose is "Media" or "Photo" or "SelfPhoto")
+        catch (MediaProcessingException error)
+        {
+            var message = purpose == "Proof" && error.Status == StatusCodes.Status400BadRequest
+                ? "صورة الإيصال تالفة أو غير قابلة للقراءة. اختر صورة JPEG أو PNG أو WebP واضحة لا تتجاوز 8 ميجابايت."
+                : error.Message;
+            if (purpose == "Media" && error.Status == StatusCodes.Status503ServiceUnavailable)
+                return Results.Json(new { message, code = "media_inspection_unavailable" }, statusCode: error.Status);
+            return Results.Json(new { message }, statusCode: error.Status);
+        }
+        using var decoded = processed;
+        // A reviewed payment proof remains the original file after decoding validates it.
+        var prepared = purpose == "Proof" ? null : decoded;
+        await using var transaction=purpose is "Media" or "Photo" or "SelfPhoto" or "Proof"?await db.Database.BeginTransactionAsync():null;
+        if(purpose is "Media" or "Photo" or "SelfPhoto" or "Proof")
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"grants:{t.AcademyId}:{t.MembershipId}"},0))");
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"AcademyMemberships\" WHERE \"Id\"={t.MembershipId} AND \"AcademyId\"={t.AcademyId} FOR SHARE");

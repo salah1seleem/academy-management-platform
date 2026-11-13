@@ -132,7 +132,7 @@ class _MemoriesState extends State<MediaMemoriesPage>
                   children: [
                     const Icon(Icons.collections_outlined),
                     Text(
-                      l('كل لحظة في مكانها', 'Every moment in its place'),
+                      l('صور وفيديوهات الشهر', 'Monthly photos and videos'),
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text('${d['month']} · ${d['from']} — ${d['to']}'),

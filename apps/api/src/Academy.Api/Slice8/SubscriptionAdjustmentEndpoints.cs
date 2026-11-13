@@ -4,6 +4,7 @@ using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice8;
@@ -24,8 +25,23 @@ public static class SubscriptionAdjustmentEndpoints
             .RequireAuthorization(AcademyPermissions.GuardianOwnRenewal);
     }
 
-    private static async Task<IResult> PeriodDetails(Guid id, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock,ClaimsPrincipal actor,IAuthorizationService authorization, SubscriptionAdjustmentService service)
+    internal static async Task<bool> AllowsPeriodAction(TenantMembership tenant, FoundationDbContext db, ClaimsPrincipal actor,
+        IAuthorizationService authorization, string permission, string path, string method, HttpContext? resource = null)
     {
+        if (!(await authorization.AuthorizeAsync(actor, resource, permission)).Succeeded) return false;
+        if ((db.SportScopeRestricted || tenant.AdditionalContext) && !MembershipScope.AllowsNarrowSportPath(path, method)) return false;
+        if (tenant.Role != AcademyRole.AcademyAdmin ||
+            !await db.AcademyMemberships.AnyAsync(m => m.Id == tenant.MembershipId && m.UseActionGrants)) return true;
+        var module = StaffAccessRules.ForPath(path);
+        var operation = StaffAccessRules.Operation(method, path);
+        return await db.StaffActionGrants.AnyAsync(g => g.MembershipId == tenant.MembershipId && g.IsActive && g.Module == module &&
+                g.Read && (operation == "Read" || operation == "Add" && g.Add || operation == "Edit" && g.Edit)) &&
+            await StaffWorkflowAccess.Allows(db, tenant.MembershipId, path, method);
+    }
+
+    private static async Task<IResult> PeriodDetails(Guid id, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock,ClaimsPrincipal actor,IAuthorizationService authorization, SubscriptionAdjustmentService service, HttpContext http)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
         var current = (await tenant.ResolveAsync())!;
         var period = await db.SubscriptionPeriods.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id)
             .Select(x => new
@@ -35,14 +51,22 @@ public static class SubscriptionAdjustmentEndpoints
                 player = x.SportEnrollment.Player.ArabicName, playerCode = x.SportEnrollment.Player.PlayerCode,
                 sport = x.SportEnrollment.Sport.ArabicName, branch = x.SportEnrollment.Branch.ArabicName,
                 group = x.SportEnrollment.TrainingGroup == null ? "في انتظار المجموعة" : x.SportEnrollment.TrainingGroup.ArabicName, x.PriceSnapshot, x.CurrencySnapshot,
+                enrollmentActive = x.SportEnrollment.IsActive && x.SportEnrollment.Player.IsActive,
                 receiptId = db.Receipts.Where(r => r.AcademyId == current.AcademyId && r.CollectionId == x.CollectionId).Select(r => (Guid?)r.Id).SingleOrDefault()
             }).SingleOrDefaultAsync();
         if (period is null) return Results.NotFound();
         var financial=await Academy.Api.Slice2.MemberSubscriptionValues.FinancialValuesVisible(current,actor,authorization,db)||
             (await authorization.AuthorizeAsync(actor,null,AcademyPermissions.PaymentRead)).Succeeded&&
             await StaffWorkflowAccess.Allows(db,current.MembershipId,"/api/v1/subscriptions/payments","GET");
+        var receiptVisible = period.receiptId.HasValue && await AllowsPeriodAction(current, db, actor, authorization,
+            AcademyPermissions.CollectionRead, $"/api/v1/subscriptions/receipts/{period.receiptId}", "GET");
+        Task<bool> CanAdjust(string action) => AllowsPeriodAction(current, db, actor, authorization,
+            AcademyPermissions.SubscriptionAdjustmentManage, $"/api/v1/subscriptions/periods/{id}/{action}", "POST");
+        var canRenew = period.enrollmentActive && await AllowsPeriodAction(current, db, actor, authorization,
+            AcademyPermissions.SubscriptionRenewManage, "/api/v1/subscriptions/admin-renewals", "POST");
         var waiver = current.Role == Academy.Infrastructure.Tenancy.AcademyRole.AcademyOwner ? await db.FreeTrainingApprovals.AsNoTracking().Where(a => a.AcademyId == current.AcademyId && db.SubscriptionPeriods.Any(p => p.Id == id && p.FreeTrainingApprovalId == a.Id)).Select(a => new { a.Id, a.Reason, a.WaivedAmount, a.Currency, a.CreatedAtUtc, approvedBy = db.Users.Where(u => u.Id == a.ActorUserId).Select(u => u.DisplayName).Single() }).SingleOrDefaultAsync() : null;
-        var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, clock.Today);
+        var today = clock.Today;
+        var status = SubscriptionPeriodState.Resolve(period.Status, period.StartDate, period.EndDate, period.planType, period.RemainingSessions, today);
         var history = await db.SubscriptionAdjustments.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.SubscriptionPeriodId == id)
             .OrderByDescending(x => x.PerformedAtUtc)
             .Select(x => new
@@ -56,7 +80,9 @@ public static class SubscriptionAdjustmentEndpoints
             planType = period.planType.ToString(), period.StartDate, period.EndDate, period.FrozenFromDate,
             period.InitialSessions, period.RemainingSessions, status = status.ToString(), period.Version,
             priceSnapshot=financial?(decimal?)period.PriceSnapshot:null,currencySnapshot=financial?period.CurrencySnapshot:null,
-            receiptId=financial?period.receiptId:null,financialValuesVisible=financial,origin = period.Origin.ToString(),
+            receiptId=receiptVisible?period.receiptId:null,financialValuesVisible=financial,origin = period.Origin.ToString(),
+            asOfDate = today, canRenew, canPause = await CanAdjust("freeze"), canDeductDays = await CanAdjust("days"),
+            canCancel = await CanAdjust("cancel"),
             pricing = financial?await Academy.Api.Operations.ManualEnrollmentDiscount.PriceForPeriod(db,current.AcademyId,id):null, waiver, adjustments = history,
             canGrantSessions = period.serviceKind == AcademyServiceKind.Training && period.planType != SubscriptionPlanType.Duration &&
                 period.InitialSessions.HasValue && period.RemainingSessions.HasValue && period.Status != SubscriptionPeriodStatus.Cancelled &&

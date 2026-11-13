@@ -1,4 +1,4 @@
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {FinancialReport,FinancialSourceTiles} from './reports';
 let scope='from=2026-09-21&to=2026-10-21&branchId=b1';
@@ -33,6 +33,48 @@ describe('Merged collection ledger',()=>{
    fireEvent.click(screen.getByRole('button',{name:'مسح'}));
    await waitFor(()=>expect(screen.getByRole('link',{name:'تصدير CSV'})).toHaveAttribute('href','/api/v1/reports/financial/export?allDates=true'));
    await screen.findByText('LEDGER-1');
+ });
+
+ it('renders a historical collection as a paid day and opens its receipt with the applied page and scope', async () => {
+   scope += '&provider=Cash&page=2&next=https://example.invalid';
+   global.fetch = vi.fn(async input => {
+     const url = String(input);
+     if (url.includes('structure/options')) return Response.json({branches:[],sports:[],groups:[]});
+     if (url.includes('subscriptions/plans')) return Response.json([]);
+     return Response.json({currency:'EGP',totalCount:26,totalAmount:600,items:[{
+       collectionId:'historical',receiptId:'original',receiptNumber:'HIST-600',player:'لاعب اصطناعي',amount:600,currency:'EGP',
+       provider:'HistoricalImport',paymentMethod:'Cash',confirmedAtUtc:'2026-10-21T10:00:00Z',historicalPaidOn:'2026-10-21',
+     }]});
+   }) as typeof fetch;
+   render(<FinancialReport/>);
+   const row = await screen.findByRole('row',{name:/HIST-600/});
+   expect(row.querySelector('time')).toHaveAttribute('datetime','2026-10-21');
+   expect(row).toHaveTextContent('نقدي / تحصيل سابق');
+   expect(row).not.toHaveTextContent('HistoricalImport');
+   expect(within(row).getByRole('link',{name:'الإيصال'})).toHaveAttribute('href','/dashboard/subscriptions/receipts/original?from=2026-09-21&to=2026-10-21&branchId=b1&provider=Cash&page=2&report=financial');
+ });
+
+ it('keeps the last applied filter after invalid input and retries a transient failure without changing scope', async () => {
+   const requests: string[] = [];
+   global.fetch = vi.fn(async input => {
+     const url = String(input);
+     if (url.includes('structure/options')) return Response.json({branches:[],sports:[],groups:[]});
+     if (url.includes('subscriptions/plans')) return Response.json([]);
+     requests.push(url);
+     if (requests.length === 1) return new Response(null,{status:503});
+     return Response.json({currency:'EGP',totalCount:0,totalAmount:0,items:[]});
+   }) as typeof fetch;
+   render(<FinancialReport/>);
+   await screen.findByText('تعذر تحميل التقرير المالي.');
+   fireEvent.click(screen.getByRole('button',{name:'إعادة المحاولة'}));
+   await screen.findByText('لا توجد تحصيلات مؤكدة أو استردادات ضمن الفلاتر.');
+   expect(requests).toHaveLength(2);
+   expect(requests[0]).toBe(requests[1]);
+   fireEvent.change(screen.getByLabelText('إلى تاريخ'),{target:{value:'2026-09-01'}});
+   fireEvent.click(screen.getByRole('button',{name:'تطبيق الفلاتر'}));
+   expect(screen.getByRole('alert')).toHaveTextContent('تاريخ البداية يجب أن يسبق النهاية');
+   expect(requests).toHaveLength(2);
+   expect(screen.getByRole('link',{name:'تصدير CSV'})).toHaveAttribute('href',expect.stringContaining('to=2026-10-21'));
  });
 });
 

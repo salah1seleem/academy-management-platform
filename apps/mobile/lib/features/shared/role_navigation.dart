@@ -1,6 +1,6 @@
 import 'role_home_navigation.dart';
 import '../guardian/guardian_progress.dart';
-import 'directory_cards.dart';
+import 'directory_cards.dart' show PlayerDirectoryCard;
 import '../coach/coach_evaluation.dart';
 import 'coach_tasks.dart';
 import 'mobile_push.dart';
@@ -14,6 +14,7 @@ import '../owner/native_staff_management.dart';
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import 'experience_ui.dart';
@@ -33,7 +34,7 @@ import '../admin/native_player_workspace.dart';
 import '../admin/native_renewal.dart';
 import '../admin/native_renewal_proof_review.dart';
 import '../admin/native_product_orders.dart';
-import 'academy_news.dart';
+import '../admin/native_enrollment_payment_read.dart';
 import 'community_ads.dart';
 import 'matches.dart';
 import 'native_match_management.dart';
@@ -46,6 +47,7 @@ import 'role_agenda.dart';
 import 'help_center.dart';
 import 'assigned_followups.dart';
 import 'native_academy_content.dart';
+import 'staff_capabilities.dart';
 
 class NativeRoleTabs extends StatefulWidget {
   final AuthController auth;
@@ -123,11 +125,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
           ]
         : [
             ('الرئيسية', 'Home', Icons.home_outlined),
-            (
-              'الحضور والتقييم',
-              'Attendance & evaluation',
-              Icons.fact_check_outlined,
-            ),
+            ('المجموعات', 'Groups', Icons.groups_outlined),
             (
               matchLabel,
               swimming ? 'Competitions' : 'Matches',
@@ -146,12 +144,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
     final Widget page = selected == 0
         ? widget.home
         : isMore
-        ? NativeMore(
-            auth: widget.auth,
-            role: widget.role,
-            account: widget.account,
-            environment: widget.environment,
-          )
+        ? NativeMore(auth: widget.auth, role: widget.role)
         : guardian
         ? selected == 1
               ? RoleAgenda(auth: widget.auth, guardian: true)
@@ -200,7 +193,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
         : admin
         ? (selected == 1 ? 'operations' : 'attendance')
         : selected == 1
-        ? 'evaluations'
+        ? 'groups'
         : 'matches';
     final header = ExperienceHeader(
       auth: widget.auth,
@@ -286,13 +279,7 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
                                       ? Icons.home_rounded
                                       : d.$3,
                                 ),
-                          label: localized(
-                            context,
-                            d.$1 == 'الحضور والتقييم'
-                                ? 'الحضور\nوالتقييم'
-                                : d.$1,
-                            d.$2,
-                          ),
+                          label: localized(context, d.$1, d.$2),
                         ),
                     ],
                   ),
@@ -304,161 +291,306 @@ class _NativeRoleTabsState extends State<NativeRoleTabs> {
 }
 
 class NativeMore extends StatelessWidget {
+  const NativeMore({super.key, required this.auth, required this.role});
   final AuthController auth;
-  final String role, environment;
-  final Widget account;
-  const NativeMore({
-    super.key,
-    required this.auth,
-    required this.role,
-    required this.account,
-    required this.environment,
-  });
+  final String role;
+
   @override
-  Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'المزيد', 'More'),
-    child: gList([
-      const Heading('أدوات الأكاديمية'),
-      if (role == 'AcademyOwner')
-        GLink(
-          'الموظفون والصلاحيات',
-          Icons.badge_outlined,
-          () => openPage(context, NativeStaffManagement(auth: auth)),
-        ),
-      if (role == 'AcademyOwner' || role == 'AcademyAdmin' || role == 'Coach')
-        NativeMatchEntry(auth: auth, asLink: true),
-      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
-        NativeProductOrdersEntry(auth: auth),
-      if (role == 'Guardian') ...[
-        GLink(
-          localized(context, 'التغذية والوجبات', 'Nutrition & meals'),
-          Icons.restaurant_outlined,
-          () => openPage(
-            context,
-            GuardianHub(
-              auth: auth,
-              section: 'nutrition',
-              environment: environment,
-            ),
+  Widget build(BuildContext context) {
+    final owner = role == 'AcademyOwner';
+    final admin = role == 'AcademyAdmin';
+    final coach = role == 'Coach';
+    return GuardianPage(
+      title: localized(context, 'المزيد', 'More'),
+      child: gList([
+        if (owner) ...[
+          Heading(
+            localized(context, 'إدارة الأكاديمية', 'Academy administration'),
           ),
-        ),
-        GLink(
-          localized(context, 'تقدم أبنائي', 'Children’s progress'),
-          Icons.insights_outlined,
-          () => openPage(
+          _moreLink(
             context,
-            GuardianHub(
-              auth: auth,
-              section: 'evaluations',
-              environment: environment,
-            ),
+            'الموظفون والصلاحيات',
+            Icons.badge_outlined,
+            NativeStaffManagement(auth: auth),
           ),
-        ),
-      ],
-      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
-        FacilityBoardLink(auth: auth),
-      if (role == 'Guardian') SponsorPreferenceEntry(auth: auth),
-      if (role == 'AcademyOwner')
-        GLink(
-          'إعدادات الرئيسية',
-          Icons.dashboard_customize_outlined,
-          () => openPage(context, OwnerHomeSettingsPage(auth: auth)),
-        ),
-      if (role == 'AcademyOwner')
-        GLink(
-          'الإعلانات',
-          Icons.campaign_outlined,
-          () => openPage(context, OwnerCommunityCampaigns(auth: auth)),
-        ),
-      CoachTasksEntry(auth: auth),
-      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
-        AttendanceCorrectionsEntry(auth: auth),
-      if (role == 'Coach')
-        GLink(
-          'نجوم فريقي الشهرية',
-          Icons.star_outline_rounded,
-          () => openPage(context, CoachMonthlyStars(auth: auth)),
-        ),
-      if (role == 'Coach')
-        GLink(
-          localized(context, 'مجموعاتي', 'My groups'),
-          Icons.groups_outlined,
-          () => openPage(context, CoachGroupsPage(auth: auth)),
-        ),
-      if (role == 'Coach' || role == 'AcademyAdmin')
-        GLink(
-          localized(context, 'سجل الحضور', 'Attendance history'),
-          Icons.access_time_outlined,
-          () => openPage(context, StaffWorkPeriodsPage(auth: auth)),
-        ),
-      if (role == 'AcademyAdmin')
-        RemoteBody(
-          auth: auth,
-          path: '/api/v1/my-permissions',
-          builder: (context, value) =>
-              value is List && value.contains('followups.read')
-              ? GLink(
+          _publishingLink(context, auth),
+          _moreLink(
+            context,
+            localized(context, 'الحملات الإعلانية', 'Ad campaigns'),
+            Icons.campaign_outlined,
+            OwnerCommunityCampaigns(auth: auth),
+          ),
+          Heading(
+            localized(context, 'التشغيل والمتابعة', 'Operations & follow-up'),
+          ),
+          CoachTasksEntry(auth: auth),
+          AttendanceCorrectionsEntry(auth: auth),
+          NativeMatchEntry(auth: auth, asLink: true),
+          NativeProductOrdersEntry(auth: auth),
+          FacilityBoardLink(auth: auth),
+        ],
+        if (coach) ...[
+          Heading(localized(context, 'الفريق', 'Team')),
+          CoachTasksEntry(auth: auth),
+          _moreLink(
+            context,
+            'نجوم فريقي الشهرية',
+            Icons.star_outline_rounded,
+            CoachMonthlyStars(auth: auth),
+          ),
+          NativeMatchEntry(auth: auth, asLink: true),
+        ],
+        if (admin)
+          ListenableBuilder(
+            listenable: auth,
+            builder: (context, _) {
+              final session = auth.session, member = session?.selected;
+              if (member == null ||
+                  member.role != 'AcademyAdmin' ||
+                  auth.busy) {
+                return const SizedBox.shrink();
+              }
+              return _AdminMoreTools(
+                key: ValueKey((
+                  auth,
+                  session?.userId,
+                  member.academyId,
+                  member.id,
+                  member.contextRevision,
+                )),
+                auth: auth,
+              );
+            },
+          ),
+        if (admin || coach) ...[
+          Heading(localized(context, 'دوامي ومستحقاتي', 'My work & pay')),
+          _moreLink(
+            context,
+            localized(context, 'سجل دوامي', 'My attendance history'),
+            Icons.access_time_outlined,
+            StaffWorkPeriodsPage(auth: auth),
+          ),
+          _moreLink(
+            context,
+            localized(context, 'طلب إثبات حضوري', 'My attendance claim'),
+            Icons.fact_check_outlined,
+            StaffAttendanceExceptionPage(auth: auth),
+          ),
+          _moreLink(
+            context,
+            localized(
+              context,
+              'السلف والمبالغ الإضافية',
+              'Advances & extra amounts',
+            ),
+            Icons.add_card_outlined,
+            StaffAmounts(auth: auth),
+          ),
+          if (coach)
+            _moreLink(
+              context,
+              localized(
+                context,
+                'اتفاقات أجر الخاص',
+                'Private coaching agreements',
+              ),
+              Icons.receipt_long_outlined,
+              CoachAgreementsPage(auth: auth),
+            ),
+        ],
+        Heading(localized(context, 'التفضيلات', 'Preferences')),
+        if (owner)
+          _moreLink(
+            context,
+            'إعدادات الرئيسية',
+            Icons.dashboard_customize_outlined,
+            OwnerHomeSettingsPage(auth: auth),
+          ),
+        MobilePushToggle(auth: auth),
+        if (!coach) HelpEntry(auth: auth),
+      ]),
+    );
+  }
+}
+
+GLink _moreLink(
+  BuildContext context,
+  String label,
+  IconData icon,
+  Widget page,
+) => GLink(label, icon, () => openPage(context, page));
+
+GLink _publishingLink(BuildContext context, AuthController auth) => _moreLink(
+  context,
+  'الأخبار والفعاليات والإعلانات',
+  Icons.newspaper_outlined,
+  NativeAcademyContent(auth: auth),
+);
+
+class _AdminMoreTools extends StatefulWidget {
+  const _AdminMoreTools({super.key, required this.auth});
+  final AuthController auth;
+
+  @override
+  State<_AdminMoreTools> createState() => _AdminMoreToolsState();
+}
+
+class _AdminMoreToolsState extends State<_AdminMoreTools>
+    with AutomaticKeepAliveClientMixin<_AdminMoreTools> {
+  late var staffAccess = _read(StaffCapabilities.load(widget.auth));
+  Future<bool?>? matchAccess;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  Future<T?> _read<T>(Future<T> request) async {
+    try {
+      return await request;
+    } on ApiFailure catch (error) {
+      if (error.status == 401 || error.status == 403) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final matches =
+        BrandScope.maybeOf(context)?.features.contains('matches') ?? true;
+    if (matches) {
+      matchAccess ??= _read(NativeMatchEntry.canRead(widget.auth));
+    } else {
+      matchAccess = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return FutureBuilder<StaffCapabilities?>(
+      future: staffAccess,
+      builder: (context, staff) => FutureBuilder<bool?>(
+        future: matchAccess,
+        builder: (context, match) {
+          final access = staff.connectionState == ConnectionState.done
+              ? staff.data
+              : null;
+          final hasMatches =
+              matchAccess != null &&
+              match.connectionState == ConnectionState.done &&
+              match.data == true;
+          final loading =
+              staff.connectionState == ConnectionState.waiting ||
+              match.connectionState == ConnectionState.waiting;
+          final staffFailed =
+              staff.connectionState == ConnectionState.done && staff.hasError;
+          final matchFailed =
+              matchAccess != null &&
+              match.connectionState == ConnectionState.done &&
+              match.hasError;
+          final failed = staffFailed || matchFailed;
+          final auth = widget.auth;
+          final links = [
+            if (access != null) ...[
+              if (access.permissions.contains('followups.read'))
+                _moreLink(
+                  context,
                   'متابعاتي المسندة',
                   Icons.task_alt,
-                  () => openPage(context, AssignedFollowUpsPage(auth: auth)),
-                )
-              : const SizedBox.shrink(),
-        ),
-      if (role == 'Coach' || role == 'AcademyAdmin')
-        GLink(
-          localized(context, 'طلب إثبات حضوري', 'My attendance claim'),
-          Icons.fact_check_outlined,
-          () => openPage(context, StaffAttendanceExceptionPage(auth: auth)),
-        ),
-      if (role == 'AcademyAdmin')
-        RemoteBody(
-          auth: auth,
-          path: '/api/v1/my-permissions',
-          builder: (context, value) =>
-              value is List && value.contains('staff.provision')
-              ? GLink(
+                  AssignedFollowUpsPage(auth: auth),
+                ),
+              if (canAssignCoachTasks(access))
+                _moreLink(
+                  context,
+                  'مهام الحضور والتقييم',
+                  Icons.task_alt,
+                  CoachTasksPage(auth: auth),
+                ),
+              if (access.permissions.contains('staff.provision'))
+                _moreLink(
+                  context,
                   localized(
                     context,
                     'مراجعة إثبات حضور الموظفين',
                     'Review staff attendance claims',
                   ),
                   Icons.rule_outlined,
-                  () => openPage(
-                    context,
-                    StaffAttendanceExceptionPage(auth: auth, review: true),
+                  StaffAttendanceExceptionPage(auth: auth, review: true),
+                ),
+              if (access.canReadAttendanceCorrections)
+                _moreLink(
+                  context,
+                  'طلبات تصحيح الحضور',
+                  Icons.fact_check_outlined,
+                  AttendanceCorrectionsPage(auth: auth),
+                ),
+            ],
+            if (hasMatches) NativeMatchEntry.link(context, auth),
+            if (access != null) ...[
+              if (access.canReadProductOrders)
+                _moreLink(
+                  context,
+                  'طلبات المنتجات',
+                  Icons.shopping_bag_outlined,
+                  NativeProductOrders(auth: auth),
+                ),
+              if (access.permissions.contains('facilities.read'))
+                _moreLink(
+                  context,
+                  localized(context, 'المرافق والحارات', 'Facilities & lanes'),
+                  Icons.pool_outlined,
+                  FacilityBoardPage(auth: auth),
+                ),
+              if (access.scope['useActionGrants'] == true
+                  ? access.explicitAction('news', 'Read')
+                  : access.permissions.contains('content.media.manage'))
+                _publishingLink(context, auth),
+            ],
+          ];
+          if (links.isEmpty && !loading && !failed) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Heading(localized(context, 'مهام الأكاديمية', 'Academy work')),
+              ...links,
+              if (loading)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: LinearProgressIndicator(
+                    semanticsLabel: localized(
+                      context,
+                      'جارٍ تحميل أدوات الإدارة',
+                      'Loading administration tools',
+                    ),
                   ),
-                )
-              : const SizedBox.shrink(),
-        ),
-      if (role == 'Coach' || role == 'AcademyAdmin')
-        GLink(
-          localized(context, 'السلف والمبالغ الإضافية', 'Request extra amount'),
-          Icons.add_card_outlined,
-          () => openPage(context, StaffAmounts(auth: auth)),
-        ),
-      if (role == 'Coach')
-        GLink(
-          localized(
-            context,
-            'اتفاقات أجر الخاص',
-            'Private coaching agreements',
-          ),
-          Icons.receipt_long_outlined,
-          () => openPage(context, CoachAgreementsPage(auth: auth)),
-        ),
-      if (role == 'AcademyOwner' || role == 'AcademyAdmin')
-        NativeContentEntry(auth: auth),
-      if (role == 'Guardian')
-        GLink(
-          localized(context, 'الأخبار', 'News'),
-          Icons.newspaper_outlined,
-          () => openPage(context, AcademyNewsPage(auth: auth)),
-        ),
-      const Heading('التفضيلات والمساعدة'),
-      MobilePushToggle(auth: auth),
-      if (role != 'Coach') HelpEntry(auth: auth),
-    ]),
-  );
+                ),
+              if (failed)
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    if (staffFailed) {
+                      staffAccess = _read(StaffCapabilities.load(auth));
+                    }
+                    if (matchFailed) {
+                      matchAccess = _read(NativeMatchEntry.canRead(auth));
+                    }
+                  }),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: UiText(
+                    localized(
+                      context,
+                      'تعذر تحميل بعض الأدوات · إعادة المحاولة',
+                      'Retry unavailable tools',
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class CoachPlayers extends StatelessWidget {
@@ -637,28 +769,28 @@ class CoachGroupsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: localized(context, 'مجموعاتي', 'My groups'),
-    child: FutureBuilder<List<Object?>>(
-      future: Future.wait([auth.request('GET', '/api/v1/coach/groups')]),
-      builder: (context, data) {
-        if (data.hasError) return const EmptyMessage('تعذر تحميل المجموعات.');
-        if (!data.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final groups = rows(data.data![0]);
+    child: RemoteBody(
+      auth: auth,
+      path: '/api/v1/coach/groups',
+      builder: (context, value) {
+        final groups = rows(value);
         return gList([
-          for (final g in groups)
-            GroupDirectoryCard(
-              group: g,
-              onTap: () => openPage(context, CoachGroup(auth: auth, group: g)),
+          for (final g in groups) CoachGroupCard(auth: auth, group: g),
+          if (groups.isEmpty)
+            EmptyMessage(
+              localized(
+                context,
+                'لا توجد مجموعات مسندة إليك.',
+                'No groups are assigned to you.',
+              ),
             ),
-          if (groups.isEmpty) const EmptyMessage(),
         ]);
       },
     ),
   );
 }
 
-class NativePaymentRequests extends StatelessWidget {
+class NativePaymentRequests extends StatefulWidget {
   final AuthController auth;
   final Map<String, String> filters;
   const NativePaymentRequests({
@@ -667,110 +799,310 @@ class NativePaymentRequests extends StatelessWidget {
     this.filters = const {},
   });
   @override
+  State<NativePaymentRequests> createState() => _NativePaymentRequestsState();
+}
+
+class _NativePaymentRequestsState extends State<NativePaymentRequests> {
+  int revision = 0;
+  final referenceInput = TextEditingController();
+  String reference = '';
+  String? referenceError;
+  late final openedContext = contextKey;
+  static final referencePattern = RegExp(
+    r'^(?:[a-f0-9]{12}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$',
+    caseSensitive: false,
+  );
+  AuthController get auth => widget.auth;
+  Map<String, String> get filters => widget.filters;
+  String get path => Uri(
+    path: '/api/v1/manage/payment-requests',
+    queryParameters: {
+      ...filters,
+      if (filters['from']?.isNotEmpty != true &&
+          filters['to']?.isNotEmpty != true)
+        'allDates': 'true',
+      'status': 'Pending',
+      if (reference.isNotEmpty) 'reference': reference,
+      'page': '1',
+      'pageSize': '25',
+    },
+  ).toString();
+
+  String? get contextKey {
+    final selected = auth.session?.selected;
+    return selected == null
+        ? null
+        : '${auth.session?.userId}:${selected.academyId}:${selected.id}:${selected.contextRevision}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    openedContext;
+  }
+
+  @override
+  void dispose() {
+    referenceInput.dispose();
+    super.dispose();
+  }
+
+  void search(String raw) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final term = raw.trim();
+    if (term.isNotEmpty && !referencePattern.hasMatch(term)) {
+      setState(
+        () => referenceError = 'أدخل رقم الطلب كاملًا كما يظهر في تفاصيله.',
+      );
+      return;
+    }
+    referenceInput.text = term;
+    setState(() {
+      referenceError = null;
+      reference = term;
+      revision++;
+    });
+  }
+
+  Future<void> open(Widget page) async {
+    final expected = contextKey;
+    await openPage(context, page);
+    if (mounted && expected != null && expected == contextKey) {
+      setState(() => revision++);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => filters['type'] == 'Product'
       ? NativeProductOrders(auth: auth, filters: filters)
       : GuardianPage(
           title: localized(context, 'طلبات الدفع', 'Payment requests'),
-          child: RemoteBody(
-            auth: auth,
-            path:
-                '/api/v1/manage/payment-requests?${Uri(queryParameters: {...filters, if (filters['from']?.isNotEmpty != true && filters['to']?.isNotEmpty != true) 'allDates': 'true', 'status': 'Pending'}).query}',
-            builder: (context, value) {
-              final d = obj(value);
-              return gList([
-                Heading(
-                  localized(
-                    context,
-                    '${d['pending']} طلب بانتظار المراجعة',
-                    '${d['pending']} requests awaiting review',
-                  ),
-                ),
-                UiText(
-                  localized(
-                    context,
-                    'اختر طلبًا لعرض تفاصيله والإجراءات المتاحة لصلاحياتك.',
-                    'Choose a request to view its details and available actions.',
-                  ),
-                ),
-                for (final r in rows(d['items']))
-                  GCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        UiText(
-                          textOf(r['player']),
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        UiText('${r['sport']} · ${r['branch']}'),
-                        UiText(textOf(r['plan'])),
-                        if (r['type'] == 'Renewal' && r['hasProof'] != true)
-                          TextButton(
-                            onPressed: () => openPage(
-                              context,
-                              NativeRenewalPayment(
-                                auth: auth,
-                                id: textOf(r['id']),
-                              ),
+          child: ListenableBuilder(
+            listenable: auth,
+            builder: (context, _) =>
+                openedContext == null || openedContext != contextKey
+                ? const SizedBox.shrink()
+                : Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                        child: TextField(
+                          controller: referenceInput,
+                          textDirection: TextDirection.ltr,
+                          style: const TextStyle(fontSize: 13),
+                          textInputAction: TextInputAction.search,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          onSubmitted: search,
+                          onChanged: (_) {
+                            if (referenceError != null)
+                              setState(() => referenceError = null);
+                          },
+                          decoration: InputDecoration(
+                            labelText: ui(context, 'رقم الطلب'),
+                            errorText: referenceError == null
+                                ? null
+                                : ui(context, referenceError!),
+                            errorMaxLines: 3,
+                            suffixIcon: IconButton(
+                              tooltip: ui(context, 'بحث'),
+                              icon: const Icon(Icons.search_rounded),
+                              onPressed: () => search(referenceInput.text),
                             ),
-                            child: const UiText('استكمال طلب التجديد'),
-                          ),
-                        if (r['type'] == 'Renewal' && r['hasProof'] == true)
-                          TextButton(
-                            onPressed: () => openPage(
-                              context,
-                              NativeRenewalProofReview(
-                                auth: auth,
-                                id: textOf(r['id']),
-                              ),
-                            ),
-                            child: const UiText('مراجعة إثبات التجديد'),
-                          ),
-                        if (r['type'] == 'FamilyRenewal')
-                          TextButton(
-                            onPressed: () => openPage(
-                              context,
-                              NativeFamilyRenewalRequest(
-                                auth: auth,
-                                id: textOf(r['id']),
-                                staff: true,
-                              ),
-                            ),
-                            child: UiText(
-                              localized(
-                                context,
-                                'تفاصيل الأسرة والإثبات',
-                                'Family details and proof',
-                              ),
-                            ),
-                          ),
-                        if (r['type'] == 'Product')
-                          TextButton(
-                            onPressed: () => openPage(
-                              context,
-                              NativeProductOrderReview(
-                                auth: auth,
-                                id: textOf(r['id']),
-                              ),
-                            ),
-                            child: const UiText('عرض طلب المنتج ومراجعته'),
-                          ),
-                        UiText(money(r['amount'], r['currency'])),
-                        UiText(
-                          localized(
-                            context,
-                            r['hasProof'] == true
-                                ? 'وصل إثبات الدفع'
-                                : 'لم يصل إثبات دفع',
-                            r['hasProof'] == true
-                                ? 'Payment proof received'
-                                : 'No payment proof yet',
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      if (reference.isNotEmpty)
+                        TextButton(
+                          onPressed: () => search(''),
+                          child: const UiText('مسح البحث'),
+                        ),
+                      Expanded(
+                        child: RemoteBody(
+                          key: ValueKey(revision),
+                          auth: auth,
+                          path: path,
+                          builder: (context, value) {
+                            final d = obj(value), items = rows(d['items']);
+                            final owner =
+                                auth.session?.selected?.role == 'AcademyOwner';
+                            final reviewProof =
+                                d['canReviewRenewalProof'] as bool? ?? owner;
+                            final webReviewTypes = <String>{
+                              for (final row in items)
+                                if (row['canOpen'] != false)
+                                  if (row['type'] == 'Enrollment')
+                                    'الاشتراكات الجديدة'
+                                  else if (row['type'] == 'Tournament')
+                                    'رسوم البطولات',
+                            };
+                            final total = switch (filters['type']) {
+                              'Renewal' => d['renewals'],
+                              'Enrollment' => d['newEnrollments'],
+                              'Tournament' => d['tournaments'],
+                              _ => d['pending'],
+                            };
+                            final count = total is num
+                                ? total.toInt()
+                                : items.length;
+                            final matches =
+                                (d['total'] as num?)?.toInt() ?? items.length;
+                            return gList([
+                              if (items.isEmpty)
+                                EmptyMessage(
+                                  reference.isEmpty
+                                      ? 'لا توجد طلبات دفع معلقة ضمن النطاق المختار.'
+                                      : 'لا توجد طلبات معلقة بهذا الرقم ضمن النطاق المختار.',
+                                )
+                              else
+                                Heading(
+                                  reference.isNotEmpty
+                                      ? localized(
+                                          context,
+                                          'نتائج البحث ($matches)',
+                                          'Search results ($matches)',
+                                        )
+                                      : localized(
+                                          context,
+                                          'طلبات معلّقة ($count)',
+                                          'Pending requests ($count)',
+                                        ),
+                                ),
+                              if (webReviewTypes.isNotEmpty)
+                                UiText(
+                                  'اعتماد ${webReviewTypes.join(' و')} من لوحة التحكم.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              for (final r in items)
+                                GCard(
+                                  key: ValueKey(
+                                    'payment-request:${r['type']}:${r['id']}',
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      UiText(
+                                        textOf(r['player']),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium,
+                                      ),
+                                      UiText('${r['sport']} · ${r['branch']}'),
+                                      UiText(textOf(r['plan'])),
+                                      PaymentRequestReference(order: r),
+                                      if (r['canOpen'] != false &&
+                                          r['type'] == 'Renewal' &&
+                                          r['hasProof'] != true)
+                                        TextButton(
+                                          onPressed: () => open(
+                                            NativeRenewalPayment(
+                                              auth: auth,
+                                              id: textOf(r['id']),
+                                            ),
+                                          ),
+                                          child: UiText(
+                                            owner
+                                                ? 'استكمال طلب التجديد'
+                                                : 'عرض طلب التجديد',
+                                          ),
+                                        ),
+                                      if (r['canOpen'] != false &&
+                                          r['type'] == 'Renewal' &&
+                                          r['hasProof'] == true)
+                                        TextButton(
+                                          onPressed: () => open(
+                                            NativeRenewalProofReview(
+                                              auth: auth,
+                                              id: textOf(r['id']),
+                                              fromPaymentQueue: true,
+                                            ),
+                                          ),
+                                          child: UiText(
+                                            reviewProof
+                                                ? 'مراجعة إثبات التجديد'
+                                                : 'عرض إثبات التجديد',
+                                          ),
+                                        ),
+                                      if (r['canOpen'] != false &&
+                                          r['type'] == 'FamilyRenewal')
+                                        TextButton(
+                                          onPressed: () => open(
+                                            NativeFamilyRenewalRequest(
+                                              auth: auth,
+                                              id: textOf(r['id']),
+                                              staff: true,
+                                            ),
+                                          ),
+                                          child: UiText(
+                                            localized(
+                                              context,
+                                              'تفاصيل الأسرة والإثبات',
+                                              'Family details and proof',
+                                            ),
+                                          ),
+                                        ),
+                                      if (r['canOpen'] != false &&
+                                          r['type'] == 'Product')
+                                        TextButton(
+                                          onPressed: () => open(
+                                            NativeProductOrderReview(
+                                              auth: auth,
+                                              id: textOf(r['id']),
+                                            ),
+                                          ),
+                                          child: const UiText('عرض طلب المنتج'),
+                                        ),
+                                      if (r['type'] == 'Enrollment')
+                                        const UiText('اشتراك جديد'),
+                                      if (r['canOpen'] == true &&
+                                          r['type'] == 'Enrollment')
+                                        TextButton(
+                                          onPressed: () => open(
+                                            NativeEnrollmentPaymentRead(
+                                              auth: auth,
+                                              id: textOf(r['id']),
+                                            ),
+                                          ),
+                                          child: const UiText(
+                                            'عرض طلب الاشتراك',
+                                          ),
+                                        ),
+                                      if (r['type'] == 'Tournament')
+                                        const UiText('رسم بطولة'),
+                                      UiText(
+                                        r['amount'] is num &&
+                                                (r['amount'] as num).isFinite &&
+                                                r['currency'] is String &&
+                                                (r['currency'] as String)
+                                                    .isNotEmpty
+                                            ? money(r['amount'], r['currency'])
+                                            : localized(
+                                                context,
+                                                'المبلغ غير محدد',
+                                                'Amount not set',
+                                              ),
+                                      ),
+                                      UiText(
+                                        localized(
+                                          context,
+                                          r['hasProof'] == true
+                                              ? 'وصل إثبات الدفع'
+                                              : 'لم يصل إثبات دفع',
+                                          r['hasProof'] == true
+                                              ? 'Payment proof received'
+                                              : 'No payment proof yet',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ]);
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-              ]);
-            },
           ),
         );
 }

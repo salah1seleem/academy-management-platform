@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
+using Academy.Api.Slice3;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice8;
@@ -12,12 +14,15 @@ public static class SubscriptionDiscountEndpoints
     {
         var renewals = app.MapGroup("/api/v1/subscriptions/renewals").RequireAuthorization(AcademyPermissions.SubscriptionRead);
         renewals.MapGet("/{id:guid}", Details);
+        renewals.MapGet("/{id:guid}/discount/attempt", Attempt).RequireAuthorization(AcademyPermissions.SubscriptionDiscountManage);
         renewals.MapPost("/{id:guid}/discount", Apply).RequireAuthorization(AcademyPermissions.SubscriptionDiscountManage).AddEndpointFilter<CsrfFilter>();
         renewals.MapPost("/{id:guid}/discount/remove", Remove).RequireAuthorization(AcademyPermissions.SubscriptionDiscountManage).AddEndpointFilter<CsrfFilter>();
     }
 
-    private static async Task<IResult> Details(Guid id, CurrentTenant tenant, FoundationDbContext db)
+    private static async Task<IResult> Details(Guid id, CurrentTenant tenant, FoundationDbContext db,
+        ClaimsPrincipal actor, IAuthorizationService authorization, HttpContext http)
     {
+        http.Response.Headers.CacheControl = "private, no-store";
         var current = (await tenant.ResolveAsync())!;
         var renewal = await db.RenewalRequests.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == id)
             .Select(x => new
@@ -26,7 +31,9 @@ public static class SubscriptionDiscountEndpoints
                 plan = (x.PlanNameSnapshot ?? x.SubscriptionPlan.ArabicName), x.OriginalAmount, discountType = x.DiscountType == null ? null : x.DiscountType.ToString(),
                 x.DiscountValue, x.DiscountAmount, x.FinalAmount, x.Currency, status = x.Status.ToString(),
                 x.DiscountReason, discountAppliedBy = x.DiscountAppliedByUserId == null ? null : db.Users.Where(u => u.Id == x.DiscountAppliedByUserId).Select(u => u.DisplayName).Single(),
-                x.DiscountAppliedAtUtc, x.PaymentRequestId, paymentStatus = db.PaymentRequests.Where(p => p.AcademyId == current.AcademyId && p.Id == x.PaymentRequestId).Select(p => p.Status.ToString()).Single(),
+                x.DiscountAppliedAtUtc, x.PaymentRequestId,
+                paymentStatus = db.PaymentRequests.Where(p => p.AcademyId == current.AcademyId && p.Id == x.PaymentRequestId && p.RenewalRequestId == x.Id)
+                    .Select(p => p.Status.ToString()).SingleOrDefault(),
                 x.RequestedAtUtc, x.Version,x.VipRewardUseId
             }).SingleOrDefaultAsync();
         if (renewal is null) return Results.NotFound();
@@ -38,11 +45,33 @@ public static class SubscriptionDiscountEndpoints
                 x.PreviousDiscountAmount, x.NewDiscountAmount, x.PreviousFinalAmount, x.NewFinalAmount, x.Reason,
                 performedBy = db.Users.Where(u => u.Id == x.PerformedByUserId).Select(u => u.DisplayName).Single(), x.CreatedAtUtc
             }).ToListAsync();
-        var canModify = renewal.VipRewardUseId==null&&(renewal.status is "PendingPayment" or "PaymentInProgress")&&(renewal.paymentStatus is "Created" or "Pending");
+        var canModify = renewal.VipRewardUseId is null && (renewal.status is "PendingPayment" or "PaymentInProgress") &&
+            (renewal.paymentStatus is "Created" or "Pending") &&
+            await SubscriptionAdjustmentEndpoints.AllowsPeriodAction(current, db, actor, authorization,
+                AcademyPermissions.SubscriptionDiscountManage, $"/api/v1/subscriptions/renewals/{id}/discount", "POST");
+        var visiblePaymentId = renewal.PaymentRequestId is { } paymentId && renewal.paymentStatus is not null &&
+            await Slice3Endpoints.CanReadStaffRenewalPayment(actor, authorization) &&
+            await SubscriptionAdjustmentEndpoints.AllowsPeriodAction(current, db, actor, authorization,
+                AcademyPermissions.PaymentRead, $"/api/v1/subscriptions/payments/{paymentId}", "GET") ? paymentId : (Guid?)null;
         return Results.Ok(new { renewal.Id, renewal.player, renewal.sport, renewal.plan, renewal.OriginalAmount, renewal.discountType,
             renewal.DiscountValue, renewal.DiscountAmount, renewal.FinalAmount, renewal.Currency, renewal.status, renewal.DiscountReason,
-            renewal.discountAppliedBy, renewal.DiscountAppliedAtUtc, renewal.PaymentRequestId, renewal.paymentStatus,
+            renewal.discountAppliedBy, renewal.DiscountAppliedAtUtc, renewal.PaymentRequestId, visiblePaymentId, renewal.paymentStatus,
             renewal.RequestedAtUtc, renewal.Version, canModify, adjustments = audit });
+    }
+
+    private static async Task<IResult> Attempt(Guid id, CurrentTenant tenant, FoundationDbContext db, HttpContext http)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        var current = (await tenant.ResolveAsync())!;
+        var actor = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var key = http.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 100) return Results.NotFound();
+        var saved = await db.RenewalDiscountAdjustments.AsNoTracking()
+            .Where(row => row.AcademyId == current.AcademyId && row.RenewalRequestId == id &&
+                row.PerformedByUserId == actor && row.IdempotencyKey == key)
+            .Select(row => new { row.RenewalRequestId, adjustmentId = row.Id })
+            .SingleOrDefaultAsync(http.RequestAborted);
+        return saved is null ? Results.NotFound() : Results.Ok(saved);
     }
 
     private static Task<IResult> Apply(Guid id, DiscountRequest request, HttpContext http, CurrentTenant tenant,

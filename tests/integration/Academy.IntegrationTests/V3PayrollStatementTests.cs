@@ -16,6 +16,30 @@ namespace Academy.IntegrationTests;
 public sealed partial class V2StaffScopeTests
 {
     [Fact]
+    public async Task V3_statement_first_attendance_without_an_approved_deduction_preserves_the_quote()
+    {
+        var fixture = await AgreementFixture();
+        using var owner = fixture.Owner;
+        var month = new DateOnly(fixture.Today.Year, fixture.Today.Month, 1);
+        var attendance = $"/api/v1/manage/staff-attendance/{fixture.Coach}";
+        var before = await StatementView(owner, fixture.Employee, month);
+        using var recorded = await Write(owner, attendance, new DailyWrite(fixture.Today, "Absent", null, null, 0, null));
+        recorded.EnsureSuccessStatusCode();
+        var day = await owner.GetFromJsonAsync<JsonElement>($"{attendance}?date={fixture.Today:yyyy-MM-dd}");
+        var unchanged = await StatementView(owner, fixture.Employee, month);
+        Assert.Equal(before.GetProperty("quoteHash").GetString(), unchanged.GetProperty("quoteHash").GetString());
+
+        using var deducted = await Write(owner, attendance, new DailyWrite(fixture.Today, "Absent", null, null, 75.25m, "خصم دوام تجريبي", Version: day.GetProperty("version").GetUInt32()));
+        deducted.EnsureSuccessStatusCode();
+        var current = await StatementView(owner, fixture.Employee, month);
+        Assert.Equal(2924.75m, current.GetProperty("row").GetProperty("netDue").GetDecimal());
+        using var stale = await StatementApprove(owner, fixture.Employee, month, before);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        using var approved = await StatementApprove(owner, fixture.Employee, month, current);
+        approved.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
     public async Task V3_statement_sql_cannot_remove_a_frozen_deduction_by_reassigning_the_attendance_member()
     {
         var f=await AgreementFixture();using var owner=f.Owner;var other=await AgreementFixture();using var otherOwner=other.Owner;var month=new DateOnly(f.Today.Year,f.Today.Month,1);
@@ -42,9 +66,11 @@ public sealed partial class V2StaffScopeTests
     }
     private static string StatementRoot(Guid e)=>$"/api/v1/manage/payroll/{e}/statement";
     private static Task<JsonElement> StatementView(HttpClient c,Guid e,DateOnly month)=>c.GetFromJsonAsync<JsonElement>($"{StatementRoot(e)}?month={month:yyyy-MM-dd}");
-    private static async Task<HttpResponseMessage> StatementCommand(HttpClient c,string path,object body,string? key)
+    private static async Task<HttpResponseMessage> StatementCommand(HttpClient c,string path,object body,string? key,string? scope=null)
     {
-        var token=(await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();using var r=new HttpRequestMessage(HttpMethod.Post,path){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",token);r.Headers.Add("Idempotency-Key",key??Guid.NewGuid().ToString());return await c.SendAsync(r);
+        var token=(await c.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf")).GetProperty("token").GetString();using var r=new HttpRequestMessage(HttpMethod.Post,path){Content=JsonContent.Create(body)};r.Headers.Add("X-CSRF-TOKEN",token);r.Headers.Add("Idempotency-Key",key??Guid.NewGuid().ToString());
+        if (scope is not null) r.Headers.Add("X-Payroll-Scope", scope);
+        return await c.SendAsync(r);
     }
     private static Task<HttpResponseMessage> StatementApprove(HttpClient c,Guid e,DateOnly month,JsonElement view,string? key=null)=>StatementCommand(c,StatementRoot(e)+"/approve",new StatementApproval(month,view.GetProperty("quoteHash").GetString()!,"اعتماد اصطناعي داخلي"),key);
     private static Task<HttpResponseMessage> StatementPay(HttpClient c,Guid e,DateOnly month,decimal amount,decimal paid,decimal remaining,string? key=null)=>StatementCommand(c,StatementRoot(e)+"/disbursements",new StatementDisbursement(month,amount,paid,remaining,"مرجع صرف اصطناعي"),key);
@@ -70,6 +96,72 @@ public sealed partial class V2StaffScopeTests
         var s=await db.PayrollStatements.SingleAsync(s=>s.EmployeeId==f.Employee);var source=s.SourceSnapshot;s.NetDue=1;await Assert.ThrowsAsync<InvalidOperationException>(()=>db.SaveChangesAsync());db.ChangeTracker.Clear();
         Assert.Equal("23514",(await Assert.ThrowsAsync<Npgsql.PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"PayrollStatements\" WHERE \"Id\"={s.Id}"))).SqlState);
         Assert.Equal("23514",(await Assert.ThrowsAsync<Npgsql.PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"PayrollDisbursements\" SET \"Amount\"=1 WHERE \"EmployeeId\"={f.Employee}"))).SqlState);Assert.Equal(source,await db.PayrollStatements.Where(s=>s.EmployeeId==f.Employee).Select(s=>s.SourceSnapshot).SingleAsync());
+    }
+
+    [Fact]
+    public async Task V3_statement_confirmation_returns_only_the_exact_saved_request_within_its_scope()
+    {
+        var f = await AgreementFixture();
+        using var owner = f.Owner;
+        var other = await AgreementFixture();
+        using var otherOwner = other.Owner;
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        var adminSession = await CreateAdmin();
+        using var admin = adminSession.Admin;
+        using var grants = adminSession.Owner;
+        var accessPath = $"/api/v1/manage/staff/{adminSession.Member}/access";
+        var access = Access(f.Branch, true, true) with { SensitivePermissions = [AcademyPermissions.PayrollPay] };
+        (await Write(grants, accessPath, access)).EnsureSuccessStatusCode();
+
+        var month = new DateOnly(f.Today.Year, f.Today.Month, 1);
+        var approveKey = Guid.NewGuid().ToString();
+        var payKey = Guid.NewGuid().ToString();
+        string Lookup(Guid employee, DateOnly period, string action, string key)
+            => $"{StatementRoot(employee)}/by-request?month={period:yyyy-MM-dd}&action={action}&requestKey={key}";
+        var approvalPath = Lookup(f.Employee, month, "approve", approveKey);
+        var payoutPath = Lookup(f.Employee, month, "disbursements", payKey);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(approvalPath)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(payoutPath)).StatusCode);
+
+        var ownerView = await StatementView(owner, f.Employee, month);
+        var ownerScope = ownerView.GetProperty("recoveryScope").GetString()!;
+        var adminScope = (await StatementView(admin, f.Employee, month)).GetProperty("recoveryScope").GetString()!;
+        Assert.NotEqual(ownerScope, adminScope);
+        var approval = new StatementApproval(month, ownerView.GetProperty("quoteHash").GetString()!);
+        var approvalCommand = StatementRoot(f.Employee) + "/approve";
+        Assert.Equal(HttpStatusCode.Forbidden, (await StatementCommand(owner, approvalCommand, approval, approveKey, adminScope)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(approvalPath)).StatusCode);
+        var approved = await StatementCommand(owner, approvalCommand, approval, approveKey, ownerScope);
+        Assert.Equal(HttpStatusCode.Created, approved.StatusCode);
+        Assert.Equal((await approved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(),
+            (await owner.GetFromJsonAsync<JsonElement>(approvalPath)).GetProperty("id").GetGuid());
+
+        var payout = new StatementDisbursement(month, 100, 0, 3000);
+        var payoutCommand = StatementRoot(f.Employee) + "/disbursements";
+        Assert.Equal(HttpStatusCode.Forbidden, (await StatementCommand(admin, payoutCommand, payout, payKey, ownerScope)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(payoutPath)).StatusCode);
+        var paid = await StatementCommand(admin, payoutCommand, payout, payKey, adminScope);
+        Assert.Equal(HttpStatusCode.Created, paid.StatusCode);
+        var confirmed = await admin.GetAsync(payoutPath);
+        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        Assert.True(confirmed.Headers.CacheControl?.NoStore);
+        var result = await confirmed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Single(result.EnumerateObject());
+        Assert.Equal((await paid.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(), result.GetProperty("id").GetGuid());
+        using var staleLookup = new HttpRequestMessage(HttpMethod.Get, payoutPath);
+        staleLookup.Headers.Add("X-Payroll-Scope", ownerScope);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.SendAsync(staleLookup)).StatusCode);
+        using var staleRead = new HttpRequestMessage(HttpMethod.Get, $"{StatementRoot(f.Employee)}?month={month:yyyy-MM-dd}");
+        staleRead.Headers.Add("X-Payroll-Scope", ownerScope);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.SendAsync(staleRead)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(payoutPath)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(payoutPath)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(Lookup(f.Employee, month.AddMonths(-1), "disbursements", payKey))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(Lookup(f.Employee, month, "approve", payKey))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(Lookup(other.Employee, month, "disbursements", payKey))).StatusCode);
+        (await Write(grants, accessPath, access with { Branches = [f.OtherBranch] })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(payoutPath)).StatusCode);
     }
 
     [Fact]

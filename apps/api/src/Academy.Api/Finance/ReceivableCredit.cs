@@ -17,6 +17,11 @@ public static class ReceivableCreditEndpoints
     {
         var api = app.MapGroup("/api/v1/finance/credit-applications").RequireAuthorization(AcademyPermissions.ReportsFinancialRead);
         api.MapGet("/{sourceId:guid}/options", async (Guid sourceId, ReceivableCreditService service) => await Run(() => service.Options(sourceId)));
+        api.MapGet("/{sourceId:guid}/attempt", async (Guid sourceId, HttpContext http, ReceivableCreditService service) =>
+        {
+            http.Response.Headers.CacheControl = "private, no-store";
+            return await Run(() => service.ReadAttempt(sourceId, http.Request.Headers["Idempotency-Key"].ToString()));
+        });
         api.MapPost("/quote", async (CreditReview body, ReceivableCreditService service) => await Run(() => service.Quote(body))).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/approve", async (CreditApprove body, HttpRequest request, ReceivableCreditService service) => await Run(() => service.Approve(body, request.Headers["Idempotency-Key"].ToString()))).AddEndpointFilter<CsrfFilter>();
     }
@@ -51,7 +56,7 @@ public sealed class ReceivableCreditService(FoundationDbContext db, CurrentTenan
         if (source is null || target is null) throw new CashRejected("المطالبة غير متاحة.", 404);
         if (source.PlayerId != target.PlayerId || source.Currency != target.Currency) throw new CashRejected("استخدم الرصيد لنفس اللاعب والعملة فقط.", 422);
         if (body.Amount > -source.Outstanding || body.Amount > target.Outstanding) throw new CashRejected("المبلغ يتجاوز الرصيد الدائن أو القائم على المطالبة المختارة.");
-        var hash = StatementComparisonRules.Hash(new { t.AcademyId, t.MembershipId, actor, source, target, body.Amount, reason });
+        var hash = StatementComparisonRules.Hash(new { t.AcademyId, t.MembershipId, actor, source, target, amount = CashRegisterService.Money(body.Amount), reason });
         return new(source, target, reason, hash);
     }
     private static object View(Prepared q, decimal amount) => new { quoteHash = q.Hash, player = q.Source.Player, q.Source.Currency, amount = CashRegisterService.Money(amount), source = new { q.Source.Id, q.Source.Description, before = CashRegisterService.Money(q.Source.Outstanding), after = CashRegisterService.Money(q.Source.Outstanding + amount) }, target = new { q.Target.Id, q.Target.Description, before = CashRegisterService.Money(q.Target.Outstanding), after = CashRegisterService.Money(q.Target.Outstanding - amount) }, q.Reason };
@@ -59,21 +64,58 @@ public sealed class ReceivableCreditService(FoundationDbContext db, CurrentTenan
     {
         var (t, actor) = await Context(); await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead); return View(await Prepare(t, actor, body), body.Amount);
     }
+
+    public async Task<object> ReadAttempt(Guid sourceId, string key)
+    {
+        var (t, actor) = await Context();
+        if (!ValidKey(key)) throw new CashRejected("معرف محاولة التسوية غير صالح.", 422);
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await LockAttempt(t.AcademyId, actor, key);
+        var row = await db.ReceivableCreditApplications.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.AcademyId == t.AcademyId && x.ActorUserId == actor && x.ActorMembershipId == t.MembershipId &&
+            x.SourceDocumentId == sourceId && x.RequestKey == key);
+        if (row is null) throw new CashRejected("لا توجد تسوية محفوظة لهذه المحاولة.", 404);
+        return await Outcome(row, true);
+    }
+
+    private static bool ValidKey(string key) => !string.IsNullOrWhiteSpace(key) && key.Length is >= 8 and <= 80;
+
+    private Task LockAttempt(Guid academy, Guid actor, string key) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"receivable-credit:{academy}:{actor}:{key}"},0))");
+
+    private async Task<object> Outcome(ReceivableCreditApplication row, bool replay)
+    {
+        var targetBranchId = await db.ReceivableDocuments.AsNoTracking()
+            .Where(d => d.AcademyId == row.AcademyId && d.Id == row.TargetDocumentId)
+            .Select(d => d.BranchId).SingleAsync();
+        return new
+        {
+            row.Id, row.SourceDocumentId, row.TargetDocumentId, targetBranchId, row.Currency, replay,
+            amount = CashRegisterService.Money(row.Amount),
+            sourceRemaining = CashRegisterService.Money(-row.SourceBalanceBefore - row.Amount),
+            targetRemaining = CashRegisterService.Money(row.TargetBalanceBefore - row.Amount)
+        };
+    }
+
     public async Task<object> Approve(CreditApprove body, string key)
     {
         var (t, actor) = await Context();
-        if (string.IsNullOrWhiteSpace(key) || key.Length is < 8 or > 80 || body.QuoteHash?.Length != 64) throw new CashRejected("راجع الرصيد قبل الاعتماد بمعرف طلب صحيح.", 422);
+        if (!ValidKey(key) || body.QuoteHash?.Length != 64) throw new CashRejected("راجع الرصيد قبل الاعتماد بمعرف طلب صحيح.", 422);
         var hash = StatementComparisonRules.Hash(new { body.SourceDocumentId, body.TargetDocumentId, body.Amount, reason = body.Reason?.Trim(), body.QuoteHash });
         await using var tx = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"receivable-credit:{t.AcademyId}:{actor}:{key}"},0))");
+        await LockAttempt(t.AcademyId, actor, key);
         var prior = await db.ReceivableCreditApplications.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.ActorUserId == actor && x.RequestKey == key);
-        if (prior != null) { if (prior.RequestHash != hash) throw new CashRejected("معرف الطلب مستخدم بتفاصيل أخرى."); return new { prior.Id, replay = true }; }
+        if (prior != null) { if (prior.RequestHash != hash) throw new CashRejected("معرف الطلب مستخدم بتفاصيل أخرى."); return await Outcome(prior, true); }
         // Same document locks as credit notes/payment allocations, in a stable order.
         foreach (var id in new[] { body.SourceDocumentId, body.TargetDocumentId }.Distinct().OrderBy(x => x))
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"receivable-document:{t.AcademyId}:{id}"},0))");
         var q = await Prepare(t, actor, new(body.SourceDocumentId, body.TargetDocumentId, body.Amount, body.Reason));
         if (q.Hash != body.QuoteHash) throw new CashRejected("تغير الرصيد. راجع القيم الجديدة قبل الاعتماد.");
         var row = new ReceivableCreditApplication { Id = Guid.NewGuid(), AcademyId = t.AcademyId, SourceDocumentId = q.Source.Id, TargetDocumentId = q.Target.Id, ActorUserId = actor, ActorMembershipId = t.MembershipId, Amount = body.Amount, SourceBalanceBefore = q.Source.Outstanding, TargetBalanceBefore = q.Target.Outstanding, Currency = q.Source.Currency, Reason = q.Reason, RequestKey = key, RequestHash = hash, QuoteHash = q.Hash, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
-        db.ReceivableCreditApplications.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return new { row.Id, replay = false };
+        db.ReceivableCreditApplications.Add(row);
+        await db.SaveChangesAsync();
+        var result = await Outcome(row, false);
+        await tx.CommitAsync();
+        return result;
     }
 }

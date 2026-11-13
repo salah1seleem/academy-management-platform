@@ -35,6 +35,39 @@ Map<String, dynamic> config({
   ],
 };
 void main() {
+  testWidgets(
+    'Owner home settings open with defaults before first customization',
+    (t) async {
+      final data = config();
+      final settings =
+          ((data['versions'] as List).single as Map)['settings'] as Map;
+      settings.remove('ownerHome');
+      final methods = <String>[];
+      final auth = await f.authenticate('AcademyOwner', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        if (path.startsWith('/api/v1/manage/configuration'))
+          methods.add(method);
+        return data;
+      });
+      await t.pumpWidget(f.app(OwnerHomeSettingsPage(auth: auth)));
+      await t.pumpAndSettle();
+
+      expect(find.text('إعادة تحميل الإعدادات الحالية'), findsNothing);
+      expect(find.text('رسم محايد'), findsWidgets);
+      expect(
+        t.widget<EditableText>(find.byType(EditableText)).controller.text,
+        isEmpty,
+      );
+      expect(methods, ['GET']);
+      await t.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    },
+  );
+
   for (final missing in ['ownerHome', 'targets']) {
     testWidgets(
       'first collection target opens and saves when $missing is absent',
@@ -101,6 +134,7 @@ void main() {
         expect(writes, 0);
         expect(t.takeException(), isNull);
         await t.enterText(find.byType(TextFormField), '1250');
+        await t.pump();
         await t.tap(find.text('حفظ الهدف'));
         await t.pumpAndSettle();
         expect(result, isTrue);
@@ -244,7 +278,6 @@ void main() {
                         to: '2026-09-30',
                         branchId: 'b1',
                         branchName: 'فرع اصطناعي',
-                        initialAmount: 1000,
                       ),
                     ),
                   );
@@ -257,11 +290,17 @@ void main() {
       );
       await t.tap(find.text('فتح'));
       await t.pumpAndSettle();
+      final date = MaterialLocalizations.of(
+        t.element(find.byType(CollectionTargetPage)),
+      ).formatShortDate;
       expect(
-        find.text('فرع اصطناعي · 2026-09-01 — 2026-09-30'),
+        find.text(
+          'فرع اصطناعي · من ${date(DateTime(2026, 9, 1))} إلى ${date(DateTime(2026, 9, 30))}',
+        ),
         findsOneWidget,
       );
-      await t.enterText(find.byType(TextFormField), '3000.50');
+      await t.enterText(find.byType(TextFormField), '٣٠٠٠٫٥٠');
+      await t.pump();
       await t.tap(find.text('حفظ الهدف'));
       await t.pumpAndSettle();
       expect(result, isNull);
@@ -284,6 +323,69 @@ void main() {
       auth.dispose();
     },
   );
+  testWidgets('clearing a target requires an explicit confirmed removal', (
+    t,
+  ) async {
+    await t.binding.setSurfaceSize(const Size(360, 760));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    var writes = 0;
+    final auth = await f.authenticate('AcademyOwner', (m, p, b, token) async {
+      if (m == 'PUT') {
+        writes++;
+        expect((b as Map)['amount'], isNull);
+        expect(b['branchId'], 'b1');
+        expect(b['expectedRevision'], 4);
+        return {};
+      }
+      return config(
+        revision: writes == 0 ? 4 : 5,
+        targets: [
+          if (writes == 0)
+            {
+              'from': '2026-09-01',
+              'to': '2026-09-30',
+              'branchId': 'b1',
+              'amount': 3000.5,
+            },
+        ],
+      );
+    });
+    await t.pumpWidget(
+      f.app(
+        CollectionTargetPage(
+          auth: auth,
+          from: '2026-09-01',
+          to: '2026-09-30',
+          branchId: 'b1',
+          branchName: 'فرع اصطناعي',
+        ),
+        scale: 2,
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(TextFormField), '');
+    await t.pump();
+    expect(
+      t
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'حفظ الهدف'))
+          .onPressed,
+      isNull,
+    );
+    expect(writes, 0);
+    await t.ensureVisible(find.text('إزالة هدف الفترة'));
+    await t.tap(find.text('إزالة هدف الفترة'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('إلغاء'));
+    await t.pumpAndSettle();
+    expect(writes, 0);
+    await t.tap(find.text('إزالة هدف الفترة'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('تأكيد إزالة الهدف'));
+    await t.pumpAndSettle();
+    expect(writes, 1);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
   testWidgets('logout during write prevents readback and settings disclosure', (
     t,
   ) async {

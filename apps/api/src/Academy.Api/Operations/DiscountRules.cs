@@ -65,9 +65,15 @@ public static class DiscountRuleEndpoints
             var plan = await db.SubscriptionPlans.TrainingOnly().AsNoTracking().SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == body.PlanId && x.IsActive);
             if (plan is null || body.DiscountRuleId.HasValue && !await db.DiscountRules.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.DiscountRuleId && x.IsActive && !x.IsSiblingOffer && !db.VipRewards.Any(v=>v.DiscountRuleId==x.Id))) return Results.NotFound();
             if (body.BranchId.HasValue && (!await db.Branches.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.BranchId && x.IsActive) || !await db.SubscriptionPlans.TrainingOnly().ForBranch(body.BranchId.Value).AnyAsync(x => x.Id == plan.Id))) return Results.UnprocessableEntity(new { message = "الباقة غير منشورة لهذا الفرع." });
+            if (body.ExistingPlayerId is Guid playerId && !await db.Players.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == playerId && x.IsActive))
+                return Results.NotFound();
             var phone = EgyptPhoneNormalizer.Normalize(body.GuardianPhone);
+            if (!string.IsNullOrWhiteSpace(body.GuardianPhone) && phone is null)
+                return Results.UnprocessableEntity(new { message = "اكتب رقم موبايل ولي الأمر بصيغة مصرية صحيحة قبل حساب المبلغ." });
             var guardian = await db.GuardianProfiles.Where(x => x.AcademyId == t.AcademyId && x.IsActive && x.ContactPhone == phone).Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
-            var price = await rules.CalculateAsync(t.AcademyId, Guid.Empty, plan.Price, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), guardian, body.DiscountRuleId, plan, body.BranchId);
+            if (phone is not null && guardian is null && EgyptPhoneNormalizer.NormalizeForNewMobile(phone) is null)
+                return Results.UnprocessableEntity(new { message = "اكتب رقم موبايل ولي الأمر بصيغة مصرية صحيحة قبل حساب المبلغ." });
+            var price = await rules.CalculateAsync(t.AcademyId, body.ExistingPlayerId ?? Guid.Empty, plan.Price, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), guardian, body.DiscountRuleId, plan, body.BranchId);
             if (body.ExceptionalDiscount is not null) {
                 try { price = ManualEnrollmentDiscount.Apply(price, body.ExceptionalDiscount, Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!), DateTimeOffset.UtcNow); }
                 catch (Academy.Api.Finance.CashRejected error) { return Results.Problem(statusCode: error.Status, title: error.Message); }
@@ -95,4 +101,4 @@ public sealed record RuleWrite(string ArabicName,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString)] decimal? MaximumAmount = null,
     Guid? BranchId = null, Guid? SportId = null, Guid? SubscriptionPlanId = null, DateOnly? StartsOn = null, DateOnly? EndsOn = null, int Priority = 0, int? ExpectedRevision = null);
 public sealed record PlayerRuleWrite(Guid DiscountRuleId, bool IsActive);
-public sealed record RegistrationQuote(Guid PlanId, string? GuardianPhone, Guid? DiscountRuleId, Guid? BranchId = null, ExceptionalEnrollmentDiscount? ExceptionalDiscount = null);
+public sealed record RegistrationQuote(Guid PlanId, string? GuardianPhone, Guid? DiscountRuleId, Guid? BranchId = null, ExceptionalEnrollmentDiscount? ExceptionalDiscount = null, Guid? ExistingPlayerId = null);

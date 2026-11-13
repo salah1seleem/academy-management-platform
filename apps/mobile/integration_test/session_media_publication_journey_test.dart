@@ -390,7 +390,7 @@ void main() {
         await t.pumpWidget(
           shell(MediaMemoriesPage(auth: family, playerId: child)),
         );
-        await wait(find.text('كل لحظة في مكانها'));
+        await wait(find.text('صور وفيديوهات الشهر'));
         expect(find.text('$caption — نسخة جديدة'), findsNothing);
         expect(
           await owner.request(

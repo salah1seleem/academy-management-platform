@@ -48,4 +48,31 @@ describe("structure list", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "إيقاف" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("كريم حسن");
   });
+  it("only shows the result count after a successful read and clears all coach filters", async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ ok: true, json: async () => [
+      { id: "coach-1", arabicName: "مدرب تجريبي أول", isActive: true, assignedGroups: 1, groups: [{ id: "group-1", name: "البراعم", branch: "فرع مدينة نصر" }] },
+      { id: "coach-2", arabicName: "مدرب تجريبي ثان", isActive: true, assignedGroups: 0 },
+    ] } as Response);
+    render(<StructureList kind="coaches" />);
+    expect(screen.queryByText("0 نتيجة")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("تعذر تحميل البيانات.");
+    expect(screen.queryByText("لا توجد سجلات مطابقة.")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 نتيجة")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "إعادة المحاولة" }));
+    expect(await screen.findByText("2 نتيجة")).toBeVisible();
+    const search = screen.getByRole("textbox", { name: "بحث المدربين" });
+    for (const term of ["مدينة نصر", "البراعم"]) {
+      fireEvent.change(search, { target: { value: term } });
+      expect(screen.getByText("1 نتيجة")).toBeVisible();
+      expect(screen.getByText("مدرب تجريبي أول")).toBeVisible();
+    }
+    const status = screen.getByRole("combobox", { name: "الحالة" });
+    const order = screen.getByRole("combobox", { name: "ترتيب المدربين" });
+    fireEvent.change(status, { target: { value: "false" } });
+    fireEvent.change(order, { target: { value: "groups" } });
+    expect(screen.getByText("0 نتيجة")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "إعادة الضبط" }));
+    expect(order).toHaveValue("rating"); expect(status).toHaveValue(""); expect(search).toHaveValue("");
+    expect(screen.getByText("2 نتيجة")).toBeVisible();
+  });
 });

@@ -21,11 +21,13 @@ public static class CoachProvisioning
         UserManager<ApplicationUser> users, TimeProvider clock)
     {
         var current = (await tenant.ResolveAsync())!;
-        var phone = EgyptPhoneNormalizer.Normalize(request.PhoneNumber);
+        var phone = EgyptPhoneNormalizer.NormalizeForNewMobile(request.PhoneNumber);
         var name = request.DisplayName?.Trim(); var email = request.Email?.Trim();
         if (string.IsNullOrEmpty(email)) email = null;
         var groups = request.GroupIds?.Distinct().ToArray() ?? [];
-        if (phone is null || string.IsNullOrWhiteSpace(name) || name.Length > 160 || groups.Length > 50 ||
+        if (phone is null)
+            return Results.BadRequest(new { message = "اكتب رقم موبايل مصريًا من 11 رقمًا يبدأ بـ010 أو 011 أو 012 أو 015، أو استخدم رمز مصر ‎+20." });
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 160 || groups.Length > 50 ||
             (email is not null && (email.Length > 256 || !new EmailAddressAttribute().IsValid(email))))
             return Results.BadRequest(new { message = "راجع الاسم ورقم الهاتف المصري والبريد والمجموعات." });
         await using var transaction = await db.Database.BeginTransactionAsync();

@@ -101,22 +101,17 @@ void main() {
         await t.tap(find.textContaining('كرة القدم').last);
         await tick(600);
         await binding.takeScreenshot('phase-completion-sport-selected');
-        await reveal(find.byType(GuardianSubscriptionSummary));
-        final summary = t.widget<GuardianSubscriptionSummary>(
-          find.byType(GuardianSubscriptionSummary),
+        final child = t.widget<PremiumChildCard>(
+          find.byType(PremiumChildCard).first,
         );
-        final selected = (summary.childData['sports'] as List).single as Map;
+        final selected = (child.childData['sports'] as List)
+            .cast<Map<String, dynamic>>()
+            .singleWhere(
+              (enrollment) => enrollment['id'] == child.selectedEnrollmentId,
+            );
         expect(selected['sport'], 'كرة القدم');
+        expect((selected['performance'] as Map)['overallScore'], 74);
         await binding.takeScreenshot('phase-completion-subscription-synced');
-        await reveal(find.byKey(const ValueKey('child-section-2')), up: true);
-        await t.tap(find.byKey(const ValueKey('child-section-2')));
-        await tick(500);
-        await reveal(find.byType(GuardianLatestProgress));
-        final progress = t.widget<GuardianLatestProgress>(
-          find.byType(GuardianLatestProgress),
-        );
-        expect(progress.childData['latestEvaluation']['overallScore'], 74);
-        await binding.takeScreenshot('phase-completion-progress-synced');
         expect(t.takeException(), isNull);
         await t.pumpWidget(const SizedBox());
         auth.dispose();
@@ -129,14 +124,10 @@ void main() {
         );
         await wait(find.text('لاعب الخاص الخيالي 001'));
         await binding.takeScreenshot('phase-completion-private-guardian');
-        await reveal(find.byType(GuardianSubscriptionSummary));
         final privateChild = t
-            .widget<GuardianSubscriptionSummary>(
-              find.byType(GuardianSubscriptionSummary),
-            )
+            .widget<PremiumChildCard>(find.byType(PremiumChildCard).first)
             .childData;
         expect(privateChild['arabicName'], 'لاعب الخاص الخيالي 001');
-        await binding.takeScreenshot('phase-completion-private-subscription');
         expect(t.takeException(), isNull);
         await t.pumpWidget(const SizedBox());
         auth.dispose();
@@ -147,18 +138,16 @@ void main() {
           '30000000-0000-0000-0000-000000000003',
           'Guardian',
         );
-        await reveal(find.byKey(const ValueKey('child-section-3')));
-        await t.tap(find.byKey(const ValueKey('child-section-3')));
-        await tick(500);
-        await reveal(find.byType(DailyNutritionCard));
-        await tick(1800);
+        final nutrition = find.descendant(
+          of: find.byType(PremiumChildCard).first,
+          matching: find.text('مكتبة التغذية'),
+        );
+        await reveal(nutrition);
         await binding.takeScreenshot('phase-completion-nutrition-home');
-        await t.tap(find.byType(DailyNutritionCard));
+        await t.tap(nutrition);
         await wait(find.byType(NutritionLibrary));
         await tick(1800);
-        final card = t.widget<DailyNutritionCard>(
-          find.byType(DailyNutritionCard),
-        );
+        final card = t.widget<NutritionLibrary>(find.byType(NutritionLibrary));
         final meals = await auth.request(
           'GET',
           dailyNutritionPath(card.playerId, card.today),

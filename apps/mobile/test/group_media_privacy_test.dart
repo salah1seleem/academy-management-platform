@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
+import 'package:academy_mobile/features/guardian/guardian_content.dart';
 import 'package:academy_mobile/features/shared/group_media_consent.dart';
 import 'package:academy_mobile/features/shared/private_media.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'auth_controller_test.dart' show FakeApi, MemoryStore;
 import 'owner_test.dart' as f;
+import 'v2_role_workspaces_test.dart' show app, authenticate;
 
 Map<String, dynamic> choice(bool allowed) => {
   'player': 'طفل اصطناعي',
@@ -27,10 +30,12 @@ Future<void> confirm(WidgetTester t) async {
 
 class PixelApi extends FakeApi implements AssetTransport {
   int reads = 0;
+  bool denyRead = false;
   PixelApi() : super((m, p, b, k) async => f.ownerCredentials());
   @override
   Future<Uint8List> asset(String path, String token) async {
     reads++;
+    if (denyRead) throw const ApiFailure(403, 'الصورة غير متاحة');
     return base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
     );
@@ -46,6 +51,94 @@ class PixelApi extends FakeApi implements AssetTransport {
 }
 
 void main() {
+  testWidgets(
+    'Child gallery keeps current media visible and clears it when the child changes',
+    (t) async {
+      final oldMedia = Completer<Object?>();
+      final nextChild = Completer<Object?>();
+      final auth = await authenticate('Guardian', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        if (path.endsWith('group-media-consent')) return choice(false);
+        if (path.endsWith('storage-policy')) return <String, dynamic>{};
+        if (path.endsWith('/first/media')) return oldMedia.future;
+        if (path.endsWith('playerId=first')) {
+          return [
+            {
+              'id': 'video',
+              'caption': 'لقطة طفل أول',
+              'contentType': 'video/mp4',
+              'url': '/api/v1/assets/video',
+            },
+          ];
+        }
+        if (path.endsWith('playerId=next')) return nextChild.future;
+        return <Object?>[];
+      });
+      await t.pumpWidget(app(GalleryPage(auth: auth, playerId: 'first')));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('لقطة طفل أول'), findsOneWidget);
+      oldMedia.completeError(
+        const ApiFailure(503, 'تعذر تحميل المعرض السابق.'),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('تعذر تحميل بعض الصور والفيديوهات.'), findsOneWidget);
+      expect(find.text('لقطة طفل أول'), findsOneWidget);
+      await t.pumpWidget(app(GalleryPage(auth: auth, playerId: 'next')));
+      await t.pump(const Duration(milliseconds: 200));
+      expect(find.text('لقطة طفل أول'), findsNothing);
+      expect(
+        find.text('لا توجد صور أو فيديوهات منشورة لهذا الطفل.'),
+        findsNothing,
+      );
+      nextChild.complete(<Object?>[]);
+      await t.pumpAndSettle();
+      expect(
+        find.text('لا توجد صور أو فيديوهات منشورة لهذا الطفل.'),
+        findsOneWidget,
+      );
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets('Changing the child discards an open consent confirmation', (
+    t,
+  ) async {
+    final writes = <String>[];
+    final auth = await authenticate('Guardian', (
+      method,
+      path,
+      body,
+      token,
+    ) async {
+      if (method == 'POST') writes.add(path);
+      if (path.endsWith('group-media-consent')) {
+        return choice(path.contains('/next/'));
+      }
+      if (path.endsWith('storage-policy')) return <String, dynamic>{};
+      return <Object?>[];
+    });
+    await t.pumpWidget(app(GalleryPage(auth: auth, playerId: 'first')));
+    await t.pumpAndSettle();
+    final allow = find.text('السماح بالمشاركة داخل المجموعة');
+    await t.ensureVisible(allow);
+    await t.tap(allow);
+    await t.pumpAndSettle();
+    expect(find.text('تأكيد اختياري'), findsOneWidget);
+    await t.pumpWidget(app(GalleryPage(auth: auth, playerId: 'next')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('تأكيد اختياري'));
+    await t.pumpAndSettle();
+    expect(writes, isEmpty);
+    expect(find.text('سحب موافقة المشاركة'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
   testWidgets(
     'compact privacy disclosure preserves status and requires the existing explicit confirmation',
     (t) async {
@@ -187,11 +280,56 @@ void main() {
         false,
       );
       final publish = find.widgetWithText(FilledButton, 'رفع صورة أو فيديو');
+      await t.scrollUntilVisible(
+        publish,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
       await t.ensureVisible(publish);
       await t.tap(publish);
       await t.pumpAndSettle();
-      expect(find.textContaining('راجع الأطفال الظاهرين'), findsOneWidget);
+      final warning = find.textContaining('راجع الأطفال الظاهرين');
+      await t.scrollUntilVisible(
+        warning,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(warning, findsOneWidget);
       expect(t.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'Private image denial between lifecycle change and rebuild does not escape the widget',
+    (t) async {
+      final api = PixelApi();
+      final auth = AuthController(api, MemoryStore())..restoring = false;
+      await auth.verify('p', 'c', 'o');
+      await t.pumpWidget(
+        f.shell(
+          page(
+            PrivateImage(
+              auth: auth,
+              path: '/api/v1/assets/00000000-0000-0000-0000-000000000001',
+              fallback: const Text('الصورة غير متاحة'),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.byType(Image), findsOneWidget);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await t.pumpAndSettle();
+      api.denyRead = true;
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await Future<void>.value();
+      await Future<void>.value();
+      await t.pumpAndSettle();
+      expect(api.reads, 2);
+      expect(find.byType(Image), findsNothing);
+      expect(find.text('الصورة غير متاحة'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
     },
   );
   testWidgets(

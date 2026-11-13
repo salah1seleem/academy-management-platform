@@ -9,6 +9,7 @@ namespace Academy.Api.Importing;
 
 public sealed record ImportIssue(string Sheet, int Row, string Column, string Message)
 {
+    internal bool IsShared { get; init; }
     public string SheetLabel => Sheet switch { "Enrollments" => "التسجيلات", "Metadata" => "إعداد الملف", "OpenBalances" => "الأرصدة الافتتاحية", _ => (ConnectedImportSchema.Names.Contains(Sheet) || FriendlyImportSchema.Names.Contains(Sheet)) ? Sheet : "القالب" };
     public string ColumnLabel => ImportSchema.Enrollments.Concat(ImportSchema.OpenBalances).FirstOrDefault(c => c.Key == Column)?.Label
         ?? ((ConnectedImportSchema.Names.Contains(Sheet) || FriendlyImportSchema.Names.Contains(Sheet)) ? Column : Column switch { "SourceSystem" => "كود المصدر", "CutoffDate" => "تاريخ القطع", "ReferenceStamp" => "نسخة المراجع", "AcademyCode" => "الأكاديمية", "SchemaVersion" => "نسخة القالب", _ => "بنية الملف" });
@@ -18,6 +19,8 @@ public sealed record ImportPreviewRow(int Row, string LegacyPlayerId, string Leg
     int PriceRevision, DateOnly Start, DateOnly? End, int? EntitledSessions, int? RemainingSessions, string? PricingMode,
     string? BasePrice, string? Discount, string? AgreedNet, string Currency, string ExistingNew, string? Notes);
 public sealed record ImportAccountLink(string Role, string Name, string Phone);
+public sealed record ImportCleanRows(int PlayerCount, int ExcludedRows, int RelatedRows = 0);
+public sealed record ImportRegistrationLabel(string Sport, string Group, string Branch);
 public sealed record ImportPreviewResult(string SchemaVersion, string FileHash, string ReferenceStamp, string? SourceSystem, DateOnly? CutoffDate,
     int RowCount, int PlayerCount, int HouseholdCount, int FinanciallyIncomplete, bool CanApprove,
     IReadOnlyList<ImportIssue> Errors, IReadOnlyList<ImportPreviewRow> Rows)
@@ -27,11 +30,14 @@ public sealed record ImportPreviewResult(string SchemaVersion, string FileHash, 
     public int? GuardianRelationships {get;init;}
     public int HistoricalPayments {get;init;}
     public decimal HistoricalPaymentTotal {get;init;}
+    public string? HistoricalPaymentCurrency { get; init; }
     public ImportAccountLink[] AccountLinks { get; init; } = [];
     public ImportGuardianMatch[] GuardianMatches { get; init; } = [];
     public ImportEffect[] Effects { get; init; } = [];
     public int CoachAssignments { get; init; }
     public int TournamentParticipations { get; init; }
+    public ImportCleanRows? CleanRows { get; init; }
+    public IReadOnlyDictionary<string, ImportRegistrationLabel> RegistrationLabels { get; init; } = new Dictionary<string, ImportRegistrationLabel>();
 }
 
 public static class ImportPreview
@@ -39,7 +45,7 @@ public static class ImportPreview
     public static ImportPreviewResult Validate(ImportWorkbook book, ImportReferences references, string fileHash, ISet<string>? existingEnrollmentIds = null)
     {
         var errors = new List<ImportIssue>(); var totalErrors = 0;
-        void Error(string sheet, int row, string col, string message) { totalErrors++; if (errors.Count < 300) errors.Add(new(sheet, row, col, message)); }
+        void Error(string sheet, int row, string col, string message, bool isShared = false) { totalErrors++; if (errors.Count < 300) errors.Add(new(sheet, row, col, message) { IsShared = isShared }); }
         Dictionary<string, ImportCell>[] Rows(string name, ImportSchema.Column[] schema)
         {
             var raw = book.Sheet(name).Rows;
@@ -103,8 +109,8 @@ public static class ImportPreview
                 basis?.ToString("0.00", CultureInfo.InvariantCulture), discount?.ToString("0.00", CultureInfo.InvariantCulture), net?.ToString("0.00", CultureInfo.InvariantCulture), V("Currency"), V("ExistingNew"), V("Notes")));
         }
         if (rowCount is 0 or > ImportSchema.MaxRows) Error("Enrollments", 1, "", "الملف يتطلب من 1 إلى 1000 تسجيل.");
-        foreach (var g in result.GroupBy(r => r.GroupId)) { var reference = references.Values.Single(v => v.Id == g.Key && v.Kind == "group"); if (reference.Capacity is { } capacity && reference.Occupied + g.Count(r => existingEnrollmentIds?.Contains(r.LegacyEnrollmentId) != true) > capacity) Error("Enrollments", g.First().Row, "GroupCode", "المجموعة تتجاوز سعتها الحالية. عالج السعة أو التوزيع قبل الاعتماد."); }
-        foreach (var phones in result.GroupBy(r => Academy.Api.Auth.EgyptPhoneNormalizer.Normalize(r.GuardianPhone))) if (phones.Select(p => p.LegacyPlayerId).Distinct().Count() > 1 && (phones.Any(p => p.HouseholdRef is null) || phones.Select(p => p.HouseholdRef).Distinct().Count() != 1)) Error("Enrollments", phones.First().Row, "HouseholdRef", "الهاتف المشترك يحتاج كود أسرة موحدًا واعتماد الربط؛ لا دمج آلي بالهاتف.");
+        foreach (var g in result.GroupBy(r => r.GroupId)) { var reference = references.Values.Single(v => v.Id == g.Key && v.Kind == "group"); if (reference.Capacity is { } capacity && reference.Occupied + g.Count(r => existingEnrollmentIds?.Contains(r.LegacyEnrollmentId) != true) > capacity) Error("Enrollments", g.First().Row, "GroupCode", "المجموعة تتجاوز سعتها الحالية. عالج السعة أو التوزيع قبل الاعتماد.", isShared: true); }
+        foreach (var phones in result.GroupBy(r => Academy.Api.Auth.EgyptPhoneNormalizer.Normalize(r.GuardianPhone))) if (phones.Select(p => p.LegacyPlayerId).Distinct().Count() > 1 && (phones.Any(p => p.HouseholdRef is null) || phones.Select(p => p.HouseholdRef).Distinct().Count() != 1)) Error("Enrollments", phones.First().Row, "HouseholdRef", "الهاتف المشترك يحتاج كود أسرة موحدًا واعتماد الربط؛ لا دمج آلي بالهاتف.", isShared: true);
         var balances = Rows("OpenBalances", ImportSchema.OpenBalances);
         var balanceKeys = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < balances.Length; i++)

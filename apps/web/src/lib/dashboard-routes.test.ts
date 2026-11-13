@@ -13,6 +13,7 @@ describe("direct-entry return destinations", () => {
   it("returns financial details to the correct in-app parent", () => {
     expect(dashboardParentPath("/dashboard/payroll")).toBe("/dashboard/finance?tab=payroll");
     expect(dashboardParentPath("/dashboard/reports/financial")).toBe("/dashboard/finance?tab=collections");
+    expect(dashboardParentPath("/dashboard/reports/receipts")).toBe("/dashboard/finance?tab=collections");
     expect(dashboardParentPath("/dashboard/finance/receivables")).toBe("/dashboard/finance");
     expect(dashboardParentPath("/dashboard/finance/external-agreements/agreement-demo/receipts/receipt-demo")).toBe("/dashboard/finance/external-agreements/agreement-demo");
   });

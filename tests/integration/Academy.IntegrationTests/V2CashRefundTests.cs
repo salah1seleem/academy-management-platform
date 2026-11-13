@@ -127,12 +127,31 @@ public sealed partial class V2ReceivablesTests
         Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,RefundRoot(f.Player)+"/quote",body)).StatusCode);
         (await Post(owner,$"{CashRoot}/sessions/{f.Session}/close",new{countedAmount=CashRegisterService.Money(100+f.Amount)})).EnsureSuccessStatusCode();
         var shift=await CashOpen(admin,f.Register,"100");
-        await Access(true, []);
+        await Access(true, ["workflow.players.read"]);
         Assert.Equal(HttpStatusCode.Forbidden, (await Post(admin, RefundRoot(f.Player)+"/quote", new RefundWrite(f.Collection,10,null,shift))).StatusCode);
-        await Access(true, ["workflow.subscriptions.refund"]);
+        var readOnly = await admin.GetFromJsonAsync<JsonElement>(RefundRoot(f.Player));
+        Assert.False(readOnly.GetProperty("canRecord").GetBoolean());
+        await Access(true, ["workflow.players.read", "workflow.subscriptions.refund"]);
         var b=await CashRefundQuote(admin,f.Player,f.Collection,shift,10);
         Assert.Equal(HttpStatusCode.Forbidden,(await Post(owner,RefundRoot(f.Player)+"/quote",b)).StatusCode);
-        (await Post(admin,RefundRoot(f.Player),b)).EnsureSuccessStatusCode();
+        var key = Guid.NewGuid().ToString();
+        var written = (await Post(admin, RefundRoot(f.Player), b, key)).EnsureSuccessStatusCode();
+        var refundId = (await written.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        foreach (var (reader, matches) in new[] { (admin, true), (owner, false) })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, RefundRoot(f.Player));
+            request.Headers.Add("Idempotency-Key", key);
+            using var response = (await reader.SendAsync(request)).EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.True(result.GetProperty("canRecord").GetBoolean());
+            Assert.True(response.Headers.CacheControl?.NoStore);
+            var row = Assert.Single(result.GetProperty("refunds").EnumerateArray());
+            Assert.Equal(refundId, row.GetProperty("id").GetGuid());
+            Assert.Equal(matches, row.GetProperty("matchesAttempt").GetBoolean());
+            var source = Assert.Single(result.GetProperty("collections").EnumerateArray());
+            Assert.Equal(f.Collection, source.GetProperty("id").GetGuid());
+            Assert.False(string.IsNullOrWhiteSpace(source.GetProperty("receiptNumber").GetString()));
+        }
         var second=await CashRefundQuote(admin,f.Player,f.Collection,shift,10);await Access(false);Assert.Equal(HttpStatusCode.Forbidden,(await Post(admin,RefundRoot(f.Player),second)).StatusCode);
     }
     [Fact]

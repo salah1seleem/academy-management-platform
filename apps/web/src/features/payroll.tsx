@@ -28,6 +28,7 @@ export function PayrollWorkspace() {
   const idempotency = useOperationKey();
   const [month, setMonth] = useState(incoming.get("month") && /^\d{4}-\d{2}$/.test(incoming.get("month")!) ? incoming.get("month")! : defaults.to.slice(0, 7)), [search, setSearch] = useState("");
   const [data, setData] = useState<Report | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
   const canManage = usePayrollPermission("payroll.pay");
   const branch = incoming.get("branchId") ?? "";
   const query = `/api/v1/manage/payroll/?month=${month}-01${branch ? `&branchId=${encodeURIComponent(branch)}` : ""}`;
@@ -36,12 +37,23 @@ export function PayrollWorkspace() {
     if (currentQuery.current !== query) return Promise.resolve();
     const version = ++requestVersion.current;
     return fetch(query).then(async response => {
+      if (response.status === 401 || response.status === 403) {
+        if (version === requestVersion.current && currentQuery.current === query) {
+          setData(null);
+          setAccessDenied(true);
+        }
+        return null;
+      }
       if (!response.ok) throw new Error();
       return response.json() as Promise<Report>;
     }).then(result => {
-      if (version === requestVersion.current && currentQuery.current === query) { setData(result); setError(""); }
+      if (result && version === requestVersion.current && currentQuery.current === query) {
+        setData(result);
+        setAccessDenied(false);
+        setError("");
+      }
     }).catch(() => {
-      if (version === requestVersion.current && currentQuery.current === query) setError("تعذر تحميل الرواتب أو لا توجد صلاحية.");
+      if (version === requestVersion.current && currentQuery.current === query) setError("تعذر تحميل الرواتب. حاول مرة أخرى.");
     });
   }, [query]);
   useEffect(() => { const requests = requestVersion; currentQuery.current = query; void load(); return () => { ++requests.current; }; }, [load, query]);
@@ -50,8 +62,9 @@ export function PayrollWorkspace() {
   // Display totals follow the same visible records as the table. Aggregate cents,
   // not floating-point money, without changing the server's settlement calculation.
   const total = (amount: (row: Salary) => number) => rows.reduce((sum, row) => sum + Math.round(amount(row) * 100), 0) / 100;
+  if (accessDenied) return <><PageHeader title="الرواتب والمستحقات" context="فريق الأكاديمية" back={{ label: "العودة إلى الرئيسية", href: "/dashboard" }} /><ErrorState message="الرواتب والمستحقات متاحة للحسابات المخولة فقط." /></>;
   return <><PageHeader title="الرواتب والمستحقات" context="فريق الأكاديمية" secondaryActions={[{ label: "الخصومات", href: "/dashboard/payroll/deductions" }, { label: "المبالغ الإضافية", href: "/dashboard/payroll/requests" }, { label: "الموظفون", href: "/dashboard/staff/employees" }]} />
-    <div className="report-filters"><label>شهر الرواتب<input type="month" required value={month} onChange={e => { if (e.target.value) { setMonth(e.target.value); setData(null); } }} /></label><ListSearch label="البحث بالاسم" value={search} onChange={setSearch} /></div>
+    <div className="report-filters payroll-filters"><label>شهر الرواتب<input type="month" required value={month} onChange={e => { if (e.target.value) { setMonth(e.target.value); setData(null); } }} /></label><ListSearch label="البحث بالاسم" value={search} onChange={setSearch} /></div>
     {error && <ErrorState message={error} />}{!data && !error ? <LoadingState /> : data && <><section className="payroll-stats">
       <MetricCard label="الراتب الأساسي المستحق" value={formatMoneyAr(total(x => x.baseDue), data.currency)} /><Link href="/dashboard/payroll/deductions"><MetricCard label="الخصومات" value={formatMoneyAr(total(x => x.deductions), data.currency)} /></Link><Link href="/dashboard/payroll/requests"><MetricCard label="الإضافات المعتمدة" value={formatMoneyAr(total(x => x.additions), data.currency)} /></Link><MetricCard label="إجمالي المستحق" value={formatMoneyAr(total(x => x.netDue), data.currency)} detail={`لم يُدفع: ${formatMoneyAr(total(x => x.remainingAmount ?? (x.isPaid ? 0 : x.netDue)), data.currency)}`} />
     </section><section className="list-card">{!rows.length ? <EmptyState message="لا يوجد موظفون مطابقون." /> : <AdminDataTable label="المستحقات" rows={rows} rowKey={x => x.employeeId} columns={[

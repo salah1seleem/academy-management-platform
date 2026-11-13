@@ -157,6 +157,77 @@ void main() {
       expect(find.text('ملغي'), findsOneWidget);
     },
   );
+  for (final (failureStatus, storedStatus) in [
+    (0, 'Cancelled'),
+    (409, 'Approved'),
+    (503, 'Pending'),
+  ]) {
+    testWidgets(
+      'FR-N: cancellation reads back $storedStatus after $failureStatus',
+      (tester) async {
+        final writes = <Object?>[];
+        var status = 'Pending';
+        var revision = 2;
+        var reads = 0;
+        const path = '/api/v1/guardian/subscriptions/family/requests/family';
+        final auth = await logged((method, requestPath, body, token) async {
+          if (requestPath == '$path/cancel') {
+            writes.add(body);
+            revision++;
+            if (writes.length == 1) {
+              status = storedStatus;
+              throw ApiFailure(failureStatus, 'INTERNAL');
+            }
+            status = 'Cancelled';
+          } else if (requestPath == path) {
+            reads++;
+          } else {
+            return {'configured': false};
+          }
+          return {...detail(status: status), 'revision': revision};
+        });
+        await tester.pumpWidget(
+          shell(NativeFamilyRenewalRequest(auth: auth, id: 'family')),
+        );
+        await tester.pumpAndSettle();
+        final cancel = find.text('إلغاء طلب التجديد');
+        await tester.scrollUntilVisible(cancel, 300);
+        await tester.tap(cancel);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('تأكيد الإلغاء'));
+        await tester.pumpAndSettle();
+        final verify = find.text('التحقق من حالة الطلب');
+        expect(verify, findsOneWidget);
+        expect(cancel, findsNothing);
+        expect(find.textContaining('INTERNAL'), findsNothing);
+        expect(writes, [
+          {'revision': 2},
+        ]);
+        await tester.ensureVisible(verify);
+        await tester.tap(verify);
+        await tester.pumpAndSettle();
+        expect(reads, 2);
+        expect(writes, hasLength(1));
+        if (storedStatus == 'Pending') {
+          await tester.scrollUntilVisible(cancel, 300);
+          await tester.tap(cancel);
+          await tester.pumpAndSettle();
+          expect(writes, hasLength(1));
+          await tester.tap(find.text('تأكيد الإلغاء'));
+          await tester.pumpAndSettle();
+          expect(writes.last, {'revision': 3});
+          expect(find.text('ملغي'), findsOneWidget);
+        } else if (storedStatus == 'Approved') {
+          expect(find.text('تم تجديد الأسرة'), findsOneWidget);
+          expect(find.text('عرض الإيصال'), findsNWidgets(2));
+          expect(cancel, findsNothing);
+        } else {
+          expect(find.text('ملغي'), findsOneWidget);
+          expect(cancel, findsNothing);
+        }
+      },
+    );
+  }
   testWidgets(
     'Staff family view remains read-only and does not expose guardian upload',
     (tester) async {

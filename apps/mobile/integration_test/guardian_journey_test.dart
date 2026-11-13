@@ -88,8 +88,8 @@ void main() {
         220,
         scrollable: find.byType(Scrollable).first,
       );
-      await waitFor(find.text('متابعة الغذاء اليومي لطفلك'));
-      await tester.ensureVisible(find.text('متابعة الغذاء اليومي لطفلك').first);
+      await waitFor(find.text('اقتراحات من مكتبة التغذية'));
+      await tester.ensureVisible(find.text('اقتراحات من مكتبة التغذية').first);
       await capture('home-meals');
       // Bring the entire child card back below the fixed app bar, rather than
       // aligning its trailing text with the bar's obscured top edge.
@@ -108,7 +108,7 @@ void main() {
       await back();
       await back();
       await tap('التدريب والمواعيد');
-      await waitFor(find.text('الجلسات القادمة'));
+      await waitFor(find.text('الحصص القادمة'));
       await back();
       await tap('التغذية والصحة');
       await waitFor(find.text('شوفان بالحليب والموز'));

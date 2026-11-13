@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
+import '../../core/widgets/page_status.dart';
 import '../guardian/guardian_ui.dart';
 import '../owner/owner_operations.dart' show OwnerScopedRead;
 
@@ -16,7 +17,34 @@ class ReceivableBalancesPage extends StatelessWidget {
   );
 }
 
-class ReceivableBalances extends StatelessWidget {
+const _balanceStates = {
+  '': 'كل المطالبات',
+  'open': 'قائمة',
+  'overdue': 'متأخرة',
+  'future': 'غير مستحقة بعد',
+  'settled': 'مسددة',
+  'credit': 'رصيد دائن',
+};
+
+String _balanceDay(BuildContext context, Object? value) {
+  final date = DateTime.tryParse(textOf(value));
+  return date == null
+      ? 'غير محدد'
+      : MaterialLocalizations.of(context).formatShortDate(date);
+}
+
+String? _balanceTime(BuildContext context, Object? value) {
+  final instant = DateTime.tryParse(textOf(value))?.toLocal();
+  if (instant == null) return null;
+  final locale = MaterialLocalizations.of(context);
+  final date = locale.formatShortDate(instant);
+  final time = locale.formatTimeOfDay(TimeOfDay.fromDateTime(instant));
+  return '$date، $time';
+}
+
+num? _amount(Object? value) => num.tryParse(textOf(value));
+
+class ReceivableBalances extends StatefulWidget {
   final AuthController auth;
   final bool staff;
   final Map<String, String> filters;
@@ -27,48 +55,165 @@ class ReceivableBalances extends StatelessWidget {
     this.filters = const {},
   });
   @override
+  State<ReceivableBalances> createState() => _ReceivableBalancesState();
+}
+
+class _ReceivableBalancesState extends State<ReceivableBalances> {
+  late String state = _initialState();
+  int revision = 0;
+
+  String _initialState() {
+    final filter = widget.filters['state'];
+    return _balanceStates.containsKey(filter) ? filter! : '';
+  }
+
+  @override
+  void didUpdateWidget(ReceivableBalances oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filters['state'] != widget.filters['state'] ||
+        oldWidget.auth != widget.auth) {
+      state = _initialState();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => RemoteBody(
-    auth: auth,
-    path: staff
+    key: ValueKey(revision),
+    auth: widget.auth,
+    path: widget.staff
         ? '/api/v1/finance/receivables?${Uri(queryParameters: {
-            for (final key in ['branchId', 'playerId', 'state', 'asOf'])
-              if (filters[key]?.isNotEmpty == true) key: filters[key]!,
+            for (final key in ['branchId', 'playerId', 'asOf'])
+              if (widget.filters[key]?.isNotEmpty == true) key: widget.filters[key]!,
           }).query}'
         : '/api/v1/guardian/receivables',
-    builder: (context, value) =>
-        ReceivableBalanceContent(data: obj(value), auth: auth, staff: staff),
+    builder: (context, value) {
+      if (!_validReceivableLedger(value)) {
+        return PageStatus(
+          child: StatusPanel(
+            message: widget.staff
+                ? 'تعذر تحميل المطالبات في هذا النطاق.'
+                : 'تعذر تحميل أرصدة الأسرة.',
+            icon: Icons.warning_amber_rounded,
+            actionLabel: 'إعادة المحاولة',
+            onAction: () => setState(() => revision++),
+          ),
+        );
+      }
+      return ReceivableBalanceContent(
+        data: obj(value),
+        auth: widget.auth,
+        staff: widget.staff,
+        balanceScope: widget.staff
+            ? (widget.filters['branchId']?.isNotEmpty == true
+                  ? 'ملخص رصيد الفرع'
+                  : 'ملخص رصيد كل الفروع')
+            : null,
+        state: widget.staff ? state : '',
+        onStateChanged: widget.staff
+            ? (next) => setState(() => state = next)
+            : null,
+      );
+    },
   );
+}
+
+bool _validReceivableLedger(Object? value) {
+  bool currency(Object? field) =>
+      field is String && RegExp(r'^[A-Z]{3}$').hasMatch(field);
+  if (value is! Json ||
+      value['items'] is! List ||
+      !currency(value['currency']) ||
+      DateTime.tryParse('${value['asOf']}') == null) {
+    return false;
+  }
+  bool amount(Object? field) => _amount(field)?.isFinite == true;
+  return [
+        'outstanding',
+        'overdue',
+        'notYetDue',
+        'overpaymentCredit',
+      ].every((key) => amount(value[key])) &&
+      (value['items'] as List).every(
+        (item) =>
+            item is Json &&
+            item['id'] is String &&
+            (item['id'] as String).trim().isNotEmpty &&
+            item['player'] is String &&
+            item['overdue'] is bool &&
+            currency(item['currency']) &&
+            amount(item['outstanding']) &&
+            amount(item['charge']),
+      );
 }
 
 class ReceivableBalanceContent extends StatelessWidget {
   final Json data;
   final AuthController? auth;
   final bool staff;
+  final String? balanceScope;
+  final String state;
+  final ValueChanged<String>? onStateChanged;
   const ReceivableBalanceContent({
     super.key,
     required this.data,
     this.auth,
     this.staff = false,
+    this.balanceScope,
+    this.state = '',
+    this.onStateChanged,
   });
+
+  bool _matches(Json item) {
+    final amount = _amount(item['outstanding']);
+    return switch (state) {
+      'open' => amount != null && amount > 0,
+      'overdue' => item['overdue'] == true,
+      'future' => amount != null && amount > 0 && item['overdue'] != true,
+      'settled' => amount == 0,
+      'credit' => amount != null && amount < 0,
+      _ => true,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final items = rows(data['items']);
+    final items = rows(data['items']).where(_matches);
     final currency = data['currency'];
+    final timestamp = _balanceTime(context, data['asOf']);
+    final colors = Theme.of(context).colorScheme;
     return gList([
+      if (onStateChanged != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: InputDecorator(
+            decoration: const InputDecoration(labelText: 'حالة الرصيد'),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: state,
+                items: [
+                  for (final option in _balanceStates.entries)
+                    DropdownMenuItem(
+                      value: option.key,
+                      child: UiText(option.value),
+                    ),
+                ],
+                onChanged: (next) => onStateChanged!(next!),
+              ),
+            ),
+          ),
+        ),
       GCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              color: Theme.of(context).colorScheme.primary,
-              size: 32,
-            ),
-            const SizedBox(height: 12),
-            if (data['asOf'] != null)
-              UiText(
-                'رصيد حتى ${day(data['asOf'])} · بالتوقيت العالمي',
-                style: const TextStyle(fontSize: 12),
+            if (balanceScope case final String scope)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: UiText(
+                  scope,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
             UiText(
               localized(context, 'إجمالي المستحقات', 'Outstanding balance'),
@@ -77,7 +222,7 @@ class ReceivableBalanceContent extends StatelessWidget {
               money(data['outstanding'], currency),
               style: Theme.of(context).textTheme.headlineMedium,
             ),
-            const Divider(height: 28),
+            const Divider(height: 20),
             balanceLine(
               context,
               'المتأخر',
@@ -92,17 +237,24 @@ class ReceivableBalanceContent extends StatelessWidget {
               data['notYetDue'],
               currency,
             ),
-            balanceLine(
-              context,
-              'رصيد لصالح العميل',
-              'Overpayment credit',
-              data['overpaymentCredit'],
-              currency,
-            ),
+            if ((_amount(data['overpaymentCredit']) ?? 0) > 0)
+              balanceLine(
+                context,
+                'رصيد دائن للأسرة',
+                'Overpayment credit',
+                data['overpaymentCredit'],
+                currency,
+              ),
+            if (timestamp != null)
+              UiText(
+                'رصيد حتى $timestamp',
+                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+              ),
           ],
         ),
       ),
       ExpansionTile(
+        dense: true,
         title: const UiText('كيف تُحسب المستحقات؟'),
         children: [
           UiText(
@@ -114,75 +266,99 @@ class ReceivableBalanceContent extends StatelessWidget {
           ),
         ],
       ),
-      const SizedBox(height: 16),
-      if (items.isEmpty) const EmptyMessage('لا توجد مطالبات مثبتة.'),
-      for (final item in items)
-        GCard(
-          onTap: staff && auth != null
-              ? () => openPage(
-                  context,
-                  ReceivableDocumentPage(auth: auth!, id: textOf(item['id'])),
-                )
-              : null,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              UiText(
-                textOf(item['player']),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              UiText(textOf(item['description'])),
-              const SizedBox(height: 8),
-              balanceLine(
-                context,
-                'المطالبة',
-                'Charge',
-                item['charge'],
-                item['currency'],
-              ),
-              balanceLine(
-                context,
-                'رصيد قائم',
-                'Balance',
-                item['outstanding'],
-                item['currency'],
-              ),
-              if (item['creditReceived'] != null &&
-                  !RegExp(r'^0(?:\.0+)?$')
-                      .hasMatch(textOf(item['creditReceived'])))
-                balanceLine(
-                  context,
-                  'تسوية برصيد دائن',
-                  'Credit applied',
-                  item['creditReceived'],
-                  item['currency'],
-                ),
-              if (item['creditUsed'] != null &&
-                  !RegExp(r'^0(?:\.0+)?$').hasMatch(textOf(item['creditUsed'])))
-                balanceLine(
-                  context,
-                  'رصيد دائن مستخدم',
-                  'Credit used',
-                  item['creditUsed'],
-                  item['currency'],
-                ),
-              UiText(
-                '${localized(context, 'الاستحقاق', 'Due')}: ${day(item['dueDate'])}',
-              ),
-              if (item['overdue'] == true)
-                UiText(
-                  localized(context, 'متأخر', 'Overdue'),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              if (staff && auth != null)
-                const UiText(
-                  'عرض المستند وحركاته',
-                  style: TextStyle(fontSize: 12),
-                ),
-            ],
-          ),
+      if (items.isEmpty)
+        EmptyMessage(
+          state.isEmpty
+              ? staff
+                    ? 'لا توجد مطالبات مثبتة في هذا النطاق.'
+                    : 'لا توجد مطالبات مثبتة للأسرة.'
+              : 'لا توجد مطالبات بهذه الحالة في النطاق المحدد.',
         ),
+      for (final item in items) _card(context, item),
     ]);
+  }
+
+  Widget _card(BuildContext context, Json item) {
+    final balance = _amount(item['outstanding']);
+    final credit = balance != null && balance < 0;
+    final overdue = item['overdue'] == true;
+    final colors = Theme.of(context).colorScheme;
+    final canOpen = staff && auth != null;
+    return GCard(
+      onTap: canOpen
+          ? () => openPage(
+              context,
+              ReceivableDocumentPage(auth: auth!, id: textOf(item['id'])),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          UiText(
+            textOf(item['player']),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          UiText(textOf(item['description'])),
+          if (staff && item['branch'] != null)
+            UiText(
+              textOf(item['branch']),
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+          const SizedBox(height: 6),
+          if (balance == 0)
+            UiText(staff ? 'مطالبة مسددة' : 'أُقفل الرصيد')
+          else
+            balanceLine(
+              context,
+              credit ? 'رصيد دائن' : 'رصيد قائم',
+              credit ? 'Credit balance' : 'Balance',
+              balance?.abs() ?? item['outstanding'],
+              item['currency'],
+            ),
+          balanceLine(
+            context,
+            'أصل المطالبة',
+            'Original charge',
+            item['charge'],
+            item['currency'],
+          ),
+          if ((_amount(item['creditReceived']) ?? 0) != 0)
+            balanceLine(
+              context,
+              'تسوية برصيد دائن',
+              'Credit applied',
+              item['creditReceived'],
+              item['currency'],
+            ),
+          if ((_amount(item['creditUsed']) ?? 0) != 0)
+            balanceLine(
+              context,
+              'رصيد دائن مستخدم',
+              'Credit used',
+              item['creditUsed'],
+              item['currency'],
+            ),
+          if (balance != null && balance > 0)
+            UiText(
+              'الاستحقاق ${_balanceDay(context, item['dueDate'])}${overdue ? ' · متأخرة' : ''}',
+              style: TextStyle(
+                color: overdue ? colors.error : colors.onSurfaceVariant,
+              ),
+            ),
+          if (canOpen)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: UiText(
+                'عرض المستند وحركاته',
+                style: TextStyle(
+                  color: colors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget balanceLine(
@@ -228,41 +404,64 @@ class ReceivableDocumentPage extends StatelessWidget {
           );
         }
         final currency = balance['currency'];
+        final outstanding = _amount(balance['outstanding']);
+        final timestamp = _balanceTime(context, data['asOf']);
+        final movements = rows(data['movements']);
+        final credits = rows(data['creditApplications'] ?? []);
         return gList([
-          Heading(textOf(balance['player'])),
-          UiText(textOf(balance['description'])),
-          if (data['asOf'] != null)
-            UiText(
-              'رصيد حتى ${day(data['asOf'])} · بالتوقيت العالمي',
-              style: const TextStyle(fontSize: 12),
+          GCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Heading(textOf(balance['description'])),
+                UiText('${balance['player']} · ${balance['branch']}'),
+                const SizedBox(height: 10),
+                UiText(
+                  outstanding != null && outstanding < 0
+                      ? 'رصيد لصالح العميل'
+                      : outstanding == 0
+                      ? 'مطالبة مسددة'
+                      : 'الرصيد القائم',
+                ),
+                MoneyText(
+                  outstanding?.abs() ?? balance['outstanding'],
+                  currency,
+                ),
+                if (timestamp != null)
+                  UiText(
+                    'رصيد حتى $timestamp',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                const Divider(height: 22),
+                UiText('الاستحقاق ${_balanceDay(context, balance['dueDate'])}'),
+                UiText(
+                  balance['source'] == 'OpeningBalance'
+                      ? 'رصيد افتتاحي موثق'
+                      : 'مطالبة مسجلة',
+                ),
+              ],
             ),
-          Heading(
-            textOf(balance['outstanding']).startsWith('-')
-                ? 'رصيد لصالح العميل'
-                : 'الرصيد القائم',
           ),
-          MoneyText(balance['outstanding'], currency),
           Facts([
             ('أصل المطالبة', money(balance['charge'], currency)),
-            ('تحصيل مخصص', money(balance['allocated'], currency)),
-            ('إشعار دائن', money(balance['credits'], currency)),
-            ('رصيد دائن مستخدم', money(balance['creditUsed'], currency)),
-            ('تسوية برصيد دائن', money(balance['creditReceived'], currency)),
-            ('الفرع', textOf(balance['branch'])),
-            ('تاريخ الاستحقاق', day(balance['dueDate'])),
-            (
-              'مصدر المستند',
-              balance['source'] == 'OpeningBalance'
-                  ? 'رصيد افتتاحي موثق'
-                  : 'مطالبة مسجلة',
-            ),
+            if ((_amount(balance['allocated']) ?? 0) != 0)
+              ('تحصيل مخصص', money(balance['allocated'], currency)),
+            if ((_amount(balance['credits']) ?? 0) != 0)
+              ('إشعار دائن', money(balance['credits'], currency)),
+            if ((_amount(balance['creditUsed']) ?? 0) != 0)
+              ('رصيد دائن مستخدم', money(balance['creditUsed'], currency)),
+            if ((_amount(balance['creditReceived']) ?? 0) != 0)
+              ('تسوية برصيد دائن', money(balance['creditReceived'], currency)),
           ]),
-          const Heading('مرجع المستند'),
-          SelectableText(id),
+          ExpansionTile(
+            dense: true,
+            title: const UiText('مرجع المستند'),
+            children: [SelectableText(id)],
+          ),
           const Heading('حركات المستند'),
-          if (rows(data['movements']).isEmpty)
+          if (movements.isEmpty && credits.isEmpty)
             const UiText('لا توجد حركات مسجلة.'),
-          for (final movement in rows(data['movements']))
+          for (final movement in movements)
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,30 +471,52 @@ class ReceivableDocumentPage extends StatelessWidget {
                         ? 'تخصيص تحصيل محفوظ'
                         : 'إشعار دائن',
                   ),
-                  MoneyText(movement['amount'], movement['currency'], size: 22),
-                  UiText(textOf(movement['reason'])),
-                  UiText(
-                    'بتاريخ ${day(movement['createdAtUtc'])} · بالتوقيت العالمي',
+                  MoneyText(
+                    movement['amount'],
+                    movement['currency'] ?? currency,
+                    size: 22,
                   ),
-                  if (movement['collectionId'] != null) ...[
-                    const UiText('مرجع التحصيل المخصص'),
-                    SelectableText(textOf(movement['collectionId'])),
-                  ],
+                  UiText(textOf(movement['reason'])),
+                  if (_balanceTime(context, movement['createdAtUtc'])
+                      case final String date)
+                    UiText(date),
+                  if (movement['collectionId'] != null)
+                    ExpansionTile(
+                      dense: true,
+                      title: const UiText('مرجع التحصيل المخصص'),
+                      children: [
+                        SelectableText(textOf(movement['collectionId'])),
+                      ],
+                    ),
                 ],
               ),
             ),
-          for (final credit in rows(data['creditApplications']))
+          for (final credit in credits)
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Heading('تسوية برصيد دائن موثقة'),
                   MoneyText(credit['amount'], currency, size: 22),
-                  UiText(
-                    'بتاريخ ${day(credit['createdAtUtc'])} · بالتوقيت العالمي',
+                  if (_balanceTime(context, credit['createdAtUtc'])
+                      case final String date)
+                    UiText(date),
+                  if (credit['reason'] != null)
+                    UiText(textOf(credit['reason'])),
+                  TextButton(
+                    onPressed: () => openPage(
+                      context,
+                      ReceivableDocumentPage(
+                        auth: auth,
+                        id: textOf(
+                          credit['sourceDocumentId'] == id
+                              ? credit['targetDocumentId']
+                              : credit['sourceDocumentId'],
+                        ),
+                      ),
+                    ),
+                    child: const UiText('عرض المطالبة المرتبطة'),
                   ),
-                  UiText('المستند المصدر: ${credit['sourceDocumentId']}'),
-                  UiText('المستند المستفيد: ${credit['targetDocumentId']}'),
                 ],
               ),
             ),

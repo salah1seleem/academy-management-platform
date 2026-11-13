@@ -22,14 +22,35 @@
 .totals > div { display: grid; gap: .45rem; padding: .7rem; border-radius: 12px; background: var(--background, #f5f7fa); }
 .totals strong { font-size: 1.05rem; }
 .totals small { font-size: .8rem; }
+.cashTotals > div:last-child { border: 1px solid var(--border); }
+.cashReceived { font-size: 1.35rem; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-block-start: 1px solid var(--border); padding-block-start: .8rem; }
 .line > strong { flex-shrink: 0; white-space: nowrap; }
 .notice { padding: 1rem; border-inline-start: 3px solid var(--primary); border-radius: 12px; background: var(--background, #f5f7fa); line-height: 1.8; font-size: .9rem; }
 .receipts { display: grid; gap: .65rem; }
 .receiptLink { display: block; padding: .7rem 1rem; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; color: var(--primary, #0d7772); text-decoration: underline; text-underline-offset: .2rem; overflow-wrap: anywhere; }
 @media (max-width: 380px) { .totals { grid-template-columns: 1fr; } .line { flex-wrap: wrap; } }
+@media (max-width: 540px) {
+  .cashTotals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cashTotals > div:last-child { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
+}
 
 :global(.dashboard-shell[data-workspace-design="v5"]) .page { color: var(--staff-text); }
 :global(.dashboard-shell[data-workspace-design="v5"]) .page :global(.page-header) { display:flex; background:transparent; border:0; border-bottom:1px solid var(--staff-border); border-radius:0; padding:0 0 18px; }
 :global(.dashboard-shell[data-workspace-design="v5"]) :is(.card,.summary,.notice,.totals>div,.plan select,.card textarea,.receiptLink) { border-radius:4px; }
 :global(.dashboard-shell[data-workspace-design="v5"]) .options { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); }
+:global(.dashboard-shell[data-workspace-design="v5"]) .page .receiptLink { color: var(--staff-text); justify-self: start; }
+
+.reviewActions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.reviewActions button { flex: 1 1 13rem; min-height: 44px; }
+
+.card .creditForm { max-width: none; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.creditAmount, .review { display: grid; gap: .55rem; min-width: 0; }
+.creditAmount small { color: var(--muted); }
+.creditAmount [role="alert"] { color: var(--danger, #b42318); }
+.review { gap: .8rem; }
+.review h3 { margin: 0; }
+.review p { overflow-wrap: anywhere; }
+.waiverPage > .card { inline-size: 100%; max-inline-size: 40rem; }
+.waiverPage > button { justify-self: start; }
+.waiverPage .card .creditForm { grid-template-columns: minmax(0, 1fr); }

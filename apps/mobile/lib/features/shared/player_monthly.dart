@@ -29,13 +29,36 @@ class _MonthlyState extends State<PlayerMonthlyPage>
   String message = '';
   String? get identity => widget.auth.session?.selected == null
       ? null
-      : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+      : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final original = identity;
   String get base => widget.playerId != null
       ? '/api/v1/guardian/children/${widget.playerId}/monthly'
       : '/api/v1/evaluations/monthly/enrollments/${widget.enrollmentId}';
-  String path({String? format, Json? data}) =>
-      '$base?${Uri(queryParameters: {'page': '$page', 'month': ?month, 'enrollmentId': ?selected, 'format': ?format, if (data != null) 'month': textOf(data['month']), if (data != null) 'enrollmentId': textOf(obj(data['enrollment'])['id'])}).query}';
+  String path({String? format, Json? report}) {
+    final query = Uri(
+      queryParameters: {
+        if (report == null) 'page': '$page',
+        'month': ?(report == null ? month : textOf(report['month'])),
+        if (widget.playerId != null)
+          'enrollmentId': ?(report == null
+              ? selected
+              : textOf(obj(report['enrollment'])['id'])),
+        'format': ?format,
+      },
+    ).query;
+    return '$base?$query';
+  }
+
+  String l(String arabic, String english) =>
+      localized(context, arabic, english);
+
+  String shortDate(Object? value) {
+    final parsed = DateTime.tryParse(textOf(value));
+    return parsed == null
+        ? textOf(value)
+        : MaterialLocalizations.of(context).formatMediumDate(parsed);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -85,7 +108,7 @@ class _MonthlyState extends State<PlayerMonthlyPage>
     context,
     {
           'Checklist': 'قائمة تحقق',
-          'Count': 'عدد',
+          'Count': 'مرة',
           'Seconds': 'ثانية',
           'Metres': 'متر',
           'Encouragement': 'نقاط تشجيعية غير مالية',
@@ -102,41 +125,76 @@ class _MonthlyState extends State<PlayerMonthlyPage>
   );
   Future<void> copy(Json d) async {
     if (busy) return;
+    final openedRevision = revision;
+    final route = ModalRoute.of(context);
+    bool stillHere() =>
+        mounted &&
+        identity == original &&
+        foreground &&
+        revision == openedRevision &&
+        (route?.isCurrent ?? true);
     setState(() {
       busy = true;
       message = '';
     });
     try {
       final r = obj(
-        await widget.auth.request('GET', path(format: 'text', data: d)),
+        await widget.auth.request('GET', path(format: 'text', report: d)),
       );
-      if (!mounted || identity != original || !foreground) return;
+      if (!stillHere()) return;
       final text = r['text'];
       if (text is! String || text.isEmpty) {
         throw StateError('Unconfirmed export');
       }
       await Clipboard.setData(ClipboardData(text: text));
-      if (mounted && identity == original && foreground) {
+      if (stillHere()) {
         setState(
           () => message = localized(
             context,
-            'تم نسخ تقرير الشهر. الحافظة تحتوي بيانات خاصة بطفلك؛ لا تشاركها دون حاجة.',
-            'Month copied. Clipboard contains your child’s private data; share carefully.',
+            'تم نسخ تقرير الشهر إلى الحافظة. احتفظ بالبيانات بشكل خاص.',
+            'Month copied to the clipboard. Keep the data private.',
           ),
         );
       }
     } catch (_) {
-      if (mounted && identity == original && foreground) {
+      if (stillHere()) {
         setState(
           () => message = localized(
             context,
-            'تعذر تأكيد التصدير؛ لم ننسخ تقريرًا ناقصًا. أعد مراجعة الصلاحية والشهر.',
-            'Export not confirmed; no partial report copied. Recheck access and month.',
+            'تعذر تأكيد التصدير. أعد المحاولة.',
+            'Could not confirm the export. Try again.',
           ),
         );
       }
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  void showScope(
+    Json report, {
+    String? nextMonth,
+    String? enrollment,
+    int nextPage = 0,
+  }) {
+    setState(() {
+      month = nextMonth ?? textOf(report['month']);
+      if (widget.playerId != null) {
+        selected = enrollment ?? textOf(obj(report['enrollment'])['id']);
+      }
+      page = nextPage;
+      revision++;
+      message = '';
+    });
+  }
+
+  Future<void> openSource(Widget destination) async {
+    await openPage(context, destination);
+    if (mounted && foreground && identity == original) {
+      setState(() {
+        revision++;
+        message = '';
+      });
     }
   }
 
@@ -148,201 +206,287 @@ class _MonthlyState extends State<PlayerMonthlyPage>
         return const SizedBox.shrink();
       }
       return GuardianPage(
-        title: localized(context, 'تقرير التطور الشهري', 'Monthly development'),
+        title: l('تقرير التطور الشهري', 'Monthly development'),
+        onBack: () => Navigator.of(context).maybePop(),
         child: RemoteBody(
           key: ValueKey(revision),
+          autoPaginate: false,
           auth: widget.auth,
           path: path(),
           builder: (context, value) {
-            final d = obj(value),
-                e = obj(d['enrollment']),
-                counts = obj(d['counts']);
+            final report = obj(value);
+            final enrollment = obj(report['enrollment']);
+            final counts = obj(report['counts']);
+            final enrollmentId = textOf(enrollment['id']);
+            final options = rows(report['enrollments'] ?? <Json>[]);
+            final items = rows(report['items']);
+            final monthKey = textOf(report['month']);
+            final date = DateTime.parse('$monthKey-01');
+            final calendar = MaterialLocalizations.of(context);
+            final currentMonth = textOf(report['asOfDate']).substring(0, 7);
+            final pageLabel = l('صفحة ${page + 1}', 'Page ${page + 1}');
+            final hasMore = report['hasMore'] == true;
             return gList([
               GCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.auto_graph_rounded),
                     Text(
-                      textOf(e['player']),
+                      textOf(enrollment['player']),
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    Text('${e['sport']} · ${d['month']}'),
-                    Text('${d['from']} — ${d['to']}'),
                     Text(
-                      localized(
-                        context,
-                        'قراءة حية للأدلة، لا قوة لاعب أو توقع احتراف.',
-                        'Live evidence, not player power or predicted success.',
+                      "${enrollment['sport']} · ${calendar.formatMonthYear(date)}",
+                    ),
+                    Text(
+                      l(
+                        "من ${shortDate(report['from'])} إلى ${shortDate(report['to'])}",
+                        "From ${shortDate(report['from'])} to ${shortDate(report['to'])}",
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: busy ? null : () => shift(d, -1),
-                      child: const Icon(Icons.chevron_right),
-                    ),
-                  ),
-                  Expanded(child: Center(child: Text(textOf(d['month'])))),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed:
-                          busy ||
-                              textOf(d['month']) ==
-                                  textOf(d['asOfDate']).substring(0, 7)
-                          ? null
-                          : () => shift(d, 1),
-                      child: const Icon(Icons.chevron_left),
-                    ),
-                  ),
-                ],
-              ),
-              if (widget.playerId != null)
-                DropdownButtonFormField<String>(
-                  initialValue: textOf(e['id']),
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: localized(
-                      context,
-                      'التسجيل الرياضي',
-                      'Sport enrollment',
-                    ),
-                  ),
-                  items: rows(d['enrollments'])
-                      .map(
-                        (x) => DropdownMenuItem(
-                          value: textOf(x['id']),
-                          child: Text(
-                            '${x['sport']} · ${x['branch']}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton(
+                          onPressed: busy || monthKey == '1900-01'
+                              ? null
+                              : () => shift(report, date, -1),
+                          child: Text(l('الشهر السابق', 'Previous month')),
                         ),
-                      )
-                      .toList(),
-                  onChanged: busy
-                      ? null
-                      : (v) => setState(() {
-                          selected = v;
-                          page = 0;
-                          message = '';
-                        }),
-                ),
-              Text(
-                textOf(d['notice']),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              GCard(
-                child: Wrap(
-                  spacing: 18,
-                  runSpacing: 12,
-                  children: [
-                    Text('${counts['skills']} مراجعة مهارة'),
-                    Text('${counts['badges']} شارة مسجلة'),
-                    Text('${counts['certificates']} شهادة مسجلة'),
+                        OutlinedButton(
+                          onPressed: busy || monthKey == currentMonth
+                              ? null
+                              : () => shift(report, date, 1),
+                          child: Text(l('الشهر التالي', 'Next month')),
+                        ),
+                      ],
+                    ),
+                    if (widget.playerId != null &&
+                        options.any(
+                          (option) => option['id'] != enrollmentId,
+                        )) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: enrollmentId,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: l('التسجيل الرياضي', 'Sport enrollment'),
+                        ),
+                        items: [
+                          if (!options.any(
+                            (option) => option['id'] == enrollmentId,
+                          ))
+                            DropdownMenuItem(
+                              value: enrollmentId,
+                              child: Text(textOf(enrollment['sport'])),
+                            ),
+                          for (final option in options)
+                            DropdownMenuItem(
+                              value: textOf(option['id']),
+                              child: Text(
+                                "${option['sport']} · ${option['branch']}",
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: busy
+                            ? null
+                            : (id) {
+                                if (id != null && id != enrollmentId) {
+                                  showScope(report, enrollment: id);
+                                }
+                              },
+                      ),
+                    ],
+                    if (report['enrollmentsHasMore'] == true)
+                      Text(
+                        l(
+                          'تظهر أول 100 تسجيل رياضي.',
+                          'Showing the first 100 sport enrollments.',
+                        ),
+                      ),
                   ],
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: busy ? null : () => copy(d),
-                icon: const Icon(Icons.copy_all_outlined),
-                label: Text(
-                  localized(
-                    context,
-                    'نسخ تقرير الشهر كاملًا',
-                    'Copy full month',
-                  ),
+              if (items.isEmpty)
+                EmptyMessage(
+                  page > 0
+                      ? l(
+                          'لا توجد نتائج في هذه الصفحة.',
+                          'There are no results on this page.',
+                        )
+                      : l(
+                          'لا توجد مراجعات أو شارات أو شهادات مسجلة لهذا الشهر.',
+                          'There are no reviews, badges or certificates for this month.',
+                        ),
                 ),
-              ),
-              Text(
-                localized(
-                  context,
-                  'التصدير يعيد فحص الصلاحية؛ لا يسترجع سحب لاحق نسخة نُسخت سابقًا.',
-                  'Export rechecks access; later withdrawal cannot recall a copied report.',
-                ),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (message.isNotEmpty) Text(message),
-              if (rows(d['items']).isEmpty)
-                Text(
-                  localized(
-                    context,
-                    'لا توجد أدلة في هذه الصفحة؛ هذا ليس حكمًا على قدرات الطفل.',
-                    'No evidence on this page; this is not a judgement of ability.',
-                  ),
-                ),
-              for (final r in rows(d['items']))
+              if (items.isNotEmpty) ...[
                 GCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Wrap(
+                    spacing: 18,
+                    runSpacing: 10,
                     children: [
                       Text(
-                        textOf(r['title']),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text('${r['on']} · ${state(textOf(r['state']))}'),
-                      if (r['value'] != null)
-                        Text('${r['value']} ${unit(textOf(r['unit']))}'),
-                      if (r['note'] != null) Text(textOf(r['note'])),
-                      Text('سجلها: ${r['actor']}'),
-                      TextButton(
-                        onPressed: () => openPage(
-                          context,
-                          r['kind'] == 'Skill'
-                              ? PlayerSkillsPage(
-                                  auth: widget.auth,
-                                  playerId: widget.playerId,
-                                  planId: textOf(r['planId']),
-                                )
-                              : r['kind'] == 'Certificate'
-                              ? PlayerCertificatesPage(
-                                  auth: widget.auth,
-                                  playerId: widget.playerId,
-                                  id: textOf(r['id']),
-                                )
-                              : PlayerBadgesPage(
-                                  auth: widget.auth,
-                                  playerId: widget.playerId,
-                                  enrollmentId: textOf(e['id']),
-                                ),
+                        l(
+                          "مراجعات المهارات: ${counts['skills']}",
+                          "Skill reviews: ${counts['skills']}",
                         ),
-                        child: Text(
-                          localized(
-                            context,
-                            'فتح المصدر وسجله',
-                            'Open source and history',
-                          ),
+                      ),
+                      Text(
+                        l(
+                          "الشارات: ${counts['badges']}",
+                          "Badges: ${counts['badges']}",
+                        ),
+                      ),
+                      Text(
+                        l(
+                          "الشهادات: ${counts['certificates']}",
+                          "Certificates: ${counts['certificates']}",
                         ),
                       ),
                     ],
                   ),
                 ),
-              const SizedBox.shrink(),
-              Text(
-                localized(
-                  context,
-                  'حتى25 دليلًا من كل نوع لكل صفحة. لا يجمع التقرير الصور أو الحضور أو المال.',
-                  'Up to25 per kind per page. No photos, attendance or finances in this report.',
+              ],
+              GCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: busy ? null : () => copy(report),
+                      icon: const Icon(Icons.copy_all_outlined),
+                      label: Text(
+                        busy
+                            ? l('جارٍ النسخ…', 'Copying…')
+                            : l('نسخ تقرير الشهر كاملًا', 'Copy full month'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l(
+                        'احتفظ بالتقرير بشكل خاص. السحب اللاحق لا يغيّر نسخة سبق نسخها.',
+                        'Keep the report private. A later withdrawal does not change a copied report.',
+                      ),
+                    ),
+                    if (message.isNotEmpty)
+                      Semantics(liveRegion: true, child: Text(message)),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(l('عن التقرير', 'About the report')),
+                      children: [
+                        Text(
+                          l(
+                            'يجمع التقرير مراجعات المهارات والشارات والشهادات لهذا الاشتراك. تظهر السجلات المسحوبة بحالتها الحالية.',
+                            'This report shows skill reviews, badges and certificates for this enrollment, including withdrawals.',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                style: Theme.of(context).textTheme.bodySmall,
               ),
+              for (final entry in items) entryCard(entry, enrollmentId),
+              if (page > 0 || hasMore)
+                GCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(liveRegion: true, child: Text(pageLabel)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: busy || page == 0
+                                ? null
+                                : () => showScope(report, nextPage: page - 1),
+                            child: Text(l('الصفحة السابقة', 'Previous page')),
+                          ),
+                          OutlinedButton(
+                            onPressed: busy || !hasMore || page >= 1000
+                                ? null
+                                : () => showScope(report, nextPage: page + 1),
+                            child: Text(l('الصفحة التالية', 'Next page')),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
             ]);
           },
         ),
       );
     },
   );
-  void shift(Json d, int amount) {
-    final date = DateTime.parse('${d['month']}-01');
+
+  Widget entryCard(Json entry, String enrollmentId) {
+    final (kind, label, destination) = switch (entry['kind']) {
+      'Skill' => (
+        l('مراجعة مهارة', 'Skill review'),
+        l('فتح خطة المهارة', 'Open skill plan'),
+        entry['planId'] is String
+            ? PlayerSkillsPage(
+                auth: widget.auth,
+                playerId: widget.playerId,
+                planId: textOf(entry['planId']),
+              )
+            : null,
+      ),
+      'Certificate' => (
+        l('شهادة إنجاز', 'Certificate'),
+        l('فتح الشهادة', 'Open certificate'),
+        PlayerCertificatesPage(
+          auth: widget.auth,
+          playerId: widget.playerId,
+          id: textOf(entry['id']),
+        ),
+      ),
+      'Badge' => (
+        l('شارة مجهود', 'Badge'),
+        l('فتح سجل الشارات', 'Open badge history'),
+        PlayerBadgesPage(
+          auth: widget.auth,
+          playerId: widget.playerId,
+          enrollmentId: enrollmentId,
+        ),
+      ),
+      _ => (l('سجل تطور', 'Development record'), '', null),
+    };
+    return GCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            textOf(entry['title']),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          Text("$kind · ${shortDate(entry['on'])}"),
+          Text(state(textOf(entry['state']))),
+          if (entry['value'] != null)
+            Text("${entry['value']} ${unit(textOf(entry['unit']))}"),
+          if (entry['note'] is String && textOf(entry['note']).isNotEmpty)
+            Text(textOf(entry['note'])),
+          if (entry['actor'] is String && textOf(entry['actor']).isNotEmpty)
+            Text(l("سجّله ${entry['actor']}", "Recorded by ${entry['actor']}")),
+          if (destination != null)
+            TextButton(
+              onPressed: busy ? null : () => openSource(destination),
+              child: Text(label),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void shift(Json report, DateTime date, int amount) {
     final next = DateTime(date.year, date.month + amount);
-    if (next.year < 1900) return;
-    setState(() {
-      month = '${next.year}-${next.month.toString().padLeft(2, '0')}';
-      page = 0;
-      message = '';
-    });
+    showScope(
+      report,
+      nextMonth: "${next.year}-${next.month.toString().padLeft(2, '0')}",
+    );
   }
 }

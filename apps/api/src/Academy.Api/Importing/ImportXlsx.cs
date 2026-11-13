@@ -53,7 +53,9 @@ public static class ImportXlsx
                 if(currentLayout && row>0 && sheet.Rows[0].Count>column && sheet.Rows[0][column].Value.Contains("yyyy-MM-dd",StringComparison.Ordinal) && ImportPreview.Date(cell.Value) is { } date)
                     return new XElement(S+"c",new XAttribute("r",address),new XAttribute("s",4),new XElement(S+"v",date.ToDateTime(TimeOnly.MinValue).ToOADate().ToString(CultureInfo.InvariantCulture)));
                 if(cell.IsText)return new XElement(S+"c",new XAttribute("r",address),new XAttribute("s",row==0?1:0),new XAttribute("t","s"),new XElement(S+"v",stringIds[cell.Value]));
-                var style=currentLayout && decimal.TryParse(cell.Value,CultureInfo.InvariantCulture,out var numeric) && decimal.Truncate(numeric)==numeric?3:2;
+                var isPhone = currentLayout && (sheet.Name == "اللاعبون" && column == 3 || sheet.Name == "أولياء الأمور" && column == 2);
+                var style = isPhone ? 0 : currentLayout && decimal.TryParse(cell.Value, CultureInfo.InvariantCulture, out var numeric)
+                    && decimal.Truncate(numeric) == numeric ? 3 : 2;
                 return new XElement(S+"c",new XAttribute("r",address),new XAttribute("s",style),new XElement(S+"v",cell.Value));
             }
             for (var i = 0; i < book.Sheets.Count; i++)
@@ -62,7 +64,7 @@ public static class ImportXlsx
                 var worksheet = new XElement(S + "worksheet",
                     new XElement(S + "sheetViews", new XElement(S + "sheetView", new XAttribute("workbookViewId", 0), new XAttribute("rightToLeft", 1), new XAttribute("showGridLines", 0), new XElement(S + "pane", new XAttribute("ySplit", 1), new XAttribute("topLeftCell", "A2"), new XAttribute("activePane", "bottomLeft"), new XAttribute("state", "frozen")))),
                     new XElement(S + "cols", new XElement(S + "col", new XAttribute("min", 1), new XAttribute("max", columns), new XAttribute("width", (sheet.Name is "Instructions" or "دليل الاستخدام" or "ابدأ هنا") ? 60 : 25), new XAttribute("customWidth", 1), new XAttribute("style", 0))),
-                    new XElement(S + "sheetData", sheet.Rows.Select((row, ri) => new XElement(S + "row", new XAttribute("r", ri + 1), new XAttribute("ht", ri == 0 ? 42 : Math.Max(28, Math.Ceiling(row.Max(c => c.Value.Length) / ((sheet.Name is "Instructions" or "دليل الاستخدام" or "ابدأ هنا") ? 45d : 22d)) * 18)), new XAttribute("customHeight", 1), row.Select((cell, ci) => WriteCell(cell,ri,ci,sheet))))));
+                    new XElement(S + "sheetData", sheet.Rows.Select((row, ri) => new XElement(S + "row", new XAttribute("r", ri + 1), new XAttribute("ht", ri == 0 ? 42 : Math.Max(28, Math.Ceiling(row.Select(c => c.Value.Length).DefaultIfEmpty().Max() / ((sheet.Name is "Instructions" or "دليل الاستخدام" or "ابدأ هنا") ? 45d : 22d)) * 18)), new XAttribute("customHeight", 1), row.Select((cell, ci) => WriteCell(cell,ri,ci,sheet))))));
                 if (FriendlyImportSchema.IsFriendly(book) && (AcademyWorkbookSchema.IsCurrent(book) ? AcademyWorkbookSchema.Sheets : FriendlyImportSchema.Sheets).TryGetValue(sheet.Name, out var fields))
                 {
                     worksheet.Add(new XElement(S + "autoFilter", new XAttribute("ref", $"A1:{Column(columns - 1)}{Math.Max(2, sheet.Rows.Count)}")));

@@ -22,6 +22,57 @@ public sealed partial class V2ReceivablesTests
     }
     private Task<HttpResponseMessage> CreditQuote(HttpClient c, Guid source, Guid target, decimal amount = 60) => Post(c, CreditPath + "/quote", new { sourceDocumentId = source, targetDocumentId = target, amount, reason = "تخصيص رصيد دائن اصطناعي" });
     private static object CreditBody(Guid source, Guid target, JsonElement q, decimal amount = 60) => new { sourceDocumentId = source, targetDocumentId = target, amount, reason = "تخصيص رصيد دائن اصطناعي", quoteHash = q.GetProperty("quoteHash").GetString() };
+
+    [Fact]
+    public async Task Credit_application_attempt_reads_exhausted_source_for_the_original_actor_and_document_only()
+    {
+        var f = await Fixture();
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        using var admin = await Staff(DemoSeed.AdminEmail);
+        var credit = await CreditFixture(owner, f.Enrollment, f.Owner);
+        var key = Guid.NewGuid().ToString();
+        async Task<HttpResponseMessage> Attempt(HttpClient client, Guid source, string requestKey)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{CreditPath}/{source}/attempt");
+            request.Headers.Add("Idempotency-Key", requestKey);
+            return await client.SendAsync(request);
+        }
+
+        Assert.Equal(HttpStatusCode.NotFound, (await Attempt(owner, credit.Source, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Attempt(owner, credit.Source, "short")).StatusCode);
+        var quoteResponse = await CreditQuote(owner, credit.Source, credit.Target, 100);
+        quoteResponse.EnsureSuccessStatusCode();
+        var quote = await quoteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var applied = await Post(owner, CreditPath + "/approve", new
+        {
+            sourceDocumentId = credit.Source, targetDocumentId = credit.Target,
+            amount = quote.GetProperty("amount").GetString(),
+            reason = quote.GetProperty("reason").GetString(), quoteHash = quote.GetProperty("quoteHash").GetString()
+        }, key);
+        applied.EnsureSuccessStatusCode();
+        var saved = await applied.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("0.00", saved.GetProperty("sourceRemaining").GetString());
+        Assert.Equal("200.00", saved.GetProperty("targetRemaining").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.GetAsync($"{CreditPath}/{credit.Source}/options")).StatusCode);
+
+        var response = await Attempt(owner, credit.Source, key);
+        response.EnsureSuccessStatusCode();
+        Assert.True(response.Headers.CacheControl?.NoStore == true && response.Headers.CacheControl.Private);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(saved.GetProperty("id").GetGuid(), result.GetProperty("id").GetGuid());
+        Assert.Equal(credit.Target, result.GetProperty("targetDocumentId").GetGuid());
+        Assert.NotEqual(Guid.Empty, result.GetProperty("targetBranchId").GetGuid());
+        Assert.Equal("100.00", result.GetProperty("amount").GetString());
+        Assert.Equal("0.00", result.GetProperty("sourceRemaining").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await Attempt(owner, credit.Target, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Attempt(foreign, credit.Source, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Attempt(admin, credit.Source, key)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Equal(1, await db.ReceivableCreditApplications.CountAsync(x => x.SourceDocumentId == credit.Source));
+    }
+
     [Fact]
     public async Task Credit_application_preview_then_atomic_replay_preserves_cash_and_guardian_csv_asOf()
     {

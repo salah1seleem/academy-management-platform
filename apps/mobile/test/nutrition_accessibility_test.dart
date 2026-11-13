@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/guardian/guardian_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,7 +7,7 @@ import 'guardian_test.dart' show logged, shell;
 
 void main() {
   testWidgets(
-    'small phone with large Arabic text can scroll the dated plan and change meals without overflow',
+    'small phone with large Arabic text can scroll the dated suggestions and change meals without overflow',
     (t) async {
       await t.binding.setSurfaceSize(const Size(320, 568));
       addTearDown(() => t.binding.setSurfaceSize(null));
@@ -47,12 +48,12 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('خطة اليوم'), findsOneWidget);
-      await t.tap(find.text('خطة اليوم'));
+      expect(find.text('اقتراحات اليوم'), findsOneWidget);
+      await t.tap(find.text('اقتراحات اليوم'));
       await t.pumpAndSettle();
-      expect(find.text('اقتراح نظام غذائي ليوم 2026-10-26'), findsOneWidget);
+      expect(find.text('الاثنين 26 أكتوبر 2026'), findsOneWidget);
       expect(find.text('معلومات عامة وليست وصفة طبية.'), findsOneWidget);
-      await t.tap(find.text('خطة اليوم'));
+      await t.tap(find.text('اقتراحات اليوم'));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       final lunch = find.widgetWithText(ChoiceChip, 'الغداء');
@@ -67,6 +68,67 @@ void main() {
       await t.tap(lunch);
       await t.pumpAndSettle();
       expect(paths, contains('/api/v1/guardian/nutrition?category=Lunch'));
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'incomplete meal results show a real empty state without fake actions or activity',
+    (t) async {
+      final auth = await logged((m, p, b, k) async {
+        expect(m, 'GET');
+        if (p.contains('/recommendations')) {
+          return {
+            'breakfast': {'arabicName': 'عنصر دون رابط'},
+          };
+        }
+        return <Object>[];
+      });
+      await t.pumpWidget(
+        shell(
+          NutritionLibrary(
+            auth: auth,
+            playerId: 'child',
+            today: '2026-10-25',
+            showToday: true,
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('لا توجد اقتراحات لهذا اليوم.'), findsOneWidget);
+      expect(find.byType(ActionChip), findsNothing);
+      expect(find.text('يوم راحة'), findsNothing);
+      expect(find.text('يوم تدريب'), findsNothing);
+      expect(find.text('لا توجد وجبات في هذا القسم حاليًا.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'unavailable daily suggestions stay in the open nutrition library',
+    (t) async {
+      final auth = await logged((m, p, b, k) async {
+        if (p.contains('/recommendations')) {
+          throw const ApiFailure(404, 'لا توجد اقتراحات');
+        }
+        return <Object>[];
+      });
+      await t.pumpWidget(
+        shell(
+          NutritionLibrary(
+            auth: auth,
+            playerId: 'child',
+            today: '2026-10-25',
+            showToday: true,
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('لا توجد اقتراحات لهذا اليوم.'), findsOneWidget);
+      expect(find.byTooltip('عرض المكتبة'), findsNothing);
+      expect(find.text('مكتبة التغذية'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();

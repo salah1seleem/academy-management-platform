@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/admin/admin_home.dart';
@@ -56,7 +57,7 @@ Widget app(Widget page, {double scale = 1}) => MaterialApp(
 void main() {
   const expected = {
     'Guardian': ['الرئيسية', 'الحصص', 'المباريات', 'التقييمات'],
-    'Coach': ['الرئيسية', 'الحضور\nوالتقييم', 'المباريات', 'المزيد'],
+    'Coach': ['الرئيسية', 'المجموعات', 'المباريات', 'المزيد'],
     'AcademyOwner': ['العمليات', 'المباريات', 'الرئيسية', 'التقارير', 'المزيد'],
     'AcademyAdmin': ['الرئيسية', 'العمليات', 'الحضور', 'المزيد'],
   };
@@ -69,7 +70,11 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.resetPhysicalSize);
           addTearDown(tester.view.resetDevicePixelRatio);
-          final auth = await authenticate(role, (m, p, b, t) async => []);
+          final calls = <String>[];
+          final auth = await authenticate(role, (m, p, b, t) async {
+            calls.add('$m $p');
+            return [];
+          });
           await tester.pumpWidget(
             app(
               NativeRoleTabs(
@@ -106,6 +111,18 @@ void main() {
           expect(find.byTooltip('حسابي'), findsOneWidget);
           expect(find.byTooltip('التنبيهات'), findsOneWidget);
           expect(find.byTooltip('شرح الصفحة بالفيديو'), findsNothing);
+          if (role == 'Coach') {
+            await tester.tap(find.text('المجموعات'));
+            await tester.pumpAndSettle();
+            expect(find.byType(CoachGroupsPage), findsOneWidget);
+            expect(find.text('لا توجد مجموعات مسندة إليك.'), findsOneWidget);
+            expect(calls.where((call) => call.contains('/api/v1/coach/')), [
+              'GET /api/v1/coach/groups',
+            ]);
+            await tester.tap(find.text('الرئيسية'));
+            await tester.pumpAndSettle();
+            expect(find.text('محتوى الدور'), findsOneWidget);
+          }
           if (role != 'Guardian') {
             await tester.tap(find.text('المزيد'));
             await tester.pumpAndSettle();
@@ -123,33 +140,56 @@ void main() {
       );
     }
   }
-  testWidgets(
-    'Admin home hides attendance when its permission is denied and never reads owner finances',
-    (tester) async {
-      final calls = <String>[];
-      final auth = await authenticate('AcademyAdmin', (m, p, b, t) async {
-        calls.add(p);
-        return p == '/api/v1/my-permissions'
-            ? ['payment.read']
-            : {'pending': 0, 'items': []};
-      });
-      await tester.pumpWidget(app(AdminHome(auth: auth)));
-      await tester.pumpAndSettle();
-      expect(find.text('طلبات الدفع'), findsOneWidget);
-      expect(find.text('حضور اللاعبين'), findsNothing);
-      expect(calls.toSet(), {
-        '/api/v1/my-permissions',
-        '/api/v1/my-access',
-        '/api/v1/manage/payment-requests?status=Pending&allDates=true',
-        '/api/v1/staff/passkeys/attendance',
-        '/api/v1/news',
-      });
-      expect(
-        calls.any((p) => p.contains('/attendance/') || p.contains('/reports/')),
-        isFalse,
-      );
-      expect(auth.session!.selected!.label, 'إداري');
-      auth.dispose();
-    },
-  );
+  for (final matchAccess in ['denied', 'forbidden', 'granted']) {
+    testWidgets(
+      'Admin home with $matchAccess match access keeps attendance and finance within permission',
+      (tester) async {
+        final calls = <String>[];
+        final auth = await authenticate('AcademyAdmin', (m, p, b, t) async {
+          calls.add(p);
+          if (p == '/api/v1/my-permissions') return ['payment.read'];
+          if (p == '/api/v1/my-match-access') {
+            if (matchAccess == 'forbidden') {
+              throw const ApiFailure(403, 'لا توجد صلاحية.');
+            }
+            return {
+              'canRead': matchAccess == 'granted',
+              'canAdd': false,
+              'canEdit': false,
+            };
+          }
+          return {'pending': 0, 'items': []};
+        });
+        await tester.pumpWidget(app(AdminHome(auth: auth)));
+        await tester.pumpAndSettle();
+        expect(find.text('طلبات الدفع'), findsOneWidget);
+        expect(find.text('حضور اللاعبين'), findsNothing);
+        expect(find.text('تسجيل الحضور'), findsNothing);
+        expect(
+          find.text('إدارة المباريات والنتائج'),
+          matchAccess == 'granted' ? findsOneWidget : findsNothing,
+        );
+        expect(calls.toSet(), {
+          '/api/v1/my-permissions',
+          '/api/v1/my-access',
+          '/api/v1/my-match-access',
+          '/api/v1/manage/payment-requests?status=Pending&allDates=true',
+          '/api/v1/staff/passkeys/attendance',
+          '/api/v1/news',
+        });
+        expect(
+          calls.any(
+            (p) =>
+                p.contains('/attendance/') ||
+                p.contains('/reports/') ||
+                p.contains('/manage/matches'),
+          ),
+          isFalse,
+        );
+        expect(auth.session!.selected!.label, 'إداري');
+        await tester.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
 }

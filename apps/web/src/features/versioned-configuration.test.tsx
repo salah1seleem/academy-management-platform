@@ -19,6 +19,27 @@ it("does not load configuration or expose controls without the server permission
   render(<VersionedConfiguration />); await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
   expect(screen.queryByRole("button", { name: "حفظ إصدار مسودة" })).not.toBeInTheDocument();
 });
+it("keeps the active cash state visible while the owner saves a different setting in a draft", async () => {
+  const fetcher = vi.fn(async (url, init) => {
+    const body = url === "/api/v1/my-permissions" ? ["academy.settings.manage"]
+      : url === "/api/v1/me" ? { role: "AcademyOwner" }
+      : url === "/api/v1/auth/csrf" ? { token: "csrf" }
+      : init?.method ? { id: "draft", revision: 2 }
+      : { entitlements: [], versions: [{ id: "active", revision: 1, version: 5, state: "Active", contentHash: "a".repeat(64), settings }], history: [] };
+    return Response.json(body);
+  });
+  global.fetch = fetcher;
+  render(<VersionedConfiguration />);
+  const toggle = await screen.findByRole("checkbox", { name: "السماح بالتشغيل النقدي" });
+  expect(toggle).toBeChecked();
+  fireEvent.click(toggle);
+  expect(screen.getByText("الحالة الحالية مفعّل")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "حفظ إصدار مسودة" }));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/manage/configuration/drafts", expect.objectContaining({
+    method: "POST", body: expect.stringContaining('"cashEnabled":false'),
+  })));
+  expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/transition"))).toBe(false);
+});
 it("owner saves the follow-up policy as a draft, not an immediate live change", async () => {
   const fetcher = vi.fn().mockImplementation(async (url, init) => ({ ok: true, status: 200, json: async () => url === "/api/v1/my-permissions" ? ["academy.settings.manage"] : url === "/api/v1/me" ? {role:"AcademyOwner"} : url === "/api/v1/manage/configuration/help-options" ? {lessons:[]} : url === "/api/v1/auth/csrf" ? {token:"csrf"} : init?.method ? {} : {entitlements:[],versions:[{id:"v1",revision:1,version:5,state:"Active",contentHash:"a".repeat(64),settings}],history:[]} }));
   global.fetch = fetcher; render(<VersionedConfiguration/>);

@@ -1,7 +1,5 @@
 import 'package:academy_mobile/core/theme/app_theme.dart';
-import 'package:academy_mobile/features/guardian/guardian_child_actions.dart';
 import 'package:academy_mobile/features/guardian/guardian_home.dart';
-import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,14 +47,6 @@ Map<String, dynamic> sport(String id, {bool swim = false}) => {
 };
 
 void main() {
-  test('Card dates use Western digits and Arabic months without a year', () {
-    expect(shortArabicDate('2026-11-09'), '9 نوفمبر');
-    expect(shortArabicDate('2026-11-10T00:00:00'), '10 نوفمبر');
-    expect(shortArabicDate('2026-09-19'), '19 سبتمبر');
-    expect(shortArabicDate('2026-10-18'), '18 أكتوبر');
-    expect(shortArabicDate(null), 'غير محدد');
-  });
-
   for (final size in [(360.0, 1.0), (440.0, 1.0), (375.0, 2.0)]) {
     testWidgets(
       'Mixed-sport cards align their footers without a blank footer gap: $size',
@@ -141,16 +131,7 @@ void main() {
                 find.widgetWithText(TextButton, 'المدرب مدرب العرض').last,
               )
               .dy;
-          final actions = find.descendant(
-            of: find.byKey(const ValueKey('child-b')),
-            matching: find.byType(GuardianChildActions),
-          );
-          expect(actions, findsOneWidget);
-          final beforeActions = t.getTopLeft(actions).dy - coachBottom;
-          final afterActions = footerTop - t.getBottomLeft(actions).dy;
-          expect(beforeActions, greaterThanOrEqualTo(0));
-          expect(afterActions, greaterThanOrEqualTo(0));
-          expect(beforeActions + afterActions, lessThan(32));
+          expect(footerTop - coachBottom, lessThan(32));
         }
         for (final name in ['التنفس', 'الحرة', 'الظهر', 'الانطلاق', 'التحمل']) {
           expect(find.text('$name · 80'), findsOneWidget);

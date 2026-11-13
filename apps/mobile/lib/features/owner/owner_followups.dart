@@ -211,7 +211,14 @@ class _FollowUpEvaluationSourceState extends State<FollowUpEvaluationSource>
 
 class OwnerFollowUpsPage extends StatefulWidget {
   final AuthController auth;
-  const OwnerFollowUpsPage({super.key, required this.auth});
+  const OwnerFollowUpsPage({
+    super.key,
+    required this.auth,
+    this.initialBranch = '',
+    this.allDates = false,
+  });
+  final String initialBranch;
+  final bool allDates;
   @override
   State<OwnerFollowUpsPage> createState() => _OwnerFollowUpsPageState();
 }
@@ -220,7 +227,8 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
   late final identity = followUpContext(widget.auth);
   Json? options, data;
   String? from, to;
-  String state = 'Open', branch = '', error = '';
+  String state = 'Open', error = '';
+  late String branch = widget.initialBranch;
   int generation = 0;
   bool initialized = false, loading = true;
   @override
@@ -248,8 +256,10 @@ class _OwnerFollowUpsPageState extends State<OwnerFollowUpsPage> {
         return;
       }
       if (!initialized) {
-        to = textOf(o['asOfDate']);
-        from = '${to!.substring(0, 7)}-01';
+        if (!widget.allDates) {
+          to = textOf(o['asOfDate']);
+          from = '${to!.substring(0, 7)}-01';
+        }
         initialized = true;
       }
       final query = Uri(

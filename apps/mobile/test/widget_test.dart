@@ -76,7 +76,7 @@ void main() {
       )..restoring = false;
       await auth.verify('phone', 'challenge', 'otp');
       await tester.pumpWidget(AcademyApp(auth: auth, environment: 'Demo'));
-      expect(find.text('اختيار الأكاديمية'), findsOneWidget);
+      expect(find.text('اختيار الدور'), findsOneWidget);
       expect(find.textContaining('ولي أمر'), findsOneWidget);
       expect(find.textContaining('مالك'), findsOneWidget);
       expect(auth.session!.membershipId, isNull);

@@ -73,14 +73,13 @@ class _NativeMediaGroupsState extends NativeOperationState<NativeMediaGroups> {
   Widget build(BuildContext context) => page(
     'رفع صور وفيديو',
     [
-      const UiText(
-        'اختر المجموعة المخوّلة، ثم راجع تاريخ الواقعة وخصوصية الملف قبل النشر.',
-      ),
-      const SizedBox(height: 16),
       TextField(
         controller: search,
         maxLength: 100,
-        decoration: const InputDecoration(labelText: 'بحث باسم المجموعة'),
+        decoration: const InputDecoration(
+          labelText: 'بحث باسم المجموعة',
+          counterText: '',
+        ),
         onSubmitted: (_) {
           applied = search.text.trim();
           changePage(1);

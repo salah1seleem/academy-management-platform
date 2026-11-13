@@ -1,3 +1,8 @@
-import { PageHeader } from "../../../components/dashboard-shell";
 import { WorkContextChooser } from "../../../features/work-context";
-export default function WorkContextPage() { return <><PageHeader title="اختر سياق العمل" context="الحساب والصلاحيات" description="كل سياق له صلاحيات وفروع ورياضات مستقلة." /><WorkContextChooser /></>; }
+
+export default async function WorkContextPage({ searchParams }: {
+  searchParams: Promise<{ returnTo?: string | string[] }>;
+}) {
+  const { returnTo } = await searchParams;
+  return <WorkContextChooser returnTo={typeof returnTo === "string" ? returnTo : undefined} />;
+}

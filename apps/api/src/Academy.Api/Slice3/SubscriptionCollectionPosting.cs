@@ -8,7 +8,8 @@ public static class SubscriptionCollectionPosting
 {
     public static (PaymentCollection Collection, Receipt Receipt) Create(PaymentRequest payment, RenewalRequest renewal,
         Guid playerId, string player, string sport, string plan, string method, string receiptMethod,
-        DateTimeOffset paidAt, DateTimeOffset storedAt, string confirmedBy, Guid? collectionId = null, Guid? receiptId = null, string? receiptNumber = null)
+        DateTimeOffset paidAt, DateTimeOffset storedAt, string confirmedBy, Guid? collectionId = null, Guid? receiptId = null,
+        string? receiptNumber = null, DateOnly? receiptDay = null)
     {
         if (payment.Status != PaymentRequestStatus.Confirmed || renewal.Status != RenewalRequestStatus.Paid ||
             payment.RenewalRequestId != renewal.Id || payment.AcademyId != renewal.AcademyId ||
@@ -20,7 +21,7 @@ public static class SubscriptionCollectionPosting
             PaymentMethod = method, Provider = payment.Provider, ProviderReference = payment.ProviderReference, ConfirmedAtUtc = paidAt,
             ConfirmedBy = confirmedBy, CreatedAtUtc = storedAt, UpdatedAtUtc = storedAt };
         var receipt = new Receipt { Id = receiptId ?? Guid.NewGuid(), AcademyId = payment.AcademyId, CollectionId = id,
-            ReceiptNumber = receiptNumber ?? $"RC-{paidAt:yyyyMMdd}-{id.ToString("N")[..8].ToUpperInvariant()}",
+            ReceiptNumber = receiptNumber ?? $"RC-{receiptDay ?? DateOnly.FromDateTime(paidAt.DateTime):yyyyMMdd}-{id.ToString("N")[..8].ToUpperInvariant()}",
             PlayerId = playerId, SportEnrollmentId = renewal.SportEnrollmentId, SubscriptionPlanId = renewal.SubscriptionPlanId,
             PlayerNameSnapshot = player, SportNameSnapshot = sport, PlanNameSnapshot = plan,
             OriginalAmount = renewal.OriginalAmount, DiscountType = renewal.DiscountType, DiscountValue = renewal.DiscountValue,

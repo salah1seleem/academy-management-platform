@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { GuardianSponsoredCard, GuardianSponsorSettings, GuardianSponsorDetail } from "./guardian-sponsored";
 import { CommunityCampaigns } from "./community-campaigns";
 import { GuardianHome } from "./guardian-core";
-const push=vi.hoisted(()=>vi.fn());vi.mock("next/navigation",()=>({useRouter:()=>({push,replace:vi.fn()})}));
+const push=vi.hoisted(()=>vi.fn());vi.mock("next/navigation",()=>({usePathname: () => "/guardian", useRouter:()=>({push,replace:vi.fn()})}));
 const ad={id:"ad",title:"ورشة برمجة افتراضية",body:"تفاصيل واضحة للأسرة",advertiser:"مركز افتراضي",buttonText:"التفاصيل",imageUrl:null,endsAtUtc:"2100-01-01T00:00:00Z",destination:"InternalDetails"};
 let intersect:IntersectionObserverCallback | undefined;
 it("a detailed creative loses its cached content when the bounded lease is reauthorized and revoked",async()=>{

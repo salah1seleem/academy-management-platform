@@ -1,3 +1,8 @@
 .trend{margin-block:14px 4px;min-width:0}.trend h3{font-size:12px;margin:0 0 4px;font-weight:600}.trend>small{display:flex;flex-wrap:wrap;gap:6px;font-size:10px;opacity:.7;line-height:1.7;text-align:right}.trend svg{display:block;width:100%;height:64px;margin-block:10px 6px;overflow:visible;color:var(--accent,#3b6cf0)}.line{fill:none;stroke:currentColor;stroke-width:2.5}.zero{stroke:currentColor;stroke-opacity:.18;stroke-width:.3}.trend circle{fill:currentColor}.points{display:grid;direction:ltr;gap:3px}.points a{min-width:0;display:flex;align-items:center;flex-direction:column;gap:2px;padding-block:4px;color:inherit;text-decoration:none;font-size:10px;overflow-wrap:anywhere;line-height:1.5}.points a:focus-visible{outline:2px solid var(--accent,#3b6cf0);outline-offset:2px}.points a:hover{background:color-mix(in srgb,currentColor 6%,transparent)}.points span{opacity:.6;font-size:9px}.negative{color:var(--negative,#f87171)}
 
 .area{fill:currentColor;fill-opacity:.16;stroke:none}.monthly svg{height:52px;color:var(--trend-secondary,#22d3ee)}.monthly .area{fill-opacity:.15}
+
+.scroller{direction:rtl;overflow-x:auto;scrollbar-width:thin;padding-block-end:4px}
+.scroller .points{gap:0}
+.scroller .points a{min-block-size:44px;justify-content:center}
+.scroller .points a:focus-visible{outline-offset:-2px}

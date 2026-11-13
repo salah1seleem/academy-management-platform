@@ -1,9 +1,10 @@
 import {expect,test} from '@playwright/test';
-test('Owner publishes a fixed skills curriculum, assigns the reviewed player, records evidence and linked family sees the same result without promotion',async({page,browser},info)=>{
- test.setTimeout(100_000);await page.setViewportSize({width:390,height:844});await page.goto('/login');await page.getByLabel('البريد الإلكتروني').fill('owner.football@example.test');await page.getByLabel('كلمة المرور').fill('Demo-Only-123!');await page.getByRole('button',{name:'دخول آمن'}).click();await page.waitForURL('**/dashboard');
- const guardian=await browser.newContext({baseURL:new URL(page.url()).origin});
+test('Owner publishes a fixed skills curriculum, assigns the reviewed player, records evidence and linked family sees the same result without promotion',async({page,browser,baseURL},info)=>{
+ test.setTimeout(100_000);await page.setViewportSize({width:390,height:844});
+ const guardian=await browser.newContext({baseURL});
  try {
   const write=async(context:typeof page.request,path:string,data:object,method:'post'|'put'='post')=>{const csrf=await(await context.get('/api/v1/auth/csrf')).json();const r=await context[method](path,{data,headers:{'X-CSRF-TOKEN':csrf.token}});expect(r.ok(),await r.text()).toBe(true);return r.status()===204?null:r.json();};
+  await write(page.request,'/api/v1/auth/login',{email:'owner.football@example.test',password:'Demo-Only-123!'});
   const phoneNumber='01099900109',challenge=await write(guardian.request,'/api/v1/auth/guardian/otp/request',{phoneNumber});await write(guardian.request,'/api/v1/auth/guardian/otp/verify',{phoneNumber,challengeId:challenge.challengeId,code:'246810'});
   const home=await(await guardian.request.get('/api/v1/guardian/home')).json(),child=home.children[0].id;
   const options=await(await page.request.get('/api/v1/evaluations/options')).json(),e=options.enrollments.find((x:{playerId:string})=>x.playerId===child);expect(e).toBeTruthy();
@@ -12,16 +13,27 @@ test('Owner publishes a fixed skills curriculum, assigns the reviewed player, re
   const before=await(await page.request.get(`/api/v1/people/players/${child}`)).json(),money=await(await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json();
   await page.goto('/dashboard/evaluations/skills');await page.getByRole('link',{name:'منهج جديد',exact:true}).click();const title=`مهارات الكرة — تجربة ${crypto.randomUUID().slice(0,5)}`;
   await page.getByLabel('اسم نسخة المنهج').fill(title);await page.getByRole('combobox',{name:'المستوى الرياضي',exact:true}).selectOption(level.id);
-  await page.getByLabel('اسم المهارة',{exact:true}).fill('تحكم في التمرين');await page.getByLabel('بروتوكول الملاحظة',{exact:true}).fill('مراجعة اصطناعية في تمرين الفريق نفسه، والإتقان بقرار فني.');await page.getByRole('button',{name:'إضافة متطلب'}).click();
-  await page.getByLabel('اسم المهارة',{exact:true}).nth(1).fill('تمريرات صحيحة من عشر محاولات');await page.getByRole('combobox',{name:'وحدة القياس',exact:true}).nth(1).selectOption('Count');await page.getByLabel('بروتوكول الملاحظة',{exact:true}).nth(1).fill('يسجل المدرب العدد من عشر محاولات بنفس التمرين.');
+  await page.getByLabel('اسم المهارة',{exact:true}).fill('تحكم في التمرين');await page.getByRole('textbox',{name:'طريقة الملاحظة',exact:true}).fill('مراجعة اصطناعية في تمرين الفريق نفسه، والإتقان بقرار فني.');await page.getByRole('button',{name:'إضافة متطلب'}).click();
+  await page.getByLabel('اسم المهارة',{exact:true}).nth(1).fill('تمريرات صحيحة من عشر محاولات');await page.getByRole('combobox',{name:'وحدة القياس',exact:true}).nth(1).selectOption('Count');await page.getByRole('textbox',{name:'طريقة الملاحظة',exact:true}).nth(1).fill('يسجل المدرب العدد من عشر محاولات بنفس التمرين.');
   await page.getByRole('button',{name:'حفظ المسودة',exact:true}).click();await page.waitForURL(/skills\/curricula\/[a-f0-9-]{36}$/);const id=page.url().split('/').at(-1)!;
-  await page.getByRole('button',{name:'نشر نسخة المنهج',exact:true}).click();await expect(page.getByText(/نسخة\d+ · منشور/)).toBeVisible();await expect(page.getByLabel('اسم نسخة المنهج')).toHaveCount(0);
+  await page.getByRole('button',{name:'نشر نسخة المنهج',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'تأكيد النشر'}).click();await expect(page.getByText('منشورة',{exact:true})).toBeVisible();await expect(page.getByLabel('اسم نسخة المنهج')).toHaveCount(0);
 await page.goto(`/dashboard/players/${child}`);await page.getByRole('link',{name:'رحلة المهارات · كرة القدم',exact:true}).click();await page.getByRole('combobox',{name:'نسخة المستوى الحالي',exact:true}).selectOption(id);page.once('dialog',d=>d.accept());await page.getByRole('button',{name:/^(إسناد خطة المهارات|استبدال الخطة مع حفظ التاريخ)$/}).click();await expect(page.getByText('تم إسناد الخطة مع حفظ السجل السابق.',{exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
   await page.getByRole('link',{name:'فتح المهارات والملاحظات',exact:true}).click();await page.waitForURL(/skills\/plans\/[a-f0-9-]{36}$/);const plan=page.url().split('/').at(-1)!;
-  const review=async(skillName:string,value?:string)=>{await page.getByRole('combobox',{name:'المهارة',exact:true}).selectOption({label:skillName});await page.getByRole('combobox',{name:'الحالة الفنية',exact:true}).selectOption('Mastered');if(value)await page.getByLabel('القياس · عدد').fill(value);await page.getByLabel('ملاحظة للأسرة (اختياري)').fill('مراجعة فنية من المتصفح محفوظة للأسرة');await page.getByRole('button',{name:'حفظ ونشر الملاحظة للأسرة',exact:true}).click();await expect(page.getByText('تم حفظ الملاحظة ونشرها للأسرة المخولة.',{exact:true})).toBeVisible();await expect(page.getByRole('combobox',{name:'المهارة',exact:true})).toBeVisible();};
-  await review('تحكم في التمرين');await review('تمريرات صحيحة من عشر محاولات','8');await expect(page.getByText('استوفى المتطلبات · يحتاج قرار مراجعة فنية بشرية. لا ترقية أو نقل تلقائي.',{exact:true})).toBeVisible();
+  const review=async(skillName:string,value?:string)=>{await page.getByRole('combobox',{name:'المهارة',exact:true}).selectOption({label:skillName});await page.getByRole('combobox',{name:'الحالة الفنية',exact:true}).selectOption('Mastered');if(value)await page.getByLabel('القياس · عدد').fill(value);await page.getByLabel('ملاحظة للأسرة (اختياري)').fill('مراجعة فنية من المتصفح محفوظة للأسرة');await page.getByRole('button',{name:'حفظ ونشر الملاحظة للأسرة',exact:true}).click();await expect(page.getByText('تم حفظ الملاحظة وأصبحت متاحة لولي الأمر.',{exact:true})).toBeVisible();await expect(page.getByRole('combobox',{name:'المهارة',exact:true})).toBeVisible();};
+  await review('تحكم في التمرين');await review('تمريرات صحيحة من عشر محاولات','8');await expect(page.getByText('اكتملت مهارات الخطة وهي جاهزة للمراجعة الفنية.',{exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath('owner-skills-web-390.png'),fullPage:true,animations:'disabled'});
-  const family=await guardian.newPage();await family.setViewportSize({width:390,height:844});await family.goto(`/guardian/children/${child}/skills/plans/${plan}`);await expect(family.getByRole('heading',{name:title,exact:true})).toBeVisible();await expect(family.getByText('استوفى المتطلبات · يحتاج قرار مراجعة فنية بشرية. لا ترقية أو نقل تلقائي.',{exact:true})).toBeVisible();await expect(family.getByRole('button',{name:'حفظ ونشر الملاحظة للأسرة'})).toHaveCount(0);await family.screenshot({path:info.outputPath('guardian-skills-web-390.png'),fullPage:true,animations:'disabled'});
+  const family=await guardian.newPage();await family.setViewportSize({width:390,height:844});await family.goto(`/guardian/children/${child}/skills/plans/${plan}`);await expect(family.getByRole('heading',{name:title,exact:true})).toBeVisible();await expect(family.getByText('اكتملت مهارات الخطة وهي جاهزة للمراجعة الفنية.',{exact:true})).toBeVisible();await expect(family.getByRole('button',{name:'حفظ ونشر الملاحظة للأسرة'})).toHaveCount(0);await family.screenshot({path:info.outputPath('guardian-skills-web-390.png'),fullPage:true,animations:'disabled'});
   expect((await guardian.request.get(`/api/v1/evaluations/skills/plans/${plan}`)).status()).toBe(403);expect(await(await page.request.get(`/api/v1/people/players/${child}`)).json()).toEqual(before);expect(await(await page.request.get('/api/v1/reports/financial?from=2026-09-01&to=2026-09-28')).json()).toEqual(money);expect(await family.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.goto(`/dashboard/evaluations/skills/curricula/${id}?levelId=${level.id}`);
+  await page.getByRole('button',{name:'نسخ إلى مسودة جديدة'}).click();
+  await page.waitForURL(url=>url.pathname.includes('/curricula/')&&!url.pathname.endsWith(`/${id}`));
+  await expect(page.getByText('مسودة',{exact:true})).toBeVisible();
+  await expect(page.getByLabel('اسم نسخة المنهج')).toHaveValue(title);
+  await page.getByRole('button',{name:'إيقاف النسخة',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'تأكيد الإيقاف'}).click();
+  await expect(page.getByText('موقوفة',{exact:true})).toBeVisible();
+  expect((await (await page.request.get(`/api/v1/evaluations/skills/curricula/${id}`)).json()).item.state).toBe('Published');
+  await page.getByRole('link',{name:'العودة إلى المناهج'}).click();
+  await expect(page).toHaveURL(new RegExp(`/skills\\?levelId=${level.id}$`));
  } finally {await guardian.close();}
 });

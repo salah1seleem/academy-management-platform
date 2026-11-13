@@ -147,6 +147,50 @@ public sealed partial class V2PlanPublicationTests
     }
 
     [Fact]
+    public async Task Cash_statement_expense_link_lists_posted_payment_dates_and_category()
+    {
+        var fixture = await Fixture();
+        using var owner = await Staff();
+        using var otherOwner = await Staff("owner.future@example.test");
+        const string expensePath = "/api/v1/finance/operating-expenses";
+        var paidOn = FacilityDay.AddDays(1);
+        var scope = $"branchId={fixture.A}&from={paidOn:yyyy-MM-dd}&to={paidOn:yyyy-MM-dd}";
+        var reportPath = $"/api/v1/reports/operating-statement?{scope}";
+        var before = await owner.GetFromJsonAsync<JsonElement>(reportPath);
+        var body = new OperatingExpenseWrite(fixture.A, OperatingExpenseScope.Group, fixture.Group, "Maintenance",
+            FacilityDay, FacilityDay, paidOn, 123.45m, "EGP", "استحقاق سابق دُفع في فترة التقرير");
+        var created = await Write(owner, expensePath + "/", body);
+        created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await Write(owner, $"{expensePath}/{id}/approve", new { })).EnsureSuccessStatusCode();
+        var quote = await Write(owner, $"{expensePath}/{id}/quote", new { });
+        quote.EnsureSuccessStatusCode();
+        var hash = (await quote.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("quoteHash").GetString()!;
+        (await ExpenseCommand(owner, $"{expensePath}/{id}/post", new OperatingExpensePost(hash), Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
+
+        var after = await owner.GetFromJsonAsync<JsonElement>(reportPath);
+        Assert.Equal(123.45m, after.GetProperty("totalExpenses").GetDecimal() - before.GetProperty("totalExpenses").GetDecimal());
+        Assert.Equal(-123.45m, after.GetProperty("surplus").GetDecimal() - before.GetProperty("surplus").GetDecimal());
+        Assert.Equal(before.GetProperty("totalIncome").GetDecimal(), after.GetProperty("totalIncome").GetDecimal());
+        var maintenance = Assert.Single(after.GetProperty("expenses").EnumerateArray(), x => x.GetProperty("key").GetString() == "Maintenance");
+        var drilldownQuery = maintenance.GetProperty("sourceUrl").GetString()!.Split('?')[1];
+        var drilldown = $"{expensePath}?{scope}&{drilldownQuery}&pageSize=100";
+        var breakdown = await owner.GetFromJsonAsync<JsonElement>(drilldown);
+        Assert.Contains(breakdown.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        Assert.Equal(maintenance.GetProperty("amount").GetDecimal(),
+            breakdown.GetProperty("items").EnumerateArray().Sum(x => x.GetProperty("amount").GetDecimal()));
+        Assert.All(breakdown.GetProperty("items").EnumerateArray(), x =>
+        {
+            Assert.Equal("Maintenance", x.GetProperty("category").GetString());
+            Assert.Equal("Posted", x.GetProperty("status").GetString());
+            Assert.Equal(paidOn.ToString("yyyy-MM-dd"), x.GetProperty("paidOn").GetString());
+        });
+        var byServiceDate = await owner.GetFromJsonAsync<JsonElement>($"{expensePath}?{scope}");
+        Assert.DoesNotContain(byServiceDate.GetProperty("items").EnumerateArray(), x => x.GetProperty("id").GetGuid() == id);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherOwner.GetAsync(drilldown)).StatusCode);
+    }
+
+    [Fact]
     public async Task Facility_expense_preserves_an_unallocated_amount_and_blocks_mixed_service_loading()
     {
         await using var licensed = await FacilityLicenseScope.Begin(factory.Services);

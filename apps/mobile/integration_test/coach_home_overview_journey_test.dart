@@ -4,7 +4,6 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/storage/refresh_store.dart';
 import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
-import 'package:academy_mobile/features/coach/coach_home_summary.dart';
 import 'package:academy_mobile/features/coach/monthly_stars.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +23,7 @@ class OverviewAppearance extends Appearance {
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'actual coach overview shows recorded group ratios and existing star budgets, with scoped read-only destinations',
+    'actual coach home leads to assigned groups and keeps monthly stars in More',
     (t) async {
       expect(const bool.fromEnvironment('ISOLATED_DEMO'), true);
       const base = String.fromEnvironment('API_BASE_URL');
@@ -47,27 +46,6 @@ void main() {
         auth.session!.selected!.academyId,
         '30000000-0000-0000-0000-000000000003',
       );
-      final calendar = obj(
-        await auth.request('GET', '/api/v1/academy/calendar'),
-      );
-      final today = textOf(calendar['today']);
-      final query = Uri(
-        queryParameters: {'from': '${today.substring(0, 7)}-01', 'to': today},
-      ).query;
-      final monthly = rows(
-        await auth.request('GET', '/api/v1/attendance/sessions?$query'),
-      ).where((s) => s['status'] != 'Cancelled').toList();
-      final recorded = monthly.fold<num>(
-        0,
-        (sum, s) => sum + (s['recorded'] as num? ?? 0),
-      );
-      final present = monthly.fold<num>(
-        0,
-        (sum, s) => sum + (s['present'] as num? ?? 0),
-      );
-      final expected = recorded > 0
-          ? '${(present * 100 / recorded).round()}%'
-          : '—';
       final budgets = obj(
         await auth.request('GET', '/api/v1/coach/monthly-stars'),
       );
@@ -128,27 +106,17 @@ void main() {
         await t.pumpWidget(
           AcademyApp(auth: auth, appearance: prefs, environment: 'Demo'),
         );
-        await wait(find.byType(CoachAttendanceSummary));
-        await reveal(find.byType(CoachAttendanceSummary));
-        expect(
-          t
-              .widget<Text>(
-                find.byKey(const ValueKey('coach-recorded-percentage')),
-              )
-              .data,
-          expected,
-        );
+        await wait(find.byType(CoachGroupCard));
+        expect(find.text('العمليات السريعة'), findsNothing);
+        expect(find.text('نجوم فريقي الشهرية'), findsNothing);
         if (!contrastOnly) {
-          await capture('attendance', mode);
-          await reveal(find.widgetWithText(ChoiceChip, 'المجموعات'));
-          await t.tap(find.widgetWithText(ChoiceChip, 'المجموعات'));
-          await t.pumpAndSettle();
-          final groupTile = find.widgetWithText(
-            ListTile,
-            textOf(groups.first['arabicName']),
+          final openGroup = find.descendant(
+            of: find.byKey(ValueKey('coach-group-${groups.first['id']}')),
+            matching: find.text('فتح المجموعة'),
           );
-          await reveal(groupTile);
-          await t.tap(groupTile);
+          await reveal(openGroup);
+          await capture('groups', mode);
+          await t.tap(openGroup);
           await wait(find.byType(CoachGroup));
           expect(
             t.widget<CoachGroup>(find.byType(CoachGroup)).group['id'],
@@ -157,14 +125,10 @@ void main() {
           await capture('group', mode);
           await back();
         }
-        final openStars = find.widgetWithText(OutlinedButton, 'منح نجمة');
+        await t.tap(find.text('المزيد'));
+        await t.pumpAndSettle();
+        final openStars = find.text('نجوم فريقي الشهرية');
         await reveal(openStars);
-        for (final team in teams) {
-          expect(find.text('${team['remaining']} من 3 متبقية'), findsWidgets);
-        }
-        if (!contrastOnly) {
-          await capture('budgets', mode);
-        }
         await t.tap(openStars);
         await wait(find.byType(CoachMonthlyStars));
         if (teams.isNotEmpty) {
@@ -182,7 +146,7 @@ void main() {
           await capture('stars', mode);
         }
         await back();
-        await wait(find.widgetWithText(OutlinedButton, 'منح نجمة'));
+        await wait(openStars);
         final after = obj(
           await auth.request('GET', '/api/v1/coach/monthly-stars'),
         );

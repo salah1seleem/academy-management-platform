@@ -268,9 +268,7 @@ void main() {
           await binding.takeScreenshot('phase-promotion-owner-preview-ios');
         }
         await t.tap(find.text('اعتماد المستوى ونقل المجموعة'));
-        await wait(
-          find.textContaining('تم اعتماد المستوى ونقل المواعيد مع حفظ التاريخ'),
-        );
+        await wait(find.textContaining('تم التنفيذ إلى'));
         final saved = await read(
           '/api/v1/people/enrollments/$eid/placement-level',
         );

@@ -142,7 +142,7 @@ void main() {
     expect(groups, hasLength(1));
     expect(groups.single['arabicName'], 'مجموعة النجوم التجريبية');
     await shell(coach);
-    await waitFor(find.text('المجموعات المسندة'));
+    await waitFor(find.text('تدريباتي'));
     await tap('المجموعات');
     await waitFor(find.text('مجموعة النجوم التجريبية'));
     await capture('phase-approved-imported-coach');

@@ -162,8 +162,8 @@ class _StaffAttendanceExceptionPageState
   Widget build(BuildContext context) => GuardianPage(
     title: localized(
       context,
-      widget.review ? 'مراجعة إثبات الحضور' : 'طلب إثبات حضوري',
-      widget.review ? 'Attendance reviews' : 'My attendance claim',
+      widget.review ? 'مراجعة إثبات حضور الموظفين' : 'طلب إثبات حضوري',
+      widget.review ? 'Review staff attendance claims' : 'My attendance claim',
     ),
     child: ListenableBuilder(
       listenable: widget.auth,

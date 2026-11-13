@@ -1,0 +1,21 @@
+.stats {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.25rem), 1fr));
+}
+
+.stats .periodDate {
+  font-size: 1rem;
+}
+
+:global(.form-shell) .reason {
+  min-height: 4.5rem;
+}
+
+.loadError {
+  display: grid;
+  gap: .75rem;
+  justify-items: start;
+}
+
+.loadError p {
+  margin: 0;
+}

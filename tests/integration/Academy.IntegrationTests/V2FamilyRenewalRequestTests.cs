@@ -27,7 +27,7 @@ public sealed partial class SubscriptionPaymentTests
     {
         public async ValueTask DisposeAsync() { Client.Dispose(); await Restore(); }
     }
-    private async Task<FamilyFixture> NewFamily(bool multipleBranches = false)
+    private async Task<FamilyFixture> NewFamily(bool multipleBranches = false, bool mixedSports = false)
     {
         var phone = "+2010" + Random.Shared.Next(10000000, 99999999).ToString(CultureInfo.InvariantCulture); var guardian = Guid.NewGuid(); var userId = Guid.NewGuid(); FamilyRenewalChoice[] choices;
         Guid settingsId; (bool Active, string? Insta, string? Wallet, string? Name) original;
@@ -40,8 +40,27 @@ public sealed partial class SubscriptionPaymentTests
             var user = new ApplicationUser { Id = userId, DisplayName = "أسرة تجديد اختبار", UserName = phone, PhoneNumber = phone, PhoneNumberConfirmed = true, CreatedAtUtc = now, UpdatedAtUtc = now }; Assert.True((await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().CreateAsync(user)).Succeeded);
             db.GuardianProfiles.Add(new() { Id = guardian, AcademyId = DemoSeed.NogoomAcademyId, UserId = userId, DisplayName = user.DisplayName, CreatedAtUtc = now, UpdatedAtUtc = now }); db.AcademyMemberships.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, UserId = userId, Role = AcademyRole.Guardian, CreatedAtUtc = now, UpdatedAtUtc = now });
             var enrollments = new List<SportEnrollment>();
-            for (var i = 0; i < 2; i++) { var player = Guid.NewGuid(); db.Players.Add(new() { Id = player, AcademyId = DemoSeed.NogoomAcademyId, PlayerCode = "FR-" + player.ToString("N")[..16], ArabicName = "طفل أسرة اصطناعي " + i, DateOfBirth = new(2016, 1, 1), CreatedAtUtc = now, UpdatedAtUtc = now }); db.GuardianPlayerLinks.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, GuardianId = guardian, PlayerId = player, CreatedByUserId = userId, CreatedAtUtc = now, UpdatedAtUtc = now }); var e = new SportEnrollment { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, PlayerId = player, SportId = Slice2DemoSeed.FootballId, BranchId = multipleBranches && i == 1 ? Slice2DemoSeed.FifthBranchId : Slice2DemoSeed.CityBranchId, TrainingGroupId = multipleBranches && i == 1 ? null : Slice2DemoSeed.FootballGroupId, CreatedAtUtc = now, UpdatedAtUtc = now }; enrollments.Add(e); db.SportEnrollments.Add(e); }
-            await db.SaveChangesAsync(); choices = enrollments.Select(e => new FamilyRenewalChoice(e.Id, Slice3DemoSeed.FootballMonthlyId)).ToArray();
+            for (var i = 0; i < 2; i++)
+            {
+                var player = Guid.NewGuid();
+                db.Players.Add(new() { Id = player, AcademyId = DemoSeed.NogoomAcademyId, PlayerCode = "FR-" + player.ToString("N")[..16], ArabicName = "طفل أسرة اصطناعي " + i, DateOfBirth = new(2016, 1, 1), CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.GuardianPlayerLinks.Add(new() { Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, GuardianId = guardian, PlayerId = player, CreatedByUserId = userId, CreatedAtUtc = now, UpdatedAtUtc = now });
+                var swimming = mixedSports && i == 1;
+                var otherBranch = (multipleBranches || mixedSports) && i == 1;
+                var enrollment = new SportEnrollment
+                {
+                    Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, PlayerId = player,
+                    SportId = swimming ? Slice2DemoSeed.SwimmingId : Slice2DemoSeed.FootballId,
+                    BranchId = otherBranch ? Slice2DemoSeed.FifthBranchId : Slice2DemoSeed.CityBranchId,
+                    TrainingGroupId = swimming ? Slice2DemoSeed.SwimmingGroupId : otherBranch ? null : Slice2DemoSeed.FootballGroupId,
+                    CreatedAtUtc = now, UpdatedAtUtc = now
+                };
+                enrollments.Add(enrollment);
+                db.SportEnrollments.Add(enrollment);
+            }
+            await db.SaveChangesAsync();
+            choices = enrollments.Select(e => new FamilyRenewalChoice(e.Id,
+                e.SportId == Slice2DemoSeed.SwimmingId ? Slice3DemoSeed.SwimmingMonthlyId : Slice3DemoSeed.FootballMonthlyId)).ToArray();
         }
         var client = factory.CreateClient(); var csrf = await Csrf(client); var challenge = await Post(client, "/api/v1/auth/guardian/otp/request", new { phoneNumber = phone }, csrf); challenge.EnsureSuccessStatusCode(); (await Post(client, "/api/v1/auth/guardian/otp/verify", new { phoneNumber = phone, challengeId = (await challenge.Content.ReadFromJsonAsync<Challenge>())!.ChallengeId, code = "246810" }, csrf)).EnsureSuccessStatusCode();
         return new(client, userId, guardian, choices, async () => { await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var row = await db.AcademyTransferSettings.SingleAsync(x => x.Id == settingsId); row.IsActive = original.Active; row.InstaPayAddress = original.Insta; row.WalletNumber = original.Wallet; row.RecipientName = original.Name; await db.SaveChangesAsync(); });
@@ -52,7 +71,7 @@ public sealed partial class SubscriptionPaymentTests
     { var response = await Post(f.Client, FamilyRequests, body ?? await FamilyBody(f), await Csrf(f.Client)); response.EnsureSuccessStatusCode(); return await response.Content.ReadFromJsonAsync<JsonElement>(); }
     private async Task<JsonElement> FamilyProof(FamilyFixture f, JsonElement request)
     {
-        using var form = new MultipartFormDataContent(); var file = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]); file.Headers.ContentType = new("image/png"); form.Add(file, "file", "synthetic-family-proof.png"); form.Add(new StringContent("Proof"), "purpose"); using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = form }; upload.Headers.Add("X-CSRF-TOKEN", await Csrf(f.Client)); var saved = await f.Client.SendAsync(upload); saved.EnsureSuccessStatusCode(); var asset = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); var proof = await Post(f.Client, $"{FamilyRequests}/{request.GetProperty("id").GetGuid()}/proof", new FamilyProofWrite(asset, request.GetProperty("revision").GetInt32()), await Csrf(f.Client)); proof.EnsureSuccessStatusCode(); return await proof.Content.ReadFromJsonAsync<JsonElement>();
+        using var form = new MultipartFormDataContent(); var file = new ByteArrayContent(SyntheticProofImage.Png()); file.Headers.ContentType = new("image/png"); form.Add(file, "file", "synthetic-family-proof.png"); form.Add(new StringContent("Proof"), "purpose"); using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = form }; upload.Headers.Add("X-CSRF-TOKEN", await Csrf(f.Client)); var saved = await f.Client.SendAsync(upload); saved.EnsureSuccessStatusCode(); var asset = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); var proof = await Post(f.Client, $"{FamilyRequests}/{request.GetProperty("id").GetGuid()}/proof", new FamilyProofWrite(asset, request.GetProperty("revision").GetInt32()), await Csrf(f.Client)); proof.EnsureSuccessStatusCode(); return await proof.Content.ReadFromJsonAsync<JsonElement>();
     }
     private static FamilyReviewWrite FamilyApproval(JsonElement request, bool accept = true) => new(accept, request.GetProperty("revision").GetInt32(), null, request.GetProperty("items").EnumerateArray().Select(l => new FamilyPlacement(l.GetProperty("id").GetGuid(), Slice2DemoSeed.FootballGroupId)).ToArray());
     [Theory]
@@ -63,7 +82,11 @@ public sealed partial class SubscriptionPaymentTests
         await using var f = await NewFamily(); var body = await FamilyBody(f, sharedPlanOnly); var pending = await CreateFamily(f, body); var id = pending.GetProperty("id").GetGuid();
         Assert.Equal("Pending", pending.GetProperty("status").GetString()); Assert.Equal(pending.GetProperty("id").GetGuid(), (await CreateFamily(f, body with { Lines = body.Lines!.Reverse().ToArray() })).GetProperty("id").GetGuid());
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); var ids = f.Choices.Select(c => c.SportEnrollmentId).ToArray(); Assert.False(await db.RenewalRequests.AnyAsync(r => ids.Contains(r.SportEnrollmentId))); Assert.False(await db.SubscriptionPeriods.AnyAsync(p => ids.Contains(p.SportEnrollmentId)));
-        pending = await FamilyProof(f, pending); using var owner = await InboxStaff(DemoSeed.OwnerEmail); var plan = await db.SubscriptionPlans.SingleAsync(p => p.Id == Slice3DemoSeed.FootballMonthlyId); var old = (plan.Price, plan.Currency, plan.DurationDays, plan.ArabicName, plan.IsActive);
+        using var owner = await InboxStaff(DemoSeed.OwnerEmail);
+        var individual = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/admin-renewals/enrollments/{ids[0]}");
+        Assert.Equal("Family", individual.GetProperty("openRenewal").GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, individual.GetProperty("openRenewal").GetProperty("paymentId").ValueKind);
+        pending = await FamilyProof(f, pending); var plan = await db.SubscriptionPlans.SingleAsync(p => p.Id == Slice3DemoSeed.FootballMonthlyId); var old = (plan.Price, plan.Currency, plan.DurationDays, plan.ArabicName, plan.IsActive);
         try
         {
             plan.Price += 99m; plan.Currency = "USD"; plan.DurationDays = 60; plan.ArabicName = "خطة معدلة لا تستبدل الاتفاق"; plan.IsActive = false; await db.SaveChangesAsync();
@@ -94,7 +117,11 @@ public sealed partial class SubscriptionPaymentTests
     public async Task Family_request_blocks_parallel_individual_renewals_and_refuses_untrusted_roles_and_children()
     {
         await using var f = await NewFamily(); var pending = await CreateFamily(f); var id = pending.GetProperty("id").GetGuid();
-        await using var scope = factory.Services.CreateAsyncScope(); var creation = scope.ServiceProvider.GetRequiredService<RenewalCreationService>(); var individual = await creation.CreateAsync(DemoSeed.NogoomAcademyId, f.User, f.Choices[0].SportEnrollmentId, f.Choices[0].SubscriptionPlanId, Guid.NewGuid().ToString("N"), true); Assert.Equal(RenewalCreationState.OpenRenewalExists, individual.State);
+        await using var scope = factory.Services.CreateAsyncScope(); var creation = scope.ServiceProvider.GetRequiredService<RenewalCreationService>(); var individual = await creation.CreateAsync(DemoSeed.NogoomAcademyId, f.User, f.Choices[0].SportEnrollmentId, f.Choices[0].SubscriptionPlanId, Guid.NewGuid().ToString("N")); Assert.Equal(RenewalCreationState.OpenRenewalExists, individual.State);
+        using var owner = await InboxStaff(DemoSeed.OwnerEmail);
+        var choice = f.Choices[0];
+        using var quote = await owner.GetAsync($"/api/v1/subscriptions/admin-renewals/enrollments/{choice.SportEnrollmentId}/quote?planId={choice.SubscriptionPlanId}");
+        Assert.Equal(HttpStatusCode.Conflict, quote.StatusCode);
         using var unrelated = await GuardianClient(); Assert.Equal(HttpStatusCode.NotFound, (await unrelated.GetAsync($"{FamilyRequests}/{id}")).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await unrelated.GetAsync($"{FamilyStaff}/{id}")).StatusCode);
         using var coach = await InboxStaff(DemoSeed.CoachEmail); Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync($"{FamilyStaff}/{id}")).StatusCode); Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync($"{FamilyRequests}/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await f.Client.PostAsJsonAsync(FamilyRequests, await FamilyBody(f))).StatusCode);

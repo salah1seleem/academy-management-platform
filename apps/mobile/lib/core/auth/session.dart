@@ -38,15 +38,14 @@ class Membership {
           : sportNames.isEmpty
           ? 'لم تمنح رياضة'
           : sportNames.join('، ')}';
-  String get label =>
-      contextName ??
-      switch (role) {
-        'Guardian' => 'ولي أمر',
-        'Coach' => 'مدرب',
-        'AcademyOwner' => 'مالك',
-        'AcademyAdmin' => 'إداري',
-        _ => 'دور غير مدعوم',
-      };
+  String get label => contextName ?? roleLabel;
+  String get roleLabel => switch (role) {
+    'Guardian' => 'ولي أمر',
+    'Coach' => 'مدرب',
+    'AcademyOwner' => 'مالك',
+    'AcademyAdmin' => 'إداري',
+    _ => 'دور غير مدعوم',
+  };
 }
 
 class Session {

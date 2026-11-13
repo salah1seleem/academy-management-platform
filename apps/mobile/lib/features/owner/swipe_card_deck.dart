@@ -3,13 +3,9 @@ import 'package:flutter/scheduler.dart';
 
 /// Continuous slow cards with a preview of the next card and touch pause.
 class SwipeCardDeck extends StatefulWidget {
-  const SwipeCardDeck({
-    super.key,
-    required this.children,
-    required this.height,
-  });
+  const SwipeCardDeck({super.key, required this.children, this.height});
   final List<Widget> children;
-  final double height;
+  final double? height;
   @override
   State<SwipeCardDeck> createState() => _SwipeCardDeckState();
 }
@@ -89,20 +85,43 @@ class _SwipeCardDeckState extends State<SwipeCardDeck>
             touching = false;
             pause();
           },
-          child: SizedBox(
-            height: widget.height,
-            child: ListView.builder(
-              key: const ValueKey('owner-decisions-rail'),
-              controller: scroll,
-              scrollDirection: Axis.horizontal,
-              itemExtent: extent,
-              itemCount: widget.children.length,
-              itemBuilder: (context, index) => Padding(
-                padding: const EdgeInsetsDirectional.only(end: 12),
-                child: widget.children[index % widget.children.length],
-              ),
-            ),
-          ),
+          child: widget.height == null
+              ? SingleChildScrollView(
+                  key: const ValueKey('owner-decisions-rail'),
+                  controller: scroll,
+                  scrollDirection: Axis.horizontal,
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final card in widget.children)
+                          SizedBox(
+                            width: extent,
+                            child: Padding(
+                              padding: const EdgeInsetsDirectional.only(
+                                end: 12,
+                              ),
+                              child: card,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                )
+              : SizedBox(
+                  height: widget.height,
+                  child: ListView.builder(
+                    key: const ValueKey('owner-decisions-rail'),
+                    controller: scroll,
+                    scrollDirection: Axis.horizontal,
+                    itemExtent: extent,
+                    itemCount: widget.children.length,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 12),
+                      child: widget.children[index % widget.children.length],
+                    ),
+                  ),
+                ),
         );
       },
     );

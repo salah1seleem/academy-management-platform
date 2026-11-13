@@ -1,11 +1,13 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Api.Finance;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Operations;
+using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -125,28 +127,49 @@ public static class NoticeEndpoints
     }
     public sealed record Child(Guid Id,string Name,decimal? Amount);
     public sealed record Recipient(Guid Id,Guid UserId,string Name,Child[] Children,decimal? Amount,string Currency);
-    private static async Task<Recipient[]> Audience(Guid academy,string kind,Guid? branch,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing,Guid user)
+    internal static IQueryable<GuardianPlayerLink> ActiveReminderLinks(FoundationDbContext db, Guid academy) =>
+        db.GuardianPlayerLinks.Where(l => l.AcademyId == academy && l.IsActive && l.Player.IsActive && l.Guardian.IsActive && l.Guardian.User.IsActive);
+
+    private static async Task<Recipient[]> Audience(Guid academy,string kind,Guid? branch,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing,Guid user,Guid? playerId=null)
     {
-        var currency=await db.Academies.Where(a=>a.Id==academy).Select(a=>a.DefaultCurrency).SingleAsync();
+        var accounting=await db.Academies.Where(a=>a.Id==academy).Select(a=>new{a.DefaultCurrency,a.TimeZone}).SingleAsync();
+        var currency=accounting.DefaultCurrency;
         List<(Guid id,string name,decimal? amount,string currency)> players;
-        if(kind=="Overdue")players=(await ReceivableEndpoints.Rows(db,academy,clock.UtcNow,clock.Today,branch,null,null).Where(r=>r.Overdue&&r.Outstanding>0&&r.Currency==currency).ToArrayAsync()).GroupBy(r=>new{r.PlayerId,r.Player,r.Currency}).Select(g=>(g.Key.PlayerId,g.Key.Player,(decimal?)g.Sum(r=>r.Outstanding),g.Key.Currency)).ToList();
+        if(kind=="Overdue")
+        {
+            var instant=clock.UtcNow;
+            var day=ReceivableEndpoints.AccountingDay(instant,accounting.TimeZone);
+            players=(await ReceivableEndpoints.Rows(db,academy,instant,day,branch,playerId,"overdue").Where(r=>r.Currency==currency).ToArrayAsync())
+                .GroupBy(r=>new{r.PlayerId,r.Player,r.Currency}).Select(g=>(g.Key.PlayerId,g.Key.Player,(decimal?)g.Sum(r=>r.Outstanding),g.Key.Currency)).ToList();
+        }
         else if(kind=="Renewal")players=(await RenewalOpportunityEndpoints.Build(db,pricing,clock,academy,user,new(branch,null,null,null,null))).Items.Where(r=>r.Currency==currency).GroupBy(r=>new{r.PlayerId,r.Player,r.Currency}).Select(g=>(g.Key.PlayerId,g.Key.Player,g.Any(r=>r.Quote==null)?null:(decimal?)g.Sum(r=>r.Quote??0),g.Key.Currency)).ToList();
+        else if(kind is "Expiring" or "Expired" or "Absence")
+            players=(await OwnerFollowUpEndpoints.DecisionPlayers(db,academy,branch,kind,clock.Today,clock.UtcNow))
+                .DistinctBy(r=>r.PlayerId).Select(r=>(r.PlayerId,r.Name,(decimal?)null,currency)).ToList();
         else return [];
+        if(playerId.HasValue)players=players.Where(p=>p.id==playerId).ToList();
         var ids=players.Select(p=>p.id).Distinct().ToArray();
-        var links=await db.GuardianPlayerLinks.Where(l=>l.AcademyId==academy&&l.IsActive&&l.Guardian.IsActive&&l.Guardian.User.IsActive&&l.Player.IsActive&&ids.Contains(l.PlayerId)).Select(l=>new{l.GuardianId,l.PlayerId,l.Guardian.UserId,l.Guardian.DisplayName}).ToArrayAsync();
+        var links=await ActiveReminderLinks(db,academy).Where(l=>ids.Contains(l.PlayerId)).Select(l=>new{l.GuardianId,l.PlayerId,l.Guardian.UserId,l.Guardian.DisplayName}).ToArrayAsync();
         return links.GroupBy(l=>new{l.GuardianId,l.UserId,l.DisplayName}).Select(g=>{var own=players.Where(p=>g.Select(l=>l.PlayerId).Contains(p.id)).OrderBy(p=>p.name).ThenBy(p=>p.id).ToArray();return new Recipient(g.Key.GuardianId,g.Key.UserId,g.Key.DisplayName,own.Select(p=>new Child(p.id,p.name,p.amount)).ToArray(),own.Any(p=>p.amount==null)?null:own.Sum(p=>p.amount??0),own.First().currency);}).OrderBy(r=>r.Name).ThenBy(r=>r.Id).ToArray();
     }
     private static object View(Recipient r)=>new{r.Id,r.Name,r.Children,r.Amount,r.Currency};
-    private static async Task<IResult> Recipients(string? kind,Guid? branchId,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing)
+    private static async Task<IResult> Recipients(string? kind,Guid? branchId,Guid? playerId,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing)
     {
-        var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();if(kind is not("Overdue" or "Renewal"))return Results.UnprocessableEntity(new{message="اختر نوع المتابعة."});
-        var items=await Audience(t.AcademyId,kind,branchId,db,clock,pricing,User(actor));
+        var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();if(kind is not("Overdue" or "Renewal" or "Expiring" or "Expired" or "Absence"))return Results.UnprocessableEntity(new{message="اختر نوع المتابعة."});
+        var items=await Audience(t.AcademyId,kind,branchId,db,clock,pricing,User(actor),playerId);
         var template=await db.NoticeTemplates.Where(n=>n.AcademyId==t.AcademyId&&n.Key==kind).Select(n=>n.Message).SingleOrDefaultAsync()??Defaults[kind];
         return Results.Ok(new{items=items.Take(200).Select(View),total=items.Length,shown=Math.Min(200,items.Length),template,kind});
     }
-    public sealed record DispatchWrite(string Kind,Guid? BranchId,Guid[] Recipients,string Message,string? PreviewHash,Guid RequestId);
+    public sealed record DispatchWrite(string Kind,Guid? BranchId,Guid[] Recipients,string Message,string? PreviewHash,Guid RequestId,Guid? PlayerId=null);
     private static string Hash(object x)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(x))));
-    private static string Render(string text,Recipient r)=>NoticeText.RenderValues(text,string.Join("، ",r.Children.Select(c=>c.Name)),guardian:r.Name,amount:r.Amount is null?"تحتاج مراجعة":$"{r.Amount:0.00} {r.Currency}");
+    private static bool DecisionNotice(string kind) => kind is "Expiring" or "Expired" or "Absence";
+    private static Recipient ForChild(Recipient recipient, Child child) => recipient with { Children = [child], Amount = child.Amount };
+    private static string Render(string text,Recipient r,string kind)
+    {
+        var currency = r.Currency == "EGP" ? "جنيه" : r.Currency;
+        var amount = r.Amount is { } value ? $"{value.ToString("0.##", CultureInfo.InvariantCulture)} {currency}" : "تحتاج مراجعة";
+        return NoticeText.RenderValues(text,string.Join("، ",r.Children.Select(c=>c.Name)),guardian:r.Name,count:kind=="Absence"?3:null,amount:amount);
+    }
     private static async Task<IResult> Preview(DispatchWrite body,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing)
         =>await Dispatch(body,false,tenant,actor,db,clock,pricing);
     private static async Task<IResult> Send(DispatchWrite body,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing)
@@ -154,20 +177,28 @@ public static class NoticeEndpoints
     private static async Task<IResult> Dispatch(DispatchWrite body,bool send,CurrentTenant tenant,ClaimsPrincipal actor,FoundationDbContext db,ISubscriptionClock clock,DiscountRules pricing)
     {
         var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
-        if(body.Kind is not("Overdue" or "Renewal")||body.Recipients is not{Length:>0 and <=200}||body.Recipients.Distinct().Count()!=body.Recipients.Length||string.IsNullOrWhiteSpace(body.Message)||body.Message.Length>1000||body.RequestId==Guid.Empty)return Results.UnprocessableEntity(new{message="حدد مستلمين ورسالة صحيحة قبل المعاينة."});
+        if(body.Kind is not("Overdue" or "Renewal" or "Expiring" or "Expired" or "Absence")||body.Recipients is not{Length:>0 and <=200}||body.Recipients.Distinct().Count()!=body.Recipients.Length||string.IsNullOrWhiteSpace(body.Message)||body.Message.Length>1000||body.RequestId==Guid.Empty)return Results.UnprocessableEntity(new{message="حدد مستلمين ورسالة صحيحة قبل المعاينة."});
         await using var tx=await db.Database.BeginTransactionAsync();await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"notice-dispatch:{t.AcademyId}:{t.MembershipId}:{body.RequestId}"},0))");
-        var requestHash=Hash(new{body.Kind,body.BranchId,recipients=body.Recipients.Order().ToArray(),body.Message});
+        var ordered = body.Recipients.Order().ToArray();
+        var requestHash=body.PlayerId.HasValue
+            ? Hash(new{body.Kind,body.BranchId,recipients=ordered,body.Message,body.PlayerId})
+            : Hash(new{body.Kind,body.BranchId,recipients=ordered,body.Message});
         var prior=await db.NoticeDispatches.SingleOrDefaultAsync(n=>n.AcademyId==t.AcademyId&&n.ActorMembershipId==t.MembershipId&&n.RequestId==body.RequestId);
         if(prior!=null)return prior.RequestHash==requestHash?Results.Ok(new{sent=prior.RecipientCount,replay=true}):Results.Conflict(new{message="مرجع الإرسال مستخدم لرسالة مختلفة."});
-        var audience=(await Audience(t.AcademyId,body.Kind,body.BranchId,db,clock,pricing,User(actor))).Where(r=>body.Recipients.Contains(r.Id)).ToArray();
+        var audience=(await Audience(t.AcademyId,body.Kind,body.BranchId,db,clock,pricing,User(actor),body.PlayerId)).Where(r=>body.Recipients.Contains(r.Id)).ToArray();
         if(audience.Length!=body.Recipients.Length)return Results.Conflict(new{message="تغيّر نطاق المستلمين أو المستحقات؛ حدّث القائمة."});
-        var messages=audience.Select(r=>new{r.Id,message=Render(body.Message,r)}).ToArray();
+        var deliveries = audience.SelectMany(r => DecisionNotice(body.Kind)
+            ? r.Children.Select(c => (Recipient: ForChild(r,c), PlayerId: (Guid?)c.Id))
+            : [(Recipient: r, PlayerId: (Guid?)null)]).ToArray();
+        var messages=deliveries.Select(d=>new{d.Recipient.Id,message=Render(body.Message,d.Recipient,body.Kind)}).ToArray();
         var previewHash=Hash(new{requestHash,scope=audience.Select(View),messages});
         if(!send)return Results.Ok(new{previewHash,count=audience.Length,messages,delivery="StoredInApp"});
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"notice-template:{t.AcademyId}:{body.Kind}"},0))");
-        if(await db.NoticeTemplates.AnyAsync(n=>n.AcademyId==t.AcademyId&&n.Key==body.Kind&&!n.IsActive))return Results.Conflict(new{message="هذا النوع من التنبيهات معطل. فعّله من إدارة التنبيهات قبل الإرسال."});
+        if(await db.NoticeTemplates.AnyAsync(n=>n.AcademyId==t.AcademyId&&n.Key==body.Kind&&!n.IsActive))return Results.Conflict(new{code="notice_template_disabled",message="هذا النوع من التنبيهات معطل. فعّله من إدارة التنبيهات قبل الإرسال."});
         if(body.PreviewHash!=previewHash)return Results.Conflict(new{message="تغيّرت الرسالة أو بيانات المتابعة؛ أعد المعاينة قبل الإرسال."});
-        foreach(var r in audience)db.AcademyNotices.Add(new(){EventKey=body.Kind,Id=Guid.NewGuid(),AcademyId=t.AcademyId,UserId=r.UserId,AudienceRole="Guardian",TargetKind=body.Kind=="Overdue"?"Receivables":"Renewal",Message=Render(body.Message,r),CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
+        foreach(var d in deliveries)db.AcademyNotices.Add(new(){EventKey=body.Kind,Id=Guid.NewGuid(),AcademyId=t.AcademyId,
+            UserId=d.Recipient.UserId,AudienceRole="Guardian",TargetKind=body.Kind switch{"Overdue"=>"Receivables","Absence"=>"GuardianFeedback",_=>"Renewal"},
+            TargetId=d.PlayerId,SubjectPlayerId=d.PlayerId,Message=Render(body.Message,d.Recipient,body.Kind),CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
         db.NoticeDispatches.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,ActorMembershipId=t.MembershipId,RequestId=body.RequestId,RequestHash=requestHash,Kind=body.Kind,RecipientCount=audience.Length,CreatedAtUtc=clock.UtcNow,UpdatedAtUtc=clock.UtcNow});
         await db.SaveChangesAsync();await tx.CommitAsync();return Results.Ok(new{sent=audience.Length,replay=false});
     }

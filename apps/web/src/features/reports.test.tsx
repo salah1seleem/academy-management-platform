@@ -5,17 +5,32 @@ import { ReceiptPrint } from "./receipt-print";
 import {v41HomeFixture} from './testing/v41-home-fixture';
 
 const query = new URLSearchParams();
-vi.mock("next/navigation", () => ({ useSearchParams: () => query }));
+const receiptNavigate = vi.fn();
+vi.mock("next/navigation", () => ({ useSearchParams: () => query, useRouter: () => ({ push: receiptNavigate }) }));
 const financial = { from: "2026-09-01", to: "2026-09-28", totalAmount: 900, totalCount: 1, currency: "EGP", items: [{ collectionId: "c1", receiptId: "r1", receiptNumber: "REC-1", player: "عمر", sport: "كرة القدم", branch: "مدينة نصر", group: "مجموعة أ", plan: "شهري", amount: 900, currency: "EGP", paymentMethod: "Online", provider: "Internal", providerReference: "P-1", confirmedAtUtc: "2026-09-28T10:00:00Z" }] };
 const attendance = { subject: "players", from: "2026-09-01", to: "2026-09-30", coverage: "StoredRecordsOnly", totalCount: 1, items: [{ id: "a1", date: "2026-09-27", time: "18:00:00", playerCode: "NG-2019", player: "يوسف خالد سمير", birthYear: 2019, sport: "كرة القدم", branch: "مدينة نصر", group: "مجموعة أ", status: "Present", sessionConsumed: false }] };
 const options = { sports: [{ id: "s1", arabicName: "كرة القدم" }], branches: [{ id: "b1", arabicName: "مدينة نصر" }], groups: [{ id: "g1", arabicName: "مجموعة أ" }] };
 
 function response(value: unknown, ok = true) { return Promise.resolve(new Response(JSON.stringify(value), { status: ok ? 200 : 403, headers: { "Content-Type": "application/json" } })); }
 beforeEach(() => { global.fetch = vi.fn((input) => { const url = String(input); if (url.endsWith("/me")) return response({ role: "AcademyOwner" }); const home=v41HomeFixture(url); if(home!==undefined)return response(home); if (url.includes("structure/options")) return response(options); if (url.includes("subscriptions/plans")) return response([]); if (url.includes("reports/financial")) return response(financial); if (url.includes("reports/attendance")) return response(attendance); if (url.includes("reports/receipts")) return response({ items: [] }); return response({}); }) as unknown as typeof fetch; });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  for (const key of [...query.keys()]) query.delete(key);
+  receiptNavigate.mockClear();
+});
 
 describe("Slice 8A reports", () => {
-  it("loads real owner metrics without fake trends", async () => { render(<OwnerDashboard />); expect((await screen.findAllByRole("link",{name:"4,100 جنيه"}))[0]).toBeVisible(); expect(screen.getByRole("link",{name:/٣\s*فعالة/})).toBeVisible(); expect(screen.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible(); expect(screen.getByRole("link",{name:/اشتراكات جديدة/})).toHaveAttribute("href",expect.stringContaining("type=Enrollment")); expect(screen.queryByText("مدفوعات فاشلة")).not.toBeInTheDocument(); expect(screen.queryByText(/%/)).not.toBeInTheDocument(); });
+  it("loads real owner metrics without fake trends", async () => {
+    render(<OwnerDashboard />);
+    expect((await screen.findAllByRole("link", { name: "4,100 جنيه" }))[0]).toBeVisible();
+    expect(await screen.findByRole("link", { name: "إجمالي الاشتراكات السارية، ٣" })).toHaveAttribute(
+      "href", "/dashboard/players/subscriptions?asOf=2026-09-28&from=2026-08-28&state=active&origin=owner-subscriptions",
+    );
+    expect(screen.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /اشتراكات جديدة/ })).toHaveAttribute("href", expect.stringContaining("type=Enrollment"));
+    expect(screen.queryByText("مدفوعات فاشلة")).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
   it("shows owner loading state", async () => { let release!: (value: Response) => void; const pending = new Promise<Response>(resolve => { release = resolve; }); const sources=global.fetch; global.fetch = vi.fn((input,init) => String(input).endsWith("/me") ? pending : sources(input,init)) as typeof fetch; render(<OwnerDashboard />); expect(screen.getByRole("status")).toBeVisible(); await act(async () => release(new Response(JSON.stringify({ role: "AcademyOwner" }), { status: 200 }))); expect(await screen.findByRole("heading", { name: "طلبات الدفع" })).toBeVisible(); });
   it("shows owner error state", async () => { global.fetch = vi.fn(() => Promise.reject()) as typeof fetch; render(<OwnerDashboard />); expect(await screen.findByRole("alert")).toBeVisible(); });
   it("renders financial confirmed total", async () => { render(<FinancialReport />); await screen.findByRole('heading',{name:'سجل التحصيلات'}); expect(screen.getByText('إجمالي التحصيل المؤكد').parentElement?.querySelector('strong')).toHaveTextContent('900 جنيه'); expect(screen.getByRole("columnheader",{name:"الصافي"})).toBeVisible(); });
@@ -24,7 +39,7 @@ describe("Slice 8A reports", () => {
     render(<FinancialReport />);
     expect(await screen.findByText("استرداد اشتراك · بتاريخ الصرف")).toBeVisible();
     expect(screen.getByText(/طريقة غير موثقة \/ تسجيل يدوي/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "الإيصال" })).toHaveAttribute("href", "/dashboard/subscriptions/receipts/r1");
+    expect(screen.getByRole("link", { name: "الإيصال" })).toHaveAttribute("href", expect.stringMatching(/^\/dashboard\/subscriptions\/receipts\/r1\?.*page=1&report=financial$/));
     fireEvent.change(screen.getByLabelText("طريقة الدفع"), { target: { value: "Unspecified" } });
     fireEvent.click(screen.getByRole("button", { name: "تطبيق الفلاتر" }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("provider=Unspecified"), expect.objectContaining({cache:"no-store"})));
@@ -35,6 +50,47 @@ describe("Slice 8A reports", () => {
   it("attendance exposes birth-year and operational filters", async () => { render(<AttendanceReport />); expect(await screen.findByText("يوسف خالد سمير", { exact: false })).toBeVisible(); expect(screen.getByLabelText("سنة الميلاد")).toBeVisible(); expect(screen.getByLabelText("المجموعة")).toBeVisible(); });
   it("attendance submits birth year and exports matching query", async () => { render(<AttendanceReport />); await screen.findByText("يوسف خالد سمير", { exact: false }); fireEvent.change(screen.getByLabelText("سنة الميلاد"), { target: { value: "2019" } }); fireEvent.click(screen.getByRole("button", { name: "تطبيق الفلاتر" })); await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("birthYear=2019"))); expect(screen.getByRole("link", { name: "تصدير CSV" })).toHaveAttribute("href", expect.stringContaining("birthYear=2019")); });
   it("receipt list has an empty state", async () => { render(<ReceiptList />); expect(await screen.findByText("لا توجد إيصالات في الفترة الحالية.")).toBeVisible(); });
+  it("distinguishes an empty chosen range from the current month", async () => {
+    query.set("from", "2026-08-01");
+    query.set("to", "2026-08-31");
+    render(<ReceiptList />);
+    expect(await screen.findByText("لا توجد إيصالات في الفترة المحددة.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "الشهر الحالي" })).toHaveAttribute("href", "/dashboard/reports/receipts");
+  });
+  it("validates receipt dates before navigating and applies the range at page one", async () => {
+    render(<ReceiptList />);
+    await screen.findByText("لا توجد إيصالات في الفترة الحالية.");
+    fireEvent.change(screen.getByLabelText("من تاريخ"), { target: { value: "2026-09-30" } });
+    fireEvent.change(screen.getByLabelText("إلى تاريخ"), { target: { value: "2026-09-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "عرض الإيصالات" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("تاريخ البداية يجب أن يسبق النهاية");
+    expect(receiptNavigate).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("إلى تاريخ"), { target: { value: "2027-10-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "عرض الإيصالات" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("366");
+    expect(receiptNavigate).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("من تاريخ"), { target: { value: "2026-09-01" } });
+    fireEvent.change(screen.getByLabelText("إلى تاريخ"), { target: { value: "2026-09-30" } });
+    fireEvent.click(screen.getByRole("button", { name: "عرض الإيصالات" }));
+    expect(receiptNavigate).toHaveBeenCalledWith(expect.stringContaining("page=1&pageSize=25&from=2026-09-01&to=2026-09-30"), { scroll: false });
+  });
+
+  it("uses server pages for receipts and passes the range back from the detail", async () => {
+    query.set("from", "2026-09-01");
+    query.set("to", "2026-09-30");
+    query.set("page", "2");
+    global.fetch = vi.fn(() => response({ items: [{
+      id: "historic", receiptNumber: "HIST-600", player: "لاعب اختبار", sport: "سباحة", plan: "شهري",
+      amount: 600, currency: "EGP", paidAtUtc: "2026-09-01T09:00:00Z", historicalPaidOn: "2026-09-01",
+    }], page: 2, pageSize: 25, totalCount: 26 })) as typeof fetch;
+    render(<ReceiptList />);
+    expect(await screen.findByText("HIST-600")).toBeVisible();
+    expect(screen.getByText("تحصيل سابق")).toBeVisible();
+    expect(screen.getByRole("link", { name: "عرض وطباعة" })).toHaveAttribute("href", expect.stringContaining("page=2&pageSize=25&from=2026-09-01&to=2026-09-30&report=1"));
+    expect(screen.getByRole("button", { name: "الصفحة التالية" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "الصفحة السابقة" }));
+    expect(receiptNavigate).toHaveBeenCalledWith(expect.stringContaining("page=1&pageSize=25&from=2026-09-01&to=2026-09-30"), { scroll: false });
+  });
   it("renders printable Arabic receipt and invokes browser print", async () => { const print = vi.spyOn(window, "print").mockImplementation(() => {}); global.fetch = vi.fn(() => response({ academyName: "أكاديمية النجوم", receiptNumber: "REC-1", playerNameSnapshot: "عمر", sportNameSnapshot: "كرة القدم", planNameSnapshot: "شهري", amount: 900, currency: "EGP", paidAtUtc: "2026-09-28T10:00:00Z", paymentMethod: "الدفع الإلكتروني", providerReference: "P-1" })) as unknown as typeof fetch; render(<ReceiptPrint endpoint="/receipt" />); expect(await screen.findByText("أكاديمية النجوم")).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "طباعة الإيصال" })); expect(print).toHaveBeenCalledOnce(); print.mockRestore(); });
   it("renders discounted receipt original discount and final paid amount", async () => { global.fetch = vi.fn(() => response({ academyName: "أكاديمية النجوم", receiptNumber: "REC-D", playerNameSnapshot: "عمر", sportNameSnapshot: "كرة القدم", planNameSnapshot: "شهري", originalAmount: 900, discountType: "Percentage", discountValue: 10, discountAmount: 90, finalAmount: 810, amount: 810, currency: "EGP", paidAtUtc: "2026-09-28T10:00:00Z", paymentMethod: "الدفع الإلكتروني", providerReference: "P-D" })) as unknown as typeof fetch; render(<ReceiptPrint endpoint="/receipt" />); expect(await screen.findByText("السعر الأصلي")).toBeVisible(); expect(screen.getByText("الخصم").parentElement).toHaveTextContent(/10%.*90/); expect(screen.getByText("المبلغ المدفوع").parentElement).toHaveTextContent(/810/); });
   it("shows receipt authorization/loading failure", async () => { global.fetch = vi.fn(() => response({}, false)) as unknown as typeof fetch; render(<ReceiptPrint endpoint="/receipt" />); expect(await screen.findByRole("alert")).toHaveTextContent("لا تملك صلاحية"); });

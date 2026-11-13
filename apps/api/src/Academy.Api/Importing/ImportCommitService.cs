@@ -87,6 +87,8 @@ public sealed class ImportCommitService(FoundationDbContext db, UserManager<Appl
         var guardians = new Dictionary<string, GuardianProfile>(StringComparer.Ordinal); var players = new Dictionary<string, Player>(StringComparer.Ordinal);
         var plans = await db.SubscriptionPlans.Where(p => preview.Rows.Select(r => r.ProductId).Contains(p.Id)).ToDictionaryAsync(p => p.Id, token);
         var now = time.GetUtcNow(); var replayed = 0; var published = 0;
+        var timeZone = await db.Academies.Where(a => a.Id == job.AcademyId).Select(a => a.TimeZone).SingleAsync(token);
+        var publishedOn = clock.DateAt(now, timeZone);
         // A shared global phone is not a family decision. Existing accounts require a scoped explicit profile selection.
         foreach (var row in preview.Rows.DistinctBy(FamilyKey).OrderBy(r => EgyptPhoneNormalizer.Normalize(r.GuardianPhone), StringComparer.Ordinal))
         {
@@ -124,11 +126,19 @@ public sealed class ImportCommitService(FoundationDbContext db, UserManager<Appl
         {
             token.ThrowIfCancellationRequested();
             var identity = PlayerHash(row); var rowBalances = balances.Where(b => b.LegacyEnrollmentId == row.LegacyEnrollmentId).OrderBy(b => b.Reference).ToArray();
-            var rowHash = connected is null ? Hash(new { row = row with { Row = 0, PriceRevision = 0 }, cutoff = job.CutoffDate, balances = rowBalances }) : Hash(new { row = row with { Row = 0, PriceRevision = 0 }, cutoff = job.CutoffDate, balances = rowBalances, extra = connected.ExtraHash(row.LegacyEnrollmentId) });
+            var stableRow = row with { Row = 0, PriceRevision = 0 };
+            string RowHash(bool legacyWorksheetRows) => connected is null
+                ? Hash(new { row = stableRow, cutoff = job.CutoffDate, balances = rowBalances })
+                : Hash(new { row = stableRow, cutoff = job.CutoffDate, balances = rowBalances, extra = connected.ExtraHash(row.LegacyEnrollmentId, legacyWorksheetRows) });
+            var rowHash = RowHash(false);
             var existing = mappings.SingleOrDefault(m => m.LegacyEnrollmentId == row.LegacyEnrollmentId);
             if (existing is not null)
             {
-                if (existing.RowHash != rowHash || branches is not null && !branches.Contains(existing.BranchId)) throw new ImportRejected("conflict");
+                if (branches is not null && !branches.Contains(existing.BranchId)) throw new ImportRejected("conflict");
+                // Historic import mappings are immutable. Keep accepting their
+                // original hash while new mappings use the stable payload hash.
+                if (existing.RowHash != rowHash && (connected?.History is null || existing.RowHash != RowHash(true)))
+                    throw new ImportRejected("conflict");
                 replayed++; continue;
             }
             var mapped = mappings.FirstOrDefault(m => m.LegacyPlayerId == row.LegacyPlayerId);
@@ -156,7 +166,7 @@ public sealed class ImportCommitService(FoundationDbContext db, UserManager<Appl
                 StartDate = row.Start, EndDate = row.End, InitialSessions = row.EntitledSessions, RemainingSessions = row.RemainingSessions, PriceSnapshot = row.AgreedNet is null ? null : ImportPreview.Amount(row.AgreedNet), CurrencySnapshot = row.Currency, CreatedByUserId = job.ActorUserId, CreatedAtUtc = now, UpdatedAtUtc = now,
                 PlanTypeSnapshot = plan.PlanType, PlanNameSnapshot = plan.ArabicName, ServiceKindSnapshot = plan.ServiceKind, TrainingFormatSnapshot = plan.TrainingFormat, PlanRevisionSnapshot = row.PriceRevision,
                 DurationDaysSnapshot = row.End.HasValue ? row.End.Value.DayNumber - row.Start.DayNumber + 1 : null, SessionCountSnapshot = row.EntitledSessions };
-            period.Status = SubscriptionPeriodState.Resolve(SubscriptionPeriodStatus.Active, period.StartDate, period.EndDate, plan.PlanType, period.RemainingSessions, clock.Today);
+            period.Status = SubscriptionPeriodState.Resolve(SubscriptionPeriodStatus.Active, period.StartDate, period.EndDate, plan.PlanType, period.RemainingSessions, publishedOn);
             if (connected is not null) {
                 var extra = connected.Members[row.LegacyEnrollmentId];
                 if (extra.Gender.HasValue) {
@@ -182,8 +192,8 @@ public sealed class ImportCommitService(FoundationDbContext db, UserManager<Appl
                 try { await placement.ValidateImportedPlacement(job.AcademyId,group.Key,ids,job.PlatformInitiated ? job.Id : null); }
                 catch (Academy.Api.Facilities.FacilityRejected error) { throw new ImportRejected("resource",error); }
             }
-            if (connected.History is not null) await connected.History.Publish(db, job, resources, token);
-            job.ResultSummary = JsonSerializer.Serialize(new { effects = connected.Effects, coachAssignments = connected.Assignments.Count, tournamentParticipations = connected.TournamentParticipations, players = preview.PlayerCount, enrollments = preview.RowCount, historical = preview.Historical, guardians = preview.GuardianCount, guardianRelationships = preview.GuardianRelationships, historicalPayments = preview.HistoricalPayments, historicalPaymentTotal = preview.HistoricalPaymentTotal }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (connected.History is not null) await connected.History.Publish(db, job, publishedOn, resources, token);
+            job.ResultSummary = JsonSerializer.Serialize(new { effects = connected.Effects, coachAssignments = connected.Assignments.Count, tournamentParticipations = connected.TournamentParticipations, players = preview.PlayerCount, enrollments = preview.RowCount, historical = preview.Historical, guardians = preview.GuardianCount, guardianRelationships = preview.GuardianRelationships, historicalPayments = preview.HistoricalPayments, historicalPaymentTotal = preview.HistoricalPaymentTotal, historicalPaymentCurrency = preview.HistoricalPaymentCurrency }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
         job.PublishedRows = published; job.ReplayedRows = replayed; job.State = ImportJobState.Completed; job.StagedFile = null; job.ErrorCode = null; job.CompletedAtUtc = now; job.LeaseUntilUtc = null; job.UpdatedAtUtc = now;
         if (job.PlatformInitiated) db.PlatformAudits.Add(new() { Id = Guid.NewGuid(), ActorUserId = job.ActorUserId, TargetAcademyId = job.AcademyId, Action = "academy.import.complete", Details = JsonSerializer.Serialize(new { job.Id, job.PublishedRows, job.ReplayedRows, job.FileHash }), AtUtc = now });

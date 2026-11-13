@@ -23,11 +23,13 @@ class OwnerScopedRead extends StatefulWidget {
   final AuthController auth;
   final String path;
   final Widget Function(BuildContext, Object?) builder;
+  final bool autoPaginate;
   const OwnerScopedRead({
     super.key,
     required this.auth,
     required this.path,
     required this.builder,
+    this.autoPaginate = true,
   });
   @override
   State<OwnerScopedRead> createState() => _OwnerScopedReadState();
@@ -49,6 +51,7 @@ class _OwnerScopedReadState extends State<OwnerScopedRead> {
         auth: widget.auth,
         path: widget.path,
         builder: widget.builder,
+        autoPaginate: widget.autoPaginate,
       );
     },
   );
@@ -756,7 +759,10 @@ class OwnerAccessHistory extends StatelessWidget {
                 ],
               ),
             ),
-          if (rows(d['items']).isEmpty) const EmptyMessage(),
+          if (rows(d['items']).isEmpty)
+            const EmptyMessage(
+              'لا توجد تغييرات في الصلاحيات خلال الفترة المحددة.',
+            ),
         ]);
       },
     ),

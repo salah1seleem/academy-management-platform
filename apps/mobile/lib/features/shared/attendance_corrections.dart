@@ -96,7 +96,7 @@ Future<StaffCapabilities> correctionAccess(AuthController auth) async {
     throw const ApiFailure(403, 'ليست لديك صلاحية عرض طلبات تصحيح الحضور.');
   }
   final access = await StaffCapabilities.load(auth);
-  if (!access.allows('attendance.read', 'attendance', 'Read')) {
+  if (!access.canReadAttendanceCorrections) {
     throw const ApiFailure(403, 'ليست لديك صلاحية عرض طلبات تصحيح الحضور.');
   }
   return access;

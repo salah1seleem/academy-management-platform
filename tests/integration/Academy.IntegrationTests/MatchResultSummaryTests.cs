@@ -44,13 +44,24 @@ public sealed partial class BrandingMatchesTests
         var registered=await db.MobilePushDevices.SingleAsync(d=>d.TokenHash==Academy.Api.Mobile.MobileAuthenticationHandler.Hash(pushToken));Assert.NotEqual(pushToken,registered.ProtectedToken);
         Assert.Equal(4,await db.MatchGoalSlots.CountAsync(g=>g.MatchId==id));
         Assert.Equal("ResultDraft",(await owner.GetFromJsonAsync<JsonElement>(path)).GetProperty("status").GetString());
+        var feedPath = $"/api/v1/my-matches?playerId={f.Player}&matchId={id}";
+        var draftFeed = Assert.Single((await guardian.GetFromJsonAsync<JsonElement>(feedPath)).EnumerateArray());
+        Assert.Equal("ResultDraft", draftFeed.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, draftFeed.GetProperty("ourScore").ValueKind);
+        Assert.Equal(JsonValueKind.Null, draftFeed.GetProperty("opponentScore").ValueKind);
+        using var otherAcademy = await Staff(Academy.Api.Auth.DemoSeed.FutureOwnerEmail);
+        Assert.Empty((await otherAcademy.GetFromJsonAsync<JsonElement>($"/api/v1/my-matches?matchId={id}")).EnumerateArray());
         var invalid=body with{GoalSlots=[new(1,"Player",Guid.NewGuid()),new(2,"Unknown"),new(3,"Unknown"),new(4,"Unknown")],ResultFinalized=true};
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Send(owner,path,invalid,true)).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Send(owner,path,body with{OurScore=-1},true)).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Send(owner,path,body with{OurScore=2},true)).StatusCode);
         var final=body with{ResultFinalized=true,ResultVersion=1};(await Send(owner,path,final,true)).EnsureSuccessStatusCode();
+        var publishedFeed = Assert.Single((await guardian.GetFromJsonAsync<JsonElement>(feedPath)).EnumerateArray());
+        Assert.Equal(id, publishedFeed.GetProperty("id").GetGuid());
+        Assert.Equal(4, publishedFeed.GetProperty("ourScore").GetInt32());
+        Assert.Equal(2, publishedFeed.GetProperty("opponentScore").GetInt32());
         var notices=await db.AcademyNotices.AsNoTracking().Where(n=>n.MatchId==id&&n.EventKey=="MatchGoals").ToArrayAsync();Assert.NotEmpty(notices);
-        Assert.All(notices,n=>{Assert.Equal(f.Player,n.SubjectPlayerId);Assert.Contains("هدفين",n.Message);Assert.Contains("4",n.Message);});
+        Assert.All(notices,n=>{Assert.Equal(f.Player,n.SubjectPlayerId);Assert.StartsWith("مبروك!",n.Message);Assert.Contains("هدفين",n.Message);Assert.Contains("4",n.Message);});
         var noticeIds=notices.Select(n=>n.Id).Order().ToArray();
         var pending=await db.MobilePushDeliveries.Where(d=>noticeIds.Contains(d.NoticeId)).Select(d=>d.Id).ToArrayAsync();Assert.Single(pending);
         Assert.Equal(HttpStatusCode.OK,(await guardian.GetAsync($"/api/v1/mobile-push/notices/{notices.Single(n=>n.UserId==registered.UserId).Id}")).StatusCode);
@@ -75,11 +86,18 @@ public sealed partial class BrandingMatchesTests
         Assert.Equal(noticeIds,await db.AcademyNotices.Where(n=>n.MatchId==id&&n.EventKey=="MatchGoals").OrderBy(n=>n.Id).Select(n=>n.Id).ToArrayAsync());
         Assert.Equal(4,await db.MatchResultChanges.CountAsync(c=>c.MatchId==id));
         Assert.Equal(pending,await db.MobilePushDeliveries.Where(d=>noticeIds.Contains(d.NoticeId)).Select(d=>d.Id).ToArrayAsync());
+        (await Send(owner,path,corrected with{OurScore=0,OpponentScore=17,GoalSlots=[],ResultFinalized=false,ResultVersion=4},true)).EnsureSuccessStatusCode();
+        var pendingCorrection = Assert.Single((await guardian.GetFromJsonAsync<JsonElement>(feedPath)).EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, pendingCorrection.GetProperty("opponentScore").ValueKind);
+        Assert.All(await db.AcademyNotices.AsNoTracking().Where(n=>n.MatchId==id&&n.EventKey=="MatchGoals").ToArrayAsync(), n =>
+        {
+            Assert.Contains("قيد المراجعة", n.Message);
+            Assert.DoesNotContain("17", n.Message);
+        });
         (await Send(guardian,"/api/v1/mobile-push/device",new PushDeviceWrite("APNs",new string('b',64)),true)).EnsureSuccessStatusCode();
         using(var remove=new HttpRequestMessage(HttpMethod.Delete,"/api/v1/mobile-push/device")){(await guardian.SendAsync(remove)).EnsureSuccessStatusCode();}
         Assert.All(await db.MobilePushDevices.AsNoTracking().Where(d=>d.MobileSessionId==registered.MobileSessionId).ToArrayAsync(),d=>Assert.False(d.IsActive));
-        using var other=await Staff(Academy.Api.Auth.DemoSeed.FutureOwnerEmail);
-        Assert.Equal(HttpStatusCode.NotFound,(await other.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await otherAcademy.GetAsync(path)).StatusCode);
     }
     [Fact]
     public async Task Coach_team_grant_allows_creation_and_results_but_not_structure_or_unassigned_team_roster()

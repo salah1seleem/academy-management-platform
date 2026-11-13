@@ -37,10 +37,6 @@ void main() {
         auth.session!.selected!.academyId,
         '30000000-0000-0000-0000-000000000003',
       );
-      final calendar = obj(
-        await auth.request('GET', '/api/v1/academy/calendar'),
-      );
-      final today = textOf(calendar['today']);
       final initial = obj(
         await auth.request('GET', NativeStaffAttendanceFlow.root),
       );
@@ -84,8 +80,8 @@ void main() {
           ),
         );
         await waitFor(find.byType(NativeRoleTabs));
-        await waitFor(find.text('المجموعات المسندة'));
-        await reach(find.text('المجموعات المسندة'));
+        await waitFor(find.text('تدريباتي'));
+        await reach(find.text('تدريباتي'));
         final brand = BrandScope.maybeOf(t.element(find.byType(CoachHome)))!;
         for (var i = 0; i < 160 && brand.loading; i++) {
           await t.pump(const Duration(milliseconds: 150));
@@ -129,37 +125,11 @@ void main() {
       await binding.takeScreenshot(
         'phase-approved-coach-web-policy-enabled-w375',
       );
-      await reach(find.byType(CoachDaySelector));
-      expect(
-        t.widget<CoachDaySelector>(find.byType(CoachDaySelector)).selected,
-        today,
-      );
-      final tomorrow = DateTime.parse('${today}T12:00:00Z')
-          .add(const Duration(days: 1))
-          .toIso8601String()
-          .substring(0, 10);
-      final day = find.descendant(
-        of: find.byType(CoachDaySelector),
-        matching: find.text('${DateTime.parse(tomorrow).day}'),
-      );
-      await t.ensureVisible(day);
-      await t.pumpAndSettle();
-      await t.tap(day);
-      await t.pump(const Duration(milliseconds: 400));
-      await waitFor(find.textContaining('حصص $tomorrow'));
-      expect(
-        t.widget<CoachDaySelector>(find.byType(CoachDaySelector)).selected,
-        tomorrow,
-      );
-      await binding.takeScreenshot('phase-approved-coach-day-context-w375');
-      await reach(find.text('المجموعات'));
-      await t.tap(find.text('المجموعات').last);
-      await t.pumpAndSettle();
       final groups = rows(await auth.request('GET', '/api/v1/coach/groups'));
       expect(groups, isNotEmpty);
-      final assigned = find.widgetWithText(
-        ListTile,
-        textOf(groups.first['arabicName']),
+      final assigned = find.descendant(
+        of: find.byKey(ValueKey('coach-group-${groups.first['id']}')),
+        matching: find.text('فتح المجموعة'),
       );
       await reach(assigned);
       await t.tap(assigned);

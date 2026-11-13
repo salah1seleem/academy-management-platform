@@ -14,7 +14,7 @@ const cairo = localFont({
 export const metadata: Metadata = {
   applicationName: "منصة إدارة الأكاديمية",
   title: "منصة إدارة الأكاديمية",
-  description: "الأساس التقني لمنصة عربية لإدارة الأكاديميات الرياضية.",
+  description: "إدارة اللاعبين والمجموعات والاشتراكات والحضور.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/branding/icon-192.png",

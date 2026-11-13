@@ -11,15 +11,31 @@ import 'guardian_content.dart';
 String dailyNutritionPath(String playerId, String today) =>
     '/api/v1/guardian/children/$playerId/nutrition/recommendations${DateTime.tryParse(today) == null ? '' : '?date=${day(today)}'}';
 
-List<(String, String, Object?)> dailyNutritionMeals(Json d) => [
-  ('الإفطار', 'Breakfast', d['breakfast']),
-  ('الغداء', 'Lunch', d['lunch']),
-  ('العشاء', 'Dinner', d['dinner']),
-  if (d['preTraining'] != null)
+List<(String, String, Json)> dailyNutritionMeals(Json d) {
+  final slots = [
+    ('الإفطار', 'Breakfast', d['breakfast']),
+    ('الغداء', 'Lunch', d['lunch']),
+    ('العشاء', 'Dinner', d['dinner']),
     ('قبل التدريب', 'Before training', d['preTraining']),
-  if (d['postTraining'] != null)
     ('بعد التدريب', 'After training', d['postTraining']),
-];
+  ];
+  return [
+    for (final (ar, en, data) in slots)
+      if (data is Json &&
+          data['id'] is String &&
+          (data['id'] as String).trim().isNotEmpty &&
+          data['arabicName'] is String &&
+          (data['arabicName'] as String).trim().isNotEmpty)
+        (ar, en, data),
+  ];
+}
+
+String? dailyNutritionActivity(Object? isTrainingDay) =>
+    switch (isTrainingDay) {
+      true => 'يوم تدريب',
+      false => 'يوم راحة',
+      _ => null,
+    };
 
 class DailyNutritionCard extends StatefulWidget {
   final AuthController auth;
@@ -82,6 +98,9 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
         final unavailable =
             result.error is ApiFailure &&
             [404, 422, 400].contains((result.error as ApiFailure).status);
+        if (unavailable && !widget.compact) {
+          return const EmptyMessage('لا توجد اقتراحات لهذا اليوم.');
+        }
         return GCard(
           child: Row(
             children: [
@@ -142,6 +161,17 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
         );
       }
       final d = obj(result.data), meals = dailyNutritionMeals(d);
+      final dayActivity = dailyNutritionActivity(d['isTrainingDay']);
+      final activity = dayActivity == null
+          ? null
+          : localized(
+              context,
+              dayActivity,
+              d['isTrainingDay'] == true ? 'Training day' : 'Rest day',
+            );
+      final disclaimer = d['disclaimer'] is String
+          ? (d['disclaimer'] as String).trim()
+          : '';
       if (widget.compact) {
         return GCard(
           onTap: library,
@@ -150,32 +180,33 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
               SizedBox(
                 width: 76,
                 height: 56,
-                child: Stack(
-                  children: [
-                    for (var i = 0; i < meals.take(3).length; i++)
-                      if (meals[i].$3 is Map)
-                        PositionedDirectional(
-                          start: i * 18.0,
-                          top: i * 3.0,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: DemoImage(
-                                obj(meals[i].$3)['imageReference'],
-                                height: 36,
+                child: meals.isEmpty
+                    ? const Icon(Icons.restaurant_outlined)
+                    : Stack(
+                        children: [
+                          for (var i = 0; i < meals.take(3).length; i++)
+                            PositionedDirectional(
+                              start: i * 18.0,
+                              top: i * 3.0,
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                padding: const EdgeInsets.all(2),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: DemoImage(
+                                    meals[i].$3['imageReference'],
+                                    height: 36,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                  ],
-                ),
+                        ],
+                      ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -185,8 +216,8 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                     UiText(
                       localized(
                         context,
-                        'متابعة الغذاء اليومي لطفلك',
-                        'Your child’s daily nutrition',
+                        'اقتراحات من مكتبة التغذية',
+                        'Suggestions from the nutrition library',
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -197,7 +228,13 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                     ),
                     const SizedBox(height: 4),
                     UiText(
-                      '${widget.playerName} · ${localized(context, d['isTrainingDay'] == true ? 'يوم تدريب' : 'يوم راحة', d['isTrainingDay'] == true ? 'Training day' : 'Rest day')}',
+                      [
+                        widget.playerName,
+                        if (meals.isEmpty)
+                          'لا توجد اقتراحات اليوم'
+                        else if (activity != null)
+                          activity,
+                      ].join(' · '),
                       style: Theme.of(context).textTheme.labelSmall,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -214,7 +251,9 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
           ),
         );
       }
-      return GCard(
+      final selectedDate = d['date'] ?? widget.today;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -229,8 +268,8 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
                   child: UiText(
                     localized(
                       context,
-                      'اقتراح نظام غذائي ليوم ${day(d['date'] ?? widget.today)}',
-                      'Nutrition suggestions for ${day(d['date'] ?? widget.today)}',
+                      sessionDateLabel(selectedDate),
+                      day(selectedDate),
                     ),
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
@@ -238,45 +277,35 @@ class _DailyNutritionCardState extends State<DailyNutritionCard> {
               ],
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                for (final m in meals)
-                  if (m.$3 is Map)
+            if (meals.isEmpty)
+              const UiText('لا توجد اقتراحات لهذا اليوم.')
+            else
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final m in meals)
                     ActionChip(
                       avatar: const Icon(Icons.restaurant_outlined, size: 14),
                       label: UiText(
-                        '${localized(context, m.$1, m.$2)} · ${textOf(obj(m.$3)['arabicName'])}',
-                        style: const TextStyle(fontSize: 11),
+                        '${localized(context, m.$1, m.$2)} · ${textOf(m.$3['arabicName'])}',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                       onPressed: () => openPage(
                         context,
                         MealDetails(
                           auth: widget.auth,
-                          id: textOf(obj(m.$3)['id']),
+                          id: m.$3['id'] as String,
                         ),
                       ),
                     ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            UiText(
-              localized(
-                context,
-                d['isTrainingDay'] == true
-                    ? 'يوم تدريب · اقتراحات تتغير يوميًا'
-                    : 'يوم راحة · اقتراحات تتغير يوميًا',
-                d['isTrainingDay'] == true
-                    ? 'Training day · Daily rotation'
-                    : 'Rest day · Daily rotation',
+                ],
               ),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-            UiText(
-              textOf(d['disclaimer']),
-              style: const TextStyle(fontSize: 10),
-            ),
+            const SizedBox(height: 6),
+            if (activity != null)
+              UiText(activity, style: Theme.of(context).textTheme.labelSmall),
+            if (disclaimer.isNotEmpty)
+              UiText(disclaimer, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       );

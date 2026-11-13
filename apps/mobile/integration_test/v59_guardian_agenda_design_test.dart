@@ -235,7 +235,7 @@ void main() {
           );
           await tap(find.byType(BackButton));
         } else {
-          await wait(find.text('لا توجد مواعيد قادمة في القائمة المعروضة.'));
+          await wait(find.text('لا توجد مواعيد قادمة.'));
         }
         expect(t.takeException(), isNull);
       }

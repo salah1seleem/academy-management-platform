@@ -1,0 +1,34 @@
+.fields,
+.optionalFields {
+  display: grid;
+  gap: 1rem;
+}
+
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+  gap: .8rem;
+}
+
+.sport {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .35rem .8rem;
+  margin: 0;
+  padding-block-end: .85rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.sport dt {
+  color: var(--muted);
+}
+
+.sport dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.optionalFields {
+  padding-block-start: .85rem;
+}

@@ -15,8 +15,9 @@ class AttendanceDraft {
        expires = _expiry(snapshot, now ?? DateTime.now()),
        changes = {
          for (final row in rows(snapshot['players']))
-           if (states[textOf(row['sportEnrollmentId'])] !=
-               row['attendanceStatus'])
+           if (states.containsKey(textOf(row['sportEnrollmentId'])) &&
+               states[textOf(row['sportEnrollmentId'])] !=
+                   (row['attendanceStatus'] ?? 'NotRecorded'))
              textOf(row['sportEnrollmentId']): {
                'sportEnrollmentId': row['sportEnrollmentId'],
                'status': states[textOf(row['sportEnrollmentId'])],
@@ -35,8 +36,11 @@ class AttendanceDraft {
     if (!expires.isAfter(now ?? DateTime.now())) {
       throw const ApiFailure(410, 'انتهت صلاحية المسودة؛ افتح كشفًا جديدًا.');
     }
-    if (latest == null) return;
-    if (scope != latest['draftScope']) {
+    if (latest != null) validateAccess(latest);
+  }
+
+  void validateAccess(Map<String, dynamic> latest) {
+    if (scope != null && scope != latest['draftScope']) {
       throw const ApiFailure(
         401,
         'تغير حساب الدخول أو الأكاديمية؛ حُذفت المسودة.',
@@ -62,13 +66,17 @@ class AttendanceDraft {
     };
   }
 
-  bool confirmed(Map<String, dynamic> latest) => changes.entries.every(
-    (e) => rows(latest['players']).any(
-      (r) =>
-          r['sportEnrollmentId'] == e.key &&
-          r['attendanceStatus'] == e.value['status'],
-    ),
-  );
+  Iterable<Map<String, dynamic>> remaining(Map<String, dynamic> latest) {
+    final remote = {
+      for (final row in rows(latest['players']))
+        row['sportEnrollmentId']: row['attendanceStatus'],
+    };
+    return changes.entries
+        .where((entry) => remote[entry.key] != entry.value['status'])
+        .map((entry) => entry.value);
+  }
+
+  bool confirmed(Map<String, dynamic> latest) => remaining(latest).isEmpty;
   void resolve(String id, Map<String, dynamic>? remote, bool keepLocal) {
     if (!keepLocal) {
       changes.remove(id);
@@ -79,8 +87,10 @@ class AttendanceDraft {
     }
   }
 
-  Map<String, dynamic> get body => {
+  Map<String, dynamic> get body => bodyFor(changes.values);
+
+  Map<String, dynamic> bodyFor(Iterable<Map<String, dynamic>> items) => {
     if (lease != null) 'draftLease': lease,
-    'items': changes.values.toList(),
+    'items': items.toList(),
   };
 }

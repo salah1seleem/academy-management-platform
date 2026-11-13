@@ -16,6 +16,7 @@ public static class PayrollStatements
     {
         var api=app.MapGroup("/api/v1/manage/payroll/{id:guid}/statement").RequireAuthorization(AcademyPermissions.PayrollRead);
         api.MapGet("",Read);
+        api.MapGet("/by-request", ReadRequest);
         app.MapPost("/api/v1/manage/payroll/{id:guid}/final-settlements/{sourceId:guid}/disbursements",PayFinal).RequireAuthorization(AcademyPermissions.PayrollRead,AcademyPermissions.PayrollManage,AcademyPermissions.PayrollPay).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/approve",Approve).RequireAuthorization(AcademyPermissions.PayrollManage,AcademyPermissions.PayrollStatementApprove).AddEndpointFilter<CsrfFilter>();
         api.MapPost("/disbursements",(Guid id,StatementDisbursement body,HttpContext http,CurrentTenant current,FoundationDbContext db,TimeProvider time)=>Disburse(id,body,http,current,db,time)).RequireAuthorization(AcademyPermissions.PayrollManage,AcademyPermissions.PayrollPay).AddEndpointFilter<CsrfFilter>();
@@ -28,7 +29,33 @@ public static class PayrollStatements
     }
     private static string Key(HttpContext http)=>http.Request.Headers["Idempotency-Key"].ToString();
     private static Guid Actor(HttpContext http)=>Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private static string RecoveryScope(HttpContext http, TenantMembership tenant)
+        => PayrollSensitiveAccess.RecoveryScope(http, tenant, "monthly-payroll");
+    private static bool ScopeMatches(HttpContext http, string scope)
+        => PayrollSensitiveAccess.ScopeMatches(http, scope);
     private static bool ValidMonth(DateOnly month)=>month.Day==1&&month.Year is >=2000 and <=9998;
+    private static async Task<IResult> ReadRequest(Guid id, DateOnly month, string action, string requestKey, HttpContext http, CurrentTenant current, FoundationDbContext db, CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        if (!ValidMonth(month) || requestKey.Length is < 8 or > 100 || action is not ("approve" or "disbursements")) return Results.NotFound();
+        var tenant = (await current.ResolveAsync())!;
+        if (!ScopeMatches(http, RecoveryScope(http, tenant))) return Results.Forbid();
+        var actor = Actor(http);
+        var employee = await db.Employees.AsNoTracking().Where(e => e.Id == id && e.AcademyId == tenant.AcademyId)
+            .Select(e => new { e.BranchId }).SingleOrDefaultAsync(ct);
+        if (employee is null || !await PayrollSensitiveAccess.BranchAllowed(db, tenant, employee.BranchId)) return Results.NotFound();
+        var statements = db.PayrollStatements.AsNoTracking().Where(s => s.AcademyId == tenant.AcademyId && s.EmployeeId == id && s.Month == month && s.Kind == "MonthlySalary");
+        var result = action == "approve"
+            ? await statements.Where(s => s.ApprovedByMembershipId == tenant.MembershipId && s.ActorUserId == actor && s.RequestKey == requestKey)
+                .Select(s => new { s.Id, s.BranchId }).SingleOrDefaultAsync(ct)
+            : await (from payment in db.PayrollDisbursements.AsNoTracking()
+                     join statement in statements on payment.StatementId equals statement.Id
+                     where payment.AcademyId == tenant.AcademyId && payment.ActorMembershipId == tenant.MembershipId
+                         && payment.ActorUserId == actor && payment.RequestKey == requestKey && payment.AdvanceId == null
+                     select new { payment.Id, payment.BranchId }).SingleOrDefaultAsync(ct);
+        if (result is null || !await PayrollSensitiveAccess.BranchAllowed(db, tenant, result.BranchId)) return Results.NotFound();
+        return Results.Ok(new { result.Id });
+    }
     internal static async Task<(PayrollRow Row,string Snapshot,string Hash)?> Prepare(Guid id,DateOnly month,TenantMembership t,FoundationDbContext db)
     {
         var employee=await db.Employees.AsNoTracking().SingleOrDefaultAsync(e=>e.Id==id&&e.AcademyId==t.AcademyId);if(employee is null)return null;
@@ -43,25 +70,30 @@ public static class PayrollStatements
         return(row,JsonSerializer.Serialize(facts),StatementComparisonRules.Hash(facts));
     }
     internal static PayrollStatement New(Employee e,DateOnly month,TenantMembership t,Guid actor,(PayrollRow Row,string Snapshot,string Hash) p,string key,string hash,DateTimeOffset now,string? note)=>new() {Id=Guid.NewGuid(),AcademyId=t.AcademyId,EmployeeId=e.Id,BranchId=e.BranchId,EmployeeName=e.Name,Month=month,Currency=e.Currency,MonthlySalary=p.Row.MonthlySalary,ContractDays=p.Row.ContractDays,BaseDue=p.Row.BaseDue,Deductions=p.Row.Deductions,Additions=p.Row.Additions,PrivateCompensation=p.Row.PrivateCompensation,NetDue=p.Row.NetDue,SourceSnapshot=p.Snapshot,SourceHash=p.Hash,ApprovedByMembershipId=t.MembershipId,ActorUserId=actor,Note=note,RequestKey=key,RequestHash=hash,CreatedAtUtc=now,UpdatedAtUtc=now};
-    private static async Task<IResult> Read(Guid id,DateOnly month,CurrentTenant current,FoundationDbContext db,TimeProvider time,HttpResponse response)
+    private static async Task<IResult> Read(Guid id,DateOnly month,CurrentTenant current,FoundationDbContext db,TimeProvider time,HttpContext http)
     {
-        response.Headers.CacheControl="no-store";if(!ValidMonth(month))return Results.UnprocessableEntity();var t=(await current.ResolveAsync())!;
+        http.Response.Headers.CacheControl="no-store";if(!ValidMonth(month))return Results.UnprocessableEntity();var t=(await current.ResolveAsync())!;
+        var recoveryScope = RecoveryScope(http, t);
+        if (!ScopeMatches(http, recoveryScope)) return Results.Forbid();
         await using var tx=await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         if(await PayrollOpening.BeforeBoundary(db,id,month))return Results.Problem(statusCode:409,title:"هذا الشهر ضمن الفترة السابقة للافتتاح الموثق؛ راجع حساب الموظف ولا تكرر الاستحقاق.");
         var prepared=await Prepare(id,month,t,db);if(prepared is null)return Results.NotFound();
         var statement=await db.PayrollStatements.AsNoTracking().SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Month==month&&s.Kind=="MonthlySalary");
         var payments=statement is null?[]:await db.PayrollDisbursements.AsNoTracking().Where(p=>p.StatementId==statement.Id).OrderByDescending(p=>p.Sequence).Select(p=>new {p.Id,p.Sequence,p.Amount,p.RemainingAfter,p.Reference,p.CreatedAtUtc,p.AdvanceId,kind=p.AdvanceId.HasValue?"AdvanceApplication":"DirectPayout"}).ToArrayAsync();
         var employeeMember=await db.Employees.Where(e=>e.Id==id).Select(e=>e.MembershipId).SingleAsync();var today=await AttendanceCalendar.TodayAsync(t.AcademyId,db,time);
+        var timeZone = await db.Academies.Where(a => a.Id == t.AcademyId).Select(a => a.TimeZone).SingleAsync();
         var unallocatedAdvances=await db.PayrollAdvances.Where(a=>a.EmployeeId==id).SumAsync(a=>a.Amount)-await db.PayrollDisbursements.Where(p=>p.EmployeeId==id&&p.AdvanceId.HasValue).SumAsync(p=>p.Amount);
         var canApprove=statement is null&&!prepared.Value.Row.IsPaid&&prepared.Value.Row.NetDue>0&&prepared.Value.Row.ContractDays>0&&month<=SalaryHistory.Month(today)&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollStatementApprove)&&(t.Role==AcademyRole.AcademyOwner||!await PayrollSensitiveAccess.IsSelf(db,t,employeeMember));
-        return Results.Ok(new {month,row=prepared.Value.Row,statement=statement is null?null:new {statement.Id,statement.CreatedAtUtc,statement.Note,statement.SourceHash},quoteHash=statement?.SourceHash??prepared.Value.Hash,
+        return Results.Ok(new {month,timeZone,recoveryScope,row=prepared.Value.Row,statement=statement is null?null:new {statement.Id,statement.CreatedAtUtc,statement.Note,statement.SourceHash},quoteHash=statement?.SourceHash??prepared.Value.Hash,
             sources=JsonSerializer.Deserialize<JsonElement>(statement?.SourceSnapshot??prepared.Value.Snapshot),canApprove,canPay=statement is not null&&prepared.Value.Row.RemainingAmount>0&&await PayrollSensitiveAccess.Allowed(db,t,AcademyPermissions.PayrollPay),payments,
             balanceScope="SelectedMonthOnly",openingBalanceVerified=await db.PayrollStatements.AnyAsync(s=>s.EmployeeId==id&&s.Kind=="Opening"),unallocatedAdvances});
     }
     private static async Task<IResult> Approve(Guid id,StatementApproval body,HttpContext http,CurrentTenant current,FoundationDbContext db,TimeProvider time)
     {
         var key=Key(http);if(key.Length is <8 or >100||!ValidMonth(body.Month)||body.QuoteHash?.Length!=64||body.Note?.Length>500)return Results.Problem(statusCode:422,title:"راجع كشف الشهر قبل الاعتماد.");
-        var t=(await current.ResolveAsync())!;await using var tx=await db.Database.BeginTransactionAsync();if(!await PayrollSensitiveAccess.LockAndAuthorize(http,current,db,AcademyPermissions.PayrollStatementApprove))return Results.Forbid();
+        var t=(await current.ResolveAsync())!;
+        if (!ScopeMatches(http, RecoveryScope(http, t))) return Results.Forbid();
+        await using var tx=await db.Database.BeginTransactionAsync();if(!await PayrollSensitiveAccess.LockAndAuthorize(http,current,db,AcademyPermissions.PayrollStatementApprove))return Results.Forbid();
         await PayrollEndpoints.Lock(db,t.AcademyId,id,body.Month);var e=await db.Employees.SingleOrDefaultAsync(e=>e.Id==id&&e.IsActive);if(e is null)return Results.NotFound();
         if(!await PayrollSensitiveAccess.BranchAllowed(db,t,e.BranchId)||t.Role!=AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.IsSelf(db,t,e.MembershipId))return Results.Forbid();
         var hash=StatementComparisonRules.Hash(new {id,body});var replay=await db.PayrollStatements.SingleOrDefaultAsync(s=>s.ApprovedByMembershipId==t.MembershipId&&s.RequestKey==key);if(replay is not null)return replay.RequestHash==hash?Results.Ok(new {replay.Id,replay=true}):Results.Conflict();
@@ -75,7 +107,9 @@ public static class PayrollStatements
     internal static async Task<IResult> Disburse(Guid id,StatementDisbursement body,HttpContext http,CurrentTenant current,FoundationDbContext db,TimeProvider time,bool opening=false,Guid? finalStatementId=null)
     {
         var key=Key(http);if(key.Length is <8 or >100||!ValidMonth(body.Month)||body.Amount<=0||body.Amount>100000000||decimal.Round(body.Amount,2)!=body.Amount||body.Reference?.Length>120)return Results.Problem(statusCode:422,title:"أدخل مبلغ صرف صحيحًا وراجع المتبقي.");
-        var t=(await current.ResolveAsync())!;await using var tx=await db.Database.BeginTransactionAsync();if(!await PayrollSensitiveAccess.LockAndAuthorize(http,current,db,AcademyPermissions.PayrollPay))return Results.Forbid();
+        var t=(await current.ResolveAsync())!;
+        if (!opening && !finalStatementId.HasValue && !ScopeMatches(http, RecoveryScope(http, t))) return Results.Forbid();
+        await using var tx=await db.Database.BeginTransactionAsync();if(!await PayrollSensitiveAccess.LockAndAuthorize(http,current,db,AcademyPermissions.PayrollPay))return Results.Forbid();
         await PayrollEndpoints.Lock(db,t.AcademyId,id,body.Month);var kind=finalStatementId.HasValue?"PrivateFinal":opening?"Opening":"MonthlySalary";var s=await db.PayrollStatements.SingleOrDefaultAsync(s=>s.EmployeeId==id&&s.Month==body.Month&&s.Kind==kind&&(!finalStatementId.HasValue||s.Id==finalStatementId.Value));if(s is null)return Results.NotFound();if(!await PayrollSensitiveAccess.BranchAllowed(db,t,s.BranchId))return Results.Forbid();
         if((opening||finalStatementId.HasValue)&&t.Role!=AcademyRole.AcademyOwner&&await PayrollSensitiveAccess.IsSelf(db,t,(await db.Employees.SingleAsync(e=>e.Id==id)).MembershipId))return Results.Forbid();
         var hash=finalStatementId.HasValue?StatementComparisonRules.Hash(new{id,body,kind,finalStatementId}):opening?StatementComparisonRules.Hash(new{id,body,kind}):StatementComparisonRules.Hash(new {id,body});var replay=await db.PayrollDisbursements.SingleOrDefaultAsync(p=>p.ActorMembershipId==t.MembershipId&&p.RequestKey==key);if(replay is not null)return replay.RequestHash==hash?Results.Ok(new {replay.Id,replay=true}):Results.Conflict();

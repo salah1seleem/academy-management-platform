@@ -1,12 +1,51 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/storage/refresh_store.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
+import '../shared/payment_proof_image.dart';
 import '../shared/private_media.dart';
 import '../shared/staff_capabilities.dart';
 import 'native_operation_form.dart';
+import '../owner/inventory_preview.dart';
+
+class NativeProductStockSection extends StatefulWidget {
+  const NativeProductStockSection({super.key, required this.auth});
+  final AuthController auth;
+
+  @override
+  State<NativeProductStockSection> createState() =>
+      _NativeProductStockSectionState();
+}
+
+class _NativeProductStockSectionState extends State<NativeProductStockSection> {
+  late final access = StaffCapabilities.load(widget.auth);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<StaffCapabilities>(
+    future: access,
+    builder: (context, snapshot) {
+      final rights = snapshot.data;
+      if (rights == null ||
+          !rights.allows('content.catalog.manage', 'catalog', 'Read') ||
+          !rights.explicitAction('catalog', 'Read')) {
+        return const SizedBox.shrink();
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OwnerInventoryPreview(auth: widget.auth),
+          NativeProductOrdersEntry(auth: widget.auth),
+        ],
+      );
+    },
+  );
+}
 
 class NativeProductOrdersEntry extends StatefulWidget {
   const NativeProductOrdersEntry({super.key, required this.auth});
@@ -30,7 +69,7 @@ class _NativeProductOrdersEntryState extends State<NativeProductOrdersEntry> {
         : FutureBuilder<StaffCapabilities>(
             future: access,
             builder: (context, result) =>
-                result.data?.allows('payment.read', 'catalog', 'Read') != true
+                result.data?.canReadProductOrders != true
                 ? const SizedBox.shrink()
                 : GLink(
                     'طلبات المنتجات',
@@ -80,7 +119,7 @@ class _NativeProductOrdersState
   Future<void> load({bool more = false}) => run(() async {
     final target = more ? number + 1 : 1;
     final access = await StaffCapabilities.load(auth);
-    if (!access.allows('payment.read', 'catalog', 'Read')) {
+    if (!access.canReadProductOrders) {
       throw const ApiFailure(403, 'ليست لديك صلاحية عرض طلبات المنتجات.');
     }
     final result = obj(
@@ -112,71 +151,104 @@ class _NativeProductOrdersState
     await load();
   }
 
+  void applySearch(String value) {
+    search.text = value;
+    setState(() {
+      appliedSearch = value.trim();
+      number = 1;
+    });
+    reload();
+  }
+
   @override
-  Widget build(BuildContext context) => page('طلبات المنتجات', [
-    choice(
-      'حالة الطلب',
-      status,
-      const [
-        {'id': '', 'arabicName': 'كل الطلبات'},
-        {'id': 'Pending', 'arabicName': 'بانتظار المراجعة'},
-        {'id': 'Confirmed', 'arabicName': 'مقبولة'},
-        {'id': 'Rejected', 'arabicName': 'مرفوضة'},
-      ],
-      (value) {
-        setState(() {
-          status = value ?? '';
-          number = 1;
-        });
-        reload();
-      },
-      required: false,
-    ),
-    field('البحث بالمنتج أو اللاعب', search, required: false),
-    OutlinedButton.icon(
-      onPressed: () {
-        setState(() {
-          appliedSearch = search.text.trim();
-          number = 1;
-        });
-        reload();
-      },
-      icon: const Icon(Icons.search),
-      label: const UiText('بحث'),
-    ),
-    if (!busy && items.isEmpty) const EmptyMessage('لا توجد طلبات مطابقة.'),
-    for (final row in items)
-      GCard(
-        onTap: () async {
-          await openPage(
-            context,
-            NativeProductOrderReview(auth: auth, id: textOf(row['id'])),
-          );
-          if (current) await reload();
+  Widget build(BuildContext context) => page(
+    'طلبات المنتجات',
+    [
+      choice(
+        'حالة الطلب',
+        status,
+        const [
+          {'id': '', 'arabicName': 'كل الطلبات'},
+          {'id': 'Pending', 'arabicName': 'بانتظار المراجعة'},
+          {'id': 'Confirmed', 'arabicName': 'مقبولة'},
+          {'id': 'Rejected', 'arabicName': 'مرفوضة'},
+        ],
+        (value) {
+          setState(() {
+            status = value ?? '';
+            number = 1;
+          });
+          reload();
         },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Heading(textOf(row['productName'])),
-            StatusPill(row['status']),
-            UiText(
-              '${row['player'] ?? 'منتج للأسرة'} · ${row['branchName'] ?? ''}',
-            ),
-            UiText(
-              '${textOf(row['colorSnapshot'] ?? '').isEmpty ? '' : '${row['colorSnapshot']} · '}${row['sizeSnapshot'] ?? 'مقاس عام'}${row['shirtNumberSnapshot'] == null ? '' : ' · رقم ${row['shirtNumberSnapshot']}'} · الكمية ${row['quantity']}',
-            ),
-            MoneyText(row['amount'], row['currency'], size: 22),
-            UiText(
-              row['hasProof'] == true
-                  ? 'وصل إثبات الدفع'
-                  : 'بانتظار إثبات الدفع',
-            ),
-            const UiText('عرض الطلب ومراجعته'),
-          ],
-        ),
+        required: false,
       ),
-    const SizedBox.shrink(),
-  ], screen: 'payments');
+      field('المنتج أو اللاعب أو رقم الطلب', search, required: false),
+      OutlinedButton.icon(
+        onPressed: () => applySearch(search.text),
+        icon: const Icon(Icons.search),
+        label: const UiText('بحث'),
+      ),
+      if (appliedSearch.isNotEmpty)
+        TextButton(
+          onPressed: () => applySearch(''),
+          child: const UiText('مسح البحث'),
+        ),
+      if (!busy && error != null)
+        OutlinedButton(
+          onPressed: () => load(more: items.isNotEmpty),
+          child: const UiText('إعادة المحاولة'),
+        ),
+      if (!busy && error == null && items.isEmpty)
+        const EmptyMessage('لا توجد طلبات مطابقة.'),
+      for (final row in items)
+        GCard(
+          key: ValueKey('staff-product-order:${row['id']}'),
+          onTap: () async {
+            await openPage(
+              context,
+              NativeProductOrderReview(auth: auth, id: textOf(row['id'])),
+            );
+            if (current) await reload();
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Heading(textOf(row['productName'])),
+              StatusPill(row['status']),
+              PaymentRequestReference(order: row),
+              UiText(
+                [
+                  row['player'] ?? 'منتج للأسرة',
+                  if (row['branchName'] != null) row['branchName'],
+                ].join(' · '),
+              ),
+              UiText(
+                [
+                  if (textOf(row['colorSnapshot'] ?? '').isNotEmpty)
+                    row['colorSnapshot'],
+                  if (textOf(row['sizeSnapshot'] ?? '').isNotEmpty)
+                    row['sizeSnapshot'],
+                  if (row['shirtNumberSnapshot'] != null)
+                    'رقم ${row['shirtNumberSnapshot']}',
+                  'الكمية ${row['quantity']}',
+                ].join(' · '),
+              ),
+              MoneyText(row['amount'], row['currency'], size: 22),
+              if (row['status'] == 'Pending')
+                UiText(
+                  row['hasProof'] == true
+                      ? 'وصل إثبات الدفع'
+                      : 'بانتظار إثبات الدفع',
+                ),
+              const UiText('عرض الطلب'),
+            ],
+          ),
+        ),
+      const SizedBox.shrink(),
+    ],
+    screen: 'payments',
+    onRetry: reload,
+  );
 }
 
 class NativeProductOrderReview extends StatefulWidget {
@@ -184,9 +256,11 @@ class NativeProductOrderReview extends StatefulWidget {
     super.key,
     required this.auth,
     required this.id,
+    this.attemptStore,
   });
   final AuthController auth;
   final String id;
+  final RefreshStore? attemptStore;
   @override
   State<NativeProductOrderReview> createState() =>
       _NativeProductOrderReviewState();
@@ -196,18 +270,75 @@ class _NativeProductOrderReviewState
     extends NativeOperationState<NativeProductOrderReview> {
   @override
   AuthController get auth => widget.auth;
+  @override
+  String? get currentContext {
+    final membership = super.currentContext;
+    return membership == null ? null : '${auth.session?.userId}:$membership';
+  }
+
   final reason = TextEditingController();
-  Json? data, frozen, original;
+  Json? data, frozen;
   StaffCapabilities? access;
-  bool recorded = false;
+  bool recorded = false, retryAllowed = false, verifiedPending = false;
+  bool unavailable = false;
+  String? fingerprint;
+  String? visibleProof;
+  bool get proofReady =>
+      visibleProof != null && visibleProof == data?['proofUrl'];
+  late final RefreshStore? attemptStore = widget.attemptStore ?? _store();
   String get path => '/api/v1/manage/product-sales/${widget.id}';
   bool get canReview =>
+      data?['canReview'] as bool? ??
       access?.allows('content.catalog.manage', 'catalog', 'Edit') == true;
   bool get canAccept =>
       canReview &&
-      (access!.owner ||
-          access!.explicitAction('catalog', 'Edit') &&
-              access!.explicitAction('finance', 'Add'));
+      (data?['canAccept'] as bool? ??
+          (access!.owner ||
+              access!.explicitAction('catalog', 'Edit') &&
+                  access!.explicitAction('finance', 'Add')));
+
+  RefreshStore? _store() {
+    final transport = auth.transport;
+    final member = auth.session?.selected;
+    if (transport is! HttpApiTransport || member == null) return null;
+    return SecureRefreshStore(
+      '${transport.config.storageKey}.product-review.'
+      '${member.academyId}.${member.id}.${auth.session?.userId ?? member.id}.'
+      '${widget.id}',
+    );
+  }
+
+  String _fingerprint(Json order, String status, Object? note) {
+    const fields = [
+      'id',
+      'productId',
+      'playerId',
+      'sportEnrollmentId',
+      'variantId',
+      'branchId',
+      'productName',
+      'sizeSnapshot',
+      'colorSnapshot',
+      'shirtNumberSnapshot',
+      'quantity',
+      'amount',
+      'unitPrice',
+      'currency',
+      'proofUrl',
+    ];
+    return sha256
+        .convert(
+          utf8.encode(
+            jsonEncode([
+              for (final field in fields) order[field],
+              status,
+              note,
+            ]),
+          ),
+        )
+        .toString();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -237,125 +368,224 @@ class _NativeProductOrderReviewState
       throw const ApiFailure(403, 'ليست لديك صلاحية عرض هذا الطلب.');
     }
     final value = await read();
+    final saved = await attemptStore?.read();
     if (current) {
       setState(() {
         access = rights;
         data = value;
+        fingerprint = saved != null && RegExp(r'^[a-f0-9]{64}$').hasMatch(saved)
+            ? saved
+            : null;
       });
     }
   });
   Future<void> review(bool accept) async {
     if (!current ||
         busy ||
-        frozen != null ||
+        fingerprint != null ||
         !canReview ||
         accept && !canAccept ||
         data?['status'] != 'Pending' ||
-        !isPrivateAsset(data?['proofUrl'])) {
+        !proofReady) {
       return;
     }
     if (reason.text.trim().length > 500) {
       setState(() => error = 'الملاحظة لا تتجاوز500حرف.');
       return;
     }
+    final source = Map<String, dynamic>.from(data!);
+    final note = reason.text.trim();
     final decision = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: UiText(accept ? 'قبول طلب المنتج' : 'رفض طلب المنتج'),
-        content: UiText(
-          accept
-              ? 'أكد وصول التحويل ومراجعة الإثبات. سيعتمد المبلغ المسجل ويُخصم المقاس والرقم المختاران من المخزون.'
-              : 'سيُحفظ رفض الطلب وملاحظتك لولي الأمر.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const UiText('رجوع'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const UiText('تأكيد المراجعة'),
-          ),
-        ],
+      builder: (context) => ListenableBuilder(
+        listenable: auth,
+        builder: (context, _) {
+          if (!current) {
+            return AlertDialog(
+              content: const UiText('انتهت جلسة المراجعة.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const UiText('إغلاق'),
+                ),
+              ],
+            );
+          }
+          return AlertDialog(
+            title: UiText(accept ? 'قبول طلب المنتج' : 'رفض طلب المنتج'),
+            content: UiText(
+              '${source['productName']} · ${money(source['amount'], source['currency'])}\n'
+              '${accept ? 'أكد وصول التحويل. سيُخصم الصنف المطلوب من المخزون.' : 'سيظهر الرفض وملاحظتك لولي الأمر.'}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const UiText('رجوع'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const UiText('تأكيد المراجعة'),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (decision != true || !current) return;
-    setState(() {
-      original = Map<String, dynamic>.from(data!);
-      frozen = {
+    if (decision != true ||
+        !current ||
+        !proofReady ||
+        visibleProof != source['proofUrl'])
+      return;
+    await run(() async {
+      final body = <String, dynamic>{
         'accept': accept,
-        'reason': reason.text.trim().isEmpty ? null : reason.text.trim(),
+        'reason': note.isEmpty ? null : note,
+        'expectedProofAssetId': Uri.parse(source['proofUrl'] as String)
+            .pathSegments
+            .last,
       };
+      final value = _fingerprint(
+        source,
+        accept ? 'Confirmed' : 'Rejected',
+        body['reason'],
+      );
+      try {
+        await attemptStore?.write(value);
+      } catch (_) {
+        throw const ApiFailure(0, 'تعذر حفظ مرجع المراجعة. حاول مجددًا.');
+      }
+      if (!current) return;
+      if (!proofReady || visibleProof != source['proofUrl']) {
+        await attemptStore?.clear();
+        return;
+      }
+      setState(() {
+        frozen = body;
+        fingerprint = value;
+      });
+      await finish();
     });
-    await finish();
   }
 
-  Future<void> finish() => run(() async {
+  Future<void> _clear() async {
+    await attemptStore?.clear();
+    if (!current) return;
+    setState(() {
+      fingerprint = null;
+      frozen = null;
+      recorded = false;
+      retryAllowed = false;
+      verifiedPending = false;
+      reason.clear();
+    });
+  }
+
+  Future<void> verify() => run(() => finish(readOnly: true));
+
+  Future<void> finish({bool readOnly = false}) async {
     try {
-      if (!recorded) {
+      if (!readOnly && !recorded) {
+        if (!proofReady ||
+            visibleProof?.split('/').last != frozen?['expectedProofAssetId']) {
+          throw const ApiFailure(0, 'أعد فتح صورة الإثبات قبل إرسال القرار.');
+        }
         try {
           await auth.request('POST', '$path/review', body: frozen);
           recorded = true;
         } on ApiFailure catch (e) {
-          if (e.status >= 400 && e.status < 500 && e.status != 408) {
-            frozen = null;
-            original = null;
+          if (e.status == 409) {
+            final previousProof = frozen?['expectedProofAssetId'];
+            final Json updated;
+            try {
+              updated = await read();
+              if (current) setState(() => data = updated);
+              await _clear();
+            } catch (_) {
+              if (current)
+                setState(() {
+                  data = null;
+                  visibleProof = null;
+                });
+              rethrow;
+            }
+            if (updated['status'] == 'Pending' &&
+                updated['proofUrl'] is String &&
+                (updated['proofUrl'] as String).split('/').last !=
+                    previousProof) {
+              throw const ApiFailure(
+                409,
+                'تغيّر إثبات الدفع. راجع الصورة الحالية.',
+              );
+            }
+          } else if ([400, 422].contains(e.status)) {
+            await _clear();
           }
           rethrow;
         }
       }
       final saved = await read();
-      final source = original!;
-      final desired = frozen!['accept'] == true ? 'Confirmed' : 'Rejected';
-      final same = [
-        'id',
-        'productId',
-        'playerId',
-        'sportEnrollmentId',
-        'variantId',
-        'branchId',
-        'productName',
-        'sizeSnapshot',
-        'colorSnapshot',
-        'shirtNumberSnapshot',
-        'quantity',
-        'currency',
-        'proofUrl',
-      ].every((k) => saved[k] == source[k]);
-      if (!same ||
-          !storedAmountMatches(saved['amount'], source['amount']) ||
-          !storedAmountMatches(saved['unitPrice'], source['unitPrice']) ||
-          saved['status'] != desired ||
-          saved['reviewReason'] != frozen!['reason']) {
-        throw const ApiFailure(
-          0,
-          'لم تتأكد مطابقة قرار المراجعة ومصدره. تحقق من الطلب نفسه قبل أي إجراء آخر.',
-        );
+      if (!current) return;
+      final status = saved['status'];
+      final sameDecision =
+          status is String &&
+          ['Confirmed', 'Rejected'].contains(status) &&
+          _fingerprint(saved, status, saved['reviewReason']) == fingerprint;
+      if (sameDecision) {
+        await _clear();
+        if (current)
+          setState(() {
+            data = saved;
+            message = 'حُفظت المراجعة وأُعيدت قراءة الطلب نفسه.';
+          });
+        return;
       }
-      if (current) {
+      if (readOnly && !recorded && status == 'Pending') {
+        final decision = frozen;
+        final sameSource =
+            decision != null &&
+            _fingerprint(
+                  saved,
+                  decision['accept'] == true ? 'Confirmed' : 'Rejected',
+                  decision['reason'],
+                ) ==
+                fingerprint;
         setState(() {
           data = saved;
-          frozen = null;
-          original = null;
-          recorded = false;
-          message = 'حُفظت المراجعة وأُعيدت قراءة الطلب نفسه.';
+          retryAllowed = sameSource;
+          verifiedPending = !sameSource;
         });
+        return;
       }
+      if (readOnly && !recorded && ['Confirmed', 'Rejected'].contains(status)) {
+        await _clear();
+        if (current) setState(() => data = saved);
+        throw const ApiFailure(
+          0,
+          'ظهر قرار مختلف على الطلب. راجع الحالة المحفوظة.',
+        );
+      }
+      throw const ApiFailure(
+        0,
+        'لم تتأكد مطابقة قرار المراجعة ومصدره. تحقق من الطلب نفسه قبل أي إجراء آخر.',
+      );
     } on ApiFailure catch (e) {
       if (current && [401, 403, 404].contains(e.status)) {
         setState(() {
           data = null;
           access = null;
+          visibleProof = null;
+          unavailable = true;
         });
       }
       rethrow;
     }
-  });
+  }
+
   @override
   Widget build(BuildContext context) {
     final value = data;
     return page('طلب منتج رياضي', [
-      if (value == null && !busy)
+      if (value == null && !busy && !unavailable)
         OutlinedButton(
           onPressed: load,
           child: const UiText('إعادة تحميل الطلب'),
@@ -363,12 +593,14 @@ class _NativeProductOrderReviewState
       if (value != null) ...[
         Heading(textOf(value['productName'])),
         StatusPill(value['status']),
+        PaymentRequestReference(order: value),
         GCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              UiText('اللاعب: ${value['player'] ?? 'منتج للأسرة'}'),
-              UiText('المقاس: ${value['sizeSnapshot'] ?? 'مقاس عام'}'),
+              if (value['player'] != null) UiText('اللاعب: ${value['player']}'),
+              if (textOf(value['sizeSnapshot'] ?? '').isNotEmpty)
+                UiText('المقاس: ${value['sizeSnapshot']}'),
               if (textOf(value['colorSnapshot'] ?? '').isNotEmpty)
                 UiText('اللون: ${value['colorSnapshot']}'),
               if (value['shirtNumberSnapshot'] != null)
@@ -380,29 +612,47 @@ class _NativeProductOrderReviewState
             ],
           ),
         ),
-        if (isPrivateAsset(value['proofUrl'])) ...[
-          const Heading('إثبات الدفع'),
-          PrivateImage(
+        if (value['proofUrl'] case final String proof
+            when isPrivateAsset(proof))
+          PaymentProofImage(
+            key: ValueKey(proof),
             auth: auth,
-            path: textOf(value['proofUrl']),
-            height: 240,
-            fit: BoxFit.contain,
-          ),
-        ] else
+            path: proof,
+            onAvailabilityChanged: (available) {
+              if (current && data?['proofUrl'] == proof) {
+                setState(() => visibleProof = available ? proof : null);
+              }
+            },
+          )
+        else if (value['status'] == 'Pending')
           const UiText('بانتظار وصول إثبات الدفع من ولي الأمر.'),
-        if (frozen != null) ...[
-          const UiText('قرار المراجعة ثابت حتى التأكد من حفظه.'),
-          FilledButton(
-            onPressed: finish,
-            child: UiText(
-              recorded
-                  ? 'إعادة التحقق من الطلب نفسه'
-                  : 'استكمال مراجعة الطلب نفسه',
-            ),
+        if (fingerprint != null) ...[
+          UiText(
+            verifiedPending
+                ? 'الطلب ما زال معلقًا. راجع الإثبات الحالي.'
+                : 'قرار المراجعة بانتظار التحقق.',
           ),
-        ] else if (value['status'] == 'Pending' &&
-            canReview &&
-            isPrivateAsset(value['proofUrl'])) ...[
+          FilledButton(
+            onPressed: verify,
+            child: const UiText('التحقق من القرار'),
+          ),
+          if (retryAllowed &&
+              proofReady &&
+              canReview &&
+              (frozen?['accept'] != true || canAccept))
+            OutlinedButton(
+              onPressed: () => run(() async {
+                setState(() => retryAllowed = false);
+                await finish();
+              }),
+              child: const UiText('إعادة إرسال نفس القرار'),
+            ),
+          if (verifiedPending && canReview)
+            OutlinedButton(
+              onPressed: () => run(_clear),
+              child: const UiText('فتح مراجعة جديدة'),
+            ),
+        ] else if (value['status'] == 'Pending' && canReview && proofReady) ...[
           field('ملاحظة لولي الأمر', reason, required: false, maxLines: 3),
           if (canAccept)
             FilledButton(

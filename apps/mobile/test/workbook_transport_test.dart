@@ -6,6 +6,138 @@ import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'Player exports are hash bound, return XLSX bytes and cannot commit',
+    () async {
+      const mime =
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      final hash = List.filled(64, 'A').join();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final workbook = Uint8List.fromList([80, 75, 3, 4]);
+      var requests = 0;
+      final listener = server.listen((request) async {
+        requests++;
+        expect(
+          request.uri.toString(),
+          requests == 1
+              ? '/api/v1/people/import/preview?downloadValidRows=true'
+              : '/api/v1/people/import/preview/corrections',
+        );
+        expect(request.headers.value('Idempotency-Key'), isNull);
+        expect(
+          request.headers.value('Authorization'),
+          'Bearer synthetic-import-token',
+        );
+        expect(request.headers.value('Accept'), mime);
+        final data = await request.fold<List<int>>([], (a, b) => a..addAll(b));
+        expect(
+          latin1.decode(data),
+          contains('name="ExpectedFileHash"\r\n\r\n$hash\r\n'),
+        );
+        request.response.headers.set('Content-Type', mime);
+        request.response.add(workbook);
+        await request.response.close();
+      });
+      final api = HttpApiTransport(
+        AppConfig('Demo', 'http://127.0.0.1:${server.port}'),
+      );
+      try {
+        final result = await api.importWorkbook(
+          workbook,
+          false,
+          {},
+          'synthetic-import-token',
+          validRowsFromHash: hash,
+        );
+        expect(result, workbook);
+        expect(
+          await api.importWorkbook(
+            workbook,
+            false,
+            {},
+            'synthetic-import-token',
+            validRowsFromHash: hash,
+            correctionRows: true,
+          ),
+          workbook,
+        );
+        await expectLater(
+          api.importWorkbook(
+            workbook,
+            true,
+            {},
+            'synthetic-import-token',
+            validRowsFromHash: hash,
+          ),
+          throwsA(isA<ApiFailure>()),
+        );
+        await expectLater(
+          api.importWorkbook(
+            workbook,
+            false,
+            {},
+            'synthetic-import-token',
+            validRowsFromHash: 'wrong',
+          ),
+          throwsA(isA<ApiFailure>()),
+        );
+        await expectLater(
+          api.importWorkbook(
+            workbook,
+            false,
+            {},
+            'synthetic-import-token',
+            correctionRows: true,
+          ),
+          throwsA(isA<ApiFailure>()),
+        );
+        expect(requests, 2);
+      } finally {
+        api.close();
+        await listener.cancel();
+        await server.close(force: true);
+      }
+    },
+  );
+
+  test(
+    'Player export rejects an error document with the workbook media type',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final listener = server.listen((request) async {
+        await request.drain<void>();
+        request.response.headers.set(
+          'Content-Type',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+        request.response.write('{"title":"unavailable"}');
+        await request.response.close();
+      });
+      final api = HttpApiTransport(
+        AppConfig('Demo', 'http://127.0.0.1:${server.port}'),
+      );
+      try {
+        await expectLater(
+          api.importWorkbook(
+            Uint8List.fromList([80, 75, 3, 4]),
+            false,
+            {},
+            'synthetic-token',
+            validRowsFromHash: List.filled(64, 'A').join(),
+            correctionRows: true,
+          ),
+          throwsA(
+            isA<ApiFailure>().having((error) => error.status, 'status', 422),
+          ),
+        );
+      } finally {
+        api.close();
+        await listener.cancel();
+        await server.close(force: true);
+      }
+    },
+  );
+
   test('Workbook multipart preserves preview/commit fields and header-only authorization without automatic retries', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final paths = <String>[];
@@ -148,6 +280,26 @@ void main() {
             ),
           );
           expect(requests, 1);
+          if (status == 422) {
+            await expectLater(
+              api.importWorkbook(
+                Uint8List.fromList([1, 2, 3]),
+                false,
+                {},
+                'synthetic-import-token',
+              ),
+              throwsA(
+                isA<ApiFailure>()
+                    .having((e) => e.status, 'status', 422)
+                    .having(
+                      (e) => e.message,
+                      'preview recovery',
+                      'تعذّر قراءة ملف Excel. اختر ملف XLSX صالحًا من القالب الحالي.',
+                    ),
+              ),
+            );
+            expect(requests, 2);
+          }
         } finally {
           api.close();
           await listener.cancel();

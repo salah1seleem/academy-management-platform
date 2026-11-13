@@ -4,10 +4,9 @@ import { formatMoneyAr } from "../../../apps/web/src/lib/formatters";
 
 async function startFootballRenewal(page: Page) {
   const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
-  const row = child.locator(".subscription-mini p").filter({ hasText: "كرة القدم" });
-  await row.getByRole("link").click();
+  await child.locator(".subscription-mini > div").filter({ hasText: "كرة القدم" }).getByRole("link").click();
   await page.getByText("اشتراك شهري", { exact: true }).click();
-  await page.getByRole("button", { name: /الدفع الإلكتروني — ادفع الآن/ }).click();
+  await page.getByRole("button", { name: /متابعة إلى طلب الدفع/ }).click();
   await expect(page.getByText("بيئة دفع تجريبية — لا توجد أموال حقيقية")).toBeVisible();
 }
 
@@ -21,8 +20,8 @@ test("Guardian completes a successful online test renewal and sees receipt", asy
   await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click();
   await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
   await page.getByRole("link", { name: "عرض الإيصال" }).click();
-  await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
-  await expect(page.locator(".printable-receipt dl > div").filter({ has: page.getByText("المبلغ المدفوع", { exact: true }) }).locator("dd")).toHaveText(formatMoneyAr(payment.finalAmount, payment.currency));
+  await expect(page.getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: "إيصال دفع", exact: true }).getByText(formatMoneyAr(payment.finalAmount, payment.currency), { exact: true })).toBeVisible();
 });
 
 test("Guardian failed payment does not report a renewal", async ({ page }) => {
@@ -36,16 +35,16 @@ test("Guardian renews for another player without gaining profile access", async 
   await guardianLogin(page);
   await page.getByRole("link", { name: "تجديد اشتراك لغيره" }).click();
   await page.getByLabel("كود التجديد").fill("RNW-DEMO-NG-0003-7K9M");
-  await page.getByRole("button", { name: "تحقق من الكود" }).click();
-  await expect(page.getByRole("heading", { name: "تأكيد المستفيد" })).toBeVisible();
+  await page.getByRole("button", { name: "تحقّق من الكود" }).click();
+  await expect(page.getByRole("region", { name: "المستفيد" })).toBeVisible();
   await expect(page.getByText("عمر أحمد حسن")).toBeVisible();
   await expect(page.getByText("كرة القدم")).toBeVisible();
   await page.getByText("اشتراك شهري", { exact: true }).click();
-  await page.getByRole("button", { name: "الدفع الإلكتروني — ادفع الآن" }).click();
+  await page.getByRole("button", { name: "متابعة إلى طلب الدفع" }).click();
   await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click();
   await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
   await page.getByRole("link", { name: "عرض الإيصال" }).click();
-  await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
   await expect(page.getByText("عمر أحمد حسن")).toBeVisible();
   await page.goto("/guardian");
   await expect(page.getByRole("heading", { name: "الأبناء", exact: true })).toBeVisible();
@@ -53,7 +52,7 @@ test("Guardian renews for another player without gaining profile access", async 
 });
 
 test("Owner sees approved and rejected payment requests and confirmed collection", async ({ page }) => {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول", exact: true }).click();
   await page.waitForURL("**/dashboard");
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: "المتابعات والطلبات" }).click();

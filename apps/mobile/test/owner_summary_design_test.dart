@@ -32,11 +32,60 @@ void main() {
       ],
     },
     'target': {'amount': 45000, 'achievement': 83},
-    'overdue': {'amount': 540},
+    'overdue': {'amount': 540, 'players': 2, 'asOf': '2026-11-13'},
     'risk': {'players': 10},
     'attendance': {'percentage': 78.8},
     'capacity': {'seats': 130},
   };
+  for (final (balance, label, dated) in [
+    (
+      {'amount': 0, 'players': 0, 'asOf': '2026-11-13'},
+      'لا توجد مستحقات متأخرة',
+      true,
+    ),
+    (
+      {'players': 0, 'asOf': '2026-11-13'},
+      'رصيد المستحقات المتأخرة غير متاح',
+      false,
+    ),
+    ({'amount': 925, 'players': -1, 'asOf': '2026-11-13'}, 'غير متاح', true),
+    (null, 'رصيد المستحقات المتأخرة غير متاح', false),
+  ]) {
+    testWidgets('overdue balance explains $label and opens the ledger', (
+      t,
+    ) async {
+      t.view.physicalSize = const Size(320, 900);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      String? report;
+      await t.pumpWidget(
+        f.app(
+          Scaffold(
+            body: SingleChildScrollView(
+              child: AcademySummaryPanel(
+                data: {...data, 'overdue': balance},
+                showWeeklyTrend: false,
+                onCapacity: () {},
+                onReport: (value) => report = value,
+              ),
+            ),
+          ),
+          scale: 2,
+        ),
+      );
+      await t.pumpAndSettle();
+      final tile = find.text(label);
+      await t.ensureVisible(tile);
+      await t.tap(tile);
+      expect(report, 'receivables');
+      expect(
+        find.textContaining('الرصيد حتى'),
+        dated ? findsOneWidget : findsNothing,
+      );
+      expect(t.takeException(), isNull);
+    });
+  }
   for (final width in [320.0, 375.0, 440.0]) {
     for (final scale in [1.0, 2.0]) {
       for (final dark in [false, true]) {
@@ -78,16 +127,29 @@ void main() {
             'ضبط هدف التحصيل',
           );
           // Keep the action opposite its heading instead of below the totals.
+          final heading = find.text('التحصيل خلال الفترة');
+          expect(t.getSize(targetButton).height, greaterThanOrEqualTo(44));
+          expect(t.widget<Text>(find.text('78.8%')).maxLines, 1);
+          final measures = find.byKey(const ValueKey('summary-halves'));
           expect(
-            t.getCenter(targetButton).dy,
-            closeTo(t.getCenter(find.text('التحصيل خلال الفترة')).dy, 1),
-          );
-          expect(
-            t.getCenter(targetButton).dx,
-            lessThan(t.getCenter(find.text('التحصيل خلال الفترة')).dx),
+            t.getBottomLeft(targetButton).dy,
+            lessThan(t.getTopLeft(measures).dy),
           );
           if (scale == 1) {
-            expect(t.getSize(find.byType(SummaryHero)).height, lessThan(290));
+            expect(
+              t.getCenter(targetButton).dy,
+              closeTo(t.getCenter(heading).dy, 1),
+            );
+            expect(
+              t.getCenter(targetButton).dx,
+              lessThan(t.getCenter(heading).dx),
+            );
+            expect(t.getSize(find.byType(SummaryHero)).height, lessThan(210));
+          } else {
+            expect(
+              t.getTopLeft(targetButton).dy,
+              greaterThan(t.getTopLeft(heading).dy),
+            );
           }
           expect(find.byKey(const ValueKey('summary-watermark')), findsNothing);
           for (final label in [
@@ -113,6 +175,34 @@ void main() {
       }
     }
   }
+  testWidgets(
+    'over-target collections retain the exact percentage for access',
+    (t) async {
+      await t.pumpWidget(
+        f.app(
+          Scaffold(
+            body: SummaryHero(
+              data: {
+                ...data,
+                'target': {'amount': 33000, 'achievement': 113.4},
+              },
+              onReport: () {},
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      final bar = t.widget<LinearProgressIndicator>(
+        find.byType(LinearProgressIndicator),
+      );
+      expect(bar.value, 1);
+      expect(bar.semanticsValue, '100%');
+      expect(bar.semanticsLabel, contains('113.4% من الهدف'));
+      expect(find.text('113.4%'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'two tenants without logos never inherit bundled academy branding',
     (t) async {

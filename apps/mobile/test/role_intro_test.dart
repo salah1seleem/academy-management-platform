@@ -55,17 +55,16 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('A clear view of your academy'), findsOneWidget);
+      expect(find.text('Subscriptions and collections'), findsOneWidget);
       expect(
-        Directionality.of(t.element(find.text('A clear view of your academy'))),
+        Directionality.of(
+          t.element(find.text('Subscriptions and collections')),
+        ),
         TextDirection.ltr,
       );
       await t.tap(find.text('Next'));
       await t.pumpAndSettle();
-      expect(
-        find.text('Follow the details that make a difference'),
-        findsOneWidget,
-      );
+      expect(find.text('Renewals and absences'), findsOneWidget);
       expect(find.text('Skip'), findsNothing);
       expect(t.takeException(), isNull);
     },
@@ -124,25 +123,17 @@ void main() {
     auth.dispose();
   });
   const titles = {
-    'Guardian': [
-      'شوف تطور ابنك بوضوح',
-      'ابقَ قريبًا من رحلته',
-      'اشتراكه ومتابعته بسهولة',
-    ],
-    'Coach': [
-      'حصصك جاهزة أمامك',
-      'تابع تطور كل لاعب',
-      'حضور واضح، ومتابعة مستمرة',
-    ],
+    'Guardian': ['تقييمات المدرب', 'الحصص والحضور', 'تجديد الاشتراك'],
+    'Coach': ['جدول مجموعاتك', 'تقييم اللاعب', 'حضور اللاعبين'],
     'AcademyAdmin': [
-      'يومك أوضح، وشغلك أسهل',
-      'كل اشتراك في وقته',
-      'من التسجيل إلى التدريب',
+      'التسجيل والتجديد',
+      'تسجيل حضور الحصة',
+      'اشتراكات اللاعبين',
     ],
     'AcademyOwner': [
-      'صورة واضحة لأكاديميتك',
-      'تابع التفاصيل التي تصنع الفرق',
-      'تجربة تليق باسم أكاديميتك',
+      'الاشتراكات والتحصيلات',
+      'التجديد والغياب',
+      'إدارة الأكاديمية',
     ],
   };
   for (final role in titles.keys) {
@@ -204,8 +195,8 @@ void main() {
           ),
         ),
       );
-      expect(find.text('أكاديميتك في مكان واحد'), findsOneWidget);
-      expect(find.text('حصصك جاهزة أمامك'), findsNothing);
+      expect(find.text('الأكاديمية المختارة'), findsOneWidget);
+      expect(find.text('جدول مجموعاتك'), findsNothing);
       expect(find.byIcon(Icons.pool_outlined), findsOneWidget);
       expect(find.byIcon(Icons.sports_soccer), findsNothing);
     },
@@ -271,7 +262,7 @@ void main() {
       );
       await t.pumpWidget(gate(const ValueKey('first')));
       await t.pumpAndSettle();
-      expect(find.text('شوف تطور ابنك بوضوح'), findsOneWidget);
+      expect(find.text('تقييمات المدرب'), findsOneWidget);
       expect(calls.toSet(), {
         '/api/v1/me/profile',
         '/api/v1/academy/experience',
@@ -294,7 +285,7 @@ void main() {
       });
       await t.pumpAndSettle();
       expect(calls.where((p) => p == '/api/v1/academy/experience').length, 1);
-      expect(find.text('شوف تطور ابنك بوضوح'), findsNothing);
+      expect(find.text('تقييمات المدرب'), findsNothing);
       await t.pumpWidget(const SizedBox());
       brand.dispose();
       prefs.dispose();

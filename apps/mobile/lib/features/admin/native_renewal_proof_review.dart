@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/theme/appearance.dart' show localized;
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_payments.dart';
 import '../guardian/guardian_ui.dart';
@@ -15,9 +16,11 @@ class NativeRenewalProofReview extends StatefulWidget {
     super.key,
     required this.auth,
     required this.id,
+    this.fromPaymentQueue = false,
   });
   final AuthController auth;
   final String id;
+  final bool fromPaymentQueue;
   @override
   State<NativeRenewalProofReview> createState() =>
       _NativeRenewalProofReviewState();
@@ -28,10 +31,15 @@ class _NativeRenewalProofReviewState
   @override
   AuthController get auth => widget.auth;
   final reason = TextEditingController();
+  final reasonField = GlobalKey();
+  final reasonFocus = FocusNode();
+  double keyboardInset = 0;
   Json? payment, proof, original, sourceProof, intent;
   List<Json> groups = [];
   String? group;
   bool acknowledged = false, canReview = false;
+  bool? proofImageAvailable;
+  int imageAttempt = 0;
   String get paymentPath => '/api/v1/subscriptions/payments/${widget.id}';
   String get root => '/api/v1/manage/payments/${widget.id}';
   @override
@@ -41,7 +49,32 @@ class _NativeRenewalProofReviewState
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    final increase = inset - keyboardInset;
+    keyboardInset = inset;
+    if (increase <= 0 || !reasonFocus.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!current || !reasonFocus.hasFocus) return;
+      final field = reasonField.currentContext;
+      if (field != null && field.findRenderObject()?.attached == true) {
+        Scrollable.ensureVisible(
+          field,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
+      } else if (operationScroll.hasClients) {
+        final position = operationScroll.position;
+        position.jumpTo(
+          (position.pixels + increase).clamp(0.0, position.maxScrollExtent),
+        );
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    reasonFocus.dispose();
     reason.dispose();
     super.dispose();
   }
@@ -57,6 +90,19 @@ class _NativeRenewalProofReviewState
     return value;
   }
 
+  Future<Json> readProof() async {
+    final evidence = obj(await auth.request('GET', '$root/proof'));
+    if (evidence['id'] == null ||
+        !isPrivateAsset(evidence['url']) ||
+        evidence['url'] != "/api/v1/assets/${evidence['assetId']}") {
+      throw const ApiFailure(
+        0,
+        'تعذر التحقق من ملف إثبات التحويل. أعد تحميل الطلب.',
+      );
+    }
+    return evidence;
+  }
+
   Future<void> load() => run(() async {
     try {
       final rights = await StaffCapabilities.load(auth);
@@ -70,16 +116,26 @@ class _NativeRenewalProofReviewState
         throw const ApiFailure(403, 'ليست لديك صلاحية عرض تفاصيل هذا التجديد.');
       }
       final value = await readPayment();
-      final evidence = obj(await auth.request('GET', '$root/proof'));
-      final options = obj(
-        await auth.request('GET', '/api/v1/manage/structure/options'),
-      );
+      final evidence = await readProof();
+      final mayReview =
+          value['canReviewProof'] != false &&
+          value['isCurrent'] == true &&
+          value['status'] == 'Pending' &&
+          evidence['status'] == 'Pending' &&
+          rights.allows('payment.read', 'payments', 'Edit', [
+            'workflow.payments.collect',
+          ]);
+      final options = mayReview
+          ? obj(await auth.request('GET', '/api/v1/manage/structure/options'))
+          : <String, dynamic>{};
       if (current) {
         setState(() {
           payment = value;
           proof = evidence;
+          proofImageAvailable = null;
+          imageAttempt++;
           group = value['groupId'] as String?;
-          groups = rows(options['groups'])
+          groups = rows(options['groups'] ?? const [])
               .where(
                 (g) =>
                     g['branchId'] == value['branchId'] &&
@@ -87,9 +143,7 @@ class _NativeRenewalProofReviewState
                     (group == null || g['id'] == group),
               )
               .toList();
-          canReview = rights.allows('payment.read', 'payments', 'Edit', [
-            'workflow.payments.collect',
-          ]);
+          canReview = mayReview;
         });
       }
     } on ApiFailure catch (e) {
@@ -102,6 +156,7 @@ class _NativeRenewalProofReviewState
       setState(() {
         payment = null;
         proof = null;
+        proofImageAvailable = null;
         canReview = false;
         groups = [];
       });
@@ -113,23 +168,31 @@ class _NativeRenewalProofReviewState
         busy ||
         intent != null ||
         !canReview ||
+        proofImageAvailable != true ||
         payment?['isCurrent'] != true ||
         payment?['status'] != 'Pending' ||
         proof?['status'] != 'Pending' ||
         !isPrivateAsset(proof?['url'])) {
       return;
     }
-    if (reason.text.trim().length > 500 ||
-        accept && !groups.any((g) => g['id'] == group)) {
-      return;
-    }
+    if (accept && !groups.any((g) => g['id'] == group)) return;
+    if (!form.currentState!.validate()) return;
+    final source = Map<String, dynamic>.from(payment!);
+    final evidence = Map<String, dynamic>.from(proof!);
+    final note = reason.text.trim();
+    final decision = {
+      'accept': accept,
+      'groupId': accept ? group : null,
+      'reason': note.isEmpty ? null : note,
+      'expectedProofAssetId': evidence['assetId'],
+    };
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: UiText(accept ? 'قبول إثبات التجديد' : 'رفض إثبات التجديد'),
         content: UiText(
           accept
-              ? 'أكد استلام ${money(payment!['finalAmount'], payment!['currency'])} ومراجعة الإثبات. سيُفعّل التجديد وتصدر حركة التحصيل مرة واحدة.'
+              ? 'أكد استلام ${money(source['finalAmount'], source['currency'])}. سيُسجّل التحصيل وتصدر فترة التجديد.'
               : 'سيُحفظ الرفض وملاحظتك للأسرة. لا يعني الرفض رد تحويل مالي.',
         ),
         actions: [
@@ -144,15 +207,11 @@ class _NativeRenewalProofReviewState
         ],
       ),
     );
-    if (!current || confirmed != true) return;
+    if (!current || confirmed != true || proofImageAvailable != true) return;
     setState(() {
-      original = Map<String, dynamic>.from(payment!);
-      sourceProof = Map<String, dynamic>.from(proof!);
-      intent = {
-        'accept': accept,
-        'groupId': accept ? group : null,
-        'reason': reason.text.trim().isEmpty ? null : reason.text.trim(),
-      };
+      original = source;
+      sourceProof = evidence;
+      intent = decision;
     });
     await finish();
   }
@@ -168,12 +227,26 @@ class _NativeRenewalProofReviewState
             intent = null;
             original = null;
             sourceProof = null;
+            if (e.status == 409 && current) {
+              reason.clear();
+              setState(() {
+                payment = null;
+                proof = null;
+                proofImageAvailable = null;
+                canReview = false;
+                groups = [];
+              });
+              throw const ApiFailure(
+                409,
+                'تغيّر طلب التجديد أو إثباته. أعد تحميل الطلب وراجعه قبل تأكيد القرار.',
+              );
+            }
           }
           rethrow;
         }
       }
       final value = await readPayment();
-      final evidence = obj(await auth.request('GET', '$root/proof'));
+      final evidence = await readProof();
       final accept = intent!['accept'] == true;
       final same = [
         'renewalId',
@@ -192,14 +265,16 @@ class _NativeRenewalProofReviewState
       if (!same ||
           !amounts ||
           evidence['id'] != sourceProof!['id'] ||
+          evidence['assetId'] != intent!['expectedProofAssetId'] ||
           evidence['url'] != sourceProof!['url'] ||
           evidence['status'] != (accept ? 'Accepted' : 'Rejected') ||
           evidence['reviewReason'] != intent!['reason'] ||
           value['status'] != (accept ? 'Confirmed' : 'Cancelled') ||
-          accept &&
-              (value['groupId'] != intent!['groupId'] ||
-                  value['receiptId'] == null ||
-                  value['periodId'] == null)) {
+          (accept
+              ? value['groupId'] != intent!['groupId'] ||
+                    value['receiptId'] == null ||
+                    value['periodId'] == null
+              : value['receiptId'] != null || value['periodId'] != null)) {
         throw const ApiFailure(
           0,
           'لم تتأكد مطابقة قرار التجديد ومصدره. أعد التحقق من الطلب نفسه.',
@@ -262,7 +337,7 @@ class _NativeRenewalProofReviewState
     }
   });
   void enlargeProof() {
-    if (!isPrivateAsset(proof?['url'])) return;
+    if (proofImageAvailable != true || !isPrivateAsset(proof?['url'])) return;
     showDialog<void>(
       context: context,
       builder: (c) => Dialog.fullscreen(
@@ -306,99 +381,162 @@ class _NativeRenewalProofReviewState
   }
 
   @override
-  Widget build(BuildContext context) => page('مراجعة إثبات التجديد', [
-    if (payment == null && !busy)
-      OutlinedButton(onPressed: load, child: const UiText('إعادة تحميل الطلب')),
-    if (payment != null) ...[
-      Heading(textOf(payment!['player'])),
-      UiText('${payment!['sport']} · ${payment!['plan']}'),
-      StatusPill(payment!['status']),
-      GCard(child: OperationPriceSummary(quote: payment!)),
-      if (isPrivateAsset(proof?['url']))
-        GCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: UiText(
-                      'إثبات التحويل',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: enlargeProof,
-                    icon: const Icon(Icons.zoom_in_rounded),
-                    label: const UiText('تكبير'),
-                  ),
-                ],
+  Widget build(BuildContext context) {
+    final imagePath = textOf(proof?['url']);
+    final attempt = imageAttempt;
+    final title = payment != null && !canReview
+        ? 'إثبات التجديد'
+        : 'مراجعة إثبات التجديد';
+    return page(title, [
+      if (widget.fromPaymentQueue)
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.format_list_bulleted_rounded),
+            label: UiText(
+              localized(
+                context,
+                'العودة لقائمة طلبات الدفع',
+                'Back to payment requests',
               ),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: enlargeProof,
-                child: PrivateImage(
-                  auth: auth,
-                  path: textOf(proof!['url']),
-                  height: 300,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ],
-          ),
-        ),
-      if (proof?['reviewReason'] != null)
-        UiText('ملاحظة المراجعة: ${proof!['reviewReason']}'),
-      if (intent != null) ...[
-        const UiText('القرار والمجموعة والمبلغ ثابتة حتى التأكد من الحفظ.'),
-        FilledButton(
-          onPressed: finish,
-          child: UiText(
-            acknowledged
-                ? 'إعادة التحقق من الطلب نفسه'
-                : 'استكمال مراجعة الطلب نفسه',
-          ),
-        ),
-      ] else if (canReview &&
-          payment!['isCurrent'] == true &&
-          payment!['status'] == 'Pending' &&
-          proof?['status'] == 'Pending' &&
-          isPrivateAsset(proof?['url'])) ...[
-        choice(
-          'مجموعة اللاعب',
-          group,
-          groups,
-          (v) => setState(() => group = v),
-        ),
-        if (payment!['groupId'] != null)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12),
-            child: UiText('سيستمر اللاعب في مجموعته الحالية.'),
-          ),
-        field('ملاحظة لولي الأمر', reason, required: false, maxLines: 2),
-        FilledButton(
-          onPressed: !groups.any((g) => g['id'] == group)
-              ? null
-              : () => decide(true),
-          child: const UiText('قبول وتفعيل التجديد'),
-        ),
-        OutlinedButton(
-          onPressed: () => decide(false),
-          child: const UiText('رفض الإثبات'),
-        ),
-      ],
-      if (payment!['receiptId'] != null)
-        TextButton(
-          onPressed: () => openPage(
-            context,
-            ReceiptPage(
-              auth: auth,
-              id: textOf(payment!['receiptId']),
-              staff: true,
             ),
           ),
-          child: const UiText('عرض الإيصال'),
         ),
-    ],
-  ], screen: 'payments');
+      if (payment == null && !busy)
+        OutlinedButton(
+          onPressed: load,
+          child: const UiText('إعادة تحميل الطلب'),
+        ),
+      if (payment != null) ...[
+        Heading(textOf(payment!['player'])),
+        PaymentRequestReference(order: payment!),
+        UiText('${payment!['sport']} · ${payment!['plan']}'),
+        StatusPill(payment!['status']),
+        GCard(child: OperationPriceSummary(quote: payment!)),
+        if (isPrivateAsset(proof?['url']))
+          GCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: UiText(
+                        'إثبات التحويل',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (proofImageAvailable == true)
+                      TextButton.icon(
+                        onPressed: enlargeProof,
+                        icon: const Icon(Icons.zoom_in_rounded),
+                        label: const UiText('تكبير'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: proofImageAvailable == true ? enlargeProof : null,
+                  child: PrivateImage(
+                    key: ValueKey((imagePath, attempt)),
+                    auth: auth,
+                    path: imagePath,
+                    height: proofImageAvailable == false ? 120 : 300,
+                    fit: BoxFit.contain,
+                    onAvailabilityChanged: (available) {
+                      if (current &&
+                          imageAttempt == attempt &&
+                          proof?['url'] == imagePath &&
+                          proofImageAvailable != available) {
+                        setState(() => proofImageAvailable = available);
+                      }
+                    },
+                    fallback: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const UiText('تعذر فتح صورة الإثبات.'),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            proofImageAvailable = null;
+                            imageAttempt++;
+                          }),
+                          child: const UiText('إعادة تحميل الصورة'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (proof?['reviewReason'] != null)
+          UiText('ملاحظة المراجعة: ${proof!['reviewReason']}'),
+        if (intent != null) ...[
+          const UiText('القرار والمجموعة والمبلغ ثابتة حتى التأكد من الحفظ.'),
+          FilledButton(
+            onPressed: finish,
+            child: UiText(
+              acknowledged
+                  ? 'إعادة التحقق من الطلب نفسه'
+                  : 'استكمال مراجعة الطلب نفسه',
+            ),
+          ),
+        ] else if (canReview &&
+            payment!['isCurrent'] == true &&
+            payment!['status'] == 'Pending' &&
+            proof?['status'] == 'Pending' &&
+            isPrivateAsset(proof?['url'])) ...[
+          if (payment!['groupId'] != null)
+            UiText(
+              groups.isEmpty
+                  ? 'المجموعة الحالية غير متاحة للمراجعة.'
+                  : 'المجموعة الحالية · ${groups.first['arabicName']}',
+            )
+          else
+            choice(
+              'مجموعة اللاعب عند القبول',
+              group,
+              groups,
+              (v) => setState(() => group = v),
+              required: false,
+            ),
+          if (proofImageAvailable == true) ...[
+            field(
+              'ملاحظة لولي الأمر',
+              reason,
+              fieldKey: reasonField,
+              focusNode: reasonFocus,
+              required: false,
+              maxLines: 2,
+              validate: (note) =>
+                  note.length > 500 ? 'اكتب ملاحظة من 500 حرف أو أقل.' : null,
+            ),
+            FilledButton(
+              onPressed: !groups.any((g) => g['id'] == group)
+                  ? null
+                  : () => decide(true),
+              child: const UiText('قبول وتفعيل التجديد'),
+            ),
+            OutlinedButton(
+              onPressed: () => decide(false),
+              child: const UiText('رفض الإثبات'),
+            ),
+          ],
+        ],
+        if (payment!['receiptId'] != null)
+          TextButton(
+            onPressed: () => openPage(
+              context,
+              ReceiptPage(
+                auth: auth,
+                id: textOf(payment!['receiptId']),
+                staff: true,
+              ),
+            ),
+            child: const UiText('عرض الإيصال'),
+          ),
+      ],
+    ], screen: 'payments');
+  }
 }

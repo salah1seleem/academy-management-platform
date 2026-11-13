@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FamilyRenewalQuote } from "./family-renewal-quote";
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/guardian", useRouter: () => ({ push }) }));
 vi.mock("../lib/pending-financial-intent", () => ({ pendingFinancialIntent: vi.fn(async () => "same-family-request-key"), clearFinancialIntent: vi.fn() }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });

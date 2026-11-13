@@ -65,6 +65,42 @@ public sealed partial class V2PlanPublicationTests
     private static async Task<Guid> ImportId(HttpResponseMessage response) { Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync()); return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); }
 
     [Fact]
+    public async Task IMP_request_lookup_recovers_the_same_batch_without_exposing_another_actor_or_academy()
+    {
+        using var owner = await Staff();
+        var key = Guid.NewGuid().ToString("N");
+        var path = $"/api/v1/people/import/jobs/by-request?requestKey={key}";
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(path)).StatusCode);
+        var fixture = await ImportFixture(owner);
+        var preview = await ImportCheck(owner, fixture.Book);
+        var id = await ImportId(await ImportStage(owner, fixture.Book, preview, key));
+        using var found = await owner.GetAsync(path);
+        Assert.True(found.IsSuccessStatusCode, await found.Content.ReadAsStringAsync());
+        Assert.True(found.Headers.CacheControl?.NoStore);
+        var queued = await found.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(id, queued.GetProperty("id").GetGuid());
+        Assert.Equal("Queued", queued.GetProperty("status").GetString());
+        Assert.False(queued.TryGetProperty("stagedFile", out _));
+
+        using var admin = await Staff(DemoSeed.AdminEmail);
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        using var coach = factory.CreateClient();
+        await MobileCoachTestSession.SignInAsync(coach, factory.Services);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync(path)).StatusCode);
+
+        await ImportPublish(id);
+        var completed = await owner.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal(id, completed.GetProperty("id").GetGuid());
+        Assert.Equal("Completed", completed.GetProperty("status").GetString());
+        Assert.Equal(1, completed.GetProperty("publishedRows").GetInt32());
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        Assert.Equal(1, await db.AcademyImportJobs.CountAsync(batch => batch.IdempotencyKey == key));
+    }
+
+    [Fact]
     public async Task IMP_02_04_05_atomic_1000_rows_preserve_multisport_siblings_agreed_net_and_signed_opening_without_cash()
     {
         using var owner = await Staff(); var f = await ImportFixture(owner, 1000, mixed: true, opening: true); var p = await ImportCheck(owner, f.Book);

@@ -79,7 +79,7 @@ class _NativeNewEnrollmentState
       quote != null && num.tryParse('${quote!['finalAmount']}') == 0;
   Json? frozen, recorded;
   final key = commandKey();
-  late final data = load();
+  late Future<List<Object?>?> data = load();
   Widget registrationChoice(
     String label,
     String? value,
@@ -96,7 +96,15 @@ class _NativeNewEnrollmentState
     required: required,
     markRequired: required,
   );
-  Future<List<Object?>> load() async {
+  Future<List<Object?>?> load() async {
+    try {
+      return await loadOptions();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Object?>> loadOptions() async {
     final result = await Future.wait([
       auth.request('GET', '/api/v1/manage/structure/options'),
       auth.request('GET', '/api/v1/subscriptions/plans'),
@@ -120,6 +128,10 @@ class _NativeNewEnrollmentState
     return result;
   }
 
+  void refreshOptions() {
+    data = load();
+  }
+
   @override
   void dispose() {
     for (final c in [playerName, guardianName, phone, discountValue, reason]) {
@@ -131,6 +143,7 @@ class _NativeNewEnrollmentState
   void invalidate() {
     quote = null;
     received = false;
+    cashSession = null;
     ageOverrideConfirmed = false;
   }
 
@@ -148,7 +161,9 @@ class _NativeNewEnrollmentState
       setState(() => error = 'اختر تاريخ ميلاد اللاعب.');
       return;
     }
-    final options = obj((await data)[0]);
+    final snapshot = await data;
+    if (!current || snapshot == null) return;
+    final options = obj(snapshot[0]);
     final selectedGroup = rows(options['groups'])
         .where((g) => g['id'] == groupId)
         .firstOrNull;
@@ -196,6 +211,11 @@ class _NativeNewEnrollmentState
       setState(() => error = 'اختر الفرع والباقة وأدخل هاتف ولي الأمر.');
       return;
     }
+    setState(() {
+      quote = null;
+      received = false;
+      cashSession = null;
+    });
     final result = obj(
       await auth.request(
         'POST',
@@ -204,12 +224,15 @@ class _NativeNewEnrollmentState
           'planId': planId,
           'branchId': branch,
           'guardianPhone': phone.text.trim(),
+          if (existingPlayer != null) 'existingPlayerId': existingPlayer!['id'],
           'discountRuleId': ruleId,
           'exceptionalDiscount': exception,
         },
       ),
     );
-    if (current) setState(() => quote = result);
+    if (current) {
+      setState(() => quote = result);
+    }
   });
   Future<void> submit(Json? group) => run(() async {
     if (existingPlayer == null && birth == null) {
@@ -391,17 +414,31 @@ class _NativeNewEnrollmentState
           completed = true;
           uncertain = false;
           playerId = textOf(result['playerId']);
-          message = amount == 0
-              ? 'تم التسجيل واعتماد الإعفاء.'
-              : 'تم التسجيل والتحصيل وإصدار الإيصال.';
         });
       }
     } catch (e) {
       if (current) {
+        final reviewExpired =
+            e is ApiFailure &&
+            (e.code == 'registration_price_changed' ||
+                e.code == 'registration_plan_unavailable');
         setState(() {
           uncertain =
-              written || e is! ApiFailure || e.status == 0 || e.status >= 500;
-          if (!uncertain) frozen = null;
+              written ||
+              (!reviewExpired &&
+                  (uncertain ||
+                      e is! ApiFailure ||
+                      [0, 408, 429, 499].contains(e.status) ||
+                      e.status >= 500));
+          if (!uncertain) {
+            frozen = null;
+            if (reviewExpired) {
+              if (e.code == 'registration_plan_unavailable') planId = null;
+              review = false;
+              invalidate();
+              refreshOptions();
+            }
+          }
         });
       }
       rethrow;
@@ -414,7 +451,10 @@ class _NativeNewEnrollmentState
         child: Column(
           children: [
             const Icon(Icons.check_circle_outline),
-            const UiText('تم حفظ الاشتراك'),
+            UiText(
+              isWaiver ? 'تم التسجيل واعتماد الإعفاء.' : 'تم حفظ الاشتراك',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             if (recorded?['receiptId'] != null)
               TextButton(
                 onPressed: () => openPage(
@@ -475,12 +515,18 @@ class _NativeNewEnrollmentState
       FutureBuilder(
         future: data,
         builder: (context, s) {
-          if (s.hasError) {
-            return const EmptyMessage(
-              'تعذر تحميل خيارات الاشتراك ضمن صلاحياتك.',
+          if (s.connectionState == ConnectionState.done && !s.hasData) {
+            return Column(
+              children: [
+                const EmptyMessage('تعذر تحميل خيارات الاشتراك.'),
+                OutlinedButton(
+                  onPressed: () => setState(refreshOptions),
+                  child: const UiText('إعادة تحميل خيارات الاشتراك'),
+                ),
+              ],
             );
           }
-          if (!s.hasData) {
+          if (s.connectionState != ConnectionState.done || !s.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           final options = obj(s.data![0]), plans = rows(s.data![1]);

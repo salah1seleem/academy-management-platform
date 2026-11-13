@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
@@ -32,9 +33,11 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final original = identity;
   int revision = 0;
-  bool foreground = true, busy = false, all = false;
-  String message = '', outcome = 'NeedsPractice';
-  String? recommended, signature, command;
+  bool foreground = true, busy = false, all = false, needsRead = false;
+  String message = '', error = '';
+  String? outcome, recommended, signature, command;
+  bool get locked => busy || needsRead;
+  bool get isInbox => widget.planId == null && widget.requestId == null;
   final note = TextEditingController();
   Json map(Object? v) => obj(v ?? <String, dynamic>{});
   List<Json> list(Object? v) => rows(v ?? <Json>[]);
@@ -53,10 +56,10 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
     ),
     'NeedsPractice' => l('يحتاج مزيدًا من التدريب', 'Needs more practice'),
     'ContextChanged' => l(
-      'أغلق لتغير الخطة أو الأدلة',
+      'أُغلق لتغيّر الخطة أو الأدلة',
       'Closed: plan or evidence changed',
     ),
-    _ => l('بانتظار مراجعة فنية بشرية', 'Awaiting human technical review'),
+    _ => l('بانتظار القرار الفني', 'Awaiting technical decision'),
   };
   @override
   void initState() {
@@ -77,14 +80,14 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
       foreground = s == AppLifecycleState.resumed;
       revision++;
       recommended = null;
-      outcome = 'NeedsPractice';
+      outcome = null;
       note.clear();
       message = '';
     });
   }
 
   Future<void> save(String url, Json body) async {
-    if (busy) return;
+    if (locked) return;
     final encoded = jsonEncode({'path': url, 'body': body});
     if (signature != encoded) {
       signature = encoded;
@@ -93,6 +96,7 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
     setState(() {
       busy = true;
       message = '';
+      error = '';
     });
     try {
       await widget.auth.request(
@@ -107,32 +111,70 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
         revision++;
         note.clear();
         recommended = null;
-        outcome = 'NeedsPractice';
-        message = l(
-          'تم حفظ المراجعة؛ لم يتغير مستوى اللاعب أو مجموعته.',
-          'Review saved; player level and group are unchanged.',
-        );
+        outcome = null;
+        message = widget.requestId == null
+            ? l('تم إرسال طلب المراجعة.', 'Review request sent.')
+            : l(
+                'تم حفظ القرار ونشره لولي الأمر المرتبط.',
+                'Decision saved and shared with the linked guardian.',
+              );
       });
     } catch (e) {
       if (mounted && identity == original) {
-        setState(
-          () => message = e is ApiFailure
-              ? e.message
-              : l(
-                  'تعذر الحفظ. لم نسجل نجاحًا.',
-                  'Could not save. No success was recorded.',
-                ),
-        );
+        final status = e is ApiFailure ? e.status : 0;
+        final uncertain = status == 0 || status >= 500;
+        final changed = [401, 403, 404, 409].contains(status);
+        setState(() {
+          needsRead = uncertain || changed;
+          error = uncertain
+              ? l(
+                  'تعذر تأكيد الحفظ. تحقّق من حالة المراجعة قبل إعادة الإرسال.',
+                  'Save could not be confirmed. Check the review before sending again.',
+                )
+              : changed
+              ? l(
+                  'تغيّرت البيانات أو الصلاحية. تحقّق من حالة المراجعة.',
+                  'Data or access changed. Check the review status.',
+                )
+              : (e as ApiFailure).message;
+        });
       }
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
-  void open(String id) => openPage(
-    context,
-    PlayerTechnicalReviewsPage(auth: widget.auth, requestId: id),
-  );
+  Future<void> open(Widget page) async {
+    await openPage(context, page);
+    if (mounted && identity == original) setState(() => revision++);
+  }
+
+  String date(Object? value) {
+    final raw = day(value);
+    final parsed = DateTime.tryParse(raw);
+    return parsed == null
+        ? raw
+        : DateFormat.yMMMd(Localizations.localeOf(context).toString())
+              .format(parsed);
+  }
+
+  Widget meta(String value) =>
+      Text(value, style: Theme.of(context).textTheme.bodySmall);
+
+  List<Widget> writeStatus() => [
+    if (message.isNotEmpty) Semantics(liveRegion: true, child: Text(message)),
+    if (error.isNotEmpty) Semantics(liveRegion: true, child: Text(error)),
+    if (needsRead)
+      OutlinedButton(
+        onPressed: () => setState(() {
+          needsRead = false;
+          error = '';
+          revision++;
+        }),
+        child: Text(l('تحقّق من حالة المراجعة', 'Check review status')),
+      ),
+  ];
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.auth,
@@ -141,165 +183,234 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
         return const SizedBox.shrink();
       }
       return GuardianPage(
-        title: widget.planId == null && widget.requestId == null
+        title: isInbox
             ? l('طلبات المراجعة الفنية', 'Technical review inbox')
+            : widget.requestId != null
+            ? l('قرار المراجعة الفنية', 'Technical review decision')
             : l('المراجعة الفنية للمستوى', 'Level technical review'),
-        child: RemoteBody(
-          key: ValueKey('$identity:$revision:$all'),
-          auth: widget.auth,
-          path: path,
-          builder: (context, value) {
-            final d = map(value);
-            return gList([
-              Text(
-                l(
-                  'قرار فني بشري بأدلة محفوظة. لا ترقية أو نقل أو شهادة تلقائية.',
-                  'A human decision with preserved evidence. No automatic promotion, transfer or certificate.',
+        onBack: () => Navigator.of(context).maybePop(),
+        child: Column(
+          children: [
+            if (isInbox)
+              SwitchListTile(
+                title: Text(
+                  l(
+                    'إظهار الطلبات التي صدر قرارها أيضًا',
+                    'Include decided requests',
+                  ),
                 ),
+                value: all,
+                onChanged: (value) => setState(() => all = value),
               ),
-              if (message.isNotEmpty) Text(message),
-              if (widget.requestId != null) ...detail(d),
-              if (widget.planId != null) ...plan(d),
-              if (widget.requestId == null && widget.planId == null)
-                ...inbox(d),
-            ]);
-          },
+            Expanded(
+              child: RemoteBody(
+                key: ValueKey('$identity:$revision:$all'),
+                auth: widget.auth,
+                path: path,
+                builder: (context, value) {
+                  final data = map(value);
+                  return gList([
+                    if (widget.requestId != null) ...detail(data),
+                    if (widget.planId != null) ...plan(data),
+                    if (isInbox) ...inbox(data),
+                  ], key: PageStorageKey('technical:$identity:$path'));
+                },
+              ),
+            ),
+          ],
         ),
       );
     },
   );
-  List<Widget> plan(Json d) {
-    final e = map(d['enrollment']), s = map(d['source']), p = map(d['plan']);
+  List<Widget> plan(Json data) {
+    final enrollment = map(data['enrollment']);
+    final source = map(data['source']);
+    final plan = map(data['plan']);
+    final entries = list(data['items']);
+    final latest = entries.isEmpty ? null : entries.first;
+    final latestRequest = map(latest?['request']);
+    final family = widget.playerId != null;
     return [
+      ...writeStatus(),
       GCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${e['player']} · ${e['sport']}',
+              '${enrollment['player']} · ${enrollment['sport']}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 12),
-            Text(
-              '${s['mastered']}/${s['requirements']} ${l('متطلبات متقنة', 'requirements mastered')}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            if (widget.playerId == null && d['canRequest'] == true)
-              FilledButton.icon(
-                onPressed: busy
-                    ? null
-                    : () => save(path, {
-                        'planVersion': p['version'],
-                        'sourceReviewSequence': s['head'],
-                        'previousRequestId': d['latestRequestId'],
-                      }),
-                icon: const Icon(Icons.fact_check_outlined),
-                label: Text(
-                  l(
-                    'طلب مراجعة فنية للمستوى',
-                    'Request level technical review',
+            if (!family) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${source['mastered']}/${source['requirements']} ${l('متطلبات متقنة', 'requirements mastered')}',
+              ),
+              if (data['canRequest'] == true) ...[
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: locked
+                      ? null
+                      : () => save(path, {
+                          'planVersion': plan['version'],
+                          'sourceReviewSequence': source['head'],
+                          'previousRequestId': data['latestRequestId'],
+                        }),
+                  child: Text(
+                    busy
+                        ? l('جارٍ إرسال الطلب…', 'Sending request…')
+                        : l(
+                            'طلب مراجعة فنية للمستوى',
+                            'Request level technical review',
+                          ),
                   ),
                 ),
-              ),
-            if (widget.playerId == null && d['canRequest'] != true)
+              ] else if (latest != null && latest['decision'] == null)
+                Text(
+                  l(
+                    'يوجد طلب بانتظار القرار.',
+                    'A request is awaiting a decision.',
+                  ),
+                )
+              else if (source['eligible'] == true &&
+                  latest != null &&
+                  (source['head'] as num) <=
+                      (latestRequest['sourceReviewSequence'] as num))
+                Text(
+                  l(
+                    'يلزم تسجيل دليل فني أحدث لإرسال طلب آخر.',
+                    'Record newer evidence before sending another request.',
+                  ),
+                )
+              else if ((source['mastered'] as num) <
+                  (source['requirements'] as num))
+                Text(
+                  l(
+                    'يمكن طلب المراجعة بعد إتقان متطلبات الخطة الحالية.',
+                    'Request a review after mastering the current plan requirements.',
+                  ),
+                ),
+            ],
+            if (entries.isEmpty)
               Text(
                 l(
-                  'يلزم استيفاء المتطلبات الحالية وإغلاق السابق ودليل أحدث قبل طلب آخر.',
-                  'Meet current requirements, close the previous request and record newer evidence before requesting again.',
+                  'لا توجد طلبات لهذه الخطة بعد.',
+                  'No requests for this plan yet.',
                 ),
               ),
           ],
         ),
       ),
-      if (list(d['items']).isEmpty)
-        Text(
-          l('لا توجد طلبات لهذه الخطة بعد.', 'No requests for this plan yet.'),
-        ),
-      for (final entry in list(d['items'])) entryCard(entry, s),
-      if (d['hasMore'] == true)
-        Text(l('تظهر أحدث20 مراجعة.', 'Showing the latest20 reviews.')),
+      for (final entry in entries) entryCard(entry, source: source),
+      if (data['hasMore'] == true)
+        Text(l('تظهر أحدث 20 مراجعة.', 'Showing the latest 20 reviews.')),
     ];
   }
 
-  Widget entryCard(Json entry, Json? source) {
-    final r = map(entry['request']), d = map(entry['decision']);
+  Widget entryCard(Json entry, {Json? source, Json? scope}) {
+    final request = map(entry['request']);
+    final changed =
+        source != null &&
+        (source['eligible'] != true ||
+            source['head'] != request['sourceReviewSequence']);
     return GCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${l('مراجعة', 'Review')} ${r['sequence']} · ${textOf(r['levelName'])}',
+            scope == null
+                ? '${l('مراجعة', 'Review')} ${request['sequence']} · ${textOf(request['levelName'])}'
+                : textOf(scope['player']),
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          if (scope != null)
+            Text(
+              [scope['branch'], scope['sport'], request['levelName']]
+                  .whereType<String>()
+                  .where((value) => value.isNotEmpty)
+                  .join(' · '),
+            ),
           const SizedBox(height: 8),
-          Text(
-            '${r['requirements']} ${l('متطلبات بأدلة عند الطلب', 'requirements evidenced when requested')}',
+          ...decision(entry, contextChanged: changed),
+          meta(
+            '${l('طلبها', 'Requested by')} ${request['actorName']} · ${date(request['createdAtUtc'])}',
           ),
-          Text('${textOf(r['actorName'])} · ${day(r['createdAtUtc'])}'),
-          const SizedBox(height: 12),
-          decision(d),
-          if (entry['application'] != null)
-            Text(
-              '${l('تم تنفيذ المستوى بمراجعة إدارية', 'Level applied after administrative review')}: ${map(entry['application'])['toLevelName']}',
-            ),
-          if (source != null &&
-              (source['eligible'] != true ||
-                  source['head'] != r['sourceReviewSequence']))
-            Text(
-              l(
-                'سجل تاريخي؛ الأدلة أو سياق الخطة تغيرا منذ الطلب.',
-                'Historical record; evidence or plan context has changed since this request.',
-              ),
-            ),
           if (widget.playerId == null)
             GLink(
               l('الأدلة وقرار المراجعة', 'Evidence and review decision'),
               Icons.fact_check_outlined,
-              () => open(textOf(r['id'])),
+              () => open(
+                PlayerTechnicalReviewsPage(
+                  auth: widget.auth,
+                  requestId: textOf(request['id']),
+                ),
+              ),
             ),
         ],
       ),
     );
   }
 
-  Widget decision(Json d) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
+  List<Widget> decision(Json entry, {bool contextChanged = false}) {
+    final decision = map(entry['decision']);
+    final application = map(entry['application']);
+    final applied = application.isNotEmpty;
+    return [
       Text(
-        label(d['outcome']),
+        applied
+            ? l('نُفّذت التوصية', 'Recommendation applied')
+            : label(decision['outcome']),
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
-      if (d.isNotEmpty) ...[
-        Text('${textOf(d['actorName'])} · ${day(d['createdAtUtc'])}'),
-        if (d['recommendedLevelName'] != null)
-          Text(
-            '${l('المستوى الموصى به', 'Recommended level')}: ${d['recommendedLevelName']}',
-          ),
-        if (d['familyNote'] != null) Text(textOf(d['familyNote'])),
-      ],
-    ],
-  );
-  List<Widget> inbox(Json d) {
-    final contexts = map(d['contexts']);
-    return [
-      SwitchListTile(
-        title: Text(l('إظهار ما صدر قراره أيضًا', 'Include decided requests')),
-        value: all,
-        onChanged: (v) => setState(() => all = v),
-      ),
-      if (list(d['items']).isEmpty)
-        Text(l('لا توجد طلبات ضمن نطاقك.', 'No requests within your scope.')),
-      for (final entry in list(d['items'])) ...[
+      if (applied)
         Text(
-          '${textOf(map(contexts[textOf(map(entry['request'])['sportEnrollmentId'])])['player'])} · ${textOf(map(contexts[textOf(map(entry['request'])['sportEnrollmentId'])])['branch'])}',
-          style: Theme.of(context).textTheme.titleMedium,
+          '${l('المستوى المنفّذ', 'Applied level')}: ${application['toLevelName']} · ${date(application['createdAtUtc'])}',
+        )
+      else if (decision['recommendedLevelName'] != null) ...[
+        Text(
+          '${l('المستوى الموصى به', 'Recommended level')}: ${decision['recommendedLevelName']}',
         ),
-        entryCard(entry, null),
+        meta(
+          contextChanged
+              ? l(
+                  'تغيّرت الخطة أو الأدلة بعد صدور التوصية.',
+                  'The plan or evidence changed after the recommendation.',
+                )
+              : l(
+                  'التنفيذ يحتاج مراجعة إدارية.',
+                  'Applying the recommendation requires administrative review.',
+                ),
+        ),
       ],
-      if (d['hasMore'] == true)
+      if (decision['familyNote'] != null) Text(textOf(decision['familyNote'])),
+      if (decision.isNotEmpty)
+        meta('${decision['actorName']} · ${date(decision['createdAtUtc'])}'),
+    ];
+  }
+
+  List<Widget> inbox(Json data) {
+    final contexts = map(data['contexts']);
+    final entries = list(data['items']);
+    return [
+      if (entries.isEmpty)
+        EmptyMessage(
+          all
+              ? l(
+                  'لا توجد طلبات مراجعة ضمن نطاقك.',
+                  'No review requests within your scope.',
+                )
+              : l(
+                  'لا توجد طلبات بانتظار القرار.',
+                  'No requests are awaiting a decision.',
+                ),
+        ),
+      for (final entry in entries)
+        entryCard(
+          entry,
+          scope: map(contexts[map(entry['request'])['sportEnrollmentId']]),
+        ),
+      if (data['hasMore'] == true)
         Text(
-          l('تظهر أول100 طلب حسب الأقدم.', 'Showing the oldest100 requests.'),
+          l('تظهر أول 100 طلب حسب الأقدم.', 'Showing the oldest 100 requests.'),
         ),
     ];
   }
@@ -311,10 +422,20 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
     final levels = list(d['levels']);
     final choices = <String>[
       'NeedsPractice',
-      if (d['currentEligible'] == true) 'ReadyForPlacement',
+      if (d['currentEligible'] == true && levels.isNotEmpty)
+        'ReadyForPlacement',
       if (d['contextChanged'] == true) 'ContextChanged',
     ];
-    final chosen = choices.contains(outcome) ? outcome : 'NeedsPractice';
+    final chosen = choices.contains(outcome) ? outcome : null;
+    final chosenLevel = levels.any((x) => x['id'] == recommended)
+        ? recommended
+        : null;
+    final applied = d['application'] != null;
+    final changed = d['contextChanged'] == true;
+    final noteLabel = l(
+      'ملخص فني للأسرة (اختياري)',
+      'Technical family summary (optional)',
+    );
     return [
       GCard(
         child: Column(
@@ -324,34 +445,49 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
               '${e['player']} · ${r['levelName']}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            Text(textOf(r['curriculumTitle'])),
+            Text(
+              [
+                e['sport'],
+                r['curriculumTitle'],
+              ].whereType<String>().join(' · '),
+            ),
             const SizedBox(height: 12),
-            decision(dec),
-            if (d['application'] != null)
+            ...decision(d, contextChanged: changed),
+            meta(
+              '${l('طلبها', 'Requested by')} ${r['actorName']} · ${date(r['createdAtUtc'])}',
+            ),
+            if (changed && dec.isEmpty)
               Text(
-                '${l('تم تنفيذ المستوى بمراجعة إدارية', 'Level applied after administrative review')}: ${map(d['application'])['toLevelName']}',
+                l(
+                  'تغيّرت الخطة أو الأدلة بعد إرسال الطلب. يلزم دليل حديث قبل التوصية بمستوى أعلى.',
+                  'The plan or evidence changed after submission. A higher level requires current evidence.',
+                ),
               ),
-            if (d['canReviewPlacement'] == true)
+            if (d['canReviewPlacement'] == true && (applied || !changed))
               GLink(
-                l('معاينة وتنفيذ التوصية', 'Preview and apply recommendation'),
+                applied
+                    ? l(
+                        'سجل تنفيذ التوصية',
+                        'Recommendation application record',
+                      )
+                    : l(
+                        'معاينة وتنفيذ التوصية',
+                        'Preview and apply recommendation',
+                      ),
                 Icons.move_up_outlined,
-                () => openPage(
-                  context,
+                () => open(
                   TechnicalPromotionPage(
                     auth: widget.auth,
                     requestId: widget.requestId!,
                   ),
                 ),
               ),
-            if (d['contextChanged'] == true && d['application'] == null)
-              Text(
-                l(
-                  'تغيرت الأدلة أو الخطة. لا يعتمد الاستعداد على الطلب القديم.',
-                  'Evidence or plan changed. Do not approve readiness from this outdated request.',
-                ),
-              ),
           ],
         ),
+      ),
+      Text(
+        l('الأدلة عند إرسال الطلب', 'Evidence at submission'),
+        style: Theme.of(context).textTheme.titleMedium,
       ),
       for (final v in list(d['evidence']))
         GCard(
@@ -362,44 +498,58 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
                 textOf(v['name']),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              Text(textOf(v['protocol'])),
               Text(
-                '${l('أتقن', 'Mastered')}${v['measuredValue'] == null ? '' : ' · ${v['measuredValue']} ${unit(v['unit'])}'}',
+                v['measuredValue'] == null
+                    ? l('أتقن المهارة', 'Skill mastered')
+                    : '${v['measuredValue']} ${unit(v['unit'])}',
               ),
-              Text('${v['actorName']} · ${day(v['observedOn'])}'),
+              meta('${v['actorName']} · ${date(v['observedOn'])}'),
+              if (textOf(v['protocol']).isNotEmpty) Text(textOf(v['protocol'])),
             ],
           ),
         ),
+      if (d['canDecide'] != true) ...writeStatus(),
       if (d['canDecide'] == true)
         GCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (d['currentEligible'] == true && levels.isEmpty) ...[
+                Text(
+                  l(
+                    'لا يوجد مستوى أعلى مفعّل لهذه الرياضة.',
+                    'There is no active higher level for this sport.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               DropdownButtonFormField<String>(
                 key: ValueKey('outcome:$revision:$chosen'),
                 initialValue: chosen,
                 isExpanded: true,
+                isDense: false,
                 decoration: InputDecoration(
                   labelText: l('قرار المراجعة', 'Review decision'),
                 ),
                 items: choices
                     .map(
-                      (x) => DropdownMenuItem(
-                        value: x,
-                        child: Text(label(x), overflow: TextOverflow.ellipsis),
-                      ),
+                      (x) => DropdownMenuItem(value: x, child: Text(label(x))),
                     )
                     .toList(),
-                onChanged: busy ? null : (v) => setState(() => outcome = v!),
+                onChanged: locked
+                    ? null
+                    : (value) => setState(() {
+                        outcome = value;
+                        recommended = null;
+                      }),
               ),
               const SizedBox(height: 16),
               if (chosen == 'ReadyForPlacement')
                 DropdownButtonFormField<String>(
                   key: ValueKey('level:$revision'),
-                  initialValue: levels.any((x) => x['id'] == recommended)
-                      ? recommended
-                      : null,
+                  initialValue: chosenLevel,
                   isExpanded: true,
+                  isDense: false,
                   decoration: InputDecoration(
                     labelText: l('المستوى الموصى به', 'Recommended level'),
                   ),
@@ -407,57 +557,64 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
                       .map(
                         (x) => DropdownMenuItem(
                           value: textOf(x['id']),
-                          child: Text(
-                            textOf(x['name']),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(textOf(x['name'])),
                         ),
                       )
                       .toList(),
-                  onChanged: busy
+                  onChanged: locked
                       ? null
                       : (v) => setState(() => recommended = v),
                 ),
               const SizedBox(height: 16),
-              TextField(
-                controller: note,
-                maxLength: 500,
-                maxLines: 3,
-                enabled: !busy,
-                decoration: InputDecoration(
-                  labelText: l(
-                    'ملخص فني للأسرة (اختياري)',
-                    'Technical family summary (optional)',
-                  ),
+              ExcludeSemantics(child: Text(noteLabel)),
+              const SizedBox(height: 8),
+              Semantics(
+                label: noteLabel,
+                child: TextField(
+                  controller: note,
+                  maxLength: 500,
+                  maxLines: 3,
+                  enabled: !locked,
                 ),
               ),
               Text(
                 l(
-                  'الملخص يظهر للأسرة؛ لا تكتب معلومات صحية أو ملاحظات إدارية خاصة.',
-                  'The summary is shared with the family. Do not include health or private administrative information.',
+                  'يظهر القرار والملخص لولي الأمر المرتبط. استبعد البيانات الصحية والملاحظات الإدارية الخاصة.',
+                  'The linked guardian sees the decision and summary. Leave out health or private administrative information.',
                 ),
               ),
+              if (chosen == 'ReadyForPlacement')
+                Text(
+                  l(
+                    'يُنفَّذ تغيير المستوى في خطوة إدارية منفصلة.',
+                    'Changing the level requires a separate administrative step.',
+                  ),
+                ),
               const SizedBox(height: 12),
-              FilledButton.icon(
+              ...writeStatus(),
+              FilledButton(
                 onPressed:
-                    busy || chosen == 'ReadyForPlacement' && recommended == null
+                    locked ||
+                        chosen == null ||
+                        chosen == 'ReadyForPlacement' && chosenLevel == null
                     ? null
                     : () => save('$root/${widget.requestId}/decision', {
                         'version': r['version'],
                         'outcome': chosen,
                         'recommendedLevelId': chosen == 'ReadyForPlacement'
-                            ? recommended
+                            ? chosenLevel
                             : null,
                         'familyNote': note.text.trim().isEmpty
                             ? null
                             : note.text.trim(),
                       }),
-                icon: const Icon(Icons.verified_outlined),
-                label: Text(
-                  l(
-                    'حفظ القرار ونشر الملخص',
-                    'Save decision and share summary',
-                  ),
+                child: Text(
+                  busy
+                      ? l('جارٍ حفظ القرار…', 'Saving decision…')
+                      : l(
+                          'حفظ القرار ونشر الملخص',
+                          'Save decision and share summary',
+                        ),
                 ),
               ),
             ],
@@ -467,7 +624,7 @@ class _PlayerTechnicalReviewsState extends State<PlayerTechnicalReviewsPage>
   }
 
   String unit(Object? u) => switch (u) {
-    'Count' => l('عدد', 'count'),
+    'Count' => l('مرة', 'reps'),
     'Seconds' => l('ثانية', 'seconds'),
     'Metres' => l('متر', 'metres'),
     _ => '',

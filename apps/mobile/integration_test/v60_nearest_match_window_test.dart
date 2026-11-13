@@ -72,7 +72,7 @@ void main() {
           AcademyApp(auth: auth, environment: 'Demo', appearance: appearance),
         );
         await wait(
-          find.text(sample.$1 == 'Guardian' ? 'أبنائي' : 'المجموعات المسندة'),
+          find.text(sample.$1 == 'Guardian' ? 'أبنائي' : 'تدريباتي'),
         );
         await t.scrollUntilVisible(
           find.byType(NextMatchStrip),

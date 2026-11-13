@@ -92,6 +92,94 @@ public sealed partial class V2ReceivablesTests
         failure=await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM \"CashSessions\" WHERE \"Id\"={id}"));Assert.Equal("23514",failure.SqlState);
         var read=await owner.GetFromJsonAsync<JsonElement>($"{CashRoot}/sessions/{id}");Assert.Equal(id,read.GetProperty("session").GetProperty("id").GetGuid());Assert.Equal(90m,decimal.Parse(read.GetProperty("session").GetProperty("countedAmount").GetString()!,System.Globalization.CultureInfo.InvariantCulture));Assert.Equal("-10.00",read.GetProperty("variance").GetString());
     }
+
+    [Fact]
+    public async Task Cash_close_rejects_a_stale_review_before_posting_the_current_variance_once()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        var targetRegister = await CashRegisterFixture(owner);
+        var sourceRegister = await CashRegisterFixture(owner);
+        (await CashAssign(owner, targetRegister.Register, targetRegister.Member)).EnsureSuccessStatusCode();
+        (await CashAssign(owner, sourceRegister.Register, sourceRegister.Member)).EnsureSuccessStatusCode();
+        var target = await CashOpen(owner, targetRegister.Register, "100.00");
+        var source = await CashOpen(owner, sourceRegister.Register, "50.00");
+        var url = $"{CashRoot}/sessions/{target}";
+        var initial = await owner.GetFromJsonAsync<JsonElement>(url);
+        Assert.Equal("100.00", initial.GetProperty("balance").GetString());
+        (await CashTransfer(owner, source, target, "30.00")).EnsureSuccessStatusCode();
+
+        var body = new CashCloseWrite(121.25m, "مراجعة نقدية", 100m);
+        Assert.Equal(HttpStatusCode.NotFound, (await Post(foreign, url + "/close", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Post(owner, url + "/close", body with { ExpectedAmount = 130.001m })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, url + "/close", body)).StatusCode);
+        var refreshed = await owner.GetFromJsonAsync<JsonElement>(url);
+        Assert.Equal("130.00", refreshed.GetProperty("balance").GetString());
+        Assert.Equal(JsonValueKind.Null, refreshed.GetProperty("session").GetProperty("closedAtUtc").ValueKind);
+
+        var key = Guid.NewGuid().ToString();
+        var current = body with { ExpectedAmount = 130m };
+        var first = await Post(owner, url + "/close", current, key);
+        first.EnsureSuccessStatusCode();
+        (await Post(owner, url + "/close", current, key)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, url + "/close", current with { ExpectedAmount = 129m }, key)).StatusCode);
+        var saved = await owner.GetFromJsonAsync<JsonElement>(url);
+        Assert.Equal("-8.75", saved.GetProperty("variance").GetString());
+        Assert.Equal("130.00", saved.GetProperty("balance").GetString());
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var row = await db.CashSessions.SingleAsync(s => s.Id == target);
+        Assert.Equal(130m, row.ExpectedAmount);
+        Assert.Equal(121.25m, row.CountedAmount);
+        Assert.Single(await db.CashMovements.Where(m => m.SessionId == target).ToListAsync());
+        Assert.False(await db.CashReceiptPostings.AnyAsync(p => p.SessionId == target));
+    }
+
+    [Fact]
+    public async Task Cash_close_with_expected_balance_serializes_with_a_concurrent_transfer()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var register = await CashRegisterFixture(owner);
+        var receiving = await CashRegisterFixture(owner);
+        (await CashAssign(owner, register.Register, register.Member)).EnsureSuccessStatusCode();
+        (await CashAssign(owner, receiving.Register, receiving.Member)).EnsureSuccessStatusCode();
+        var source = await CashOpen(owner, register.Register, "100.00");
+        var target = await CashOpen(owner, receiving.Register, "0.00");
+        var writes = await Task.WhenAll(
+            Post(owner, $"{CashRoot}/sessions/{source}/close", new CashCloseWrite(100m, null, 100m)),
+            CashTransfer(owner, source, target, "10.00"));
+        Assert.Single(writes, response => response.IsSuccessStatusCode);
+        Assert.Single(writes, response => response.StatusCode == HttpStatusCode.Conflict);
+        var detail = await owner.GetFromJsonAsync<JsonElement>($"{CashRoot}/sessions/{source}");
+        Assert.Equal(writes[0].IsSuccessStatusCode ? "100.00" : "90.00", detail.GetProperty("balance").GetString());
+        Assert.Equal(writes[0].IsSuccessStatusCode ? JsonValueKind.String : JsonValueKind.Null,
+            detail.GetProperty("session").GetProperty("closedAtUtc").ValueKind);
+    }
+
+    [Fact]
+    public async Task Cash_close_zero_count_keeps_collection_and_operating_reports_unchanged()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var register = await CashRegisterFixture(owner);
+        (await CashAssign(owner, register.Register, register.Member)).EnsureSuccessStatusCode();
+        var id = await CashOpen(owner, register.Register, "100.50");
+        const string collections = "/api/v1/reports/financial?allDates=true";
+        const string operating = "/api/v1/reports/operating-statement?allDates=true";
+        var collectionBefore = await owner.GetFromJsonAsync<JsonElement>(collections);
+        var operatingBefore = await owner.GetFromJsonAsync<JsonElement>(operating);
+
+        var result = await Post(owner, $"{CashRoot}/sessions/{id}/close", new CashCloseWrite(0m, null, 100.50m));
+        result.EnsureSuccessStatusCode();
+        var saved = await owner.GetFromJsonAsync<JsonElement>($"{CashRoot}/sessions/{id}");
+        Assert.Equal("-100.50", saved.GetProperty("variance").GetString());
+        var collectionAfter = await owner.GetFromJsonAsync<JsonElement>(collections);
+        var operatingAfter = await owner.GetFromJsonAsync<JsonElement>(operating);
+        foreach (var key in new[] { "totalAmount", "totalRefunds", "netAmount", "totalCount", "sourceSummary" })
+            Assert.Equal(collectionBefore.GetProperty(key).GetRawText(), collectionAfter.GetProperty(key).GetRawText());
+        foreach (var key in new[] { "totalIncome", "totalExpenses", "surplus" })
+            Assert.Equal(operatingBefore.GetProperty(key).GetRawText(), operatingAfter.GetProperty(key).GetRawText());
+    }
+
     [Fact]
     public async Task Cash_disabled_blocks_open_and_transfer_but_owner_can_reconcile_existing_shift()
     {

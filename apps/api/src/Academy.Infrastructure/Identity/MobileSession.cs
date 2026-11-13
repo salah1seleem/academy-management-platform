@@ -25,6 +25,8 @@ public sealed class MobileOtpChallenge
 {
     public Guid Id { get; set; }
     public required string PhoneNumberNormalized { get; set; }
+    public Guid? ProviderUserId { get; set; }
+    public string? ProviderVerificationSid { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset ExpiresAtUtc { get; set; }
     public DateTimeOffset? ConsumedAtUtc { get; set; }

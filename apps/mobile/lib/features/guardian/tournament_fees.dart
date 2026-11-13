@@ -4,7 +4,9 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/appearance.dart';
 import '../../core/theme/ui_text.dart';
+import '../shared/private_media.dart' show isPrivateAsset;
 import '../shared/transfer_payment.dart';
+import 'guardian_payments.dart' show receiptDateLabel;
 import 'guardian_ui.dart';
 
 class TournamentFees extends StatefulWidget {
@@ -181,13 +183,19 @@ class _TournamentCheckoutState extends State<TournamentCheckout> {
   int revision = 0;
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'دفع رسم البطولة', 'Tournament checkout'),
+    title: localized(context, 'رسم البطولة', 'Tournament fee'),
     child: RemoteBody(
       key: ValueKey(revision),
       auth: widget.auth,
       path: '/api/v1/guardian/tournament-payments/${widget.id}',
       builder: (context, v) {
         final d = obj(v);
+        final status = d['status'];
+        final paid = status == 'Confirmed';
+        final hasProof = isPrivateAsset(d['proofUrl']);
+        final receiptDate = paid
+            ? receiptDateLabel(context, d['confirmedAtUtc'])
+            : null;
         return gList([
           GCard(
             child: Column(
@@ -195,35 +203,42 @@ class _TournamentCheckoutState extends State<TournamentCheckout> {
               children: [
                 Heading(textOf(d['tournamentName'])),
                 UiText(textOf(d['player'])),
+                StatusPill(
+                  status == 'Pending' && hasProof ? 'UnderReview' : status,
+                ),
+                UiText(paid ? 'المبلغ المحصّل' : 'رسم المشاركة'),
                 UiText(
                   money(d['amount'], d['currency']),
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                StatusPill(d['status']),
                 if (d['reviewReason'] != null)
                   UiText(textOf(d['reviewReason'])),
               ],
             ),
           ),
-          if (d['status'] != 'Confirmed')
+          if (status == 'Pending' && hasProof)
+            const UiText('وصل إثبات الدفع. انتظر المراجعة قبل إرسال مبلغ آخر.'),
+          if (status == 'Pending' || status == 'Rejected')
             TransferPayment(
               auth: widget.auth,
               proofPath:
                   '/api/v1/guardian/tournament-payments/${widget.id}/proof',
               subscription: false,
+              replacement: hasProof,
+              showConfirmation: false,
               onSubmitted: () => setState(() => revision++),
             ),
-          if (d['receiptNumber'] != null)
+          if (paid && d['receiptNumber'] != null)
             GCard(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.verified_outlined, size: 40),
-                  Heading(
-                    localized(context, 'تم تأكيد التحصيل', 'Payment confirmed'),
+                  const Heading('إيصال رسم البطولة'),
+                  SelectableText(
+                    textOf(d['receiptNumber']),
+                    textDirection: TextDirection.ltr,
                   ),
-                  SelectableText(textOf(d['receiptNumber'])),
-                  UiText(money(d['amount'], d['currency'])),
-                  UiText(day(d['confirmedAtUtc'])),
+                  if (receiptDate != null) UiText(receiptDate),
                 ],
               ),
             ),

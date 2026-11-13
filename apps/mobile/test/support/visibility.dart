@@ -44,20 +44,3 @@ Future<void> revealTestTarget(WidgetTester tester, Finder target) async {
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
 }
-
-Future<void> expandChildDetails(WidgetTester tester) async {
-  final target = find.byKey(const ValueKey('child-home-details'));
-  await revealTestTarget(tester, target);
-  if (find.byKey(const ValueKey('child-section-0')).evaluate().isEmpty) {
-    await tester.tap(target);
-    await tester.pumpAndSettle();
-  }
-  final root = find
-      .descendant(
-        of: find.byKey(const ValueKey('guardian-home-scroll')),
-        matching: find.byType(Scrollable),
-      )
-      .first;
-  tester.state<ScrollableState>(root).position.jumpTo(0);
-  await tester.pumpAndSettle();
-}

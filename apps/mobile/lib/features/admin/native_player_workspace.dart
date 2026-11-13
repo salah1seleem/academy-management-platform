@@ -633,6 +633,7 @@ class _NativeSubscriptionPeriodState
   @override
   AuthController get auth => widget.auth;
   Json? period;
+  DateTime? accountingDay;
   final when = TextEditingController(),
       days = TextEditingController(),
       end = TextEditingController(),
@@ -642,12 +643,18 @@ class _NativeSubscriptionPeriodState
   Json? frozen;
   String? savedAdjustmentId;
   String intent = commandKey();
-  bool allowed(String leaf) => widget.access.allows(
-    'subscription.adjustment.manage',
-    'subscriptions',
-    'Edit',
-    [leaf],
-  );
+  bool allowed(String leaf, [String? capability]) {
+    final effective = capability == null ? null : period?[capability];
+    return effective is bool
+        ? effective
+        : widget.access.allows(
+            'subscription.adjustment.manage',
+            'subscriptions',
+            'Edit',
+            [leaf],
+          );
+  }
+
   bool get financial =>
       widget.access.owner ||
       widget.access.allows('payment.read', 'payments', 'Read', [
@@ -671,21 +678,41 @@ class _NativeSubscriptionPeriodState
     super.dispose();
   }
 
-  Future<void> load() => run(() async {
-    final p = obj(
-      await auth.request('GET', '/api/v1/subscriptions/periods/${widget.id}'),
-    );
-    final calendar = obj(await auth.request('GET', '/api/v1/academy/calendar'));
-    if (current) {
-      setState(() {
-        period = p;
-        when.text = textOf(calendar['today']);
-        end.text = p['endDate'] == null
-            ? textOf(calendar['today'])
-            : day(p['endDate']);
-      });
+  DateTime? periodDay(Object? value) =>
+      DateTime.tryParse('${day(value)}T00:00:00Z');
+
+  String dateLabel(BuildContext context, DateTime date) =>
+      MaterialLocalizations.of(context).formatShortDate(date);
+
+  Future<void> load() => run(readPeriod);
+
+  Future<void> readPeriod() async {
+    try {
+      final p = obj(
+        await auth.request('GET', '/api/v1/subscriptions/periods/${widget.id}'),
+      );
+      if (p['id'] != widget.id) {
+        throw const ApiFailure(404, 'الفترة المطلوبة غير متاحة.');
+      }
+      final today =
+          p['asOfDate'] ??
+          obj(await auth.request('GET', '/api/v1/academy/calendar'))['today'];
+      if (current) {
+        setState(() {
+          period = p;
+          accountingDay = periodDay(today);
+          when.text = textOf(today);
+          end.text = day(p['endDate'] ?? today);
+          operation = null;
+          invalidate();
+        });
+      }
+    } catch (_) {
+      if (current) setState(() => period = null);
+      rethrow;
     }
-  });
+  }
+
   void invalidate() {
     frozen = null;
     savedAdjustmentId = null;
@@ -783,6 +810,7 @@ class _NativeSubscriptionPeriodState
       if (current) {
         setState(() {
           period = read;
+          accountingDay = periodDay(read['asOfDate']) ?? accountingDay;
           message = 'حُفظ التعديل وأُعيدت قراءة سجل الاشتراك.';
           uncertain = false;
           frozen = null;
@@ -793,6 +821,11 @@ class _NativeSubscriptionPeriodState
         });
       }
     } catch (e) {
+      if (!written && e is ApiFailure && [403, 404, 409].contains(e.status)) {
+        await readPeriod();
+        if (current) setState(() => error = e.message);
+        return;
+      }
       if (current) {
         setState(
           () => uncertain =
@@ -805,15 +838,31 @@ class _NativeSubscriptionPeriodState
   @override
   Widget build(BuildContext context) {
     final p = period;
+    final startDate = periodDay(p?['startDate']);
+    final endDate = periodDay(p?['endDate']);
+    final frozenFrom = periodDay(p?['frozenFromDate']);
+    final resumeFrom = frozenFrom?.add(const Duration(days: 1));
+    final canPause = allowed('workflow.subscriptions.pause', 'canPause');
+    final waitForResume =
+        canPause &&
+        p?['status'] == 'Frozen' &&
+        resumeFrom != null &&
+        accountingDay != null &&
+        resumeFrom.isAfter(accountingDay!);
+    final deductionLimit = startDate != null && endDate != null
+        ? endDate.difference(startDate).inDays.clamp(0, 365)
+        : 0;
+    final dayCount = int.tryParse(days.text);
     final dated =
         p != null &&
         ['Duration', 'Combined'].contains(p['planType']) &&
         p['endDate'] != null &&
         p['status'] != 'Cancelled';
     final choices = <Json>[
-      if (dated && allowed('workflow.subscriptions.days')) ...[
+      if (dated &&
+          deductionLimit > 0 &&
+          allowed('workflow.subscriptions.days', 'canDeductDays'))
         {'id': 'Deduct', 'arabicName': 'خصم أيام'},
-      ],
       if (p != null &&
           p['status'] != 'Cancelled' &&
           p['remainingSessions'] != null &&
@@ -821,29 +870,51 @@ class _NativeSubscriptionPeriodState
           p['canGrantSessions'] == true &&
           allowed('workflow.subscriptions.sessions'))
         {'id': 'sessions', 'arabicName': 'إضافة حصص وتحديد نهاية الاشتراك'},
-      if (dated && allowed('workflow.subscriptions.pause')) ...[
+      if (dated && canPause) ...[
         if (p['status'] == 'Active')
           {'id': 'freeze', 'arabicName': 'تجميد الاشتراك'},
-        if (p['status'] == 'Frozen')
+        if (p['status'] == 'Frozen' && resumeFrom != null && !waitForResume)
           {'id': 'resume', 'arabicName': 'استئناف الاشتراك'},
       ],
       if (p != null &&
           p['status'] != 'Cancelled' &&
-          allowed('workflow.subscriptions.cancel'))
+          allowed('workflow.subscriptions.cancel', 'canCancel'))
         {'id': 'cancel', 'arabicName': 'إلغاء الاشتراك'},
     ];
-    return page('الاشتراك وسجل التعديلات', [
-      if (p != null) ...[
-        Heading(textOf(p['plan'])),
-        UiText('${p['player']} · ${p['sport']} · ${p['branch']}'),
-        StatusPill(p['status']),
-        UiText('${day(p['startDate'])} — ${day(p['endDate'])}'),
-        if (p['remainingSessions'] != null)
-          UiText('${p['remainingSessions']} حصص متبقية'),
-        if (financial) ...[
-          UiText(
-            'القيمة المسجلة ${money(p['priceSnapshot'], p['currencySnapshot'])}',
+    return page(
+      'الاشتراك وسجل التعديلات',
+      [
+        if (p == null && error != null)
+          OutlinedButton(
+            onPressed: load,
+            child: const UiText('إعادة المحاولة'),
           ),
+        if (p != null) ...[
+          Heading(textOf(p['plan'])),
+          UiText(
+            [p['player'], p['sport'], p['branch']]
+                .whereType<String>()
+                .where((value) => value.isNotEmpty)
+                .join(' · '),
+          ),
+          StatusPill(p['status']),
+          if (startDate != null)
+            UiText(
+              endDate == null
+                  ? 'تاريخ البداية ${dateLabel(context, startDate)}'
+                  : 'من ${dateLabel(context, startDate)} إلى ${dateLabel(context, endDate)}',
+            ),
+          if (waitForResume)
+            UiText(
+              'يمكن الاستئناف ابتداءً من ${dateLabel(context, resumeFrom)}.',
+            ),
+          if (p['remainingSessions'] != null)
+            UiText('${p['remainingSessions']} حصص متبقية'),
+          if ((p['financialValuesVisible'] as bool? ?? financial) &&
+              p['priceSnapshot'] != null)
+            UiText(
+              'القيمة المسجلة ${money(p['priceSnapshot'], p['currencySnapshot'])}',
+            ),
           if (p['receiptId'] != null)
             GLink(
               'إيصال التحصيل',
@@ -857,112 +928,168 @@ class _NativeSubscriptionPeriodState
                 ),
               ),
             ),
-        ],
-        if (choices.isNotEmpty) ...[
-          choice(
-            'الإجراء',
-            operation,
-            choices,
-            uncertain
-                ? null
-                : (v) => setState(() {
-                    operation = v;
-                    invalidate();
-                  }),
-            required: false,
-          ),
-          if (operation != null)
-            AbsorbPointer(
-              absorbing: uncertain,
-              child: Column(
-                children: [
-                  if (operation == 'sessions') ...[
+          if (choices.isNotEmpty) ...[
+            choice(
+              'الإجراء',
+              operation,
+              choices,
+              uncertain
+                  ? null
+                  : (v) => setState(() {
+                      operation = v;
+                      invalidate();
+                    }),
+              required: false,
+            ),
+            if (operation != null)
+              AbsorbPointer(
+                absorbing: uncertain,
+                child: Column(
+                  children: [
+                    if (operation == 'sessions') ...[
+                      field(
+                        'عدد الحصص الإضافية',
+                        days,
+                        keyboard: TextInputType.number,
+                        changed: () => setState(invalidate),
+                      ),
+                      dateField(
+                        'نهاية الاشتراك الجديدة',
+                        end,
+                        changed: invalidate,
+                      ),
+                      const UiText(
+                        'تضاف الحصص إلى رصيد هذه الفترة وتتغير نهايتها كلها. السعر والتحصيلات كما هي.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ] else if (operation == 'Deduct') ...[
+                      field(
+                        'عدد الأيام',
+                        days,
+                        keyboard: TextInputType.number,
+                        changed: () => setState(invalidate),
+                        validate: (value) {
+                          final count = int.tryParse(value);
+                          return count != null &&
+                                  count >= 1 &&
+                                  count <= deductionLimit
+                              ? null
+                              : 'أدخل عددًا صحيحًا من 1 إلى $deductionLimit.';
+                        },
+                      ),
+                      if (endDate != null &&
+                          dayCount != null &&
+                          dayCount >= 1 &&
+                          dayCount <= deductionLimit)
+                        UiText(
+                          'النهاية المتوقعة ${dateLabel(context, endDate.subtract(Duration(days: dayCount)))}.',
+                        ),
+                    ] else
+                      dateField(
+                        'تاريخ السريان',
+                        when,
+                        changed: invalidate,
+                        firstDate: operation == 'resume'
+                            ? resumeFrom
+                            : operation == 'freeze'
+                            ? startDate
+                            : null,
+                        lastDate: operation == 'resume' || operation == 'freeze'
+                            ? accountingDay
+                            : null,
+                      ),
                     field(
-                      'عدد الحصص الإضافية',
-                      days,
-                      keyboard: TextInputType.number,
+                      'سبب التعديل',
+                      reason,
+                      required: operation == 'sessions',
+                      maxLines: 3,
                       changed: () => setState(invalidate),
                     ),
-                    dateField(
-                      'نهاية الاشتراك الجديدة',
-                      end,
-                      changed: invalidate,
+                    if (operation == 'cancel')
+                      const UiText(
+                        'إلغاء الاشتراك لا يصرف مبلغًا تلقائيًا. الاسترداد له مراجعة وصلاحية منفصلة.',
+                      ),
+                    CheckboxListTile(
+                      value: confirmed,
+                      title: const UiText(
+                        'راجعت أثر التعديل على الاشتراك وأؤكد تنفيذه.',
+                      ),
+                      onChanged: (v) => setState(() => confirmed = v == true),
                     ),
-                    const UiText(
-                      'تضاف الحصص إلى رصيد هذه الفترة وتتغير نهايتها كلها. السعر والتحصيلات كما هي.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ] else if (operation == 'Add' || operation == 'Deduct')
-                    field(
-                      'عدد الأيام',
-                      days,
-                      keyboard: TextInputType.number,
-                      changed: () => setState(invalidate),
-                    )
-                  else
-                    dateField('تاريخ السريان', when, changed: invalidate),
-                  field(
-                    'سبب التعديل',
-                    reason,
-                    required: operation == 'sessions',
-                    maxLines: 3,
-                    changed: () => setState(invalidate),
-                  ),
-                  if (operation == 'cancel')
-                    const UiText(
-                      'إلغاء الاشتراك لا يصرف مبلغًا تلقائيًا. الاسترداد له مراجعة وصلاحية منفصلة.',
-                    ),
-                  CheckboxListTile(
-                    value: confirmed,
-                    title: const UiText(
-                      'راجعت أثر التعديل على الاشتراك وأؤكد تنفيذه.',
-                    ),
-                    onChanged: (v) => setState(() => confirmed = v == true),
-                  ),
-                ],
-              ),
-            ),
-          if (uncertain)
-            const UiText(
-              'لم تتأكد نتيجة الطلب؛ احتفظ بنفس التفاصيل وأعد التأكيد أو راجع السجل.',
-            ),
-          if (operation != null)
-            FilledButton(
-              onPressed: confirmed ? save : null,
-              child: UiText(
-                uncertain ? 'إعادة تأكيد التعديل نفسه' : 'تأكيد تعديل الاشتراك',
-              ),
-            ),
-        ],
-        if (!uncertain)
-          OutlinedButton(
-            onPressed: () => run(() async {
-              final value = obj(
-                await auth.request(
-                  'GET',
-                  '/api/v1/subscriptions/periods/${widget.id}',
+                  ],
                 ),
-              );
-              if (current) {
-                setState(() {
-                  period = value;
-                  invalidate();
-                });
-              }
-            }),
-            child: const UiText('تحديث سجل الاشتراك'),
-          ),
-        const Heading('سجل التعديلات'),
-        if (rows(p['adjustments'] ?? []).isEmpty)
-          const EmptyMessage('لا توجد تعديلات مسجلة.'),
-        for (final h in rows(p['adjustments'] ?? []))
-          GCard(
-            child: UiText(
-              '${const {'FreezeStarted': 'تجميد', 'FreezeEnded': 'استئناف', 'DaysAdded': 'إضافة أيام', 'DaysDeducted': 'خصم أيام', 'SessionsAdded': 'إضافة حصص', 'Cancelled': 'إلغاء'}[h['type']] ?? 'تعديل مسجل'} · ${day(h['effectiveDate'])}\n${h['type'] == 'SessionsAdded' ? '+${h['sessionsDelta']} حصة · الرصيد ${h['oldRemainingSessions']} ← ${h['newRemainingSessions']} · نهاية الفترة ${day(h['newEndDate'])}' : h['daysDelta'] ?? ''} · ${h['reason'] ?? ''}',
+              ),
+            if (uncertain)
+              const UiText(
+                'لم تتأكد نتيجة الطلب؛ احتفظ بنفس التفاصيل وأعد التأكيد أو راجع السجل.',
+              ),
+            if (operation != null)
+              FilledButton(
+                onPressed: confirmed ? save : null,
+                child: UiText(
+                  uncertain
+                      ? 'إعادة تأكيد التعديل نفسه'
+                      : 'تأكيد تعديل الاشتراك',
+                ),
+              ),
+          ],
+          if (!uncertain)
+            OutlinedButton(
+              onPressed: load,
+              child: const UiText('تحديث سجل الاشتراك'),
             ),
-          ),
+          const Heading('سجل التعديلات'),
+          if (rows(p['adjustments'] ?? []).isEmpty)
+            const EmptyMessage('لا توجد تعديلات مسجلة.'),
+          for (final h in rows(p['adjustments'] ?? []))
+            adjustmentCard(context, h),
+        ],
       ],
-    ], screen: 'players');
+      screen: 'players',
+      onRetry: load,
+    );
+  }
+
+  Widget adjustmentCard(BuildContext context, Json h) {
+    final type = h['type'];
+    final date = periodDay(h['effectiveDate']);
+    final endDate = periodDay(h['newEndDate']);
+    final delta = h['daysDelta'];
+    return GCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          UiText(
+            const {
+                  'FreezeStarted': 'بدء التجميد',
+                  'FreezeEnded': 'استئناف الاشتراك',
+                  'DaysAdded': 'إضافة أيام',
+                  'DaysDeducted': 'خصم أيام',
+                  'SessionsAdded': 'إضافة حصص',
+                  'Cancelled': 'إلغاء الاشتراك',
+                }[type] ??
+                'تعديل مسجل',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          if (date != null) UiText(dateLabel(context, date)),
+          if (delta is int && type == 'DaysDeducted')
+            UiText('الأيام المخصومة ${delta.abs()}'),
+          if (delta is int && type == 'DaysAdded')
+            UiText('الأيام المضافة $delta'),
+          if (delta is int && type == 'FreezeEnded')
+            UiText('أيام التجميد $delta'),
+          if (type == 'SessionsAdded')
+            UiText(
+              'أضيفت ${h['sessionsDelta']} حصة · الرصيد من ${h['oldRemainingSessions']} إلى ${h['newRemainingSessions']}',
+            ),
+          if (endDate != null)
+            UiText('نهاية الفترة ${dateLabel(context, endDate)}'),
+          if (h['reason'] is String &&
+              (h['reason'] as String).trim().isNotEmpty)
+            UiText(h['reason'] as String),
+        ],
+      ),
+    );
   }
 }
 

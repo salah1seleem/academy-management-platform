@@ -79,6 +79,20 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
             }
             final p = matches.first;
             final name = textOf(p['player'] ?? p['arabicName']);
+            final enrollment = {
+              ...p,
+              'id': widget.enrollmentId,
+              'player': name,
+              'group': p['group'] ?? session['group'],
+              'sport': p['sport'] ?? session['sport'],
+              'sportId': p['sportId'] ?? session['sportId'],
+              if (widget.sessionId != null)
+                'criteriaState': session['criteriaState'],
+              if (widget.sessionId != null) 'sessionId': widget.sessionId,
+              if (widget.sessionId != null)
+                'evaluationDate': session['sessionDate'],
+            };
+            final canEvaluate = data['canEvaluate'] == true;
             return gList([
               if (p['playerId'] is String)
                 GuardianContactAction(
@@ -125,24 +139,25 @@ class _CoachPlayerPageState extends State<CoachPlayerPage> {
               ),
               if (p['recurring'] is List)
                 WeeklyGroupSchedule(schedules: rows(p['recurring'])),
-              if (data['canEvaluate'] == true)
+              if (canEvaluate)
                 FilledButton.icon(
                   icon: const Icon(Icons.assessment_outlined),
-                  label: const UiText('تقييم اللاعب'),
+                  label: const UiText('تقييم جديد'),
                   onPressed: () => openPage(
                     context,
-                    CoachEvaluation(
+                    CoachEvaluation(auth: widget.auth, enrollment: enrollment),
+                  ),
+                ),
+              if (p['playerId'] is String)
+                GLink(
+                  'تقييمات اللاعب',
+                  Icons.assignment_outlined,
+                  () => openPage(
+                    context,
+                    CoachPlayerEvaluations(
                       auth: widget.auth,
-                      enrollment: {
-                        ...p,
-                        'id': widget.enrollmentId,
-                        'player': name,
-                        'group': p['group'] ?? session['group'],
-                        if (widget.sessionId != null)
-                          'sessionId': widget.sessionId,
-                        if (widget.sessionId != null)
-                          'evaluationDate': session['sessionDate'],
-                      },
+                      enrollment: enrollment,
+                      canEvaluate: canEvaluate,
                     ),
                   ),
                 ),

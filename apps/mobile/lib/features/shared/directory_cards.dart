@@ -16,10 +16,10 @@ int? ageInYears(Object? date, {DateTime? today}) {
           : 0);
 }
 
-int? remainingDays(Object? date) {
+int? remainingDays(Object? date, {DateTime? asOf}) {
   final d = DateTime.tryParse('$date');
   if (d == null) return null;
-  final now = DateTime.now();
+  final now = asOf ?? DateTime.now();
   return DateTime.utc(
     d.year,
     d.month,
@@ -83,6 +83,10 @@ class PlayerDirectoryCard extends StatelessWidget {
     this.openLabel = 'ملف اللاعب',
     this.selected,
     this.onSelection,
+    this.subscriptionAsOf,
+    this.showSubscriptionStatus = true,
+    this.subscriptionStatusLabel,
+    this.showSubscriptionBalance = false,
   });
   final AuthController auth;
   final Json player;
@@ -91,6 +95,10 @@ class PlayerDirectoryCard extends StatelessWidget {
   final String openLabel;
   final bool? selected;
   final ValueChanged<bool?>? onSelection;
+  final DateTime? subscriptionAsOf;
+  final bool showSubscriptionStatus;
+  final String? subscriptionStatusLabel;
+  final bool showSubscriptionBalance;
   @override
   Widget build(BuildContext context) {
     final name = textOf(
@@ -108,6 +116,7 @@ class PlayerDirectoryCard extends StatelessWidget {
     final subscribed = known.any((e) {
       final s = obj(e['subscription']);
       final status = s['status'];
+      final days = remainingDays(s['endDate'], asOf: subscriptionAsOf);
       return ![
             'Expired',
             'Cancelled',
@@ -119,8 +128,7 @@ class PlayerDirectoryCard extends StatelessWidget {
           (s['sessionBased'] == false ||
               s['remainingSessions'] == null ||
               (s['remainingSessions'] as num) > 0) &&
-          (remainingDays(s['endDate']) == null ||
-              remainingDays(s['endDate'])! >= 0);
+          (days == null || days >= 0);
     });
     final active =
         player['isActive'] != false &&
@@ -174,8 +182,13 @@ class PlayerDirectoryCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  DirectoryTag(active ? 'نشط' : 'غير نشط', positive: active),
+                  if (showSubscriptionStatus) ...[
+                    const SizedBox(width: 8),
+                    DirectoryTag(
+                      subscriptionStatusLabel ?? (active ? 'نشط' : 'غير نشط'),
+                      positive: active,
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -270,32 +283,42 @@ class PlayerDirectoryCard extends StatelessWidget {
         s['expired'] == true || status == 'Expired' || status == 'Cancelled';
     final frozen = s['frozen'] == true || status == 'Frozen';
     final left = s['remainingSessions'] as num?;
-    final days = remainingDays(s['endDate']);
+    final days = remainingDays(s['endDate'], asOf: subscriptionAsOf);
+    final showPerRegistration =
+        showSubscriptionStatus &&
+        (subscriptionStatusLabel == null || showSubscriptionBalance);
+    final showRegistrationStatus =
+        subscriptionStatusLabel == null || enrollments.length > 1;
     return [
       if (e['price'] != null)
         DirectoryTag(
           money(e['price'], e['currency']),
           icon: Icons.payments_outlined,
         ),
-      if (expired)
-        const DirectoryTag('غير نشط', positive: false)
-      else if (frozen)
-        const DirectoryTag('مجمّد')
-      else if (status == 'Scheduled')
-        const DirectoryTag('لم يبدأ بعد')
-      else ...[
-        if (left != null && s['sessionBased'] != false)
+      if (showPerRegistration) ...[
+        if (expired && showRegistrationStatus)
           DirectoryTag(
-            'متبقي $left حصة',
-            icon: Icons.event_available_outlined,
-            positive: left > 2,
-          ),
-        if (days != null && days >= 0)
-          DirectoryTag(
-            'متبقي $days يوم',
-            icon: Icons.timelapse_outlined,
-            positive: days > 7,
-          ),
+            showSubscriptionBalance ? 'منتهٍ' : 'غير نشط',
+            positive: false,
+          )
+        else if (frozen && showRegistrationStatus)
+          const DirectoryTag('مجمّد')
+        else if (status == 'Scheduled' && showRegistrationStatus)
+          const DirectoryTag('لم يبدأ بعد')
+        else if (!expired && !frozen && status != 'Scheduled') ...[
+          if (left != null && s['sessionBased'] != false)
+            DirectoryTag(
+              'متبقي $left حصة',
+              icon: Icons.event_available_outlined,
+              positive: left > 2,
+            ),
+          if (days != null && days >= 0)
+            DirectoryTag(
+              'متبقي $days يوم',
+              icon: Icons.timelapse_outlined,
+              positive: days > 7,
+            ),
+        ],
       ],
     ];
   }

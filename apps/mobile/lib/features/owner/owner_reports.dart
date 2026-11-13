@@ -2,22 +2,27 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
+import '../../core/widgets/page_status.dart';
 import '../guardian/guardian_ui.dart';
-import '../guardian/guardian_payments.dart' show ReceiptPage;
+import '../guardian/guardian_payments.dart'
+    show ReceiptPage, receiptDateLabel, receiptTimestamp;
 import '../shared/experience_ui.dart';
 import '../shared/receivable_balances.dart';
 import '../shared/staff_attendance_exceptions.dart';
 import '../shared/page_video.dart';
 import '../shared/report_export.dart';
 import 'owner_cockpit.dart';
+import 'owner_expenses.dart';
 import 'home_destinations.dart';
 import 'external_agreements.dart';
+import 'provider_quarantine.dart';
 import 'renewal_opportunities.dart';
 import '../admin/native_product_orders.dart';
 
 const _reports = {
   'financial-hub': 'التقارير المالية',
   'financial': 'الإيرادات والتحصيلات',
+  'provider-quarantine': 'اختلافات الدفع',
   'income': 'الإيرادات والتحصيلات',
   'receivables': 'المستحقات المالية',
   'expenses': 'المصروفات',
@@ -33,21 +38,6 @@ const _reports = {
   'subscriptions': 'الاشتراكات',
   'external': 'الاتفاقيات والإيرادات الخارجية',
 };
-
-String expenseName(Object? key) =>
-    const {
-      'Rent': 'إيجار المنشأة',
-      'Electricity': 'الكهرباء',
-      'Water': 'المياه',
-      'Heating': 'التدفئة',
-      'Maintenance': 'الصيانة والتشغيل',
-      'CollectionFees': 'رسوم التحصيل الإلكتروني',
-      'Supplies': 'المستلزمات',
-      'Administration': 'المصروفات الإدارية',
-      'Facility': 'تشغيل المرافق',
-      'Other': 'مصروفات أخرى',
-    }[key] ??
-    'المصروف';
 
 class OwnerReports extends StatefulWidget {
   const OwnerReports({
@@ -102,17 +92,22 @@ class _OwnerReportsState extends State<OwnerReports> {
   };
   void open(String name) => openPage(
     context,
-    OwnerReports(
-      auth: widget.auth,
-      initialReport: name,
-      initialFilters: filters,
-    ),
+    name == 'provider-quarantine'
+        ? NativeProviderQuarantine(auth: widget.auth)
+        : OwnerReports(
+            auth: widget.auth,
+            initialReport: name,
+            initialFilters: filters,
+          ),
   );
   String get report =>
       widget.initialReport == 'income' ? 'financial' : widget.initialReport;
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: report.isEmpty ? 'التقارير' : _reports[report] ?? 'التقارير',
+    onBack: report == 'expenses' || report == 'operating'
+        ? () => Navigator.of(context).pop()
+        : null,
     actions: [
       if (['financial', 'attendance', 'staff-attendance'].contains(report))
         ReportExportButton(
@@ -127,19 +122,41 @@ class _OwnerReportsState extends State<OwnerReports> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           if (snapshot.hasError) {
-            return const EmptyMessage('تعذر تحميل فلاتر التقارير.');
+            return PageStatus(
+              child: StatusPanel(
+                message: 'تعذر تحميل فلاتر التقارير.',
+                icon: Icons.wifi_off_outlined,
+                onAction: () => setState(() => metadata = load()),
+                actionLabel: 'إعادة المحاولة',
+              ),
+            );
           }
           return const Center(child: CircularProgressIndicator());
         }
         final query = filters..removeWhere((key, value) => value.isEmpty);
         return Column(
           children: [
+            if (report == 'expenses')
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: UiText(
+                    query['dateBasis'] == 'payment'
+                        ? 'تاريخ السداد'
+                        : 'فترة الاستحقاق',
+                  ),
+                ),
+              ),
             if (report != 'receivables')
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: ScopeDateTiles(
                   from: from,
                   to: to,
+                  clearLabel: report == 'expenses'
+                      ? 'مسح الفترة'
+                      : 'مسح الفلاتر',
                   onChanged: (a, b) => setState(() {
                     from = a;
                     to = b;
@@ -149,7 +166,7 @@ class _OwnerReportsState extends State<OwnerReports> {
                   onClear: () => setState(() {
                     from = '';
                     to = '';
-                    branch = '';
+                    if (report != 'expenses') branch = '';
                     all = true;
                     collectionType = '';
                     page = 1;
@@ -167,7 +184,15 @@ class _OwnerReportsState extends State<OwnerReports> {
                 }),
               ),
             ),
-            Expanded(child: content(query)),
+            Expanded(
+              child: report == 'expenses'
+                  ? OwnerExpenseList(
+                      auth: widget.auth,
+                      filters: query,
+                      metadata: snapshot.data!,
+                    )
+                  : content(query),
+            ),
           ],
         );
       },
@@ -202,6 +227,8 @@ class _OwnerReportsState extends State<OwnerReports> {
     if (report == 'financial-hub') {
       return menu([
         ('financial', Icons.receipt_long_outlined),
+        if (widget.auth.session?.selected?.role == 'AcademyOwner')
+          ('provider-quarantine', Icons.rule_outlined),
         ('receivables', Icons.pending_actions_rounded),
         ('expenses', Icons.payments_outlined),
         ('operating', Icons.analytics_outlined),
@@ -306,13 +333,11 @@ class _OwnerReportsState extends State<OwnerReports> {
     final financial = report == 'financial';
     final path = financial
         ? '/api/v1/reports/financial'
-        : report == 'expenses'
-        ? '/api/v1/finance/operating-expenses'
         : '/api/v1/reports/attendance';
     return RemoteBody(
       auth: widget.auth,
       path:
-          '$path?${Uri(queryParameters: {...query, 'page': '$page', 'pageSize': '25', if (!financial && report != 'expenses') 'subject': report == 'staff-attendance' ? 'staff' : 'players'}).query}',
+          '$path?${Uri(queryParameters: {...query, 'page': '$page', 'pageSize': '25', if (!financial) 'subject': report == 'staff-attendance' ? 'staff' : 'players'}).query}',
       builder: (context, value) {
         final d = obj(value), items = rows(d['items']);
         return gList([
@@ -328,10 +353,6 @@ class _OwnerReportsState extends State<OwnerReports> {
             const Heading('سجل التحصيلات'),
           ] else
             Heading(_reports[report] ?? 'التقرير'),
-          if (financial)
-            UiText(
-              'صافي التحصيل: ${money(d['netAmount'] ?? d['totalAmount'], d['currency'])}',
-            ),
           if (items.isEmpty) const EmptyMessage('لا توجد سجلات مطابقة.'),
           for (final row in items)
             GCard(
@@ -344,17 +365,17 @@ class _OwnerReportsState extends State<OwnerReports> {
                         row['name'] ??
                         row['description'] ??
                         row['categoryName'] ??
-                        expenseName(row['category']),
+                        'السجل',
                   ),
                 ),
                 subtitle: UiText(
                   financial
-                      ? '${financialCollectionName(row['collectionType'])}${row['collectionType'] == 'Refund' ? ' · بتاريخ الصرف' : ''} · ${row['branch']}\n${row['receiptNumber']}'
+                      ? _financialCollectionSubtitle(context, row)
                       : '${row['group'] ?? row['category'] ?? ''} · ${day(row['date'] ?? row['periodFrom'])}',
-                  style: const TextStyle(fontSize: 10),
+                  style: TextStyle(fontSize: financial ? 11 : 10),
                 ),
                 trailing: UiText(
-                  financial || report == 'expenses'
+                  financial
                       ? money(
                           row['netAmount'] ?? row['amount'],
                           row['currency'] ?? d['currency'],
@@ -406,6 +427,21 @@ String financialCollectionName(Object? type) => switch (type) {
   _ => 'حركة مالية',
 };
 
+bool _isHistoricalCollection(Json row) =>
+    row['historicalPaidOn'] is String || row['provider'] == 'HistoricalImport';
+
+String _financialCollectionSubtitle(BuildContext context, Json row) {
+  final historical = _isHistoricalCollection(row);
+  final paidOn = receiptDateLabel(context, row['historicalPaidOn']);
+  final description = [
+    historical ? 'تحصيل سابق' : financialCollectionName(row['collectionType']),
+    ?paidOn,
+    if (row['collectionType'] == 'Refund') 'بتاريخ الصرف',
+    if (row['branch'] != null) textOf(row['branch']),
+  ].join(' · ');
+  return '$description\n${textOf(row['receiptNumber'])}';
+}
+
 /// A read-only view of the exact authorized ledger row; it does not reprice or
 /// reconstruct a receipt from a different source's identifier.
 class FinancialCollectionDetail extends StatefulWidget {
@@ -432,6 +468,15 @@ class _FinancialCollectionDetailState extends State<FinancialCollectionDetail> {
       final kind = row['collectionType'];
       final refund = kind == 'Refund' || kind == 'Void';
       final subscription = kind == null || kind == '' || kind == 'Subscription';
+      final historical = _isHistoricalCollection(row);
+      final paidOn = receiptDateLabel(context, row['historicalPaidOn']);
+      final confirmedAt = historical
+          ? null
+          : receiptTimestamp(
+              context,
+              row['confirmedAtUtc'],
+              row['confirmedAtAcademy'],
+            );
       final receipt = row['receiptId'];
       final hasReceipt =
           receipt is String &&
@@ -441,7 +486,7 @@ class _FinancialCollectionDetailState extends State<FinancialCollectionDetail> {
       return GuardianPage(
         title: refund ? 'تفاصيل الاسترداد' : 'تفاصيل التحصيل',
         child: gList([
-          Heading(financialCollectionName(kind)),
+          Heading(historical ? 'تحصيل سابق' : financialCollectionName(kind)),
           Heading(textOf(row['player'])),
           const UiText('المبلغ في التقرير'),
           MoneyText(
@@ -466,19 +511,27 @@ class _FinancialCollectionDetailState extends State<FinancialCollectionDetail> {
           ])
             if (row[field.$2] != null)
               ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
                 title: UiText(field.$1),
                 subtitle: UiText(textOf(row[field.$2])),
               ),
-          if (row['confirmedAtUtc'] != null)
+          if (paidOn != null || confirmedAt != null)
             ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
               title: UiText(
-                refund
-                    ? 'تاريخ الصرف بالتوقيت العالمي'
-                    : 'تاريخ التأكيد بالتوقيت العالمي',
+                historical
+                    ? 'تاريخ القبض'
+                    : refund
+                    ? 'تاريخ الصرف ${confirmedAt!.zone}'
+                    : 'تاريخ التأكيد ${confirmedAt!.zone}',
               ),
-              subtitle: UiText(day(row['confirmedAtUtc'])),
+              subtitle: UiText(paidOn ?? confirmedAt!.text),
             ),
           ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
             title: const UiText('طريقة الدفع'),
             subtitle: UiText(switch (row['paymentMethod']) {
               'Cash' => 'نقدي',
@@ -486,9 +539,12 @@ class _FinancialCollectionDetailState extends State<FinancialCollectionDetail> {
               _ => 'غير مسجلة',
             }),
           ),
-          if (row['providerReference'] is String &&
+          if (!historical &&
+              row['providerReference'] is String &&
               (row['providerReference'] as String).isNotEmpty)
             ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
               title: const UiText('مرجع العملية'),
               subtitle: UiText(row['providerReference']),
             ),
@@ -575,6 +631,7 @@ class CollectionSourceSummary extends StatelessWidget {
             ),
           ],
         ),
+        const UiText('صافي التحصيل'),
         MoneyText(
           data['netAmount'] ?? data['totalAmount'],
           data['currency'],

@@ -85,9 +85,16 @@ public static partial class Slice5Endpoints
         return Results.Ok(new { entity.Version });
     }
 
-    private static async Task<IResult> Options(CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider time, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization)
+    private static async Task<IResult> Options(bool? criteriaOnly, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, TimeProvider time, Microsoft.AspNetCore.Authorization.IAuthorizationService authorization)
     {
         var t = (await tenant.ResolveAsync())!; var user = UserId(principal);
+        var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
+        if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
+        var sports = await sportQuery.OrderBy(x => x.ArabicName).ToListAsync();
+        if (criteriaOnly == true) return Results.Ok(new
+        {
+            sports = sports.Select(sport => new { sport.Id, name = sport.ArabicName, supportsFootballAxis = IsFootball(sport) })
+        });
         var day = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId, db, time);
         var enrollments = db.SportEnrollments.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
         if (t.Role == AcademyRole.Coach) enrollments = enrollments.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroupId == FoundationDbContext.AssignedGroupAt(x.AcademyId, x.Id, day) && a.AcademyMembership.UserId == user && a.IsActive));
@@ -101,18 +108,16 @@ public static partial class Slice5Endpoints
                     sessionBased=(p.PlanTypeSnapshot??p.SubscriptionPlan.PlanType)!=Academy.Infrastructure.Subscriptions.SubscriptionPlanType.Duration,
                     frozen=p.Status==Academy.Infrastructure.Subscriptions.SubscriptionPeriodStatus.Frozen}).FirstOrDefault()
             }).ToListAsync();
-        var sportQuery = db.Sports.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.IsActive);
-        if (t.Role == AcademyRole.Coach) sportQuery = sportQuery.Where(x => db.StaffGroupAssignments.Any(a => a.AcademyId == t.AcademyId && a.TrainingGroup.SportId == x.Id && a.AcademyMembership.UserId == user && a.IsActive));
-        var sports = await sportQuery.OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName }).ToListAsync();
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/evaluations","POST",default));
         var canManageAttendance = (await authorization.AuthorizeAsync(principal, AcademyPermissions.AttendanceManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/attendance/sessions/check/players","PUT",default));
-        return Results.Ok(new { enrollments = rows, sports, canEvaluate, canManageAttendance });
+        return Results.Ok(new { enrollments = rows, sports = sports.Select(sport => new { sport.Id, name = sport.ArabicName }), canEvaluate, canManageAttendance });
     }
 
-    private static async Task<IResult> ListEvaluations(string? search, Guid? playerId, Guid? sportId, Guid? groupId, string? status, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)
+    private static async Task<IResult> ListEvaluations(string? search, Guid? playerId, Guid? sportId, Guid? groupId, Guid? sportEnrollmentId, string? status, DateOnly? from, DateOnly? to, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, IEvaluationReportCalculator calculator)
     {
         var t = (await tenant.ResolveAsync())!; var query = AccessibleEvaluations(t, principal, db).AsNoTracking();
         if (playerId.HasValue) query = query.Where(x => x.SportEnrollment.PlayerId == playerId);
+        if (sportEnrollmentId.HasValue) query = query.Where(x => x.SportEnrollmentId == sportEnrollmentId);
         if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.SportEnrollment.Player.ArabicName.Contains(search.Trim()) || x.SportEnrollment.Player.PlayerCode.Contains(search.Trim()));
         if (sportId.HasValue) query = query.Where(x => x.SportId == sportId); if (groupId.HasValue) query = query.Where(x => x.TrainingGroupId == groupId);
         if (Enum.TryParse<EvaluationStatus>(status, true, out var parsed)) query = query.Where(x => x.Status == parsed); if (from.HasValue) query = query.Where(x => x.EvaluationDate >= from); if (to.HasValue) query = query.Where(x => x.EvaluationDate <= to);

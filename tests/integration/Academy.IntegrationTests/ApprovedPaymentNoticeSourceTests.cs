@@ -5,6 +5,7 @@ using Academy.Api.Auth;
 using Academy.Api.Slice2;
 using Academy.Api.Slice6;
 using Academy.Infrastructure.Operations;
+using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,56 @@ namespace Academy.IntegrationTests;
 
 public sealed partial class SubscriptionPaymentTests
 {
+    [Fact]
+    public async Task Payment_queue_preserves_unset_zero_and_fractional_amounts_and_distinguishes_references()
+    {
+        using var owner = await InboxStaff(DemoSeed.OwnerEmail);
+        using var foreign = await InboxStaff(DemoSeed.FutureOwnerEmail);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var source = await db.NewEnrollmentRequests.AsNoTracking().SingleAsync(x => x.Id == Slice6DemoSeed.PendingRequestId);
+        var created = DateTimeOffset.UtcNow;
+        var examples = new (Guid Id, decimal? Amount)[]
+        {
+            (Guid.Parse("F8A12C09-1182-4300-AA00-000000000001"), null),
+            (Guid.Parse("F8A12C09-1182-4300-AA00-123400000001"), 0m),
+            (Guid.Parse("FDA12C09-1182-4300-AA00-000000000003"), 721.25m)
+        };
+        var ids = examples.Select(x => x.Id).ToArray();
+        db.NewEnrollmentRequests.AddRange(examples.Select(example => new NewEnrollmentRequest
+        {
+            Id = example.Id, AcademyId = source.AcademyId, RequestedByGuardianUserId = source.RequestedByGuardianUserId,
+            RequestType = NewEnrollmentRequestType.NewChild, NewChildArabicName = "طلب تجريبي لاختبار المبلغ",
+            NewChildDateOfBirth = new DateOnly(2017, 5, 1), SportId = source.SportId, PreferredBranchId = source.PreferredBranchId,
+            FinalAmount = example.Amount, OriginalAmount = example.Amount, Currency = example.Amount.HasValue ? "EGP" : null,
+            IdempotencyKey = example.Id.ToString("N"), CreatedAtUtc = created, UpdatedAtUtc = created
+        }));
+        await db.SaveChangesAsync();
+        try
+        {
+            var before = await db.Collections.CountAsync();
+            const string queue = "/api/v1/manage/payment-requests?type=Enrollment&allDates=true&status=Pending";
+            var reply = await owner.GetFromJsonAsync<JsonElement>($"{queue}&branchId={source.PreferredBranchId}");
+            var rows = reply.GetProperty("items").EnumerateArray().Where(row => ids.Contains(row.GetProperty("id").GetGuid())).ToArray();
+            Assert.Equal(ids, rows.Select(row => row.GetProperty("id").GetGuid()).ToArray());
+            Assert.Equal(JsonValueKind.Null, rows[0].GetProperty("amount").ValueKind);
+            Assert.Equal(JsonValueKind.Null, rows[0].GetProperty("currency").ValueKind);
+            Assert.Equal(0m, rows[1].GetProperty("amount").GetDecimal());
+            Assert.Equal("EGP", rows[1].GetProperty("currency").GetString());
+            Assert.Equal(721.25m, rows[2].GetProperty("amount").GetDecimal());
+            Assert.Equal(ids[0].ToString("D").ToUpperInvariant(), rows[0].GetProperty("reference").GetString());
+            Assert.Equal(ids[1].ToString("D").ToUpperInvariant(), rows[1].GetProperty("reference").GetString());
+            Assert.Equal("FDA12C000003", rows[2].GetProperty("reference").GetString());
+            var external = await foreign.GetFromJsonAsync<JsonElement>(queue);
+            Assert.DoesNotContain(external.GetProperty("items").EnumerateArray(), row => ids.Contains(row.GetProperty("id").GetGuid()));
+            Assert.Equal(before, await db.Collections.CountAsync());
+        }
+        finally
+        {
+            await db.NewEnrollmentRequests.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+    }
+
     [Theory]
     [InlineData("71000000-0000-0000-0000-000000000001")]
     [InlineData("71000000-0000-0000-0000-000000000004")]

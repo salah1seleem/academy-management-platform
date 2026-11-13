@@ -131,7 +131,7 @@ void main() {
       await tester.tap(find.byType(BackButton).last);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('المجموعات المسندة'),
+        find.text('تدريباتي'),
         220,
         scrollable: find.byType(Scrollable).first,
       );

@@ -154,26 +154,37 @@ class HomeSubscriptionPlayers extends StatefulWidget {
     required this.filters,
     this.state = '',
     this.uniquePlayers = false,
+    this.scopeLabel,
+    this.academyToday,
   });
   final AuthController auth;
   final Map<String, String> filters;
   final String state;
   final bool uniquePlayers;
+  final String? scopeLabel, academyToday;
   @override
   State<HomeSubscriptionPlayers> createState() =>
       _HomeSubscriptionPlayersState();
 }
 
 class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
-  int page = 1;
   bool sendingReminder = false;
-  Future<void> remind() async {
+  String? get authority {
+    final current = widget.auth.session?.selected;
+    return current?.role == 'AcademyOwner'
+        ? '${current!.academyId}:${current.id}:${current.contextRevision}'
+        : null;
+  }
+
+  Future<void> remind(String snapshotDate) async {
+    final openedAs = authority;
+    if (openedAs == null || sendingReminder) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const UiText('تنبيه قرب انتهاء الاشتراك'),
         content: const UiText(
-          'إرسال تنبيه داخل التطبيق لأولياء أمور الاشتراكات الحالية التي تنتهي خلال 7 أيام، في الفرع والرياضة المحددين؟',
+          'إرسال تنبيه داخل التطبيق لأولياء أمور الاشتراكات التي تنتهي خلال 7 أيام في النطاق المعروض؟',
         ),
         actions: [
           TextButton(
@@ -187,9 +198,23 @@ class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted || openedAs != authority) return;
     setState(() => sendingReminder = true);
     try {
+      final calendar = obj(
+        await widget.auth.request('GET', '/api/v1/academy/calendar'),
+      );
+      if (!mounted || openedAs != authority) return;
+      if (calendar['today'] != snapshotDate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: UiText(
+              'تغيّر تاريخ القائمة. افتح اشتراكات اليوم قبل إرسال التنبيه.',
+            ),
+          ),
+        );
+        return;
+      }
       final result = obj(
         await widget.auth.request(
           'POST',
@@ -200,12 +225,12 @@ class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
           },
         ),
       );
-      if (mounted) {
+      if (mounted && openedAs == authority) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: UiText(textOf(result['message']))));
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && openedAs == authority) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: UiText(
@@ -219,8 +244,16 @@ class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
     }
   }
 
-  Widget entry(BuildContext context, Json p, bool allowed, bool canEvaluate) {
+  Widget entry(
+    BuildContext context,
+    Json p,
+    bool allowed,
+    bool canEvaluate,
+    DateTime? asOf,
+  ) {
     final sports = p['sports'] is List ? rows(p['sports']) : [p];
+    final hasActive = sports.any((sport) => sport['active'] == true);
+    final hasFrozen = sports.any((sport) => sport['frozen'] == true);
     Future<void> evaluate() async {
       Json? picked = sports.length == 1
           ? sports.first
@@ -266,10 +299,20 @@ class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
 
     return PlayerDirectoryCard(
       auth: widget.auth,
+      subscriptionAsOf: asOf,
+      showSubscriptionStatus: widget.filters['dimension'] != 'months',
+      showSubscriptionBalance: true,
+      subscriptionStatusLabel: hasActive
+          ? widget.state == 'expiring'
+                ? 'ينتهي قريبًا'
+                : 'سارٍ'
+          : hasFrozen
+          ? 'مجمّد'
+          : 'منتهٍ',
       player: {
         ...p,
         'arabicName': p['name'],
-        'hasActiveSubscription': sports.any((s) => s['active'] == true),
+        'hasActiveSubscription': hasActive,
       },
       enrollments: [
         for (final s in sports)
@@ -297,19 +340,50 @@ class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
     );
   }
 
+  String get title => widget.uniquePlayers
+      ? 'قائمة اللاعبين'
+      : switch (widget.state) {
+          'active' => 'الاشتراكات السارية',
+          'current' => 'الاشتراكات التي لا تنتهي قريبًا',
+          'expiring' => 'الاشتراكات التي تنتهي قريبًا',
+          'expired' => 'الاشتراكات المنتهية',
+          _ when widget.filters['dimension'] == 'months' =>
+            'تسجيلات بدأ اشتراكها',
+          _ => 'الاشتراكات',
+        };
+
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: widget.uniquePlayers ? 'قائمة اللاعبين' : 'الاشتراكات',
+    title: title,
     child: RemoteBody(
       auth: widget.auth,
       path:
-          '/api/v1/subscriptions/home/items?${Uri(queryParameters: {...widget.filters, 'page': '$page', if (widget.filters['to'] != null) 'asOf': widget.filters['to']!, if (widget.uniquePlayers) 'uniquePlayers': 'true', 'state': widget.state.isEmpty ? 'all' : widget.state}).query}',
+          '/api/v1/subscriptions/home/items?${Uri(queryParameters: {...widget.filters, 'page': '1', if (widget.filters['to'] != null) 'asOf': widget.filters['to']!, if (widget.uniquePlayers) 'uniquePlayers': 'true', 'state': widget.state.isEmpty ? 'all' : widget.state}).query}',
       builder: (context, value) {
         final d = obj(value), items = rows(d['items']);
-        final allowed =
-            widget.auth.session?.selected?.role == 'AcademyOwner' ||
-            d['canOpenPlayer'] == true;
+        final asOf = DateTime.tryParse(textOf(d['asOf']));
+        final from = DateTime.tryParse(textOf(d['from']));
+        final formatDate = MaterialLocalizations.of(context).formatShortDate;
+        final owner = widget.auth.session?.selected?.role == 'AcademyOwner';
+        final allowed = (d['canOpenPlayer'] as bool?) ?? owner;
+        final canEvaluate = (d['canEvaluate'] as bool?) ?? owner;
         return gList([
+          if (widget.scopeLabel case final String name) Heading(name),
+          Heading(
+            '${widget.uniquePlayers ? 'عدد اللاعبين' : 'عدد التسجيلات'} · ${d['total']}',
+          ),
+          if (asOf != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: UiText(
+                from != null && from != asOf
+                    ? 'من ${formatDate(from)} إلى ${formatDate(asOf)}'
+                    : widget.filters['dimension'] == 'months'
+                    ? 'حتى ${formatDate(asOf)}'
+                    : 'الحالة في ${formatDate(asOf)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           if (widget.uniquePlayers && allowed)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -321,37 +395,23 @@ class _HomeSubscriptionPlayersState extends State<HomeSubscriptionPlayers> {
               ),
             ),
           if (widget.state == 'expiring' &&
-              widget.auth.session?.selected?.role == 'AcademyOwner' &&
-              widget.filters['dimension'] == null)
+              authority != null &&
+              items.isNotEmpty &&
+              widget.filters['dimension'] == null &&
+              widget.academyToday != null &&
+              widget.academyToday == d['asOf'])
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: OutlinedButton.icon(
-                onPressed: sendingReminder ? null : remind,
+                onPressed: sendingReminder
+                    ? null
+                    : () => remind(widget.academyToday!),
                 icon: const Icon(Icons.notifications_active_outlined),
                 label: const UiText('تنبيه أولياء الأمور'),
               ),
             ),
-          Heading('${d['total']} ${widget.uniquePlayers ? 'لاعب' : 'اشتراك'}'),
-          if (d['from'] != null)
-            UiText(
-              'من ${day(d['from'])} إلى ${day(d['asOf'])}',
-              style: const TextStyle(fontSize: 11),
-            )
-          else if (d['asOf'] != null)
-            UiText(
-              'حتى ${day(d['asOf'])}',
-              style: const TextStyle(fontSize: 11),
-            ),
-          if (items.isEmpty)
-            const EmptyMessage('لا توجد نتائج مطابقة للفلاتر.'),
-          for (final p in items)
-            entry(
-              context,
-              p,
-              allowed,
-              widget.auth.session?.selected?.role == 'AcademyOwner' ||
-                  d['canEvaluate'] == true,
-            ),
+          if (items.isEmpty) const EmptyMessage('لا توجد سجلات في هذا النطاق.'),
+          for (final p in items) entry(context, p, allowed, canEvaluate, asOf),
           const SizedBox.shrink(),
         ]);
       },

@@ -66,6 +66,30 @@ public sealed partial class SubscriptionAdjustmentIntegrationTests : IAsyncLifet
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Operational_period_lists_exclude_frozen_scheduled_and_exhausted_from_expiring()
+    {
+        var running = await NewScenario(end: Today.AddDays(7));
+        var frozen = await NewScenario(end: Today.AddDays(4));
+        var exhausted = await NewScenario(SubscriptionPlanType.Combined, end: Today.AddDays(3));
+        var scheduled = await AddPaidPeriod(await NewScenario(), Today.AddDays(1), Today.AddDays(5), SubscriptionPeriodStatus.Scheduled);
+        await Freeze(frozen);
+        await using (var scope = Scope())
+            await Db(scope).SubscriptionPeriods.Where(x => x.Id == exhausted.PeriodId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RemainingSessions, 0));
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        async Task<Dictionary<Guid, string?>> ReadStates(string state) =>
+            (await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/periods?state={state}"))
+                .EnumerateArray().ToDictionary(x => x.GetProperty("id").GetGuid(), x => x.GetProperty("status").GetString());
+        var expiring = await ReadStates("expiring");
+        Assert.Equal("Active", expiring[running.PeriodId]);
+        foreach (var id in new[] { frozen.PeriodId, exhausted.PeriodId, scheduled.PeriodId })
+            Assert.DoesNotContain(id, expiring.Keys);
+        Assert.Equal("Frozen", (await ReadStates("active"))[frozen.PeriodId]);
+        Assert.Equal("Expired", (await ReadStates("expired"))[exhausted.PeriodId]);
+        Assert.Equal("Scheduled", (await ReadStates("all"))[scheduled.PeriodId]);
+    }
+
     [Fact] public async Task Admin_can_freeze_active_duration_period()
     {
         var s = await NewScenario(); using var c = await Staff(DemoSeed.AdminEmail);

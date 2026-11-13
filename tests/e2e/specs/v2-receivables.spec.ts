@@ -16,10 +16,10 @@ test("Owner posts an opening balance, corrects it without cash and drills into i
   await page.getByRole("combobox", { name: "المصدر", exact: true }).selectOption("OpeningBalance");
   const post = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith("/finance/receivables"));
   await page.getByRole("button", { name: "تثبيت المطالبة", exact: true }).click(); const saved = await post; expect(saved.status()).toBe(201);
-  const detailsLink = page.getByRole("row").filter({ hasText: description }).getByRole("link", { name: "التفاصيل والحركات" });
-  await expect(detailsLink).toBeVisible(); const id = (await detailsLink.getAttribute("href"))!.split("/").pop()!;
-  await page.goto(`/dashboard/finance/receivables/${id}`);
+  const detailsLink = page.getByRole("row").filter({ hasText: description }).getByRole("link", { name: enrollment.player, exact: true });
+  await detailsLink.click();
   await expect(page.getByRole("heading", { name: description })).toBeVisible();
+  const id = new URL(page.url()).pathname.split("/").pop()!;
   await expect(page.getByText(/مستند مثبت لا يُعدل ولا يُحذف/)).toBeVisible();
   await page.getByLabel("المبلغ", { exact: true }).fill("5.00"); await page.getByLabel("سبب الحركة").fill("تصحيح موثق لمثال اصطناعي");
   await page.getByRole("button", { name: "تثبيت الحركة", exact: true }).click(); await page.waitForURL("**/finance/receivables");

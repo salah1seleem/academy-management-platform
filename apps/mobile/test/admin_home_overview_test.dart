@@ -316,6 +316,51 @@ void main() {
     },
   );
   testWidgets(
+    'home distinguishes an empty inbox and opens the same all-date scope',
+    (t) async {
+      final reads = <Uri>[];
+      final auth = await f.authenticate('AcademyAdmin', (m, p, b, k) async {
+        if (p.startsWith('/api/v1/my-followups?')) {
+          reads.add(Uri.parse(p));
+          return {'items': []};
+        }
+        return response(p);
+      });
+      await t.pumpWidget(app(AdminHome(auth: auth)));
+      await t.pumpAndSettle();
+      final empty = find.text('لا توجد متابعات مفتوحة.');
+      await t.scrollUntilVisible(
+        empty,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(empty, findsOneWidget);
+      final inbox = find.text('متابعاتي المسندة');
+      await t.scrollUntilVisible(
+        inbox,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.ensureVisible(inbox);
+      await t.pumpAndSettle();
+      await t.tap(inbox);
+      await t.pumpAndSettle();
+      expect(
+        t
+            .widget<AssignedFollowUpsPage>(find.byType(AssignedFollowUpsPage))
+            .initialAllDates,
+        isTrue,
+      );
+      expect(reads, hasLength(2));
+      expect(
+        reads.map((uri) => uri.queryParameters),
+        everyElement({'allDates': 'true', 'state': 'Open'}),
+      );
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
     'second academy and logout redact old pending home and a late source cannot restore it',
     (t) async {
       var second = false;

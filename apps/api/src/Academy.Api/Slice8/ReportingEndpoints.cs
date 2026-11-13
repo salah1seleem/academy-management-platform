@@ -214,7 +214,9 @@ public static partial class ReportingEndpoints
             .GroupBy(x => x.Currency).Select(x => new { currency = x.Key, count = x.Count(), amount = x.Sum(y => y.Amount) }).ToListAsync();
         var unpaidExpenses = await db.OperatingExpenses.Where(x => x.AcademyId == academyId && (x.Status == OperatingExpenseStatus.Approved || x.Status == OperatingExpenseStatus.Posted) && x.PaidOn == null && (!branchId.HasValue || x.BranchId == branchId))
             .GroupBy(x => x.Currency).Select(x => new { currency = x.Key, count = x.Count(), amount = x.Sum(y => y.Amount) }).ToListAsync();
-        var receivableRows = await ReceivableEndpoints.Rows(db, academyId, clock.UtcNow, clock.Today, branchId, null, null).ToListAsync();
+        var balanceInstant = clock.UtcNow;
+        var balanceDay = ReceivableEndpoints.AccountingDay(balanceInstant, academy.TimeZone);
+        var receivableRows = await ReceivableEndpoints.Rows(db, academyId, balanceInstant, balanceDay, branchId, null, null).ToListAsync();
         var receivables = receivableRows.GroupBy(x => x.Currency).Select(x => new {
             currency = x.Key,
             outstanding = x.Sum(y => Math.Max(0, y.Outstanding)),
@@ -291,6 +293,7 @@ public static partial class ReportingEndpoints
         rows.AddRange(await RefundFinancialRows(refundQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
         rows.AddRange(await DayPassFinancialRows(dayPassQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
         rows.AddRange(await ExternalFinancialRows(externalQuery.Where(x=>ids.Contains(x.Id)),db).ToListAsync());
+        SetCollectionDates(rows, TimeZoneInfo.FindSystemTimeZoneById(current.TimeZone));
         return Results.Ok(new { from = range.From, to = range.To, totalAmount = total, totalRefunds = refunds, netAmount = total - refunds, totalCount = count, sourceSummary, currency = range.Currency, page = currentPage, pageSize = size, items = rows.OrderByDescending(x => x.ConfirmedAtUtc).ThenBy(x => x.CollectionId) });
     }
 
@@ -324,9 +327,28 @@ public static partial class ReportingEndpoints
         if(collectionType is not ("Product" or "Tournament" or "DayPass" or "External")) rows.AddRange(await RefundFinancialRows(refunds,db).ToListAsync());
         if(collectionType is not ("Subscription" or "Product" or "Tournament" or "External" or "Refund")) rows.AddRange(await DayPassFinancialRows(dayPasses,db).ToListAsync());
         rows.AddRange(await ExternalFinancialRows(externalQuery,db).ToListAsync());
-        var csv = new List<string[]> { new[] { "رقم الإيصال", "اللاعب / الطرف", "الرياضة", "الفرع", "المجموعة", "الباقة", "المبلغ", "العملة", "طريقة الدفع", "مزود الدفع", "مرجع المزود", "وقت التحصيل", "الاسترداد", "الصافي", "نوع التحصيل" } };
-        csv.AddRange(rows.OrderBy(x=>x.ConfirmedAtUtc).ThenBy(x=>x.CollectionId).Select(x => new[] { x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, x.PaymentMethod, x.Provider, x.ProviderReference, x.ConfirmedAtUtc.ToString("O"), x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), (x.Amount - x.RefundAmount).ToString("0.00", CultureInfo.InvariantCulture), x.CollectionType == "Product" ? "منتج رياضي" : x.CollectionType == "Tournament" ? "رسم بطولة" : x.CollectionType=="External"?"اتفاق خارجي":x.CollectionType=="DayPass"?"زيارة يومية":x.CollectionType=="Void"?"عكس إيصال نقدي":x.CollectionType=="Refund"?"استرداد اشتراك":"اشتراك" }));
+        SetCollectionDates(rows, TimeZoneInfo.FindSystemTimeZoneById(current.TimeZone));
+        var csv = new List<string[]> { new[] { "رقم الإيصال", "اللاعب / الطرف", "الرياضة", "الفرع", "المجموعة", "الباقة", "المبلغ", "العملة", "طريقة الدفع", "مزود الدفع", "مرجع المزود", "تاريخ أو وقت التحصيل", "الاسترداد", "الصافي", "نوع التحصيل" } };
+        csv.AddRange(rows.OrderBy(x => x.ConfirmedAtUtc).ThenBy(x => x.CollectionId).Select(x => new[] {
+            x.ReceiptNumber, x.Player, x.Sport, x.Branch, x.Group, x.Plan, x.Amount.ToString("0.00", CultureInfo.InvariantCulture),
+            x.Currency, x.PaymentMethod, x.HistoricalPaidOn.HasValue ? "تحصيل سابق" : x.Provider, x.ProviderReference,
+            x.HistoricalPaidOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? (x.ConfirmedAtAcademy ?? x.ConfirmedAtUtc).ToString("O", CultureInfo.InvariantCulture),
+            x.RefundAmount.ToString("0.00", CultureInfo.InvariantCulture), x.NetAmount.ToString("0.00", CultureInfo.InvariantCulture),
+            x.CollectionType switch { "Product" => "منتج رياضي", "Tournament" => "رسم بطولة", "External" => "اتفاق خارجي", "DayPass" => "زيارة يومية", "Void" => "عكس إيصال نقدي", "Refund" => "استرداد اشتراك", _ => "اشتراك" }
+        }));
         return Csv(csv, $"financial-collections-{range.From:yyyy-MM}.csv");
+    }
+
+    private static void SetCollectionDates(List<FinancialRow> rows, TimeZoneInfo zone)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            var local = TimeZoneInfo.ConvertTime(row.ConfirmedAtUtc, zone);
+            rows[i] = row.Provider == HistoricalReceiptCalendar.Provider
+                ? row with { HistoricalPaidOn = DateOnly.FromDateTime(local.DateTime), ProviderReference = "" }
+                : row with { ConfirmedAtAcademy = local };
+        }
     }
 
     private static async Task<IResult> AttendanceReport(string? subject, int? month, int? year, DateOnly? from, DateOnly? to, bool? allDates, Guid? sportId, Guid? branchId, Guid? groupId, string? status, string? search, Guid? coachId, int? birthYear, int? page, int? pageSize, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock)
@@ -372,11 +394,16 @@ public static partial class ReportingEndpoints
 
     private static async Task<IResult> ReceiptList(DateOnly? from, DateOnly? to, int? page, int? pageSize, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
+        if (page is < 1 or > 100000) return Results.UnprocessableEntity(new { message = "رقم الصفحة غير صالح." });
         var current = (await tenant.ResolveAsync())!; var range = await FinancialRange(current.AcademyId, from, to, db, clock); if (range.Error is not null) return range.Error;
         var query = db.Receipts.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.PaidAtUtc >= range.StartUtc && x.PaidAtUtc < range.EndUtcExclusive);
         var size = Math.Clamp(pageSize ?? 50, 1, 100); var currentPage = Math.Max(page ?? 1, 1);
-        var rows = await query.OrderByDescending(x => x.PaidAtUtc).Skip((currentPage - 1) * size).Take(size).Select(x => new { x.Id, x.ReceiptNumber, player = x.PlayerNameSnapshot, sport = x.SportNameSnapshot, plan = x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc }).ToListAsync();
-        return Results.Ok(new { totalCount = await query.CountAsync(), page = currentPage, pageSize = size, items = rows });
+        var rows = await query.OrderByDescending(x => x.PaidAtUtc).ThenByDescending(x => x.Id).Skip((currentPage - 1) * size).Take(size)
+            .Select(x => new { x.Id, x.ReceiptNumber, player = x.PlayerNameSnapshot, sport = x.SportNameSnapshot, plan = x.PlanNameSnapshot, x.Amount, x.Currency, x.PaidAtUtc, historical = x.Collection.Provider == HistoricalReceiptCalendar.Provider }).ToListAsync();
+        var zone = rows.Any(row => row.historical) ? await HistoricalReceiptCalendar.AcademyZone(db, current.AcademyId) : null;
+        var items = rows.Select(row => new { row.Id, row.ReceiptNumber, row.player, row.sport, row.plan, row.Amount, row.Currency, row.PaidAtUtc,
+            historicalPaidOn = row.historical ? HistoricalReceiptCalendar.PaidOn(row.PaidAtUtc, zone!) : (DateOnly?)null });
+        return Results.Ok(new { totalCount = await query.CountAsync(), page = currentPage, pageSize = size, from = range.From, to = range.To, items });
     }
 
     private static IQueryable<PaymentCollection> FinancialQuery(Guid academyId, string currency, DateTimeOffset start, DateTimeOffset end, Guid? sportId, Guid? branchId, Guid? planId, string? provider, string? search, FoundationDbContext db)
@@ -496,7 +523,9 @@ public static partial class ReportingEndpoints
         var academy = await db.Academies.AsNoTracking().Where(x => x.Id == academyId).Select(x => new { x.TimeZone, x.DefaultCurrency }).SingleAsync();
         if (allDates && from is null && to is null) return new(DateOnly.MinValue, clock.Today, DateTimeOffset.MinValue, DateTimeOffset.MaxValue, academy.DefaultCurrency, null);
         var end = to ?? clock.Today; var start = from ?? new DateOnly(end.Year, end.Month, 1);
-        if (end < start || end.DayNumber - start.DayNumber > MaxInteractiveDays) return new(start, end, default, default, academy.DefaultCurrency, Validation("range", $"نطاق التاريخ يجب ألا يتجاوز {MaxInteractiveDays} يومًا."));
+        if (end == DateOnly.MaxValue) return new(start, end, default, default, academy.DefaultCurrency, Validation("range", "اختر تاريخ نهاية صالحًا."));
+        if (end < start) return new(start, end, default, default, academy.DefaultCurrency, Validation("range", "تاريخ البداية يجب أن يسبق النهاية أو يساويها."));
+        if (end.DayNumber - start.DayNumber > MaxInteractiveDays) return new(start, end, default, default, academy.DefaultCurrency, Validation("range", $"نطاق التاريخ يجب ألا يتجاوز {MaxInteractiveDays} يومًا."));
         var range = UtcRange(start, end, academy.TimeZone); return new(start, end, range.Start, range.EndExclusive, academy.DefaultCurrency, null);
     }
 
@@ -517,14 +546,24 @@ public static partial class ReportingEndpoints
     internal static (DateTimeOffset Start, DateTimeOffset EndExclusive) UtcRange(DateOnly from, DateOnly to, string timeZoneId)
     {
         var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        var localStart = DateTime.SpecifyKind(from.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
-        var localEnd = DateTime.SpecifyKind(to.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
-        return (new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localStart, zone)), new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEnd, zone)));
+        return (DayBoundaryUtc(from, zone), DayBoundaryUtc(to.AddDays(1), zone));
     }
 
-    internal static IResult Csv(IEnumerable<string[]> rows, string filename)
+    internal static DateTimeOffset DayBoundaryUtc(DateOnly day, TimeZoneInfo zone)
     {
-        var text = string.Join("\r\n", rows.Select(row => string.Join(',', row.Select(CsvCell)))) + "\r\n";
+        var local = day.ToDateTime(TimeOnly.MinValue);
+        // A civil day may start after midnight during a clock change.
+        while (zone.IsInvalidTime(local)) local = local.AddMinutes(1);
+        if (zone.IsAmbiguousTime(local)) return new DateTimeOffset(local, zone.GetAmbiguousTimeOffsets(local).Max()).ToUniversalTime();
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, zone));
+    }
+
+    internal static IResult Csv(IEnumerable<string[]> rows, string filename, int? decimalColumn = null)
+    {
+        var text = string.Join("\r\n", rows.Select(row => string.Join(',', row.Select((value, index) =>
+            index == decimalColumn && decimal.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var amount)
+                ? amount.ToString("0.00", CultureInfo.InvariantCulture)
+                : CsvCell(value))))) + "\r\n";
         var body = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(text)).ToArray();
         return Results.File(body, "text/csv; charset=utf-8", filename);
     }
@@ -546,6 +585,8 @@ public sealed record LatestCollection(Guid ReceiptId, string ReceiptNumber, stri
 public sealed record FinancialRow(Guid CollectionId, Guid ReceiptId, string ReceiptNumber, string Player, string Sport, string Branch, string Group, string Plan, decimal Amount, string Currency, string PaymentMethod, string Provider, string ProviderReference, DateTimeOffset ConfirmedAtUtc, decimal RefundAmount, string CollectionType = "Subscription")
 {
     public decimal NetAmount => Amount - RefundAmount;
+    public DateOnly? HistoricalPaidOn { get; init; }
+    public DateTimeOffset? ConfirmedAtAcademy { get; init; }
 }
 public sealed record PlayerAttendanceRow(Guid Id, DateOnly Date, TimeOnly Time, string PlayerCode, string Player, int BirthYear, string Sport, string Branch, string Group, string Status, bool SessionConsumed);
 public sealed record StaffAttendanceRow(Guid Id, DateOnly Date, TimeOnly Time, string Staff, string Role, string Sport, string Branch, string Group, string Status);

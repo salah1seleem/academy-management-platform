@@ -46,4 +46,35 @@ describe("family cash confirmation", () => {
     spy.mockRestore();
     Storage.prototype.setItem = original;
   });
+  it.each(["partial", "duplicate", "wrong total"])("retains the attempt after a %s successful reply and recovers by reading only", async variant => {
+    const receipts = [
+      { receiptId: "r1", amount: "600.00", currency: "EGP", player: "لاعب اختبار أول", sport: "كرة القدم" },
+      { receiptId: "r2", amount: "634.56", currency: "EGP", player: "لاعب اختبار ثانٍ", sport: "السباحة" },
+    ];
+    const valid = { amount: "1234.56", currency: "EGP", items: receipts };
+    const invalid = variant === "partial" ? { ...valid, items: [receipts[0]] }
+      : variant === "duplicate" ? { ...valid, items: [receipts[0], { ...receipts[1], receiptId: "r1" }] }
+      : { ...valid, amount: "1234.55" };
+    let collects = 0, checks = 0;
+    global.fetch = vi.fn(async path => {
+      if (String(path).endsWith("/csrf")) return response({ token: "csrf" });
+      if (String(path).endsWith("/family-collection-result")) {
+        checks++;
+        return checks === 1 ? response({ status: "Confirmed", ...invalid }) : response({ status: "Confirmed", ...valid });
+      }
+      collects++;
+      return response(invalid);
+    });
+    render(<CashFamilyConfirmation sessionId="shift" body={crossBody} amount="1234.56" currency="EGP" onLocked={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "تحصيل وتجديد كل التسجيلات" }));
+    await screen.findByRole("alert");
+    expect(sessionStorage.getItem("academy-cash-family-pending:shift")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "إعادة إرسال نفس المحاولة" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "التحقق من نتيجة المحاولة" }));
+    expect(await screen.findByRole("link", { name: /إيصال لاعب اختبار ثانٍ · السباحة/ })).toHaveAttribute("href", "/dashboard/subscriptions/receipts/r2");
+    expect(collects).toBe(1);
+    expect(checks).toBe(2);
+    expect(sessionStorage.getItem("academy-cash-family-pending:shift")).toBeNull();
+  });
 });

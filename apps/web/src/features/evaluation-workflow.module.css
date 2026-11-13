@@ -1,0 +1,110 @@
+.evaluationFields {
+  display: grid;
+  gap: 16px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.evaluationFields label {
+  display: grid;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.evaluationFilters {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.evaluationSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  margin-block-end: 16px;
+  border: 1px solid var(--staff-border);
+  background: var(--staff-surface);
+}
+
+.evaluationSummary > div {
+  display: grid;
+  gap: 4px;
+}
+
+.evaluationSummary > div span {
+  color: var(--staff-text-secondary);
+}
+
+.criterion h3 {
+  margin-block: 0 4px;
+}
+
+.criterion small {
+  color: var(--staff-text-secondary);
+}
+
+.criterion details {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.criterion summary {
+  display: list-item;
+  align-content: center;
+  min-block-size: 44px;
+  cursor: pointer;
+}
+
+.criterion input {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.criterion [role="alert"] {
+  color: var(--staff-danger);
+}
+
+.evaluationActions {
+  position: sticky;
+  z-index: 2;
+  inset-block-end: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: var(--staff-surface);
+  border: 1px solid var(--staff-border);
+  margin-block-start: 12px;
+}
+
+.evaluationActions > p {
+  margin: 0;
+}
+
+.evaluationError {
+  padding: 8px 10px;
+  border-inline-start: 3px solid var(--staff-danger);
+  color: var(--staff-danger);
+}
+
+.evaluationButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.evaluationButtons > button {
+  flex: 1 1 auto;
+  min-block-size: 44px;
+}
+
+@media (max-height: 540px) {
+  .evaluationActions {
+    position: static;
+  }
+}

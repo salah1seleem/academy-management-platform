@@ -53,8 +53,9 @@ public static class MatchResults
             var count=credited.GetValueOrDefault(recipient.PlayerId);var notice=prior.SingleOrDefault(n=>n.SubjectPlayerId==recipient.PlayerId&&n.UserId==recipient.UserId);
             if(notice is null&&count==0)continue;
             var correction=notice!=null||!first;
-            var message=!body.IsActive?"أُلغيت المباراة؛ لا تُعتمد نتيجتها السابقة.":!match.ResultFinalized?"نتيجة المباراة قيد المراجعة؛ راجعوا الملخص بعد اعتماد التصحيح.":count==0?$"تصحيح نتيجة: لم تُسجّل أهداف معتمدة باسم {players.GetValueOrDefault(recipient.PlayerId,"اللاعب")} في هذه المباراة.":$"{(correction?"تصحيح نتيجة: ":"")}سجّل {players.GetValueOrDefault(recipient.PlayerId,"اللاعب")} {GoalWords(count)} في مباراة {body.MatchDate:yyyy-MM-dd}.";
-            message+=$" النتيجة: {team.Name} {body.OurScore} – {body.Opponent.Trim()} {body.OpponentScore}.";
+            var message=!body.IsActive?"أُلغيت المباراة؛ لا تُعتمد نتيجتها السابقة.":!match.ResultFinalized?"نتيجة المباراة قيد المراجعة؛ راجعوا الملخص بعد اعتماد التصحيح.":count==0?$"تصحيح نتيجة: لم تُسجّل أهداف معتمدة باسم {players.GetValueOrDefault(recipient.PlayerId,"اللاعب")} في هذه المباراة.":$"{(correction?"تصحيح نتيجة: ":"مبروك! ")}سجّل {players.GetValueOrDefault(recipient.PlayerId,"اللاعب")} {GoalWords(count)} في مباراة {body.MatchDate:yyyy-MM-dd}.";
+            if (body.IsActive && match.ResultFinalized)
+                message += $" النتيجة: {team.Name} {body.OurScore} – {body.Opponent.Trim()} {body.OpponentScore}.";
             if(notice is null){notice=new(){Id=Guid.NewGuid(),AcademyId=match.AcademyId,UserId=recipient.UserId,SubjectPlayerId=recipient.PlayerId,MatchId=match.Id,EventKey="MatchGoals",AudienceRole="Guardian",TargetKind="Matches",TargetId=match.Id,DeduplicationKey=ImportCommitService.Hash(new{kind="MatchGoals",match.Id,player=recipient.PlayerId}),Message=message,CreatedAtUtc=now};db.AcademyNotices.Add(notice);}
             else if(notice.Message!=message){notice.Message=message;notice.IsRead=false;}
             notice.IsActive=!disabled;notice.UpdatedAtUtc=now;

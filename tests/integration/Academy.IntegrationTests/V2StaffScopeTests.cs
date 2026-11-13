@@ -61,6 +61,77 @@ public sealed partial class V2StaffScopeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Owner_renewal_code_keeps_staff_writes_and_reads_in_branch_sport_and_action_scope()
+    {
+        var fixture = await CreateAdmin();
+        using var owner = fixture.Owner;
+        using var admin = fixture.Admin;
+        var data = await Data();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var inBranch = await db.SportEnrollments.SingleAsync(e => e.TrainingGroupId == data.GroupA);
+        var otherBranch = await db.SportEnrollments.SingleAsync(e => e.TrainingGroupId == data.GroupB);
+        var otherSportId = await db.Sports.Where(s => s.AcademyId == inBranch.AcademyId && s.IsActive && s.Id != inBranch.SportId).Select(s => s.Id).FirstAsync();
+        var otherSport = new SportEnrollment { Id = Guid.NewGuid(), AcademyId = inBranch.AcademyId, PlayerId = inBranch.PlayerId,
+            SportId = otherSportId, BranchId = inBranch.BranchId, CreatedAtUtc = inBranch.CreatedAtUtc, UpdatedAtUtc = inBranch.UpdatedAtUtc };
+        db.SportEnrollments.Add(otherSport);
+        await db.SaveChangesAsync();
+        var grantPath = $"/api/v1/manage/staff/{fixture.Member}/access";
+        static string PathFor(Guid id) => $"/api/v1/subscriptions/beneficiary-references/{id}";
+        var path = PathFor(inBranch.Id);
+
+        (await Write(owner, grantPath, Access(data.A))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Write(admin, path + "/regenerate", new { }, false)).StatusCode);
+        (await Write(owner, grantPath, Access(data.A, add: true) with { AllSports = false, Sports = [inBranch.SportId] })).EnsureSuccessStatusCode();
+        foreach (var outside in new[] { otherBranch.Id, otherSport.Id })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(PathFor(outside))).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await Write(admin, PathFor(outside) + "/regenerate", new { }, false)).StatusCode);
+        }
+        (await Write(admin, path + "/regenerate", new { }, false)).EnsureSuccessStatusCode();
+        var profile = await admin.GetFromJsonAsync<JsonElement>($"/api/v1/people/players/{inBranch.PlayerId}");
+        Assert.False(Assert.Single(profile.GetProperty("enrollments").EnumerateArray()).GetProperty("canIssueRenewalCode").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Staff_mobile_only_account_rejects_invalid_prefix_and_serializes_duplicate_identity()
+    {
+        using var first = await Staff(DemoSeed.OwnerEmail);
+        using var second = await Staff(DemoSeed.OwnerEmail);
+        const string route = "/api/v1/manage/staff";
+        var tail = Random.Shared.Next(10000000, 99999999).ToString();
+        var input = new StaffWrite("مدرب اصطناعي بدخول الهاتف", null, "011" + tail, null, AcademyRole.Coach, null);
+        using var invalid = await Write(first, route, input with { Phone = "013" + tail }, false);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
+        var responses = await Task.WhenAll(
+            Write(first, route, input, false),
+            Write(second, route, input with { Phone = "+20 (0) 11" + tail }, false));
+        using var created = Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+        using var conflict = Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
+        var membershipId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var phone = "+2011" + tail;
+        var user = await db.Users.SingleAsync(u => u.PhoneNumber == phone);
+        Assert.Equal(membershipId, (await db.AcademyMemberships.SingleAsync(m => m.UserId == user.Id)).Id);
+        Assert.False(await db.Employees.AnyAsync(e => e.MembershipId == membershipId));
+        Assert.False(await db.Users.AnyAsync(u => u.PhoneNumber == "+2013" + tail));
+
+        using var app = factory.CreateClient();
+        using var request = await app.PostAsJsonAsync("/api/v1/mobile/auth/otp/request", new { phoneNumber = input.Phone });
+        request.EnsureSuccessStatusCode();
+        var challengeId = (await request.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("challengeId").GetGuid();
+        using var verified = await app.PostAsJsonAsync("/api/v1/mobile/auth/otp/verify", new { phoneNumber = phone, challengeId, code = "246810", deviceName = "اختبار حساب الفريق" });
+        verified.EnsureSuccessStatusCode();
+        var session = await verified.Content.ReadFromJsonAsync<JsonElement>();
+        app.DefaultRequestHeaders.Authorization = new("Bearer", session.GetProperty("accessToken").GetString());
+        Assert.Empty((await app.GetFromJsonAsync<JsonElement>("/api/v1/coach/groups")).EnumerateArray());
+        Assert.Equal(HttpStatusCode.Forbidden, (await app.GetAsync(route)).StatusCode);
+    }
+
+    [Fact]
     public async Task Branch_scope_filters_lists_nested_profiles_sessions_reports_and_rejects_IDOR()
     {
         var fixture = await CreateAdmin(); using var owner = fixture.Owner; using var admin = fixture.Admin;

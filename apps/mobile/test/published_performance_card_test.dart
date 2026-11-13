@@ -112,8 +112,8 @@ void main() {
         ),
       );
       expect(find.text('50'), findsOneWidget);
-      expect(find.text('متوسط التقييم'), findsOneWidget);
-      expect(find.text('التقييم غير مكتمل'), findsOneWidget);
+      expect(find.text('متوسط الأداء'), findsOneWidget);
+      expect(find.text('التقييم غير مكتمل'), findsNothing);
       expect(find.textContaining('2 من 3 معايير'), findsOneWidget);
       expect(
         t

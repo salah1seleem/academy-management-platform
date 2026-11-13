@@ -5,6 +5,8 @@ using Academy.Infrastructure.People;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Structure;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Slice2;
@@ -178,9 +180,12 @@ public static class Slice2DashboardEndpoints
         await db.SaveChangesAsync(); return Results.NoContent();
     }
 
-    private static async Task<IResult> GetPlayer(Guid playerId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time)
+    private static async Task<IResult> GetPlayer(Guid playerId, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock, TimeProvider time, HttpContext http, IAuthorizationService authorization)
     {
         var current = (await tenant.ResolveAsync())!;
+        var canIssueCode = current.Role == AcademyRole.AcademyOwner &&
+            (await authorization.AuthorizeAsync(http.User, AcademyPermissions.SubscriptionPlanManage)).Succeeded;
+        var eligibleCodes = BeneficiaryRenewalCodes.EligibleEnrollments(db, current.AcademyId);
         var groupDate = await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, time);
         var player = await db.Players.AsNoTracking().Where(x => x.AcademyId == current.AcademyId && x.Id == playerId).Select(x => new
         {
@@ -202,6 +207,7 @@ public static class Slice2DashboardEndpoints
                 transfers = db.EnrollmentGroupTransfers.Where(tr => tr.SportEnrollmentId == e.Id).OrderByDescending(tr => tr.EffectiveDate).Select(tr => new { tr.EffectiveDate, groupName = db.TrainingGroups.Where(g => g.Id == tr.TargetGroupId).Select(g => g.ArabicName).FirstOrDefault() }).ToList(),
                 sessionMoves = db.EnrollmentSessionMoves.Where(m => m.SportEnrollmentId == e.Id).OrderByDescending(m => m.CreatedAtUtc).Select(m => new { m.SourceSessionId, m.TargetSessionId, m.BatchId, date = db.TrainingSessions.Where(s => s.Id == m.TargetSessionId).Select(s => s.SessionDate).First(), group = db.TrainingGroups.Where(g => g.Id == m.TargetGroupId).Select(g => g.ArabicName).First() }).ToList(),
                 status = e.Status.ToString(),
+                canIssueRenewalCode = canIssueCode && eligibleCodes.Any(eligible => eligible.Id == e.Id),
                 subscription = db.SubscriptionPeriods.Where(period => period.AcademyId == current.AcademyId && period.SportEnrollmentId == e.Id)
                     .OrderByDescending(period => period.UpdatedAtUtc)
                     .Select(period => new

@@ -2,10 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Academy.Api.Auth;
+using Academy.Api.Operations;
 using Academy.Api.Slice2;
 using Academy.Api.Slice3;
+using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Subscriptions;
+using Academy.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -45,12 +48,379 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         try { var details = await Details(); Assert.Equal("2026-09-28", details.GetProperty("previewStart").GetString()); }
         finally { foreach (var (period, state) in states) period.Status = state; await db.SaveChangesAsync(); }
     }
+
+    [Theory]
+    [InlineData(SubscriptionPeriodStatus.Active, SubscriptionPlanType.Duration, "2026-09-01", "2026-09-27", null, "Expired")]
+    [InlineData(SubscriptionPeriodStatus.Active, SubscriptionPlanType.Sessions, "2026-09-01", null, 0, "Expired")]
+    [InlineData(SubscriptionPeriodStatus.Frozen, SubscriptionPlanType.Duration, "2026-09-01", "2026-09-27", null, "Frozen")]
+    [InlineData(SubscriptionPeriodStatus.Active, SubscriptionPlanType.Duration, "2026-09-29", "2026-10-29", null, "Scheduled")]
+    public async Task Search_and_review_show_the_same_effective_period_status(SubscriptionPeriodStatus storedStatus,
+        SubscriptionPlanType planType, string start, string? end, int? sessions, string expected)
+    {
+        var enrollmentId = await Enrollment();
+        var planId = planType == SubscriptionPlanType.Sessions ? Slice3DemoSeed.FootballSessionsId : Slice3DemoSeed.FootballMonthlyId;
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var created = await Json(await Post(owner, "/api/v1/subscriptions/admin-renewals",
+            new { sportEnrollmentId = enrollmentId, subscriptionPlanId = planId }, Key()));
+        var paymentId = created.GetProperty("paymentId").GetGuid();
+        await Simulate(paymentId, "Success");
+
+        await using var scope = Scope();
+        var db = Db(scope);
+        var code = await db.SportEnrollments.Where(x => x.Id == enrollmentId).Select(x => x.Player.PlayerCode).SingleAsync();
+        var period = await db.SubscriptionPeriods.SingleAsync(x => x.Collection.PaymentRequestId == paymentId);
+        var previous = (await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollmentId && p.Id != period.Id)
+            .ToListAsync()).Select(p => (Period: p, p.Status)).ToArray();
+        try
+        {
+            foreach (var (older, _) in previous) older.Status = SubscriptionPeriodStatus.Cancelled;
+            period.Status = storedStatus;
+            period.StartDate = DateOnly.ParseExact(start, "yyyy-MM-dd");
+            period.EndDate = end is null ? null : DateOnly.ParseExact(end, "yyyy-MM-dd");
+            period.RemainingSessions = sessions;
+            await db.SaveChangesAsync();
+
+            var results = await Search(code);
+            var row = Assert.Single(results.EnumerateArray(), x => x.GetProperty("id").GetGuid() == enrollmentId);
+            var review = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/admin-renewals/enrollments/{enrollmentId}");
+            Assert.Equal(period.Id, row.GetProperty("period").GetProperty("id").GetGuid());
+            Assert.Equal(period.Id, review.GetProperty("current").GetProperty("id").GetGuid());
+            Assert.Equal(expected, row.GetProperty("period").GetProperty("status").GetString());
+            Assert.Equal(expected, review.GetProperty("current").GetProperty("status").GetString());
+        }
+        finally
+        {
+            foreach (var (older, state) in previous) older.Status = state;
+            await db.SaveChangesAsync();
+        }
+    }
+
     [Fact] public async Task Owner_can_create_admin_renewal() { using var c = await Staff(DemoSeed.OwnerEmail); Assert.Equal(HttpStatusCode.Created, (await Create(c)).StatusCode); }
     [Fact] public async Task Admin_can_create_admin_renewal() { using var c = await Staff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.Created, (await Create(c)).StatusCode); }
     [Fact] public async Task Idempotency_key_is_required() { using var c = await Staff(DemoSeed.OwnerEmail); var r = await Post(c, "/api/v1/subscriptions/admin-renewals", Body(), null); Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode); }
     [Fact] public async Task Same_idempotency_key_replays_same_result() { using var c = await Staff(DemoSeed.OwnerEmail); var key = Key(); var first = await Create(c, key); var second = await Create(c, key); Assert.Equal((await Json(first)).GetProperty("paymentId").GetGuid(), (await Json(second)).GetProperty("paymentId").GetGuid()); }
     [Fact] public async Task Reusing_a_key_for_a_different_plan_is_rejected_without_a_second_request() { using var c = await Staff(DemoSeed.OwnerEmail); var key = Key(); (await Create(c, key)).EnsureSuccessStatusCode(); var r = await Post(c, "/api/v1/subscriptions/admin-renewals", new { sportEnrollmentId = await Enrollment(), subscriptionPlanId = Slice3DemoSeed.SwimmingMonthlyId }, key); Assert.Equal(HttpStatusCode.Conflict, r.StatusCode); }
     [Fact] public async Task Second_open_renewal_is_rejected() { using var c = await Staff(DemoSeed.OwnerEmail); (await Create(c)).EnsureSuccessStatusCode(); Assert.Equal(HttpStatusCode.Conflict, (await Create(c)).StatusCode); }
+
+    [Fact]
+    public async Task Staff_quote_is_read_only_and_posting_uses_the_quoted_amount_and_terms()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var enrollment = await Enrollment();
+        var plans = (await Details()).GetProperty("plans");
+        var demoPlans = new[] { Slice3DemoSeed.FootballMonthlyId, Slice3DemoSeed.FootballQuarterlyId,
+            Slice3DemoSeed.FootballAnnualId, Slice3DemoSeed.FootballSessionsId };
+        foreach (var id in demoPlans)
+        {
+            var plan = Assert.Single(plans.EnumerateArray(), p => p.GetProperty("id").GetGuid() == id);
+            var quote = await ReadQuote(owner, enrollment, id);
+            Assert.Equal(enrollment, quote.EnrollmentId);
+            Assert.Equal(id, quote.PlanId);
+            Assert.Equal(plan.GetProperty("price").GetDecimal(), quote.OriginalAmount);
+            Assert.Equal(quote.OriginalAmount - quote.DiscountAmount, quote.FinalAmount);
+            var months = plan.GetProperty("durationMonths");
+            var days = plan.GetProperty("durationDays");
+            var sessions = plan.GetProperty("sessionCount");
+            Assert.Equal(months.ValueKind == JsonValueKind.Number ? quote.Start.AddMonths(months.GetInt32()).AddDays(-1)
+                : days.ValueKind == JsonValueKind.Number ? quote.Start.AddDays(days.GetInt32() - 1) : (DateOnly?)null, quote.End);
+            Assert.Equal(sessions.ValueKind == JsonValueKind.Number ? sessions.GetInt32() : (int?)null, quote.Sessions);
+        }
+        Assert.Equal(0, await Count<RenewalRequest>(r => r.IdempotencyKey.StartsWith(Prefix)));
+
+        var sessionsPlan = Slice3DemoSeed.FootballSessionsId;
+        var selected = await ReadQuote(owner, enrollment, sessionsPlan);
+        using var created = await Post(owner, "/api/v1/subscriptions/admin-renewals", new
+            { sportEnrollmentId = enrollment, subscriptionPlanId = sessionsPlan, expectedQuoteHash = selected.QuoteHash }, Key());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var ids = (await created.Content.ReadFromJsonAsync<CreatedDto>())!;
+        Assert.Equal(0, await Count<PaymentCollection>(c => c.PaymentRequestId == ids.PaymentId));
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.GetAsync(QuotePath(enrollment, sessionsPlan))).StatusCode);
+        await Simulate(ids.PaymentId, "Success");
+        await Simulate(ids.PaymentId, "Success");
+        await using var scope = Scope(); var db = Db(scope);
+        var collected = await db.PaymentRequests.SingleAsync(p => p.Id == ids.PaymentId);
+        Assert.Equal(selected.FinalAmount, collected.Amount);
+        var period = await db.SubscriptionPeriods.SingleAsync(p => p.Collection.PaymentRequestId == ids.PaymentId);
+        Assert.Equal(selected.Start, period.StartDate);
+        Assert.Equal(selected.End, period.EndDate);
+        Assert.Equal(selected.Sessions, period.InitialSessions);
+        Assert.Equal(1, await Count<Receipt>(r => r.Collection.PaymentRequestId == ids.PaymentId));
+    }
+
+    [Fact]
+    public async Task A_changed_plan_rejects_the_quote_and_a_committed_key_still_replays_after_another_change()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var enrollment = await Enrollment(); var planId = Slice3DemoSeed.FootballMonthlyId;
+        var original = await ReadQuote(owner, enrollment, planId);
+        await using var scope = Scope(); var db = Db(scope);
+        var plan = await db.SubscriptionPlans.SingleAsync(x => x.Id == planId);
+        var before = (plan.Price, plan.Revision);
+        try
+        {
+            plan.Price += 25; plan.Revision++;
+            await db.SaveChangesAsync();
+            object Body(string hash) => new { sportEnrollmentId = enrollment, subscriptionPlanId = planId, expectedQuoteHash = hash };
+            using var stale = await Post(owner, "/api/v1/subscriptions/admin-renewals", Body(original.QuoteHash), Key());
+            Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+            Assert.Contains("تغيّر السعر", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());
+            Assert.Equal(0, await Count<RenewalRequest>(r => r.IdempotencyKey.StartsWith(Prefix)));
+            var updated = await ReadQuote(owner, enrollment, planId);
+            Assert.Equal(original.OriginalAmount + 25, updated.OriginalAmount);
+            var key = Key();
+            var created = await Json(await Post(owner, "/api/v1/subscriptions/admin-renewals", Body(updated.QuoteHash), key));
+            plan.Price += 10; plan.Revision++;
+            await db.SaveChangesAsync();
+            var replay = await Json(await Post(owner, "/api/v1/subscriptions/admin-renewals", Body(updated.QuoteHash), key));
+            Assert.Equal(created.GetProperty("paymentId").GetGuid(), replay.GetProperty("paymentId").GetGuid());
+            Assert.Equal(1, await Count<RenewalRequest>(r => r.IdempotencyKey.StartsWith(Prefix)));
+        }
+        finally { (plan.Price, plan.Revision) = before; await db.SaveChangesAsync(); }
+    }
+
+    [Fact]
+    public async Task A_new_discount_and_changed_prior_period_each_invalidate_the_quote()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var enrollment = await Enrollment(); var planId = Slice3DemoSeed.FootballMonthlyId;
+        var original = await ReadQuote(owner, enrollment, planId);
+        await using var scope = Scope(); var db = Db(scope);
+        var period = await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollment && p.EndDate != null && p.Status != SubscriptionPeriodStatus.Cancelled)
+            .OrderByDescending(p => p.EndDate).FirstAsync();
+        var oldEnd = period.EndDate;
+        var ruleId = Guid.Parse("b5ce42b5-47f1-4e3f-acdb-e89c85f73f50");
+        var now = DateTimeOffset.UtcNow;
+        var rule = await db.DiscountRules.SingleOrDefaultAsync(r => r.Id == ruleId);
+        if (rule is null)
+        {
+            rule = new DiscountRule
+            {
+                Id = ruleId, AcademyId = DemoSeed.NogoomAcademyId, ArabicName = "خصم اختبار التجديد",
+                Reason = "تحديث الخصم", Percentage = 50, SubscriptionPlanId = planId, Revision = 1,
+                IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now
+            };
+            db.DiscountRules.Add(rule);
+            db.DiscountRuleVersions.Add(DiscountRuleVersion.Create(rule, null, now));
+        }
+        var link = new PlayerDiscountLink { Id = Guid.NewGuid(), AcademyId = rule.AcademyId, DiscountRuleId = rule.Id, PlayerId = Slice2DemoSeed.OtherPlayerId,
+            IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now };
+        db.PlayerDiscountLinks.Add(link);
+        await db.SaveChangesAsync();
+        try
+        {
+            Task<HttpResponseMessage> CreateFrom(StaffRenewalQuote quote) => Post(owner, "/api/v1/subscriptions/admin-renewals", new
+                { sportEnrollmentId = enrollment, subscriptionPlanId = planId, expectedQuoteHash = quote.QuoteHash }, Key());
+            Assert.Equal(HttpStatusCode.Conflict, (await CreateFrom(original)).StatusCode);
+            var discounted = await ReadQuote(owner, enrollment, planId);
+            Assert.Equal(original.OriginalAmount / 2, discounted.DiscountAmount);
+            Assert.Equal(original.OriginalAmount / 2, discounted.FinalAmount);
+            period.EndDate = discounted.Start.AddDays(2);
+            await db.SaveChangesAsync();
+            Assert.Equal(HttpStatusCode.Conflict, (await CreateFrom(discounted)).StatusCode);
+            var extended = await ReadQuote(owner, enrollment, planId);
+            Assert.Equal(discounted.Start.AddDays(3), extended.Start);
+            Assert.Equal(discounted.FinalAmount, extended.FinalAmount);
+            Assert.Equal(0, await Count<RenewalRequest>(r => r.IdempotencyKey.StartsWith(Prefix)));
+            var periodsBefore = await Count<SubscriptionPeriod>(p => p.SportEnrollmentId == enrollment);
+            using var created = await CreateFrom(extended);
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var ids = (await created.Content.ReadFromJsonAsync<CreatedDto>())!;
+            var payment = await db.PaymentRequests.AsNoTracking().SingleAsync(p => p.Id == ids.PaymentId);
+            var renewal = await db.RenewalRequests.AsNoTracking().SingleAsync(r => r.Id == ids.RenewalId);
+            Assert.Equal(extended.FinalAmount, payment.Amount);
+            Assert.Equal(extended.DiscountAmount, renewal.DiscountAmount);
+            Assert.Equal(rule.Id, renewal.DiscountRuleIdSnapshot);
+            Assert.Equal(PaymentRequestStatus.Pending, payment.Status);
+            Assert.Equal(periodsBefore, await Count<SubscriptionPeriod>(p => p.SportEnrollmentId == enrollment));
+            Assert.Equal(0, await Count<PaymentCollection>(c => c.PaymentRequestId == ids.PaymentId));
+            Assert.Equal(0, await Count<Receipt>(r => r.Collection.PaymentRequestId == ids.PaymentId));
+        }
+        finally
+        {
+            period.EndDate = oldEnd;
+            db.PlayerDiscountLinks.Remove(link);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Staff_quotes_reject_other_academies_wrong_sports_and_coaches()
+    {
+        var enrollment = await Enrollment(); var plan = Slice3DemoSeed.FootballMonthlyId;
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        using var coach = await Staff(DemoSeed.CoachEmail);
+        using var guardian = await Guardian();
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(QuotePath(enrollment, plan))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(QuotePath(enrollment, Slice3DemoSeed.SwimmingMonthlyId))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync(QuotePath(enrollment, plan))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(QuotePath(enrollment, plan))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Calendar_month_quote_at_month_end_uses_only_plans_published_to_the_enrollment_branch()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var enrollment = await Enrollment();
+        await using var scope = Scope(); var db = Db(scope);
+        var branch = await db.SportEnrollments.Where(x => x.Id == enrollment).Select(x => x.BranchId).SingleAsync();
+        var other = await db.Branches.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Id != branch && x.IsActive)
+            .OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+        var period = await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollment && p.EndDate != null && p.Status != SubscriptionPeriodStatus.Cancelled)
+            .OrderByDescending(p => p.EndDate).FirstAsync();
+        var oldEnd = period.EndDate;
+        var now = DateTimeOffset.UtcNow;
+        var available = Guid.NewGuid();
+        var unavailable = Guid.NewGuid();
+        var createdPlans = new[] { available, unavailable };
+        try
+        {
+            foreach (var (id, publication) in new[] { (available, branch), (unavailable, other) })
+            {
+                db.SubscriptionPlans.Add(new SubscriptionPlan
+                {
+                    Id = id, AcademyId = DemoSeed.NogoomAcademyId, SportId = Slice2DemoSeed.FootballId,
+                    ArabicName = $"شهر تقويمي لاختبار التجديد {id:N}", PlanType = SubscriptionPlanType.Duration,
+                    DurationMonths = 1, Price = 600m, Currency = "EGP", AllBranches = false, Revision = 1,
+                    CreatedAtUtc = now, UpdatedAtUtc = now
+                });
+                db.PlanBranchPublications.Add(new PlanBranchPublication
+                {
+                    Id = Guid.NewGuid(), AcademyId = DemoSeed.NogoomAcademyId, SubscriptionPlanId = id,
+                    BranchId = publication, CreatedAtUtc = now, UpdatedAtUtc = now
+                });
+            }
+            period.EndDate = new DateOnly(2027, 1, 30);
+            await db.SaveChangesAsync();
+            var quote = await ReadQuote(owner, enrollment, available);
+            Assert.Equal(new DateOnly(2027, 1, 31), quote.Start);
+            Assert.Equal(new DateOnly(2027, 2, 27), quote.End);
+            Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(QuotePath(enrollment, unavailable))).StatusCode);
+            Assert.Equal(0, await Count<RenewalRequest>(r => r.IdempotencyKey.StartsWith(Prefix)));
+        }
+        finally
+        {
+            period.EndDate = oldEnd;
+            await db.SaveChangesAsync();
+            await db.PlanBranchPublications.Where(x => createdPlans.Contains(x.SubscriptionPlanId)).ExecuteDeleteAsync();
+            await db.SubscriptionPlans.Where(x => createdPlans.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+    }
+
+    private static string QuotePath(Guid enrollment, Guid plan) => $"/api/v1/subscriptions/admin-renewals/enrollments/{enrollment}/quote?planId={plan}";
+    private static async Task<StaffRenewalQuote> ReadQuote(HttpClient owner, Guid enrollment, Guid plan)
+        => (await owner.GetFromJsonAsync<StaffRenewalQuote>(QuotePath(enrollment, plan)))!;
+
+    [Fact]
+    public async Task Renewal_search_and_review_show_the_active_period_before_a_paid_future_period()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var enrollment = await Enrollment();
+        await using var scope = Scope(); var db = Db(scope);
+        var code = await db.SportEnrollments.Where(e => e.Id == enrollment).Select(e => e.Player.PlayerCode).SingleAsync();
+        var active = await db.SubscriptionPeriods.Where(p => p.SportEnrollmentId == enrollment &&
+            p.EndDate != null && p.Status == SubscriptionPeriodStatus.Active)
+            .OrderByDescending(p => p.EndDate).FirstAsync();
+        var original = (active.StartDate, active.EndDate, active.UpdatedAtUtc);
+        var today = new DateOnly(2026, 9, 28);
+        try
+        {
+            active.StartDate = today.AddDays(-30);
+            active.EndDate = today.AddDays(14);
+            await db.SaveChangesAsync();
+            var payment = await Created();
+            await Simulate(payment.PaymentId, "Success");
+            var paid = await db.SubscriptionPeriods.AsNoTracking().SingleAsync(p => p.Collection!.PaymentRequestId == payment.PaymentId);
+            Assert.Equal(SubscriptionPeriodStatus.Scheduled, paid.Status);
+            async Task AssertDisplay(Guid id, string status)
+            {
+                var search = (await Search(code)).EnumerateArray().Single(r => r.GetProperty("id").GetGuid() == enrollment);
+                foreach (var period in new[] { search.GetProperty("period"), (await Details()).GetProperty("current") })
+                {
+                    Assert.Equal(id, period.GetProperty("id").GetGuid());
+                    Assert.Equal(status, period.GetProperty("status").GetString());
+                }
+            }
+            await AssertDisplay(active.Id, "Active");
+            Assert.Equal(paid.EndDate!.Value.AddDays(1), (await ReadQuote(owner, enrollment, Slice3DemoSeed.FootballMonthlyId)).Start);
+            active.EndDate = today.AddDays(-2);
+            active.UpdatedAtUtc = paid.UpdatedAtUtc.AddHours(1);
+            await db.SaveChangesAsync();
+            await AssertDisplay(paid.Id, "Scheduled");
+        }
+        finally
+        {
+            (active.StartDate, active.EndDate, active.UpdatedAtUtc) = original;
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Existing_renewal_can_be_resumed_only_with_authorized_payment_read()
+    {
+        var enrollment = await Enrollment();
+        var created = await Created();
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var path = $"/api/v1/subscriptions/admin-renewals/enrollments/{enrollment}";
+        var paymentPath = $"/api/v1/subscriptions/payments/{created.PaymentId}";
+        var details = await owner.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal("Single", details.GetProperty("openRenewal").GetProperty("kind").GetString());
+        Assert.Equal(created.PaymentId, details.GetProperty("openRenewal").GetProperty("paymentId").GetGuid());
+        Assert.Equal(HttpStatusCode.Conflict, (await Create(owner)).StatusCode);
+        Assert.Equal(0, await Count<PaymentCollection>(c => c.PaymentRequestId == created.PaymentId));
+
+        var email = $"renewal-scope.{Guid.NewGuid():N}@example.test";
+        using var registered = await Post(owner, "/api/v1/manage/staff",
+            new StaffWrite("إداري اختبار استكمال التجديد", email, "010" + Random.Shared.Next(10000000, 99999999), "Demo-Only-123!", AcademyRole.AcademyAdmin, "اختبار"), null);
+        registered.EnsureSuccessStatusCode();
+        var member = (await registered.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        using var admin = await Staff(email);
+        async Task Grant(bool canReadPayments, bool canReadSubscriptions = true, bool canCollect = false)
+        {
+            var actions = StaffAccessRules.Modules.Select(module => new StaffActionValue(module,
+                module == "subscriptions" && canReadSubscriptions || module == "payments" && canReadPayments,
+                module == "payments" && canCollect, false, false)).ToArray();
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/manage/staff/{member}/access")
+            { Content = JsonContent.Create(new StaffAccessWrite(true, [], actions)) };
+            request.Headers.Add("X-CSRF-TOKEN", (await owner.GetFromJsonAsync<Csrf>("/api/v1/auth/csrf"))!.Token);
+            (await owner.SendAsync(request)).EnsureSuccessStatusCode();
+        }
+        await Grant(false);
+        var restricted = await admin.GetFromJsonAsync<JsonElement>(path);
+        Assert.False(restricted.GetProperty("canReadPayment").GetBoolean());
+        Assert.Equal("Single", restricted.GetProperty("openRenewal").GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, restricted.GetProperty("openRenewal").GetProperty("paymentId").ValueKind);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(paymentPath)).StatusCode);
+        const string queue = "/api/v1/manage/payment-requests?type=Renewal&allDates=true&status=Pending";
+        async Task<bool> CanOpen() => Assert.Single((await admin.GetFromJsonAsync<JsonElement>(queue))
+            .GetProperty("items").EnumerateArray(), row => row.GetProperty("id").GetGuid() == created.PaymentId)
+            .GetProperty("canOpen").GetBoolean();
+        await Grant(true, canReadSubscriptions: false);
+        Assert.False(await CanOpen());
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(paymentPath)).StatusCode);
+        await Grant(true);
+        var allowed = await admin.GetFromJsonAsync<JsonElement>(path);
+        Assert.True(allowed.GetProperty("canReadPayment").GetBoolean());
+        Assert.Equal(created.PaymentId, allowed.GetProperty("openRenewal").GetProperty("paymentId").GetGuid());
+        Assert.True(await CanOpen());
+        var readOnly = await admin.GetFromJsonAsync<JsonElement>(paymentPath);
+        foreach (var action in new[] { "canCollect", "canCollectCash", "canReviewProof", "canRetry", "canSimulate", "canEditDiscount" })
+            Assert.False(readOnly.GetProperty(action).GetBoolean(), action);
+        var collectionPath = $"/api/v1/manage/payments/{created.PaymentId}/collect";
+        Assert.Equal(HttpStatusCode.Forbidden, (await Post(admin, collectionPath, new { paymentMethod = "Online" }, null)).StatusCode);
+        await Grant(true, canCollect: true);
+        var collecting = await admin.GetFromJsonAsync<JsonElement>(paymentPath);
+        Assert.True(collecting.GetProperty("canCollect").GetBoolean());
+        Assert.False(collecting.GetProperty("canCollectCash").GetBoolean());
+        Assert.False(collecting.GetProperty("canReviewProof").GetBoolean());
+        await Grant(false);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(queue)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Post(admin, collectionPath, new { paymentMethod = "Online" }, null)).StatusCode);
+        Assert.Equal(0, await Count<PaymentCollection>(c => c.PaymentRequestId == created.PaymentId));
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(paymentPath)).StatusCode);
+    }
     [Fact] public async Task Concurrent_open_renewals_create_only_one_request() { using var first = await Staff(DemoSeed.OwnerEmail); using var second = await Staff(DemoSeed.AdminEmail); var responses = await Task.WhenAll(Create(first), Create(second)); Assert.Single(responses, x => x.IsSuccessStatusCode); Assert.Single(responses, x => x.StatusCode == HttpStatusCode.Conflict); }
     [Fact] public async Task Creation_persists_renewal_request() { var created = await Created(); Assert.Equal(1, await Count<RenewalRequest>(x => x.Id == created.RenewalId)); }
     [Fact] public async Task Creation_persists_payment_request() { var created = await Created(); Assert.Equal(1, await Count<PaymentRequest>(x => x.Id == created.PaymentId)); }
@@ -84,6 +454,7 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         var amount=pending.GetProperty("finalAmount").GetDecimal();var url=$"/api/v1/manage/payments/{created.PaymentId}/collect";
         var changed=(amount+1).ToString("0.00",System.Globalization.CultureInfo.InvariantCulture);
         Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,url,new{paymentMethod="Online",expectedAmount=changed},null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,url,new{paymentMethod="Online",expectedAmount="0"},null)).StatusCode);
         Assert.Equal(0,await Count<PaymentCollection>(c=>c.PaymentRequestId==created.PaymentId));
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Post(owner,url,new{paymentMethod="Online",expectedAmount="1,000"},null)).StatusCode);
         var body=new{paymentMethod="Online",expectedAmount=amount.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture)};
@@ -95,6 +466,8 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
         var receipt=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/receipts/{saved.GetProperty("receiptId").GetGuid()}");
         Assert.Equal(amount,receipt.GetProperty("amount").GetDecimal());
         Assert.Equal("Online",receipt.GetProperty("paymentMethod").GetString());
+        Assert.Equal(pending.GetProperty("providerReference").GetString(), receipt.GetProperty("providerReference").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(receipt.GetProperty("providerReference").GetString()));
         Assert.Equal(saved.GetProperty("receiptId").GetGuid(),period.GetProperty("receiptId").GetGuid());
         Assert.Equal(1,await Count<PaymentCollection>(c=>c.PaymentRequestId==created.PaymentId));
         Assert.Equal(1,await Count<SubscriptionPeriod>(p=>p.Collection.PaymentRequestId==created.PaymentId));

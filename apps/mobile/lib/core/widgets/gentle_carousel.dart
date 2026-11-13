@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Slow RTL-aware travel. Pauses for touch, reduced motion, backgrounding and
-/// a pushed route; never duplicates interactive cards for an endless loop.
+/// Slow RTL-aware travel. A touch or keyboard interaction stops automatic
+/// travel for this mounted rail so a card never moves away during a decision.
+/// Covered/inactive routes and accessibility settings suspend automatic travel.
 class GentleCarousel extends StatefulWidget {
   const GentleCarousel({
     super.key,
@@ -23,8 +24,7 @@ class _GentleCarouselState extends State<GentleCarousel>
     with WidgetsBindingObserver {
   final scroll = ScrollController();
   Timer? timer;
-  bool forward = true, foreground = true;
-  DateTime resumeAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool forward = true, foreground = true, interacted = false;
   @override
   void initState() {
     super.initState();
@@ -34,17 +34,41 @@ class _GentleCarouselState extends State<GentleCarousel>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(GentleCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.count != widget.count) syncTimer();
+  }
+
+  void syncTimer() {
     timer?.cancel();
-    if (!MediaQuery.disableAnimationsOf(context) &&
+    if (!interacted &&
+        foreground &&
+        widget.count > 1 &&
+        TickerMode.valuesOf(context).enabled &&
+        !MediaQuery.disableAnimationsOf(context) &&
         !MediaQuery.accessibleNavigationOf(context)) {
       timer = Timer.periodic(const Duration(seconds: 4), (_) => advance());
+    }
+  }
+
+  void stopForInteraction() {
+    if (interacted) return;
+    interacted = true;
+    timer?.cancel();
+    if (scroll.hasClients && scroll.position.isScrollingNotifier.value) {
+      scroll.jumpTo(scroll.offset);
     }
   }
 
   void advance() {
     if (!mounted ||
         !foreground ||
-        DateTime.now().isBefore(resumeAt) ||
+        interacted ||
+        !TickerMode.valuesOf(context).enabled ||
         ModalRoute.of(context)?.isCurrent == false ||
         !scroll.hasClients ||
         widget.count < 2) {
@@ -70,6 +94,7 @@ class _GentleCarouselState extends State<GentleCarousel>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
+    syncTimer();
   }
 
   @override
@@ -81,19 +106,25 @@ class _GentleCarouselState extends State<GentleCarousel>
   }
 
   @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: (_) =>
-        resumeAt = DateTime.now().add(const Duration(seconds: 8)),
-    child: SizedBox(
-      height: widget.height,
-      child: ListView.separated(
-        controller: scroll,
-        scrollDirection: Axis.horizontal,
-        itemCount: widget.count,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => SizedBox(
-          width: widget.width,
-          child: widget.itemBuilder(context, index),
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onFocusChange: (focused) {
+      if (focused) stopForInteraction();
+    },
+    child: Listener(
+      onPointerDown: (_) => stopForInteraction(),
+      child: SizedBox(
+        height: widget.height,
+        child: ListView.separated(
+          controller: scroll,
+          scrollDirection: Axis.horizontal,
+          itemCount: widget.count,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (context, index) => SizedBox(
+            width: widget.width,
+            child: widget.itemBuilder(context, index),
+          ),
         ),
       ),
     ),

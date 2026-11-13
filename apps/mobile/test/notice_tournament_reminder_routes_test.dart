@@ -70,7 +70,7 @@ void main() {
           expect(find.text('لاعب اختبار خيالي'), findsNothing);
         } else {
           expect(find.text('TRN-SAVED-TEST'), findsOneWidget);
-          expect(find.text('تم تأكيد التحصيل'), findsOneWidget);
+          expect(find.text('المبلغ المحصّل'), findsOneWidget);
         }
         expect(calls.any((c) => !c.startsWith('GET ')), false);
         expect(calls.any((c) => c.contains('/subscriptions/receipts/')), false);
@@ -103,6 +103,17 @@ void main() {
               ],
             };
           }
+          if (p == '/api/v1/guardian/receivables') {
+            return {
+              'asOf': '2026-11-13T01:00:00Z',
+              'currency': 'EGP',
+              'outstanding': '246.75',
+              'overdue': '215.75',
+              'notYetDue': '31.00',
+              'overpaymentCredit': '0.00',
+              'items': [],
+            };
+          }
           if (p == '/api/v1/guardian/subscriptions/enrollments') return [];
           return {};
         });
@@ -114,10 +125,18 @@ void main() {
         await t.pumpAndSettle();
         expect(
           kind == 'Receivables'
-              ? find.byType(ReceivableBalances)
+              ? find.byType(ReceivableBalancesPage)
               : find.byType(RenewalPicker),
           findsOneWidget,
         );
+        if (kind == 'Receivables') {
+          expect(find.text('أرصدة الأسرة'), findsOneWidget);
+          expect(find.text('246.75 ج.م'), findsOneWidget);
+          expect(find.text('215.75 ج.م'), findsOneWidget);
+          Navigator.of(t.element(find.byType(ReceivableBalancesPage))).pop();
+          await t.pumpAndSettle();
+          expect(find.text('تذكير داخلي اصطناعي'), findsOneWidget);
+        }
         expect(calls.any((c) => !c.startsWith('GET ')), false);
         expect(calls.any((c) => c.contains('/null')), false);
         expect(t.takeException(), isNull);
@@ -126,4 +145,62 @@ void main() {
       },
     );
   }
+
+  testWidgets('staff inbox does not link to family balances', (t) async {
+    final calls = <String>[];
+    final auth = await authenticate('AcademyAdmin', (m, p, b, token) async {
+      calls.add('$m $p');
+      return {
+        'unread': 0,
+        'total': 1,
+        'items': [
+          {
+            'id': 'staff-reminder',
+            'message': 'تذكير اختبار للموظف',
+            'isRead': true,
+            'targetKind': 'Receivables',
+            'targetId': null,
+          },
+        ],
+      };
+    });
+    await t.pumpWidget(app(NotificationInbox(auth: auth)));
+    await t.pumpAndSettle();
+    expect(find.text('تذكير اختبار للموظف'), findsOneWidget);
+    expect(find.text('كشف المستحقات'), findsNothing);
+    expect(calls, ['GET /api/v1/notifications?page=1']);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
+  testWidgets(
+    'family balance retries a malformed response without a false zero',
+    (t) async {
+      var reads = 0;
+      final auth = await authenticate('Guardian', (m, p, b, token) async {
+        expect('$m $p', 'GET /api/v1/guardian/receivables');
+        reads++;
+        return {
+          'asOf': '2026-11-13T01:00:00Z',
+          'currency': 'EGP',
+          if (reads > 1) 'outstanding': '0.00',
+          'overdue': '0.00',
+          'notYetDue': '0.00',
+          'overpaymentCredit': '0.00',
+          'items': [],
+        };
+      });
+      await t.pumpWidget(app(ReceivableBalancesPage(auth: auth)));
+      await t.pumpAndSettle();
+      expect(find.text('تعذر تحميل أرصدة الأسرة.'), findsOneWidget);
+      expect(find.text('إجمالي المستحقات'), findsNothing);
+      await t.tap(find.text('إعادة المحاولة'));
+      await t.pumpAndSettle();
+      expect(find.text('إجمالي المستحقات'), findsOneWidget);
+      expect(find.text('لا توجد مطالبات مثبتة للأسرة.'), findsOneWidget);
+      expect(reads, 2);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
 }

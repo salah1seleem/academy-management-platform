@@ -114,29 +114,30 @@ void main() {
       );
       await t.pumpAndSettle();
       await choose(t, 'المجموعة البديلة', 'مجموعة بديلة');
-      await tap(t, 'معاينة الأثر والتعارضات');
+      await tap(t, 'معاينة نقل المجموعة');
+      await t.scrollUntilVisible(
+        find.text('المجموعة مكتملة'),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('المجموعة مكتملة'), findsOneWidget);
-      expect(find.text('تأكيد الإجراء'), findsNothing);
+      expect(find.text('تأكيد نقل المجموعة'), findsNothing);
       conflict = false;
-      await tap(t, 'معاينة الأثر والتعارضات');
-      await tap(t, 'راجعت الأثر والحصص وأؤكد اعتماد الإجراء.');
-      await tap(t, 'تأكيد الإجراء');
+      await tap(t, 'معاينة نقل المجموعة');
+      await tap(t, 'تأكيد نقل المجموعة');
       expect(write, {
         'groupId': 'new',
         'effectiveDate': '2026-10-21',
         'fingerprint': 'reviewed',
       });
-      expect(
-        find.text('حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('تم تسجيل نقل المجموعة'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();
     },
   );
   testWidgets(
-    'Selected occurrence move preserves exact pair and retries same payload after an uncertain response',
+    'Selected occurrence move preserves exact pair and reads first before retrying the reviewed payload',
     (t) async {
       final writes = <Map>[];
       var saved = false;
@@ -212,14 +213,14 @@ void main() {
         'البديلة · 2026-10-23 · 18:00:00 — 19:00:00',
       );
       await tap(t, 'إضافة إلى الحصص المختارة');
-      await tap(t, 'معاينة الأثر والتعارضات');
-      await tap(t, 'راجعت الأثر والحصص وأؤكد اعتماد الإجراء.');
-      await tap(t, 'تأكيد الإجراء');
-      expect(
-        find.text('حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.'),
-        findsNothing,
-      );
-      await tap(t, 'إعادة تأكيد الإجراء نفسه');
+      await tap(t, 'معاينة نقل الحصص');
+      await tap(t, 'تأكيد نقل الحصص');
+      expect(find.text('تم تسجيل نقل الحصص المختارة.'), findsNothing);
+      await tap(t, 'تحقّق من سجل النقل');
+      expect(writes, hasLength(1));
+      expect(find.text('تأكيد نقل الحصص'), findsNothing);
+      await tap(t, 'معاينة نقل الحصص');
+      await tap(t, 'تأكيد نقل الحصص');
       expect(writes, hasLength(2));
       expect(writes[0], writes[1]);
       expect(writes[0], {
@@ -228,10 +229,7 @@ void main() {
         ],
         'fingerprint': 'pair-review',
       });
-      expect(
-        find.text('حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.'),
-        findsOneWidget,
-      );
+      expect(find.text('تم تسجيل نقل الحصص المختارة.'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();
@@ -298,22 +296,88 @@ void main() {
         'الحصة البديلة',
         'البديلة · 2026-10-23 · 18:00:00 — 19:00:00',
       );
-      await tap(t, 'معاينة الأثر والتعارضات');
-      await tap(t, 'راجعت الأثر والحصص وأؤكد اعتماد الإجراء.');
-      await tap(t, 'تأكيد الإجراء');
+      await tap(t, 'معاينة حجز التعويض');
+      await tap(t, 'تأكيد حجز التعويض');
       expect(write, {
         'trainingSessionId': 'target',
         'fingerprint': 'booking-review',
       });
-      expect(
-        find.text('حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.'),
-        findsOneWidget,
-      );
+      expect(find.text('تم حجز الحصة التعويضية.'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();
     },
   );
+  testWidgets(
+    'Lost release response checks the exact booking without repeating the command',
+    (t) async {
+      var writes = 0, reads = 0;
+      final auth = await authenticate('AcademyOwner', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        if (method == 'POST') {
+          expect(path, endsWith('/compensation-bookings/booking/cancel'));
+          expect(body, {'version': 3});
+          writes++;
+          throw const ApiFailure(503, 'تعذر تأكيد تحرير الحجز.');
+        }
+        expect(path, endsWith('/enrollments/enrollment/compensations'));
+        reads++;
+        return [
+          {
+            'id': 'grant',
+            'sport': 'كرة القدم',
+            'unit': 'Session',
+            'units': 1,
+            'allocated': writes == 0 ? 1 : 0,
+            'consumed': 0,
+            'sourceDate': '2026-10-21',
+            'validFrom': '2026-10-21',
+            'validTo': '2026-11-21',
+            'cause': 'CancelledSession',
+            'bookings': [
+              {
+                'id': 'booking',
+                'group': 'المجموعة البديلة',
+                'date': '2026-10-23',
+                'state': writes == 0 ? 'Reserved' : 'Cancelled',
+                'units': 1,
+                'consumed': 0,
+                'version': 3,
+              },
+            ],
+          },
+        ];
+      });
+      await t.pumpWidget(
+        app(
+          NativePlayerCompensations(
+            auth: auth,
+            enrollment: enrollment,
+            canManage: true,
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await tap(t, 'تحرير حجز التعويض');
+      await t.tap(find.text('تأكيد تحرير الحجز'));
+      await t.pumpAndSettle();
+      expect(writes, 1);
+      expect(reads, 1);
+      expect(find.text('تحرير حجز التعويض'), findsNothing);
+      await tap(t, 'تحقّق من سجل التعويض');
+      expect(writes, 1);
+      expect(reads, 2);
+      expect(find.text('حُرر الحجز وأُعيدت قراءة السجل.'), findsOneWidget);
+      expect(find.text('حجز محرر'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
   testWidgets(
     'Native player directory uses server pagination, one row per player and scoped search',
     (t) async {

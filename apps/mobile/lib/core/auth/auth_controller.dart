@@ -11,6 +11,8 @@ class AuthController extends ChangeNotifier {
   final RefreshStore store;
   Session? session;
   bool busy = false, restoring = true, restoreFailed = false;
+  bool _roleSessionUnconfirmed = false;
+  bool get roleSessionUnconfirmed => _roleSessionUnconfirmed;
   String? error;
   int _epoch = 0;
   Future<void>? _refreshing;
@@ -24,9 +26,18 @@ class AuthController extends ChangeNotifier {
     return result;
   }
 
-  Future<void> _accept(Object? json, int epoch, {bool notify = true}) async {
+  Future<void> _accept(
+    Object? json,
+    int epoch, {
+    bool notify = true,
+    String? expectedMembershipId,
+  }) async {
     if (epoch != _epoch) return;
     final next = Session.fromJson(json);
+    if (expectedMembershipId != null &&
+        next.selected?.id != expectedMembershipId) {
+      throw const FormatException('Unexpected membership in role selection');
+    }
     await _storage(() async {
       if (epoch == _epoch) await store.write(next.refreshToken);
     });
@@ -61,6 +72,7 @@ class AuthController extends ChangeNotifier {
       '/api/v1/mobile/auth/otp/request',
       body: {'phoneNumber': phone},
     ) as Map<String, dynamic>;
+    error = null;
     return result['challengeId'] as String;
   }
 
@@ -91,6 +103,37 @@ class AuthController extends ChangeNotifier {
 
   Future<void> refresh() =>
       _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+
+  Future<void> recheckMemberships() async {
+    final selected = session?.selected;
+    if (selected == null) return;
+    final epoch = _epoch;
+    final response = await request('GET', '/api/v1/mobile/auth/memberships');
+    final live = session;
+    final current = live?.selected;
+    if (epoch != _epoch || live == null || current?.id != selected.id) return;
+    final memberships = (response as List)
+        .map((entry) => Membership.fromJson(entry as Map<String, dynamic>))
+        .toList(growable: false);
+    final updated = memberships
+        .where((entry) => entry.id == selected.id)
+        .firstOrNull;
+    if (updated == null || updated.academyId != selected.academyId) {
+      throw const ApiFailure(403, 'تعذر التحقق من صلاحيات الدور الحالي.');
+    }
+    if (updated.contextRevision < current!.contextRevision) return;
+    session = Session(
+      live.accessToken,
+      live.refreshToken,
+      live.displayName,
+      live.membershipId,
+      live.accessExpires,
+      memberships,
+      userId: live.userId,
+    );
+    notifyListeners();
+  }
+
   Future<void> _doRefresh() async {
     final epoch = _epoch;
     final token = session?.refreshToken ?? await store.read();
@@ -120,7 +163,9 @@ class AuthController extends ChangeNotifier {
     Object? body,
     String? idempotencyKey,
   }) async {
-    if (busy) throw const ApiFailure(409, 'انتظر اكتمال تحديث الجلسة.');
+    if (busy || _roleSessionUnconfirmed) {
+      throw const ApiFailure(409, 'انتظر اكتمال تحديث الجلسة.');
+    }
     final epoch = _epoch;
     if (session == null) throw const ApiFailure(401, 'سجل الدخول أولًا.');
     if (session!.accessExpires.isBefore(
@@ -162,13 +207,14 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> selectRole(String membershipId) async {
-    if (busy || session == null) return;
+    if (busy || session == null || _roleSessionUnconfirmed) return;
+    var epoch = _epoch;
     busy = true;
     notifyListeners();
     try {
       await refresh(); // Serialize with any running refresh before rotating for selection.
-      final epoch = ++_epoch;
-      if (session == null) throw const ApiFailure(401, 'سجل الدخول مجددًا.');
+      if (epoch != _epoch || session == null) return;
+      epoch = ++_epoch;
       await _accept(
         await transport.send(
           'POST',
@@ -178,7 +224,44 @@ class AuthController extends ChangeNotifier {
         ),
         epoch,
         notify: false,
+        expectedMembershipId: membershipId,
       );
+    } on ApiFailure catch (failure) {
+      if (epoch == _epoch &&
+          session != null &&
+          (failure.status == 0 ||
+              failure.status == 401 ||
+              failure.status >= 500)) {
+        _roleSessionUnconfirmed = true;
+      }
+      if (epoch == _epoch && session == null && failure.status == 401) {
+        error = 'انتهت الجلسة. سجّل الدخول لاختيار الدور.';
+      }
+      rethrow;
+    } catch (_) {
+      if (epoch == _epoch && session != null) _roleSessionUnconfirmed = true;
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> checkRoleSession() async {
+    if (busy || session == null) return;
+    final epoch = _epoch;
+    busy = true;
+    notifyListeners();
+    try {
+      // A refresh can confirm the surviving session without replaying role selection.
+      await refresh();
+      if (epoch == _epoch) _roleSessionUnconfirmed = false;
+    } catch (_) {
+      if (epoch == _epoch) {
+        _roleSessionUnconfirmed = session != null;
+        if (session == null) error = 'انتهت الجلسة. سجّل الدخول لاختيار الدور.';
+      }
+      rethrow;
     } finally {
       busy = false;
       notifyListeners();
@@ -189,7 +272,7 @@ class AuthController extends ChangeNotifier {
     Future<T> Function(AssetTransport, String) action, {
     bool read = false,
   }) async {
-    if (busy || session == null) {
+    if (busy || session == null || _roleSessionUnconfirmed) {
       throw const ApiFailure(401, 'سجل الدخول أولًا.');
     }
     if (transport is! AssetTransport) {
@@ -233,6 +316,8 @@ class AuthController extends ChangeNotifier {
     bool commit = false,
     Map<String, String> fields = const {},
     String? idempotencyKey,
+    String? validRowsFromHash,
+    bool correctionRows = false,
   }) => _assetAction((_, token) {
     if (transport is! WorkbookTransport) {
       throw const ApiFailure(501, 'خدمة استيراد الملفات غير متاحة.');
@@ -243,6 +328,8 @@ class AuthController extends ChangeNotifier {
       fields,
       token,
       idempotencyKey: idempotencyKey,
+      validRowsFromHash: validRowsFromHash,
+      correctionRows: correctionRows,
     );
   });
 
@@ -262,6 +349,7 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
     }
     session = null;
+    _roleSessionUnconfirmed = false;
     restoreFailed = false;
     notifyListeners();
     if (token != null) {

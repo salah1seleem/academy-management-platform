@@ -21,6 +21,7 @@ Json balance() => {
   'outstanding': '-100.00',
   'branch': 'مدينة نصر',
   'dueDate': '2026-10-01',
+  'overdue': false,
   'source': 'ManualCharge',
 };
 Json document() => {
@@ -92,7 +93,10 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byType(ScopeDateTiles), findsNothing);
       expect(calls.last, '/api/v1/finance/receivables?branchId=branch');
-      expect(find.textContaining('رصيد حتى 2026-10-22'), findsOneWidget);
+      final date = MaterialLocalizations.of(
+        t.element(find.byType(ReceivableBalances)),
+      ).formatShortDate(DateTime.utc(2026, 10, 22));
+      expect(find.textContaining('رصيد حتى $date'), findsOneWidget);
       await t.scrollUntilVisible(
         find.text('مستند اصطناعي مسدد ثم مصحح'),
         150,
@@ -101,10 +105,10 @@ void main() {
       await t.tap(find.text('مستند اصطناعي مسدد ثم مصحح'));
       await t.pumpAndSettle();
       expect(calls.last, '/api/v1/finance/receivables/document');
-      expect(t.widget<MoneyText>(find.byType(MoneyText)).value, '-100.00');
+      expect(t.widget<MoneyText>(find.byType(MoneyText).first).value, 100);
       expect(find.text('رصيد لصالح العميل'), findsOneWidget);
       await t.scrollUntilVisible(
-        find.text('confirmed-collection'),
+        find.text('مرجع التحصيل المخصص').hitTestable(),
         200,
         scrollable: find
             .descendant(
@@ -114,6 +118,19 @@ void main() {
             .first,
       );
       expect(find.text('تخصيص تحصيل محفوظ'), findsOneWidget);
+      await t.tap(find.text('مرجع التحصيل المخصص'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.text('confirmed-collection').hitTestable(),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(find.text('confirmed-collection'), findsOneWidget);
       await auth.logout();
       await t.pumpAndSettle();
       expect(find.text('confirmed-collection'), findsNothing);

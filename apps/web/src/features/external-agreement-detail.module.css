@@ -1,0 +1,21 @@
+form:global(.form-shell) > label.received {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 44px;
+}
+
+.received input[type="checkbox"] {
+  flex: none;
+  width: 1.2rem;
+  height: 1.2rem;
+  margin: 0;
+}
+
+bdi.receiptNumber {
+  display: inline-block;
+  max-width: 100%;
+  font: 600 clamp(0.67rem, 3.35vw, 0.75rem) ui-monospace, monospace;
+  text-align: right;
+  word-break: break-all;
+}

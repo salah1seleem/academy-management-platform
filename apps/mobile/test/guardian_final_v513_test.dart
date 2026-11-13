@@ -24,7 +24,9 @@ void main() {
       final auth = await f.authenticate('AcademyOwner', (m, p, b, k) async {
         calls.add(m);
         return {
-          'stockQuantity': 12,
+          'id': 'kit',
+          'usesVariants': true,
+          'stockQuantity': 4,
           'variants': [
             {'size': '10', 'color': 'كحلي', 'quantity': 2},
             {'size': '10', 'color': 'أبيض', 'quantity': 2},
@@ -136,15 +138,121 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('85'), findsOneWidget);
+      final score = find.text('85 من 100', findRichText: true);
+      expect(score, findsOneWidget);
+      expect(find.text('٢٨ أكتوبر ٢٠٢٦'), findsOneWidget);
       expect(find.text('السرعة · 86'), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('family-filter-l')));
       await t.pumpAndSettle();
-      expect(find.text('85'), findsNothing);
+      expect(score, findsNothing);
       expect(
         find.text('لا يوجد تقييم منشور لهذه الرياضة بعد.'),
         findsOneWidget,
       );
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'progress separates a real zero from an unavailable mean on a narrow screen',
+    (t) async {
+      t.view.physicalSize = const Size(320, 1200);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      final auth = await f.authenticate('Guardian', (m, p, b, k) async => {});
+      await t.pumpWidget(
+        f.app(
+          Scaffold(
+            body: GuardianProgress(
+              auth: auth,
+              children: const [
+                {
+                  'id': 'child',
+                  'arabicName': 'طفل تجريبي',
+                  'sports': [
+                    {
+                      'sport': 'كرة القدم',
+                      'group': '  ',
+                      'performance': {
+                        'evaluationId': 'football-report',
+                        'evaluationDate': '2026-10-29',
+                        'meanPerformance': 0,
+                        'criteria': [
+                          {'name': 'السرعة', 'value': 0},
+                          {'name': 'التمرير', 'value': null},
+                        ],
+                      },
+                    },
+                    {
+                      'sport': 'السباحة',
+                      'performance': {
+                        'evaluationId': 'swim-report',
+                        'meanPerformance': null,
+                      },
+                    },
+                  ],
+                },
+              ],
+            ),
+          ),
+          scale: 1.5,
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('كرة القدم'), findsOneWidget);
+      expect(find.text('0 من 100', findRichText: true), findsOneWidget);
+      expect(find.text('السرعة · 0'), findsOneWidget);
+      expect(find.textContaining('التمرير'), findsNothing);
+      expect(find.text('غير متاح'), findsOneWidget);
+      expect(find.text('التقرير الكامل'), findsNWidgets(2));
+      expect(find.byKey(const ValueKey('family-child-filter')), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'progress clears a filter when the selected child is no longer linked',
+    (t) async {
+      t.view.physicalSize = const Size(320, 1200);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      final auth = await f.authenticate('Guardian', (m, p, b, k) async => {});
+      const first = {'id': 'first', 'arabicName': 'أول تجريبي'};
+      const secondName = 'الطفل الثاني باسم تجريبي طويل لاختبار الفلتر';
+      const second = {'id': 'second', 'arabicName': secondName};
+      final secondFilter = find.byKey(const ValueKey('family-filter-second'));
+      Future<void> show(List<Json> children) async {
+        await t.pumpWidget(
+          f.app(
+            Scaffold(
+              body: GuardianProgress(auth: auth, children: children),
+            ),
+            scale: 1.5,
+          ),
+        );
+        await t.pumpAndSettle();
+      }
+
+      await show([first, second]);
+      expect(secondFilter.hitTestable(), findsOneWidget);
+      expect(t.getRect(secondFilter).left, greaterThanOrEqualTo(0));
+      expect(t.getRect(secondFilter).right, lessThanOrEqualTo(320));
+      await t.tap(secondFilter);
+      await t.pumpAndSettle();
+      await show([first]);
+      expect(find.text('أول تجريبي'), findsOneWidget);
+      expect(find.text(secondName), findsNothing);
+      expect(find.text('لا توجد تسجيلات رياضية لهذا اللاعب.'), findsOneWidget);
+      await show([first, second]);
+      expect(find.text('أول تجريبي'), findsNWidgets(2));
+      expect(find.text(secondName), findsNWidgets(2));
+      await show([]);
+      expect(find.byKey(const ValueKey('family-child-filter')), findsNothing);
+      expect(find.text('لا يوجد أبناء مرتبطون بهذا الحساب.'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();
@@ -348,58 +456,66 @@ void main() {
       auth.dispose();
     },
   );
-  testWidgets(
-    'winning and losing scores have distinct colors and draw scores match',
-    (t) async {
-      await t.pumpWidget(
-        f.app(
-          const Scaffold(
-            body: MatchResultCard(
-              data: {
-                'status': 'Completed',
-                'ourScore': 3,
-                'opponentScore': 1,
-                'team': 'النخبة',
-                'opponent': 'النجوم',
-              },
+  for (final theme in [
+    AcademyTheme.light(),
+    AcademyTheme.dark(),
+    AcademyTheme.themed(VisualModel.pitch),
+    AcademyTheme.themed(VisualModel.premium),
+  ]) {
+    testWidgets(
+      'Published score colors match both teams on ${theme.scaffoldBackgroundColor}',
+      (t) async {
+        final outcomes = <Color>{};
+        final surface = theme.cardTheme.color!.computeLuminance();
+        for (final (state, our, their) in [
+          ('فوز', 3, 1),
+          ('خسارة', 0, 2),
+          ('تعادل', 2, 2),
+        ]) {
+          await t.pumpWidget(
+            MaterialApp(
+              theme: theme,
+              home: Scaffold(
+                body: MatchResultCard(
+                  data: {
+                    'status': 'Completed',
+                    'ourScore': our,
+                    'opponentScore': their,
+                    'team': 'النخبة',
+                    'opponent': 'النجوم',
+                    'tournament': 'بطولة العرض',
+                  },
+                ),
+              ),
             ),
-          ),
-        ),
-      );
-      await t.pumpAndSettle();
-      final winner = t
-          .widget<UiText>(find.widgetWithText(UiText, '3'))
-          .style!
-          .color;
-      final loser = t
-          .widget<UiText>(find.widgetWithText(UiText, '1'))
-          .style!
-          .color;
-      expect(winner, loser);
-      await t.pumpWidget(
-        f.app(
-          const Scaffold(
-            body: MatchResultCard(
-              data: {
-                'status': 'Completed',
-                'ourScore': 2,
-                'opponentScore': 2,
-                'team': 'النخبة',
-                'opponent': 'النجوم',
-              },
-            ),
-          ),
-        ),
-      );
-      await t.pumpAndSettle();
-      final colors = t
-          .widgetList<UiText>(find.widgetWithText(UiText, '2'))
-          .map((w) => w.style!.color)
-          .toSet();
-      expect(colors.length, 1);
-      expect(colors.single, isNot(winner));
-      expect(colors.single, isNot(loser));
-      expect(t.takeException(), isNull);
-    },
-  );
+          );
+          await t.pumpAndSettle();
+          final label = t.widget<UiText>(find.widgetWithText(UiText, state));
+          final color = label.style!.color!;
+          outcomes.add(color);
+          final scores = t
+              .widgetList<UiText>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is UiText &&
+                      (widget.data == '$our' || widget.data == '$their'),
+                ),
+              )
+              .toList();
+          expect(scores, hasLength(2));
+          expect(
+            scores.map((score) => score.style!.color),
+            everyElement(color),
+          );
+          final ink = color.computeLuminance();
+          final contrast = ink > surface
+              ? (ink + .05) / (surface + .05)
+              : (surface + .05) / (ink + .05);
+          expect(contrast, greaterThanOrEqualTo(4.5));
+        }
+        expect(outcomes, hasLength(3));
+        expect(t.takeException(), isNull);
+      },
+    );
+  }
 }

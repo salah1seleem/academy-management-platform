@@ -58,11 +58,28 @@ public static class NewsEndpoints
             today=await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(t.AcademyId,db,time),
             canCreate=await NewsAudience.ManageAllowed(db,t,"Add"),canEdit=await NewsAudience.ManageAllowed(db,t,"Edit"),canDelete=await NewsAudience.ManageAllowed(db,t,"Delete")});
     }
-    private static async Task<IResult> Feed(CurrentTenant tenant,FoundationDbContext db,TimeProvider clock,ClaimsPrincipal actor)
+    private static async Task<IResult> Feed(CurrentTenant tenant, FoundationDbContext db, TimeProvider clock,
+        ClaimsPrincipal actor, int? page, string? kind, Guid? item, HttpResponse response)
     {
-        var t=(await tenant.ResolveAsync())!;var q=await NewsAudience.Feed(db,t,User(actor),clock.GetUtcNow());
-        return Results.Ok(await q.OrderByDescending(n=>n.PublishedAtUtc).ThenBy(n=>n.Id).Select(n=>new {n.Id,n.Title,n.Body,n.Kind,n.PublishedAtUtc,n.StartsAtUtc,n.EndsAtUtc,
-            imageUrl=n.ImageAssetId==null?null:"/api/v1/assets/"+n.ImageAssetId}).Take(10).ToArrayAsync());
+        response.Headers.CacheControl = "no-store";
+        if (page is < 1 or > 100000) return Invalid("رقم الصفحة غير صالح.");
+        if (kind is not (null or "News" or "Event")) return Invalid("نوع المحتوى غير صالح.");
+        var t = (await tenant.ResolveAsync())!;
+        var query = await NewsAudience.Feed(db, t, User(actor), clock.GetUtcNow());
+        if (kind == "Event") query = query.Where(n => n.Kind == "Event");
+        if (kind == "News") query = query.Where(n => n.Kind != "Event");
+        if (item.HasValue) query = query.Where(n => n.Id == item);
+        var size = page.HasValue ? 20 : 10;
+        var pageNumber = item.HasValue ? 1 : page ?? 1;
+        var items = await query.OrderByDescending(n => n.PublishedAtUtc).ThenBy(n => n.Id)
+            .Skip((pageNumber - 1) * size).Take(size).Select(n => new
+            {
+                n.Id, n.Title, n.Body, n.Kind, n.PublishedAtUtc, n.StartsAtUtc, n.EndsAtUtc,
+                imageUrl = n.ImageAssetId == null ? null : "/api/v1/assets/" + n.ImageAssetId
+            }).ToArrayAsync();
+        return page.HasValue
+            ? Results.Ok(new { items, total = await query.CountAsync(), page = pageNumber, pageSize = size })
+            : Results.Ok(items);
     }
     private static Task<IResult> Create(NewsWrite body,CurrentTenant t,FoundationDbContext db,TimeProvider clock) => Save(null,body,t,db,clock);
     private static Task<IResult> Edit(Guid id,NewsWrite body,CurrentTenant t,FoundationDbContext db,TimeProvider clock) => Save(id,body,t,db,clock);

@@ -23,7 +23,9 @@ public static class MediaPublication
         t.Role is AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin&&
         (await auth.AuthorizeAsync(h.User,h,AcademyPermissions.PlayerMediaRead)).Succeeded&&
         (await auth.AuthorizeAsync(h.User,h,AcademyPermissions.PlayerMediaManage)).Succeeded&&
-        (t.Role==AcademyRole.AcademyOwner||!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants)||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="media"&&g.IsActive&&g.Read&&(add?g.Add:g.Edit)));
+        (t.Role==AcademyRole.AcademyOwner||
+            (!await db.AcademyMemberships.AnyAsync(m=>m.Id==t.MembershipId&&m.UseActionGrants)||await db.StaffActionGrants.AnyAsync(g=>g.MembershipId==t.MembershipId&&g.Module=="media"&&g.IsActive&&g.Read&&(add?g.Add:g.Edit)))&&
+            await StaffWorkflowAccess.Allows(db,t.MembershipId,"/api/v1/assets/upload","POST",h.RequestAborted));
 
     private static async Task<IResult> Withdraw(Guid id,MediaWithdrawalWrite b,CurrentTenant tenant,FoundationDbContext db,HttpContext h,IAuthorizationService auth,TimeProvider clock)
     {

@@ -11,6 +11,11 @@ class StaffCapabilities {
   final bool owner;
   final List<String> permissions;
   final Json scope;
+
+  bool get canReadProductOrders => allows('payment.read', 'catalog', 'Read');
+  bool get canReadAttendanceCorrections =>
+      allows('attendance.read', 'attendance', 'Read');
+
   static Future<StaffCapabilities> load(AuthController auth) async {
     final owner = auth.session?.selected?.role == 'AcademyOwner';
     if (owner) {

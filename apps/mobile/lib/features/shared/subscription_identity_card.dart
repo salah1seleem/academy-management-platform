@@ -13,9 +13,11 @@ class SubscriptionIdentityCard extends StatelessWidget {
     required this.onTotal,
     required this.onStatus,
     this.onPlayers,
+    this.newSubscriptions,
   });
   final Map<String, dynamic> data;
   final bool owner;
+  final num? newSubscriptions;
   final VoidCallback onTotal;
   final VoidCallback? onPlayers;
   final ValueChanged<String> onStatus;
@@ -26,10 +28,11 @@ class SubscriptionIdentityCard extends StatelessWidget {
         muted = theme.colorScheme.onSurfaceVariant;
     final ocean = OceanPalette.active(theme);
     final logo = BrandScope.maybeOf(context)?.logo != null;
+    final asOf = DateTime.tryParse('${data['asOf']}');
     final statuses = [
       (
         'current',
-        'فعالة',
+        'لا تنتهي قريبًا',
         ocean
             ? OceanPalette.positive
             : dark
@@ -106,6 +109,11 @@ class SubscriptionIdentityCard extends StatelessWidget {
                           color: ink,
                         ),
                       ),
+                      if (asOf != null)
+                        UiText(
+                          'الحالة في ${MaterialLocalizations.of(context).formatShortDate(asOf)}',
+                          style: TextStyle(fontSize: 11, color: muted),
+                        ),
                       TextButton(
                         onPressed: onTotal,
                         style: TextButton.styleFrom(
@@ -128,12 +136,21 @@ class SubscriptionIdentityCard extends StatelessWidget {
                               ),
                             ),
                             UiText(
-                              'اشتراكات فعالة',
+                              'إجمالي الاشتراكات السارية',
                               style: TextStyle(fontSize: 11, color: muted),
                             ),
                           ],
                         ),
                       ),
+                      if (newSubscriptions != null)
+                        UiText(
+                          '$newSubscriptions اشتراكات جديدة خلال الفترة',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: academyAccent(context),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -204,11 +221,6 @@ class SubscriptionIdentityCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 8),
-            UiText(
-              'قرب الانتهاء ضمن الفعالة',
-              style: TextStyle(fontSize: 10, color: muted),
-            ),
-            const SizedBox(height: 4),
             TextButton(
               onPressed: onPlayers,
               style: TextButton.styleFrom(

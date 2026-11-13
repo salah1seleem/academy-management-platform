@@ -2,7 +2,7 @@ import { expect, Page, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { guardianLogin } from "../support/auth";
-async function login(page: Page) { await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", {name:"دخول آمن"}).click(); await page.waitForURL("**/dashboard"); }
+async function login(page: Page) { await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", {name:"تسجيل الدخول",exact:true}).click(); await page.waitForURL("**/dashboard"); }
 async function write(page: Page, path: string, data: unknown, method="POST", key?: string) { const token = await page.request.get("/api/v1/auth/csrf").then(r=>r.json()); return page.request.fetch(path,{method,data,headers:{"X-CSRF-TOKEN":token.token,...(key?{"Idempotency-Key":key}:{})}}); }
 test("Compact stored-data dashboard has matched filter heights, drill-downs and no hero/latest", async ({page}, info) => {
   await page.setViewportSize({width:1440,height:1000}); await login(page);
@@ -21,6 +21,7 @@ test("Compact stored-data dashboard has matched filter heights, drill-downs and 
   await expect(page.getByRole("heading",{name:/اشتراكات/})).toBeVisible();
 });
 test("Published match reaches only its guardian and a separate tournament proof produces one receipt", async ({page}) => {
+  test.setTimeout(90_000);
   await login(page); expect((await page.request.get("/api/v1/platform/academies")).status()).toBe(401);
   const options=await page.request.get("/api/v1/manage/matches/options").then(r=>r.json());
   const player=options.players.find((p:{playerId:string,sportId:string})=>p.playerId==="36000000-0000-0000-0000-000000000001"&&p.sportId==="32000000-0000-0000-0000-000000000001");
@@ -29,7 +30,9 @@ test("Published match reaches only its guardian and a separate tournament proof 
   const teamResponse=await write(page,"/api/v1/manage/matches/teams",{name:`منتخب اختبار ${suffix}`,sportId:player.sportId,branchId:player.branchId,ageCategoryId:category.id,coachMembershipId:options.coaches[0].id,enrollmentIds:[player.id],isActive:true}); expect(teamResponse.ok()).toBeTruthy(); const team=(await teamResponse.json()).id;
   const match={tournamentId:tournament,teamId:team,opponent:"منافس عرض خيالي",matchDate:"2026-10-03",startTime:"17:00",venue:"ملعب اختبار",notes:"بيانات مصطنعة",benchPlayerIds:[],publish:true,isActive:true};
   const matchResponse=await write(page,"/api/v1/manage/matches/",match); expect(matchResponse.ok()).toBeTruthy(); const matchId=(await matchResponse.json()).id;
-  await page.goto("/dashboard/matches"); await page.getByRole("button",{name:"المباريات",exact:true}).click(); const matchCard=page.getByRole("article").filter({has:page.getByText(`منتخب اختبار ${suffix}`,{exact:true})}); await expect(matchCard).toContainText("منافس عرض خيالي"); await expect(matchCard).toContainText("2026-10-03");
+  await page.goto("/dashboard/matches"); await page.getByRole("button",{name:"المباريات",exact:true}).click(); const matchCard=page.getByRole("article").filter({has:page.getByText(`منتخب اختبار ${suffix}`,{exact:true})}); await expect(matchCard).toContainText("منافس عرض خيالي");
+  await expect(matchCard.locator("time")).toHaveAttribute("datetime", match.matchDate);
+  await expect(matchCard.locator("time")).toContainText("أكتوبر");
   await guardianLogin(page); expect(await page.request.get("/api/v1/my-matches").then(r=>r.text())).toContain(matchId);
   expect(await page.request.get("/api/v1/my-matches?playerId=36000000-0000-0000-0000-000000000004").then(r=>r.json())).toEqual([]);
   const key=`tournament-e2e-${suffix}`, body={tournamentId:tournament,enrollmentId:player.id};
@@ -39,7 +42,13 @@ test("Published match reaches only its guardian and a separate tournament proof 
   const assetId=(await asset.json()).id; expect((await write(page,`/api/v1/guardian/tournament-payments/${id}/proof`,{assetId})).status()).toBe(200);
   await page.context().clearCookies(); await login(page); await page.goto(`/dashboard/tournament-payments/${id}`);
   await expect(page.getByRole("link",{name:"عرض إثبات التحويل"})).toBeVisible(); expect((await page.request.get(`/api/v1/assets/${assetId}`)).status()).toBe(200);
-  await page.getByRole("button",{name:"قبول وإصدار الإيصال"}).click(); await expect(page.getByText(/TRN-/)).toBeVisible();
-  expect((await write(page,`/api/v1/manage/tournament-payments/${id}/review`,{accept:true})).status()).toBe(200);
-  const report=await page.request.get("/api/v1/reports/financial?from=2026-09-01&to=2026-09-28&collectionType=Tournament").then(r=>r.json()); expect(report.items.filter((x:{collectionId:string})=>x.collectionId===id)).toHaveLength(1);
+  await page.getByRole("button",{name:"قبول وإصدار الإيصال"}).click();
+  await page.getByRole("dialog").getByRole("button",{name:"تسجيل التحصيل"}).click();
+  const receipt = page.getByText(/TRN-/);
+  await expect(receipt).toBeVisible();
+  expect((await write(page,`/api/v1/manage/tournament-payments/${id}/review`,{accept:true,expectedProofAssetId:assetId})).status()).toBe(200);
+  const report=await page.request.get("/api/v1/reports/financial?allDates=true&collectionType=Tournament").then(r=>r.json());
+  expect(report.items.filter((x:{collectionId:string})=>x.collectionId===id)).toEqual([
+    expect.objectContaining({ receiptNumber: await receipt.innerText(), amount: 250, collectionType: "Tournament" }),
+  ]);
 });

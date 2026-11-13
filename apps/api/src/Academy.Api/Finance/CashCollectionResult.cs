@@ -32,9 +32,16 @@ public sealed partial class CashRegisterService
         if(session.OpenedByMembershipId!=t.MembershipId)throw new CashRejected("استعادة نتيجة محاولات ورديتك الشخصية فقط.",403);
         await using var tx=await db.Database.BeginTransactionAsync();
         var request=await Request(t.AcademyId,user,"familycollect",body.Key);var prefix="family-"+AcademyConfigurationService.Hash(request)+":";
-        var posts=await db.CashReceiptPostings.AsNoTracking().Where(p=>p.AcademyId==t.AcademyId&&p.SessionId==id&&p.ActorUserId==user&&p.RequestKey.StartsWith(prefix)).OrderBy(p=>p.RequestKey)
-            .Select(p=>new{p.ReceiptId,p.Amount,p.Currency}).ToArrayAsync();
-        if(posts.Length>0)return new{status="Confirmed",amount=Money(posts.Sum(p=>p.Amount)),currency=posts[0].Currency,items=posts.Select(p=>new{receiptId=p.ReceiptId,amount=Money(p.Amount),p.Currency}),canDiscard=false};
+        // The actor and exact attempt have already been scoped. The saved receipt
+        // snapshots are needed even when this cashier collected across branches.
+        var posts=await (from posting in db.CashReceiptPostings.AsNoTracking()
+            join receipt in db.Receipts.IgnoreQueryFilters(["trusted-branches"]).Where(r=>r.AcademyId==t.AcademyId)
+                on posting.ReceiptId equals receipt.Id
+            where posting.AcademyId==t.AcademyId&&posting.SessionId==id&&posting.ActorUserId==user&&posting.RequestKey.StartsWith(prefix)
+            orderby posting.RequestKey
+            select new{posting.ReceiptId,posting.Amount,posting.Currency,receipt.PlayerNameSnapshot,receipt.SportNameSnapshot}).ToArrayAsync();
+        if(posts.Length>0)return new{status="Confirmed",amount=Money(posts.Sum(p=>p.Amount)),currency=posts[0].Currency,
+            items=posts.Select(p=>new{receiptId=p.ReceiptId,amount=Money(p.Amount),p.Currency,player=p.PlayerNameSnapshot,sport=p.SportNameSnapshot}),canDiscard=false};
         var closed=await db.CashSessions.Where(s=>s.Id==id).Select(s=>s.ClosedAtUtc.HasValue).SingleAsync();var expired=false;
         if(body.Reference is not null)expired=references.ResolveFamily(body.Reference,new(t,user,id,session.BranchId),false).ExpiresAt<=time.GetUtcNow();
         return new{status="NotRecorded",canDiscard=closed||expired};

@@ -37,7 +37,7 @@ class _StaffWorkPeriodsPageState extends State<StaffWorkPeriodsPage> {
 
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: localized(context, 'سجل الحضور', 'Attendance history'),
+    title: localized(context, 'سجل دوامي', 'My attendance history'),
     child: ListenableBuilder(
       listenable: widget.auth,
       builder: (context, _) {

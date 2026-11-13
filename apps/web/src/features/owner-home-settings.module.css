@@ -8,3 +8,50 @@
 .preferences form > label input { width:100%; padding:10px 12px; min-height:44px; }
 .preferences small { color:var(--staff-text-secondary); font-size:12px; }
 .preferences form > button { justify-self:start; min-width:180px; }
+
+.targetDialog form {
+  display: grid;
+  gap: 12px;
+  margin-block-start: 18px;
+}
+
+.targetDialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.targetDialog label input {
+  min-height: 44px;
+  text-align: end;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.targetDialog form > small {
+  color: var(--staff-text-secondary);
+}
+
+.targetDialog .targetError {
+  padding: 9px 12px;
+  border-inline-start: 3px solid var(--staff-danger);
+  color: var(--staff-danger);
+}
+
+.targetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 4px;
+}
+
+.targetActions button {
+  flex: 1 1 auto;
+  min-height: 44px;
+  border-radius: var(--staff-radius-sm);
+}
+
+@media (max-width: 480px) {
+  .targetActions {
+    display: grid;
+  }
+}

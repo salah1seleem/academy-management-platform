@@ -49,6 +49,142 @@ Future<void> choose(WidgetTester t, String label, String value) async {
 }
 
 void main() {
+  for (final (kind, canRead) in [
+    ('Single', true),
+    ('Single', false),
+    ('Family', false),
+  ]) {
+    testWidgets(
+      'Existing $kind renewal with payment read $canRead never offers another creation',
+      (t) async {
+        final reads = <String>[];
+        final auth = await authenticate('AcademyOwner', (
+          method,
+          path,
+          body,
+          token,
+        ) async {
+          expect(method, 'GET');
+          reads.add(path);
+          if (path.endsWith('/payments/payment')) return payment;
+          return {
+            'enrollment': {
+              'id': 'enrollment',
+              'player': 'لاعب اصطناعي',
+              'sport': 'كرة القدم',
+              'branch': 'فرع الاختبار',
+              'group': 'مجموعة الاختبار',
+            },
+            'current': {'status': 'Expired'},
+            'plans': [
+              {
+                'id': 'plan',
+                'arabicName': 'باقة اختبار',
+                'price': 500,
+                'currency': 'EGP',
+              },
+            ],
+            'previewStart': '2026-11-09',
+            'openRenewal': {
+              'kind': kind,
+              'paymentId': canRead ? 'payment' : null,
+            },
+            'canReadPayment': canRead,
+          };
+        });
+        await t.pumpWidget(
+          app(NativeAdminRenewal(auth: auth, enrollmentId: 'enrollment')),
+        );
+        await t.pumpAndSettle();
+        expect(find.text('اشتراك منتهٍ'), findsOneWidget);
+        expect(find.text('إنشاء طلب التجديد والدفع'), findsNothing);
+        expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+        if (canRead) {
+          await tap(t, 'فتح طلب الدفع الحالي');
+          expect(find.byType(NativeRenewalPayment), findsOneWidget);
+          expect(reads.last, '/api/v1/subscriptions/payments/payment');
+        } else {
+          expect(find.text('فتح طلب الدفع الحالي'), findsNothing);
+          expect(
+            find.text(
+              kind == 'Family'
+                  ? 'هذا التسجيل ضمن طلب تجديد أسرة مفتوح.'
+                  : 'يتابع طلب الدفع موظف لديه صلاحية المدفوعات.',
+            ),
+            findsOneWidget,
+          );
+          expect(reads, hasLength(1));
+        }
+        await t.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'Renewal search distinguishes empty results and returns to the applied player search',
+    (t) async {
+      const enrollment = {
+        'id': 'enrollment',
+        'player': 'لاعب اصطناعي',
+        'sport': 'كرة القدم',
+        'branch': 'فرع الاختبار',
+        'group': 'مجموعة الاختبار',
+        'playerCode': 'QA-001',
+        'period': {'status': 'Expired'},
+      };
+      final searches = <String>[];
+      final auth = await authenticate('AcademyOwner', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        expect(method, 'GET');
+        if (path.endsWith('/enrollments/enrollment')) {
+          return {
+            'enrollment': enrollment,
+            'current': {'status': 'Expired'},
+            'previewStart': '2026-11-09',
+            'plans': [
+              {
+                'id': 'plan',
+                'arabicName': 'باقة اختبار',
+                'price': 500,
+                'currency': 'EGP',
+              },
+            ],
+          };
+        }
+        final query = Uri.parse(path).queryParameters['search'] ?? '';
+        searches.add(query);
+        return query == 'لا يوجد' ? [] : [enrollment];
+      });
+      await t.pumpWidget(app(NativeAdminRenewal(auth: auth)));
+      await t.pumpAndSettle();
+      final field = find.byType(TextFormField);
+      await t.enterText(field, 'لا يوجد');
+      await tap(t, 'بحث');
+      expect(find.textContaining('لا توجد تسجيلات مطابقة'), findsOneWidget);
+      await t.enterText(field, 'QA-001');
+      await tap(t, 'بحث');
+      expect(find.text('اشتراك منتهٍ'), findsOneWidget);
+      expect(find.text('غير نشط'), findsNothing);
+      await tap(t, 'اختيار للتجديد');
+      await choose(t, 'الباقة', 'باقة اختبار · 500 ج.م');
+      await tap(t, 'تغيير تسجيل اللاعب');
+      expect(searches.last, 'QA-001');
+      await tap(t, 'اختيار للتجديد');
+      final create = find.widgetWithText(
+        FilledButton,
+        'إنشاء طلب التجديد والدفع',
+      );
+      expect(t.widget<FilledButton>(create).onPressed, isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
   for (final collect in [false, true]) {
     testWidgets(
       'Administrator payment read ${collect ? 'with electronic collection' : 'alone'} never opens a cash shift or unauthorized collection',
@@ -103,7 +239,7 @@ void main() {
           await t.ensureVisible(choice);
           await t.tap(choice);
           await t.pumpAndSettle();
-          expect(find.text('تحويل إلكتروني تم استلامه'), findsWidgets);
+          expect(find.text('تحويل إلكتروني'), findsWidgets);
           expect(find.text('نقدي من ورديتي'), findsNothing);
         } else {
           expect(find.text('طريقة التحصيل'), findsNothing);
@@ -124,6 +260,7 @@ void main() {
           if (p.endsWith('/enrollments/enrollment')) {
             return {
               'enrollment': {
+                'id': 'enrollment',
                 'player': 'لاعب اصطناعي',
                 'sport': 'كرة القدم',
                 'branch': 'فرع اختبار',
@@ -140,6 +277,19 @@ void main() {
               ],
             };
           }
+          if (p.endsWith('/enrollments/enrollment/quote?planId=plan')) {
+            return {
+              'enrollmentId': 'enrollment',
+              'planId': 'plan',
+              'quoteHash': 'a' * 64,
+              'start': '2026-10-21',
+              'end': '2026-11-20',
+              'originalAmount': 500,
+              'discountAmount': 100,
+              'finalAmount': 400,
+              'currency': 'EGP',
+            };
+          }
           if (m == 'POST') {
             writes.add(Map.from(b as Map));
             if (lost && writes.length == 1) {
@@ -147,7 +297,10 @@ void main() {
             }
             return {'paymentId': 'payment', 'renewalId': 'renewal'};
           }
-          return {...payment, 'canCollect': false};
+          if (m == 'GET' && p.endsWith('/payments/payment')) {
+            return {...payment, 'amount': 400, 'canCollect': false};
+          }
+          throw StateError('Unexpected renewal route $m $p');
         });
         await t.pumpWidget(
           app(NativeAdminRenewal(auth: auth, enrollmentId: 'enrollment')),
@@ -157,7 +310,7 @@ void main() {
         await tap(t, 'إنشاء طلب التجديد والدفع');
         if (lost) {
           expect(find.byType(NativeRenewalPayment), findsNothing);
-          await tap(t, 'إعادة التحقق من طلب التجديد');
+          await tap(t, 'إعادة إرسال طلب التجديد نفسه');
           expect(writes[0], writes[1]);
         }
         expect(find.byType(NativeRenewalPayment), findsOneWidget);
@@ -175,6 +328,10 @@ void main() {
               api.keys[i],
         ];
         expect(keys.every((key) => key == keys.first && key != null), isTrue);
+        expect(
+          writes.every((write) => write['expectedQuoteHash'] == 'a' * 64),
+          isTrue,
+        );
         expect(t.takeException(), isNull);
         await t.pumpWidget(const SizedBox());
         auth.dispose();
@@ -188,11 +345,23 @@ void main() {
     'wrongReceipt',
     'foreignPeriod',
     'forbidden',
+    'pendingAfterLoss',
+    'changedAmount',
+    'replacedPayment',
+    'foreignPayment',
+    'invalidResponse',
   ]) {
     testWidgets(
       'Renewal collection $fault requires its exact stored receipt and period and never re-collects confirmed payment',
       (t) async {
         var posts = 0, paid = false, failed = false, recover = false;
+        final needsPendingCheck = [
+          'pendingAfterLoss',
+          'changedAmount',
+          'replacedPayment',
+          'foreignPayment',
+          'invalidResponse',
+        ].contains(fault);
         final readPaths = <String>[];
         final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
           if (m == 'POST') {
@@ -205,6 +374,11 @@ void main() {
             if (fault == 'forbidden') {
               throw const ApiFailure(403, 'غير مخول بالتحصيل.');
             }
+            if (needsPendingCheck && posts == 1) {
+              throw fault == 'changedAmount'
+                  ? const ApiFailure(409, 'تغيّر المبلغ.')
+                  : const ApiFailure(0, 'فقد رد التحصيل.');
+            }
             paid = true;
             if (fault == 'lostWrite' && !failed) {
               failed = true;
@@ -214,12 +388,22 @@ void main() {
           }
           readPaths.add(p);
           if (p.endsWith('/payments/payment')) {
+            if (recover && fault == 'invalidResponse') return null;
             if (fault == 'lostRead' && paid && !failed) {
               failed = true;
               throw const ApiFailure(503, 'تعذر قراءة الطلب.');
             }
             return {
               ...payment,
+              if (recover && fault == 'changedAmount') ...{
+                'discountAmount': 50,
+                'finalAmount': 450,
+              },
+              if (recover && fault == 'replacedPayment') ...{
+                'isCurrent': false,
+                'currentPaymentId': 'replacement',
+              },
+              if (recover && fault == 'foreignPayment') 'id': 'other-payment',
               'status': paid ? 'Confirmed' : 'Pending',
               'receiptId': paid ? 'receipt' : null,
               'periodId': paid ? 'period' : null,
@@ -255,7 +439,7 @@ void main() {
           app(NativeRenewalPayment(auth: auth, id: 'payment')),
         );
         await t.pumpAndSettle();
-        await choose(t, 'طريقة التحصيل', 'تحويل إلكتروني تم استلامه');
+        await choose(t, 'طريقة التحصيل', 'تحويل إلكتروني');
         await tap(t, 'تأكيد التحصيل وإصدار الإيصال');
         expect(posts, 0);
         await t.tap(find.text('تأكيد'));
@@ -270,6 +454,45 @@ void main() {
             ),
             isFalse,
           );
+        } else if (needsPendingCheck) {
+          expect(find.text('نتيجة التحصيل غير مؤكدة'), findsOneWidget);
+          expect(find.text('تأكيد التحصيل وإصدار الإيصال'), findsNothing);
+          recover = true;
+          await tap(t, 'تحقّق من حالة الدفع');
+          expect(posts, 1);
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(find.text('تم التحصيل'), findsNothing);
+          if (fault == 'pendingAfterLoss') {
+            expect(find.text('بانتظار التحصيل'), findsOneWidget);
+            await tap(t, 'تأكيد التحصيل وإصدار الإيصال');
+            expect(posts, 1);
+            await t.tap(find.text('رجوع'));
+            await t.pumpAndSettle();
+            expect(posts, 1);
+            await tap(t, 'تأكيد التحصيل وإصدار الإيصال');
+            expect(posts, 1);
+            await t.tap(find.text('تأكيد'));
+            await t.pumpAndSettle();
+            expect(posts, 2);
+            expect(find.text('تم التحصيل'), findsOneWidget);
+          } else if (fault == 'changedAmount') {
+            expect(
+              find.text('تغيّر المبلغ. راجع الإجمالي واختر طريقة التحصيل.'),
+              findsOneWidget,
+            );
+            final collect = t.widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'تأكيد التحصيل وإصدار الإيصال'),
+            );
+            expect(collect.onPressed, isNull);
+          } else if (fault == 'replacedPayment') {
+            expect(find.text('تم استبدال طلب الدفع'), findsOneWidget);
+            expect(find.text('فتح طلب الدفع الحالي'), findsOneWidget);
+            expect(find.text('تأكيد التحصيل وإصدار الإيصال'), findsNothing);
+          } else {
+            expect(find.text('تعذر التحقق من حالة طلب الدفع.'), findsOneWidget);
+            expect(find.text('تحقّق من حالة الدفع'), findsOneWidget);
+            expect(find.text('تأكيد التحصيل وإصدار الإيصال'), findsNothing);
+          }
         } else {
           if (fault != 'success') {
             expect(
@@ -277,7 +500,7 @@ void main() {
               findsNothing,
             );
             recover = true;
-            await tap(t, 'إعادة التحقق من التحصيل نفسه');
+            await tap(t, 'تحقّق من حالة الدفع');
           }
           expect(find.text('تم التحصيل'), findsOneWidget);
           expect(find.text('عرض الإيصال'), findsOneWidget);

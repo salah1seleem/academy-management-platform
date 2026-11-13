@@ -8,6 +8,8 @@ import '../shared/assigned_followups.dart';
 import '../shared/experience_ui.dart';
 import '../owner/owner_followups.dart';
 import 'admin_home_overview.dart';
+import 'native_product_orders.dart';
+import '../shared/native_match_management.dart';
 
 import 'package:flutter/material.dart';
 
@@ -104,6 +106,10 @@ class _AdminHomeState extends State<AdminHome> {
         try {
           final value = await widget.auth.request('GET', source.$3);
           if (scope != currentIdentity || attempt != generation) return;
+          if (source.$2 == 'followups' &&
+              (value is! Map || value['items'] is! List)) {
+            throw const FormatException('Invalid follow-up list');
+          }
           result[source.$2] = value;
         } catch (e) {
           if (scope != currentIdentity || attempt != generation) return;
@@ -205,12 +211,25 @@ class _AdminHomeState extends State<AdminHome> {
               subtitle: 'المهام والحصص التي تحتاج متابعتك',
             ),
 
+            NativeOperationActions(
+              key: ValueKey('admin-primary-$identity'),
+              auth: widget.auth,
+              primaryOnly: true,
+            ),
+            NativeMatchEntry(
+              key: ValueKey('admin-matches-$identity'),
+              auth: widget.auth,
+              asLink: true,
+            ),
             if (permissions.contains('subscription.read'))
               SubscriptionHomePanel(
                 key: ValueKey('admin-subscriptions-$identity'),
                 auth: widget.auth,
               ),
-            StaffHomeAttendanceAction(auth: widget.auth),
+            StaffHomeAttendanceAction(
+              key: ObjectKey(request),
+              auth: widget.auth,
+            ),
             if (d['sessionsPending'] == true)
               const PendingHomeSection(label: 'جارٍ تحميل حصص اليوم'),
             if (permissions.contains('attendance.read') &&
@@ -237,31 +256,38 @@ class _AdminHomeState extends State<AdminHome> {
               AdminHomeTask(
                 key: const ValueKey('admin-home-payments-task'),
                 title: 'طلبات الدفع',
-                detail: 'كل الطلبات المعلقة، بما فيها الأقدم من اليوم',
+                detail: 'الطلبات المعلقة من كل التواريخ',
                 count: d['paymentsError'] == null && payment['pending'] is num
                     ? (payment['pending'] as num).toInt()
                     : null,
-                action: 'مراجعة الطلبات',
-                onOpen: () =>
-                    openPage(context, NativePaymentRequests(auth: widget.auth)),
+                action: 'عرض الطلبات',
+                onOpen: () async {
+                  final scope = currentIdentity;
+                  await openPage(
+                    context,
+                    NativePaymentRequests(auth: widget.auth),
+                  );
+                  if (mounted && scope == currentIdentity) await refresh();
+                },
               ),
-            NativeOperationActions(
-              key: ValueKey('admin-rail-$identity'),
-              auth: widget.auth,
-              compact: true,
-              carousel: true,
-            ),
+            if (permissions.contains('content.catalog.manage'))
+              NativeProductStockSection(
+                key: ValueKey('admin-inventory-$identity'),
+                auth: widget.auth,
+              ),
             if (d['followupsPending'] == true)
               const PendingHomeSection(label: 'جارٍ تحميل المتابعات المسندة'),
             if (permissions.contains('followups.read') &&
                 d['followupsPending'] != true) ...[
+              const ExperienceSection(
+                'متابعات مسندة إليّ',
+                Icons.assignment_outlined,
+              ),
               if (d['followupsError'] != null)
-                ErrorNotice(textOf(d['followupsError'])),
+                const ErrorNotice('تعذر تحميل المتابعات.'),
+              if (d['followupsError'] == null && assigned.isEmpty)
+                const UiText('لا توجد متابعات مفتوحة.'),
               if (assigned.isNotEmpty) ...[
-                const ExperienceSection(
-                  'متابعات مسندة إليّ',
-                  Icons.assignment_outlined,
-                ),
                 for (final item in assigned.take(3))
                   GCard(
                     child: Column(
@@ -313,16 +339,14 @@ class _AdminHomeState extends State<AdminHome> {
                 () async {
                   await openPage(
                     context,
-                    AssignedFollowUpsPage(auth: widget.auth),
+                    AssignedFollowUpsPage(
+                      auth: widget.auth,
+                      initialAllDates: true,
+                    ),
                   );
                   if (mounted && currentIdentity == identity) await refresh();
                 },
               ),
-              if (followups['hasMore'] == true)
-                const UiText(
-                  'المعاينة محدودة؛ افتح المتابعات لتصفية السجل.',
-                  style: TextStyle(fontSize: 11),
-                ),
             ],
             if (permissions.contains('people.manage'))
               GLink(
@@ -343,14 +367,6 @@ class _AdminHomeState extends State<AdminHome> {
                     'جدول اليوم · ${sessions.length} حصة',
                     'Today’s schedule · ${sessions.length} sessions',
                   ),
-                ),
-                UiText(
-                  localized(
-                    context,
-                    'بتوقيت الأكاديمية، مرتبة حسب البداية',
-                    'Academy day, ordered by start time',
-                  ),
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
                 for (final s in sessions.take(3))

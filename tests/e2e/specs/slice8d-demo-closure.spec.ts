@@ -60,7 +60,7 @@ async function createAdminRenewal(page: Page, testInfo?: TestInfo) {
   await expect(page.getByText("بداية الفترة المتوقعة")).toBeVisible();
   await assertMobileArabicSurface(page);
   if (testInfo) await attachScreen(page, testInfo, "admin-renewal-review-390");
-  await page.getByRole("button", { name: "إنشاء طلب التجديد والدفع" }).click();
+  await page.getByRole("button", { name: "إنشاء طلب التجديد" }).click();
   await page.waitForURL("**/dashboard/subscriptions/payments/**");
 }
 
@@ -104,9 +104,9 @@ test.describe.serial("Slice 8D demo closure journeys", () => {
   test("Journey C — Guardian checkout, failure, retry and success remain Arabic", async ({ page }, testInfo) => {
     await guardianLogin(page);
     const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
-    await child.locator(".subscription-mini p").filter({ hasText: "كرة القدم" }).getByRole("link").click();
+    await child.locator(".subscription-mini > div").filter({ hasText: "كرة القدم" }).getByRole("link").click();
     await page.getByText("اشتراك شهري", { exact: true }).click();
-    await page.getByRole("button", { name: /الدفع الإلكتروني — ادفع الآن/ }).click();
+    await page.getByRole("button", { name: /متابعة إلى طلب الدفع/ }).click();
     await page.waitForURL("**/guardian/checkout/**");
     await assertMobileArabicSurface(page);
     await attachScreen(page, testInfo, "guardian-checkout-390");

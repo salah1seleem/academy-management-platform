@@ -59,7 +59,8 @@ public static class StaffAccessRules
         if (path.Contains("/matches") || path.Contains("/tournament")) return "matches";
         if (path.Contains("/evaluation")) return "evaluations";
         if (path.Contains("/attendance")) return "attendance";
-        if (path.Contains("/payment") || path.Contains("/enrollment-request") || path.Contains("/collections")) return "payments";
+        if (path.Contains("/payment") || path.Contains("/enrollment-request") || path.Contains("/collections") ||
+            path.StartsWith("/api/v1/subscriptions/receipts/", StringComparison.Ordinal)) return "payments";
         if (path.Contains("/subscription") || path.Contains("/renewal") || path.Contains("/discount")) return "subscriptions";
         if (path.Contains("/people")) return "players";
         if (path.Contains("/structure") || path.Contains("/branches") || path.Contains("/sports") || path.Contains("/age-categories") || path.Contains("/groups") || path.Contains("/coaches") || path.Contains("/sessions") || path.Contains("/schedules")) return "academy";
@@ -67,6 +68,8 @@ public static class StaffAccessRules
     }
     public static string Operation(string method, string path)
     {
+        if (method == "POST" && path.StartsWith("/api/v1/subscriptions/periods/", StringComparison.Ordinal) &&
+            path.EndsWith("/days", StringComparison.Ordinal)) return "Edit";
         if (path.StartsWith("/api/v1/communication/", StringComparison.Ordinal) && path.EndsWith("/preview", StringComparison.Ordinal)) return "Read";
         if (path.StartsWith("/api/v1/communication/", StringComparison.Ordinal) && path.EndsWith("/send", StringComparison.Ordinal)) return "Edit";
         if (method == "POST" && path.StartsWith("/api/v1/subscriptions/periods/", StringComparison.Ordinal) && (path.EndsWith("/sessions", StringComparison.Ordinal) || path.EndsWith("/days", StringComparison.Ordinal))) return "Edit";

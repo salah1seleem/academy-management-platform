@@ -31,6 +31,10 @@ public sealed partial class V2ReceivablesTests
     {
         using var owner=await Staff(DemoSeed.OwnerEmail);var f=await CashRefundFixture(owner);var id=await VoidReceiptId(f.Collection);var body=await VoidQuote(owner,id,f.Session);var key=Guid.NewGuid().ToString();
         var original=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/receipts/{id}");Assert.True(original.GetProperty("canReviewVoid").GetBoolean());
+        using var guardian = await Guardian();
+        var receiptList = $"/api/v1/guardian/subscriptions/receipts?page=1&allIssued=true&playerId={f.Player}";
+        var active = Assert.Single((await guardian.GetFromJsonAsync<JsonElement>(receiptList)).GetProperty("items").EnumerateArray(), item => item.GetProperty("id").GetGuid() == id);
+        Assert.False(active.GetProperty("isVoided").GetBoolean());
         var results=await Task.WhenAll(Post(owner,VoidRoot(id)+"/void",body,key),Post(owner,VoidRoot(id)+"/void",body,key));Assert.All(results,r=>r.EnsureSuccessStatusCode());
         var saved=(await results[0].Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();Assert.Equal(saved,(await results[1].Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid());
         await using var s=factory.Services.CreateAsyncScope();var db=s.ServiceProvider.GetRequiredService<FoundationDbContext>();
@@ -43,9 +47,16 @@ public sealed partial class V2ReceivablesTests
         Assert.True((await (await Post(owner,VoidRoot(id)+"/void",body,key)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("replay").GetBoolean());
         Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,VoidRoot(id)+"/void",body with {Reason="تغيير"},key)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict,(await Post(owner,VoidRoot(id)+"/void",body)).StatusCode);
-        using var guardian=await Guardian();var read=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/subscriptions/receipts/{id}");Assert.True(read.GetProperty("isVoided").GetBoolean());
-        foreach(var field in new[]{"receiptNumber","amount","paidAtUtc","playerNameSnapshot"}) Assert.Equal(original.GetProperty(field).ToString(),read.GetProperty(field).ToString());
-        var day=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(row.CreatedAtUtc,TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")).DateTime);
+        var read=await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/subscriptions/receipts/{id}");Assert.True(read.GetProperty("isVoided").GetBoolean());
+        var reversed = Assert.Single((await guardian.GetFromJsonAsync<JsonElement>(receiptList)).GetProperty("items").EnumerateArray(), item => item.GetProperty("id").GetGuid() == id);
+        Assert.True(reversed.GetProperty("isVoided").GetBoolean());
+        Assert.Equal(active.GetProperty("amount").GetDecimal(), reversed.GetProperty("amount").GetDecimal());
+        foreach(var field in new[]{"receiptNumber","amount","paidAtUtc","paidAtAcademy","playerNameSnapshot"}) Assert.Equal(original.GetProperty(field).ToString(),read.GetProperty(field).ToString());
+        Assert.Equal(original.GetProperty("paidAtAcademy").GetString(), reversed.GetProperty("paidAtAcademy").GetString());
+        var academyReversal = TimeZoneInfo.ConvertTime(row.CreatedAtUtc, TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo"));
+        Assert.True(academyReversal.EqualsExact(read.GetProperty("voidedAtAcademy").GetDateTimeOffset()));
+        Assert.Equal(row.CreatedAtUtc, read.GetProperty("voidedAtUtc").GetDateTimeOffset());
+        var day=DateOnly.FromDateTime(academyReversal.DateTime);
         var code=await db.Players.Where(p=>p.Id==f.Player).Select(p=>p.PlayerCode).SingleAsync();var filter=$"from={day:yyyy-MM-dd}&to={day:yyyy-MM-dd}&search={code}";
         var report=await owner.GetFromJsonAsync<JsonElement>("/api/v1/reports/financial?"+filter);Assert.Equal(-f.Amount,report.GetProperty("netAmount").GetDecimal());
         Assert.Equal("Void",Assert.Single(report.GetProperty("items").EnumerateArray()).GetProperty("collectionType").GetString());

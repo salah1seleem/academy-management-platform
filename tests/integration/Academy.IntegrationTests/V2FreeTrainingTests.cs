@@ -23,6 +23,40 @@ public sealed partial class SubscriptionPaymentTests
         return new(c.SportEnrollmentId,c.SubscriptionPlanId,reason,(await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("quoteHash").GetString()!);
     }
     private async Task<HttpResponseMessage> Waive(HttpClient owner,FreeTrainingApprove body,string? key=null)=>await Post(owner,Waivers+"/approve",body,await Csrf(owner),key??Guid.NewGuid().ToString("N"));
+    private static Task<HttpResponseMessage> ReadWaiverAttempt(HttpClient client, Guid enrollmentId, string key)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{Waivers}/{enrollmentId}/attempt");
+        request.Headers.Add("Idempotency-Key", key);
+        return client.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task Free_training_recovers_only_the_owners_attempt_for_the_same_enrollment()
+    {
+        await using var family = await NewFamily();
+        using var owner = await InboxStaff(DemoSeed.OwnerEmail);
+        var body = await WaiverBody(owner, family);
+        var key = Guid.NewGuid().ToString("N");
+        Assert.Equal(HttpStatusCode.NotFound, (await ReadWaiverAttempt(owner, body.SportEnrollmentId, key)).StatusCode);
+        var saved = await Waive(owner, body, key);
+        saved.EnsureSuccessStatusCode();
+        var outcome = await saved.Content.ReadFromJsonAsync<JsonElement>();
+
+        var recovered = await ReadWaiverAttempt(owner, body.SportEnrollmentId, key);
+        recovered.EnsureSuccessStatusCode();
+        var readBack = await recovered.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(outcome.GetProperty("periodId").GetGuid(), readBack.GetProperty("periodId").GetGuid());
+        Assert.Equal(outcome.GetProperty("playerId").GetGuid(), readBack.GetProperty("playerId").GetGuid());
+        Assert.Equal(body.SportEnrollmentId, readBack.GetProperty("sportEnrollmentId").GetGuid());
+        Assert.Equal(HttpStatusCode.NotFound, (await ReadWaiverAttempt(owner, family.Choices[1].SportEnrollmentId, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await ReadWaiverAttempt(owner, body.SportEnrollmentId, "short")).StatusCode);
+        using var foreign = await InboxStaff(DemoSeed.FutureOwnerEmail);
+        Assert.Equal(HttpStatusCode.NotFound, (await ReadWaiverAttempt(foreign, body.SportEnrollmentId, key)).StatusCode);
+        using var admin = await InboxStaff(DemoSeed.AdminEmail);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ReadWaiverAttempt(admin, body.SportEnrollmentId, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ReadWaiverAttempt(family.Client, body.SportEnrollmentId, key)).StatusCode);
+    }
+
     [Fact]
     public async Task Free_training_owner_approves_once_with_no_cash_or_receipt_and_guardian_sees_only_own_service()
     {

@@ -1,14 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
-
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
-import 'player_goals.dart' show goalCommandId;
 import 'player_certificates.dart';
+import 'player_goals.dart' show goalCommandId;
 
 class TechnicalPromotionPage extends StatefulWidget {
   final AuthController auth;
@@ -28,14 +28,25 @@ class _TechnicalPromotionState extends State<TechnicalPromotionPage>
       ? null
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final original = identity;
-  bool foreground = true, busy = false;
+  bool foreground = true, needsRead = false, saved = false, checked = false;
   int revision = 0;
-  String? group, command, signature;
-  String message = '', error = '';
+  String? group, command, signature, previewGroup;
+  bool? applying;
+  String error = '';
   Json? preview;
+  bool get locked => applying != null || needsRead || saved;
   String get path =>
       '/api/v1/evaluations/technical-reviews/${widget.requestId}/promotion';
   String l(String ar, String en) => localized(context, ar, en);
+  List<Json> items(Object? value) => rows(value ?? const []);
+  String displayDate(Object? value) {
+    final parsed = DateTime.tryParse(day(value));
+    return parsed == null
+        ? ''
+        : DateFormat.yMMMd(Localizations.localeOf(context).toString())
+              .format(parsed);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,70 +60,117 @@ class _TechnicalPromotionState extends State<TechnicalPromotionPage>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
+  void didChangeAppLifecycleState(AppLifecycleState state) {
     setState(() {
-      foreground = s == AppLifecycleState.resumed;
+      foreground = state == AppLifecycleState.resumed;
       revision++;
       preview = null;
       group = null;
-      message = '';
-      error = '';
     });
   }
 
-  Future<void> submit(Json options, bool save) async {
-    if (busy || group == null) return;
+  void check() {
+    setState(() {
+      preview = null;
+      error = '';
+      if (needsRead && command != null) checked = true;
+      needsRead = false;
+      revision++;
+    });
+  }
+
+  Future<void> submit(
+    Json options,
+    String selected, {
+    required bool save,
+  }) async {
+    if (locked || options['applied'] != null || options['canPreview'] != true) {
+      return;
+    }
+    final current = preview;
+    if (save &&
+        (current == null ||
+            previewGroup != selected ||
+            current['enrollmentVersion'] != options['enrollmentVersion'] ||
+            current['fingerprint'] is! String ||
+            (current['fingerprint'] as String).isEmpty ||
+            (obj(current['preview'])['conflicts'] as List).isNotEmpty)) {
+      return;
+    }
+    final startRevision = revision;
     final body = <String, Object?>{
-      'groupId': group,
+      'groupId': selected,
       'enrollmentVersion': options['enrollmentVersion'],
-      'fingerprint': save && preview != null ? preview!['fingerprint'] : null,
+      'fingerprint': save ? current!['fingerprint'] : null,
     };
-    final next = jsonEncode({'save': save, ...body});
-    if (signature != next) {
+    final next = jsonEncode(body);
+    if (save && signature != next) {
       signature = next;
       command = goalCommandId();
     }
     setState(() {
-      busy = true;
+      applying = save;
       error = '';
+      checked = false;
+      if (!save) preview = null;
     });
     try {
-      final result = obj(
-        await widget.auth.request(
-          'POST',
-          path + (save ? '' : '/preview'),
-          body: {...body, 'requestId': command},
-        ),
+      final result = await widget.auth.request(
+        'POST',
+        path + (save ? '' : '/preview'),
+        body: {...body, 'requestId': save ? command : goalCommandId()},
       );
       if (!mounted || identity != original) return;
-      signature = null;
-      command = null;
-      setState(() {
-        if (save) {
+      if (save) {
+        setState(() {
+          saved = true;
           preview = null;
           revision++;
-          message = l(
-            'تم اعتماد المستوى ونقل المواعيد مع حفظ التاريخ، دون تحصيل جديد.',
-            'Level and schedule transfer saved with history; no new collection.',
-          );
-        } else {
-          preview = result;
-        }
-      });
-    } catch (failure) {
-      if (mounted && identity == original) {
+          signature = null;
+          command = null;
+        });
+      } else if (foreground && startRevision == revision) {
+        final candidate = obj(result);
+        final details = obj(candidate['preview']);
         setState(() {
-          if (!save || failure is ApiFailure && failure.status < 500) {
-            preview = null;
+          if (candidate['enrollmentVersion'] != options['enrollmentVersion'] ||
+              details['effectiveDate'] != options['effectiveDate'] ||
+              (details['targetGroupId'] != null &&
+                  details['targetGroupId'] != selected)) {
+            needsRead = true;
+            error = l(
+              'تغيّرت بيانات التسكين. حدّثها قبل إعادة المعاينة.',
+              'Placement details changed. Refresh them before previewing again.',
+            );
+          } else {
+            preview = candidate;
+            previewGroup = selected;
           }
-          error = l(
-            'تعذر الاعتماد. ربما تغير المصدر أو الصلاحية؛ أعد المعاينة. لم نسجل نجاحًا.',
-            'Could not confirm. Source or permissions may have changed; preview again. No success recorded.',
-          );
+        });
+      }
+    } catch (failure) {
+      if (mounted &&
+          identity == original &&
+          (save || startRevision == revision)) {
+        final status = failure is ApiFailure ? failure.status : 0;
+        setState(() {
+          preview = null;
+          needsRead = save || [401, 403, 404, 409].contains(status);
+          error = save && (status == 0 || status >= 500)
+              ? l(
+                  'تعذر تأكيد التنفيذ. تحقّق من سجل التنفيذ قبل المحاولة مرة أخرى.',
+                  'The transfer could not be confirmed. Check the transfer record before trying again.',
+                )
+              : failure is ApiFailure
+              ? failure.message
+              : l(
+                  'تعذر تحميل المعاينة. أعد المحاولة.',
+                  'The preview could not be loaded. Try again.',
+                );
         });
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) setState(() => applying = null);
     }
   }
 
@@ -125,166 +183,311 @@ class _TechnicalPromotionState extends State<TechnicalPromotionPage>
       }
       return GuardianPage(
         title: l('تنفيذ التوصية الفنية', 'Apply technical recommendation'),
+        onBack: () => Navigator.of(context).maybePop(),
         child: RemoteBody(
           key: ValueKey('$identity:$revision'),
           auth: widget.auth,
           path: path,
           builder: (context, value) {
-            final d = obj(value),
-                applied = d['applied'] == null ? null : obj(d['applied']);
+            final data = obj(value);
+            final applied = data['applied'] == null
+                ? null
+                : obj(data['applied']);
+            final groups = items(data['groups']);
+            final selected = groups.any((item) => item['id'] == group)
+                ? group
+                : null;
             final current =
-                preview?['enrollmentVersion'] == d['enrollmentVersion']
+                selected != null &&
+                    previewGroup == selected &&
+                    preview?['enrollmentVersion'] == data['enrollmentVersion']
                 ? preview
                 : null;
-            final details = current == null ? null : obj(current['preview']);
-            final conflicts = details == null
-                ? <Object?>[]
-                : (details['conflicts'] as List? ?? []);
             return gList([
-              if (message.isNotEmpty) Text(message),
-              if (error.isNotEmpty) Text(error),
-              GCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      textOf(d['recommendedLevel']),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text(
-                      '${l('التنفيذ من يوم', 'Effective day')}: ${d['effectiveDate']}',
-                    ),
-                    Text(
-                      l(
-                        'معاينة ثم اعتماد صريح. يحفظ التاريخ ولا يغير العمرية أو الباقة أو التحصيل أو الحضور المسجل.',
-                        'Preview then explicitly confirm. History is preserved; age category, package, money and recorded attendance are unchanged.',
-                      ),
-                    ),
-                    if (applied != null)
-                      Text(
-                        '${l('تم التنفيذ إلى', 'Applied to')}: ${applied['toLevelName']}',
-                      ),
-                    if (applied != null)
-                      GLink(
-                        l(
-                          'شهادة إنجاز من هذا المصدر',
-                          'Achievement certificate from this source',
-                        ),
-                        Icons.workspace_premium_outlined,
-                        () => openPage(
-                          context,
-                          PlayerCertificatesPage(
-                            auth: widget.auth,
-                            sourceId: textOf(applied['id']),
-                          ),
-                        ),
-                      ),
-                    if (applied == null && d['canPreview'] != true)
-                      Text(
-                        l(
-                          'تغيرت الأدلة أو الخطة؛ يلزم طلب ومراجعة حديثان.',
-                          'Evidence or plan changed; a new request and review are required.',
-                        ),
-                      ),
-                    if (applied == null && d['canPreview'] == true) ...[
-                      const SizedBox(height: 24),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        initialValue: group,
-                        decoration: InputDecoration(
-                          labelText: l(
-                            'المجموعة في المستوى الموصى به',
-                            'Group at recommended level',
-                          ),
-                        ),
-                        items: rows(d['groups'])
-                            .map(
-                              (g) => DropdownMenuItem(
-                                value: textOf(g['id']),
-                                child: Text(textOf(g['name']), maxLines: 2),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: busy
-                            ? null
-                            : (v) => setState(() {
-                                group = v;
-                                preview = null;
-                                message = '';
-                              }),
-                      ),
-                      if (rows(d['groups']).isEmpty)
-                        Text(
-                          l(
-                            'لا توجد مجموعة مطابقة؛ جهزها ومواعيدها أولًا.',
-                            'No matching group. Prepare a group and its sessions first.',
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: busy || group == null
-                            ? null
-                            : () => submit(d, false),
-                        child: Text(
-                          l(
-                            'معاينة المستوى والمواعيد',
-                            'Preview level and schedule',
-                          ),
-                        ),
-                      ),
-                      if (d['hasMore'] == true)
-                        Text(
-                          l(
-                            'تظهر أول100 مجموعة.',
-                            'Showing the first100 groups.',
-                          ),
-                        ),
-                    ],
-                  ],
-                ),
-              ),
-              if (d['canPreview'] == true && current != null && details != null)
-                GCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        l('راجع قبل الاعتماد', 'Review before confirming'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(
-                        '${details['sourceGroup']} ← ${details['targetGroup']}',
-                      ),
-                      Text('${current['level']} · ${details['effectiveDate']}'),
-                      Text(
-                        '${l('مواعيد سابقة', 'Previous sessions')}: ${(details['removedSessions'] as List).length} · ${l('جديدة', 'New')}: ${(details['addedSessions'] as List).length}',
-                      ),
-                      for (final c in conflicts) Text(textOf(c)),
-                      if (conflicts.isEmpty)
-                        Text(
-                          l(
-                            'لا تعارض في المعاينة الحالية؛ يعاد الفحص عند الحفظ.',
-                            'No conflicts in this preview; checks run again when saving.',
-                          ),
-                        ),
-                      FilledButton(
-                        onPressed: busy || conflicts.isNotEmpty
-                            ? null
-                            : () => submit(d, true),
-                        child: Text(
-                          l(
-                            'اعتماد المستوى ونقل المجموعة',
-                            'Confirm level and group transfer',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              optionCard(data, groups, selected, applied),
+              if (data['canPreview'] == true &&
+                  applied == null &&
+                  current != null)
+                previewCard(data, selected!, current),
             ]);
           },
         ),
       );
     },
   );
+
+  Widget optionCard(
+    Json data,
+    List<Json> groups,
+    String? selected,
+    Json? applied,
+  ) {
+    final player = data['player'] as String? ?? '';
+    final scope = [
+      data['sport'],
+      data['branch'],
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    final label = l(
+      'المجموعة في المستوى الموصى به',
+      'Group at recommended level',
+    );
+    return GCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            player.isEmpty ? textOf(data['recommendedLevel']) : player,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          if (player.isNotEmpty && scope.isNotEmpty) Text(scope),
+          if (applied != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                '${l('تم التنفيذ إلى', 'Applied to')} ${applied['toLevelName']}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            if (applied['effectiveDate'] != null)
+              fact(
+                l('بداية النقل', 'Transfer starts'),
+                displayDate(applied['effectiveDate']),
+              )
+            else if (applied['createdAtUtc'] != null)
+              fact(
+                l('تاريخ التسجيل', 'Recorded on'),
+                displayDate(applied['createdAtUtc']),
+              ),
+            GLink(
+              l(
+                'شهادة إنجاز من هذا المصدر',
+                'Achievement certificate from this source',
+              ),
+              Icons.workspace_premium_outlined,
+              () => openPage(
+                context,
+                PlayerCertificatesPage(
+                  auth: widget.auth,
+                  sourceId: textOf(applied['id']),
+                ),
+              ),
+            ),
+          ] else ...[
+            if (player.isNotEmpty)
+              fact(
+                l('المستوى الموصى به', 'Recommended level'),
+                textOf(data['recommendedLevel']),
+              ),
+            if (error.isNotEmpty)
+              Semantics(liveRegion: true, child: Text(error)),
+            if (needsRead || saved)
+              OutlinedButton(
+                onPressed: check,
+                child: Text(
+                  l('تحقّق من سجل التنفيذ', 'Check the transfer record'),
+                ),
+              ),
+            if (checked)
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  l(
+                    'لا يوجد تنفيذ مسجّل لهذه التوصية.',
+                    'No transfer is recorded for this recommendation.',
+                  ),
+                ),
+              ),
+            if (saved)
+              Text(
+                l(
+                  'لم يظهر سجل التنفيذ بعد. حدّث السجل للتحقق.',
+                  'The transfer record has not appeared. Refresh to check again.',
+                ),
+              )
+            else if (data['canPreview'] != true)
+              Text(
+                l(
+                  'تغيّرت الأدلة أو الخطة. يلزم طلب مراجعة فنية جديد.',
+                  'Evidence or the plan changed. Request a new technical review.',
+                ),
+              )
+            else if (groups.isEmpty)
+              Text(
+                l(
+                  'لا توجد مجموعة مطابقة في فرع اللاعب. جهّز المجموعة ومواعيدها أولًا.',
+                  'No matching group in this branch. Prepare a group and its sessions first.',
+                ),
+              )
+            else ...[
+              const SizedBox(height: 16),
+              ExcludeSemantics(child: Text(label)),
+              const SizedBox(height: 6),
+              Semantics(
+                label: label,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('$revision:$selected'),
+                  isExpanded: true,
+                  isDense: false,
+                  initialValue: selected,
+                  hint: Text(l('اختر المجموعة', 'Choose group')),
+                  items: groups
+                      .map(
+                        (item) => DropdownMenuItem(
+                          value: textOf(item['id']),
+                          child: Text(textOf(item['name'])),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: locked
+                      ? null
+                      : (value) => setState(() {
+                          group = value;
+                          preview = null;
+                          error = '';
+                        }),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: locked || selected == null
+                    ? null
+                    : () => submit(data, selected, save: false),
+                child: Text(
+                  applying == false
+                      ? l('جارٍ تحميل المعاينة…', 'Loading preview…')
+                      : l(
+                          'معاينة المستوى والمواعيد',
+                          'Preview level and schedule',
+                        ),
+                ),
+              ),
+              if (data['hasMore'] == true)
+                Text(
+                  l(
+                    'تظهر أول 100 مجموعة مطابقة.',
+                    'Showing the first 100 matching groups.',
+                  ),
+                ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget fact(String label, String value) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Text('$label · $value'),
+  );
+
+  Widget schedule(String title, List<Json> sessions) {
+    final dates = sessions
+        .where((item) => item['sessionDate'] != null)
+        .take(3)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          sessions.isEmpty
+              ? l('لا توجد مواعيد مجدولة.', 'No scheduled sessions.')
+              : '${l('العدد', 'Total')}: ${sessions.length}',
+        ),
+        for (final item in dates)
+          Text(
+            [
+              displayDate(item['sessionDate']),
+              if (item['startTime'] != null && item['endTime'] != null)
+                trainingTimeRange(item['startTime'], item['endTime']),
+            ].where((value) => value.isNotEmpty).join(' · '),
+          ),
+        if (dates.isNotEmpty && sessions.length > dates.length)
+          Text(
+            l(
+              'تظهر أقرب ${dates.length} مواعيد.',
+              'Showing the next ${dates.length} sessions.',
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget previewCard(Json options, String selected, Json current) {
+    final details = obj(current['preview']);
+    final conflicts = details['conflicts'] as List;
+    return GCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l('معاينة التسكين', 'Placement preview'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          fact(
+            l('المجموعة الحالية', 'Current group'),
+            textOf(details['sourceGroup']),
+          ),
+          fact(
+            l('المجموعة الجديدة', 'New group'),
+            textOf(details['targetGroup']),
+          ),
+          fact(l('المستوى الجديد', 'New level'), textOf(current['level'])),
+          fact(
+            l('بداية النقل', 'Transfer starts'),
+            displayDate(details['effectiveDate']),
+          ),
+          if (conflicts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              l('تعذّر اعتماد هذه المجموعة', 'This group cannot be confirmed'),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            for (final conflict in conflicts) Text(textOf(conflict)),
+          ],
+          schedule(
+            l(
+              'مواعيد تخرج من جدول اللاعب',
+              'Sessions removed from the player schedule',
+            ),
+            items(details['removedSessions']),
+          ),
+          schedule(
+            l(
+              'مواعيد تضاف إلى جدول اللاعب',
+              'Sessions added to the player schedule',
+            ),
+            items(details['addedSessions']),
+          ),
+          const SizedBox(height: 12),
+          if (conflicts.isEmpty)
+            Text(
+              l(
+                'تُراجع الأهلية عند الاعتماد. يبقى الاشتراك والتحصيل وسجل الحضور محفوظًا.',
+                'Eligibility is rechecked when you confirm. Subscription, payment and attendance records are preserved.',
+              ),
+            ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: locked || conflicts.isNotEmpty
+                ? null
+                : () => submit(options, selected, save: true),
+            child: Text(
+              applying == true
+                  ? l('جارٍ اعتماد التسكين…', 'Confirming placement…')
+                  : l(
+                      'اعتماد المستوى ونقل المجموعة',
+                      'Confirm level and group transfer',
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

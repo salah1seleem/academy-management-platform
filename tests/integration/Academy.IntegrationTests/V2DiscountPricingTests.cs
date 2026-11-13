@@ -18,6 +18,51 @@ namespace Academy.IntegrationTests;
 public sealed partial class V2PlanPublicationTests
 {
     [Fact]
+    public async Task Existing_player_registration_quote_matches_the_committed_permanent_discount()
+    {
+        var fixture = await Fixture(false);
+        using var owner = await Staff();
+        var plan = await CreatePlan(owner, fixture.B);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var player = await db.SportEnrollments.Where(x => x.Id == fixture.Enrollment).Select(x => x.PlayerId).SingleAsync();
+        var linkedRule = await AddRule(owner, FixedRule(fixture.B, plan, 250));
+        var selectedRule = await AddRule(owner, FixedRule(fixture.B, plan, 300));
+        var linkPath = $"/api/v1/discount-rules/players/{player}";
+        (await Write(owner, linkPath, new PlayerRuleWrite(linkedRule, true), true)).EnsureSuccessStatusCode();
+        (await Write(owner, linkPath, new PlayerRuleWrite(selectedRule, false), true)).EnsureSuccessStatusCode();
+
+        var phone = "010" + Random.Shared.Next(10000000, 99999999);
+        var quote = new RegistrationQuote(plan, phone, null, fixture.B, ExistingPlayerId: player);
+        async Task<string?> FinalAmount(RegistrationQuote request)
+        {
+            using var response = await Write(owner, "/api/v1/people/registration-quote", request);
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("finalAmount").GetString();
+        }
+
+        Assert.Equal("600.00", await FinalAmount(quote with { ExistingPlayerId = null }));
+        Assert.Equal("350.00", await FinalAmount(quote));
+        Assert.Equal("300.00", await FinalAmount(quote with { DiscountRuleId = selectedRule }));
+        using var missing = await Write(owner, "/api/v1/people/registration-quote", quote with { ExistingPlayerId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        var registration = new RegistrationRequest(player, null, null, null, null, "ولي أمر تحقق الخصم", phone, null,
+            fixture.B, Slice2DemoSeed.SwimmingId, null, plan, "Online", selectedRule, ExpectedAmount: 350);
+        using var stale = await Write(owner, "/api/v1/people/registrations", registration);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.False(await db.PlayerDiscountLinks.Where(x => x.PlayerId == player && x.DiscountRuleId == selectedRule).Select(x => x.IsActive).SingleAsync());
+        using var saved = await Write(owner, "/api/v1/people/registrations", registration with { ExpectedAmount = 300 });
+        saved.EnsureSuccessStatusCode();
+        var result = await saved.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(player, result.GetProperty("playerId").GetGuid());
+        var receiptId = result.GetProperty("receiptId").GetGuid();
+        var receipt = await db.Receipts.SingleAsync(x => x.Id == receiptId);
+        Assert.Equal((300m, (Guid?)selectedRule), (receipt.Amount, receipt.DiscountRuleIdSnapshot));
+        Assert.True(await db.PlayerDiscountLinks.Where(x => x.PlayerId == player && x.DiscountRuleId == selectedRule).Select(x => x.IsActive).SingleAsync());
+    }
+
+    [Fact]
     public async Task Discount_retry_preserves_financial_and_service_terms_instead_of_repricing_history()
     {
         var f = await Fixture(false); using var owner = await Staff(); var plan = await CreatePlan(owner, f.A); var body = FixedRule(f.A, plan); var rule = await AddRule(owner, body);
@@ -43,12 +88,12 @@ public sealed partial class V2PlanPublicationTests
         (await Write(owner, $"/api/v1/discount-rules/players/{player}", new { discountRuleId = rule, isActive = true }, true)).EnsureSuccessStatusCode();
         var submitted = await Write(guardian, "/api/v1/guardian/enrollment-requests", new { requestType = 1, existingPlayerId = player, sportId = Slice2DemoSeed.FootballId, preferredBranchId = f.A, subscriptionPlanId = plan }); submitted.EnsureSuccessStatusCode(); var id = (await submitted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var request = await db.NewEnrollmentRequests.SingleAsync(x => x.Id == id); Assert.Equal((RenewalDiscountType.FixedAmount, 200m, 200m, 400m), (request.DiscountType, request.DiscountValue, request.DiscountAmount, request.FinalAmount));
-        using var upload = new MultipartFormDataContent(); var file = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]); file.Headers.ContentType = new("image/png"); upload.Add(file, "file", "synthetic-proof.png"); upload.Add(new StringContent("Proof"), "purpose");
+        using var upload = new MultipartFormDataContent(); var file = new ByteArrayContent(SyntheticProofImage.Png()); file.Headers.ContentType = new("image/png"); upload.Add(file, "file", "synthetic-proof.png"); upload.Add(new StringContent("Proof"), "purpose");
         var csrf = await guardian.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf"); using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = upload }; uploadRequest.Headers.Add("X-CSRF-TOKEN", csrf.GetProperty("token").GetString());
         var uploaded = await guardian.SendAsync(uploadRequest); uploaded.EnsureSuccessStatusCode(); var asset = (await uploaded.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         (await Write(guardian, $"/api/v1/guardian/enrollment-requests/{id}/proof", new { assetId = asset })).EnsureSuccessStatusCode();
         (await Write(owner, $"/api/v1/discount-rules/{rule}", body with { FixedAmount = 300, ExpectedRevision = 1 }, true)).EnsureSuccessStatusCode();
-        (await Write(owner, $"/api/v1/enrollment-requests/{id}/approve", new { trainingGroupId = group })).EnsureSuccessStatusCode();
+        (await Write(owner, $"/api/v1/enrollment-requests/{id}/approve", new { trainingGroupId = group, expectedProofAssetId = asset })).EnsureSuccessStatusCode();
         db.ChangeTracker.Clear(); request = await db.NewEnrollmentRequests.SingleAsync(x => x.Id == id); var receipt = await db.Receipts.SingleAsync(x => x.SportEnrollmentId == request.CreatedSportEnrollmentId);
         Assert.Equal(400, receipt.Amount); Assert.Equal(RenewalDiscountType.FixedAmount, receipt.DiscountType); Assert.Equal(200, receipt.DiscountValue); Assert.Equal(rule, receipt.DiscountRuleIdSnapshot); Assert.Equal(1, receipt.DiscountRuleRevisionSnapshot);
     }

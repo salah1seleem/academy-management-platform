@@ -173,6 +173,7 @@ public sealed partial class FoundationDbContext(DbContextOptions<FoundationDbCon
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PhoneNumberNormalized).HasMaxLength(32);
+            entity.Property(x => x.ProviderVerificationSid).HasMaxLength(34);
             entity.HasIndex(x => new { x.PhoneNumberNormalized, x.CreatedAtUtc });
         });
 

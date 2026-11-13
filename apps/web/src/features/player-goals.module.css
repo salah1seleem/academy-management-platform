@@ -1,0 +1,51 @@
+.familyGoal {
+  overflow-wrap: anywhere;
+}
+
+.familyGoal h2,
+.familyGoal p {
+  margin: 0;
+}
+
+.familyGoal article p {
+  margin-block-start: .5rem;
+}
+
+.metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  color: var(--muted);
+}
+
+.familyGoal summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.retry {
+  justify-self: start;
+  min-height: 44px;
+  border: 0;
+  cursor: pointer;
+}
+
+.editorForm:global(.form-shell) {
+  grid-template-columns: minmax(0, 1fr);
+  max-inline-size: 44rem;
+}
+
+.withdraw {
+  margin-block-start: .75rem;
+}
+
+.familyHeader h1 {
+  font-size: clamp(1.5rem, 5vw, 2rem);
+}
+
+.related {
+  padding-inline: .5rem;
+}

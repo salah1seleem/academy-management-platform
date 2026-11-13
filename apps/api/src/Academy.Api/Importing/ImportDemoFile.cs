@@ -8,7 +8,7 @@ namespace Academy.Api.Importing;
 // Downloads synthetic examples only. It neither resets nor imports any records.
 public static class ImportDemoFile
 {
-    public static ImportWorkbook? Create(ImportReferences refs, ISubscriptionClock clock)
+    public static ImportWorkbook? Create(ImportReferences refs, DateOnly today)
     {
         if (refs.AcademyId != DemoSeed.NogoomAcademyId && refs.AcademyId != FootballDemoSeed.AcademyId) return null;
         var primaryId = refs.AcademyId == DemoSeed.NogoomAcademyId ? Slice2DemoSeed.FootballGroupId : FootballDemoSeed.Id("group/0");
@@ -16,8 +16,8 @@ public static class ImportDemoFile
         var birthYear = primary.MinYear ?? primary.MaxYear ?? 2016;
         var groups = new[] { primary }.Concat(refs.Values.Where(g => g.Kind == "group" && g.Id == Slice2DemoSeed.SwimmingGroupId && g.MinYear <= birthYear && g.MaxYear >= birthYear)).ToArray();
         static IReadOnlyList<ImportCell> Row(params string[] v) => v.Select(x => new ImportCell(x, true)).ToArray();
-        var template = refs.Template(clock.Today); var rows = new List<IReadOnlyList<ImportCell>> { template.Sheet("Enrollments").Rows[0] };
-        var month = new DateOnly(clock.Today.Year, clock.Today.Month, 1); var end = month.AddMonths(1).AddDays(-1);
+        var template = refs.Template(today); var rows = new List<IReadOnlyList<ImportCell>> { template.Sheet("Enrollments").Rows[0] };
+        var month = new DateOnly(today.Year, today.Month, 1); var end = month.AddMonths(1).AddDays(-1);
         for (var i = 0; i < 2 + (groups.Length > 1 ? 1 : 0); i++)
         {
             var g = groups[i == 2 ? 1 : 0]; var child = i == 2 ? 0 : i;
@@ -28,7 +28,7 @@ public static class ImportDemoFile
         return new(template.Sheets.Select(s => s.Name switch {
             "Enrollments" => s with { Rows = rows },
             "Metadata" => s with { Rows = s.Rows.Select(r => r[0].Value == "SourceSystem" ? Row("SourceSystem", "demo-historical-v2") : r).ToArray() },
-            "OpenBalances" => s with { Rows = [s.Rows[0], Row("DEMO-E0", "500.00", refs.Currency, clock.Today.ToString("yyyy-MM-dd"), "DEMO-OPEN-500", "سند اعتماد اصطناعي للعرض فقط")] },
+            "OpenBalances" => s with { Rows = [s.Rows[0], Row("DEMO-E0", "500.00", refs.Currency, today.ToString("yyyy-MM-dd"), "DEMO-OPEN-500", "سند اعتماد اصطناعي للعرض فقط")] },
             _ => s }).ToArray());
     }
 }

@@ -83,18 +83,19 @@ void main() {
         of: find.byType(GuardianChildCarousel),
         matching: find.byType(PageView),
       );
-      expect(t.widget<PageView>(pager).controller!.viewportFraction, .88);
+      expect(t.widget<PageView>(pager).controller!.viewportFraction, .94);
       await t.drag(pager, const Offset(320, 0));
       await t.pumpAndSettle();
       expect(t.widget<PageView>(pager).controller!.page!.round(), 1);
       final chosen = children[1];
-      final workspace = find.byKey(ValueKey('child-workspace-${chosen['id']}'));
+      final workspace = find.byKey(ValueKey('child-${chosen['id']}'));
       await reach(workspace);
       expect(workspace, findsOneWidget);
       await binding.takeScreenshot(
         'phase-approved-guardian-swiped-workspace-w375',
       );
-      await reach(find.text('أرصدة الأسرة'));
+      await reach(find.text('إيصالاتي'));
+      expect(find.text('أرصدة الأسرة'), findsNothing);
       t
           .state<ScrollableState>(find.byType(Scrollable).first)
           .position

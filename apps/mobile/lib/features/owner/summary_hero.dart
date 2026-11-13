@@ -5,6 +5,51 @@ import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import '../shared/experience_ui.dart';
 
+class PeriodTrend extends StatelessWidget {
+  const PeriodTrend({super.key, required this.change});
+
+  final num change;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = change < 0
+        ? ExperienceColors.negative(context)
+        : change > 0
+        ? ExperienceColors.positive(context)
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return Row(
+      children: [
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Icon(
+            change < 0
+                ? Icons.trending_down_rounded
+                : change > 0
+                ? Icons.trending_up_rounded
+                : Icons.trending_flat_rounded,
+            key: const ValueKey('collection-trend-icon'),
+            size: 19,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: UiText(
+            change == 0
+                ? 'مثل الفترة السابقة'
+                : '${performanceScoreText(change.abs())}% ${change < 0 ? 'أقل' : 'أعلى'} من الفترة السابقة',
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class SummaryHero extends StatelessWidget {
   const SummaryHero({
     super.key,
@@ -12,219 +57,163 @@ class SummaryHero extends StatelessWidget {
     required this.onReport,
     this.onTarget,
   });
+
   final Json data;
   final VoidCallback onReport;
   final VoidCallback? onTarget;
+
   @override
   Widget build(BuildContext context) {
     final collections = obj(data['collections']), target = obj(data['target']);
-    final change = collections['changePercentage'] as num?,
-        progress = target['achievement'] as num?;
+    final change = collections['changePercentage'] as num?;
+    final progress = target['achievement'] as num?;
+    final goal = target['amount'] as num?;
+    final colors = Theme.of(context).colorScheme;
     final accent = academyAccent(context);
-    return Column(
+    final achieved = progress == null ? null : performanceScoreText(progress);
+    final collected = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  const Flexible(
-                    child: UiText(
-                      'التحصيل خلال الفترة',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'تعريف التحصيل',
-                    icon: const Icon(Icons.info_outline, size: 16),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const UiText('التحصيل خلال الفترة'),
-                        content: const UiText(
-                          'التحصيل الفعلي بعد الاسترداد، بنفس الفرع والفترة المختارين. المقارنة بفترة سابقة مساوية في عدد الأيام.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(c),
-                            child: const UiText('حسنًا'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+        TextButton(
+          onPressed: onReport,
+          style: TextButton.styleFrom(
+            alignment: AlignmentDirectional.centerStart,
+            foregroundColor: colors.onSurface,
+            padding: EdgeInsets.zero,
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: MoneyText(collections['net'], data['currency'], size: 28),
+          ),
+        ),
+        if (change != null) PeriodTrend(change: change),
+      ],
+    );
+    final targetTile = goal == null
+        ? UiText(
+            'لم يُحدد هدف للفترة',
+            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+          )
+        : Container(
+            key: const ValueKey('summary-target-inline'),
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 12),
-            if (onTarget != null)
-              SizedBox(
-                width: 154,
-                child: OutlinedButton(
-                  key: const ValueKey('collection-target-button'),
-                  onPressed: onTarget,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 44),
-                    foregroundColor: academyInk(context),
-                    backgroundColor: accent.withValues(alpha: .09),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.flag_outlined, size: 15),
-                        SizedBox(width: 5),
-                        UiText(
-                          'ضبط هدف التحصيل',
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                UiText(
+                  'هدف الفترة',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
-              ),
-          ],
-        ),
-
-        Row(
-          key: const ValueKey('summary-halves'),
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  InkWell(
-                    onTap: onReport,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerStart,
-                        child: MoneyText(
-                          collections['net'],
-                          data['currency'],
-                          size: 32,
-                        ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: MoneyText(goal, data['currency'], size: 18),
+                ),
+                if (progress != null) ...[
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: (progress / 100).clamp(0, 1).toDouble(),
+                    color: accent,
+                    borderRadius: BorderRadius.circular(4),
+                    minHeight: 5,
+                    semanticsLabel: progress < 0 || progress > 100
+                        ? 'تحقيق هدف التحصيل، $achieved% من الهدف'
+                        : 'تحقيق هدف التحصيل',
+                    semanticsValue:
+                        '${performanceScoreText(progress.clamp(0, 100))}%',
+                  ),
+                  const SizedBox(height: 3),
+                  ExcludeSemantics(
+                    child: UiText(
+                      '$achieved%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  if (change != null)
-                    Row(
-                      children: [
-                        Icon(
-                          change < 0
-                              ? Icons.trending_down_rounded
-                              : Icons.trending_up_rounded,
-                          key: const ValueKey('collection-trend-icon'),
-                          size: 24,
-                          color: change < 0
-                              ? ExperienceColors.negative(context)
-                              : ExperienceColors.positive(context),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: UiText(
-                            '${change.abs().toStringAsFixed(1)}% ${change < 0 ? 'أقل' : 'أعلى'} من الفترة السابقة',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: change < 0
-                                  ? ExperienceColors.negative(context)
-                                  : ExperienceColors.positive(context),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (target['amount'] != null && progress != null) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      key: const ValueKey('summary-target-inline'),
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 52,
-                          height: 52,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox.expand(
-                                child: CircularProgressIndicator(
-                                  value: (progress / 100)
-                                      .clamp(0, 1)
-                                      .toDouble(),
-                                  color: accent,
-                                  strokeWidth: 5,
-                                  strokeCap: StrokeCap.round,
-                                  backgroundColor: accent.withValues(alpha: .1),
-                                  semanticsLabel: 'تحقيق هدف التحصيل',
-                                  semanticsValue:
-                                      '${progress.toStringAsFixed(0)}%',
-                                ),
-                              ),
-                              UiText(
-                                '${progress.toStringAsFixed(0)}%',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const UiText(
-                                'هدف الفترة',
-                                style: TextStyle(fontSize: 11),
-                              ),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: AlignmentDirectional.centerStart,
-                                child: MoneyText(
-                                  target['amount'],
-                                  data['currency'],
-                                  size: 21,
-                                ),
-                              ),
-                              UiText(
-                                'المتبقي ${money(((target['amount'] as num) - (collections['net'] as num)).clamp(0, double.infinity), data['currency'])}',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                ],
+              ],
+            ),
+          );
+    const heading = UiText(
+      'التحصيل خلال الفترة',
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    );
+    return LayoutBuilder(
+      builder: (context, bounds) {
+        final compact =
+            bounds.maxWidth >= 238 * MediaQuery.textScalerOf(context).scale(1);
+        final action = onTarget == null
+            ? null
+            : OutlinedButton(
+                key: const ValueKey('collection-target-button'),
+                onPressed: onTarget,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(44, 44),
+                ),
+                child: UiText(
+                  'ضبط هدف التحصيل',
+                  maxLines: compact ? 1 : null,
+                  softWrap: !compact,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+        final showTarget = goal != null || onTarget != null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (action == null)
+              heading
+            else if (compact)
+              Row(
+                children: [
+                  const Expanded(child: heading),
+                  const SizedBox(width: 8),
+                  action,
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [heading, const SizedBox(height: 4), action],
+              ),
+            const SizedBox(height: 4),
+            if (compact && showTarget)
+              Row(
+                key: const ValueKey('summary-halves'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: collected),
+                  const SizedBox(width: 9),
+                  Expanded(flex: 4, child: targetTile),
+                ],
+              )
+            else
+              Column(
+                key: const ValueKey('summary-halves'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  collected,
+                  if (showTarget) ...[const SizedBox(height: 8), targetTile],
                 ],
               ),
-            ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 }

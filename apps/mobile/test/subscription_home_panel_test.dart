@@ -26,6 +26,82 @@ Map<String, dynamic> home() => {
 };
 void main() {
   testWidgets(
+    'a cumulative point keeps the branch and drops the period start',
+    (t) async {
+      Uri? destination;
+      final auth = await authenticate('AcademyOwner', (_, path, _, _) async {
+        if (path.contains('/breakdown')) {
+          return {
+            'items': [
+              {'key': '2026-09-30', 'name': 'سبتمبر 2026', 'total': 7},
+            ],
+          };
+        }
+        if (path.contains('/items')) {
+          destination = Uri.parse(path);
+          return {
+            'total': 1,
+            'asOf': '2026-09-30',
+            'items': [
+              {
+                'id': 'e1',
+                'playerId': 'p1',
+                'name': 'لاعب خيالي',
+                'sport': 'السباحة',
+                'active': true,
+                'endDate': '2026-10-12',
+                'remainingSessions': 4,
+              },
+            ],
+          };
+        }
+        return {
+          ...home(),
+          'dimensions': ['months'],
+        };
+      });
+      await t.pumpWidget(
+        app(
+          Scaffold(
+            body: SingleChildScrollView(
+              child: SubscriptionHomePanel(
+                auth: auth,
+                from: '2026-10-01',
+                asOf: '2026-10-25',
+                branchId: 'b',
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      final analysis = find.text('تحليل الاشتراكات');
+      await t.ensureVisible(analysis);
+      await t.tap(analysis);
+      await t.pumpAndSettle();
+      final september = find.text('سبتمبر 2026');
+      await t.ensureVisible(september);
+      await t.tap(september);
+      await t.pumpAndSettle();
+      expect(destination?.queryParameters, {
+        'branchId': 'b',
+        'asOf': '2026-10-25',
+        'dimension': 'months',
+        'key': '2026-09-30',
+        'page': '1',
+        'state': 'all',
+      });
+      expect(find.text('تسجيلات بدأ اشتراكها'), findsOneWidget);
+      expect(find.text('عدد التسجيلات · 1'), findsOneWidget);
+      expect(find.text('لاعب خيالي'), findsOneWidget);
+      expect(find.text('نشط'), findsNothing);
+      expect(find.textContaining('متبقي'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets(
     'overview is immediate; analysis opens groups and cached dimensions retain the trusted scope',
     (t) async {
       final calls = <String>[];
@@ -91,9 +167,9 @@ void main() {
       await t.tap(find.text('الباقات'));
       await t.pumpAndSettle();
       expect(calls.where((p) => p.contains('/breakdown')).length, 2);
-      await t.ensureVisible(find.text('فعالة'));
+      await t.ensureVisible(find.text('لا تنتهي قريبًا'));
       await t.pumpAndSettle();
-      await t.tap(find.text('فعالة'));
+      await t.tap(find.text('لا تنتهي قريبًا'));
       await t.pumpAndSettle();
       final query = Uri.parse(calls.last).queryParameters;
       expect(query['state'], 'current');

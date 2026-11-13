@@ -27,6 +27,24 @@ public sealed record SubscriptionAdjustmentResult(
 
 public static class SubscriptionPeriodState
 {
+    internal static IOrderedQueryable<SubscriptionPeriod> OrderForDisplay(IQueryable<SubscriptionPeriod> periods, DateOnly today) =>
+        periods.OrderByDescending(p => p.Status == SubscriptionPeriodStatus.Frozen ||
+                (p.Status != SubscriptionPeriodStatus.Cancelled && p.StartDate <= today &&
+                 (p.EndDate == null || p.EndDate >= today) &&
+                 ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration ||
+                  p.RemainingSessions == null || p.RemainingSessions > 0)))
+            .ThenByDescending(p => p.Status != SubscriptionPeriodStatus.Cancelled && p.StartDate > today &&
+                ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration ||
+                 p.RemainingSessions == null || p.RemainingSessions > 0))
+            .ThenBy(p => p.StartDate > today && p.Status != SubscriptionPeriodStatus.Cancelled ? (DateOnly?)p.StartDate : null)
+            .ThenByDescending(p => p.UpdatedAtUtc)
+            .ThenByDescending(p => p.Id);
+
+    internal static IQueryable<SubscriptionPeriod> Upcoming(IQueryable<SubscriptionPeriod> periods, DateOnly today) =>
+        periods.Where(p => p.StartDate > today && p.Status != SubscriptionPeriodStatus.Cancelled && p.Status != SubscriptionPeriodStatus.Frozen &&
+            ((p.PlanTypeSnapshot ?? p.SubscriptionPlan.PlanType) == SubscriptionPlanType.Duration ||
+             p.RemainingSessions == null || p.RemainingSessions > 0));
+
     public static SubscriptionPeriodStatus Resolve(SubscriptionPeriodStatus stored, DateOnly start, DateOnly? end, SubscriptionPlanType planType, int? remainingSessions, DateOnly today)
     {
         if (stored is SubscriptionPeriodStatus.Cancelled or SubscriptionPeriodStatus.Frozen) return stored;

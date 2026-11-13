@@ -121,7 +121,10 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('موظف عرض'), findsOneWidget);
     expect(find.text('ليست لديك صلاحية الرواتب'), findsNothing);
-    expect(find.text('إضافة موظف'), findsOneWidget);
+    expect(find.text('إضافة موظف'), findsNothing);
+    await t.tap(find.text('إضافة حساب دخول'));
+    await t.pumpAndSettle();
+    expect(find.text('حساب دخول للموظف'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }

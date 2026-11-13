@@ -96,24 +96,27 @@ void main() {
         await revealTestTarget(tester, find.text('حاضر'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('حاضر'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('حفظ الحضور'));
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(
-          find.text('بانتظار المزامنة'),
-          -250,
-          scrollable: find.byType(Scrollable).first,
-        );
-        expect(find.text('بانتظار المزامنة'), findsOneWidget);
+        expect(find.text('الحفظ غير مؤكد'), findsOneWidget);
         expect(writes, 1);
-        final retry = find.text('مراجعة وإعادة المزامنة');
+        final retry = find.text('تحقق من الحفظ');
         await revealTestTarget(tester, retry);
         await tester.tap(retry);
         await tester.pumpAndSettle();
+        expect(writes, 1);
+        if (!lostResponse) {
+          final resend = find.text('إعادة إرسال التغييرات');
+          await revealTestTarget(tester, resend);
+          await tester.tap(resend);
+          await tester.pumpAndSettle();
+        }
         expect(writes, lostResponse ? 1 : 2);
-        expect(find.text('بانتظار المزامنة'), findsNothing);
+        expect(find.text('الحفظ غير مؤكد'), findsNothing);
         expect(
           find.textContaining(
-            lostResponse ? 'دون إعادة الإرسال' : 'يمكن تصحيحه',
+            lostResponse ? 'دون إعادة الإرسال' : 'تم حفظ الحضور.',
           ),
           findsOneWidget,
         );
@@ -219,7 +222,7 @@ void main() {
     final auth = await coach((m, p, b, t) async {
       if (p == '/api/v1/coach/groups') {
         return [
-          {'id': 'g1', 'arabicName': 'براعم 2018'},
+          {'id': 'g1', 'arabicName': 'براعم 2018', 'playerCount': 2},
         ];
       }
       if (p == '/api/v1/academy/calendar') return {'today': '2026-09-28'};
@@ -261,6 +264,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('براعم 2018'), findsWidgets);
+    expect(find.text('لاعبان'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.textContaining('مسبح الاختبار · A'),
       250,
@@ -294,7 +298,7 @@ void main() {
               'sportEnrollmentId': 'e1',
               'arabicName': 'آدم',
               'playerCode': 'FB-001',
-              'attendanceStatus': 'NotRecorded',
+              'attendanceStatus': sent == null ? 'NotRecorded' : 'Late',
               'version': 9104,
             },
           ],
@@ -324,7 +328,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.toString(), contains('Late'));
       expect(sent.toString(), contains('expectedVersion: 9104'));
-      expect(find.textContaining('يمكن تصحيحه'), findsOneWidget);
+      expect(find.textContaining('تم حفظ الحضور.'), findsOneWidget);
     },
   );
 }

@@ -1,9 +1,73 @@
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
-import {NotificationInbox,NotificationTemplates,NotificationHistory} from './notification-center';
-vi.mock('next/navigation',()=>({useSearchParams:()=>new URLSearchParams()}));
-afterEach(()=>{cleanup();vi.restoreAllMocks();});
+import {CollectionReminders,NotificationInbox,NotificationTemplates,NotificationHistory} from './notification-center';
+let query=new URLSearchParams();
+vi.mock('next/navigation',()=>({useSearchParams:()=>query}));
+afterEach(()=>{cleanup();vi.restoreAllMocks();query=new URLSearchParams();});
 const response=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status});
+it.each([true,false])("offers the family balance from a targetless reminder only in the guardian inbox (%s)",async guardian=>{
+ global.fetch=vi.fn(async()=>response({unread:1,total:1,items:[{id:'receivable',message:'تذكير مستحقات اصطناعي',createdAtUtc:'2026-11-13',isRead:false,targetKind:'Receivables',targetId:null}]}));
+ render(<NotificationInbox guardian={guardian}/>);
+ await screen.findByText('تذكير مستحقات اصطناعي');
+ const destination=screen.queryByRole('link',{name:'كشف المستحقات'});
+ if(guardian)expect(destination).toHaveAttribute('href','/guardian/receivables');
+ else expect(destination).not.toBeInTheDocument();
+});
+const reminderAudience={total:1,shown:1,template:'رسالة اصطناعية',items:[{id:'parent',name:'أسرة اصطناعية',children:[{name:'لاعب اصطناعي'}],amount:100,currency:'EGP'}]};
+
+it('recovers the recipient read and removes the composer when the selected branch is empty',async()=>{
+ query=new URLSearchParams({branchId:'a'});
+ global.fetch=vi.fn().mockResolvedValueOnce(response({},503)).mockResolvedValueOnce(response({...reminderAudience,items:[],total:0,shown:0}));
+ render(<CollectionReminders/>);
+ expect(await screen.findByRole('alert')).toHaveTextContent('تعذر تحميل قائمة المستلمين');
+ expect(screen.queryByRole('status')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'تحديث قائمة المستلمين'}));
+ expect(await screen.findByRole('link',{name:'مراجعة كشف المستحقات'})).toHaveAttribute('href','/dashboard/finance/receivables?state=overdue&branchId=a');
+ expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+ expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+});
+
+it('clears the old audience and message on navigation and shows a distinct denied state',async()=>{
+ query=new URLSearchParams({branchId:'a'});
+ global.fetch=vi.fn(async path=>String(path).includes('branchId=a')?response(reminderAudience):response({},403));
+ const view=render(<CollectionReminders/>);
+ fireEvent.click(await screen.findByRole('checkbox',{name:/أسرة اصطناعية/}));
+ expect(screen.getByRole('button',{name:'معاينة التنبيه'})).toBeVisible();
+ query=new URLSearchParams({branchId:'b'});
+ view.rerender(<CollectionReminders/>);
+ expect(screen.queryByText('أسرة اصطناعية')).not.toBeInTheDocument();
+ expect(await screen.findByRole('alert')).toHaveTextContent('غير متاحة لهذا الحساب');
+ expect(screen.queryByRole('button',{name:'تحديث قائمة المستلمين'})).not.toBeInTheDocument();
+});
+
+it('keeps the exact attempted send after a lost reply and reloads after a stale preview',async()=>{
+ const posts:unknown[]=[];
+ let count=0;
+ global.fetch=vi.fn(async (path,init)=>{
+  const url=String(path);
+  if(url.endsWith('/csrf'))return response({token:'csrf'});
+  if(url.endsWith('/preview'))return response({previewHash:'confirmed',count:1,messages:[{id:'parent',message:'نص المعاينة'}]});
+  if(url.endsWith('/send')){
+   posts.push(JSON.parse(String(init?.body)));
+   if(++count===1)throw new TypeError('network');
+   return response({message:'تغيّرت البيانات'},409);
+  }
+  return response(reminderAudience);
+ });
+ render(<CollectionReminders/>);
+ fireEvent.click(await screen.findByRole('checkbox',{name:/أسرة اصطناعية/}));
+ fireEvent.click(screen.getByRole('button',{name:'معاينة التنبيه'}));
+ expect(await screen.findByText('نص المعاينة')).toBeVisible();
+ expect(posts).toHaveLength(0);
+ fireEvent.click(screen.getByRole('button',{name:/تأكيد إرسال/}));
+ const retry=await screen.findByRole('button',{name:'إعادة تأكيد الإرسال'});
+ expect(screen.getByRole('textbox',{name:'نص التنبيه'})).toBeDisabled();
+ fireEvent.click(retry);
+ expect(await screen.findByRole('button',{name:'تحديث قائمة المستلمين'})).toBeVisible();
+ expect(screen.queryByText('نص المعاينة')).not.toBeInTheDocument();
+ expect(posts).toHaveLength(2);
+ expect(posts[0]).toEqual(posts[1]);
+});
 it('inbox persists unread state and links each committed event to its own resource',async()=>{
  let read=false;const writes:unknown[]=[];
  global.fetch=vi.fn(async(path,init)=>{
@@ -12,11 +76,58 @@ it('inbox persists unread state and links each committed event to its own resour
   return response({unread:read?0:1,total:3,items:[{id:'notice',message:'تعديل أيام طفل اصطناعي',isRead:read,createdAtUtc:'2026-10-21',reward:false,targetKind:'SubscriptionPeriod',targetId:'exact-period'},
   {id:'family',message:'تجديد طفلة أ وطفل ب',isRead:true,createdAtUtc:'2026-10-21',reward:false,targetKind:'FamilyRenewal',targetId:'exact-family'}, {id:'product',message:'إثبات طلب منتج اصطناعي',isRead:true,createdAtUtc:'2026-10-21',reward:false,targetKind:'ProductReview',targetId:'exact-order'}]});
  });
- render(<NotificationInbox/>);
+ render(<NotificationInbox guardian/>);
  expect(await screen.findByRole('link',{name:'عرض الاشتراك وتعديلاته'})).toHaveAttribute('href','/guardian/subscriptions/periods/exact-period');
  expect(screen.getByRole('link',{name:'عرض تجديد الأسرة'})).toHaveAttribute('href','/guardian/family-renewals/exact-family');
- expect(screen.getByRole('link',{name:'مراجعة طلب المنتج'})).toHaveAttribute('href','/dashboard/product-sales/exact-order');
- fireEvent.click(screen.getByRole('button',{name:'تمت القراءة'}));await waitFor(()=>expect(screen.getByText('0 غير مقروءة')).toBeInTheDocument());expect(writes).toEqual([{isRead:true}]);
+ expect(screen.queryByRole('link',{name:'مراجعة طلب المنتج'})).not.toBeInTheDocument();
+ const article = screen.getByText('تعديل أيام طفل اصطناعي').closest('article')!;
+ const button = within(article).getByRole('button',{name:'تحديد كمقروء'});
+ button.focus(); fireEvent.click(button); fireEvent.click(button);
+ await screen.findByText('غير المقروءة 0');
+ expect(within(article).getByRole('button',{name:'تحديد كغير مقروء'})).toHaveFocus();
+ expect(writes).toEqual([{isRead:true}]);
+});
+it('recovers a failed inbox read without presenting loading and error together', async () => {
+ global.fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(response({items: [], unread: 0, total: 0}));
+ render(<NotificationInbox guardian/>);
+ expect(await screen.findByRole('alert')).toHaveTextContent('تعذر تحميل التنبيهات.');
+ expect(screen.queryByText('جارٍ تحميل التنبيهات…')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button', {name: 'إعادة المحاولة'}));
+ expect(await screen.findByText('لا توجد تنبيهات.')).toBeVisible();
+ expect(screen.queryByRole('navigation',{name:'صفحات التنبيهات'})).not.toBeInTheDocument();
+});
+it('checks the saved status on the same page after a lost write reply', async () => {
+ let saved = false;
+ const writes: unknown[] = [];
+ global.fetch = vi.fn(async (path, init) => {
+  if (String(path).endsWith('/csrf')) return response({token:'csrf'});
+  if (init?.method === 'PUT') {
+   writes.push(JSON.parse(String(init.body)));
+   saved = true;
+   throw new TypeError('Connection closed');
+  }
+  const second = String(path).endsWith('page=2');
+  return response({unread: saved ? 0 : 1, total: 26, items: [{id: second ? 'second' : 'first', message: second ? 'تنبيه في الصفحة الثانية' : 'تنبيه في الصفحة الأولى', createdAtUtc: '2026-10-21', isRead: saved || !second, reward: false}]});
+ });
+ render(<NotificationInbox/>);
+ fireEvent.click(await screen.findByRole('button',{name:'التالي'}));
+ await screen.findByText('تنبيه في الصفحة الثانية');
+ fireEvent.click(screen.getByRole('button',{name:'تحديد كمقروء'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('تعذر تأكيد تحديث الحالة.');
+ expect(screen.getByText('غير المقروءة 1')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'تحديث القائمة'}));
+ expect(await screen.findByRole('button',{name:'تحديد كغير مقروء'})).toBeVisible();
+ expect(screen.getByText('صفحة 2 من 2')).toBeVisible();
+ expect(writes).toEqual([{isRead:true}]);
+});
+it('links directly to the stored match for staff and exposes no guardian payment destination', async () => {
+ global.fetch = vi.fn(async () => response({unread: 2, total: 2, items: [
+  {id: 'match', message: 'موعد مباراة اصطناعية', isRead: false, createdAtUtc: '2026-10-21', matchId: 'match-target', targetKind: 'Matches', reward: false},
+  {id: 'payment', message: 'دفع أسرة اصطناعية', isRead: false, createdAtUtc: '2026-10-21', targetKind: 'Payment', targetId: 'payment-target', reward: false},
+ ]}));
+ render(<NotificationInbox/>);
+ expect(await screen.findByRole('link',{name:'عرض المباراة'})).toHaveAttribute('href','/dashboard/matches?matchId=match-target');
+ expect(screen.queryByRole('link',{name:'عرض طلب الدفع'})).not.toBeInTheDocument();
 });
 it('template editor lists actual event variables and saving a template never sends a notification',async()=>{
  const calls:{path:string;method?:string;body?:unknown}[]=[];
@@ -68,7 +179,7 @@ it('reward notices open the persisted reward id while legacy notices retain the 
   {id:'reward-notice',message:'مكافأة محفوظة محددة',isRead:true,createdAtUtc:'2026-10-23',reward:true,targetKind:'Rewards',targetId:'exact-reward'},
   {id:'old-reward-notice',message:'مكافأة تاريخية بلا معرف',isRead:true,createdAtUtc:'2026-10-23',reward:true,targetKind:'Rewards'},
  ]}));
- render(<NotificationInbox/>);await screen.findByText('مكافأة محفوظة محددة');
+ render(<NotificationInbox guardian/>);await screen.findByText('مكافأة محفوظة محددة');
  expect(screen.getAllByRole('link',{name:'عرض المكافأة'}).map(a=>a.getAttribute('href'))).toEqual(['/guardian/rewards/exact-reward','/guardian/rewards']);
  expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
 });

@@ -74,6 +74,8 @@ abstract interface class WorkbookTransport {
     Map<String, String> fields,
     String token, {
     String? idempotencyKey,
+    String? validRowsFromHash,
+    bool correctionRows = false,
   });
 }
 
@@ -120,12 +122,26 @@ class HttpApiTransport
           .timeout(const Duration(seconds: 20));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         // Fixed localized messages avoid leaking HTML, stack traces or arbitrary server content.
+        if (response.statusCode == 409 && _guardianRenewalIsOpen(path, raw)) {
+          throw const ApiFailure(
+            409,
+            'يوجد طلب تجديد مفتوح لهذا التسجيل.',
+            code: 'renewal_already_open',
+          );
+        }
+        final registrationConflict = _registrationReviewConflict(
+          path,
+          response.statusCode,
+          raw,
+        );
+        if (registrationConflict != null) throw registrationConflict;
         throw ApiFailure(response.statusCode, switch (response.statusCode) {
           400 => 'راجع البيانات المدخلة وحاول مجددًا.',
           401 => 'انتهت الجلسة أو تعذر التحقق من بيانات الدخول.',
           403 => 'ليس لديك صلاحية لهذا الإجراء.',
           409 =>
-            evaluationConflictMessage(raw) ??
+            staffAttendanceConflictMessage(path, raw) ??
+                evaluationConflictMessage(raw) ??
                 'تغيرت البيانات. حدّث الصفحة قبل المحاولة.',
           422 =>
             registrationValidationMessage(path, raw) ??
@@ -336,19 +352,31 @@ class HttpApiTransport
     Map<String, String> fields,
     String token, {
     String? idempotencyKey,
+    String? validRowsFromHash,
+    bool correctionRows = false,
   }) async {
     const allowed = {
       'ExpectedFileHash',
       'ExpectedReferenceStamp',
       'GuardianLinksApproved',
       'OpeningBalancesApproved',
+      'HistoricalPaymentsApproved',
       'AcceptFinancialReview',
       'GuardianResolutions',
     };
+    const workbookType =
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    final download = validRowsFromHash != null;
     if (bytes.isEmpty ||
         bytes.length > 5 * 1024 * 1024 ||
         fields.keys.any((key) => !allowed.contains(key)) ||
         fields.values.any((value) => value.length > 256 * 1024) ||
+        correctionRows && !download ||
+        download &&
+            (commit ||
+                fields.isNotEmpty ||
+                idempotencyKey != null ||
+                !RegExp(r'^[0-9A-F]{64}$').hasMatch(validRowsFromHash)) ||
         commit &&
             (idempotencyKey == null ||
                 !RegExp(r'^[a-zA-Z0-9_-]{8,100}$').hasMatch(idempotencyKey))) {
@@ -358,17 +386,24 @@ class HttpApiTransport
       );
     }
     final boundary = 'academy-xlsx-${DateTime.now().microsecondsSinceEpoch}';
+    final action = correctionRows
+        ? 'preview/corrections'
+        : (commit ? 'commit' : 'preview');
+    final uri = config.api.resolve('/api/v1/people/import/$action');
     try {
       final request = await _client
           .postUrl(
-            config.api.resolve(
-              '/api/v1/people/import/${commit ? 'commit' : 'preview'}',
-            ),
+            download && !correctionRows
+                ? uri.replace(queryParameters: {'downloadValidRows': 'true'})
+                : uri,
           )
           .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        download ? workbookType : 'application/json',
+      );
       request.headers.set(
         HttpHeaders.contentTypeHeader,
         'multipart/form-data; boundary=$boundary',
@@ -376,7 +411,9 @@ class HttpApiTransport
       if (idempotencyKey != null) {
         request.headers.set('Idempotency-Key', idempotencyKey);
       }
-      for (final field in fields.entries) {
+      for (final field
+          in (download ? {'ExpectedFileHash': validRowsFromHash} : fields)
+              .entries) {
         request.add(
           utf8.encode(
             '--$boundary\r\nContent-Disposition: form-data; name="${field.key}"\r\n\r\n${field.value}\r\n',
@@ -407,12 +444,37 @@ class HttpApiTransport
         throw ApiFailure(response.statusCode, switch (response.statusCode) {
           401 => 'انتهت الجلسة. سجل الدخول وراجع الدفعة قبل إعادة التأكيد.',
           403 => 'ليست لديك صلاحية استيراد هذه البيانات ضمن نطاقك.',
-          409 => 'تغيرت المعاينة أو الروابط. راجع الدفعة والملف قبل المحاولة.',
-          413 => 'ارفع ملف XLSX ضمن5ميجابايت.',
-          422 => 'راجع القالب والموافقات والبيانات المطلوبة قبل الاعتماد.',
+          409 =>
+            download
+                ? 'تعذّر فصل الصفوف. صحّح الملف الأصلي وأعد فحصه.'
+                : 'تغيرت المعاينة أو الروابط. راجع الدفعة والملف قبل المحاولة.',
+          413 => 'اختر ملف XLSX بحجم لا يزيد عن 5 ميجابايت.',
+          422 =>
+            commit ? 'راجع القالب والموافقات والبيانات المطلوبة قبل الاعتماد.' : 'تعذّر قراءة ملف Excel. اختر ملف XLSX صالحًا من القالب الحالي.',
           429 => 'محاولات كثيرة. انتظر قليلًا ثم راجع حالة الدفعة.',
           _ => 'تعذر تأكيد نتيجة الاستيراد. راجع الدفعات قبل إعادة المحاولة.',
         });
+      }
+      if (download) {
+        if (response.headers.contentType?.mimeType != workbookType ||
+            body.length < 4 ||
+            body.length > 5 * 1024 * 1024) {
+          throw const ApiFailure(
+            422,
+            'تعذّر تنزيل ملف XLSX صالح. أعد فحص الملف الأصلي.',
+          );
+        }
+        final bytes = body.takeBytes();
+        if (bytes[0] != 0x50 ||
+            bytes[1] != 0x4B ||
+            bytes[2] != 0x03 ||
+            bytes[3] != 0x04) {
+          throw const ApiFailure(
+            422,
+            'تعذّر تنزيل ملف XLSX صالح. أعد فحص الملف الأصلي.',
+          );
+        }
+        return bytes;
       }
       return jsonDecode(utf8.decode(body.takeBytes()));
     } on SocketException {
@@ -436,8 +498,48 @@ class HttpApiTransport
   }
 }
 
+bool _guardianRenewalIsOpen(String path, String raw) {
+  if (path != '/api/v1/guardian/subscriptions/renewals' &&
+      path != '/api/v1/guardian/subscriptions/external/renewals') {
+    return false;
+  }
+  try {
+    final value = jsonDecode(raw);
+    return value is Map && value['code'] == 'renewal_already_open';
+  } on FormatException {
+    return false;
+  }
+}
+
 /// Only this first-party registration allowlist can replace the generic error.
 /// Never display arbitrary HTTP bodies, HTML, exception text or hidden metadata.
+ApiFailure? _registrationReviewConflict(String path, int status, String raw) {
+  if (path != '/api/v1/people/registrations' || ![409, 422].contains(status)) {
+    return null;
+  }
+  final Map<String, dynamic> payload;
+  try {
+    final value = jsonDecode(raw);
+    if (value is! Map<String, dynamic>) return null;
+    payload = value;
+  } on FormatException {
+    return null;
+  }
+  return switch ((status, payload['message'])) {
+    (409, 'تغير المبلغ المستحق. راجع السعر قبل التحصيل.') => const ApiFailure(
+      409,
+      'تغيّر المبلغ المستحق. احسب المبلغ الحالي وراجع التحصيل من جديد.',
+      code: 'registration_price_changed',
+    ),
+    (422, 'اختر باقة فعالة مطابقة للرياضة والفرع.') => const ApiFailure(
+      422,
+      'الباقة لم تعد متاحة لهذا التسجيل. اختر باقة من الخيارات الحالية.',
+      code: 'registration_plan_unavailable',
+    ),
+    _ => null,
+  };
+}
+
 String? registrationValidationMessage(String path, String raw) {
   if (path != '/api/v1/people/registrations' &&
       path != '/api/v1/people/registration-quote') {
@@ -475,6 +577,38 @@ String? evaluationConflictMessage(String raw) {
         'معايير الرياضة متوقفة. راجع إعداداتها قبل إنشاء تقييم.',
       'evaluation_group_required' =>
         'أسند اللاعب إلى مجموعة مناسبة قبل إنشاء تقييم.',
+      _ => null,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Display only the known location and attempt conflicts from the staff clock.
+String? staffAttendanceConflictMessage(String path, String raw) {
+  if (!const [
+    '/api/v1/staff/passkeys/attendance/options',
+    '/api/v1/staff/passkeys/attendance/complete',
+  ].contains(path)) {
+    return null;
+  }
+  try {
+    final value = jsonDecode(raw);
+    if (value is! Map) return null;
+    return switch (value['message']) {
+      'الموقع خارج نطاق الفرع؛ لم يسجل حضور. يمكنك طلب مراجعة.' =>
+        'الموقع خارج نطاق الفرع. اقترب من موقع التسجيل أو اطلب مراجعة.',
+      'الموقع قريب من حدود النطاق ولا يكفي للقبول؛ أعد المحاولة أو اطلب مراجعة.' => 'دقة الموقع لا تكفي قرب حدود النطاق. اقترب من موقع التسجيل أو اطلب مراجعة.',
+      'التسجيل الذاتي موقوف لهذا الفرع؛ اطلب مراجعة الإدارة، دون إغلاق الفترة تلقائيًا.' =>
+        'التسجيل الذاتي موقوف لهذا الفرع. اطلب مراجعة الإدارة.',
+      'قراءة الموقع قديمة أو ساعة الجهاز مختلفة؛ أعد التقاط موقع حديث.' =>
+        'قراءة الموقع قديمة أو ساعة الجهاز مختلفة. أعد التقاط الموقع.',
+      'دقة الموقع ضعيفة؛ أعد المحاولة أو اطلب مراجعة، دون توسيع نطاق الفرع.' =>
+        'دقة الموقع ضعيفة. أعد التقاط الموقع أو اطلب مراجعة.',
+      'المحاولة انتهت أو استُخدمت؛ أعد قراءة المصدر.' ||
+      'انتهت المحاولة؛ أعد التقاط الموقع.' =>
+        'انتهت محاولة التسجيل. حدّث الحالة قبل بدء محاولة جديدة.',
+      'اختر فرع بداية الفترة نفسها للانصراف؛ راجع الإدارة إذا تغير مكان العمل.' => 'اختر فرع بداية الفترة للانصراف. إذا تغيّر مكان العمل، اطلب مراجعة الإدارة.',
       _ => null,
     };
   } catch (_) {

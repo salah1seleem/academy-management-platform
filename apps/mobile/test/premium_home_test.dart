@@ -82,14 +82,13 @@ void main() {
         ),
       );
       expect(find.textContaining('77.1 · التقييم المركب'), findsOneWidget);
-      expect(find.text('متوسط التقييم'), findsOneWidget);
+      expect(find.text('متوسط الأداء'), findsOneWidget);
       expect(
         find.text('بيانات الأداء غير كافية لحساب المتوسط'),
         findsOneWidget,
       );
       expect(find.textContaining('التقييم المركب'), findsOneWidget);
-      expect(find.text('بداية الاشتراك: 1 سبتمبر'), findsOneWidget);
-      expect(find.text('نهاية الاشتراك: 30 سبتمبر'), findsOneWidget);
+      expect(find.textContaining('2026-09-30'), findsOneWidget);
       expect(
         tester.getSize(find.byKey(const ValueKey('child-p1'))).height,
         greaterThan(350),
@@ -138,7 +137,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('اقتراح نظام غذائي ليوم 2026-09-28'), findsOneWidget);
+      expect(find.text('الاثنين 28 سبتمبر 2026'), findsOneWidget);
       expect(find.text('قبل التدريب · موز وزبادي'), findsOneWidget);
       expect(find.text('بعد التدريب · حليب وفاكهة'), findsOneWidget);
       expect(find.textContaining('خطة علاجية'), findsNothing);

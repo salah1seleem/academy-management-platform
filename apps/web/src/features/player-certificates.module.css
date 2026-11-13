@@ -2,6 +2,33 @@
 .paper h2 { font-size:clamp(1.55rem,6vw,2.7rem); color:#84243b; margin:.4rem 0; }
 .paper h3 { font-size:clamp(1.45rem,5vw,2.2rem); margin:.8rem 0; }
 .paper p { margin:.65rem 0; }.paper svg { vertical-align:middle; }.paper small { display:block; color:#475766; font-size:.8rem; }
-.medal { width:72px; height:72px; display:grid; place-items:center; background:#f6e9cd; color:#7c5820; border-radius:50%; margin:0 auto; }.academy { font-weight:800; }.level { display:block; font-size:1.4rem; color:#84243b; }.disclaimer { border-block-start:1px solid #e2d7c2; padding-block-start:1rem; font-size:.9rem; }.withdrawn { padding:1rem; background:#fff0f1; border:2px solid #a8253c; border-radius:1rem; color:#8c1830; }
+.withdrawn p { margin:.2rem 0 0; }
+.medal { width:72px; height:72px; display:grid; place-items:center; background:#f6e9cd; color:#7c5820; border-radius:50%; margin:0 auto; }.academy { font-weight:800; }.level { display:block; font-size:1.4rem; color:#84243b; }.disclaimer { border-block-start:1px solid #e2d7c2; padding-block-start:1rem; font-size:.9rem; }.withdrawn { margin-block-end:.9rem; padding:.7rem; background:#fff0f1; border:2px solid #a8253c; border-radius:1rem; color:#8c1830; }
 .family { padding-block-end:1rem; min-width:0; }.family :global(.page-header) { color:#fff; }.family :global(.section-card) { background:#fff; color:#17333b; padding:1.25rem; border-radius:1.25rem; margin-block:1rem; line-height:1.7; }.family :global(.button) { display:inline-flex; align-items:center; min-height:44px; border:1px solid #b7c8ca; border-radius:.8rem; padding:.6rem 1rem; background:#fff; color:#0e635f; }
-@media print { :global(body:has(.academy-achievement-print)) * { visibility:hidden; } :global(body:has(.academy-achievement-print) .academy-achievement-print), :global(body:has(.academy-achievement-print) .academy-achievement-print) * { visibility:visible; } .paper { position:absolute; inset:0 auto auto 0; width:100%; margin:0; box-shadow:none; break-inside:avoid; print-color-adjust:exact; } }
+
+
+.familyHeader h1 { font-size:clamp(1.5rem,6vw,2rem); }
+.family :global(.section-card) h2 { margin:0 0 .55rem; font-size:1.18rem; }
+.family :global(.section-card) p { margin-block:.55rem; }
+.metadata { display:flex; align-items:center; flex-wrap:wrap; gap:.55rem; }
+.issuedLabel, .withdrawnLabel { padding:.2rem .55rem; border-radius:.5rem; font-weight:700; }
+.issuedLabel { background:#e4f4ed; color:#145839; }
+.withdrawnLabel { background:#fff0f1; color:#8c1830; }
+.actions { margin-block:.5rem; }
+.withdrawAction :global(.form-shell) { grid-template-columns:minmax(0,1fr); max-inline-size:42rem; }
+.withdrawAction summary { align-content:center; min-height:44px; font-weight:700; cursor:pointer; }
+.errorPanel { margin-block:.65rem; }
+.family .errorPanel { background:var(--surface,#fff); padding:.75rem; border-radius:.7rem; }
+.printOutlet, .printFallback { display:none; }
+
+@media print {
+  :global(body:has(.academy-certificate-surface)) .printFallback {
+    display:block; visibility:visible; position:absolute; inset:1rem auto auto 1rem;
+    color:#172b3d;
+  }
+  :global(html):has(.printOutlet), :global(body):has(> .printOutlet) { background:#fff !important; }
+  :global(body):has(> .printOutlet) > :not(.printOutlet) { display:none !important; }
+  .printOutlet, .printOutlet * { visibility:visible !important; }
+  .printOutlet { display:block; }
+  .printOutlet .paper { width:100%; margin:0; box-shadow:none; break-inside:avoid; print-color-adjust:exact; }
+}

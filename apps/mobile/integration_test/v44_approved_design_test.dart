@@ -32,7 +32,7 @@ void main() {
     for (final sample in [
       ('AcademyOwner', '01099900010', 'owner', 'ملخص الأكاديمية'),
       ('AcademyAdmin', '01099900011', 'admin', 'حضور اللاعبين'),
-      ('Coach', '01099900020', 'coach', 'المجموعات المسندة'),
+      ('Coach', '01099900020', 'coach', 'تدريباتي'),
       ('Guardian', '01099900101', 'guardian', 'أبنائي'),
     ]) {
       final auth = AuthController(

@@ -24,7 +24,8 @@ abstract class VerifiedOwnerSettingsState<T extends StatefulWidget>
   Json? active;
   String? academyCurrency;
   OwnerSettingsWrite? pending;
-  bool get locked => busy || pending != null;
+  bool settingsChanged = false;
+  bool get locked => busy || pending != null || settingsChanged;
   void applySettings(Json value, {bool initial = false});
   void confirmed() {}
 
@@ -52,7 +53,10 @@ abstract class VerifiedOwnerSettingsState<T extends StatefulWidget>
       return value;
     } on ApiFailure catch (e) {
       if (current && (e.status == 401 || e.status == 403)) {
-        setState(() => active = null);
+        setState(() {
+          active = null;
+          pending = null;
+        });
       }
       rethrow;
     }
@@ -64,6 +68,7 @@ abstract class VerifiedOwnerSettingsState<T extends StatefulWidget>
     setState(() {
       active = value;
       pending = null;
+      settingsChanged = false;
       applySettings(value, initial: initial);
     });
   });
@@ -89,7 +94,10 @@ abstract class VerifiedOwnerSettingsState<T extends StatefulWidget>
         await auth.request('PUT', change.path, body: change.body);
       } on ApiFailure catch (e) {
         if (current && e.status >= 400 && e.status < 500 && e.status != 408) {
-          setState(() => pending = null);
+          setState(() {
+            pending = null;
+            settingsChanged = e.status == 409;
+          });
         }
         rethrow;
       }

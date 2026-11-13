@@ -157,7 +157,9 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
   final name = TextEditingController(),
       price = TextEditingController(),
       months = TextEditingController(text: '1'),
-      sessions = TextEditingController(text: '12');
+      sessions = TextEditingController(text: '12'),
+      referencePrice = TextEditingController(),
+      paidMonths = TextEditingController();
   Json options = {};
   String? sport;
   String type = 'Combined', format = 'Group';
@@ -167,6 +169,47 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
       done = false,
       uncertain = false;
   final branches = <String>{};
+  static const types = [
+    {'id': 'Combined', 'arabicName': 'مدة وحصص'},
+    {'id': 'Duration', 'arabicName': 'مدة فقط'},
+    {'id': 'Sessions', 'arabicName': 'حصص فقط'},
+  ];
+  static const formats = [
+    {'id': 'Group', 'arabicName': 'جماعي'},
+    {'id': 'Private', 'arabicName': 'خاص'},
+    {'id': 'SemiPrivate', 'arabicName': 'شبه خاص'},
+    {'id': 'Season', 'arabicName': 'موسمي'},
+  ];
+  bool get season => format == 'Season';
+  String get planType => season ? 'Duration' : type;
+  int? get duration => int.tryParse(months.text.trim());
+  int? get charged => int.tryParse(paidMonths.text.trim());
+  static const maxMinor = 99999999900;
+
+  int? minorUnits(String value) {
+    final match = RegExp(r'^([0-9]{1,9})(?:\.([0-9]{1,2}))?$')
+        .firstMatch(value);
+    if (match == null) return null;
+    final amount =
+        int.parse(match[1]!) * 100 +
+        int.parse((match[2] ?? '').padRight(2, '0'));
+    return amount > 0 && amount <= maxMinor ? amount : null;
+  }
+
+  String? get seasonTotal {
+    final reference = minorUnits(referencePrice.text.trim());
+    final paid = charged;
+    if (reference == null || paid == null || paid < 1 || paid > 120) {
+      return null;
+    }
+    final total = reference * paid;
+    if (total > maxMinor) return null;
+    return '${total ~/ 100}.${(total % 100).toString().padLeft(2, '0')}';
+  }
+
+  String? validatePrice(String value) => minorUnits(value) == null
+      ? 'أدخل سعرًا أكبر من صفر بمنزلتين عشريتين على الأكثر.'
+      : null;
   @override
   void initState() {
     super.initState();
@@ -179,6 +222,9 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
     );
     final access = await StaffCapabilities.load(auth);
     if (!current) return;
+    if (!access.allows('subscription.plan.manage', 'subscriptions', 'Add')) {
+      throw const ApiFailure(403, 'ليست لديك صلاحية إضافة باقة.');
+    }
     setState(() {
       options = o;
       final s = rows(o['sports']);
@@ -192,34 +238,42 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
   });
   @override
   void dispose() {
-    for (final c in [name, price, months, sessions]) {
+    for (final c in [
+      name,
+      price,
+      months,
+      sessions,
+      referencePrice,
+      paidMonths,
+    ]) {
       c.dispose();
     }
     super.dispose();
   }
 
   Future<void> save() => run(() async {
-    if (uncertain) return;
+    if (uncertain || !review || done) return;
     final body = {
       'arabicName': name.text.trim(),
       'sportId': sport,
-      'planType': type,
-      'price': price.text.trim(),
-      'durationMonths': type == 'Sessions' ? null : int.tryParse(months.text),
+      'planType': planType,
+      'price': season ? seasonTotal : price.text.trim(),
+      'durationMonths': planType == 'Sessions' ? null : duration,
       'durationDays': null,
-      'sessionCount': type == 'Duration' ? null : int.tryParse(sessions.text),
+      'sessionCount': planType == 'Duration'
+          ? null
+          : int.tryParse(sessions.text.trim()),
       'allBranches': allBranches,
       'branchIds': allBranches ? <String>[] : branches.toList(),
       'trainingFormat': format,
       'serviceKind': 'Training',
+      if (season) 'referenceMonthlyPrice': referencePrice.text.trim(),
+      if (season) 'chargedMonths': charged,
     };
     try {
       await auth.request('POST', '/api/v1/subscriptions/plans', body: body);
       if (current) {
-        setState(() {
-          done = true;
-          message = 'تم حفظ الباقة وأصبحت متاحة للاشتراكات.';
-        });
+        setState(() => done = true);
       }
     } on ApiFailure catch (e) {
       if (e.status == 0 || e.status >= 500) {
@@ -234,31 +288,48 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
   });
   void reviewPlan() {
     final valid = form.currentState!.validate();
+    if (!valid) return;
     setState(() {
-      if (valid && (allBranches || branches.isNotEmpty)) {
+      if (allBranches || branches.isNotEmpty) {
         review = true;
         error = null;
       } else {
-        error = 'أكمل الحقول واختر فرعًا واحدًا على الأقل.';
+        error = 'اختر فرعًا واحدًا على الأقل لإتاحة الباقة.';
       }
     });
+    if (operationScroll.hasClients) operationScroll.jumpTo(0);
   }
+
+  String label(List<Map<String, String>> choices, String? value) =>
+      choices.firstWhere((choice) => choice['id'] == value)['arabicName']!;
 
   @override
   Widget build(BuildContext context) => page(
     'إضافة باقة',
     [
-      OperationSteps(
-        labels: const ['الباقة', 'المراجعة'],
-        current: review ? 1 : 0,
-      ),
+      if (!done && options.isNotEmpty)
+        OperationSteps(
+          labels: const ['الباقة', 'المراجعة'],
+          current: review ? 1 : 0,
+        ),
+      if (!busy && error != null && options.isEmpty)
+        TextButton(
+          onPressed: load,
+          child: const UiText('إعادة تحميل خيارات الباقة'),
+        ),
       if (options.isNotEmpty && !done) ...[
         if (!review) ...[
           OperationSection(
             title: 'تعريف الباقة',
             icon: Icons.inventory_2_outlined,
             children: [
-              field('اسم الباقة', name, markRequired: true),
+              field(
+                'اسم الباقة',
+                name,
+                markRequired: true,
+                validate: (value) =>
+                    value.length > 160 ? 'الاسم لا يتجاوز 160 حرفًا.' : null,
+              ),
               choice(
                 'الرياضة',
                 sport,
@@ -266,43 +337,84 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
                 (v) => setState(() => sport = v),
                 markRequired: true,
               ),
-              choice('نوع الباقة', type, const [
-                {'id': 'Combined', 'arabicName': 'مدة وحصص'},
-                {'id': 'Duration', 'arabicName': 'مدة فقط'},
-                {'id': 'Sessions', 'arabicName': 'حصص فقط'},
-              ], (v) => setState(() => type = v!)),
-              choice('نمط التدريب', format, const [
-                {'id': 'Group', 'arabicName': 'جماعي'},
-                {'id': 'Private', 'arabicName': 'خاص'},
-                {'id': 'SemiPrivate', 'arabicName': 'شبه خاص'},
-                {'id': 'Season', 'arabicName': 'موسمي'},
-              ], (v) => setState(() => format = v!)),
+              choice(
+                'نمط التدريب',
+                format,
+                formats,
+                (v) => setState(() => format = v!),
+              ),
+              if (!season)
+                choice(
+                  'نوع الباقة',
+                  type,
+                  types,
+                  (v) => setState(() => type = v!),
+                ),
             ],
           ),
           OperationSection(
-            title: 'الاستحقاق والسعر',
+            title: 'المدة والسعر',
             icon: Icons.payments_outlined,
             children: [
-              if (type != 'Sessions')
+              if (planType != 'Sessions')
                 field(
-                  'عدد الأشهر',
+                  season ? 'أشهر الخدمة' : 'عدد الأشهر',
                   months,
                   keyboard: TextInputType.number,
                   markRequired: true,
+                  validate: (_) =>
+                      (duration ?? 0) >= 1 && (duration ?? 0) <= 120
+                      ? null
+                      : 'أدخل عدد أشهر من 1 إلى 120.',
                 ),
-              if (type != 'Duration')
+              if (planType != 'Duration')
                 field(
                   'عدد الحصص',
                   sessions,
                   keyboard: TextInputType.number,
                   markRequired: true,
+                  validate: (value) {
+                    final count = int.tryParse(value) ?? 0;
+                    return count >= 1 && count <= 10000
+                        ? null
+                        : 'أدخل عدد حصص من 1 إلى 10,000.';
+                  },
                 ),
-              field(
-                'سعر الباقة',
-                price,
-                keyboard: const TextInputType.numberWithOptions(decimal: true),
-                markRequired: true,
-              ),
+              if (season) ...[
+                field(
+                  'السعر الشهري المرجعي',
+                  referencePrice,
+                  keyboard: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  validate: validatePrice,
+                ),
+                field(
+                  'الأشهر المدفوعة',
+                  paidMonths,
+                  keyboard: TextInputType.number,
+                  validate: (_) {
+                    if ((charged ?? 0) < 1 ||
+                        (charged ?? 0) > (duration ?? 0)) {
+                      return 'أدخل عددًا من 1 إلى عدد أشهر الخدمة.';
+                    }
+                    if (minorUnits(referencePrice.text.trim()) != null &&
+                        seasonTotal == null) {
+                      return 'إجمالي الموسم يتجاوز الحد المسموح للسعر.';
+                    }
+                    return null;
+                  },
+                ),
+              ] else
+                field(
+                  'سعر الباقة',
+                  price,
+                  keyboard: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  markRequired: true,
+                  validate: validatePrice,
+                ),
             ],
           ),
           OperationSection(
@@ -337,15 +449,19 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
             children: [
               Heading(name.text.trim()),
               UiText(
-                'السعر: ${price.text} · ${type == 'Sessions'
-                    ? '${sessions.text} حصة'
-                    : type == 'Duration'
-                    ? '${months.text} شهر'
-                    : '${months.text} شهر · ${sessions.text} حصة'}',
+                '${textOf(rows(options['sports']).where((row) => row['id'] == sport).firstOrNull?['arabicName'])} · ${label(formats, format)}',
               ),
-              const SizedBox(height: 12),
-              const UiText(
-                'حفظ الباقة يتيح اختيارها للاشتراكات؛ لا يُحصّل مبلغًا.',
+              UiText(
+                'السعر بعملة الأكاديمية: ${amountText(season ? seasonTotal : price.text)}',
+              ),
+              if (planType != 'Sessions') UiText('أشهر الخدمة: $duration'),
+              if (season) UiText('الأشهر المدفوعة: $charged'),
+              if (planType != 'Duration')
+                UiText('الحصص: ${sessions.text.trim()}'),
+              UiText(
+                allBranches
+                    ? 'متاحة في كل الفروع'
+                    : 'الفروع: ${rows(options['branches']).where((row) => branches.contains(row['id'])).map((row) => row['arabicName']).join('، ')}',
               ),
             ],
           ),
@@ -355,7 +471,7 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
           title: 'الباقة جاهزة',
           icon: Icons.check_circle_outline,
           children: [
-            const UiText('تقدر تختارها الآن عند تسجيل اشتراك جديد.'),
+            UiText('يمكن اختيار «${name.text.trim()}» عند تسجيل اشتراك جديد.'),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const UiText('العودة للعمليات'),
@@ -363,6 +479,7 @@ class _NativePlanCreateState extends NativeOperationState<NativePlanCreate> {
           ],
         ),
     ],
+    onRetry: options.isEmpty ? load : null,
     bottom: done || options.isEmpty
         ? null
         : Column(

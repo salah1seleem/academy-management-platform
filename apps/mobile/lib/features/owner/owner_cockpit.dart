@@ -7,6 +7,7 @@ import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
 import 'owner_operations.dart';
 import 'owner_reports.dart';
+import 'owner_expenses.dart';
 
 /// All figures and decision conditions come from the same owner API as the web.
 class OwnerCockpit extends StatelessWidget {
@@ -269,6 +270,17 @@ class NativeOperatingStatement extends StatelessWidget {
         '/api/v1/reports/operating-statement?${Uri(queryParameters: {...filters, 'includeMonthly': 'true'}).query}',
     builder: (context, value) {
       final d = obj(value);
+      final unpaid = d['unpaidOperatingExpenses'];
+      final unpaidFilters = {
+        for (final key in ['branchId', 'sportId'])
+          if (filters[key] case final String id when id.isNotEmpty) key: id,
+        if (filters['allDates'] == 'true')
+          'allDates': 'true'
+        else if (d['to'] case final String date when date.isNotEmpty)
+          'to': date,
+        'unpaid': 'true',
+        'status': 'Posted',
+      };
       return gList([
         const Heading('الفائض والعجز التشغيلي'),
         UiText('${d['from']} — ${d['to']}', textDirection: TextDirection.ltr),
@@ -277,6 +289,18 @@ class NativeOperatingStatement extends StatelessWidget {
           onOpen: null,
           showTitle: false,
           showBalances: false,
+          expenseAction: (line) {
+            final source = operatingExpenseSource(line, d, filters);
+            if (source == null) return null;
+            return () => openPage(
+              context,
+              OwnerReports(
+                auth: auth,
+                initialReport: 'expenses',
+                initialFilters: source,
+              ),
+            );
+          },
           onMonth: (month) => openPage(
             context,
             OwnerReports(
@@ -295,11 +319,23 @@ class NativeOperatingStatement extends StatelessWidget {
         Facts([
           ('مستحقات العملاء', money(d['receivables'], d['currency'])),
           ('رواتب مستحقة', money(d['approvedPayrollPayable'], d['currency'])),
-          (
-            'مصروفات غير مسددة',
-            money(d['unpaidOperatingExpenses'], d['currency']),
-          ),
+          if (unpaid == 0)
+            ('مصروفات مرحلة غير مسددة', money(unpaid, d['currency'])),
         ]),
+        if (unpaid is num && unpaid.isFinite && unpaid > 0)
+          GLink(
+            'مصروفات مرحلة غير مسددة',
+            Icons.payments_outlined,
+            () => openPage(
+              context,
+              OwnerReports(
+                auth: auth,
+                initialReport: 'expenses',
+                initialFilters: unpaidFilters,
+              ),
+            ),
+            subtitle: money(unpaid, d['currency']),
+          ),
         if (d['externalReceivables'] != null)
           Facts([
             (

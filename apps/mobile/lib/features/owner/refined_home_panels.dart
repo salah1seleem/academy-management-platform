@@ -19,10 +19,13 @@ class AcademySummaryPanel extends StatelessWidget {
     this.onTarget,
     this.onWeek,
     this.dateFilters,
+    this.showHeading = true,
+    this.showWeeklyTrend = true,
     this.onGroups,
     this.onPlayers,
   });
   final Widget? dateFilters;
+  final bool showHeading, showWeeklyTrend;
   final VoidCallback? onGroups, onPlayers;
   final Json data;
   final ValueChanged<String> onReport;
@@ -32,46 +35,112 @@ class AcademySummaryPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = obj(data['collections']),
-        overdue = obj(data['overdue']),
+        overdue = data['overdue'] is Json
+            ? obj(data['overdue'])
+            : const <String, dynamic>{},
         attendance = obj(data['attendance']),
-        capacity = obj(data['capacity']);
+        capacity = obj(data['capacity']),
+        members = obj(data['members'] ?? <String, dynamic>{});
+    final amount = overdue['amount'];
+    final players = overdue['players'];
+    final hasAmount = amount is num && amount.isFinite && amount >= 0;
+    final hasPlayers = players is int && players >= 0;
+    final asOf = DateTime.tryParse('${overdue['asOf']}');
+    final colors = Theme.of(context).colorScheme;
+    Widget measure(
+      String title,
+      String value,
+      Color color, {
+      bool numeric = true,
+    }) {
+      final text = UiText(
+        value,
+        textDirection: numeric ? TextDirection.ltr : null,
+        maxLines: numeric ? 1 : null,
+        softWrap: !numeric,
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          UiText(title, style: const TextStyle(fontSize: 11)),
+          const SizedBox(height: 4),
+          if (numeric)
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: text,
+            )
+          else
+            text,
+        ],
+      );
+    }
+
+    Widget tile(Widget content, VoidCallback open) => Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: open,
+        child: Padding(padding: const EdgeInsets.all(9), child: content),
+      ),
+    );
+    Widget pair(Widget first, Widget second) => IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: first),
+          const SizedBox(width: 8),
+          Expanded(child: second),
+        ],
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 6),
-          child:
-              MediaQuery.textScalerOf(context).scale(12) > 18 &&
-                  dateFilters != null
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const UiText(
-                      'ملخص الأكاديمية',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    dateFilters!,
-                  ],
-                )
-              : Row(
-                  children: [
-                    const Expanded(
-                      child: UiText(
+        if (showHeading)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            child:
+                MediaQuery.textScalerOf(context).scale(12) > 18 &&
+                    dateFilters != null
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const UiText(
                         'ملخص الأكاديمية',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
-                    ?dateFilters,
-                  ],
-                ),
-        ),
+                      const SizedBox(height: 8),
+                      dateFilters!,
+                    ],
+                  )
+                : Row(
+                    children: [
+                      const Expanded(
+                        child: UiText(
+                          'ملخص الأكاديمية',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      ?dateFilters,
+                    ],
+                  ),
+          ),
         SummarySurface(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,115 +150,117 @@ class AcademySummaryPanel extends StatelessWidget {
                 onReport: () => onReport('financial'),
                 onTarget: onTarget,
               ),
-              const SizedBox(height: 8),
-              Divider(color: Theme.of(context).colorScheme.outline),
-              const SizedBox(height: 8),
-              HomeTrend(
-                items: rows(c['weekly'] ?? <Json>[]),
-                monthly: false,
-                currency: data['currency'],
-                onOpen: onWeek,
+              if (showWeeklyTrend &&
+                  rows(c['weekly'] ?? <Json>[]).isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Divider(color: Theme.of(context).colorScheme.outline),
+                const SizedBox(height: 8),
+                HomeTrend(
+                  items: rows(c['weekly'] ?? <Json>[]),
+                  monthly: false,
+                  currency: data['currency'],
+                  onOpen: onWeek,
+                ),
+              ],
+              const SizedBox(height: 12),
+              const UiText(
+                'خلال الفترة',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 14),
-              LayoutBuilder(
-                builder: (context, bounds) => Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+              const SizedBox(height: 6),
+              pair(
+                tile(
+                  measure(
+                    'متوسط الحضور',
+                    attendance['percentage'] == null
+                        ? '—'
+                        : '${attendance['percentage']}%',
+                    ExperienceColors.positive(context),
+                  ),
+                  () => onReport('attendance'),
+                ),
+                tile(
+                  measure(
+                    'عدد اللاعبين',
+                    '${members['players'] ?? '—'}',
+                    ExperienceColors.information(context),
+                  ),
+                  onPlayers ?? (() => onReport('renewals')),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const UiText(
+                'الوضع الحالي',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              tile(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final k in [
-                      (
-                        'مستحقات متأخرة',
-                        money(overdue['amount'], data['currency']),
-                        ExperienceColors.negative(context),
-                        () => onReport('receivables'),
-                      ),
-                      (
-                        'عدد المجموعات',
-                        '${obj(data['members'])['groups'] ?? '—'}',
-                        ExperienceColors.warning(context),
-                        onGroups ?? onCapacity,
-                      ),
-                      (
-                        'أماكن تدريب متاحة',
-                        (capacity['unknownGroups'] as num? ?? 0) > 0
-                            ? 'غير مكتمل'
-                            : '${capacity['seats']}',
-                        ExperienceColors.information(context),
-                        onCapacity,
-                      ),
-                      (
-                        'متوسط الحضور',
-                        attendance['percentage'] == null
-                            ? '—'
-                            : '${attendance['percentage']}%',
-                        ExperienceColors.positive(context),
-                        () => onReport('attendance'),
-                      ),
-                      (
-                        'عدد اللاعبين',
-                        '${obj(data['members'])['players'] ?? '—'}',
-                        ExperienceColors.information(context),
-                        onPlayers ?? (() => onReport('renewals')),
-                      ),
-                      (
-                        'أسر عليها متأخرات',
-                        '${overdue['families'] ?? '—'}',
-                        ExperienceColors.warning(context),
-                        () => onReport('receivables'),
-                      ),
-                    ])
-                      SizedBox(
-                        width: MediaQuery.textScalerOf(context).scale(12) > 18
-                            ? (bounds.maxWidth - 10) / 2
-                            : (bounds.maxWidth - 20) / 3,
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(14),
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: k.$4,
-                            child: Container(
-                              padding: const EdgeInsets.all(9),
-                              constraints: const BoxConstraints(minHeight: 80),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.outline,
-                                  width: .5,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  UiText(
-                                    k.$1,
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  if (k.$1 == 'مستحقات متأخرة')
-                                    MoneyText(
-                                      overdue['amount'],
-                                      data['currency'],
-                                      size: 22,
-                                      color: k.$3,
-                                    )
-                                  else
-                                    UiText(
-                                      k.$2,
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w600,
-                                        color: k.$3,
-                                      ),
-                                    ),
-                                ],
-                              ),
+                    if (!hasAmount)
+                      const UiText('رصيد المستحقات المتأخرة غير متاح')
+                    else if (amount == 0 && players == 0)
+                      const UiText('لا توجد مستحقات متأخرة')
+                    else
+                      pair(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const UiText(
+                              'مستحقات متأخرة',
+                              style: TextStyle(fontSize: 11),
                             ),
-                          ),
+                            const SizedBox(height: 4),
+                            MoneyText(
+                              amount,
+                              data['currency'],
+                              size: 22,
+                              color: ExperienceColors.negative(context),
+                            ),
+                          ],
+                        ),
+                        measure(
+                          'لاعبون عليهم متأخرات',
+                          hasPlayers ? '$players' : 'غير متاح',
+                          ExperienceColors.warning(context),
+                          numeric: hasPlayers,
                         ),
                       ),
+                    if (hasAmount && asOf != null) ...[
+                      const SizedBox(height: 6),
+                      UiText(
+                        'الرصيد حتى ${sessionDateLabel(asOf)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ],
+                ),
+                () => onReport('receivables'),
+              ),
+              const SizedBox(height: 8),
+              pair(
+                tile(
+                  measure(
+                    'أماكن تدريب متاحة',
+                    (capacity['unknownGroups'] as num? ?? 0) > 0
+                        ? 'غير مكتمل'
+                        : '${capacity['seats']}',
+                    ExperienceColors.information(context),
+                    numeric: (capacity['unknownGroups'] as num? ?? 0) == 0,
+                  ),
+                  onCapacity,
+                ),
+                tile(
+                  measure(
+                    'عدد المجموعات',
+                    '${members['groups'] ?? '—'}',
+                    ExperienceColors.information(context),
+                  ),
+                  onGroups ?? onCapacity,
                 ),
               ),
             ],
@@ -339,6 +410,7 @@ class HomeCollectionCards extends StatefulWidget {
     required this.referenceDay,
     this.receivables,
     this.onReceivables,
+    this.periodOnly = false,
     required this.onOpen,
     this.onSource,
     this.onBranch,
@@ -346,6 +418,7 @@ class HomeCollectionCards extends StatefulWidget {
   final Json data;
   final Object? currency;
   final String referenceDay;
+  final bool periodOnly;
   final num? receivables;
   final VoidCallback? onReceivables;
   final void Function(bool, String) onOpen;
@@ -445,12 +518,13 @@ class _HomeCollectionCardsState extends State<HomeCollectionCards> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ExperienceSection(
-          'التحصيلات',
-          Icons.account_balance_wallet_outlined,
-          action: () => widget.onOpen(false, ''),
-          actionLabel: 'السجل',
-        ),
+        if (!widget.periodOnly)
+          ExperienceSection(
+            'التحصيلات',
+            Icons.account_balance_wallet_outlined,
+            action: () => widget.onOpen(false, ''),
+            actionLabel: 'السجل',
+          ),
         GCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -458,7 +532,10 @@ class _HomeCollectionCardsState extends State<HomeCollectionCards> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final daily in [true, false]) ...[
+                  for (final daily in [
+                    if (!widget.periodOnly) true,
+                    false,
+                  ]) ...[
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.all(6),
@@ -466,7 +543,11 @@ class _HomeCollectionCardsState extends State<HomeCollectionCards> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             UiText(
-                              daily ? 'التحصيل اليومي' : 'التحصيل الشهري',
+                              widget.periodOnly
+                                  ? 'صافي التحصيل خلال الفترة'
+                                  : daily
+                                  ? 'التحصيل اليومي'
+                                  : 'التحصيل الشهري',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -530,25 +611,26 @@ class _HomeCollectionCardsState extends State<HomeCollectionCards> {
               if (data['monthSources'] is List ||
                   data['todaySources'] is List) ...[
                 const Divider(height: 24),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final daily in [true, false])
-                      ChoiceChip(
-                        selectedColor: academyAccent(context),
-                        label: UiText(
-                          daily ? 'اليوم' : 'الشهر',
-                          style: TextStyle(
-                            color: dailyChart == daily
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : Theme.of(context).colorScheme.onSurface,
+                if (!widget.periodOnly)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final daily in [true, false])
+                        ChoiceChip(
+                          selectedColor: academyAccent(context),
+                          label: UiText(
+                            daily ? 'اليوم' : 'الشهر',
+                            style: TextStyle(
+                              color: dailyChart == daily
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                  : Theme.of(context).colorScheme.onSurface,
+                            ),
                           ),
+                          selected: dailyChart == daily,
+                          onSelected: (_) => setState(() => dailyChart = daily),
                         ),
-                        selected: dailyChart == daily,
-                        onSelected: (_) => setState(() => dailyChart = daily),
-                      ),
-                  ],
-                ),
+                    ],
+                  ),
                 const SizedBox(height: 12),
                 Row(
                   key: const ValueKey('collection-breakdown-halves'),
@@ -658,17 +740,62 @@ class HomeOperatingStatement extends StatelessWidget {
     required this.data,
     required this.onOpen,
     this.onMonth,
+    this.expenseAction,
     this.showTitle = true,
     this.showBalances = true,
     this.showReceivables = true,
+    this.showHistoryLabel = false,
   });
   final Json data;
   final VoidCallback? onOpen;
-  final bool showTitle, showBalances, showReceivables;
+  final bool showTitle, showBalances, showReceivables, showHistoryLabel;
   final ValueChanged<Json>? onMonth;
+  final VoidCallback? Function(Json)? expenseAction;
+
+  Widget _line(Json line, Color color, VoidCallback? action) {
+    final title = UiText(
+      textOf(line['label']),
+      style: TextStyle(
+        fontSize: action == null ? 10 : 12,
+        fontWeight: action == null ? null : FontWeight.w600,
+      ),
+    );
+    final tile = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (action == null)
+            title
+          else
+            Row(
+              children: [
+                Expanded(child: title),
+                const Icon(Icons.chevron_right_rounded, size: 16),
+              ],
+            ),
+          MoneyText(line['amount'], data['currency'], size: 15, color: color),
+        ],
+      ),
+    );
+    return action == null
+        ? tile
+        : Semantics(
+            button: true,
+            child: InkWell(
+              onTap: action,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: tile,
+              ),
+            ),
+          );
+  }
+
   @override
   Widget build(BuildContext context) {
     final surplus = data['surplus'] as num;
+    final change = data['surplusChangePercentage'] as num?;
     final color = surplus < 0
         ? ExperienceColors.negative(context)
         : ExperienceColors.positive(context);
@@ -708,18 +835,27 @@ class HomeOperatingStatement extends StatelessWidget {
                   )
                 : Row(
                     children: [
-                      Icon(
-                        surplus < 0 ? Icons.trending_down : Icons.trending_up,
-                        size: 20,
-                        color: color,
-                      ),
+                      Icon(Icons.balance_rounded, size: 20, color: color),
                       const SizedBox(width: 10),
                       Expanded(child: label),
                       Flexible(child: result),
                     ],
                   ),
           ),
+          if (change != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: PeriodTrend(change: change),
+            ),
           const SizedBox(height: 12),
+          if (showHistoryLabel)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 6),
+              child: UiText(
+                'آخر ٣ أشهر حتى نهاية الفترة',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
           OperatingMonthlyChart(
             showRange: false,
             items: rows(data['monthly'] ?? []),
@@ -778,23 +914,12 @@ class HomeOperatingStatement extends StatelessWidget {
                         for (final line in rows(
                           data[section.$1],
                         ).where((line) => line['amount'] != 0))
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                UiText(
-                                  textOf(line['label']),
-                                  style: const TextStyle(fontSize: 10),
-                                ),
-                                MoneyText(
-                                  line['amount'],
-                                  data['currency'],
-                                  size: 15,
-                                  color: section.$4,
-                                ),
-                              ],
-                            ),
+                          _line(
+                            line,
+                            section.$4,
+                            section.$1 == 'expenses'
+                                ? expenseAction?.call(line)
+                                : null,
                           ),
                       ],
                     ),
@@ -865,7 +990,9 @@ class HomeDecisionCards extends StatelessWidget {
   final ValueChanged<Json>? onGroup, onCoach;
   @override
   Widget build(BuildContext context) {
-    final overdue = obj(data['overdue']),
+    final overdue = data['overdue'] is Json
+            ? obj(data['overdue'])
+            : const <String, dynamic>{},
         risk = obj(data['risk']),
         capacity = obj(data['capacity']);
     final daily = obj(data['todayPlan'] ?? <String, dynamic>{});
@@ -919,10 +1046,11 @@ class HomeDecisionCards extends StatelessWidget {
           'مراجعة المتابعات وإسنادها',
           onFollowUps!,
         ),
-      if ((overdue['amount'] as num? ?? 0) > 0)
+      if (overdue['amount'] case final num amount
+          when amount.isFinite && amount > 0 && overdue['families'] is int)
         (
           Icons.receipt_long_outlined,
-          '${money(overdue['amount'], data['currency'])} مستحقات متأخرة',
+          '${money(amount, data['currency'])} مستحقات متأخرة',
           '${overdue['families']} ولي أمر يحتاجون متابعة',
           'تحضير تذكيرات التحصيل',
           () => onReminders == null

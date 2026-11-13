@@ -16,6 +16,15 @@ const coachTaskKinds = {
 };
 const coachTaskPermission = 'workflow.coach-tasks.assign';
 
+bool canAssignCoachTasks(StaffCapabilities access) {
+  final leaf = rows(access.scope['workflowActions'] ?? [])
+      .where((grant) => grant['key'] == coachTaskPermission)
+      .firstOrNull;
+  return access.explicitAction('followups', 'Edit') &&
+      leaf?['hasExplicitGrant'] == true &&
+      leaf?['allowed'] == true;
+}
+
 class CoachTasksEntry extends StatelessWidget {
   const CoachTasksEntry({super.key, required this.auth});
   final AuthController auth;
@@ -33,12 +42,7 @@ class CoachTasksEntry extends StatelessWidget {
       future: StaffCapabilities.load(auth),
       builder: (context, s) {
         final access = s.data;
-        final leaf = rows(access?.scope['workflowActions'] ?? [])
-            .where((g) => g['key'] == coachTaskPermission)
-            .firstOrNull;
-        return access?.explicitAction('followups', 'Edit') == true &&
-                leaf?['hasExplicitGrant'] == true &&
-                leaf?['allowed'] == true
+        return access != null && canAssignCoachTasks(access)
             ? link()
             : const SizedBox.shrink();
       },

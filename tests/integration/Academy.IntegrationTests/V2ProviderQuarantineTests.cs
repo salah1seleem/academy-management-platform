@@ -81,8 +81,9 @@ public sealed partial class SubscriptionPaymentTests
     [Fact]
     public async Task Same_event_id_with_another_request_or_amount_never_replays_as_success()
     {
-        var first = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); var second = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId);
+        var first = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId);
         using var source = factory.CreateClient(); var e = await Signed(first); (await source.PostAsJsonAsync(Events, e)).EnsureSuccessStatusCode();
+        var second = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId);
         var other = await Signed(second, v => v with { ProviderEventId = e.ProviderEventId });
         Assert.Equal(HttpStatusCode.BadRequest, (await source.PostAsJsonAsync(Events, other)).StatusCode);
         var changed = await Signed(first, v => v with { ProviderEventId = e.ProviderEventId, Amount = e.Amount + 1m });
@@ -132,11 +133,27 @@ public sealed partial class SubscriptionPaymentTests
         using var owner = await InboxStaff(DemoSeed.OwnerEmail); var r = await owner.GetAsync($"{Inbox}/{q.Id}"); r.EnsureSuccessStatusCode(); var body = await r.Content.ReadAsStringAsync(); Assert.DoesNotContain("signature", body, StringComparison.OrdinalIgnoreCase); Assert.DoesNotContain("envelopeHash", body, StringComparison.OrdinalIgnoreCase);
         var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")).DateTime);
         var today = await owner.GetFromJsonAsync<JsonElement>($"{Inbox}?from={day:yyyy-MM-dd}&to={day:yyyy-MM-dd}"); Assert.True(today.GetProperty("total").GetInt32() > 0);
+        var monthly = await owner.GetFromJsonAsync<JsonElement>($"{Inbox}?monthToDate=true&pageSize=10");
+        Assert.Equal(new DateOnly(day.Year, day.Month, 1).ToString("yyyy-MM-dd"), monthly.GetProperty("from").GetString());
+        Assert.Equal(day.ToString("yyyy-MM-dd"), monthly.GetProperty("to").GetString());
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await owner.GetAsync($"{Inbox}?monthToDate=true&from={day:yyyy-MM-dd}")).StatusCode);
+        var observedAt = JsonDocument.Parse(body).RootElement.GetProperty("observedAtCairo").GetDateTime();
+        Assert.Equal(TimeZoneInfo.ConvertTime(q.CreatedAtUtc, TimeZoneInfo.FindSystemTimeZoneById("Africa/Cairo")).DateTime, observedAt);
         var old = await owner.GetFromJsonAsync<JsonElement>($"{Inbox}?from=2020-01-01&to=2020-01-02"); Assert.Equal(0, old.GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await owner.GetAsync($"{Inbox}?from=2026-10-20&to=2026-10-01")).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await owner.GetAsync($"{Inbox}?pageSize=11")).StatusCode);
+        var last = await owner.GetFromJsonAsync<JsonElement>($"{Inbox}?page=100000&pageSize=10");
+        var total = last.GetProperty("total").GetInt32();
+        var lastPage = (total - 1) / 10 + 1;
+        Assert.Equal(10, last.GetProperty("pageSize").GetInt32());
+        Assert.Equal(lastPage, last.GetProperty("page").GetInt32());
+        Assert.Equal(total - (lastPage - 1) * 10, last.GetProperty("items").GetArrayLength());
         using var futureOwner = await InboxStaff(DemoSeed.FutureOwnerEmail); Assert.Equal(HttpStatusCode.NotFound, (await futureOwner.GetAsync($"{Inbox}/{q.Id}")).StatusCode);
         using var guardian = await GuardianClient(); Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(Inbox)).StatusCode);
         using var admin = await InboxStaff(DemoSeed.AdminEmail); Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(Inbox)).StatusCode);
+        using var coach = await InboxStaff(DemoSeed.CoachEmail);
+        Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync(Inbox)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await coach.GetAsync($"{Inbox}/{q.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed, (await owner.PostAsJsonAsync($"{Inbox}/{q.Id}", new { accepted = true })).StatusCode);
         q.ReasonCode = "changed"; await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync()); db.ChangeTracker.Clear();
         await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"ProviderEventQuarantines\" SET \"ReceivedAmount\"=0 WHERE \"Id\"={q.Id}"));

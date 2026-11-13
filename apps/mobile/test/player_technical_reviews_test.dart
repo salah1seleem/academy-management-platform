@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/shared/player_technical_reviews.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,10 +71,7 @@ void main() {
       expect(writes.single, containsPair('planVersion', 3));
       expect(writes.single, containsPair('sourceReviewSequence', 5));
       expect(writes.single, containsPair('previousRequestId', null));
-      expect(
-        find.text('تم حفظ المراجعة؛ لم يتغير مستوى اللاعب أو مجموعته.'),
-        findsOneWidget,
-      );
+      expect(find.text('تم إرسال طلب المراجعة.'), findsOneWidget);
     },
   );
   testWidgets(
@@ -151,12 +149,72 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await t.ensureVisible(find.text('حفظ القرار ونشر الملخص'));
+      await t.pumpAndSettle();
       await t.tap(find.text('حفظ القرار ونشر الملخص'));
       await t.pumpAndSettle();
       expect(commands.single, containsPair('recommendedLevelId', 'next'));
       expect(commands.single, containsPair('outcome', 'ReadyForPlacement'));
       expect(commands.single, containsPair('familyNote', null));
       expect(commands.single, containsPair('version', 7));
+    },
+  );
+  testWidgets(
+    'Unknown decision response checks the result without another write',
+    (t) async {
+      int posts = 0;
+      final auth = await fixture.owner((m, p, b, k) async {
+        if (m == 'POST') {
+          posts++;
+          throw const ApiFailure(503, 'تعذر الاتصال.');
+        }
+        return posts == 0
+            ? technicalDetail()
+            : {
+                ...technicalDetail(),
+                'canDecide': false,
+                'decision': {
+                  'outcome': 'NeedsPractice',
+                  'familyNote': 'يكرر التمرين',
+                  'actorName': 'مراجع العرض',
+                  'createdAtUtc': '2026-10-18',
+                },
+              };
+      });
+      await t.pumpWidget(
+        fixture.shell(PlayerTechnicalReviewsPage(auth: auth, requestId: 'r')),
+      );
+      await t.pumpAndSettle();
+      final save = find.widgetWithText(FilledButton, 'حفظ القرار ونشر الملخص');
+      await t.scrollUntilVisible(
+        save,
+        190,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(t.widget<FilledButton>(save).onPressed, isNull);
+      final select = find.byType(DropdownButtonFormField<String>);
+      await t.ensureVisible(select);
+      await t.tap(select);
+      await t.pumpAndSettle();
+      await t.tap(find.text('يحتاج مزيدًا من التدريب').last);
+      await t.pumpAndSettle();
+      await t.ensureVisible(save);
+      await t.tap(save);
+      await t.pumpAndSettle();
+      expect(posts, 1);
+      expect(t.widget<FilledButton>(save).onPressed, isNull);
+      final check = find.text('تحقّق من حالة المراجعة');
+      await t.ensureVisible(check);
+      await t.tap(check);
+      await t.pumpAndSettle();
+      expect(posts, 1);
+      expect(save, findsNothing);
+      await t.scrollUntilVisible(
+        find.text('يكرر التمرين'),
+        -160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('يكرر التمرين'), findsOneWidget);
     },
   );
   for (final width in [360.0, 390.0, 430.0]) {

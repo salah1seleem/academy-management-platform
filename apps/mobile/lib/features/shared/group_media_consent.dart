@@ -59,11 +59,13 @@ class _ConsentState extends State<GroupMediaConsentCard>
   Future<void> save(Json d) async {
     if (busy) return;
     final allowed = d['allowed'] != true;
+    final reviewedPath = path;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
-          l(
+          localized(
+            dialogContext,
             allowed ? 'السماح بمشاركة طفلي؟' : 'سحب موافقة المشاركة؟',
             allowed ? 'Allow group sharing?' : 'Withdraw sharing consent?',
           ),
@@ -71,21 +73,27 @@ class _ConsentState extends State<GroupMediaConsentCard>
         content: Text(textOf(d['notice'])),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l('رجوع', 'Back')),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(localized(dialogContext, 'رجوع', 'Back')),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l('تأكيد اختياري', 'Confirm my choice')),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              localized(dialogContext, 'تأكيد اختياري', 'Confirm my choice'),
+            ),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted || identity != original || !foreground) {
+    if (confirmed != true ||
+        !mounted ||
+        identity != original ||
+        !foreground ||
+        path != reviewedPath) {
       return;
     }
     final next = jsonEncode({
-      'path': path,
+      'path': reviewedPath,
       'revision': d['revision'],
       'allowed': allowed,
     });
@@ -100,20 +108,20 @@ class _ConsentState extends State<GroupMediaConsentCard>
     try {
       await widget.auth.request(
         'POST',
-        path,
+        reviewedPath,
         body: {
           'allowed': allowed,
           'revision': d['revision'],
           'requestId': request,
         },
       );
-      if (!mounted || identity != original) return;
+      if (!mounted || identity != original || path != reviewedPath) return;
       signature = null;
       request = null;
       setState(() => revision++);
       widget.onSaved?.call();
     } catch (_) {
-      if (mounted && identity == original) {
+      if (mounted && identity == original && path == reviewedPath) {
         setState(
           () => error = l(
             'لم نؤكد حفظ اختيار المشاركة؛ أعد فتحه ثم حاول مرة أخرى.',

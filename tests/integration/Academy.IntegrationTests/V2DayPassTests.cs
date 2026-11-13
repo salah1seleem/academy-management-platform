@@ -73,7 +73,7 @@ public sealed partial class V2PlanPublicationTests
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/facilities/day-pass/review")).StatusCode);
 
         using var upload = new MultipartFormDataContent();
-        var file = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+        var file = new ByteArrayContent(SyntheticProofImage.Png());
         file.Headers.ContentType = new("image/png"); upload.Add(file, "file", "day-pass-proof.png"); upload.Add(new StringContent("Proof"), "purpose");
         var csrf = await guardian.GetFromJsonAsync<JsonElement>("/api/v1/auth/csrf");
         using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/assets/upload") { Content = upload };

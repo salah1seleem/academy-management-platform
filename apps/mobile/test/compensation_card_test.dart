@@ -8,6 +8,9 @@ void main() {
     testWidgets(
       'Compensation is a read-only dated entitlement in $locale at large text',
       (tester) async {
+        tester.view.physicalSize = const Size(360, 960);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
         await tester.pumpWidget(
           MaterialApp(
             locale: Locale(locale),
@@ -18,6 +21,7 @@ void main() {
               child: Scaffold(
                 body: SingleChildScrollView(
                   child: CompensationCard(
+                    today: '2026-11-08',
                     data: const {
                       'sport': 'السباحة',
                       'unit': 'Minute',
@@ -30,7 +34,9 @@ void main() {
                         {
                           'state': 'Reserved',
                           'group': 'موعد بديل',
-                          'date': '2026-11-01',
+                          'date': '2026-11-11',
+                          'startTime': '17:00:00',
+                          'endTime': '18:00:00',
                         },
                         {
                           'state': 'Cancelled',
@@ -47,9 +53,16 @@ void main() {
         );
         expect(find.textContaining('120'), findsOneWidget);
         expect(find.textContaining('موعد بديل'), findsOneWidget);
-        expect(find.textContaining('حجز محرر'), findsNothing);
         expect(
-          find.text(locale == 'ar' ? 'غير محجوز 60' : 'Unbooked 60'),
+          find.text(locale == 'ar' ? 'أُلغي الحجز' : 'Booking cancelled'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            locale == 'ar'
+                ? 'متاح للحجز 60 دقيقة'
+                : 'Available to book 60 minutes',
+          ),
           findsOneWidget,
         );
         expect(find.byType(ElevatedButton), findsNothing);

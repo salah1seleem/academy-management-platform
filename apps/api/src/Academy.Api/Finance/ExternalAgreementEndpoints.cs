@@ -61,7 +61,21 @@ public static class ExternalAgreementEndpoints
         try{var(t,_,canManage)=await Authority(tenant,db,config,http,false);var a=await db.ExternalAgreements.AsNoTracking().SingleOrDefaultAsync(a=>a.AcademyId==t.AcademyId&&a.Id==id);if(a is null)return Results.NotFound();
             var zone=TimeZoneInfo.FindSystemTimeZoneById(await db.Academies.Where(x=>x.Id==t.AcademyId).Select(x=>x.TimeZone).SingleAsync());
             var receipts=await db.ExternalAgreementReceipts.AsNoTracking().Where(r=>r.AgreementId==id).OrderByDescending(r=>r.ReceivedAtUtc).ToArrayAsync();
-            return Results.Ok(new{agreement=a,receipts=receipts.Select(r=>new{r.Id,r.Amount,r.Currency,r.ReceiptNumber,r.PaymentMethod,r.PaymentReference,r.ReceivedAtUtc,receivedOn=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(r.ReceivedAtUtc,zone).DateTime)}),paid=receipts.Sum(r=>r.Amount),remaining=a.CancelledAtUtc.HasValue?0:a.Amount-receipts.Sum(r=>r.Amount),canManage,cash=await cash.ExternalReceiptOptions(a.BranchId,a.Currency),bookings=await(from l in db.ExternalAgreementBookings join b in db.ResourceBookings on l.ResourceBookingId equals b.Id join r in db.FacilityResources on b.ResourceId equals r.Id where l.AgreementId==id orderby b.Date,b.StartTime select new{b.Id,b.Date,b.StartTime,b.EndTime,resource=r.Name,b.State,b.ReservedSeats}).ToArrayAsync()});
+            var hasAttempt=Guid.TryParse(http.Request.Headers["Idempotency-Key"],out var attempt);
+            var paid=receipts.Sum(r=>r.Amount);
+            return Results.Ok(new
+            {
+                agreement=a, membershipId=t.MembershipId, academyName=t.AcademyName, paid,
+                remaining=a.CancelledAtUtc.HasValue?0:a.Amount-paid, canManage,
+                receipts=receipts.Select(r=>new
+                {
+                    r.Id,r.Amount,r.Currency,r.ReceiptNumber,r.PaymentMethod,r.PaymentReference,r.ReceivedAtUtc,
+                    receivedOn=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(r.ReceivedAtUtc,zone).DateTime),
+                    matchesAttempt=hasAttempt&&r.RequestId==attempt&&r.ActorMembershipId==t.MembershipId
+                }),
+                cash=await cash.ExternalReceiptOptions(a.BranchId,a.Currency),
+                bookings=await(from l in db.ExternalAgreementBookings join b in db.ResourceBookings on l.ResourceBookingId equals b.Id join r in db.FacilityResources on b.ResourceId equals r.Id where l.AgreementId==id orderby b.Date,b.StartTime select new{b.Id,b.Date,b.StartTime,b.EndTime,resource=r.Name,b.State,b.ReservedSeats}).ToArrayAsync()
+            });
         }catch(CashRejected e){return Results.Problem(statusCode:e.Status,title:e.Message);}
     }
     private static async Task<IResult> Create(ExternalAgreementWrite b,CurrentTenant tenant,FoundationDbContext db,AcademyConfigurationService config,HttpContext http,TimeProvider clock,FacilityService facilities)

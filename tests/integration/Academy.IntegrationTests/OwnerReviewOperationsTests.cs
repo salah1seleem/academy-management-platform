@@ -205,7 +205,40 @@ public sealed partial class OwnerReviewOperationsTests : IAsyncLifetime
             if (x.GetProperty("type").GetString() == "FamilyRenewal") Assert.True(await db.FamilyRenewalLines.AnyAsync(l => l.AcademyId == DemoSeed.NogoomAcademyId && l.RequestId == x.GetProperty("id").GetGuid() && l.BranchId == Slice2DemoSeed.CityBranchId));
             else Assert.Equal("فرع مدينة نصر", x.GetProperty("branch").GetString());
         }
+        var renewal = rows.First(row => row.GetProperty("type").GetString() == "Renewal");
+        var reference = renewal.GetProperty("reference").GetString();
+        var filtered = await c.GetFromJsonAsync<JsonElement>($"/api/v1/manage/payment-requests?allDates=true&reference={reference}");
+        var match = Assert.Single(filtered.GetProperty("items").EnumerateArray());
+        Assert.Equal(renewal.GetProperty("id").GetGuid(), match.GetProperty("id").GetGuid());
+        Assert.Equal("Renewal", match.GetProperty("type").GetString());
+        var all = await c.GetFromJsonAsync<JsonElement>("/api/v1/manage/payment-requests?allDates=true");
+        Assert.Equal(all.GetProperty("pending").GetInt32(), filtered.GetProperty("pending").GetInt32());
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await c.GetAsync("/api/v1/manage/payment-requests?from=2026-10-10&to=2026-01-01")).StatusCode);
+    }
+    [Fact]
+    public async Task Payment_queue_pages_match_the_legacy_first_page_and_keep_pending_totals()
+    {
+        using var owner = await Owner();
+        for (var index = 0; index < 11; index++) await Register(owner);
+        const string endpoint = "/api/v1/manage/payment-requests?allDates=true";
+        var legacy = await owner.GetFromJsonAsync<JsonElement>(endpoint);
+        var first = await owner.GetFromJsonAsync<JsonElement>(endpoint + "&page=1&pageSize=10");
+        var second = await owner.GetFromJsonAsync<JsonElement>(endpoint + "&page=2&pageSize=10");
+        Assert.Equal(100, legacy.GetProperty("pageSize").GetInt32());
+        var ordered = Keys(legacy).ToArray();
+        Assert.True(ordered.Length > 10);
+        Assert.Equal(ordered.Take(10), Keys(first));
+        Assert.Equal(ordered.Skip(10).Take(10), Keys(second));
+        Assert.Equal(legacy.GetProperty("total").GetInt32(), second.GetProperty("total").GetInt32());
+        Assert.Equal(first.GetProperty("pending").GetInt32(), second.GetProperty("pending").GetInt32());
+        Assert.Equal(2, second.GetProperty("page").GetInt32());
+        var unavailable = await owner.GetFromJsonAsync<JsonElement>(endpoint + "&page=100000&pageSize=10");
+        Assert.Empty(Keys(unavailable));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await owner.GetAsync(endpoint + "&page=0")).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await owner.GetAsync(endpoint + "&pageSize=51")).StatusCode);
+
+        static IEnumerable<(string?, Guid)> Keys(JsonElement result) => result.GetProperty("items").EnumerateArray()
+            .Select(item => (item.GetProperty("type").GetString(), item.GetProperty("id").GetGuid()));
     }
     [Fact] public async Task Owner_decision_backlog_keeps_older_pending_requests_outside_the_chart_period()
     {
@@ -279,15 +312,30 @@ public sealed partial class OwnerReviewOperationsTests : IAsyncLifetime
         using var guardian = await Guardian(); using var owner = await Owner(); var name = "لاعب اختبار التسجيل " + Guid.NewGuid();
         var body = new { requestType = "NewChild", newChildArabicName = name, newChildDateOfBirth = "2017-05-01", sportId = Slice2DemoSeed.FootballId, preferredBranchId = Slice2DemoSeed.CityBranchId, subscriptionPlanId = Slice3DemoSeed.FootballMonthlyId };
         var created = await Send(guardian, "/api/v1/guardian/enrollment-requests", body, Guid.NewGuid().ToString()); Assert.Equal(HttpStatusCode.Created, created.StatusCode); var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        var approval = new { trainingGroupId = await FreshRegistrationGroup() };
+        var approval = new { trainingGroupId = await FreshRegistrationGroup(), expectedProofAssetId = (Guid?)null };
         Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/enrollment-requests/{id}/approve", approval)).StatusCode);
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>(); Assert.False(await db.Players.AnyAsync(x => x.ArabicName == name));
         var asset = await Upload(guardian, "Proof"); Assert.Equal(HttpStatusCode.OK, (await Send(guardian, $"/api/v1/guardian/enrollment-requests/{id}/proof", new { assetId = asset })).StatusCode);
+        var replacement = await Upload(guardian, "Proof");
+        var proofPath = $"/api/v1/guardian/enrollment-requests/{id}/proof";
+        (await Send(guardian, proofPath, new { assetId = replacement })).EnsureSuccessStatusCode();
+        var saved = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/manage/enrollment-requests/{id}/payment");
+        Assert.Equal(replacement, saved.GetProperty("proofAssetId").GetGuid());
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/enrollment-requests/{id}/approve", approval)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/enrollment-requests/{id}/approve", approval with { expectedProofAssetId = asset })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(owner, $"/api/v1/enrollment-requests/{id}/reject", new { expectedProofAssetId = asset })).StatusCode);
+        Assert.False(await db.Players.AnyAsync(x => x.ArabicName == name));
+        approval = approval with { expectedProofAssetId = replacement };
         var accepted = await Send(owner, $"/api/v1/enrollment-requests/{id}/approve", approval); Assert.True(accepted.StatusCode == HttpStatusCode.OK, string.Join("\n", factory.Errors));
         Assert.Equal(HttpStatusCode.OK, (await Send(owner, $"/api/v1/enrollment-requests/{id}/approve", approval)).StatusCode);
         var result = await accepted.Content.ReadFromJsonAsync<JsonElement>(); var enrollment = result.GetProperty("enrollmentId").GetGuid();
         Assert.Equal(1, await db.Collections.CountAsync(x => x.SportEnrollmentId == enrollment)); Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(x => x.SportEnrollmentId == enrollment));
         var collection = await db.Collections.SingleAsync(x => x.SportEnrollmentId == enrollment); Assert.Equal("Online", collection.PaymentMethod); Assert.Equal(1, await db.Receipts.CountAsync(x => x.CollectionId == collection.Id));
+        var finalProof = await Send(guardian, proofPath, new { assetId = replacement });
+        finalProof.EnsureSuccessStatusCode();
+        Assert.Equal("Approved", (await finalProof.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetString());
+        var familyPayment = await guardian.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/enrollment-requests/{id}/payment");
+        Assert.Equal(await db.Receipts.Where(x => x.CollectionId == collection.Id).Select(x => x.Id).SingleAsync(), familyPayment.GetProperty("receiptId").GetGuid());
         Assert.Equal(HttpStatusCode.OK, (await guardian.GetAsync($"/api/v1/guardian/children/{result.GetProperty("playerId").GetGuid()}" )).StatusCode);
     }
     [Fact] public async Task Refund_is_append_only_idempotent_and_bounded_by_collection()

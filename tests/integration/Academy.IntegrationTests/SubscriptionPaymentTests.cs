@@ -19,8 +19,63 @@ public sealed partial class SubscriptionPaymentTests : IAsyncLifetime
     private readonly string connection = Environment.GetEnvironmentVariable("ACADEMY_TEST_CONNECTION_STRING") ?? throw new InvalidOperationException("ACADEMY_TEST_CONNECTION_STRING is required.");
     private Factory factory = null!;
     private InternalGatewayRouteScope route = null!;
-    public async Task InitializeAsync() { factory = new Factory(connection); _ = factory.CreateClient(); route = await InternalGatewayRouteScope.Begin(factory.Services); }
-    public async Task DisposeAsync() { await route.DisposeAsync(); await factory.DisposeAsync(); }
+    private readonly HashSet<Guid> preparedEnrollments = [];
+    private readonly List<(Guid RenewalId, RenewalRequestStatus Renewal, Guid PaymentId, PaymentRequestStatus Payment)> suspended = [];
+
+    public async Task InitializeAsync()
+    {
+        factory = new Factory(connection);
+        _ = factory.CreateClient();
+        route = await InternalGatewayRouteScope.Begin(factory.Services);
+    }
+
+    private async Task PrepareSharedDemoPayment(Guid enrollmentId)
+    {
+        if (!preparedEnrollments.Add(enrollmentId)) return;
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        foreach (var row in await OpenSharedDemoPayments(db, [enrollmentId]))
+        {
+            suspended.Add((row.Renewal.Id, row.Renewal.Status, row.Payment.Id, row.Payment.Status));
+            row.Renewal.Status = RenewalRequestStatus.Failed;
+            row.Payment.Status = PaymentRequestStatus.Failed;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (preparedEnrollments.Count > 0)
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            foreach (var row in await OpenSharedDemoPayments(db, preparedEnrollments.ToArray()))
+            {
+                row.Renewal.Status = RenewalRequestStatus.Cancelled;
+                row.Payment.Status = PaymentRequestStatus.Cancelled;
+            }
+            foreach (var previous in suspended)
+            {
+                (await db.RenewalRequests.SingleAsync(r => r.Id == previous.RenewalId)).Status = previous.Renewal;
+                (await db.PaymentRequests.SingleAsync(p => p.Id == previous.PaymentId)).Status = previous.Payment;
+            }
+            await db.SaveChangesAsync();
+        }
+        await route.DisposeAsync();
+        await factory.DisposeAsync();
+    }
+
+    private static async Task<List<(RenewalRequest Renewal, PaymentRequest Payment)>> OpenSharedDemoPayments(FoundationDbContext db, Guid[] enrollments)
+    {
+        var rows = await (from r in db.RenewalRequests
+                          join p in db.PaymentRequests on r.PaymentRequestId equals (Guid?)p.Id
+                          where r.AcademyId == DemoSeed.NogoomAcademyId && p.AcademyId == r.AcademyId &&
+                                enrollments.Contains(r.SportEnrollmentId) &&
+                                (r.Status == RenewalRequestStatus.PendingPayment || r.Status == RenewalRequestStatus.PaymentInProgress) &&
+                                (p.Status == PaymentRequestStatus.Pending || p.Status == PaymentRequestStatus.Created)
+                          select new { Renewal = r, Payment = p }).ToListAsync();
+        return rows.Select(row => (row.Renewal, row.Payment)).ToList();
+    }
 
     [Fact] public async Task Payment_success_creates_exactly_one_collection() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); await Simulate(p, "Success"); Assert.Equal(1, await Count<PaymentCollection>(x => x.PaymentRequestId == p)); }
     [Fact] public async Task Duplicate_success_callback_still_creates_one_collection() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); await Simulate(p, "Success"); await Simulate(p, "Success"); Assert.Equal(1, await Count<PaymentCollection>(x => x.PaymentRequestId == p)); }
@@ -37,11 +92,62 @@ public sealed partial class SubscriptionPaymentTests : IAsyncLifetime
     [Fact] public async Task Provider_event_id_replay_is_idempotent() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); ProviderEventEnvelope e; await using (var s = factory.Services.CreateAsyncScope()) { var d = s.ServiceProvider.GetRequiredService<FoundationDbContext>(); e = s.ServiceProvider.GetRequiredService<IPaymentGateway>().CreateTestEvent(await d.PaymentRequests.SingleAsync(x => x.Id == p), PaymentEventOutcome.Success); } using var c = factory.CreateClient(); (await c.PostAsJsonAsync("/api/v1/payments/internal-test/events", e)).EnsureSuccessStatusCode(); (await c.PostAsJsonAsync("/api/v1/payments/internal-test/events", e)).EnsureSuccessStatusCode(); Assert.Equal(1, await Count<PaymentProviderEvent>(x => x.ProviderEventId == e.ProviderEventId)); }
     [Fact] public void Internal_gateway_is_refused_outside_demo_test() { var env = new StubEnvironment { EnvironmentName = Environments.Production }; Assert.Throws<InvalidOperationException>(() => InternalTestPaymentGateway.ValidateEnvironment(env, new InternalTestPaymentOptions { Enabled = true, SigningKey = "long-enough-test-signing-key" })); }
     [Fact] public async Task Collection_total_uses_confirmed_records_only() { using var c = factory.CreateClient(); await StaffLogin(c); var result = await c.GetFromJsonAsync<CollectionResult>("/api/v1/subscriptions/collections"); await using var s = factory.Services.CreateAsyncScope(); var expected = await s.ServiceProvider.GetRequiredService<FoundationDbContext>().Collections.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId).SumAsync(x => x.Amount); Assert.Equal(expected, result!.Total); }
-    [Fact] public async Task Plan_validation_rejects_invalid_combinations() { using var c = factory.CreateClient(); await StaffLogin(c); var r = await Post(c, "/api/v1/subscriptions/plans", new { arabicName = "غير صالح", sportId = Slice2DemoSeed.FootballId, planType = 1, price = 1, durationDays = (int?)null, sessionCount = 2 }, await Csrf(c)); Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode); }
-    [Fact] public async Task Client_cannot_override_plan_amount_or_currency() { using var c = await GuardianClient(); var enrollment = await Enrollment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); var r = await Post(c, "/api/v1/guardian/subscriptions/renewals", new { sportEnrollmentId = enrollment, subscriptionPlanId = Slice3DemoSeed.FootballMonthlyId, amount = .01m, currency = "USD" }, await Csrf(c), Guid.NewGuid().ToString()); var created = await r.Content.ReadFromJsonAsync<Created>(); await using var s = factory.Services.CreateAsyncScope(); var payment = await s.ServiceProvider.GetRequiredService<FoundationDbContext>().PaymentRequests.SingleAsync(x => x.Id == created!.PaymentId); Assert.Equal(720m, payment.Amount); Assert.Equal(900m, await s.ServiceProvider.GetRequiredService<FoundationDbContext>().RenewalRequests.Where(x => x.Id == payment.RenewalRequestId).Select(x => x.OriginalAmount).SingleAsync()); Assert.Equal("EGP", payment.Currency); }
-    [Fact] public async Task Browser_return_query_cannot_confirm_payment() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); using var c = await GuardianClient(); var r = await c.GetFromJsonAsync<PaymentStatus>($"/api/v1/guardian/subscriptions/payments/{p}?success=true"); Assert.Equal("Pending", r!.Status); Assert.Equal(0, await Count<PaymentCollection>(x => x.PaymentRequestId == p)); }
 
-    private async Task<Guid> NewPayment(Guid player, Guid sport) { using var c = await GuardianClient(); var enrollment = await Enrollment(player, sport); var plan = sport == Slice2DemoSeed.SwimmingId ? Slice3DemoSeed.SwimmingMonthlyId : Slice3DemoSeed.FootballMonthlyId; var r = await Post(c, "/api/v1/guardian/subscriptions/renewals", new { sportEnrollmentId = enrollment, subscriptionPlanId = plan }, await Csrf(c), Guid.NewGuid().ToString()); r.EnsureSuccessStatusCode(); return (await r.Content.ReadFromJsonAsync<Created>())!.PaymentId; }
+    [Fact]
+    public async Task Collection_feed_changes_once_after_confirmed_renewal()
+    {
+        const string endpoint = "/api/v1/subscriptions/collections";
+        using var owner = factory.CreateClient();
+        await StaffLogin(owner);
+        var before = (await owner.GetFromJsonAsync<CollectionResult>(endpoint))!;
+
+        var rejected = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId);
+        await Simulate(rejected, "Failed");
+        var pending = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId);
+        var waiting = (await owner.GetFromJsonAsync<CollectionResult>(endpoint))!;
+        Assert.Equal(before.Totals, waiting.Totals);
+        Assert.Equal(before.Items.Length, waiting.Items.Length);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
+        var quote = await db.PaymentRequests.AsNoTracking().SingleAsync(row => row.Id == pending);
+        await Simulate(pending, "Success");
+        var confirmed = (await owner.GetFromJsonAsync<CollectionResult>(endpoint))!;
+        var saved = await db.Collections.AsNoTracking().SingleAsync(row => row.PaymentRequestId == pending);
+        var paid = Assert.Single(confirmed.Items, item => item.Id == saved.Id);
+        Assert.Equal(quote.Amount, paid.Amount);
+        Assert.Equal(quote.Currency, paid.Currency);
+        Assert.Equal("InternalTest", quote.Provider);
+        Assert.Equal("Online", paid.PaymentMethod);
+        Assert.Equal(saved.PaymentMethod, paid.PaymentMethod);
+        Assert.Equal(before.Items.Length + 1, confirmed.Items.Length);
+        Assert.Equal(before.Total + quote.Amount, confirmed.Total);
+        Assert.Equal(before.Totals.Single(row => row.Currency == quote.Currency).Amount + quote.Amount,
+            confirmed.Totals.Single(row => row.Currency == quote.Currency).Amount);
+        Assert.Equal(paid.ReceiptId, await db.Receipts.Where(row => row.CollectionId == saved.Id).Select(row => row.Id).SingleAsync());
+        Assert.Equal(1, await db.SubscriptionPeriods.CountAsync(row => row.CollectionId == saved.Id));
+
+        await Simulate(pending, "Success");
+        var replayed = (await owner.GetFromJsonAsync<CollectionResult>(endpoint))!;
+        Assert.Equal(confirmed.Totals, replayed.Totals);
+        Assert.Equal(confirmed.Items, replayed.Items);
+    }
+
+    [Fact] public async Task Plan_validation_rejects_invalid_combinations() { using var c = factory.CreateClient(); await StaffLogin(c); var r = await Post(c, "/api/v1/subscriptions/plans", new { arabicName = "غير صالح", sportId = Slice2DemoSeed.FootballId, planType = 1, price = 1, durationDays = (int?)null, sessionCount = 2 }, await Csrf(c)); Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode); }
+    [Fact] public async Task Client_cannot_override_plan_amount_or_currency() { using var c = await GuardianClient(); var enrollment = await Enrollment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); await PrepareSharedDemoPayment(enrollment); var r = await Post(c, "/api/v1/guardian/subscriptions/renewals", new { sportEnrollmentId = enrollment, subscriptionPlanId = Slice3DemoSeed.FootballMonthlyId, amount = .01m, currency = "USD" }, await Csrf(c), Guid.NewGuid().ToString()); var created = await r.Content.ReadFromJsonAsync<Created>(); await using var s = factory.Services.CreateAsyncScope(); var payment = await s.ServiceProvider.GetRequiredService<FoundationDbContext>().PaymentRequests.SingleAsync(x => x.Id == created!.PaymentId); Assert.Equal(720m, payment.Amount); Assert.Equal(900m, await s.ServiceProvider.GetRequiredService<FoundationDbContext>().RenewalRequests.Where(x => x.Id == payment.RenewalRequestId).Select(x => x.OriginalAmount).SingleAsync()); Assert.Equal("EGP", payment.Currency); }
+    [Fact] public async Task Browser_return_query_cannot_confirm_payment() { var p = await NewPayment(Slice2DemoSeed.OmarPlayerId, Slice2DemoSeed.FootballId); using var c = await GuardianClient(); var r = await c.GetFromJsonAsync<PaymentStatus>($"/api/v1/guardian/subscriptions/payments/{p}?success=true"); Assert.Equal("Pending", r!.Status); Assert.True(r.SimulationAvailable); Assert.Equal(0, await Count<PaymentCollection>(x => x.PaymentRequestId == p)); }
+
+    private async Task<Guid> NewPayment(Guid player, Guid sport)
+    {
+        using var c = await GuardianClient();
+        var enrollment = await Enrollment(player, sport);
+        await PrepareSharedDemoPayment(enrollment);
+        var plan = sport == Slice2DemoSeed.SwimmingId ? Slice3DemoSeed.SwimmingMonthlyId : Slice3DemoSeed.FootballMonthlyId;
+        using var response = await Post(c, "/api/v1/guardian/subscriptions/renewals",
+            new { sportEnrollmentId = enrollment, subscriptionPlanId = plan }, await Csrf(c), Guid.NewGuid().ToString());
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<Created>())!.PaymentId;
+    }
     private async Task Simulate(Guid payment, string outcome) { using var c = await GuardianClient(); (await Post(c, $"/api/v1/guardian/subscriptions/payments/{payment}/simulate", new { outcome }, await Csrf(c))).EnsureSuccessStatusCode(); }
     private async Task<HttpClient> GuardianClient() { var c = factory.CreateClient(); var request = await Post(c, "/api/v1/auth/guardian/otp/request", new { phoneNumber = DemoSeed.GuardianPhone }, await Csrf(c)); var challenge = await request.Content.ReadFromJsonAsync<Challenge>(); (await Post(c, "/api/v1/auth/guardian/otp/verify", new { challengeId = challenge!.ChallengeId, phoneNumber = DemoSeed.GuardianPhone, code = "246810" }, await Csrf(c))).EnsureSuccessStatusCode(); return c; }
     private async Task StaffLogin(HttpClient c) { (await Post(c, "/api/v1/auth/login", new { email = DemoSeed.OwnerEmail, password = "Demo-Only-123!" }, await Csrf(c))).EnsureSuccessStatusCode(); }
@@ -49,7 +155,10 @@ public sealed partial class SubscriptionPaymentTests : IAsyncLifetime
     private async Task<int> Count<T>(System.Linq.Expressions.Expression<Func<T, bool>> predicate) where T : class { await using var s = factory.Services.CreateAsyncScope(); return await s.ServiceProvider.GetRequiredService<FoundationDbContext>().Set<T>().CountAsync(predicate); }
     private static async Task<string> Csrf(HttpClient c) => (await c.GetFromJsonAsync<CsrfDto>("/api/v1/auth/csrf"))!.Token;
     private static Task<HttpResponseMessage> Post(HttpClient c, string path, object body, string token, string? key = null) { var r = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) }; r.Headers.Add("X-CSRF-TOKEN", token); if (key is not null) r.Headers.Add("Idempotency-Key", key); return c.SendAsync(r); }
-    private sealed record CsrfDto(string Token); private sealed record Challenge(Guid ChallengeId); private sealed record Created(Guid PaymentId); private sealed record PaymentStatus(string Status); private sealed record CollectionResult(decimal Total);
+    private sealed record CsrfDto(string Token); private sealed record Challenge(Guid ChallengeId); private sealed record Created(Guid PaymentId); private sealed record PaymentStatus(string Status, bool SimulationAvailable);
+    private sealed record CollectionResult(decimal Total, CollectionAmount[] Totals, CollectionItem[] Items);
+    private sealed record CollectionAmount(string Currency, decimal Amount);
+    private sealed record CollectionItem(Guid Id, Guid ReceiptId, decimal Amount, string Currency, string PaymentMethod);
     private sealed class Factory(string connection) : WebApplicationFactory<Program> { protected override void ConfigureWebHost(IWebHostBuilder b) { b.UseEnvironment("Demo"); b.UseSetting("ConnectionStrings:Default", connection); b.UseSetting("Demo:SeedProfile", "LegacyRegression"); b.UseSetting("Demo:SeedEnabled", "true"); b.UseSetting("Demo:FixedOtpEnabled", "true"); b.UseSetting("Demo:FixedOtp", "246810"); b.UseSetting("Demo:StaffPassword", "Demo-Only-123!"); b.UseSetting("Demo:ReferenceDate", "2026-09-28"); b.UseSetting("Payments:InternalTest:Enabled", "true"); b.UseSetting("Payments:InternalTest:SigningKey", "Demo-Test-Signing-Key-Only-123456"); } }
     private sealed class StubEnvironment : IHostEnvironment { public string EnvironmentName { get; set; } = Environments.Production; public string ApplicationName { get; set; } = "Tests"; public string ContentRootPath { get; set; } = string.Empty; public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!; }
 }

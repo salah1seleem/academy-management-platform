@@ -118,10 +118,7 @@ void main() {
           expect(neutral.activeTrackColor, neutral.inactiveTrackColor);
           final scaffold = t.widget<AppScaffold>(find.byType(AppScaffold));
           expect(scaffold.bottomBar, isNotNull);
-          final publish = find.widgetWithText(
-            FilledButton,
-            'نشر التقييم لولي الأمر',
-          );
+          final publish = find.widgetWithText(FilledButton, 'مراجعة النشر');
           expect(publish, findsOneWidget);
           expect(
             find.ancestor(of: publish, matching: find.byType(ListView)),

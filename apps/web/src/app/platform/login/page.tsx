@@ -1,16 +1,43 @@
 "use client";
-import { useState, type FormEvent } from "react";
+
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
-import { platformRequest } from "../../../features/platform-api";
-import { canonicalDigits } from "../../../lib/number-input";
+import { LoginForm, type LoginCredentials } from "../../../components/login-form";
+import styles from "../../../components/login-form.module.css";
+import { webAuthRequest } from "../../../lib/web-auth-request";
 
 export default function PlatformLogin() {
-  const router = useRouter(); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [code, setCode] = useState("");
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault(); if (busy) return; const form = new FormData(e.currentTarget); setBusy(true); setError("");
-    try { await platformRequest("/api/v1/platform/auth/login", "POST", { email: form.get("email"), password: form.get("password"), code }); router.replace("/platform"); }
-    catch (e) { setError(e instanceof Error ? e.message : "تعذر الدخول."); setBusy(false); }
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(credentials: LoginCredentials) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await webAuthRequest("/api/v1/platform/auth", "login", credentials);
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("تحقّق من البريد الإلكتروني وكلمة المرور ورمز التحقق.");
+      }
+      if (!response.ok) throw new Error("تعذر تسجيل الدخول الآن. حاول مرة أخرى.");
+      const result = await response.json().catch(() => null);
+      if (result?.authenticated !== true) throw new Error("تعذر تأكيد الدخول. حدّث الصفحة وأعد المحاولة.");
+      router.replace("/platform");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "تعذر تسجيل الدخول.");
+      setBusy(false);
+    }
   }
-  return <main className="center-shell"><section className="login-card" aria-labelledby="platform-title"><span className="eyebrow"><ShieldCheck aria-hidden="true" /> iAcademy One · إدارة المنصة</span><h1 id="platform-title">دخول مشغّل المنصة</h1><p className="muted">حساب مستقل محمي بالتحقق الثنائي، وليس حساب مالك الأكاديمية.</p><form method="post" onSubmit={e => void submit(e)}><label className="field">البريد الإلكتروني<input name="email" type="email" required autoComplete="username" /></label><label className="field">كلمة المرور<input name="password" type="password" required autoComplete="current-password" /></label><label className="field">رمز التحقق<input name="code" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" dir="ltr" value={code} onChange={e => setCode(canonicalDigits(e.target.value))} /></label><button className="primary-button" disabled={busy}>{busy ? "جارٍ التحقق…" : "دخول المنصة"}</button></form>{error && <p role="alert" className="error-message">{error}</p>}<a href="/login">دخول الأكاديمية</a></section></main>;
+
+  return <main className="center-shell">
+    <section className={`login-card ${styles.card}`} aria-labelledby="platform-title">
+      <header className={styles.header}>
+        <h1 id="platform-title">دخول إدارة المنصة</h1>
+        <p className="muted">استخدم حساب مشغّل المنصة ورمز التحقق.</p>
+      </header>
+      <LoginForm busy={busy} error={error} platform onLogin={submit} />
+      <Link className={styles.link} href="/login">دخول الأكاديمية</Link>
+    </section>
+  </main>;
 }

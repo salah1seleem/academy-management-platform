@@ -38,16 +38,18 @@ public sealed partial class PlatformSetupImportTests : IAsyncLifetime
     {
         var csrf=await client.GetFromJsonAsync<JsonElement>("/api/v1/platform/auth/csrf");using var form=new MultipartFormDataContent();form.Add(new ByteArrayContent(bytes),"file","fictional.xlsx");var request=new HttpRequestMessage(HttpMethod.Post,$"/api/v1/platform/academies/{id}/import/preview"){Content=form};request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());var r=await client.SendAsync(request);r.EnsureSuccessStatusCode();return (await r.Content.ReadFromJsonAsync<ImportPreviewResult>())!;
     }
-    private static async Task<HttpResponseMessage> Stage(HttpClient client,Guid id,byte[] bytes,ImportPreviewResult preview,bool platform=true)
+    private static async Task<HttpResponseMessage> Stage(HttpClient client,Guid id,byte[] bytes,ImportPreviewResult preview,bool platform=true,bool historyApproved=false)
     {
         var csrf=await client.GetFromJsonAsync<JsonElement>(platform?"/api/v1/platform/auth/csrf":"/api/v1/auth/csrf");using var form=new MultipartFormDataContent();form.Add(new ByteArrayContent(bytes),"file","fictional.xlsx");
         foreach(var pair in new Dictionary<string,string>{{"ExpectedFileHash",preview.FileHash},{"ExpectedReferenceStamp",preview.ReferenceStamp},{"GuardianLinksApproved","true"},{"OpeningBalancesApproved","true"},{"AcceptFinancialReview","true"},{"GuardianResolutions","[]"}})form.Add(new StringContent(pair.Value),pair.Key);
+        if (historyApproved) form.Add(new StringContent("true"), "HistoricalPaymentsApproved");
         var request=new HttpRequestMessage(HttpMethod.Post,platform?$"/api/v1/platform/academies/{id}/import/commit":"/api/v1/people/import/commit"){Content=form};request.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());request.Headers.Add("Idempotency-Key",Guid.NewGuid().ToString());return await client.SendAsync(request);
     }
     [Fact]
     public async Task Draft_import_is_platform_attributed_atomic_and_owner_reupload_reuses_the_same_job()
     {
         using var platform=await Platform();var phone="01091"+Random.Shared.Next(100000,999999);var id=await Create(platform,phone);var path=$"/api/v1/platform/academies/{id}";
+        var academyName = $"أكاديمية اختبار {id.ToString("N")[..8]}";
         var licenses=await platform.GetFromJsonAsync<JsonElement>(path+"/entitlements");var features=licenses.EnumerateArray().ToDictionary(x=>x.GetProperty("feature").GetString()!,x=>x.GetProperty("feature").GetString() is "training" or "matches");
         (await Send(platform,path+"/entitlements",new {planCode="Trial",features},true)).EnsureSuccessStatusCode();
         var bytes=ImportXlsx.Write(ConnectedImportSchema.Template(id,"EGP",new DateOnly(2026,10,25),true,10,"platform-setup-"+id.ToString("N"),Random.Shared.Next(1_000_000,2_000_000)));
@@ -60,7 +62,7 @@ public sealed partial class PlatformSetupImportTests : IAsyncLifetime
             var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();Assert.Equal(10,await db.Players.CountAsync(p=>p.AcademyId==id));Assert.Equal(11,await db.SportEnrollments.CountAsync(p=>p.AcademyId==id));Assert.False(await db.Academies.Where(a=>a.Id==id).Select(a=>a.IsActive).SingleAsync());Assert.False(await db.Collections.AnyAsync(c=>c.AcademyId==id));Assert.False(await db.Receipts.AnyAsync(c=>c.AcademyId==id));Assert.True(await db.PlatformAudits.AnyAsync(x=>x.TargetAcademyId==id&&x.Action=="academy.import.complete"));}
         var detail=await platform.GetFromJsonAsync<JsonElement>(path+"/setup");Assert.NotEmpty(detail.GetProperty("readiness").EnumerateArray());
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await Send(platform,path+"/state",new {target="Active",version=0},true)).StatusCode);
-        (await Send(platform,path+"/setup",new PlatformSetup.SetupWrite(0,"أكاديمية تجربة خيالية","القاهرة — موقع خيالي",phone,phone,"Africa/Cairo","Trial",1000,"EGP","Monthly",new DateOnly(2026,10,25),new DateOnly(2026,11,25)),true)).EnsureSuccessStatusCode();
+        (await Send(platform,path+"/setup",new PlatformSetup.SetupWrite(0,academyName,"القاهرة — موقع خيالي",phone,phone,"Africa/Cairo","Trial",1000,"EGP","Monthly",new DateOnly(2026,10,25),new DateOnly(2026,11,25)),true)).EnsureSuccessStatusCode();
         (await Send(platform,path+"/configuration",new {features},true)).EnsureSuccessStatusCode();
         var logo=Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=");
         var csrf=await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/auth/csrf");using(var form=new MultipartFormDataContent()){var image=new ByteArrayContent(logo);image.Headers.ContentType=new("image/png");form.Add(image,"file","logo.png");using var req=new HttpRequestMessage(HttpMethod.Post,path+"/logo"){Content=form};req.Headers.Add("X-CSRF-TOKEN",csrf.GetProperty("token").GetString());(await platform.SendAsync(req)).EnsureSuccessStatusCode();}
@@ -71,7 +73,7 @@ public sealed partial class PlatformSetupImportTests : IAsyncLifetime
         (await Send(owner,"/api/v1/auth/login",new {email,password="Demo-Only-123!"},platform:false)).EnsureSuccessStatusCode();
         var replay=await Stage(owner,id,bytes,preview,false);replay.EnsureSuccessStatusCode();var result=await replay.Content.ReadFromJsonAsync<JsonElement>();Assert.Equal(jobId,result.GetProperty("id").GetGuid());Assert.True(result.GetProperty("replayedRequest").GetBoolean());
         Assert.Equal(HttpStatusCode.Unauthorized,(await owner.GetAsync(path+"/setup")).StatusCode);
-        var listing=await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/academies/directory?search="+Uri.EscapeDataString("أكاديمية تجربة خيالية")+"&sort=players&direction=desc");Assert.Contains(listing.GetProperty("items").EnumerateArray(),x=>x.GetProperty("id").GetGuid()==id&&x.GetProperty("players").GetInt32()==10);
+        var listing=await platform.GetFromJsonAsync<JsonElement>("/api/v1/platform/academies/directory?search="+Uri.EscapeDataString(academyName)+"&sort=players&direction=desc");Assert.Contains(listing.GetProperty("items").EnumerateArray(),x=>x.GetProperty("id").GetGuid()==id&&x.GetProperty("players").GetInt32()==10);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,(await platform.GetAsync("/api/v1/platform/academies/directory?sort=fee")).StatusCode);
         Assert.Equal(HttpStatusCode.OK,(await platform.GetAsync("/api/v1/platform/academies/directory?sort=fee&currency=EGP&period=Monthly")).StatusCode);
     }

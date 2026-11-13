@@ -14,11 +14,9 @@ import '../../core/theme/appearance.dart';
 import '../../core/theme/academy_brand.dart';
 import 'guardian_ui.dart';
 import 'guardian_profile.dart';
-import 'guardian_child_actions.dart';
 import 'coach_feedback.dart';
 import 'guardian_payments.dart';
 import 'guardian_report.dart';
-import 'daily_nutrition.dart';
 import 'family_nutrition_rail.dart';
 import 'family_media.dart';
 import 'reward_banner.dart';
@@ -28,7 +26,6 @@ import '../shared/community_ads.dart';
 import '../shared/notification_inbox.dart';
 import 'sport_store.dart';
 import '../shared/matches.dart';
-import '../shared/receivable_balances.dart';
 import '../shared/private_media.dart';
 import 'guardian_content.dart';
 import '../owner/owner_action_rail.dart';
@@ -50,39 +47,48 @@ class GuardianHome extends StatefulWidget {
 class _GuardianHomeState extends State<GuardianHome>
     with WidgetsBindingObserver {
   String? selectedPlayer, identity;
-  int section = 0, homeRevision = 0;
-  bool detailsExpanded = false;
+  int homeRevision = 0;
+  Future<List<Json>>? upcomingMatches;
   final selectedEnrollments = <String, String>{};
+  bool restoredSelection = false;
+  (String, AuthController, String?) get selectionKey =>
+      ('guardian-home-selection', widget.auth, identity);
 
-  Json workspaceChild(Json child) {
-    final sports = rows(child['sports']);
-    final sport =
-        sports
-            .where((s) => s['id'] == selectedEnrollments[textOf(child['id'])])
-            .firstOrNull ??
-        sports.firstOrNull;
-    final performance = sport?['performance'] is Map
-        ? obj(sport!['performance'])
-        : null;
-    final legacy = child['latestEvaluation'];
-    final latest = sport?.containsKey('performance') == true
-        ? performance == null || performance['evaluationId'] == null
-              ? null
-              : <String, dynamic>{
-                  'id': performance['evaluationId'],
-                  'sport': sport?['sport'],
-                  'evaluationDate': performance['evaluationDate'],
-                  'overallScore': performance['meanPerformance'],
-                }
-        : legacy is Map && legacy['sport'] == sport?['sport']
-        ? legacy
-        : null;
-    return {
-      ...child,
-      'sports': <Json>[?sport],
-      'latestEvaluation': latest,
-      'power': null,
-    };
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (restoredSelection || identity == null) return;
+    restoredSelection = true;
+    final saved = PageStorage.maybeOf(context)
+        ?.readState(context, identifier: selectionKey);
+    if (saved is (String, Map<String, String>)) {
+      selectedPlayer = saved.$1;
+      selectedEnrollments.addAll(saved.$2);
+    }
+  }
+
+  void selectChild(String player, {String? enrollment}) {
+    if (identity == null || identity != currentIdentity) return;
+    setState(() {
+      selectedPlayer = player;
+      if (enrollment != null) selectedEnrollments[player] = enrollment;
+    });
+    PageStorage.maybeOf(context)?.writeState(context, (
+      player,
+      Map<String, String>.of(selectedEnrollments),
+    ), identifier: selectionKey);
+  }
+
+  Future<List<Json>> readUpcomingMatches() async {
+    final matches = rows(
+      await widget.auth.request('GET', '/api/v1/my-matches?upcomingOnly=true'),
+    ).where((item) => item['isUpcoming'] == true).toList();
+    matches.sort(
+      (a, b) => '${a['matchDate']} ${a['startTime']}'.compareTo(
+        '${b['matchDate']} ${b['startTime']}',
+      ),
+    );
+    return matches;
   }
 
   String? get currentIdentity =>
@@ -107,7 +113,10 @@ class _GuardianHomeState extends State<GuardianHome>
 
   void noticesChanged() {
     if (mounted && identity != null && identity == currentIdentity) {
-      setState(() => homeRevision++);
+      setState(() {
+        upcomingMatches = null;
+        homeRevision++;
+      });
     }
   }
 
@@ -116,7 +125,7 @@ class _GuardianHomeState extends State<GuardianHome>
     setState(() {
       identity = currentIdentity;
       selectedPlayer = null;
-      detailsExpanded = false;
+      upcomingMatches = null;
       selectedEnrollments.clear();
     });
   }
@@ -131,7 +140,7 @@ class _GuardianHomeState extends State<GuardianHome>
       notificationChanges(widget.auth).addListener(noticesChanged);
       identity = currentIdentity;
       selectedPlayer = null;
-      detailsExpanded = false;
+      upcomingMatches = null;
       selectedEnrollments.clear();
     }
   }
@@ -175,16 +184,9 @@ class _GuardianHomeState extends State<GuardianHome>
                   : allChildren.isEmpty
                   ? null
                   : textOf(allChildren.first['id']);
-              final children = allChildren
-                  .where((c) => c['id'] == selected)
-                  .map(workspaceChild)
-                  .toList();
               final competitions =
                   BrandScope.maybeOf(context)?.features.contains('matches') ??
                   true;
-              final effectiveSection = section == 4 && !competitions
-                  ? 0
-                  : section;
               final nutritionToday = textOf(
                 home['trainingToday'] ?? home['today'],
               );
@@ -193,17 +195,14 @@ class _GuardianHomeState extends State<GuardianHome>
                   auth: widget.auth,
                   alerts: rows(home['urgentAlerts'] ?? <Json>[]),
                   onReturned: () {
-                    if (mounted) setState(() => homeRevision++);
+                    noticesChanged();
                   },
                 ),
                 GuardianRewardBanner(
                   key: ValueKey('reward-$identity'),
                   auth: widget.auth,
                 ),
-                const RoleHomeIntro(
-                  title: 'رحلة أبنائك',
-                  subtitle: 'تقدمهم ومواعيدهم، وأنت بالقرب منهم',
-                ),
+                const RoleHomeIntro(title: 'أبنائي'),
                 if (allChildren.length > 1)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -220,53 +219,57 @@ class _GuardianHomeState extends State<GuardianHome>
                               ),
                               selected: child['id'] == selected,
                               showCheckmark: false,
-                              onSelected: (_) => setState(
-                                () => selectedPlayer = textOf(child['id']),
-                              ),
+                              onSelected: (_) =>
+                                  selectChild(textOf(child['id'])),
                             ),
                           ),
                       ],
                     ),
                   ),
                 if (allChildren.isNotEmpty)
-                  GuardianChildCarousel(
-                    key: ValueKey('carousel-$identity'),
-                    auth: widget.auth,
-                    children: allChildren,
-                    selectedPlayerId: selected,
-                    selectedEnrollments: selectedEnrollments,
-                    onEnrollmentSelected: (player, enrollment) => setState(() {
-                      selectedPlayer = player;
-                      selectedEnrollments[player] = enrollment;
-                    }),
-                    today: textOf(home['today']),
-                    nutritionDate: nutritionToday,
-                    onSelected: (id) => setState(() => selectedPlayer = id),
-                    onOpenEnrollment: (id, enrollmentId) => open(
-                      ChildProfile(
-                        auth: widget.auth,
-                        environment: widget.environment,
-                        playerId: id,
-                        today: home['today'],
-                        nutritionDate: nutritionToday,
-                        initialEnrollmentId: enrollmentId,
+                  FutureBuilder<List<Json>>(
+                    future: competitions
+                        ? upcomingMatches ??= readUpcomingMatches()
+                        : null,
+                    builder: (context, matches) => GuardianChildCarousel(
+                      key: ValueKey('carousel-$identity'),
+                      auth: widget.auth,
+                      children: allChildren,
+                      selectedPlayerId: selected,
+                      selectedEnrollments: selectedEnrollments,
+                      onEnrollmentSelected: (player, enrollment) =>
+                          selectChild(player, enrollment: enrollment),
+                      today: textOf(home['today']),
+                      nutritionDate: nutritionToday,
+                      matches: competitions
+                          ? matches.data ?? const []
+                          : const [],
+                      onSelected: selectChild,
+                      onOpenEnrollment: (id, enrollmentId) => open(
+                        ChildProfile(
+                          auth: widget.auth,
+                          environment: widget.environment,
+                          playerId: id,
+                          today: home['today'],
+                          nutritionDate: nutritionToday,
+                          initialEnrollmentId: enrollmentId,
+                        ),
                       ),
-                    ),
-                    onOpen: (id) => open(
-                      ChildProfile(
-                        auth: widget.auth,
-                        environment: widget.environment,
-                        playerId: id,
-                        today: home['today'],
-                        nutritionDate: nutritionToday,
+                      onOpen: (id) => open(
+                        ChildProfile(
+                          auth: widget.auth,
+                          environment: widget.environment,
+                          playerId: id,
+                          today: home['today'],
+                          nutritionDate: nutritionToday,
+                        ),
                       ),
                     ),
                   ),
                 if (allChildren.isEmpty)
                   const EmptyMessage('لا يوجد أبناء مرتبطون بهذا الحساب.'),
-                OwnerActionRail(
+                _GuardianQuickActions(
                   key: ValueKey('guardian-home-actions-$identity'),
-                  automatic: false,
                   actions: [
                     OwnerRailAction(
                       localized(context, 'اشتراك جديد', 'New enrollment'),
@@ -331,185 +334,21 @@ class _GuardianHomeState extends State<GuardianHome>
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                if (children.isNotEmpty)
-                  GCard(
-                    padding: EdgeInsets.zero,
-                    child: ExpansionTile(
-                      key: const ValueKey('child-home-details'),
-                      initiallyExpanded: detailsExpanded,
-                      onExpansionChanged: (value) =>
-                          setState(() => detailsExpanded = value),
-                      shape: const Border(),
-                      collapsedShape: const Border(),
-                      title: UiText(
-                        'تفاصيل ${textOf(children.first['arabicName']).split(' ').first}',
-                      ),
-                      leading: const Icon(Icons.manage_accounts_outlined),
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      children: [
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final item in [
-                                (0, 'الاشتراك', Icons.card_membership_rounded),
-                                (
-                                  1,
-                                  'الجدول والحصص',
-                                  Icons.calendar_month_rounded,
-                                ),
-                                (2, 'التقييمات', Icons.insights_rounded),
-                                (3, 'التغذية والصحة', Icons.restaurant_rounded),
-                                if (competitions)
-                                  (4, 'المنافسات', Icons.emoji_events_rounded),
-                              ])
-                                Padding(
-                                  padding: const EdgeInsetsDirectional.only(
-                                    end: 8,
-                                  ),
-                                  child: _ChildFeatureTab(
-                                    key: ValueKey('child-section-${item.$1}'),
-                                    label: item.$2,
-                                    icon: item.$3,
-                                    selected: effectiveSection == item.$1,
-                                    onTap: () =>
-                                        setState(() => section = item.$1),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        for (final child in children)
-                          KeyedSubtree(
-                            key: ValueKey('child-workspace-${child['id']}'),
-                            child: Column(
-                              children: [
-                                if (effectiveSection == 1)
-                                  for (final sport in rows(child['sports']))
-                                    if (sport['nextSession'] is Map)
-                                      NextSessionCard(
-                                        childName: textOf(child['arabicName']),
-                                        sport: sport,
-                                        onTap: () => open(
-                                          ProfileRecords(
-                                            auth: widget.auth,
-                                            playerId: child['id'],
-                                            section: 'schedule',
-                                            enrollmentId: textOf(sport['id']),
-                                          ),
-                                        ),
-                                      ),
-                                if (effectiveSection == 1 &&
-                                    !rows(child['sports'])
-                                        .any((s) => s['nextSession'] is Map))
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 14),
-                                    child: UiText(
-                                      localized(
-                                        context,
-                                        'لا يوجد موعد تدريب قادم منشور لهذا الطفل.',
-                                        'No upcoming training session published for this child.',
-                                      ),
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                  ),
-                                if (effectiveSection == 0)
-                                  GuardianSubscriptionSummary(
-                                    auth: widget.auth,
-                                    environment: widget.environment,
-                                    childData: child,
-                                  ),
-                                if (effectiveSection == 2)
-                                  GuardianLatestProgress(
-                                    auth: widget.auth,
-                                    childData: child,
-                                  ),
-                                if (effectiveSection == 4)
-                                  NextMatchStrip(
-                                    auth: widget.auth,
-                                    playerId: textOf(child['id']),
-                                  ),
-                                if (effectiveSection == 4)
-                                  GLink(
-                                    'مباريات ${child['arabicName']}',
-                                    Icons.emoji_events_outlined,
-                                    () => open(
-                                      MatchSchedule(
-                                        auth: widget.auth,
-                                        playerId: textOf(child['id']),
-                                      ),
-                                    ),
-                                  ),
-                                if (effectiveSection == 3)
-                                  DailyNutritionCard(
-                                    key: ValueKey(
-                                      'home-nutrition-${child['id']}',
-                                    ),
-                                    auth: widget.auth,
-                                    playerId: child['id'],
-                                    playerName: child['arabicName'],
-                                    today: nutritionToday,
-                                  ),
-                                const SizedBox(height: 18),
-                              ],
-                            ),
-                          ),
-                      ],
+                if (allChildren.isNotEmpty) ...[
+                  Heading(
+                    localized(
+                      context,
+                      'اقتراحات من مكتبة التغذية',
+                      'Suggestions from the nutrition library',
                     ),
                   ),
-                Heading(
-                  localized(
-                    context,
-                    'أقرب المواعيد لأبنائي',
-                    'Upcoming for my children',
+                  FamilyNutritionRail(
+                    auth: widget.auth,
+                    children: allChildren,
+                    today: nutritionToday,
                   ),
-                ),
-                for (final child in allChildren) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: UiText(
-                      textOf(child['arabicName']),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  for (final sport in rows(child['sports']))
-                    if (sport['nextSession'] is Map)
-                      NextSessionCard(
-                        childName: textOf(child['arabicName']),
-                        sport: sport,
-                        onTap: () => open(
-                          ProfileRecords(
-                            auth: widget.auth,
-                            playerId: child['id'],
-                            section: 'schedule',
-                            enrollmentId: textOf(sport['id']),
-                          ),
-                        ),
-                      ),
-                  if (competitions)
-                    NextMatchStrip(
-                      key: ValueKey('family-match-${child['id']}'),
-                      auth: widget.auth,
-                      playerId: textOf(child['id']),
-                    ),
                 ],
-                const SizedBox(height: 12),
-                Heading(
-                  localized(
-                    context,
-                    'النظام الغذائي اليومي للأبناء',
-                    'Daily family nutrition',
-                  ),
-                ),
-                FamilyNutritionRail(
-                  auth: widget.auth,
-                  children: allChildren,
-                  today: nutritionToday,
-                ),
                 GuardianSponsoredCard(auth: widget.auth),
-                NewsStrip(auth: widget.auth),
                 Heading(
                   localized(context, 'منتجات الرياضة', 'Sports products'),
                 ),
@@ -535,11 +374,7 @@ class _GuardianHomeState extends State<GuardianHome>
                   Icons.receipt_long_outlined,
                   () => open(ReceiptsPage(auth: widget.auth)),
                 ),
-                GLink(
-                  localized(context, 'أرصدة الأسرة', 'Family balances'),
-                  Icons.account_balance_wallet_outlined,
-                  () => open(ReceivableBalancesPage(auth: widget.auth)),
-                ),
+                NewsStrip(auth: widget.auth),
               ], key: const ValueKey('guardian-home-scroll'));
             },
           ),
@@ -578,241 +413,82 @@ class GuardianHomeMedia extends StatelessWidget {
   );
 }
 
-class GuardianSubscriptionSummary extends StatelessWidget {
-  final AuthController auth;
-  final String environment;
-  final Json childData;
-  const GuardianSubscriptionSummary({
-    super.key,
-    required this.auth,
-    required this.environment,
-    required this.childData,
-  });
+class _GuardianQuickActions extends StatelessWidget {
+  const _GuardianQuickActions({super.key, required this.actions});
+  final List<OwnerRailAction> actions;
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (final sport in rows(childData['sports']))
-        GCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      const Heading('العمليات السريعة'),
+      LayoutBuilder(
+        builder: (context, bounds) {
+          final scale = MediaQuery.textScalerOf(context).scale(1);
+          final columns = scale > 1.3
+              ? 2
+              : bounds.maxWidth >= 440
+              ? 5
+              : bounds.maxWidth >= 320
+              ? 4
+              : 3;
+          const gap = 8.0;
+          final width = (bounds.maxWidth - gap * (columns - 1)) / columns;
+          final colors = Theme.of(context).colorScheme;
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
             children: [
-              UiText(
-                localized(
-                  context,
-                  'الاشتراك · ${sport['sport']}',
-                  'Subscription · ${sport['sport']}',
-                ),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (sport['period'] is Map) ...[
-                StatusPill(sport['period']['status'], fontSize: 14),
-                const SizedBox(height: 6),
-                if (sport['period']['plan'] != null)
-                  UiText(
-                    textOf(sport['period']['plan']),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                UiText(
-                  'بداية الاشتراك ${day(sport['period']['startDate'])} · نهاية الاشتراك ${day(sport['period']['endDate'])}',
-                  style: const TextStyle(fontSize: 14),
-                  textDirection: TextDirection.ltr,
-                ),
-              ] else
-                UiText(
-                  localized(
-                    context,
-                    'لا يوجد اشتراك فعال',
-                    'No active subscription',
-                  ),
-                  style: const TextStyle(fontSize: 14),
-                ),
-              if (sport['id'] != null &&
-                  (sport['period'] == null ||
-                      [
-                        'Expired',
-                        'Expiring',
-                      ].contains(sport['period']['status']))) ...[
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  key: ValueKey('home-renew-${sport['id']}'),
-                  onPressed: () => openPage(
-                    context,
-                    PlanPicker(
-                      auth: auth,
-                      environment: environment,
-                      enrollmentId: textOf(sport['id']),
-                      childName: textOf(childData['arabicName']),
+              for (final action in actions)
+                SizedBox(
+                  width: width,
+                  child: Material(
+                    color: colors.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: colors.outlineVariant),
                     ),
-                  ),
-                  icon: const Icon(Icons.autorenew),
-                  label: UiText(
-                    localized(
-                      context,
-                      'تجديد · ${childData['arabicName']}',
-                      'Renew · ${childData['arabicName']}',
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      key: action.key,
+                      onTap: action.onTap,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 10,
+                        ),
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 17,
+                              backgroundColor: Color.alphaBlend(
+                                action.color.withValues(alpha: .13),
+                                colors.surfaceContainerHigh,
+                              ),
+                              foregroundColor: colors.onPrimaryContainer,
+                              child: Icon(action.icon, size: 18),
+                            ),
+                            const SizedBox(height: 6),
+                            UiText(
+                              action.label,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ],
             ],
-          ),
-        ),
+          );
+        },
+      ),
     ],
   );
-}
-
-class GuardianLatestProgress extends StatelessWidget {
-  final AuthController auth;
-  final Json childData;
-  const GuardianLatestProgress({
-    super.key,
-    required this.auth,
-    required this.childData,
-  });
-  @override
-  Widget build(BuildContext context) {
-    final power = childData['power'];
-    final latest =
-        childData['latestEvaluation'] ??
-        (power is Map && power['evaluationId'] != null
-            ? {
-                'id': power['evaluationId'],
-                'overallScore': power['overallScore'],
-              }
-            : null);
-    return GCard(
-      onTap: latest is Map
-          ? () => openPage(
-              context,
-              PlayerReport(auth: auth, id: textOf(latest['id'])),
-            )
-          : () => openPage(
-              context,
-              ReportHistory(auth: auth, playerId: textOf(childData['id'])),
-            ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.insights_outlined,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                UiText(
-                  localized(
-                    context,
-                    'تطور ${childData['arabicName']}',
-                    '${childData['arabicName']}’s progress',
-                  ),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                UiText(
-                  latest is Map
-                      ? latest['evaluationDate'] == null
-                            ? localized(
-                                context,
-                                'عرض آخر تقييم منشور',
-                                'Open latest published report',
-                              )
-                            : '${latest['sport']} · ${day(latest['evaluationDate'])}'
-                      : localized(
-                          context,
-                          'لا يوجد تقييم منشور بعد',
-                          'No published report yet',
-                        ),
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          if (latest is Map && latest['overallScore'] is num)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: UiText(
-                '${(latest['overallScore'] as num).round()}',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-          const Icon(Icons.chevron_right),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChildFeatureTab extends StatelessWidget {
-  const _ChildFeatureTab({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Column(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: selected
-                      ? color.withValues(alpha: .13)
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                ),
-                child: Icon(
-                  icon,
-                  size: 21,
-                  color: selected
-                      ? color
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 6),
-              UiText(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? color : null,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class GuardianChildCarousel extends StatefulWidget {
@@ -823,6 +499,7 @@ class GuardianChildCarousel extends StatefulWidget {
     this.selectedPlayerId,
     required this.today,
     this.nutritionDate,
+    this.matches = const [],
     required this.onSelected,
     required this.onOpen,
     this.onOpenEnrollment,
@@ -837,6 +514,7 @@ class GuardianChildCarousel extends StatefulWidget {
   final String? selectedPlayerId;
   final String today;
   final String? nutritionDate;
+  final List<Json> matches;
   final ValueChanged<String> onSelected, onOpen;
   final void Function(String playerId, String? enrollmentId)? onOpenEnrollment;
   @override
@@ -855,6 +533,7 @@ class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
   );
   final heights = <int, double>{};
   String? layoutSignature;
+  int layoutVersion = 0;
   double get uniformHeight =>
       heights.values.fold<double>(450, (a, b) => a > b ? a : b);
   @override
@@ -887,11 +566,14 @@ class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
       MediaQuery.textScalerOf(context).scale(1),
       widget.children,
       widget.selectedEnrollments,
+      widget.matches,
     ]);
     if (signature != layoutSignature) {
       layoutSignature = signature;
+      layoutVersion++;
       heights.clear();
     }
+    final measuredVersion = layoutVersion;
     return SizedBox(
       height: uniformHeight,
       child: PageView.builder(
@@ -914,8 +596,10 @@ class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
                   minHeight: 0,
                   maxHeight: double.infinity,
                   child: _ChildCardMeasure(
+                    key: ValueKey((i, measuredVersion)),
                     onSize: (size) {
                       if (mounted &&
+                          measuredVersion == layoutVersion &&
                           ((heights[i] ?? 0) - size.height).abs() > .5) {
                         setState(() {
                           heights[i] = size.height;
@@ -928,7 +612,16 @@ class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
                       auth: widget.auth,
                       childData: c,
                       today: widget.today,
-                      nutritionDate: widget.nutritionDate,
+                      nutritionDate: widget.nutritionDate ?? widget.today,
+                      nextMatch: widget.matches
+                          .where(
+                            (match) =>
+                                (match['children'] as List?)?.contains(
+                                  c['id'],
+                                ) ==
+                                true,
+                          )
+                          .firstOrNull,
                       selectedEnrollmentId:
                           widget.selectedEnrollments[textOf(c['id'])],
                       onEnrollmentChanged: widget.onEnrollmentSelected == null
@@ -955,7 +648,11 @@ class _GuardianChildCarouselState extends State<GuardianChildCarousel> {
 }
 
 class _ChildCardMeasure extends SingleChildRenderObjectWidget {
-  const _ChildCardMeasure({required this.onSize, required super.child});
+  const _ChildCardMeasure({
+    super.key,
+    required this.onSize,
+    required super.child,
+  });
   final ValueChanged<Size> onSize;
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -992,6 +689,7 @@ class PremiumChildCard extends StatefulWidget {
   final Json childData;
   final String today;
   final String? nutritionDate;
+  final Json? nextMatch;
   final VoidCallback onTap;
   final ValueChanged<String?>? onOpenEnrollment;
   final String? selectedEnrollmentId;
@@ -1001,9 +699,10 @@ class PremiumChildCard extends StatefulWidget {
     required this.auth,
     required this.childData,
     required this.today,
-    this.nutritionDate,
     required this.onTap,
     this.showSubscription = true,
+    this.nutritionDate,
+    this.nextMatch,
     this.cardHeight,
     this.onOpenEnrollment,
     this.selectedEnrollmentId,
@@ -1046,6 +745,22 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
         performance['applicableCriteria'] as num? ?? criteria.length;
     final colors = Theme.of(context).colorScheme;
     final name = textOf(c['arabicName']);
+    final age = ageOn(c['dateOfBirth'], widget.today);
+    final period = sport?['period'] is Map ? obj(sport!['period']) : null;
+    final coaches = rows(sport?['coaches'] ?? const []);
+    final session = sport?['nextSession'] is Map
+        ? obj(sport!['nextSession'])
+        : null;
+    final match = widget.nextMatch;
+    const portraitHeight = 134.0;
+    String appointment(Object? date, Object? time) {
+      final when = DateTime.tryParse(textOf(date));
+      if (when == null) return 'الموعد لم يُحدد';
+      final shortDate = MaterialLocalizations.of(context)
+          .formatShortMonthDay(when);
+      return '$shortDate · ${trainingTimeOf(time)}';
+    }
+
     final mean = score is num ? performanceScoreText(score) : '—';
     final chart =
         performance['isFootballReport'] == true && assessedAxes.isNotEmpty
@@ -1058,7 +773,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
       borderRadius: BorderRadius.circular(18),
       child: SizedBox(
         width: width,
-        height: 158,
+        height: portraitHeight,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -1068,7 +783,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
               reference: c['photoReference'],
               gender: c['gender'],
               size: width,
-              height: 158,
+              height: portraitHeight,
               square: true,
             ),
             Positioned(
@@ -1097,7 +812,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                       ),
                     ),
                     const UiText(
-                      'متوسط التقييم',
+                      'متوسط الأداء',
                       style: TextStyle(
                         color: Color(0xFFDCE7F3),
                         fontSize: 10,
@@ -1157,7 +872,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
           )
         else
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
+            padding: EdgeInsets.symmetric(vertical: 14),
             child: UiText(
               'سيظهر تطور الأداء عند نشر تقييم لهذه الرياضة.',
               style: TextStyle(fontSize: 12),
@@ -1167,8 +882,8 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
     );
     return Container(
       key: ValueKey('child-${c['id']}'),
-      constraints: BoxConstraints(minHeight: widget.cardHeight ?? 0),
-      padding: const EdgeInsets.all(18),
+      height: widget.cardHeight,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(26),
@@ -1203,31 +918,47 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                         color: colors.onSurface,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    UiText(
-                      childContextLine(c, sport, widget.today),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.3,
-                        color: colors.onSurfaceVariant,
+                    if (sports.length <= 1)
+                      UiText(
+                        [
+                          if (sport != null) textOf(sport['sport']),
+                          if (age != null) '$age سنة',
+                          if (sport?['branch'] != null)
+                            textOf(sport!['branch']),
+                        ].join(' · '),
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.35,
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
               if ((c['monthlyStars'] as num? ?? 0) > 0)
-                UiText(
-                  '★ ' * (c['monthlyStars'] as num).toInt(),
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: ExperienceColors.award(context),
+                Semantics(
+                  label: '${c['monthlyStars']} نجوم',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        size: 17,
+                        color: ExperienceColors.award(context),
+                      ),
+                      if ((c['monthlyStars'] as num) > 1)
+                        UiText(
+                          '${c['monthlyStars']}',
+                          style: TextStyle(
+                            color: ExperienceColors.award(context),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 9),
           if (sports.length > 1) ...[
             DropdownButtonFormField<String>(
               key: ValueKey('card-enrollment-${c['id']}-${sport?['id']}'),
@@ -1247,7 +978,11 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                   DropdownMenuItem(
                     value: textOf(item['id']),
                     child: UiText(
-                      '${item['sport']} · ${item['branch'] ?? ''}',
+                      [
+                        textOf(item['sport']),
+                        if (age != null) '$age سنة',
+                        textOf(item['branch']),
+                      ].join(' · '),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
@@ -1257,7 +992,7 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
                 widget.onEnrollmentChanged?.call(value!);
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
           ],
           LayoutBuilder(
             builder: (context, bounds) =>
@@ -1287,17 +1022,18 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
               value: (score / 100).clamp(0, 1),
               minHeight: 3,
             ),
-            if (scored < applicable) ...[
-              const SizedBox(height: 6),
-              UiText(
-                'التقييم غير مكتمل',
-                style: TextStyle(fontSize: 11, color: colors.error),
+            const SizedBox(height: 6),
+            Tooltip(
+              message: 'متوسط الدرجات المسجّلة في آخر تقييم منشور.',
+              child: UiText(
+                '$scored من $applicable معايير · آخر تقييم منشور',
+                style: TextStyle(
+                  fontSize: 10,
+                  height: 1.3,
+                  color: colors.onSurfaceVariant,
+                ),
               ),
-              UiText(
-                '$scored من $applicable معايير',
-                style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
-              ),
-            ],
+            ),
           ] else ...[
             const UiText(
               'بيانات الأداء غير كافية لحساب المتوسط',
@@ -1310,118 +1046,152 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
               ),
           ],
           if (widget.showSubscription && sport != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
+            const SizedBox(height: 8),
+            DecoratedBox(
               decoration: BoxDecoration(
                 color: colors.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(13),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (sport['period'] is Map) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: UiText(
-                            textOf(sport['period']['plan']),
-                            style: const TextStyle(
-                              fontSize: 12,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                child: period == null
+                    ? const UiText(
+                        'لا يوجد اشتراك فعال',
+                        style: TextStyle(fontSize: 12),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: UiText(
+                                  textOf(period['plan']),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              StatusPill(period['status'], fontSize: 10),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          UiText(
+                            [
+                              textOf(sport['group'] ?? 'في انتظار المجموعة'),
+                              if (period['remainingSessions'] != null)
+                                '${period['remainingSessions']} حصص متبقية',
+                              if (period['endDate'] != null)
+                                'حتى ${day(period['endDate'])}',
+                            ].join(' · '),
+                            style: TextStyle(
+                              fontSize: 10,
                               height: 1.4,
-                              fontWeight: FontWeight.w700,
+                              color: colors.onSurfaceVariant,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        StatusPill(sport['period']['status'], fontSize: 10),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    UiText(
-                      textOf(sport['group'] ?? 'في انتظار المجموعة'),
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.3,
-                        color: colors.onSurfaceVariant,
+                        ],
                       ),
-                    ),
-                    if (sport['period']['remainingSessions'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 4),
-                        child: UiText(
-                          '${sport['period']['remainingSessions']} حصص متبقية',
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.3,
-                            fontWeight: FontWeight.w800,
-                            color: colors.primary,
-                          ),
-                        ),
-                      ),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: [
-                        UiText(
-                          'بداية الاشتراك: ${shortArabicDate(sport['period']['startDate'])}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            height: 1.4,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                        UiText(
-                          'نهاية الاشتراك: ${shortArabicDate(sport['period']['endDate'])}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            height: 1.4,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else
-                    const UiText(
-                      'لا يوجد اشتراك فعال',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                ],
               ),
             ),
           ],
-          for (final coach in rows(sport?['coaches'] ?? []))
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: () => openPage(
-                  context,
-                  CoachFeedbackPage(
-                    auth: widget.auth,
-                    playerId: textOf(c['id']),
-                    initialGroupId: textOf(coach['groupId']),
-                    initialCoachId: textOf(coach['id']),
+          if (coaches.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final coach in coaches)
+                  TextButton(
+                    onPressed: () => openPage(
+                      context,
+                      CoachFeedbackPage(
+                        auth: widget.auth,
+                        playerId: textOf(c['id']),
+                        initialGroupId: textOf(coach['groupId']),
+                        initialCoachId: textOf(coach['id']),
+                      ),
+                    ),
+                    child: Text.rich(
+                      TextSpan(
+                        text: ui(context, 'المدرب'),
+                        style: TextStyle(color: colors.onSurfaceVariant),
+                        children: [
+                          TextSpan(
+                            text: '  ${coach['name']}',
+                            style: TextStyle(
+                              color: colors.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          if (widget.nutritionDate != null) ...[
+            const SizedBox(height: 6),
+            _ChildCardShortcuts(
+              actions: [
+                (
+                  icon: Icons.calendar_today_outlined,
+                  label: session == null ? 'جدول الحصص' : 'الحصة القادمة',
+                  detail: session == null
+                      ? 'الجدول'
+                      : appointment(
+                          session['sessionDate'],
+                          session['startTime'],
+                        ),
+                  onTap: () => openPage(
+                    context,
+                    ProfileRecords(
+                      auth: widget.auth,
+                      playerId: textOf(c['id']),
+                      section: 'schedule',
+                      enrollmentId: sport?['id']?.toString(),
+                    ),
                   ),
                 ),
-                icon: const Icon(Icons.sports_outlined, size: 17),
-                label: UiText(
-                  'المدرب ${coach['name']}',
-                  style: const TextStyle(fontSize: 12),
+                if (match != null)
+                  (
+                    icon: Icons.sports_soccer_outlined,
+                    label: 'المباراة القادمة',
+                    detail: appointment(match['matchDate'], match['startTime']),
+                    onTap: () => openPage(
+                      context,
+                      MatchSchedule(
+                        auth: widget.auth,
+                        playerId: textOf(c['id']),
+                        matchId: textOf(match['id']),
+                      ),
+                    ),
+                  ),
+                (
+                  icon: Icons.restaurant_outlined,
+                  label: 'مكتبة التغذية',
+                  detail: 'اقتراحات اليوم',
+                  onTap: () => openPage(
+                    context,
+                    NutritionLibrary(
+                      auth: widget.auth,
+                      playerId: textOf(c['id']),
+                      today: widget.nutritionDate!,
+                      playerName: name,
+                      showToday: true,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          const SizedBox(height: 8),
-          GuardianChildActions(
-            auth: widget.auth,
-            playerId: textOf(c['id']),
-            playerName: name,
-            nutritionDate: widget.nutritionDate ?? widget.today,
-            enrollmentId: sport?['id']?.toString(),
-            nextSession: sport?['nextSession'] is Map
-                ? obj(sport!['nextSession'])
-                : null,
-          ),
-          const SizedBox(height: 12),
+          ],
+          const SizedBox(height: 7),
           FilledButton(
             onPressed: () {
               if (widget.onOpenEnrollment != null) {
@@ -1439,6 +1209,73 @@ class _PremiumChildCardState extends State<PremiumChildCard> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChildCardShortcuts extends StatelessWidget {
+  const _ChildCardShortcuts({required this.actions});
+  final List<({IconData icon, String label, String detail, VoidCallback onTap})>
+  actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final accessible = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final colors = Theme.of(context).colorScheme;
+    const gap = 5.0;
+    final tiles = [
+      for (final action in actions)
+        Material(
+          color: colors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: action.onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(action.icon, color: colors.primary, size: 16),
+                  const SizedBox(height: 2),
+                  UiText(
+                    action.label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                    ),
+                  ),
+                  UiText(
+                    action.detail,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: colors.onSurfaceVariant,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+    ];
+    if (accessible) {
+      return Column(
+        spacing: gap,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: tiles,
+      );
+    }
+    return IntrinsicHeight(
+      child: Row(
+        spacing: gap,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final tile in tiles) Expanded(child: tile),
+          if (tiles.length < 3) const Spacer(),
         ],
       ),
     );

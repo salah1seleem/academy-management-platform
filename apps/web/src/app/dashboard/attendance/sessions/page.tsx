@@ -1,2 +1,7 @@
 import { TrainingSessionsList } from "../../../../features/attendance";
-export default async function Page({ searchParams }: { searchParams: Promise<{ groupId?: string; playerId?: string }> }) { const query = await searchParams; return <TrainingSessionsList key={`${query.groupId ?? "all"}-${query.playerId ?? "all"}`} initialGroupId={query.groupId} playerId={query.playerId} />; }
+
+type Query = { from?: string; to?: string; groupId?: string; playerId?: string; search?: string; status?: string };
+export default async function Page({ searchParams }: { searchParams: Promise<Query> }) {
+  const query = await searchParams;
+  return <TrainingSessionsList key={JSON.stringify(query)} initial={query} playerId={typeof query.playerId === "string" ? query.playerId : undefined} />;
+}

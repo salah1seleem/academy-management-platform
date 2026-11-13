@@ -146,12 +146,16 @@ void main() {
         await binding.takeScreenshot(name);
       }
 
-      Future<void> confirmPlacement() async {
-        await tap(find.text('معاينة الأثر والتعارضات'));
-        await wait(find.text('راجعت الأثر والحصص وأؤكد اعتماد الإجراء.'));
-        await tap(find.text('راجعت الأثر والحصص وأؤكد اعتماد الإجراء.'));
-        await tap(find.text('تأكيد الإجراء'));
-        await wait(find.text('حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.'));
+      Future<void> confirmPlacement({bool booking = false}) async {
+        await tap(
+          find.text(booking ? 'معاينة حجز التعويض' : 'معاينة استحقاق التعويض'),
+        );
+        await tap(
+          find.text(booking ? 'تأكيد حجز التعويض' : 'تأكيد استحقاق التعويض'),
+        );
+        await wait(
+          find.text(booking ? 'تم حجز الحصة التعويضية.' : 'تم اعتماد التعويض.'),
+        );
       }
 
       final appearance = Appearance();
@@ -204,7 +208,7 @@ void main() {
         'الحصة البديلة',
         'مجموعة قبول نقل وتعويض اصطناعية2016 · 2026-10-29 · 18:00:00 — 19:00:00',
       );
-      await confirmPlacement();
+      await confirmPlacement(booking: true);
       await capture('phase-approved-compensation-booked-w375');
       final bookingCommand = transport.commands.singleWhere(
         (c) => c.path.endsWith('/booking'),

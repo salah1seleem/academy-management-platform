@@ -53,29 +53,23 @@ void main() {
         (
           'Guardian',
           '01099900100',
-          'شوف تطور ابنك بوضوح',
-          'اشتراكه ومتابعته بسهولة',
+          'تقييمات المدرب',
+          'تجديد الاشتراك',
           'guardian',
         ),
-        (
-          'Coach',
-          '01099900020',
-          'حصصك جاهزة أمامك',
-          'حضور واضح، ومتابعة مستمرة',
-          'coach',
-        ),
+        ('Coach', '01099900020', 'جدول مجموعاتك', 'حضور اللاعبين', 'coach'),
         (
           'AcademyAdmin',
           '01099900011',
-          'يومك أوضح، وشغلك أسهل',
-          'من التسجيل إلى التدريب',
+          'التسجيل والتجديد',
+          'اشتراكات اللاعبين',
           'admin',
         ),
         (
           'AcademyOwner',
           '01099900010',
-          'صورة واضحة لأكاديميتك',
-          'تجربة تليق باسم أكاديميتك',
+          'الاشتراكات والتحصيلات',
+          'إدارة الأكاديمية',
           'owner',
         ),
       ];
@@ -146,7 +140,7 @@ void main() {
         await t.ensureVisible(find.byKey(const ValueKey('login-submit')));
         await t.pumpAndSettle();
         await t.tap(find.byKey(const ValueKey('login-submit')));
-        await wait(find.text('شوف تطور ابنك بوضوح'));
+        await wait(find.text('تقييمات المدرب'));
         expect(loginAuth.session!.selected!.role, 'Guardian');
         expect(
           loginAuth.session!.selected!.academyId,

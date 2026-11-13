@@ -23,6 +23,7 @@ public sealed partial class ConnectedImportPlan
     public required ImportReferences References {get;set;}
     public FriendlyImportInput? Friendly { get; private set; }
     public FriendlyImportHistory? History { get; private set; }
+    private bool validateCompletedRows;
     public List<ImportIssue> Errors {get;}=[];
     public List<object> Creates {get;}=[];
     public List<ImportAccountLink> AccountLinks {get;}=[];
@@ -34,7 +35,15 @@ public sealed partial class ConnectedImportPlan
     public Dictionary<Guid,TrainingGroup> Groups {get;}=[];
     public Dictionary<Guid,SubscriptionPlan> Plans {get;}=[];
     public int TournamentParticipations => Members.Values.Sum(m=>m.Tournaments.Length);
-    public string ExtraHash(string enrollment)=>Friendly is not null && Friendly.Extras.TryGetValue(enrollment,out var extras) ? ImportCommitService.Hash(new { member = Members[enrollment], history = History!.Fingerprint(enrollment), extras.Team, extras.Tournaments, extras.Photo }) : History is null ? ImportCommitService.Hash(Members[enrollment]) : ImportCommitService.Hash(new { member = Members[enrollment], history = History.Fingerprint(enrollment) });
+    public string ExtraHash(string enrollment, bool legacyWorksheetRows)
+    {
+        var member = Members[enrollment];
+        if (History is null) return ImportCommitService.Hash(member);
+        var history = History.Fingerprint(enrollment, legacyWorksheetRows);
+        return Friendly is not null && Friendly.Extras.TryGetValue(enrollment, out var extras)
+            ? ImportCommitService.Hash(new { member, history, extras.Team, extras.Tournaments, extras.Photo })
+            : ImportCommitService.Hash(new { member, history });
+    }
     public static Guid Id(Guid academy,string source,string kind,string code)=>new(SHA256.HashData(Encoding.UTF8.GetBytes($"connected-import:{academy}:{source}:{kind}:{code}"))[..16]);
     public static string[] Codes(string value)=>value.Split([',','،',';','؛'],StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
     private sealed class CellError(string column,string message):Exception(message){public string Column=>column;}
@@ -77,7 +86,11 @@ public sealed partial class ConnectedImportPlan
                 list.Add(r);
             }
         }
-        if(plan.Errors.Count>0)return plan;
+        // V3 normalization omits unusable player rows. Keep checking the other
+        // rows when normalization is the only source of errors so the user can
+        // correct independent issues in one pass.
+        if (plan.Errors.Count > 0 && (!currentLayout || friendly is null ||
+            plan.Errors.Any(error => !friendly.PlayerCellErrors.Contains(error)))) return plan;
         void Issue(Input r,CellError e)=>plan.Errors.Add(new(r.Sheet,r.Number,ConnectedImportSchema.Sheets[r.Sheet].FirstOrDefault(f=>f.Key==e.Column)?.Header??e.Column,e.Message));
         void Each(string sheet,Action<Input> apply){var keys=new HashSet<string>(StringComparer.Ordinal);foreach(var r in inputs[sheet])try{
             if(r.Cells.ContainsKey("Code")){r.Need(Regex.IsMatch(r["Code"],"^[A-Za-z0-9_.:-]{1,80}$",RegexOptions.CultureInvariant,TimeSpan.FromMilliseconds(100)),"Code","استخدم كودًا نصيًا قصيرًا ثابتًا");r.Need(keys.Add(r["Code"]),"Code","كود مكرر");r.Need(r.Cells["Code"].IsText,"Code","اكتب الكود كنص");}
@@ -179,13 +192,16 @@ public sealed partial class ConnectedImportPlan
         Each("الفرق",r=>{var b=Ref(r,"Branch","branch");var sp=Ref(r,"Sport","sport");var c=Ref(r,"Coach","coach");r.Need(coachBranches[c].Contains(b)&&coachSports[c].Contains(sp),"Coach","الفريق خارج نطاق المدرب");Store(r,"team",new MatchTeam{Name=r["Name"],BranchId=b,SportId=sp,AgeCategoryId=Ref(r,"Age","age"),CoachMembershipId=c});});
         var rows=new List<IReadOnlyList<ImportCell>>{ConnectedImportSchema.Row(ImportSchema.Enrollments.Select(c=>c.Key).ToArray())};
         Each("الأعضاء",r=>{foreach(var field in new[]{"Player","Enrollment","Family","Branch","Sport","Level","Group","Plan","Offer","Team","Tournaments"})r.Need(r[field]==""||r.Cells[field].IsText,field,"الأكواد يجب أن تكون خلايا نصية");
-            var branch=Ref(r,"Branch","branch");var sp=Ref(r,"Sport","sport");var group=Ref(r,"Group","group");var product=Ref(r,"Plan","product");var level=Ref(r,"Level","level",true);var g=plan.Groups[group];var p=plan.Plans[product];
-            r.Need(g.BranchId==branch&&g.SportId==sp,"Group","المجموعة لا تطابق الفرع والرياضة");r.Need((int)p.TrainingFormat==(int)g.RegistrationFormat,"Plan","نمط الباقة لا يطابق المجموعة");r.Need(level==Guid.Empty||((TrainingLevel)cache[typeof(TrainingLevel)][level]).SportId==sp,"Level","المستوى لا يطابق الرياضة");r.Need(g.TrainingLevelId==null||g.TrainingLevelId==level,"Level","راجع مستوى اللاعب والمجموعة");
+            var branch=Ref(r,"Branch","branch");var sp=Ref(r,"Sport","sport");var group=Ref(r,"Group","group");var product=Ref(r,"Plan","product");var level=Ref(r,"Level","level",true);
+            r.Need(plan.Groups.TryGetValue(group, out var g), "Group", "المجموعة لم تجتز الفحص");
+            r.Need(plan.Plans.TryGetValue(product, out var p), "Plan", "الباقة لم تجتز الفحص");
+            r.Need(g!.BranchId==branch&&g.SportId==sp,"Group","المجموعة لا تطابق الفرع والرياضة");r.Need((int)p!.TrainingFormat==(int)g.RegistrationFormat,"Plan","نمط الباقة لا يطابق المجموعة");r.Need(level==Guid.Empty||((TrainingLevel)cache[typeof(TrainingLevel)][level]).SportId==sp,"Level","المستوى لا يطابق الرياضة");r.Need(g.TrainingLevelId==null||g.TrainingLevelId==level,"Level","راجع مستوى اللاعب والمجموعة");
             r.Need(r["Gender"] is "" or "ذكر" or "أنثى","Gender","الجنس غير صحيح");var offer=Ref(r,"Offer","offer",true);if(offer!=Guid.Empty)r.Need(DiscountPricing.Eligible((DiscountRule)cache[typeof(DiscountRule)][offer],r.DateAt("Start",true)!.Value,branch,p),"Offer","العرض غير مناسب لهذا التسجيل");
             var tournaments=r["Tournaments"]==""?[]:Refs(r,"Tournaments","tournament");var team=Ref(r,"Team","team",true);r.Need(tournaments.Length==0||team!=Guid.Empty,"Team","المشاركة تحتاج كود فريق صريحًا؛ مجموعة التدريب ليست فريقًا");
             if(team!=Guid.Empty){var tm=(MatchTeam)cache[typeof(MatchTeam)][team];r.Need(tm.SportId==sp&&tm.BranchId==branch&&tm.AgeCategoryId==g.AgeCategoryId,"Team","الفريق لا يطابق فرع ورياضة وفئة اللاعب");}
             foreach(var t in tournaments)r.Need(((AcademyTournament)cache[typeof(AcademyTournament)][t]).SportId==sp,"Tournaments","البطولة لا تطابق رياضة اللاعب");
             r.Need(!plan.Members.ContainsKey(r["Enrollment"]),"Enrollment","كود التسجيل مكرر");plan.Members[r["Enrollment"]]=new(r["Enrollment"],r["Gender"]==""?null:r["Gender"]=="ذكر"?Gender.Male:Gender.Female,level==Guid.Empty?null:level,g.RegistrationFormat,offer==Guid.Empty?null:offer,tournaments,team==Guid.Empty?null:team);
+            while (rows.Count < r.Number - 1) rows.Add([]);
             rows.Add(ConnectedImportSchema.Row(r["Player"],r["Enrollment"],r["Family"],r["Name"],r["Guardian"],r["Phone"],r["Birth"],branch.ToString(),sp.ToString(),"",group.ToString(),product.ToString(),r["Start"],r["End"],r["Entitled"],r["Remaining"],r["Pricing"] switch {"صافي متفق"=>"agreed_net","السعر والخصم"=>"price_and_discount",_=>r["Pricing"]},r["Base"],r["Discount"],r["Net"],r["Currency"],r["State"]=="قائم"?"existing":r["State"]=="جديد"?"new":r["State"],r["Notes"]));
             if(!r.Cells["Phone"].IsText)rows[^1]=rows[^1].Select((c,i)=>i==5?c with{IsText=false}:c).ToArray();
         });
@@ -206,13 +222,26 @@ public sealed partial class ConnectedImportPlan
             "OpenBalances"=>s with{Rows=new[]{ConnectedImportSchema.Row(ImportSchema.OpenBalances.Select(c=>c.Key).ToArray())}.Concat(inputs["الأرصدة الافتتاحية"].Select(r=>ConnectedImportSchema.Row(r["Enrollment"],r["Amount"],r["Currency"],r["Cutoff"],r["Reference"],r["Evidence"]))).ToArray()},
             "Metadata"=>s with{Rows=new[]{ConnectedImportSchema.Row("Key","Value"),ConnectedImportSchema.Row("SchemaVersion",ImportSchema.Version),ConnectedImportSchema.Row("AcademyCode",ConnectedImportSchema.Meta(book,"الأكاديمية")??""),ConnectedImportSchema.Row("SourceSystem",source),ConnectedImportSchema.Row("CutoffDate",ConnectedImportSchema.Meta(book,"تاريخ القطع")??""),ConnectedImportSchema.Row("ReferenceStamp",stamp)}},_=>s
         }).ToArray());
+        plan.validateCompletedRows = currentLayout && plan.Members.Count > 0;
         if(ConnectedImportSchema.Meta(book,"نسخة القالب")!=ConnectedImportSchema.Version)plan.Errors.Add(new("إعدادات الملف",1,"نسخة القالب","نسخة غير مدعومة."));
         if(inputs["إعدادات الملف"].Select(r=>r["Key"]).Distinct().Count()!=inputs["إعدادات الملف"].Count)plan.Errors.Add(new("إعدادات الملف",1,"الإعداد","إعداد مكرر."));
         foreach(var (sheet,kind) in new[]{("الفروع","branch"),("الرياضات","sport"),("الفئات العمرية","age"),("مستويات التدريب","level"),("المجموعات","group"),("الباقات","product"),("العروض","offer"),("البطولات","tournament"),("الفرق","team"),("الحصص","schedule"),("المدربون","coach")}){var ids=maps.GetValueOrDefault(kind,[]).Values;var created=ids.Count(id=>plan.Creates.Any(e=>e.GetType().GetProperty("Id")?.GetValue(e) is Guid eid&&eid==id));plan.Effects.Add(new(sheet,created,ids.Count()-created));}
         // A player cannot be scheduled into overlapping sports even on the first import.
-        Gender? MembersGender(string code)=>plan.Members[code].Gender;
-        foreach(var players in rows.Skip(1).GroupBy(r=>r[0].Value)){if(players.Select(r=>MembersGender(r[1].Value)).Where(g=>g.HasValue).Distinct().Count()>1)plan.Errors.Add(new("الأعضاء",2,"ذكر أو أنثى","بيانات جنس اللاعب متعارضة عبر الرياضات."));
-            var gs=players.Select(r=>Guid.Parse(r[10].Value)).ToHashSet();var schedule=plan.Schedules.Where(s=>gs.Contains(s.TrainingGroupId)).ToArray();if(schedule.Any(s=>schedule.Any(o=>o.TrainingGroupId!=s.TrainingGroupId&&o.DayOfWeek==s.DayOfWeek&&o.StartTime<s.EndTime&&s.StartTime<o.EndTime&&!(o.ValidFrom>s.ValidTo||o.ValidTo<s.ValidFrom))))plan.Errors.Add(new("الأعضاء",2,"كود اللاعب","تعارض مواعيد اللاعب عبر الرياضات: "+players.Key));}
+        var registrationsByPlayer = rows.Skip(1).Select((row, index) => (Row: row, Number: index + 2))
+            .Where(r => r.Row.Count > 0).GroupBy(r => r.Row[0].Value);
+        foreach (var registrations in registrationsByPlayer)
+        {
+            var firstRow = registrations.First().Number;
+            var genders = registrations.Select(r => plan.Members[r.Row[1].Value].Gender).Where(g => g.HasValue).Distinct();
+            if (genders.Count() > 1)
+                plan.Errors.Add(new("الأعضاء", firstRow, "ذكر أو أنثى", "بيانات جنس اللاعب متعارضة عبر الرياضات."));
+            var groupIds = registrations.Select(r => Guid.Parse(r.Row[10].Value)).ToHashSet();
+            var schedule = plan.Schedules.Where(s => groupIds.Contains(s.TrainingGroupId)).ToArray();
+            if (schedule.Any(s => schedule.Any(o => o.TrainingGroupId != s.TrainingGroupId &&
+                o.DayOfWeek == s.DayOfWeek && o.StartTime < s.EndTime && s.StartTime < o.EndTime &&
+                !(o.ValidFrom > s.ValidTo || o.ValidTo < s.ValidFrom))))
+                plan.Errors.Add(new("الأعضاء", firstRow, "كود اللاعب *", "تعارض مواعيد اللاعب عبر الرياضات: " + registrations.Key));
+        }
         if (friendly is not null) { plan.History = await FriendlyImportHistory.Build(friendly, plan, db, academy, source, time, maps); plan.Errors.AddRange(friendly.Errors.Where(e => !plan.Errors.Contains(e))); }
         return plan;
     }
@@ -221,8 +250,32 @@ public sealed partial class ConnectedImportPlan
         var result=ImportPreview.Validate(Legacy,References,hash,existing);
         // A structural failure leaves Legacy as an empty internal template. Its
         // metadata/empty-row errors are not errors in the uploaded workbook.
-        var rowErrors = Errors.Count > 0 ? [] : result.Errors;
-        var errors=Errors.Concat(rowErrors.Select(e=>e.Sheet=="Enrollments"?e with{Sheet="الأعضاء",Message=e.Column=="PricingMode"?"اختر «صافي متفق» مع الصافي وحده، أو «السعر والخصم» مع المبالغ الثلاثة المتطابقة؛ ويمكن ترك المال فارغًا للمراجعة.":e.Message,Column=ImportSchema.Enrollments.FirstOrDefault(c=>c.Key==e.Column) is { } c?ConnectedImportSchema.Sheets["الأعضاء"][Array.IndexOf(ImportSchema.Enrollments,c)].Header:e.Column}:e)).Select(e => Friendly?.MapIssue(e) ?? e).Take(300).ToArray();
-        return result with{SchemaVersion=Friendly is null ? ConnectedImportSchema.Version : FriendlyImportSchema.Version,CanApprove=errors.Length==0,Errors=errors,AccountLinks=AccountLinks.ToArray(),Effects=Effects.ToArray(),CoachAssignments=Assignments.Count,TournamentParticipations=TournamentParticipations,Historical=History?.Summary,GuardianCount=Friendly?.Guardians.Count,GuardianRelationships=Friendly?.Rows["علاقات أولياء الأمور"].Count,HistoricalPayments=History?.PaymentsCount??0,HistoricalPaymentTotal=History?.PaymentsTotal??0};
+        var rowErrors = Errors.Count > 0 && !validateCompletedRows ? [] : result.Errors;
+        ImportIssue Map(ImportIssue issue) => Friendly?.MapIssue(issue) ?? issue;
+        var mapped = Errors.Select(Map).ToList();
+        var reported = validateCompletedRows ? mapped.Select(e => (e.Sheet, e.Row, e.Column)).ToHashSet() : null;
+        foreach (var rowError in rowErrors)
+        {
+            var issue = Map(ConnectedIssue(rowError));
+            if (issue.IsShared || reported?.Contains((issue.Sheet, issue.Row, issue.Column)) != true)
+                mapped.Add(issue);
+        }
+        var errors = mapped.Take(300).ToArray();
+        return result with{SchemaVersion=Friendly is null ? ConnectedImportSchema.Version : FriendlyImportSchema.Version,CanApprove=errors.Length==0,Errors=errors,AccountLinks=AccountLinks.ToArray(),Effects=Effects.ToArray(),CoachAssignments=Assignments.Count,TournamentParticipations=TournamentParticipations,Historical=History?.Summary,GuardianCount=Friendly?.Guardians.Count,GuardianRelationships=Friendly?.Rows["علاقات أولياء الأمور"].Count,HistoricalPayments=History?.PaymentsCount??0,HistoricalPaymentTotal=History?.PaymentsTotal??0,
+            HistoricalPaymentCurrency = errors.Length == 0 && History?.PaymentsCount > 0 ? References.Currency : null};
+    }
+
+    private static ImportIssue ConnectedIssue(ImportIssue issue)
+    {
+        if (issue.Sheet != "Enrollments") return issue;
+        var column = Array.FindIndex(ImportSchema.Enrollments, field => field.Key == issue.Column);
+        return issue with
+        {
+            Sheet = "الأعضاء",
+            Column = column < 0 ? issue.Column : ConnectedImportSchema.Sheets["الأعضاء"][column].Header,
+            Message = issue.Column == "PricingMode"
+                ? "اختر «صافي متفق» مع الصافي وحده، أو «السعر والخصم» مع المبالغ الثلاثة المتطابقة؛ ويمكن ترك المال فارغًا للمراجعة."
+                : issue.Message
+        };
     }
 }

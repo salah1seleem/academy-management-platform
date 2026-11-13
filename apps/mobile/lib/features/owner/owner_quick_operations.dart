@@ -42,9 +42,10 @@ class NativeOperationActions extends StatefulWidget {
     required this.auth,
     this.compact = false,
     this.carousel = false,
+    this.primaryOnly = false,
   });
   final AuthController auth;
-  final bool compact, carousel;
+  final bool compact, carousel, primaryOnly;
   @override
   State<NativeOperationActions> createState() => _NativeOperationActionsState();
 }
@@ -259,6 +260,58 @@ class _NativeOperationActionsState extends State<NativeOperationActions> {
             ));
           }
           if (actions.isEmpty) return const SizedBox.shrink();
+          if (widget.primaryOnly) {
+            const priority = [
+              'اشتراك جديد',
+              'تجديد اشتراك',
+              'تسجيل الحضور',
+              'الحصص',
+              'تسكين لاعب',
+            ];
+            final primary = [
+              for (final label in priority)
+                ...actions.where((action) => action.label == label),
+            ];
+            if (primary.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Heading('العمليات الرئيسية'),
+                LayoutBuilder(
+                  builder: (context, constraints) => Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final action in primary)
+                        SizedBox(
+                          width: (constraints.maxWidth - 8) / 2,
+                          child: GCard(
+                            onTap: () => openPage(context, action.page),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  action.icon,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(height: 6),
+                                UiText(
+                                  action.label,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
           if (widget.carousel) {
             const colors = {
               'اشتراك جديد': Color(0xFFCA2449),

@@ -8,41 +8,6 @@ import '../guardian/guardian_ui.dart';
 import '../owner/owner_followups.dart';
 import 'private_media.dart';
 
-class NativeContentEntry extends StatelessWidget {
-  const NativeContentEntry({super.key, required this.auth});
-  final AuthController auth;
-  Widget link(BuildContext context) => GLink(
-    'الأخبار والفعاليات والإعلانات',
-    Icons.newspaper_outlined,
-    () => openPage(context, NativeAcademyContent(auth: auth)),
-  );
-  @override
-  Widget build(BuildContext context) =>
-      auth.session?.selected?.role == 'AcademyOwner'
-      ? link(context)
-      : RemoteBody(
-          auth: auth,
-          path: '/api/v1/my-access',
-          builder: (context, value) {
-            final access = obj(value);
-            if (access['useActionGrants'] == true) {
-              return rows(access['actions'] ?? [])
-                      .any((g) => g['module'] == 'news' && g['read'] == true)
-                  ? link(context)
-                  : const SizedBox.shrink();
-            }
-            return RemoteBody(
-              auth: auth,
-              path: '/api/v1/my-permissions',
-              builder: (context, permissions) =>
-                  (permissions as List).contains('content.media.manage')
-                  ? link(context)
-                  : const SizedBox.shrink(),
-            );
-          },
-        );
-}
-
 const contentKinds = {
   'News': 'الأخبار',
   'Event': 'الفعاليات',

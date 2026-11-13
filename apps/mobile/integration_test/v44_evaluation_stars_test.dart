@@ -3,7 +3,6 @@ import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/storage/refresh_store.dart';
 import 'package:academy_mobile/core/theme/appearance.dart';
-import 'package:academy_mobile/core/widgets/app_widgets.dart';
 import 'package:academy_mobile/features/coach/coach_evaluation.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
 import 'package:academy_mobile/features/coach/monthly_stars.dart';
@@ -180,26 +179,24 @@ void main() {
         final playerName = find.text(textOf(enrollment['player']));
         await locate(playerName);
         final playerCard = find
-            .ancestor(of: playerName, matching: find.byType(AppCard))
+            .ancestor(of: playerName, matching: find.byType(Card))
             .first;
-        final evaluate = find.descendant(
+        final playerDetails = find.descendant(
           of: playerCard,
-          matching: find.text('تقييم اللاعب'),
+          matching: find.textContaining(RegExp(r'^(تفاصيل اللاعب|عرض الملف)$')),
         );
-        await t.ensureVisible(evaluate);
-        await t.tap(evaluate);
-        await waitFor(find.byType(CoachEvaluation));
+        await t.ensureVisible(playerDetails);
+        await t.tap(playerDetails);
         if (resumeId.isNotEmpty) {
-          await tap('مسودات اللاعب');
-          await waitFor(find.byType(NativeEvaluationDrafts));
-          final draft = find.byKey(ValueKey('evaluation-draft-$resumeId'));
+          await tap('تقييمات اللاعب');
+          await waitFor(find.byType(CoachPlayerEvaluations));
+          final draft = find.byKey(ValueKey('evaluation-history-$resumeId'));
           await locate(draft);
           await t.tap(draft);
-          await waitFor(find.byType(CoachEvaluation));
-          await tap('إعادة التحقق من المسودة نفسها');
         } else {
-          await tap('بدء تقييم جديد');
+          await tap('تقييم جديد');
         }
+        await waitFor(find.byType(CoachEvaluation));
         await waitFor(find.byType(Slider));
         final sliders = t.widgetList<Slider>(find.byType(Slider)).toList();
         expect(sliders.length, greaterThanOrEqualTo(2));
@@ -221,7 +218,9 @@ void main() {
             .jumpTo(0);
         await t.pumpAndSettle();
         await capture('phase-approved-evaluation-zero-and-explicit50-native');
-        await tap('نشر التقييم لولي الأمر');
+        await tap('مراجعة النشر');
+        await t.tap(find.text('نشر لولي الأمر'));
+        await t.pumpAndSettle();
         await waitFor(find.text('تم نشر التقييم.'));
         await capture('phase-approved-evaluation-published-native');
       }

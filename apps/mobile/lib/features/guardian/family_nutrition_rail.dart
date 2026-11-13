@@ -49,16 +49,13 @@ class _FamilyNutritionRailState extends State<FamilyNutritionRail> {
           final d = obj(data);
           final meals = <_Meal>[
             for (final item in dailyNutritionMeals(d))
-              if (item.$3 is Map &&
-                  obj(item.$3)['id'] is String &&
-                  (obj(item.$3)['id'] as String).trim().isNotEmpty)
-                (
-                  child: child,
-                  meal: obj(item.$3),
-                  slot: item.$1,
-                  note: d['isTrainingDay'] == true ? 'يوم تدريب' : 'يوم راحة',
-                  failed: false,
-                ),
+              (
+                child: child,
+                meal: item.$3,
+                slot: item.$1,
+                note: dailyNutritionActivity(d['isTrainingDay']) ?? '',
+                failed: false,
+              ),
           ];
           if (meals.isNotEmpty) {
             return [
@@ -126,6 +123,7 @@ class _FamilyNutritionRailState extends State<FamilyNutritionRail> {
         playerId: textOf(item.child['id']),
         playerName: textOf(item.child['arabicName']),
         today: widget.today,
+        showToday: item.meal != null,
       ),
     );
   }
@@ -250,7 +248,7 @@ class _FamilyNutritionRailState extends State<FamilyNutritionRail> {
                                         UiText(
                                           items[i].meal == null
                                               ? items[i].note
-                                              : 'النظام الغذائي ليوم ${day(widget.today)}',
+                                              : 'اقتراح ليوم ${day(widget.today)}',
                                           maxLines: 3,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
@@ -264,7 +262,11 @@ class _FamilyNutritionRailState extends State<FamilyNutritionRail> {
                                               ? (items[i].failed
                                                     ? 'إعادة المحاولة'
                                                     : 'عرض مكتبة التغذية')
-                                              : '${items[i].slot} · ${items[i].note}',
+                                              : [
+                                                  items[i].slot,
+                                                  if (items[i].note.isNotEmpty)
+                                                    items[i].note,
+                                                ].join(' · '),
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: colors.onSurfaceVariant,

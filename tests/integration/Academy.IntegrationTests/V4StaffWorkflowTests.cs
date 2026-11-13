@@ -19,14 +19,23 @@ public sealed partial class V2StaffScopeTests
         (await Write(owner,$"/api/v1/manage/staff/{f.Member}/access",access)).EnsureSuccessStatusCode();
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var id=await db.SubscriptionPeriods.Where(p=>p.AcademyId==DemoSeed.NogoomAcademyId&&p.CollectionId!=null).Select(p=>p.Id).FirstAsync();
+        var ownerPeriod=await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/periods/{id}");
+        var receiptPath=$"/api/v1/subscriptions/receipts/{ownerPeriod.GetProperty("receiptId").GetGuid()}";
         var hidden=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/periods/{id}");
         Assert.False(hidden.GetProperty("financialValuesVisible").GetBoolean());
         foreach(var field in new[]{"priceSnapshot","currencySnapshot","receiptId","pricing"})Assert.Equal(JsonValueKind.Null,hidden.GetProperty(field).ValueKind);
         Assert.NotNull(hidden.GetProperty("startDate").GetString());Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
+        foreach(var field in new[]{"canRenew","canPause","canDeductDays","canCancel"}) Assert.False(hidden.GetProperty(field).GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetAsync(receiptPath)).StatusCode);
         actions=StaffAccessRules.Modules.Select(m=>new Academy.Api.Operations.StaffActionValue(m,m is "players" or "subscriptions" or "payments",false,false,false)).ToArray();
+        (await Write(owner,$"/api/v1/manage/staff/{f.Member}/access",access with{Actions=actions})).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetAsync(receiptPath)).StatusCode);
         (await Write(owner,$"/api/v1/manage/staff/{f.Member}/access",access with{Actions=actions,WorkflowActions=["workflow.players.read","workflow.payments.read"]})).EnsureSuccessStatusCode();
         var visible=await admin.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/periods/{id}");
         Assert.True(visible.GetProperty("financialValuesVisible").GetBoolean());Assert.Equal(JsonValueKind.Number,visible.GetProperty("priceSnapshot").ValueKind);Assert.NotEqual(Guid.Empty,visible.GetProperty("receiptId").GetGuid());
+        Assert.Equal(HttpStatusCode.OK,(await admin.GetAsync(receiptPath)).StatusCode);
+        using var foreign=await Staff(DemoSeed.FutureOwnerEmail);
+        Assert.Equal(HttpStatusCode.NotFound,(await foreign.GetAsync(receiptPath)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await admin.GetAsync("/api/v1/reports/financial")).StatusCode);
     }
     [Fact] public async Task V4_admin_can_record_scoped_expense_without_financial_report_or_approval_permission()

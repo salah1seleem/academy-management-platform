@@ -27,7 +27,7 @@ class _OwnerHomeSettingsPageState
   };
   @override
   void applySettings(Json value, {bool initial = false}) {
-    final home = obj(obj(value['settings'])['ownerHome'] ?? {});
+    final home = obj(obj(value['settings'])['ownerHome'] ?? <String, dynamic>{});
     top = true;
     final stored = obj(home['highlightPortraits'] ?? <String, dynamic>{});
     portraits = {

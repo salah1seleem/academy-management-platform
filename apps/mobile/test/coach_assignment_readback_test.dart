@@ -1,8 +1,6 @@
 import 'package:academy_mobile/features/admin/native_structure_operations.dart';
-import 'package:academy_mobile/features/shared/subscription_home.dart';
-import 'package:academy_mobile/features/owner/owner_dashboard.dart';
+import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:academy_mobile/features/owner/owner_operations.dart';
-import 'package:academy_mobile/features/owner/refined_home_panels.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -91,137 +89,63 @@ void main() {
       },
     );
   }
-  for (final allDecisions in [false, true]) {
-    testWidgets(
-      'Owner assignment return refreshes saved decision and keeps branch/date scope; all=$allDecisions',
-      (t) async {
-        var stored = false;
-        var reads = 0;
-        final calls = <String>[];
-        final auth = await fixture.homeOwner((m, p, b, token) async {
-          calls.add(p);
-          if (p.contains('/reports/owner-summary')) {
-            reads++;
-            return {
-              ...fixture.summary(),
-              'operations': {
-                'coachPerformance': <Object>[],
-                'groupAttention': <Object>[],
-                'underAssignedCoaches': stored
-                    ? <Object>[]
-                    : [
-                        {
-                          'id': 'coach',
-                          'name': 'مدرب الاختبار',
-                          'groupCount': 2,
-                          'target': 3,
-                        },
-                      ],
+  testWidgets(
+    'Coach assignment opens from the operational coach card in its branch',
+    (t) async {
+      var saved = false;
+      final auth = await fixture.homeOwner((m, p, b, token) async {
+        if (p.endsWith('/structure/options')) return options;
+        if (m == 'POST') {
+          expect(b, {'membershipId': 'coach'});
+          saved = true;
+          return 'assignment';
+        }
+        if (p == '/api/v1/manage/groups/group/coaches/coach') {
+          return {
+            'id': 'assignment',
+            'trainingGroupId': 'group',
+            'academyMembershipId': 'coach',
+            'isActive': true,
+          };
+        }
+        return {};
+      });
+      await t.pumpWidget(
+        fixture.shell(
+          GuardianPage(
+            title: 'المدربون',
+            child: OwnerDecisionsPanel(
+              auth: auth,
+              operations: {
+                'underAssignedCoaches': [
+                  {
+                    'id': 'coach',
+                    'name': 'مدرب الاختبار',
+                    'groupCount': 2,
+                    'target': 3,
+                  },
+                ],
               },
-            };
-          }
-          if (p.endsWith('/structure/options')) return options;
-          if (p.endsWith('/news')) return <Object>[];
-          if (m == 'POST') {
-            expect(b, {'membershipId': 'coach'});
-            stored = true;
-            return 'assignment';
-          }
-          if (p == '/api/v1/manage/groups/group/coaches/coach') {
-            return {
-              'id': 'assignment',
-              'trainingGroupId': 'group',
-              'academyMembershipId': 'coach',
-              'isActive': true,
-            };
-          }
-          return {};
-        });
-        await t.pumpWidget(
-          fixture.shell(
-            OwnerDashboard(auth: auth, accountPage: const SizedBox()),
-          ),
-        );
-        await t.pumpAndSettle();
-        t
-            .widget<SubscriptionHomePanel>(find.byType(SubscriptionHomePanel))
-            .onBranchChanged!('branch');
-        await t.pumpAndSettle();
-        if (allDecisions) {
-          await tap(t, find.text('كل القرارات'));
-          expect(
-            t
-                .widget<OwnerDecisionsPage>(find.byType(OwnerDecisionsPage))
-                .filters,
-            {'from': '2026-08-28', 'to': '2026-09-28', 'branchId': 'branch'},
-          );
-          expect(
-            calls.lastWhere((p) => p.contains('/reports/owner-summary')),
-            contains('branchId=branch'),
-          );
-          await tap(t, find.text('مدرب الاختبار · 2 مجموعات من أصل 3'));
-        } else {
-          await t.scrollUntilVisible(
-            find.byType(HomeDecisionCards),
-            220,
-            scrollable: find.byType(Scrollable).first,
-            maxScrolls: 80,
-          );
-          await t.pumpAndSettle();
-          await tap(
-            t,
-            find.descendant(
-              of: find.byType(HomeDecisionCards),
-              matching: find.text('إسناد مدرب لمجموعة'),
+              branchId: 'branch',
             ),
-          );
-        }
-        final page = t.widget<NativeCoachAssignment>(
-          find.byType(NativeCoachAssignment),
-        );
-        expect(page.coachId, 'coach');
-        expect(page.branchId, 'branch');
-        await chooseGroup(t);
-        await tap(t, find.text('حفظ الإسناد'));
-        expect(find.text('تم حفظ الإسناد.'), findsOneWidget);
-        final before = reads;
-        Navigator.of(t.element(find.byType(NativeCoachAssignment))).pop();
-        await t.pumpAndSettle();
-        if (allDecisions) {
-          Navigator.of(t.element(find.byType(OwnerDecisionsPage))).pop();
-          await t.pumpAndSettle();
-        }
-        expect(reads, greaterThan(before));
-        await t.scrollUntilVisible(
-          find.byType(SubscriptionHomePanel),
-          -220,
-          scrollable: find.byType(Scrollable).first,
-          maxScrolls: 80,
-        );
-        await t.pumpAndSettle();
-        expect(
-          t
-              .widget<SubscriptionHomePanel>(find.byType(SubscriptionHomePanel))
-              .branchId,
-          'branch',
-        );
-        await t.scrollUntilVisible(
-          find.byType(HomeDecisionCards),
-          220,
-          scrollable: find.byType(Scrollable).first,
-          maxScrolls: 80,
-        );
-        await t.pumpAndSettle();
-        expect(
-          t
-              .widget<HomeDecisionCards>(find.byType(HomeDecisionCards))
-              .data['underAssignedCoaches'],
-          isEmpty,
-        );
-        expect(t.takeException(), isNull);
-        await t.pumpWidget(const SizedBox());
-        auth.dispose();
-      },
-    );
-  }
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await tap(t, find.text('مدرب الاختبار · 2 مجموعات من أصل 3'));
+      expect(
+        t
+            .widget<NativeCoachAssignment>(find.byType(NativeCoachAssignment))
+            .branchId,
+        'branch',
+      );
+      await chooseGroup(t);
+      await tap(t, find.text('حفظ الإسناد'));
+      expect(saved, isTrue);
+      expect(find.text('تم حفظ الإسناد.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
 }

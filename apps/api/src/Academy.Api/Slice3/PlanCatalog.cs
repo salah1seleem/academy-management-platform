@@ -18,15 +18,23 @@ public static class PlanCatalog
     public static bool FormatMatches(Academy.Infrastructure.People.TrainingRegistrationFormat format, TrainingFormat plan) => format switch { Academy.Infrastructure.People.TrainingRegistrationFormat.Group => plan is TrainingFormat.Group or TrainingFormat.Season, Academy.Infrastructure.People.TrainingRegistrationFormat.Private => plan == TrainingFormat.Private, Academy.Infrastructure.People.TrainingRegistrationFormat.SemiPrivate => plan == TrainingFormat.SemiPrivate, _ => false };
     public static Task LockAsync(FoundationDbContext db, Guid academy, Guid plan) =>
         db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"plan-publication:{academy}:{plan}"}, 0))");
+
+    // Like the write guard, treat historical publications at another branch as shared.
+    public static IQueryable<Guid> PublicationsOutsideBranchScope(FoundationDbContext db, Guid academyId) =>
+        db.PlanBranchPublications.IgnoreQueryFilters()
+            .Where(x => x.AcademyId == academyId && !db.RequestBranchIds.Contains(x.BranchId))
+            .Select(x => x.SubscriptionPlanId);
+
     public static async Task<IResult> Detail(Guid id, CurrentTenant tenant, FoundationDbContext db)
     {
         var t = (await tenant.ResolveAsync())!;
         var plan = await db.SubscriptionPlans.AsNoTracking().Include(x => x.Sport).SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id);
         if (plan is null) return Results.NotFound();
         var branches = await db.PlanBranchPublications.Where(x => x.AcademyId == t.AcademyId && x.SubscriptionPlanId == id && x.IsActive).Select(x => x.BranchId).ToArrayAsync();
+        var canManagePublication = !db.BranchScopeRestricted || !plan.AllBranches && !await PublicationsOutsideBranchScope(db, t.AcademyId).ContainsAsync(id);
         var versions = await db.PlanPriceVersions.AsNoTracking().Where(x => x.AcademyId == t.AcademyId && x.SubscriptionPlanId == id).OrderByDescending(x => x.Revision)
             .Select(x => new { x.Revision, x.ArabicName, price = x.Price.ToString("0.00", CultureInfo.InvariantCulture), x.Currency, planType = x.PlanType.ToString(), x.DurationDays, x.DurationMonths, serviceKind = x.ServiceKind.ToString(), trainingFormat = x.TrainingFormat.ToString(), x.SessionCount, referenceMonthlyPrice = x.ReferenceMonthlyPrice.HasValue ? x.ReferenceMonthlyPrice.Value.ToString("0.00", CultureInfo.InvariantCulture) : null, x.ChargedMonths, x.Published, x.EffectiveAtUtc }).Take(50).ToListAsync();
-        return Results.Ok(new { plan.Id, plan.ArabicName, plan.EnglishName, plan.SportId, sport = plan.Sport.ArabicName, planType = plan.PlanType.ToString(), price = plan.Price.ToString("0.00", CultureInfo.InvariantCulture), plan.Currency, plan.DurationDays, plan.DurationMonths, serviceKind = plan.ServiceKind.ToString(), trainingFormat = plan.TrainingFormat.ToString(), referenceMonthlyPrice = plan.ReferenceMonthlyPrice.HasValue ? plan.ReferenceMonthlyPrice.Value.ToString("0.00", CultureInfo.InvariantCulture) : null, plan.ChargedMonths, plan.SessionCount, plan.DisplayOrder, plan.IsActive, plan.AllBranches, branchIds = branches, plan.Revision, versions });
+        return Results.Ok(new { plan.Id, plan.ArabicName, plan.EnglishName, plan.SportId, sport = plan.Sport.ArabicName, planType = plan.PlanType.ToString(), price = plan.Price.ToString("0.00", CultureInfo.InvariantCulture), plan.Currency, plan.DurationDays, plan.DurationMonths, serviceKind = plan.ServiceKind.ToString(), trainingFormat = plan.TrainingFormat.ToString(), referenceMonthlyPrice = plan.ReferenceMonthlyPrice.HasValue ? plan.ReferenceMonthlyPrice.Value.ToString("0.00", CultureInfo.InvariantCulture) : null, plan.ChargedMonths, plan.SessionCount, plan.DisplayOrder, plan.IsActive, plan.AllBranches, branchIds = branches, plan.Revision, versions, canManagePublication });
     }
     public static async Task<IResult> Save(Guid? id, PlanRequest request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, ISubscriptionClock clock)
     {

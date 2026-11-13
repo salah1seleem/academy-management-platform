@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Academy.Api.Auth;
 using Academy.Api.Slice3;
 using Academy.Infrastructure.Identity;
@@ -29,16 +30,43 @@ public static class StaffManagement
     }
     private static async Task<IResult> Create(StaffWrite body, CurrentTenant tenant, FoundationDbContext db, UserManager<ApplicationUser> users, ISubscriptionClock clock)
     {
-        var t = (await tenant.ResolveAsync())!; if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
-        var phone = EgyptPhoneNormalizer.Normalize(body.Phone);
+        var t = (await tenant.ResolveAsync())!;
+        if (t.Role != AcademyRole.AcademyOwner) return Results.Forbid();
+        var phone = EgyptPhoneNormalizer.NormalizeForNewMobile(body.Phone);
+        if (phone is null)
+            return Results.UnprocessableEntity(new { message = "اكتب رقم موبايل مصريًا يبدأ بـ010 أو 011 أو 012 أو 015، أو استخدم رمز مصر ‎+20." });
+        var name = body.Name?.Trim();
+        var job = body.JobTitle?.Trim();
+        if (body.Role is not (AcademyRole.AcademyAdmin or AcademyRole.Coach) || string.IsNullOrEmpty(name) || name.Length > 100 || job?.Length > 100)
+            return Results.UnprocessableEntity(new { message = "راجع الاسم والمسمى الوظيفي والدور." });
         var email = string.IsNullOrWhiteSpace(body.Email) ? $"staff.{Guid.NewGuid():N}@accounts.invalid" : body.Email.Trim();
-        var password = string.IsNullOrEmpty(body.TemporaryPassword) ? "A!9"+Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)) : body.TemporaryPassword;
-        if (body.Role is not (AcademyRole.AcademyAdmin or AcademyRole.Coach) || string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 100 || body.JobTitle?.Length > 100 || email.Length > 200 || !email.Contains('@') || phone is null) return Results.UnprocessableEntity(new { message = "أدخل الاسم والهاتف والدور بصورة صحيحة." });
-        if (await users.FindByEmailAsync(email) is not null || await db.Users.AnyAsync(x => x.PhoneNumber == phone)) return Results.Conflict(new { message = "البريد أو الهاتف مستخدم بالفعل. لا تُنشئ هوية مشتركة." });
+        if (email.Length > 200 || !new EmailAddressAttribute().IsValid(email))
+            return Results.UnprocessableEntity(new { message = "اكتب بريدًا إلكترونيًا صالحًا." });
+
+        static IResult Duplicate() => Results.Conflict(new { message = "رقم الهاتف أو البريد الإلكتروني مستخدم بالفعل." });
         await using var tx = await db.Database.BeginTransactionAsync();
-        var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, PhoneNumber = phone, PhoneNumberConfirmed = false, DisplayName = body.Name.Trim(), IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
-        var result = await users.CreateAsync(user, password); if (!result.Succeeded) return Results.UnprocessableEntity(new { message = "تعذر إنشاء الحساب. استخدم كلمة مرور قوية وبريدًا صحيحًا." });
-        var member = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = body.Role, JobTitle = body.JobTitle?.Trim(), IsActive = true, AllBranches = body.Role != AcademyRole.AcademyAdmin, UseActionGrants = body.Role == AcademyRole.AcademyAdmin, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow }; db.AcademyMemberships.Add(member); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { member.Id });
+        if (await users.FindByEmailAsync(email) is not null || await db.Users.AnyAsync(x => x.PhoneNumber == phone)) return Duplicate();
+        var password = string.IsNullOrEmpty(body.TemporaryPassword)
+            ? "A!a9" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            : body.TemporaryPassword;
+        var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, PhoneNumber = phone, DisplayName = name, IsActive = true, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+        try
+        {
+            var result = await users.CreateAsync(user, password);
+            if (!result.Succeeded)
+                return result.Errors.Any(e => e.Code is "DuplicateEmail" or "DuplicateUserName")
+                    ? Duplicate()
+                    : Results.UnprocessableEntity(new { message = "استخدم كلمة مرور من 12 خانة على الأقل، فيها أحرف كبيرة وصغيرة ورقم ورمز." });
+            var member = new AcademyMembership { Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = user.Id, Role = body.Role, JobTitle = string.IsNullOrEmpty(job) ? null : job, IsActive = true, AllBranches = body.Role != AcademyRole.AcademyAdmin, UseActionGrants = body.Role == AcademyRole.AcademyAdmin, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
+            db.AcademyMemberships.Add(member);
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+            return Results.Ok(new { member.Id });
+        }
+        catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23505", ConstraintName: "IX_Users_PhoneNumber" or "EmailIndex" or "UserNameIndex" })
+        {
+            return Duplicate();
+        }
     }
     private static async Task<IResult> Grants(Guid id, GrantWrite body, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
@@ -49,7 +77,26 @@ public static class StaffManagement
         await db.Entry(member).ReloadAsync();
         if (member.UseActionGrants) return Results.Conflict(new { message = "هذا الموظف يستخدم مصفوفة صلاحيات الوحدات والفروع؛ عدّل الصلاحيات من شاشة صلاحيات الموظف." });
         var rows = await db.StaffGrants.Where(x => x.AcademyId == t.AcademyId && x.MembershipId == id).ToListAsync();
-        foreach (var input in body.Grants) { var row = rows.SingleOrDefault(x => x.Permission == input.Permission); if (row is null) { row = new StaffGrant { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, Permission = input.Permission, CreatedAtUtc = clock.UtcNow }; db.StaffGrants.Add(row); } row.Allowed = input.Allowed; row.IsActive = true; row.UpdatedAtUtc = clock.UtcNow; }
+        var changed = false;
+        foreach (var input in body.Grants)
+        {
+            var row = rows.SingleOrDefault(x => x.Permission == input.Permission);
+            if (row is not null && row.IsActive && row.Allowed == input.Allowed) continue;
+            if (row is null)
+            {
+                row = new StaffGrant { Id = Guid.NewGuid(), AcademyId = t.AcademyId, MembershipId = id, Permission = input.Permission, CreatedAtUtc = clock.UtcNow };
+                db.StaffGrants.Add(row);
+            }
+            row.Allowed = input.Allowed;
+            row.IsActive = true;
+            row.UpdatedAtUtc = clock.UtcNow;
+            changed = true;
+        }
+        if (changed)
+        {
+            member.ContextRevision++;
+            member.UpdatedAtUtc = clock.UtcNow;
+        }
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.NoContent();
     }
 }

@@ -32,6 +32,7 @@ class PickerImportTransport extends HttpApiTransport {
     Map<String, String> fields,
     String token, {
     String? idempotencyKey,
+    String? validRowsFromHash,
   }) async {
     final result = await super.importWorkbook(
       bytes,
@@ -39,7 +40,9 @@ class PickerImportTransport extends HttpApiTransport {
       fields,
       token,
       idempotencyKey: idempotencyKey,
+      validRowsFromHash: validRowsFromHash,
     );
+    if (validRowsFromHash != null) return result;
     if (commit) {
       commitResult = obj(result);
       debugPrint(

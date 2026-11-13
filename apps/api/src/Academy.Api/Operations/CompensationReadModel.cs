@@ -3,7 +3,7 @@ using Academy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
-public sealed record CompensationBookingView(Guid Id, Guid TrainingSessionId, string Group, DateOnly Date, string State, int Units, int Consumed, uint Version);
+public sealed record CompensationBookingView(Guid Id, Guid TrainingSessionId, string Group, DateOnly Date, string State, int Units, int Consumed, uint Version, TimeOnly StartTime, TimeOnly EndTime);
 public sealed record CompensationView(Guid Id, Guid SportEnrollmentId, string Sport, string Cause, string Unit, int Units, DateOnly ValidFrom, DateOnly ValidTo, DateOnly SourceDate, int Consumed, int Allocated, CompensationBookingView[] Bookings, Guid SourceSessionId);
 public static class CompensationReadModel
 {
@@ -21,10 +21,10 @@ public static class CompensationReadModel
             join trainingGroup in db.TrainingGroups on b.TrainingGroupId equals trainingGroup.Id
             where b.AcademyId == academy && ids.Contains(b.GrantId)
             orderby s.SessionDate, s.StartTime
-            select new { b.Id, b.GrantId, b.TrainingSessionId, groupName = trainingGroup.ArabicName, date = s.SessionDate, b.State, b.Units, b.Version }).ToArrayAsync();
+            select new { b.Id, b.GrantId, b.TrainingSessionId, groupName = trainingGroup.ArabicName, date = s.SessionDate, s.StartTime, s.EndTime, b.State, b.Units, b.Version }).ToArrayAsync();
         var used = await db.CompensationMovements.AsNoTracking().Where(m => m.AcademyId == academy && ids.Contains(m.GrantId)).GroupBy(m => m.BookingId).Select(g => new { id = g.Key, units = g.Sum(m => m.Units) }).ToDictionaryAsync(g => g.id, g => g.units);
         return grants.Select(g => new CompensationView(g.Id, g.SportEnrollmentId, g.sport, g.Cause.ToString(), g.Unit.ToString(), g.Units, g.ValidFrom, g.ValidTo, g.sourceDate,
             bookings.Where(b => b.GrantId == g.Id).Sum(b => used.GetValueOrDefault(b.Id)), bookings.Where(b => b.GrantId == g.Id && b.State == CompensationBookingState.Reserved).Sum(b => b.Units),
-            bookings.Where(b => b.GrantId == g.Id).Select(b => new CompensationBookingView(b.Id, b.TrainingSessionId, b.groupName, b.date, b.State.ToString(), b.Units, used.GetValueOrDefault(b.Id), b.Version)).ToArray(), g.SourceSessionId)).ToArray();
+            bookings.Where(b => b.GrantId == g.Id).Select(b => new CompensationBookingView(b.Id, b.TrainingSessionId, b.groupName, b.date, b.State.ToString(), b.Units, used.GetValueOrDefault(b.Id), b.Version, b.StartTime, b.EndTime)).ToArray(), g.SourceSessionId)).ToArray();
     }
 }

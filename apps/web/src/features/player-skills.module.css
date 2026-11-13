@@ -1,9 +1,7 @@
 .family { display: grid; gap: 1rem; padding-block-end: 1rem; line-height: 1.7; }
-.family > a { color: #fff; width: fit-content; text-underline-offset: .25em; }
-.family :global(.page-header), .family :global(.guardian-page-header) { color: white; padding: .5rem .25rem; }
-.family :global(.page-header) h1, .family :global(.guardian-page-header) h1 { margin: .4rem 0; font-size: clamp(1.4rem, 6vw, 2rem); line-height: 1.5; }
-.family :global(.breadcrumb) { margin: 0; color: #fff; opacity: .85; font-size: .85rem; }
-.family :global(.section-card) { min-width: 0; padding: 1.1rem; background: var(--surface, #fff); color: var(--text, #17333b); border: 1px solid var(--border, #dce5e9); border-radius: 1.1rem; box-shadow: 0 5px 20px #102b3910; margin-block: .75rem; overflow-wrap: anywhere; }
+.family :global(.guardian-page-header) { color: white; padding: .5rem .25rem; }
+.family :global(.guardian-page-header) h1 { margin: .5rem 0 0; font-size: clamp(1.4rem, 6vw, 2rem); line-height: 1.5; }
+.family :global(.section-card) { min-width: 0; padding: 1.1rem; background: var(--surface, #fff); color: var(--text, #17333b); border: 1px solid var(--border, #dce5e9); border-radius: 1.1rem; box-shadow: 0 5px 20px #102b3910; margin-block: 0; overflow-wrap: anywhere; }
 .family :global(.section-card) h2 { font-size: 1.1rem; margin: .4rem 0 .75rem; line-height: 1.6; }
 .family :global(.section-card) h3 { font-size: 1rem; }
 .family :global(.section-card) p { font-size: .95rem; margin-block: .6rem; }
@@ -16,4 +14,69 @@
 .progressTrack { width: 100%; height: .65rem; accent-color: var(--primary, #d71935); border: 0; border-radius: 1rem; overflow: hidden; }
 .progressTrack::-webkit-progress-bar { background: var(--primary-soft, #f5e8eb); border-radius: 1rem; }
 .progressTrack::-webkit-progress-value { background: var(--primary, #d71935); border-radius: 1rem; }
+.reviewMeta { color: var(--muted); font-size: .9em; }
 .noPlan { padding: 1rem; border-radius: 1rem; background: var(--surface, #fff); color: var(--text, #17333b); border: 1px solid var(--border, #dce5e9); }
+
+.curriculumFilter { display: flex; flex-wrap: wrap; gap: .8rem; align-items: end; margin-block: 1rem; }
+.curriculumFilter label { display: grid; gap: .35rem; min-width: 0; width: min(100%, 24rem); }
+.curriculumFilter select { min-width: 0; width: 100%; }
+.curriculumRows, .curriculumRequirements { list-style: none; padding: 0; margin: 0; }
+.curriculumRows li { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: .4rem 1rem; padding-block: .8rem; }
+.curriculumRows li + li, .curriculumRequirements li + li { border-block-start: 1px solid var(--border); }
+.curriculumRows li > div { min-width: 0; }
+.curriculumRows li p, .curriculumRequirements li p { margin: .2rem 0; }
+.curriculumRows li p, .curriculumFacts { color: var(--muted); }
+.curriculumTitle { display: inline-grid; align-items: center; font-weight: 750; min-height: 44px; overflow-wrap: anywhere; }
+.curriculumRequirements li { padding-block: .7rem; overflow-wrap: anywhere; }
+.curriculumRequirements h3 { margin: 0 0 .3rem; }
+.curriculumFacts { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .8rem; margin-block: 1rem; }
+.curriculumForm > :is(fieldset, p, h2) { grid-column: 1 / -1; }
+.curriculumSkill { display: grid; gap: .7rem; min-inline-size: 0; margin: 0; padding: .75rem; border: 1px solid var(--border); border-radius: .65rem; }
+.curriculumSkill legend { padding-inline: .4rem; font-weight: 700; }
+.curriculumSkill > button { justify-self: start; }
+@media (min-width: 900px) {
+  .curriculumSkill { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .curriculumSkill > :is(label:last-of-type, button) { grid-column: 1 / -1; }
+}
+.curriculumActions { margin-block: 1rem; }
+.curriculumActions :global(.form-actions) { background: transparent; }
+.curriculumLevel { margin-block: 1rem; }
+.curriculumLevel summary { cursor: pointer; width: fit-content; min-height: 44px; }
+.curriculumStatus { border-inline-start: 3px solid var(--primary); padding: .65rem .85rem; color: var(--text); }
+
+.reviewFilter { display: flex; align-items: center; gap: .65rem; min-height: 44px; cursor: pointer; }
+.reviewFilter input { inline-size: 1.2rem; block-size: 1.2rem; flex: none; accent-color: var(--primary); }
+.reviewForm > :is(h2, p, button, label:has(textarea)) { grid-column: 1 / -1; }
+.reviewForm > label { min-width: 0; }
+.reviewForm select { width: 100%; }
+.reviewForm > button { justify-self: start; }
+
+.placementFacts { margin-block: .5rem 1rem; }
+.placementFacts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: .5rem; padding-block: .55rem; }
+.placementFacts > div + div { border-block-start: 1px solid var(--border); }
+.placementFacts dt { color: var(--muted); }
+.placementFacts dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+
+.groupTransferForm { display: grid; justify-items: start; gap: .8rem; padding-block: .35rem .65rem; }
+.groupTransferForm > :global(.section-card), .groupTransferInputs { width: 100%; min-width: 0; }
+.groupTransferInputs label { display: grid; gap: .35rem; min-width: 0; }
+.groupTransferInputs :is(select, input) { width: 100%; min-width: 0; }
+
+.sessionTransferForm { grid-template-columns: minmax(0, 1fr); }
+.sessionTransferForm :global(.session-move-list) { width: 100%; min-width: 0; }
+.sessionTransferForm :global(.session-move-row) > label,
+.sessionTransferForm :global(.session-move-select) > span { min-width: 0; overflow-wrap: anywhere; }
+.sessionTransferForm :global(.session-move-row) select { width: 100%; min-width: 0; }
+
+.compensationPanel { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; padding-block: .65rem; }
+.compensationPanel > fieldset { display: grid; gap: .75rem; margin-block: 0; }
+.compensationPanel > fieldset > button, .compensationPanel > button { justify-self: start; }
+.compensationInputs > label { display: grid; gap: .35rem; min-width: 0; }
+.compensationInputs :is(input, select) { width: 100%; min-width: 0; }
+.compensationCards > article { border-color: var(--border); background: var(--surface); overflow-wrap: anywhere; }
+.compensationReview { min-width: 0; overflow-wrap: anywhere; }
+.compensationConflicts { padding-inline-start: 1.4rem; }
+.compensationBooking { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem .8rem; }
+.compensationBooking > div { display: grid; gap: .15rem; min-width: 0; }
+.compensationBooking .compensationBookingStatus { color: var(--text); font-weight: 700; }
+.compensationBooking + .compensationBooking { border-block-start: 1px solid var(--border); padding-block-start: .55rem; }

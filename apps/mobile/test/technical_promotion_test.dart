@@ -7,6 +7,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'owner_test.dart' as f;
 
 Map<String, dynamic> options() => {
+  'player': 'لاعب اصطناعي',
+  'sport': 'كرة القدم',
+  'branch': 'فرع العرض',
   'enrollmentVersion': 9,
   'effectiveDate': '2026-10-18',
   'recommendedLevel': 'مستوى تالٍ',
@@ -27,13 +30,18 @@ Map<String, dynamic> preview() => {
     'conflicts': <Object>[],
     'removedSessions': <Object>[],
     'addedSessions': [
-      {'id': 's'},
+      {
+        'id': 's',
+        'sessionDate': '2026-10-19',
+        'startTime': '07:00:00',
+        'endTime': '08:00:00',
+      },
     ],
   },
 };
 void main() {
   testWidgets(
-    'Lost save response retains exact retry intent and does not invent success',
+    'Lost save response requires a read and fresh preview before reusing the same intent',
     (t) async {
       final writes = <Object?>[];
       final auth = await f.owner((m, p, b, k) async {
@@ -54,21 +62,38 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.text('معاينة المستوى والمواعيد'));
       await t.pumpAndSettle();
-      for (var i = 0; i < 2; i++) {
-        await t.scrollUntilVisible(
-          find.text('اعتماد المستوى ونقل المجموعة'),
-          180,
-          scrollable: find.byType(Scrollable).first,
-        );
-        await t.tap(find.text('اعتماد المستوى ونقل المجموعة'));
-        await t.pumpAndSettle();
-      }
+      final confirm = find.text('اعتماد المستوى ونقل المجموعة');
+      await t.scrollUntilVisible(
+        confirm,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.ensureVisible(confirm);
+      await t.pumpAndSettle();
+      await t.tap(confirm);
+      await t.pumpAndSettle();
+      final check = find.text('تحقّق من سجل التنفيذ');
+      await t.ensureVisible(check);
+      await t.pumpAndSettle();
+      await t.tap(check);
+      await t.pumpAndSettle();
+      expect(find.text('لا يوجد تنفيذ مسجّل لهذه التوصية.'), findsOneWidget);
+      expect(writes.length, 1);
+      expect(confirm, findsNothing);
+      await t.tap(find.text('معاينة المستوى والمواعيد'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        confirm,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.ensureVisible(confirm);
+      await t.pumpAndSettle();
+      await t.tap(confirm);
+      await t.pumpAndSettle();
       expect(writes.length, 2);
       expect(writes[0], writes[1]);
-      expect(
-        find.textContaining('تم اعتماد المستوى ونقل المواعيد مع حفظ التاريخ'),
-        findsNothing,
-      );
+      expect(find.textContaining('تم التنفيذ إلى'), findsNothing);
     },
   );
   for (final width in [360.0, 390.0, 430.0]) {
@@ -109,7 +134,13 @@ void main() {
         }
         return {
           ...options(),
-          'applied': saved ? {'toLevelName': 'مستوى تالٍ'} : null,
+          'applied': saved
+              ? {
+                  'id': 'h',
+                  'toLevelName': 'مستوى تالٍ',
+                  'effectiveDate': '2026-10-17',
+                }
+              : null,
         };
       });
       await t.pumpWidget(
@@ -128,6 +159,8 @@ void main() {
         180,
         scrollable: find.byType(Scrollable).first,
       );
+      await t.ensureVisible(find.text('اعتماد المستوى ونقل المجموعة'));
+      await t.pumpAndSettle();
       await t.tap(find.text('اعتماد المستوى ونقل المجموعة'));
       await t.pumpAndSettle();
       expect(writes.length, 2);
@@ -159,7 +192,7 @@ void main() {
     expect(find.text('اعتماد المستوى ونقل المجموعة'), findsNothing);
     await auth.logout();
     await t.pumpAndSettle();
-    expect(find.text('مستوى تالٍ'), findsNothing);
+    expect(find.text('لاعب اصطناعي'), findsNothing);
   });
   testWidgets('Long Arabic at200 percent is usable on narrow mobile widths', (
     t,
@@ -171,6 +204,7 @@ void main() {
       final auth = await f.owner(
         (m, p, b, k) async => {
           ...options(),
+          'player': 'لاعب العرض',
           'recommendedLevel':
               'مستوى تقدم طويل لا يغير الاشتراك ولا تاريخ الطفل',
         },

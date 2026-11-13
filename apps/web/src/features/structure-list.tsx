@@ -23,14 +23,38 @@ export function StructureList({ kind }: { kind: Kind }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [coachByGroups,setCoachByGroups]=useState(incoming.get("sort")==="groups");
-  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState<{ url: string; attempt: number; failed: boolean }>();
+  const loading = loaded?.url !== listUrl || loaded.attempt !== attempt;
+  const loadFailed = !loading && loaded.failed;
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [target, setTarget] = useState<Item | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { fetch(listUrl).then(async response => { if (!response.ok) throw new Error(); setItems(await response.json() as Item[]); }).catch(() => setError("تعذر تحميل البيانات.")).finally(() => setLoading(false)); }, [listUrl]);
-  const filtered = useMemo(() => { const term = search.trim().toLocaleLowerCase("ar"); const result=items.filter(item => (!status || String(item.isActive)===status) && (!term || [item.arabicName, item.englishName, item.branchName, item.sportName, item.categoryName, ...(item.coaches??[])].some(value => value?.toLocaleLowerCase("ar").includes(term)))); return kind==='coaches'?result.sort((a,b)=>(coachByGroups?(b.assignedGroups??0)-(a.assignedGroups??0):(b.parentRating??-1)-(a.parentRating??-1))||a.arabicName.localeCompare(b.arabicName,'ar')):result; }, [items, search,kind,coachByGroups,status]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(listUrl, { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error();
+      const rows = await response.json() as Item[];
+      if (controller.signal.aborted) return;
+      setItems(rows);
+      setLoaded({ url: listUrl, attempt, failed: false });
+    }).catch(() => {
+      if (!controller.signal.aborted) setLoaded({ url: listUrl, attempt, failed: true });
+    });
+    return () => controller.abort();
+  }, [listUrl, attempt]);
+  const filtered = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("ar");
+    const result = items.filter(item => (!status || String(item.isActive) === status) && (!term || [
+      item.arabicName, item.englishName, item.branchName, item.sportName, item.categoryName,
+      ...(item.coaches ?? []), ...(item.groups ?? []).flatMap(group => [group.name, group.branch]),
+    ].some(value => value?.toLocaleLowerCase("ar").includes(term))));
+    return kind === "coaches" ? result.sort((a, b) => (
+      coachByGroups ? (b.assignedGroups ?? 0) - (a.assignedGroups ?? 0) : (b.parentRating ?? -1) - (a.parentRating ?? -1)
+    ) || a.arabicName.localeCompare(b.arabicName, "ar")) : result;
+  }, [items, search, kind, coachByGroups, status]);
 
   async function changeStatus() { if (!target) return; setSaving(true); setError(""); try { await csrfRequest(`/api/v1/manage/structure/${kind}/${target.id}/status`, "PUT", { isActive: !target.isActive }); const response = await fetch(listUrl); if (!response.ok) throw new Error("تعذر تحديث القائمة."); setItems(await response.json() as Item[]); setSuccess(target.isActive ? `تم إيقاف «${target.arabicName}».` : `تم تفعيل «${target.arabicName}».`); setTarget(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "تعذر تغيير الحالة."); } finally { setSaving(false); } }
 
@@ -43,8 +67,8 @@ export function StructureList({ kind }: { kind: Kind }) {
       {key:"players",header:"اللاعبون",render:(item:Item)=>item.playerCount??"—"},
     ]:[]),
     ...(kind==="coaches"?[
-      {key:"groups",header:"المجموعات المسندة",render:(item:Item)=><div className="cell-stack"><strong>{item.assignedGroups??0} مجموعات</strong>{Boolean(item.groups?.length)&&<details><summary>عرض المجموعات والفروع</summary>{item.groups?.map(g=><span className="cell-stack" key={g.id}>{g.name}<small>{g.branch}</small></span>)}</details>}</div>},
-      {key:"rating",header:"تقييم أولياء الأمور",render:(item:Item)=>item.parentRating==null?"لم يُقيّم بعد":<span>{item.parentRating} ★<small>{item.parentRatingCount??0} تقييمات</small></span>},
+      {key:"groups",header:"المجموعات المسندة",render:(item:Item)=><div className="cell-stack"><strong>{item.assignedGroups ?? "—"}</strong>{Boolean(item.groups?.length)&&<details><summary>عرض المجموعات والفروع</summary>{item.groups?.map(g=><span className="cell-stack" key={g.id}><span>{g.name}</span><small>{g.branch}</small></span>)}</details>}</div>},
+      {key:"rating",header:"تقييم أولياء الأمور",render:(item:Item)=>item.parentRating==null?"لم يُقيّم بعد":<div className="cell-stack"><span>{item.parentRating} ★</span>{item.parentRatingCount != null && <small>عدد التقييمات {item.parentRatingCount}</small>}</div>},
     ]:[]),
     {key:"status",header:"الحالة",render:item=><StatusBadge status={item.isActive?"Active":"Inactive"}/>},
     {key:"actions",header:"الإجراءات",width:kind==="coaches"?"160px":"110px",render:item=><RowActions actions={kind==="coaches"?[
@@ -54,15 +78,19 @@ export function StructureList({ kind }: { kind: Kind }) {
   ];
   return <>
     <PageHeader title={config[kind].title} context={`الأكاديمية / ${config[kind].title}`} action={{ label: config[kind].create, href: `/dashboard/academy/${kind}/${kind === "coaches" ? "create" : "new"}` }} />
-    <FilterToolbar resultCount={filtered.length} onReset={()=>{setSearch("");setStatus("");}}>
-      <SearchInput value={search} onChange={setSearch} label={`بحث ${config[kind].title}`} placeholder="ابحث بالاسم أو الفرع أو الرياضة"/>
+    <FilterToolbar resultCount={loading || loadFailed ? undefined : filtered.length} onReset={()=>{setSearch("");setStatus("");setCoachByGroups(incoming.get("sort") === "groups");}}>
+      <SearchInput value={search} onChange={setSearch} label={kind === "coaches" ? "بحث المدربين" : `بحث ${config[kind].title}`}
+        placeholder={kind === "coaches" ? "ابحث بالاسم أو المجموعة أو الفرع" : "ابحث بالاسم أو الفرع أو الرياضة"} />
       <label>الحالة<select value={status} onChange={e=>setStatus(e.target.value)}><option value="">كل الحالات</option><option value="true">فعال</option><option value="false">متوقف</option></select></label>
       {kind==='coaches'&&<label>ترتيب المدربين<select value={coachByGroups?"groups":"rating"} onChange={e=>setCoachByGroups(e.target.value==="groups")}><option value="rating">حسب التقييم</option><option value="groups">حسب المجموعات المسندة</option></select></label>}
     </FilterToolbar>
     <section className="list-card">
       {success && <p className="success-message" role="status">{success}</p>}
       {error && <ErrorState message={error} />}
-      {loading ? <LoadingState /> : filtered.length === 0 ? <EmptyState /> : <AdminDataTable label={kind==="coaches"?"قائمة المدربين":`قائمة ${config[kind].title}`} columns={columns} rows={filtered} rowKey={item=>item.id} rowClassName={item=>item.isActive?"":"inactive-record"}/>}
+      {loading ? <LoadingState /> : loadFailed ? <>
+        <ErrorState message="تعذر تحميل البيانات." />
+        <button className="secondary-button" type="button" onClick={() => setAttempt(attempt + 1)}>إعادة المحاولة</button>
+      </> : filtered.length === 0 ? <EmptyState /> : <AdminDataTable label={kind==="coaches"?"قائمة المدربين":`قائمة ${config[kind].title}`} columns={columns} rows={filtered} rowKey={item=>item.id} rowClassName={item=>item.isActive?"":"inactive-record"}/>}
     </section>
     <ConfirmationDialog open={target !== null} title={target?.isActive ? "تأكيد الإيقاف" : "تأكيد التفعيل"} message={`هل تريد ${target?.isActive ? "إيقاف" : "تفعيل"} «${target?.arabicName ?? ""}»؟ لن تُحذف العلاقات التاريخية.`} confirmLabel={target?.isActive ? "إيقاف" : "تفعيل"} busy={saving} onConfirm={() => void changeStatus()} onCancel={() => setTarget(null)} />
   </>;

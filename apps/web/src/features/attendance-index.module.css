@@ -1,0 +1,6 @@
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); align-items: end; gap: .65rem; margin-block-end: 1rem; }
+.filters > * { min-width: 0; }
+.filters label { display: grid; min-width: 0; gap: .25rem; color: var(--muted); font-weight: 700; }
+.filters input, .filters select { width: 100%; min-width: 0; min-height: 44px; }
+.dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: .65rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .4rem; }

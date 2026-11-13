@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DateFilterDefaults } from "../components/date-filter-defaults";
 import { monthToDate } from "../lib/date-range";
@@ -39,7 +39,6 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it.each([
   ["الحصص", <GroupSessions key="sessions" initialDate="2026-10-08" />, "مسح الفلاتر"],
-  ["الرئيسية", <PremiumOwnerDashboard key="home" />, "مسح الفلاتر"],
   ["المالية", <FinancialReport key="financial" />, "مسح"],
   ["حضور اللاعبين", <AttendanceReport key="attendance" />, "مسح"],
   ["حضور المدربين", <DailyStaffReport key="staff" onPlayers={() => {}} />, "مسح"],
@@ -52,11 +51,25 @@ it.each([
   render(<DateFilterDefaults range={range}>{content}</DateFilterDefaults>);
   if(_name==="المباريات")fireEvent.click(screen.getByRole("button",{name:"المباريات"}));
   const from = await screen.findByLabelText("من تاريخ"), to = screen.getByLabelText("إلى تاريخ");
-  await waitFor(()=>expect(from).toHaveValue(_name === "المباريات" ? "" : _name === "قائمة الحضور" ? range.to : _name === "الرئيسية" ? "2026-09-08" : range.from)); expect(to).toHaveValue(_name === "المباريات" ? "" : range.to);
+  await waitFor(()=>expect(from).toHaveValue(_name === "المباريات" ? "" : _name === "قائمة الحضور" ? range.to : range.from)); expect(to).toHaveValue(_name === "المباريات" ? "" : range.to);
   fireEvent.click(await screen.findByRole("button", { name: reset }));
   await waitFor(() => { expect(from).toHaveValue(""); expect(to).toHaveValue(""); });
   await Promise.resolve(); await Promise.resolve();
   expect(from).toHaveValue(""); expect(to).toHaveValue("");
+});
+it("opens the approved Owner trailing period and cancels date edits without applying them", async () => {
+  render(<DateFilterDefaults range={range}><PremiumOwnerDashboard /></DateFilterDefaults>);
+  const scope = within(await screen.findByRole("group", { name: "فترة ملخص الأكاديمية" }));
+  const custom = scope.getByRole("button", { name: "الفترة المخصصة" });
+  fireEvent.click(custom);
+  const start = scope.getByLabelText("من تاريخ (ملخص الأكاديمية)");
+  expect(start).toHaveValue("2026-09-08");
+  expect(scope.getByLabelText("إلى تاريخ (ملخص الأكاديمية)")).toHaveValue("2026-10-08");
+  fireEvent.change(start, { target: { value: "2026-09-20" } });
+  fireEvent.click(scope.getByRole("button", { name: "إلغاء" }));
+  expect(custom).toHaveFocus();
+  fireEvent.click(custom);
+  expect(scope.getByLabelText("من تاريخ (ملخص الأكاديمية)")).toHaveValue("2026-09-08");
 });
 it("keeps an explicitly linked report period instead of replacing it with defaults", async () => {
   incoming.set("from", "2026-09-01"); incoming.set("to", "2026-09-28");

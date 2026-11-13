@@ -228,7 +228,7 @@ void main() {
       await reveal(t, find.byType(DropdownButtonFormField<String>));
       await t.tap(find.byType(DropdownButtonFormField<String>));
       await t.pumpAndSettle();
-      await t.tap(find.text('السباحة · فرع الاختبار').last);
+      await t.tap(find.text('السباحة · 8 سنة · فرع الاختبار').last);
       await t.pumpAndSettle();
       await reveal(t, find.textContaining('والتقرير'));
       await t.tap(find.textContaining('والتقرير'));

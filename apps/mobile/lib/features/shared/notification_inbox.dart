@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
@@ -51,9 +52,7 @@ class _NotificationBellState extends State<NotificationBell>
   Timer? timer;
   bool foreground = true;
   String? snapshotKey;
-  String? get contextKey => widget.auth.session?.selected == null
-      ? null
-      : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
+  String? get contextKey => _noticeIdentity(widget.auth);
   @override
   void initState() {
     super.initState();
@@ -69,13 +68,14 @@ class _NotificationBellState extends State<NotificationBell>
   void changed() {
     if (identity == contextKey) return;
     identity = contextKey;
-    unread = 0;
     snapshotKey = null;
+    setState(() => unread = 0);
     load();
   }
 
   Future<void> load() async {
     final g = ++generation;
+    if (contextKey == null) return;
     try {
       final d = obj(await widget.auth.request('GET', '/api/v1/notifications'));
       if (mounted && g == generation) {
@@ -88,8 +88,13 @@ class _NotificationBellState extends State<NotificationBell>
           _noticeRevision(widget.auth).value++;
         }
       }
-    } catch (_) {
-      if (mounted && g == generation) setState(() => unread = 0);
+    } catch (failure) {
+      if (mounted &&
+          g == generation &&
+          failure is ApiFailure &&
+          (failure.status == 401 || failure.status == 403)) {
+        setState(() => unread = 0);
+      }
     }
   }
 
@@ -136,34 +141,53 @@ class NotificationInbox extends StatefulWidget {
 }
 
 class _NotificationInboxState extends State<NotificationInbox> {
-  int page = 1, revision = 0;
+  int revision = 0;
   late final openedIdentity = _noticeIdentity(widget.auth);
-  bool busy = false;
-  Future<void> read(Json n) async {
-    if (busy ||
+  final readOverrides = <String, bool>{};
+  int? unreadOverride;
+  String? pending, failedNotice;
+
+  void refresh() => setState(() {
+    revision++;
+    readOverrides.clear();
+    unreadOverride = null;
+    failedNotice = null;
+  });
+
+  Future<void> read(String id, bool wasRead, int unread) async {
+    if (pending != null ||
+        failedNotice != null ||
         openedIdentity == null ||
         openedIdentity != _noticeIdentity(widget.auth)) {
       return;
     }
-    setState(() => busy = true);
+    setState(() => pending = id);
     try {
       await widget.auth.request(
         'PUT',
-        '/api/v1/notifications/${n['id']}/read',
-        body: {'isRead': n['isRead'] != true},
+        '/api/v1/notifications/${Uri.encodeComponent(id)}/read',
+        body: {'isRead': !wasRead},
       );
       if (mounted && openedIdentity == _noticeIdentity(widget.auth)) {
-        setState(() => revision++);
+        if (widget.urgentMatchesOnly) {
+          // The server filters out read items, so paging must start again.
+          refresh();
+        } else {
+          setState(() {
+            readOverrides[id] = !wasRead;
+            unreadOverride = wasRead
+                ? unread + 1
+                : (unread > 0 ? unread - 1 : 0);
+          });
+        }
         _noticeRevision(widget.auth).value++;
       }
     } catch (_) {
       if (mounted && openedIdentity == _noticeIdentity(widget.auth)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: UiText('تعذر تحديث حالة التنبيه.')),
-        );
+        setState(() => failedNotice = id);
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) setState(() => pending = null);
     }
   }
 
@@ -181,9 +205,11 @@ class _NotificationInboxState extends State<NotificationInbox> {
               key: ValueKey(revision),
               auth: widget.auth,
               path:
-                  '/api/v1/notifications?page=$page${widget.urgentMatchesOnly ? '&urgentMatchesOnly=true' : ''}',
+                  '/api/v1/notifications?page=1${widget.urgentMatchesOnly ? '&urgentMatchesOnly=true' : ''}',
               builder: (context, value) {
                 final d = obj(value);
+                final items = rows(d['items']);
+                final unread = unreadOverride ?? (d['unread'] as int? ?? 0);
                 return gList([
                   if (widget.urgentMatchesOnly)
                     TextButton(
@@ -193,42 +219,50 @@ class _NotificationInboxState extends State<NotificationInbox> {
                       ),
                       child: const UiText('كل التنبيهات'),
                     ),
-                  UiText(
-                    '${d['unread']} غير مقروءة',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
-                  if (rows(d['items']).isEmpty)
-                    const EmptyMessage('لا توجد تنبيهات.'),
-                  for (final n in rows(d['items']))
-                    GCard(
+                  if (items.isNotEmpty) ...[
+                    UiText(
+                      'غير المقروءة $unread',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (items.isEmpty) const EmptyMessage('لا توجد تنبيهات.'),
+                  ...items.map((n) {
+                    final id = textOf(n['id']);
+                    final isRead = readOverrides[id] ?? (n['isRead'] == true);
+                    final date = DateTime.tryParse(textOf(n['createdAtUtc']));
+                    return GCard(
                       key: ValueKey('notice-${n['id']}'),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 4,
                             children: [
-                              Icon(
-                                n['isRead'] == true
-                                    ? Icons.notifications_none
-                                    : Icons.mark_email_unread_outlined,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: UiText(
-                                  day(n['createdAtUtc']),
-                                  style: const TextStyle(fontSize: 10),
+                              ExcludeSemantics(
+                                child: Icon(
+                                  isRead
+                                      ? Icons.notifications_none
+                                      : Icons.mark_email_unread_outlined,
+                                  size: 20,
                                 ),
                               ),
+                              UiText(isRead ? 'مقروء' : 'غير مقروء'),
+                              if (date != null)
+                                UiText(
+                                  MaterialLocalizations.of(context)
+                                      .formatShortDate(date.toLocal()),
+                                ),
                             ],
                           ),
                           const SizedBox(height: 10),
                           UiText(
                             textOf(n['message']),
                             style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: n['isRead'] == true
+                              fontSize: 14,
+                              fontWeight: isRead
                                   ? FontWeight.w400
                                   : FontWeight.w700,
                             ),
@@ -236,15 +270,6 @@ class _NotificationInboxState extends State<NotificationInbox> {
                           Wrap(
                             spacing: 8,
                             children: [
-                              TextButton(
-                                onPressed: busy ? null : () => read(n),
-                                child: UiText(
-                                  n['isRead'] == true
-                                      ? 'تحديد كغير مقروء'
-                                      : 'تمت القراءة',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              ),
                               if (n['matchId'] != null ||
                                   n['targetKind'] == 'Matches')
                                 TextButton(
@@ -286,11 +311,13 @@ class _NotificationInboxState extends State<NotificationInbox> {
                                   ),
                                   child: const UiText('عرض إشعار المجموعة'),
                                 ),
-                              if (n['targetKind'] == 'Receivables')
+                              if (n['targetKind'] == 'Receivables' &&
+                                  widget.auth.session?.selected?.role ==
+                                      'Guardian')
                                 TextButton(
                                   onPressed: () => openPage(
                                     context,
-                                    ReceivableBalances(auth: widget.auth),
+                                    ReceivableBalancesPage(auth: widget.auth),
                                   ),
                                   child: const UiText('كشف المستحقات'),
                                 ),
@@ -494,7 +521,10 @@ class _NotificationInboxState extends State<NotificationInbox> {
                                   ),
                                   child: const UiText('عرض طلب الأسرة'),
                                 ),
-                              if (n['targetKind'] == 'Contact' &&
+                              if (const [
+                                    'Contact',
+                                    'GuardianFeedback',
+                                  ].contains(n['targetKind']) &&
                                   n['targetId'] != null)
                                 TextButton(
                                   onPressed: () => openPage(
@@ -502,10 +532,16 @@ class _NotificationInboxState extends State<NotificationInbox> {
                                     CoachFeedbackPage(
                                       auth: widget.auth,
                                       playerId: textOf(n['targetId']),
+                                      initialKind:
+                                          n['targetKind'] == 'GuardianFeedback'
+                                          ? 'Complaint'
+                                          : 'Rating',
                                     ),
                                   ),
-                                  child: const UiText(
-                                    'التواصل أو تقديم ملاحظة',
+                                  child: UiText(
+                                    n['targetKind'] == 'GuardianFeedback'
+                                        ? 'تقديم شكوى أو اقتراح للمالك'
+                                        : 'التواصل أو تقديم ملاحظة',
                                   ),
                                 ),
                               if (n['targetKind'] == 'Schedule')
@@ -531,12 +567,34 @@ class _NotificationInboxState extends State<NotificationInbox> {
                                   ),
                                   child: const UiText('عرض الملاحظة'),
                                 ),
+                              TextButton(
+                                onPressed:
+                                    pending != null || failedNotice != null
+                                    ? null
+                                    : () => read(id, isRead, unread),
+                                child: UiText(
+                                  pending == id
+                                      ? 'جارٍ تحديث الحالة…'
+                                      : isRead
+                                      ? 'تحديد كغير مقروء'
+                                      : 'تحديد كمقروء',
+                                ),
+                              ),
                             ],
                           ),
+                          if (failedNotice == id) ...[
+                            const UiText(
+                              'تعذر تأكيد تحديث الحالة. حدّث القائمة للتحقق.',
+                            ),
+                            TextButton(
+                              onPressed: refresh,
+                              child: const UiText('تحديث القائمة'),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                  const SizedBox.shrink(),
+                    );
+                  }),
                 ]);
               },
             ),

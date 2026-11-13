@@ -1,0 +1,26 @@
+.inventory { display: grid; gap: 1rem; }
+.inventory p { margin-block: 0; }
+.header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.header h2 { margin-block: 0 .4rem; }
+.rows { display: grid; gap: .75rem; }
+.variant {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  min-inline-size: 0;
+  gap: .75rem;
+  padding: .75rem;
+  margin: 0;
+  border: 1px solid var(--staff-border, var(--border));
+  border-radius: .4rem;
+}
+.variant legend { padding-inline: .35rem; }
+.variant label { display: grid; min-inline-size: 0; gap: .35rem; }
+.variant input { width: 100%; min-width: 0; }
+.variant button { justify-self: start; align-self: end; }
+.inventory > button { justify-self: start; }
+.check { display: flex; align-items: flex-start; gap: .5rem; }
+.check input { width: 1.1rem; height: 1.1rem; min-height: 0; flex: 0 0 1.1rem; margin-block-start: .2em; }
+.review { display: grid; gap: .75rem; border-block-start: 1px solid var(--staff-border, var(--border)); padding-block-start: 1rem; }
+.review button { justify-self: start; }
+.readOnly { padding-inline-start: 0; list-style: none; margin: 0; }
+.readOnly li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; border-block-start: 1px solid var(--staff-border, var(--border)); padding-block: .65rem; }

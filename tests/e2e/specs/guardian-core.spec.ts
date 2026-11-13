@@ -1,7 +1,7 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 async function adminLogin(page: Page) {
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("admin.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click();
   await page.waitForURL(/\/dashboard(?:\?|$)/);
 }
 async function openGuardianRequests(page: Page) {
@@ -28,6 +28,7 @@ test.describe.serial("Guardian core mobile journeys", () => {
 
   test("Journey C — admin approves once and Guardian can continue to plans", async ({ page }) => {
     await guardianLogin(page); await openGuardianRequests(page);
+    await expect(page.getByRole("article").first()).toBeVisible();
     let approved = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "مقبول" });
     if (await approved.count() === 0) {
       // Test-only compatible U8 group; the existing U10 swimming group must not accept Mariam.
@@ -39,10 +40,21 @@ test.describe.serial("Guardian core mobile journeys", () => {
         const created = await page.request.post("/api/v1/manage/groups", { headers: { "X-CSRF-TOKEN": csrf.token }, data: { arabicName: groupName, branchId: "31000000-0000-0000-0000-000000000002", sportId: "32000000-0000-0000-0000-000000000002", ageCategoryId: "33000000-0000-0000-0000-000000000001", capacity: 20 } });
         expect(created.ok()).toBeTruthy();
       }
-      await page.context().clearCookies(); await adminLogin(page); await page.goto("/dashboard/enrollment-requests"); await page.getByLabel("من تاريخ").fill(""); await page.getByLabel("إلى تاريخ").fill(""); const row = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "قيد الانتظار" }); await row.getByRole("link", { name: "عرض", exact: true }).click(); await page.getByLabel("المجموعة").selectOption({ label: groupName }); await page.getByRole("button", { name: "قبول وإنشاء التسجيل" }).click(); await expect(page.getByRole("heading", { name: "طلبات الدفع" })).toBeVisible();
+      const firstList = page.waitForResponse(response => response.url().includes("/api/v1/enrollment-requests?") && response.ok());
+      await page.goto("/dashboard/enrollment-requests");
+      await firstList;
+      await page.getByRole("button", { name: "إعادة الضبط" }).click();
+      await expect(page.getByLabel("من تاريخ")).toHaveValue("");
+      await expect(page.getByLabel("إلى تاريخ")).toHaveValue("");
+      const row = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "قيد الانتظار" });
+      await row.getByRole("link", { name: "عرض", exact: true }).click();
+      await page.getByLabel("المجموعة").selectOption({ label: groupName });
+      await page.getByRole("button", { name: "قبول وإنشاء التسجيل" }).click();
+      await page.getByRole("dialog", { name: "تأكيد قبول طلب الاشتراك" }).getByRole("button", { name: "تأكيد القبول" }).click();
+      await expect(page.getByRole("status").filter({ hasText: "مقبول" })).toBeVisible();
       await page.context().clearCookies(); await guardianLogin(page); await openGuardianRequests(page); approved = page.locator("article").filter({ hasText: "مريم أحمد محمود" }).filter({ hasText: "السباحة" }).filter({ hasText: "مقبول" });
     }
-    await expect(approved).toHaveCount(1); await approved.getByRole("link", { name: "إكمال الاشتراك / اختيار الباقة" }).click(); await expect(page.getByRole("heading", { name: "اختر الباقة" })).toBeVisible();
+    await expect(approved).toHaveCount(1); await approved.getByRole("link", { name: "إكمال الاشتراك / اختيار الباقة" }).click(); await expect(page.getByRole("heading", { name: "اختيار باقة الاشتراك" })).toBeVisible(); await expect(page.getByRole("group", { name: "الباقات المتاحة" })).toBeVisible();
   });
 
   test("Journey D — child profile integrates report, schedule, attendance and subscriptions", async ({ page }) => {

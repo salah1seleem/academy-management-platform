@@ -21,6 +21,17 @@ it("legacy coach review is explicit, versioned and optional-note; only eligible 
 });
 beforeEach(()=>{Object.defineProperty(HTMLDialogElement.prototype,"showModal",{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute("open","");}});Object.defineProperty(HTMLDialogElement.prototype,"close",{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute("open");}});});
 afterEach(()=>{cleanup();vi.restoreAllMocks();matchQuery="";});
+it("opens a published fixture with draft scores without selecting result publication", () => {
+  global.fetch = vi.fn(() => reply([])) as typeof fetch;
+  const published = { ...match, publishedAtUtc: "2026-11-01", ourScore: 0, opponentScore: 2, resultFinalized: false };
+  render(<MatchEditor match={published} template={null} options={options} busy={false} onSubmit={() => {}} onNew={() => {}} />);
+  const checkbox = screen.getByRole("checkbox", { name: "نشر النتيجة وإشعار أولياء أمور الهدافين" });
+  expect(checkbox).not.toBeChecked();
+  const editor = screen.getByRole<HTMLFormElement>("form", { name: "محرر المباراة" });
+  expect(new FormData(editor).has("resultFinalized")).toBe(false);
+  fireEvent.click(checkbox);
+  expect(new FormData(editor).has("resultFinalized")).toBe(true);
+});
 it("read-only matches users see no copy action",async()=>{
   global.fetch=vi.fn(url=>String(url).includes("/structure/")?reply({sports:[],branches:[],categories:[],groups:[]}):String(url).includes("/options")?reply({...options,canCopy:false}):reply([{...match,team:"منتخب عرض",tournament:"بطولة عرض"}])) as typeof fetch;render(<MatchesWorkspace/>);fireEvent.click(screen.getByRole("button",{name:"المباريات"}));await screen.findByText("منتخب عرض",{selector:"strong"});expect(screen.queryByRole("button",{name:"نسخ مباراة"})).not.toBeInTheDocument();
 });

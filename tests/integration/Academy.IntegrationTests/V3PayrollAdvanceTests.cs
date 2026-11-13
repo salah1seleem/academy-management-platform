@@ -16,6 +16,60 @@ public sealed partial class V2StaffScopeTests
     private static string AdvanceRoot(Guid id)=>$"/api/v1/manage/payroll/{id}/advances";
     private static Task<HttpResponseMessage> AdvanceRecord(HttpClient c,Guid id,decimal amount,string? key=null)=>StatementCommand(c,AdvanceRoot(id),new PayrollAdvanceWrite(amount,"مرجع سلفة داخلي"),key);
     private static Task<HttpResponseMessage> AdvanceApply(HttpClient c,Guid id,Guid advance,DateOnly month,decimal amount,decimal available,decimal due,string? key=null)=>StatementCommand(c,$"{AdvanceRoot(id)}/{advance}/applications",new PayrollAdvanceApply(month,amount,available,due),key);
+
+    [Fact]
+    public async Task V3_advance_recovery_resolves_saved_cash_and_allocation_for_the_original_actor()
+    {
+        var fixture = await AgreementFixture();
+        using var owner = fixture.Owner;
+        var path = AdvanceRoot(fixture.Employee);
+        var ownerView = await owner.GetFromJsonAsync<JsonElement>(path);
+        var ownerScope = ownerView.GetProperty("recoveryScope").GetString()!;
+        Assert.Equal(fixture.Employee, ownerView.GetProperty("employeeId").GetGuid());
+        var recordKey = Guid.NewGuid().ToString();
+        var recordLookup = $"{path}/by-request?kind=record&requestKey={recordKey}";
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(recordLookup)).StatusCode);
+        var record = new PayrollAdvanceWrite(350.25m, "مرجع اصطناعي");
+        var saved = await StatementCommand(owner, path, record, recordKey, ownerScope);
+        Assert.Equal(HttpStatusCode.Created, saved.StatusCode);
+        var advance = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(advance, (await owner.GetFromJsonAsync<JsonElement>(recordLookup)).GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.OK, (await StatementCommand(owner, path, record, recordKey, ownerScope)).StatusCode);
+
+        var month = new DateOnly(fixture.Today.Year, fixture.Today.Month, 1);
+        (await StatementApprove(owner, fixture.Employee, month, await StatementView(owner, fixture.Employee, month))).EnsureSuccessStatusCode();
+        var allocationKey = Guid.NewGuid().ToString();
+        var allocationLookup = $"{path}/by-request?kind=apply&requestKey={allocationKey}";
+        var allocationPath = $"{path}/{advance}/applications";
+        var apply = new PayrollAdvanceApply(month, 125.75m, 350.25m, 3000);
+        var allocated = await StatementCommand(owner, allocationPath, apply, allocationKey, ownerScope);
+        Assert.Equal(HttpStatusCode.Created, allocated.StatusCode);
+        var allocation = (await allocated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(allocation, (await owner.GetFromJsonAsync<JsonElement>(allocationLookup)).GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"{path}/by-request?kind=record&requestKey={allocationKey}")).StatusCode);
+
+        var staff = await CreateAdmin();
+        using var admin = staff.Admin;
+        using var grantOwner = staff.Owner;
+        var access = $"/api/v1/manage/staff/{staff.Member}/access";
+        (await Write(grantOwner, access, Access(fixture.Branch, true, true) with { SensitivePermissions = [AcademyPermissions.PayrollAdvanceManage, AcademyPermissions.PayrollPay] })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(recordLookup)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(allocationLookup)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await StatementCommand(admin, path, record, recordKey, ownerScope)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await StatementCommand(admin, allocationPath, apply, allocationKey, ownerScope)).StatusCode);
+        (await Write(grantOwner, access, Access(fixture.OtherBranch, true, true))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(path)).StatusCode);
+
+        using var foreign = await Staff(DemoSeed.FutureOwnerEmail);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(recordLookup)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await foreign.GetAsync(allocationLookup)).StatusCode);
+        var view = await owner.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal(224.50m, Assert.Single(view.GetProperty("advances").EnumerateArray()).GetProperty("remaining").GetDecimal());
+        Assert.Equal(2874.25m, Assert.Single(view.GetProperty("statements").EnumerateArray()).GetProperty("remaining").GetDecimal());
+        Assert.Single(view.GetProperty("applications").EnumerateArray());
+    }
+
     [Fact]
     public async Task V3_advance_concurrent_distinct_allocations_cannot_spend_the_same_pool_twice()
     {

@@ -110,6 +110,50 @@ void main() {
       expect(t.takeException(), isNull);
     },
   );
+  testWidgets('a seasonal plan reviews and saves exact calendar terms', (
+    t,
+  ) async {
+    final writes = <Map>[];
+    final auth = await f.authenticate('AcademyOwner', (
+      method,
+      path,
+      body,
+      _,
+    ) async {
+      if (method == 'POST') {
+        expect(path, '/api/v1/subscriptions/plans');
+        writes.add(body as Map);
+        return {'id': 'season'};
+      }
+      return options;
+    });
+    await t.pumpWidget(f.app(NativePlanCreate(auth: auth)));
+    await t.pumpAndSettle();
+    await text(t, 'اسم الباقة', 'موسم السباحة التجريبي');
+    await choose(t, 'نمط التدريب', 'موسمي');
+    expect(find.text('عدد الحصص'), findsNothing);
+    await text(t, 'أشهر الخدمة', '٥');
+    await text(t, 'السعر الشهري المرجعي', '٦٠٠٫٢٥');
+    await text(t, 'الأشهر المدفوعة', '٦');
+    await tap(t, 'مراجعة الباقة');
+    expect(find.text('أدخل عددًا من 1 إلى عدد أشهر الخدمة.'), findsOneWidget);
+    expect(writes, isEmpty);
+    await text(t, 'الأشهر المدفوعة', '٤');
+    await tap(t, 'مراجعة الباقة');
+    expect(find.text('متاحة في كل الفروع'), findsOneWidget);
+    expect(writes, isEmpty);
+    await tap(t, 'تأكيد حفظ الباقة');
+    expect(writes.single, containsPair('trainingFormat', 'Season'));
+    expect(writes.single, containsPair('planType', 'Duration'));
+    expect(writes.single, containsPair('durationMonths', 5));
+    expect(writes.single, containsPair('chargedMonths', 4));
+    expect(writes.single, containsPair('referenceMonthlyPrice', '600.25'));
+    expect(writes.single, containsPair('price', '2401.00'));
+    expect(writes.single, containsPair('sessionCount', null));
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
   testWidgets(
     'group wizard validates days then previews and saves group, coach and timetable together',
     (t) async {
@@ -174,17 +218,20 @@ void main() {
       final calls = <String>[];
       final auth = await f.authenticate('AcademyOwner', (m, p, b, token) async {
         calls.add('$m $p');
+        if (p == '/api/v1/academy/calendar') return {'today': '2026-11-05'};
         if (p.contains('/criteria/defaults')) {
           return m == 'GET'
               ? {
+                  'sportId': 's',
                   'sport': 'السباحة',
                   'criteria': [
                     {'arabicName': 'تقنية التنفس'},
                     {'arabicName': 'التوازن'},
                   ],
                 }
-              : {'count': 2};
+              : {'count': 2, 'created': 2};
         }
+        if (p == '/api/v1/evaluations/criteria?sportId=s') return [];
         if (m == 'POST') return {'id': 'e'};
         return {
           'id': 'e',
@@ -213,11 +260,14 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(calls, isEmpty);
-      expect(find.text('معايير الرياضة لم تُجهّز بعد'), findsOneWidget);
-      await tap(t, 'تجهيز معايير التقييم');
+      expect(calls, ['GET /api/v1/evaluations/criteria?sportId=s']);
+      expect(find.text('لا توجد معايير لهذه الرياضة'), findsOneWidget);
+      await tap(t, 'عرض المعايير المقترحة');
+      await tap(t, 'إلغاء');
       expect(calls.where((c) => c.startsWith('POST')), isEmpty);
-      await tap(t, 'اعتماد المعايير وبدء التقييم');
+      await tap(t, 'عرض المعايير المقترحة');
+      expect(calls.where((c) => c.startsWith('POST')), isEmpty);
+      await tap(t, 'إضافة المعايير وبدء التقييم');
       expect(calls.where((c) => c.startsWith('POST')), [
         'POST /api/v1/evaluations/criteria/defaults',
         'POST /api/v1/evaluations',

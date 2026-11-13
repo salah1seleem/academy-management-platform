@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
 import '../guardian/guardian_ui.dart';
@@ -11,7 +12,13 @@ import 'feedback_investigations.dart';
 class AssignedFollowUpsPage extends StatelessWidget {
   final AuthController auth;
   final String? id;
-  const AssignedFollowUpsPage({super.key, required this.auth, this.id});
+  final bool initialAllDates;
+  const AssignedFollowUpsPage({
+    super.key,
+    required this.auth,
+    this.id,
+    this.initialAllDates = false,
+  });
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: auth,
@@ -21,9 +28,10 @@ class AssignedFollowUpsPage extends StatelessWidget {
             child: Center(child: UiText('سجل الدخول لعرض متابعاتك.')),
           )
         : _AssignedReader(
-            key: ValueKey('${followUpContext(auth)}:$id'),
+            key: ValueKey('${followUpContext(auth)}:$id:$initialAllDates'),
             auth: auth,
             id: id,
+            initialAllDates: initialAllDates,
           ),
   );
 }
@@ -31,7 +39,13 @@ class AssignedFollowUpsPage extends StatelessWidget {
 class _AssignedReader extends StatefulWidget {
   final AuthController auth;
   final String? id;
-  const _AssignedReader({super.key, required this.auth, this.id});
+  final bool initialAllDates;
+  const _AssignedReader({
+    super.key,
+    required this.auth,
+    this.id,
+    required this.initialAllDates,
+  });
   @override
   State<_AssignedReader> createState() => _AssignedReaderState();
 }
@@ -46,6 +60,7 @@ class _AssignedReaderState extends State<_AssignedReader>
   @override
   void initState() {
     super.initState();
+    initialized = widget.initialAllDates;
     WidgetsBinding.instance.addObserver(this);
     load();
   }
@@ -94,10 +109,15 @@ class _AssignedReaderState extends State<_AssignedReader>
           initialized = true;
         }
       });
-    } catch (_) {
+    } catch (failure) {
       if (mounted && request == generation) {
+        final forbidden =
+            failure is ApiFailure &&
+            (failure.status == 403 || failure.status == 404);
         setState(
-          () => error = 'المتابعات غير متاحة ضمن إسنادك وصلاحياتك الحالية.',
+          () => error = forbidden
+              ? 'المتابعات غير متاحة ضمن إسنادك وصلاحياتك الحالية.'
+              : 'تعذر تحميل المتابعات. أعد المحاولة.',
         );
       }
     }

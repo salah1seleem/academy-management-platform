@@ -23,27 +23,38 @@ it('saves placement and configurable assignment target, then reloads the active 
  expect(screen.getByLabelText(/هدف المجموعات/)).toHaveValue(3);
 });
 it('target confirmation retains branch and dates and submits the actual revision once',async()=>{
- const onSaved=vi.fn(),writes:unknown[]=[];let saved:unknown[]=[];
+ const onSaved=vi.fn(),writes:unknown[]=[];let saved:unknown[]=[{from:'2026-09-01',to:'2026-09-30',branchId:'b1',amount:1000.25}];
  global.fetch=vi.fn(async(input,init)=>{
   const path=String(input);if(path.endsWith('/csrf'))return json({token:'csrf-test'});
   if(path.endsWith('/collection-target')){const body=JSON.parse(String(init!.body));writes.push(body);saved=[body];return json({revision:10});}
   return json({versions:[{state:'Active',revision:9,settings:{ownerHome:{targets:saved}}}]});
  });
- render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" amount={1000.25} onSaved={onSaved} onClose={vi.fn()}/>);
- const input=await screen.findByLabelText('هدف الفترة (ج.م)');expect(input).toHaveValue(1000.25);
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" onSaved={onSaved} onClose={vi.fn()}/>);
+ const input=await screen.findByLabelText('هدف الفترة (ج.م)');expect(input).toHaveValue('1000.25');
  await waitFor(()=>expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeEnabled());
- fireEvent.change(input,{target:{value:'3000.50'}});fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
+ fireEvent.change(input,{target:{value:'٣٠٠٠٫٥٠'}});fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
  await waitFor(()=>expect(onSaved).toHaveBeenCalledOnce());
  expect(writes).toEqual([{from:'2026-09-01',to:'2026-09-30',branchId:'b1',amount:3000.5,expectedRevision:9}]);
- expect(screen.getByRole('dialog')).toHaveTextContent('فرع اصطناعي · 2026-09-01 — 2026-09-30');
+ expect(screen.getByRole('dialog')).toHaveTextContent('فرع اصطناعي · من 1 سبتمبر 2026 إلى 30 سبتمبر 2026');
 });
 it('a rejected target is not announced as saved or silently re-scoped',async()=>{
  const onSaved=vi.fn();
- global.fetch=vi.fn(async input=>String(input).endsWith('/csrf')?json({token:'csrf-test'}):String(input).endsWith('/collection-target')?json({message:'تغيرت الإعدادات؛ حدّث الصفحة قبل حفظ الهدف.'},409):json({versions:[{state:'Active',revision:1,settings:{}}]}));
- render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:''}} branchLabel="كل الفروع" currency="EGP" amount={null} onSaved={onSaved} onClose={vi.fn()}/>);
- await waitFor(()=>expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeEnabled());
+ let writes=0;
+ global.fetch=vi.fn(async input=>{
+  if(String(input).endsWith('/csrf'))return json({token:'csrf-test'});
+  if(String(input).endsWith('/collection-target')){writes++;return json({},409);}
+  const targets=writes===0?[]:[{from:'2026-09-01',to:'2026-09-30',branchId:null,amount:2000}];
+  return json({versions:[{state:'Active',revision:writes+1,settings:{ownerHome:{targets}}}]});
+ });
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:''}} branchLabel="كل الفروع" currency="EGP" onSaved={onSaved} onClose={vi.fn()}/>);
+ await screen.findByLabelText('هدف الفترة (ج.م)');
  fireEvent.change(screen.getByLabelText('هدف الفترة (ج.م)'),{target:{value:'1000'}});fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
- expect(await screen.findByText('تغيرت الإعدادات؛ حدّث الصفحة قبل حفظ الهدف.')).toBeVisible();expect(onSaved).not.toHaveBeenCalled();
+ expect(await screen.findByText('تغيّرت إعدادات الأكاديمية. اقرأ الهدف الحالي قبل الحفظ.')).toBeVisible();expect(onSaved).not.toHaveBeenCalled();
+ expect(screen.getByLabelText('هدف الفترة (ج.م)')).toBeDisabled();
+ expect(screen.queryByRole('button',{name:'حفظ الهدف'})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'قراءة الهدف الحالي'}));
+ await waitFor(()=>expect(screen.getByLabelText('هدف الفترة (ج.م)')).toHaveValue('2000'));
+ expect(writes).toBe(1);
 });
 it('does not confirm owner preferences when GET still returns the previous placement',async()=>{
  global.fetch=vi.fn(async(input,init)=>String(input).endsWith('/csrf')?json({token:'csrf-test'}):init?.method==='PUT'?json({revision:5}):json({versions:[{state:'Active',revision:4,settings:{ownerHome:{quickActionsAtTop:false,coachAssignmentTarget:null}}}]}));
@@ -56,8 +67,8 @@ it('does not confirm owner preferences when GET still returns the previous place
 it('does not close target confirmation when only another branch target was persisted',async()=>{
  const onSaved=vi.fn();
  global.fetch=vi.fn(async(input,init)=>String(input).endsWith('/csrf')?json({token:'csrf-test'}):init?.method==='PUT'?json({revision:2}):json({versions:[{state:'Active',revision:2,settings:{ownerHome:{targets:[{from:'2026-09-01',to:'2026-09-30',branchId:'other',amount:3000}]}}}]}));
- render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" amount={1000} onSaved={onSaved} onClose={vi.fn()}/>);
- await waitFor(()=>expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeEnabled());
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" onSaved={onSaved} onClose={vi.fn()}/>);
+ await screen.findByLabelText('هدف الفترة (ج.م)');
  fireEvent.change(screen.getByLabelText('هدف الفترة (ج.م)'),{target:{value:'3000'}});
  fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
  expect(await screen.findByText(/لم يتطابق هدف الفترة المقروء/)).toBeVisible();expect(onSaved).not.toHaveBeenCalled();
@@ -86,12 +97,12 @@ it('reloads a mismatched target from the new GET snapshot without resubmitting',
   if(init?.method==='PUT'){writes++;return json({});}
   return json({versions:[{state:'Active',revision:5,settings:{ownerHome:{targets:[{from:'2026-09-01',to:'2026-09-30',branchId:'b1',amount}]}}}]});
  });
- render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" amount={1000} onSaved={vi.fn()} onClose={vi.fn()}/>);
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" onSaved={vi.fn()} onClose={vi.fn()}/>);
  await waitFor(()=>expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeEnabled());
  fireEvent.change(screen.getByLabelText('هدف الفترة (ج.م)'),{target:{value:'3000'}});fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
  await screen.findByText(/لم يتطابق هدف الفترة المقروء/);amount=7000;
- fireEvent.click(screen.getByRole('button',{name:'إعادة تحميل الإعدادات الحالية'}));
- await waitFor(()=>expect(screen.getByLabelText('هدف الفترة (ج.م)')).toHaveValue(7000));expect(writes).toBe(1);
+ fireEvent.click(screen.getByRole('button',{name:'قراءة الهدف الحالي'}));
+ await waitFor(()=>expect(screen.getByLabelText('هدف الفترة (ج.م)')).toHaveValue('7000'));expect(writes).toBe(1);
 });
 it('target removal confirms absence of only the exact branch and period',async()=>{
  const onSaved=vi.fn();let targets=[{from:'2026-09-01',to:'2026-09-30',branchId:'b1',amount:1000}];
@@ -100,8 +111,55 @@ it('target removal confirms absence of only the exact branch and period',async()
   if(init?.method==='PUT'){expect(JSON.parse(String(init.body)).amount).toBeNull();targets=[{from:'2026-09-01',to:'2026-09-30',branchId:'other',amount:1000}];return json({});}
   return json({versions:[{state:'Active',revision:5,settings:{ownerHome:{targets}}}]});
  });
- render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" amount={1000} onSaved={onSaved} onClose={vi.fn()}/>);
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:'b1'}} branchLabel="فرع اصطناعي" currency="EGP" onSaved={onSaved} onClose={vi.fn()}/>);
  await waitFor(()=>expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeEnabled());
- fireEvent.change(screen.getByLabelText('هدف الفترة (ج.م)'),{target:{value:''}});fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
+ fireEvent.change(screen.getByLabelText('هدف الفترة (ج.م)'),{target:{value:''}});
+ expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeDisabled();
+ fireEvent.click(screen.getByRole('button',{name:'إزالة هدف الفترة'}));
+ expect(targets).toHaveLength(1);
+ fireEvent.click(screen.getByRole('button',{name:'العودة إلى التعديل'}));
+ expect(targets).toHaveLength(1);
+ fireEvent.click(screen.getByRole('button',{name:'إزالة هدف الفترة'}));
+ fireEvent.click(screen.getByRole('button',{name:'تأكيد إزالة الهدف'}));
  await waitFor(()=>expect(onSaved).toHaveBeenCalledOnce());expect(targets).toHaveLength(1);
+});
+
+it('distinguishes the monthly default from a scoped target and disables an empty save', async()=>{
+ global.fetch=vi.fn(async()=>json({versions:[{state:'Active',revision:5,settings:{monthlyCollectionTarget:5000,ownerHome:{targets:[{from:'2026-09-01',to:'2026-09-30',branchId:'other',amount:1000}]}}}]}));
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:''}} branchLabel="كل الفروع" currency="EGP" usesMonthlyDefault onSaved={vi.fn()} onClose={vi.fn()}/>);
+ expect(await screen.findByLabelText('هدف الفترة (ج.م)')).toHaveValue('');
+ expect(screen.getByText('الهدف الشهري الافتراضي 5,000 جنيه')).toBeVisible();
+ expect(screen.getByRole('button',{name:'حفظ الهدف'})).toBeDisabled();
+ expect(screen.queryByText(/لإزالة الهدف/)).toBeNull();
+});
+
+
+it('keeps keyboard access to recovery after a lost reply and lets the owner close safely', async()=>{
+ let writes=0,reads=0;
+ const onClose=vi.fn(),onSaved=vi.fn();
+ global.fetch=vi.fn(async(input,init)=>{
+  if(String(input).endsWith('/csrf'))return json({token:'csrf-test'});
+  if(init?.method==='PUT'){writes++;throw Error('network');}
+  reads++;
+  if(reads>1)return json({},503);
+  return json({versions:[{state:'Active',revision:7,settings:{}}]});
+ });
+ render(<CollectionTargetDialog scope={{from:'2026-09-01',to:'2026-09-30',branchId:''}} branchLabel="كل الفروع" currency="EGP" onSaved={onSaved} onClose={onClose}/>);
+ const input=await screen.findByLabelText('هدف الفترة (ج.م)');
+ fireEvent.change(input,{target:{value:'1.239'}});
+ fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
+ expect(await screen.findByText(/بمنزلتين عشريتين/)).toBeVisible();
+ expect(writes).toBe(0);
+ fireEvent.change(input,{target:{value:'1000'}});
+ fireEvent.click(screen.getByRole('button',{name:'حفظ الهدف'}));
+ const check=await screen.findByRole('button',{name:'التحقق من الحفظ'});
+ await waitFor(()=>expect(check).toHaveFocus());
+ fireEvent.click(check);
+ expect(await screen.findByText('تعذر تحميل إعدادات الأكاديمية.')).toBeVisible();
+ await waitFor(()=>expect(check).toHaveFocus());
+ expect(writes).toBe(1);
+ expect(reads).toBe(2);
+ fireEvent.keyDown(check,{key:'Escape'});
+ expect(onClose).toHaveBeenCalledWith(true);
+ expect(onSaved).not.toHaveBeenCalled();
 });

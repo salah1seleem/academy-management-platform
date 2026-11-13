@@ -92,8 +92,10 @@ public static class ReceivableEndpoints
     private static async Task<(DateOnly Day, string Currency)> AccountingContext(FoundationDbContext db, Guid academy, DateTimeOffset time)
     {
         var settings = await db.Academies.Where(x => x.Id == academy).Select(x => new { x.TimeZone, x.DefaultCurrency }).SingleAsync();
-        return (DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, TimeZoneInfo.FindSystemTimeZoneById(settings.TimeZone)).DateTime), settings.DefaultCurrency);
+        return (AccountingDay(time, settings.TimeZone), settings.DefaultCurrency);
     }
+    internal static DateOnly AccountingDay(DateTimeOffset time, string timeZone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, TimeZoneInfo.FindSystemTimeZoneById(timeZone)).DateTime);
     private static async Task<IResult> Read(Guid? branchId, Guid? playerId, string? state, DateTimeOffset? asOf, CurrentTenant tenant, FoundationDbContext db, ISubscriptionClock clock)
     {
         var t = (await tenant.ResolveAsync())!; var instant = asOf ?? clock.UtcNow;

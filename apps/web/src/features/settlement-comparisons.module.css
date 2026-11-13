@@ -1,23 +1,25 @@
-.notice {
-  display: grid;
-  gap: .4rem;
-  margin-block: 1rem;
-  padding: 1rem 1.15rem;
-  border: 1px solid var(--staff-border, var(--border));
-  border-inline-start: 3px solid var(--staff-primary-700, var(--primary));
-  border-radius: 14px;
-  background: var(--staff-primary-50, #f0faf8);
-  color: var(--staff-text, #22334a);
-}
-.notice strong { font-size: 1rem; }
-.notice p { margin: 0; font-size: .9rem; line-height: 1.8; }
 .fields { min-width: 0; margin-block: 1rem; }
 .fields legend { padding-inline: .5rem; font-size: .95rem; font-weight: 700; }
 .fields > label { min-width: 0; }
 .preview { display: grid; gap: 1rem; margin-block-start: 1.5rem; min-width: 0; }
 .preview h2, .preview p { margin: 0; }
-.upload { position: relative; }
-.upload .fileInput { position: absolute; width: 1px; height: 1px; opacity: 0; clip-path: inset(50%); }
-.uploadButton { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: .65rem 1rem; border: 1px solid var(--staff-border, var(--border)); border-radius: 10px; color: var(--staff-primary-700, var(--primary)); background: var(--staff-surface, #fff); cursor: pointer; }
-.upload:focus-within .uploadButton { outline: 2px solid var(--staff-primary-700, var(--primary)); outline-offset: 2px; }
-.upload:has(input:disabled) .uploadButton { cursor: default; opacity: .65; }
+.filterBar { display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; }
+.filterBar > label { display: grid; gap: .35rem; min-width: 0; }
+.filterBar > button { justify-self: start; }
+@media (min-width: 680px) {
+  .filterBar { grid-template-columns: repeat(2, minmax(0, 16rem)) auto; }
+}
+.readError, .detail { display: grid; gap: .85rem; justify-items: start; }
+.detail h2, .reference { margin: 0; }
+.reference, .metadata dd { overflow-wrap: anywhere; }
+.amounts, .metadata { display: grid; margin: 0; width: 100%; min-width: 0; }
+.amounts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.amounts > div { min-width: 0; padding: .65rem; border: 1px solid var(--staff-border, var(--border)); border-radius: .6rem; }
+.amounts dt, .metadata dt { font-size: .82rem; }
+.amounts dd, .metadata dd { margin: .35rem 0 0; }
+.amounts dd { font-weight: 700; overflow-wrap: anywhere; }
+.metadata { gap: .6rem 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-block: 1rem; }
+.csvFile { display: grid; grid-column: 1 / -1; gap: .8rem; min-width: 0; }
+.csvFile p { margin: 0 0 .5rem; font-size: .875rem; }
+.csvFile label { display: grid; gap: .35rem; min-width: 0; }

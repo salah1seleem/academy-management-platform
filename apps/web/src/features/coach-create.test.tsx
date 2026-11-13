@@ -23,7 +23,7 @@ describe("individual coach provisioning", () => {
     expect(screen.queryByLabelText(/كلمة المرور/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "حفظ المدرب" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("/api/v1/manage/coaches", "POST", {
-      displayName: "مدرب تجريبي", phoneNumber: "01012345678", email: null, isActive: true, groupIds: ["group-a"],
+      displayName: "مدرب تجريبي", phoneNumber: "+201012345678", email: null, isActive: true, groupIds: ["group-a"],
     }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/academy/coaches"));
   });
@@ -39,8 +39,29 @@ describe("individual coach provisioning", () => {
     expect(await screen.findByRole("button", { name: "جارٍ الحفظ…" })).toBeDisabled(); expect(request).toHaveBeenCalledOnce();
   });
   it("does not show a writable form when group loading fails", async () => {
-    vi.mocked(fetch).mockRejectedValue(new Error("offline")); render(<CoachCreate />);
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("offline")); render(<CoachCreate />);
     expect(await screen.findByText(/تعذر تحميل المجموعات/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "حفظ المدرب" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "إعادة المحاولة" }));
+    expect(await screen.findByRole("button", { name: "حفظ المدرب" })).toBeEnabled();
+  });
+  it.each(["1012345678", "0101234567", "010123456789", "01312345678", "02212345678", "+9711012345678", "010abc45678", "0101234+5678"])("rejects %s without writing or losing selected groups", async number => {
+    render(<CoachCreate />); await fill();
+    const phone = screen.getByLabelText("رقم الهاتف المصري");
+    const group = screen.getByLabelText("براعم 2018");
+    fireEvent.click(group);
+    fireEvent.change(phone, { target: { value: number } });
+    fireEvent.click(screen.getByRole("button", { name: "حفظ المدرب" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("اكتب رقم موبايل مصري صحيح.");
+    expect(phone).toHaveFocus(); expect(phone).toHaveValue(number);
+    expect(group).toBeChecked(); expect(request).not.toHaveBeenCalled();
+  });
+  it.each(["+20 (0) 10-1234-5678", "٠١٠١٢٣٤٥٦٧٨", "۰۰۲۰۱۰۱۲۳۴۵۶۷۸"])("canonicalizes %s and submits an inactive coach with no groups", async number => {
+    request.mockResolvedValue({});
+    render(<CoachCreate />); await fill();
+    fireEvent.change(screen.getByLabelText("رقم الهاتف المصري"), { target: { value: number } });
+    fireEvent.click(screen.getByLabelText("حساب نشط داخل الأكاديمية"));
+    fireEvent.click(screen.getByRole("button", { name: "حفظ المدرب" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("/api/v1/manage/coaches", "POST", expect.objectContaining({ phoneNumber: "+201012345678", isActive: false, groupIds: [] })));
   });
 });

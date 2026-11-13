@@ -9,6 +9,8 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/widgets/app_widgets.dart';
 import 'approved_login_layout.dart';
 
+enum _LoginAction { request, verify, resend }
+
 class LoginPage extends StatefulWidget {
   final AuthController auth;
   final String environment;
@@ -18,27 +20,50 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static final _otpPattern = RegExp(r'^[0-9]{6}$');
+  static final _phoneSeparators = RegExp(r'[\s()\-]');
+  static final _phonePattern = RegExp(r'^(?:(?:\+|00)?200?|0)1[0-9]{9}$');
+
   final phone = TextEditingController(), otp = TextEditingController();
+  final phoneFocus = FocusNode();
   final form = GlobalKey<FormState>();
-  String? challenge, error;
-  bool busy = false;
+  String? challenge, error, notice;
+  _LoginAction? pending;
+  bool get busy => pending != null;
   @override
   void dispose() {
     phone.dispose();
     otp.dispose();
+    phoneFocus.dispose();
     super.dispose();
   }
 
-  Future<void> submit() async {
-    if (busy || !form.currentState!.validate()) return;
+  Future<void> submit({bool resend = false}) async {
+    if (busy || (resend ? challenge == null : !form.currentState!.validate())) {
+      return;
+    }
+    final requesting = challenge == null || resend;
     setState(() {
-      busy = true;
+      pending = resend
+          ? _LoginAction.resend
+          : requesting
+          ? _LoginAction.request
+          : _LoginAction.verify;
       error = null;
+      notice = null;
     });
     try {
-      if (challenge == null) {
+      if (requesting) {
         final id = await widget.auth.requestOtp(phone.text.trim());
-        if (mounted) setState(() => challenge = id);
+        if (mounted) {
+          setState(() {
+            challenge = id;
+            if (resend) {
+              otp.clear();
+              notice = 'يمكنك إدخال الرمز الجديد.';
+            }
+          });
+        }
       } else {
         await widget.auth.verify(
           phone.text.trim(),
@@ -47,7 +72,15 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } on ApiFailure catch (failure) {
-      if (mounted) setState(() => error = failure.message);
+      if (mounted) {
+        setState(() {
+          error = failure.status != 401
+              ? failure.message
+              : requesting
+              ? 'تعذر إرسال الرمز. راجع رقم الهاتف المسجل لدى الأكاديمية.'
+              : 'الرمز غير صحيح أو انتهت صلاحيته. يمكنك طلب رمز جديد.';
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -55,14 +88,33 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) setState(() => pending = null);
     }
   }
 
+  void editPhone() {
+    setState(() {
+      challenge = null;
+      otp.clear();
+      error = null;
+      notice = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && challenge == null && !busy) phoneFocus.requestFocus();
+    });
+  }
+
   String get maskedPhone {
-    final value = phone.text.trim().replaceAll(RegExp(r'\s+'), '');
+    final value = phone.text.replaceAll(_phoneSeparators, '');
     if (value.length <= 6) return value;
     return '${value.substring(0, 3)} ••••• ${value.substring(value.length - 3)}';
+  }
+
+  String submitLabel(BuildContext context) {
+    if (challenge != null) return ui(context, 'تأكيد الدخول');
+    return Localizations.localeOf(context).languageCode == 'en'
+        ? 'Continue'
+        : 'متابعة';
   }
 
   Widget otpPreview(BuildContext context) {
@@ -114,12 +166,14 @@ class _LoginPageState extends State<LoginPage> {
     form: AutofillGroup(
       child: GuidedForm(
         key: form,
+        autovalidateMode: AutovalidateMode.onUserInteractionIfError,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (challenge == null)
               TextFormField(
                 controller: phone,
+                focusNode: phoneFocus,
                 enabled: !busy,
                 keyboardType: TextInputType.phone,
                 inputFormatters: const [ArabicNumberInputFormatter()],
@@ -130,51 +184,67 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: InputDecoration(
                   labelText: ui(context, 'رقم الهاتف'),
                   hintText: '01xxxxxxxxx',
+                  helperText: ui(
+                    context,
+                    'مصر (+20)',
+                  ).replaceFirst('+20', '\u2066+20\u2069'),
                   errorMaxLines: 3,
                 ),
+                onChanged: (_) {
+                  if (error != null) setState(() => error = null);
+                },
                 onFieldSubmitted: (_) => submit(),
-                validator: (value) => value == null || value.trim().length < 10
-                    ? ui(context, 'أدخل رقم الهاتف المصري.')
-                    : null,
+                validator: (value) {
+                  final number = (value ?? '').replaceAll(_phoneSeparators, '');
+                  return _phonePattern.hasMatch(number)
+                      ? null
+                      : ui(context, 'أدخل رقم الهاتف المصري.');
+                },
               )
             else ...[
               Stack(
                 children: [
-                  TextFormField(
-                    controller: otp,
-                    enabled: !busy,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: const [ArabicNumberInputFormatter()],
-                    textInputAction: TextInputAction.done,
-                    textDirection: TextDirection.ltr,
-                    maxLength: 6,
-                    cursorColor: Colors.transparent,
-                    autofillHints: const [AutofillHints.oneTimeCode],
-                    style: const TextStyle(
-                      fontSize: 19,
-                      color: Colors.transparent,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: ui(context, 'رمز التحقق'),
-                      labelStyle: const TextStyle(
+                  Semantics(
+                    label: ui(context, 'رمز التحقق'),
+                    child: TextFormField(
+                      key: ValueKey(challenge),
+                      controller: otp,
+                      enabled: !busy,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: const [ArabicNumberInputFormatter()],
+                      textInputAction: TextInputAction.done,
+                      textDirection: TextDirection.ltr,
+                      maxLength: 6,
+                      cursorColor: Colors.transparent,
+                      cursorErrorColor: Colors.transparent,
+                      autofillHints: const [AutofillHints.oneTimeCode],
+                      style: const TextStyle(
+                        fontSize: 19,
                         color: Colors.transparent,
-                        fontSize: 1,
                       ),
-                      floatingLabelBehavior: FloatingLabelBehavior.never,
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 20),
-                      counterText: '',
-                      errorMaxLines: 3,
+                      decoration: InputDecoration(
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        focusedErrorBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                        ),
+                        counterText: '',
+                        errorMaxLines: 3,
+                      ),
+                      onChanged: (_) => setState(() {
+                        error = null;
+                        notice = null;
+                      }),
+                      onFieldSubmitted: (_) => submit(),
+                      validator: (value) => _otpPattern.hasMatch(value ?? '')
+                          ? null
+                          : ui(context, 'أدخل رمز التحقق من ٦ أرقام.'),
                     ),
-                    onChanged: (_) => setState(() {}),
-                    onFieldSubmitted: (_) => submit(),
-                    validator: (value) => value?.trim().length == 6
-                        ? null
-                        : ui(context, 'أدخل رمز التحقق من ٦ أرقام.'),
                   ),
                   Positioned(
                     top: 0,
@@ -197,6 +267,14 @@ class _LoginPageState extends State<LoginPage> {
             ],
             if (error ?? widget.auth.error case final String message)
               ErrorNotice(message),
+            if (notice case final String message)
+              Semantics(
+                liveRegion: true,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: UiText(message),
+                ),
+              ),
             const SizedBox(height: 20),
             FilledButton(
               key: const ValueKey('login-submit'),
@@ -208,19 +286,24 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               onPressed: busy ? null : submit,
-              child: busy
-                  ? const SizedBox.square(
+              child: busy && pending != _LoginAction.resend
+                  ? SizedBox.square(
                       dimension: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        semanticsLabel: 'جارٍ التنفيذ',
+                        semanticsLabel: ui(
+                          context,
+                          pending == _LoginAction.verify
+                              ? 'جارٍ التحقق'
+                              : 'جارٍ طلب الرمز',
+                        ),
                       ),
                     )
                   : Row(
                       children: [
                         Expanded(
-                          child: UiText(
-                            challenge == null ? 'متابعة' : 'تأكيد الدخول',
+                          child: Text(
+                            submitLabel(context),
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -239,15 +322,23 @@ class _LoginPageState extends State<LoginPage> {
             ),
             if (challenge != null) ...[
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: busy
-                    ? null
-                    : () => setState(() {
-                        challenge = null;
-                        otp.clear();
-                        error = null;
-                      }),
-                child: const UiText('تغيير الرقم أو طلب رمز جديد'),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: busy ? null : () => submit(resend: true),
+                    child: UiText(
+                      pending == _LoginAction.resend
+                          ? 'جارٍ طلب الرمز'
+                          : 'طلب رمز جديد',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: busy ? null : editPhone,
+                    child: const UiText('تعديل الرقم'),
+                  ),
+                ],
               ),
             ],
           ],

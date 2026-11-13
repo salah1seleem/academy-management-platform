@@ -29,6 +29,112 @@ Json ledger(String type) => {
 };
 
 void main() {
+  testWidgets('collection detail and receipt show the same academy time', (
+    t,
+  ) async {
+    const utc = '2026-10-23T09:00:00Z';
+    const local = '2026-10-22T23:00:00-10:00';
+    final calls = <String>[];
+    final auth = await authenticate('AcademyOwner', (method, path, _, _) async {
+      calls.add('$method $path');
+      return {
+        'receiptNumber': 'REF-TEST',
+        'playerNameSnapshot': 'لاعب اصطناعي',
+        'amount': 450,
+        'currency': 'EGP',
+        'paidAtUtc': utc,
+        'paidAtAcademy': local,
+      };
+    });
+    await t.pumpWidget(
+      app(
+        FinancialCollectionDetail(
+          auth: auth,
+          row: {
+            ...ledger('Subscription'),
+            'confirmedAtUtc': utc,
+            'confirmedAtAcademy': local,
+          },
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    final date = find.text('تاريخ التأكيد بتوقيت الأكاديمية');
+    await t.scrollUntilVisible(date, 150);
+    final tile = t.widget<ListTile>(
+      find.ancestor(of: date, matching: find.byType(ListTile)),
+    );
+    final stamp = receiptTimestamp(t.element(date), utc, local)!;
+    expect(tile.subtitle, isNotNull);
+    expect(find.text(stamp.text), findsOneWidget);
+    expect(stamp.text, contains('٢٢'));
+    await t.scrollUntilVisible(find.text('عرض الإيصال'), 150);
+    await t.tap(find.text('عرض الإيصال').hitTestable());
+    await t.pumpAndSettle();
+    expect(find.textContaining(stamp.text), findsOneWidget);
+    expect(calls, ['GET /api/v1/subscriptions/receipts/original-receipt-id']);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
+  testWidgets(
+    'Historical collection detail and receipt agree on the paid day',
+    (t) async {
+      final calls = <String>[];
+      final auth = await authenticate('AcademyOwner', (
+        method,
+        path,
+        body,
+        token,
+      ) async {
+        expect(method, 'GET');
+        calls.add(path);
+        return {
+          'receiptNumber': 'HIST-600',
+          'playerNameSnapshot': 'لاعب اصطناعي',
+          'historicalPaidOn': '2026-09-01',
+          'historicalPeriod': {
+            'startDate': '2026-09-01',
+            'endDate': '2026-09-30',
+          },
+          'amount': 600,
+          'currency': 'EGP',
+          'paymentMethod': 'Cash',
+        };
+      });
+      await t.pumpWidget(
+        app(
+          FinancialCollectionDetail(
+            auth: auth,
+            row: {
+              ...ledger('Subscription'),
+              'receiptNumber': 'HIST-600',
+              'provider': 'HistoricalImport',
+              'providerReference': 'HIST-INTERNAL',
+              'historicalPaidOn': '2026-09-01',
+              'netAmount': 600,
+            },
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('تحصيل سابق'), findsOneWidget);
+      expect(t.widget<MoneyText>(find.byType(MoneyText)).value, 600);
+      await t.scrollUntilVisible(find.text('تاريخ القبض'), 150);
+      expect(find.text('١ سبتمبر ٢٠٢٦'), findsOneWidget);
+      expect(find.text('تاريخ التأكيد بالتوقيت العالمي'), findsNothing);
+      expect(find.text('HIST-INTERNAL'), findsNothing);
+      await t.scrollUntilVisible(find.text('عرض الإيصال'), 150);
+      await t.tap(find.text('عرض الإيصال').hitTestable());
+      await t.pumpAndSettle();
+      expect(calls, ['/api/v1/subscriptions/receipts/original-receipt-id']);
+      expect(find.textContaining('فترة الاشتراك من'), findsOneWidget);
+      expect(find.textContaining('تاريخ القبض'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
   for (final kind in ['Refund', 'Void']) {
     testWidgets(
       '$kind preserves negative ledger net and original receipt without displaying zero as payout',
@@ -51,11 +157,19 @@ void main() {
             'discountAmount': 100,
             'amount': 900,
             'currency': 'EGP',
+            'paidAtUtc': '2026-10-21T15:00:00Z',
           };
         });
         await t.pumpWidget(
           app(
-            FinancialCollectionDetail(auth: auth, row: ledger(kind)),
+            FinancialCollectionDetail(
+              auth: auth,
+              row: {
+                ...ledger(kind),
+                if (kind == 'Void')
+                  'confirmedAtAcademy': '2026-10-22T23:45:00+02:00',
+              },
+            ),
             scale: kind == 'Void' ? 2 : 1,
           ),
         );
@@ -67,7 +181,10 @@ void main() {
         );
         expect(find.textContaining('قيمة المبلغ المردود: 1'), findsOneWidget);
         expect(find.text('المبلغ'), findsNothing);
-        await t.scrollUntilVisible(find.text('2026-10-22'), 200);
+        await t.scrollUntilVisible(
+          find.text('تاريخ الصرف بالتوقيت العالمي'),
+          200,
+        );
         expect(find.text('تاريخ الصرف بالتوقيت العالمي'), findsOneWidget);
         await t.scrollUntilVisible(find.text('عرض إيصال التحصيل الأصلي'), 200);
         await t.pumpAndSettle();
@@ -104,7 +221,10 @@ void main() {
         await t.pumpAndSettle();
         expect(t.widget<MoneyText>(find.byType(MoneyText)).value, 450);
         await t.scrollUntilVisible(find.text('الخدمة المحفوظة'), 200);
-        await t.scrollUntilVisible(find.text('2026-10-22'), 200);
+        await t.scrollUntilVisible(
+          find.text('تاريخ التأكيد بالتوقيت العالمي'),
+          200,
+        );
         if (type == 'Product' || type == 'External') {
           final action = type == 'Product'
               ? 'عرض طلب المنتج'

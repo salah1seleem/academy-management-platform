@@ -70,7 +70,7 @@ void main() {
     },
   );
   testWidgets(
-    'actual nearest Coach session does not wait for evaluation-options data',
+    'Coach home groups and next session do not wait for evaluation options',
     (t) async {
       final pending = Completer<Object?>();
       final auth = await coach(
@@ -82,17 +82,16 @@ void main() {
         app(CoachHome(auth: auth, accountPage: const SizedBox())),
       );
       await t.pumpAndSettle();
-      expect(find.byType(CoachSessionCard), findsWidgets);
-      expect(find.text('اللاعبون في مجموعاتي'), findsNothing);
+      expect(find.byType(CoachGroupCard), findsWidgets);
+      expect(find.text('تسجيلات اللاعبين'), findsOneWidget);
       expect(pending.isCompleted, false);
-      pending.complete(homeResponse('/api/v1/evaluations/options'));
-      await t.pumpAndSettle();
       await t.scrollUntilVisible(
-        find.text('اللاعبون في مجموعاتي'),
+        find.byType(CoachSessionCard),
         180,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('اللاعبون في مجموعاتي'), findsOneWidget);
+      expect(find.byType(CoachSessionCard), findsOneWidget);
+      expect(pending.isCompleted, false);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();

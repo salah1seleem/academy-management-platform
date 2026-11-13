@@ -14,11 +14,11 @@ class CollectionTargetPage extends StatefulWidget {
     this.to,
     this.branchId,
     this.branchName,
-    this.initialAmount,
+    this.usesMonthlyDefault = false,
   });
   final AuthController auth;
   final String? from, to, branchId, branchName;
-  final Object? initialAmount;
+  final bool usesMonthlyDefault;
   @override
   State<CollectionTargetPage> createState() => _CollectionTargetPageState();
 }
@@ -44,16 +44,7 @@ class _CollectionTargetPageState
           .toList();
   @override
   void applySettings(Json value, {bool initial = false}) {
-    final matches = targets(value);
-    final stored = widget.from == null
-        ? obj(value['settings'])['monthlyCollectionTarget']
-        : matches.length == 1
-        ? matches.single['amount']
-        : null;
-    amount.text =
-        (initial && widget.from != null ? widget.initialAmount : stored)
-            ?.toString() ??
-        '';
+    amount.text = storedTarget(value)?.toString() ?? '';
   }
 
   @override
@@ -64,25 +55,63 @@ class _CollectionTargetPageState
     super.dispose();
   }
 
-  Future<void> save() async {
+  Object? storedTarget(Json value) {
+    if (widget.from == null) {
+      return obj(value['settings'])['monthlyCollectionTarget'];
+    }
+    final matches = targets(value);
+    return matches.length == 1 ? matches.single['amount'] : null;
+  }
+
+  Future<void> saveAmount() async {
     final text = amount.text.trim();
-    final value = text.isEmpty ? null : num.tryParse(text);
-    if (text.isNotEmpty &&
-        (value == null ||
-            value <= 0 ||
-            value > 1000000000 ||
-            !storedAmountMatches(text, value))) {
+    final value = num.tryParse(text);
+    if (value == null ||
+        value <= 0 ||
+        value > 1000000000 ||
+        !storedAmountMatches(text, value)) {
       setState(
-        () => error = 'أدخل هدفًا موجبًا بدقتين عشريتين أو اتركه فارغًا.',
+        () =>
+            error = 'أدخل مبلغًا موجبًا حتى مليار، بمنزلتين عشريتين كحد أقصى.',
       );
       return;
     }
+    await save(value);
+  }
+
+  Future<void> removeTarget(Object stored, bool hasMonthlyDefault) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const UiText('إزالة الهدف؟'),
+        content: UiText(
+          'سيُزال الهدف البالغ ${money(stored, academyCurrency)}.'
+          '${hasMonthlyDefault ? ' سيعود عرض الهدف الشهري الافتراضي.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const UiText('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const UiText('تأكيد إزالة الهدف'),
+          ),
+        ],
+      ),
+    );
+    if (current && confirmed == true) await save(null);
+  }
+
+  Future<void> save(num? value) async {
+    final revision = active?['revision'];
+    if (revision == null || locked) return;
     await saveSettings(
       OwnerSettingsWrite(
         path: '/api/v1/manage/configuration/collection-target',
         body: {
           'amount': value,
-          'expectedRevision': active!['revision'],
+          'expectedRevision': revision,
           if (widget.from != null) 'from': widget.from,
           if (widget.to != null) 'to': widget.to,
           if (widget.branchId?.isNotEmpty == true) 'branchId': widget.branchId,
@@ -100,37 +129,61 @@ class _CollectionTargetPageState
               : matches.length == 1 &&
                     storedAmountMatches(matches.single['amount'], value);
         },
-        failure: 'لم يتطابق هدف الفترة المقروء مع الفرع والفترة والقيمة المرسلة. أعد التحقق.',
-        success: 'تم حفظ هدف التحصيل.',
+        failure: 'لم يتطابق هدف الفترة المقروء مع التغيير المطلوب.',
+        success: value == null ? 'تمت إزالة الهدف.' : 'تم حفظ هدف التحصيل.',
       ),
     );
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) => page(widget.from == null ? 'هدف التحصيل الشهري' : 'ضبط هدف التحصيل', [
-    if (active != null) ...[
-      UiText(
-        widget.from == null
-            ? 'هدف لشهر الأكاديمية الحالي ولكل الفروع.'
-            : '${widget.branchName ?? 'كل الفروع'} · ${widget.from} — ${widget.to}',
-      ),
-      const SizedBox(height: 20),
-      field(
-        'الهدف (${academyCurrency ?? '—'})',
-        amount,
-        required: false,
-        keyboard: const TextInputType.numberWithOptions(decimal: true),
-        readOnly: locked,
-      ),
-      FilledButton(
-        onPressed: locked ? null : save,
-        child: UiText(
-          widget.from == null ? 'حفظ الهدف وعرض الشهر الحالي' : 'حفظ الهدف',
+  Widget build(BuildContext context) {
+    final settings = active == null ? null : obj(active!['settings']);
+    final stored = active == null ? null : storedTarget(active!);
+    final monthly = widget.usesMonthlyDefault && settings != null
+        ? settings['monthlyCollectionTarget']
+        : null;
+    final format = MaterialLocalizations.of(context).formatShortDate;
+    final from = DateTime.tryParse(widget.from ?? '');
+    final to = DateTime.tryParse(widget.to ?? '');
+    final range = from == null || to == null
+        ? 'الفترة المحددة'
+        : from == to
+        ? format(to)
+        : 'من ${format(from)} إلى ${format(to)}';
+    return page(widget.from == null ? 'هدف التحصيل الشهري' : 'ضبط هدف التحصيل', [
+      if (active != null) ...[
+        UiText(
+          widget.from == null
+              ? 'هدف لشهر الأكاديمية الحالي ولكل الفروع.'
+              : '${widget.branchName ?? 'كل الفروع'} · $range',
         ),
-      ),
-    ],
-    ...recovery,
-  ]);
+        const SizedBox(height: 16),
+        field(
+          'الهدف (${academyCurrency == 'EGP' ? 'ج.م' : academyCurrency ?? '—'})',
+          amount,
+          required: false,
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
+          readOnly: locked,
+          changed: () => setState(() => error = null),
+        ),
+        if (monthly != null)
+          UiText('الهدف الشهري الافتراضي ${money(monthly, academyCurrency)}'),
+        if (pending == null && !settingsChanged)
+          FilledButton(
+            onPressed: locked || amount.text.trim().isEmpty ? null : saveAmount,
+            child: UiText(
+              widget.from == null ? 'حفظ الهدف وعرض الشهر الحالي' : 'حفظ الهدف',
+            ),
+          ),
+        if (!locked && stored != null)
+          OutlinedButton(
+            onPressed: () => removeTarget(stored, monthly != null),
+            child: UiText(
+              widget.from == null ? 'إزالة الهدف الشهري' : 'إزالة هدف الفترة',
+            ),
+          ),
+      ],
+      ...recovery,
+    ], onRetry: () => loadSettings());
+  }
 }

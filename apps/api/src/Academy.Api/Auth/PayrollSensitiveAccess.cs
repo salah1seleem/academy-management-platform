@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Academy.Api.Finance;
 using Academy.Infrastructure.Persistence;
 using Academy.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +12,13 @@ public static class PayrollSensitiveAccess
 {
     public static readonly string[] Permissions = [AcademyPermissions.PayrollAdditionReview, AcademyPermissions.PayrollPay, AcademyPermissions.CoachAgreementManage,AcademyPermissions.SalaryManage,AcademyPermissions.PayrollStatementApprove,AcademyPermissions.PayrollAdvanceManage];
     public static bool Contains(string permission) => Permissions.Contains(permission);
+
+    internal static string RecoveryScope(HttpContext http, TenantMembership tenant, string purpose)
+        => StatementComparisonRules.Hash(new { purpose, tenant.AcademyId, tenant.MembershipId, actor = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!) });
+
+    internal static bool ScopeMatches(HttpContext http, string scope)
+        => !http.Request.Headers.TryGetValue("X-Payroll-Scope", out var expected)
+            || expected.Count == 1 && string.Equals(expected[0], scope, StringComparison.Ordinal);
 
     public static async Task<bool> Allowed(FoundationDbContext db, TenantMembership tenant, string permission)
     {

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StatementImport } from "./statement-import";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("from=2026-11-03&to=2026-11-04&page=2") }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 const options = { branches: [{ id: "branch", name: "فرع العرض" }], providers: ["InternalTest"] };
@@ -29,13 +30,18 @@ describe("statement CSV import", () => {
     render(<StatementImport />); await fill(); expect(screen.getByRole("link", { name: "تنزيل قالب CSV" })).toHaveAttribute("href", "/api/v1/finance/settlement-comparisons/import/template");
     fireEvent.click(screen.getByRole("button", { name: "معاينة الكشف" })); await screen.findByText("لا يوجد تحصيل مطابق للمرجع"); expect(screen.getByLabelText("ملف الكشف CSV")).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "حفظ نتائج الكشف كاملة" })); await screen.findByText("النتيجة غير مؤكدة، أعد المحاولة."); expect(screen.queryByRole("button", { name: "تعديل الكشف" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "إعادة تأكيد الحفظ بنفس الكشف" })); await screen.findByText("تم حفظ مقارنة الكشف"); expect(writes).toHaveLength(2); expect(writes[0]).toBe(writes[1]); expect(screen.getAllByRole("link", { name: "عرض المقارنة" })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "إعادة تأكيد الحفظ بنفس الكشف" }));
+    await screen.findByText("تم التحقق من حفظ أسطر الكشف (2).");
+    expect(writes).toHaveLength(2); expect(writes[0]).toBe(writes[1]);
+    const links = screen.getAllByRole("link", { name: "عرض المقارنة" });
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/dashboard/finance/settlement-comparisons/saved-0?from=2026-11-03&to=2026-11-04&page=2");
   });
   it("invalid or oversized files clear old content and cannot be submitted", async () => {
     global.fetch = vi.fn(async () => response(options)); render(<StatementImport />); await fill();
     for (const file of [{ name: "demo.xlsx", size: 1 }, { name: "demo.csv", size: 131073 }]) {
       fireEvent.change(screen.getByLabelText("ملف الكشف CSV"), { target: { files: [file] } });
-      await screen.findByText("اختر ملف CSV بترميز UTF-8 لا يتجاوز 128 KiB."); expect(screen.getByRole("button", { name: "معاينة الكشف" })).toBeDisabled(); expect(screen.queryByText("الملف المختار: demo.csv")).not.toBeInTheDocument();
+      await screen.findByText("اختر ملف CSV بترميز UTF-8 لا يتجاوز 128 كيلوبايت."); expect(screen.getByRole("button", { name: "معاينة الكشف" })).toBeDisabled(); expect(screen.queryByText("الملف المختار: demo.csv")).not.toBeInTheDocument();
     }
   });
   it("replaces a preview only after explicit editing and surfaces row errors without saving", async () => {
@@ -50,5 +56,28 @@ describe("statement CSV import", () => {
     fireEvent.change(screen.getByLabelText("ملف الكشف CSV"), { target: { files: [{ name: "old.csv", size: 1, arrayBuffer: () => new Promise<ArrayBuffer>(resolve => { finish = resolve; }) }] } });
     fireEvent.change(screen.getByLabelText("ملف الكشف CSV"), { target: { files: [{ name: "wrong.xlsx", size: 1 }] } }); finish(new TextEncoder().encode(csv).buffer);
     await waitFor(() => expect(screen.getByRole("button", { name: "معاينة الكشف" })).toBeDisabled()); expect(screen.queryByText("الملف المختار: old.csv")).not.toBeInTheDocument();
+  });
+  it.each([409, 403])("recovers an explicit save response of %s", async status => {
+    global.fetch = vi.fn(async path => {
+      const url = String(path);
+      if (url.endsWith("/options")) return response(options);
+      if (url.endsWith("/csrf")) return response({ token: "csrf" });
+      if (url.endsWith("/preview")) return response(preview);
+      return response({ title: "رفض تجريبي للحفظ." }, status);
+    });
+    render(<StatementImport />);
+    await fill();
+    fireEvent.click(screen.getByRole("button", { name: "معاينة الكشف" }));
+    fireEvent.click(await screen.findByRole("button", { name: "حفظ نتائج الكشف كاملة" }));
+    await screen.findByText("رفض تجريبي للحفظ.");
+    expect(screen.queryByRole("button", { name: "إعادة تأكيد الحفظ بنفس الكشف" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "معاينة كشف التسوية" })).not.toBeInTheDocument();
+    if (status === 409) {
+      expect(screen.getByLabelText("ملف الكشف CSV")).toBeEnabled();
+      expect(screen.getByText("الملف المختار: demo.csv")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "معاينة الكشف" })).toBeEnabled();
+    } else {
+      expect(screen.queryByLabelText("ملف الكشف CSV")).not.toBeInTheDocument();
+    }
   });
 });

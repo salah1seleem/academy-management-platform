@@ -18,6 +18,19 @@ it("shows only the server inbox with month defaults and clear removes all filter
   await waitFor(() => expect(requests.at(-1)).toContain("allDates=true&state="));
   expect(screen.queryByRole("button", { name: "إنشاء متابعة" })).not.toBeInTheDocument();
 });
+it("keeps the home inbox period when opening an older task and returning", async () => {
+  const fetcher = vi.fn(async (path: string) => Response.json(path.includes("/task")
+    ? { item, history: [], canEdit: false }
+    : { from: null, to: null, items: [item] }));
+  global.fetch = fetcher as typeof fetch;
+  const list = render(<AssignedFollowUps initialAllDates />);
+  expect(await screen.findByRole("link", { name: "فتح المتابعة" })).toHaveAttribute("href", "/dashboard/my-followups/task?allDates=true");
+  expect(fetcher.mock.calls.map(([path]) => path)).toContain("/api/v1/my-followups?allDates=true&state=Open");
+  expect(screen.getByLabelText("من تاريخ")).toHaveValue("");
+  list.unmount();
+  render(<AssignedFollowUps id="task" initialAllDates />);
+  expect(await screen.findByRole("link", { name: "العودة لمتابعاتي" })).toHaveAttribute("href", "/dashboard/my-followups?allDates=true");
+});
 it("posts only the delegated fields and version then shows saved history without an assignee selector", async () => {
   let saved = false; let body: Record<string, unknown> | undefined;
   global.fetch = vi.fn(async (path, options) => {
@@ -37,6 +50,11 @@ it("removes stale task data and actions when authorization is revoked on focus",
   global.fetch = vi.fn().mockResolvedValueOnce(Response.json({ item, canEdit: true, canOpenSource: true, history: [] })).mockResolvedValue(Response.json({}, { status: 404 }));
   render(<AssignedFollowUps id="task"/>); await screen.findByRole("link", { name: "فتح المجموعة نفسها" }); fireEvent(window, new Event("focus"));
   expect(await screen.findByRole("alert")).toHaveTextContent("غير متاحة"); expect(screen.queryByText("مجموعة العرض")).not.toBeInTheDocument(); expect(screen.queryByRole("button", { name: "حفظ تحديث المتابعة" })).not.toBeInTheDocument();
+});
+it("renders an Arabic retry message for a transport failure", async () => {
+  global.fetch = vi.fn(async () => { throw new TypeError("Failed to fetch"); }) as typeof fetch;
+  render(<AssignedFollowUps id="task" />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("تعذر تحميل المتابعات. أعد المحاولة.");
 });
 it("the existing matrix permits read/edit for own tasks but not create/delete", () => {
   render(<StaffActionMatrix actions={[{ module: "followups", read: false, edit: false, add: false, delete: false }]} onChange={vi.fn()}/>);

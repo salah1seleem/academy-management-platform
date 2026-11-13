@@ -98,7 +98,7 @@ void main() {
       await tester.pumpAndSettle();
       await scrollTo(find.byType(DailyNutritionCard));
       await capture('daily-preview');
-      await tester.tap(find.text('متابعة الغذاء اليومي لطفلك'));
+      await tester.tap(find.text('اقتراحات من مكتبة التغذية'));
       await waitFor(find.text('التغذية والصحة'));
       await waitFor(find.text('اقتراحات اليوم'));
       await capture('daily-details');

@@ -82,7 +82,7 @@ void main() {
         ) async {
           expect(m, 'GET');
           calls.add(p);
-            if (p.endsWith('/guardian-one')) {
+          if (p.endsWith('/guardian-one')) {
             return {
               'displayName': 'ولي أمر عرض اصطناعي',
               'contactPhone': '01099900001',
@@ -90,7 +90,7 @@ void main() {
                 {'arabicName': 'طفل مرتبط اصطناعي', 'playerCode': 'PL01'},
               ],
             };
-            }
+          }
           return {
             'items': [
               {
@@ -145,7 +145,7 @@ void main() {
   }
 
   testWidgets(
-    'paid new enrollment shows the saved discount and proof without a payment action',
+    'paid new enrollment opens only the receipt associated with that request',
     (t) async {
       phone(t);
       final calls = <String>[];
@@ -157,14 +157,24 @@ void main() {
       ) async {
         expect(m, 'GET');
         calls.add(p);
+        if (p.endsWith('/receipts/receipt-one')) {
+          return {
+            'receiptNumber': 'RC-TEST-ONE',
+            'amount': 900,
+            'currency': 'EGP',
+            'paidAtUtc': '2026-11-12T09:00:00Z',
+            'paymentMethod': 'Online',
+          };
+        }
         return {
           'originalAmount': 1000,
           'discountAmount': 100,
           'discountReason': 'خصم أخوة محفوظ',
           'amount': 900,
           'currency': 'EGP',
-          'status': 'Paid',
-          'proofUrl': '/private-proof',
+          'status': 'Approved',
+          'paymentRequestId': 'payment-one',
+          'receiptId': 'receipt-one',
         };
       });
       await t.pumpWidget(
@@ -172,15 +182,65 @@ void main() {
       );
       await t.pumpAndSettle();
       expect(find.text('خصم أخوة محفوظ'), findsOneWidget);
-      expect(find.text('تم رفع إثبات دفع لهذا الطلب.'), findsOneWidget);
+      expect(find.text('المبلغ المحصّل'), findsOneWidget);
       expect(find.byType(TransferPayment), findsNothing);
+      await t.tap(find.text('عرض الإيصال'));
+      await t.pumpAndSettle();
+      expect(find.text('RC-TEST-ONE'), findsOneWidget);
       expect(calls, [
         '/api/v1/guardian/enrollment-requests/request-one/payment',
+        '/api/v1/guardian/subscriptions/receipts/receipt-one',
       ]);
       await auth.logout();
       await t.pumpAndSettle();
       expect(find.text('خصم أخوة محفوظ'), findsNothing);
       expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+
+  testWidgets(
+    'saved enrollment proof exposes replacement and skips transfer instructions',
+    (t) async {
+      final calls = <String>[];
+      final auth = await fixture.authenticate('Guardian', (
+        m,
+        p,
+        b,
+        token,
+      ) async {
+        calls.add('$m $p');
+        return {
+          'status': 'UnderReview',
+          'amount': 720,
+          'currency': 'EGP',
+          'proofUrl': '/api/v1/assets/10000000-0000-0000-0000-000000000001',
+        };
+      });
+      await t.pumpWidget(
+        fixture.app(EnrollmentPaymentPage(auth: auth, id: 'request-one')),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('المبلغ المطلوب'), findsOneWidget);
+      expect(
+        find.text('وصل إثبات الدفع. انتظر المراجعة قبل إرسال مبلغ آخر.'),
+        findsOneWidget,
+      );
+      expect(
+        t.widget<TransferPayment>(find.byType(TransferPayment)).replacement,
+        true,
+      );
+      expect(find.text('التحويل للأكاديمية'), findsNothing);
+      await t.tap(find.text('تحديث الحالة'));
+      await t.pumpAndSettle();
+      expect(
+        calls,
+        List.filled(
+          2,
+          'GET /api/v1/guardian/enrollment-requests/request-one/payment',
+        ),
+      );
       await t.pumpWidget(const SizedBox());
       auth.dispose();
     },

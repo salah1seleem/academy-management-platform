@@ -8,7 +8,13 @@ import 'v2_role_workspaces_test.dart' show authenticate, app;
 
 void main() {
   for (final action in PlayerPlacementAction.values) {
-    for (final fault in ['success', 'source', 'details', 'lostRead']) {
+    for (final fault in [
+      'success',
+      'source',
+      'details',
+      'lostRead',
+      'lostWrite',
+    ]) {
       testWidgets(
         'placement ${action.name} confirms its exact source and retries acknowledged reads only: $fault',
         (t) async {
@@ -62,6 +68,9 @@ void main() {
             }
             if (m == 'POST') {
               posts++;
+              if (fault == 'lostWrite') {
+                throw const ApiFailure(503, 'تعذر تأكيد الحفظ.');
+              }
               return {'id': 'saved'};
             }
             if (posts == 0) throw StateError('Unexpected initial read $p');
@@ -157,17 +166,47 @@ void main() {
           if (action == PlayerPlacementAction.sessions) {
             await flow.tap(t, 'إضافة إلى الحصص المختارة');
           }
-          await flow.tap(t, 'معاينة الأثر والتعارضات');
-          await flow.tap(t, 'راجعت الأثر والحصص وأؤكد اعتماد الإجراء.');
-          await flow.tap(t, 'تأكيد الإجراء');
-          const success = 'حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.';
+          final groupTransfer = action == PlayerPlacementAction.group;
+          final sessionTransfer = action == PlayerPlacementAction.sessions;
+          final transfer = groupTransfer || sessionTransfer;
+          final booking = action == PlayerPlacementAction.booking;
+          await flow.tap(
+            t,
+            groupTransfer
+                ? 'معاينة نقل المجموعة'
+                : sessionTransfer
+                ? 'معاينة نقل الحصص'
+                : booking
+                ? 'معاينة حجز التعويض'
+                : 'معاينة استحقاق التعويض',
+          );
+          await flow.tap(
+            t,
+            groupTransfer
+                ? 'تأكيد نقل المجموعة'
+                : sessionTransfer
+                ? 'تأكيد نقل الحصص'
+                : booking
+                ? 'تأكيد حجز التعويض'
+                : 'تأكيد استحقاق التعويض',
+          );
+          final success = groupTransfer
+              ? 'تم تسجيل نقل المجموعة'
+              : sessionTransfer
+              ? 'تم تسجيل نقل الحصص المختارة.'
+              : booking
+              ? 'تم حجز الحصة التعويضية.'
+              : 'تم اعتماد التعويض.';
           if (fault != 'success') {
-            expect(find.text(success), findsNothing);
+            expect(find.textContaining(success), findsNothing);
             expect(posts, 1);
             recovered = true;
-            await flow.tap(t, 'إعادة تأكيد الإجراء نفسه');
+            await flow.tap(
+              t,
+              transfer ? 'تحقّق من سجل النقل' : 'تحقّق من سجل التعويض',
+            );
           }
-          expect(find.text(success), findsOneWidget);
+          expect(find.textContaining(success), findsOneWidget);
           expect(
             posts,
             1,

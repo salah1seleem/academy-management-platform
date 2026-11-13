@@ -44,6 +44,8 @@ public sealed partial class CashRegisterService
         return payment;
     }
 
+    internal Task<bool> CanUsePendingCashCollection(TenantMembership tenant) => CollectionPermissions(tenant, false);
+
     public async Task<object> PendingPaymentOptions(Guid id)
     {
         var (t, _) = await Context(write: true); await CollectionPermissions(t, true);

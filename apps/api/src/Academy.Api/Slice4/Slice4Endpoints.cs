@@ -219,8 +219,16 @@ public static class Slice4Endpoints
         });
         var context = await corrections.Context(id);
         var canEvaluate = (await authorization.AuthorizeAsync(principal, AcademyPermissions.EvaluationManage)).Succeeded && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/evaluations","POST",default));
+        string? criteriaState = null;
+        if (canEvaluate)
+        {
+            var criteria = await db.EvaluationCriteria.AsNoTracking()
+                .Where(item => item.AcademyId == t.AcademyId && item.SportId == session.SportId)
+                .Select(item => item.IsActive).ToListAsync();
+            criteriaState = criteria.Contains(true) ? "Ready" : criteria.Count == 0 ? "Missing" : "Inactive";
+        }
         var display = (await SessionPresentationReadModel.Read(db, t.AcademyId, [id]))[id];
-        return Results.Ok(new { canManageAttendance=context.CanManageAttendance && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/attendance/sessions/check/players","PUT",default)), canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName, display.TrainingFormat, display.TrainingFormatSource, display.IsSubstitute }, players = rows });
+        return Results.Ok(new { canManageAttendance=context.CanManageAttendance && (t.Role != AcademyRole.Coach || await StaffWorkflowAccess.CoachAllows(db,t.MembershipId,"/api/v1/attendance/sessions/check/players","PUT",default)), canRequestCorrection=context.CanRequestCorrection, isPast=context.IsPast, context.DraftLease, context.DraftScope, context.DraftExpiresAtUtc, canEvaluate, lastSynchronizedAtUtc = clock.GetUtcNow(), session = new { session.Id, session.SessionDate, session.StartTime, session.EndTime, session.SportId, criteriaState, status = session.Status.ToString(), group = session.TrainingGroup.ArabicName, sport = session.Sport.ArabicName, branch = session.Branch.ArabicName, display.TrainingFormat, display.TrainingFormatSource, display.IsSubstitute }, players = rows });
     }
 
     private static async Task<IResult> SavePlayerAttendance(Guid id, PlayerAttendanceBatch request, CurrentTenant tenant, ClaimsPrincipal principal, FoundationDbContext db, AttendanceService service, AttendanceDraftGuard drafts)

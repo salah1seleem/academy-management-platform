@@ -1,0 +1,28 @@
+.detailHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.detailHeading h2 { margin-block: 0; }
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: 1rem;
+  margin-block: 1rem 0;
+}
+
+.details dt { color: var(--staff-text-secondary, var(--muted)); }
+
+.details dd {
+  margin: .25rem 0 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.fieldError {
+  color: var(--staff-danger, var(--danger));
+  margin: 0;
+}

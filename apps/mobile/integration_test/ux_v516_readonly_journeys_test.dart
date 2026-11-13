@@ -75,6 +75,7 @@ class _ReadOnlyLive extends HttpApiTransport {
     Map<String, String> fields,
     String token, {
     String? idempotencyKey,
+    String? validRowsFromHash,
   }) async => deny('workbook');
 }
 
@@ -120,7 +121,7 @@ void main() {
       for (final sample in [
         ('AcademyOwner', '01000204010', 'owner', 'اشتراكات الأكاديمية'),
         ('Guardian', '01000003130', 'guardian', 'يوسف خالد'),
-        ('Coach', '01000003131', 'coach', 'ملعبك اليوم'),
+        ('Coach', '01000003131', 'coach', 'تدريباتي'),
         ('AcademyAdmin', '01084720301', 'admin', 'يوم الأكاديمية'),
       ]) {
         if (roleFilter.isNotEmpty && roleFilter != sample.$1) continue;

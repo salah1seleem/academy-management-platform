@@ -136,6 +136,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("import", context => RateLimitPartition.GetFixedWindowLimiter(
         $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 6, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("import-correction", context => RateLimitPartition.GetFixedWindowLimiter(
+        $"{context.User.FindFirstValue(ClaimTypes.NameIdentifier)}:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 4, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
@@ -229,6 +232,16 @@ builder.Services.AddScoped<Academy.Api.Importing.ImportCommitService>();
 builder.Services.AddScoped<Academy.Api.Importing.ImportRequestContext>();
 if (builder.Configuration.GetValue("Notifications:WorkerEnabled", builder.Environment.IsProduction())) builder.Services.AddHostedService<Academy.Api.Operations.NotificationSchedule>();
 builder.Services.AddHttpClient();
+builder.Services.AddOptions<MobileOtpOptions>().Bind(builder.Configuration.GetSection("MobileOtp"))
+    .Validate(options => options.IsValid(), "Mobile OTP requires a Verify service, an API key, and one Egyptian test number.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient(TwilioMobileOtp.ClientName, client =>
+{
+    client.BaseAddress = new Uri("https://verify.twilio.com/");
+    client.Timeout = TimeSpan.FromSeconds(8);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<TwilioMobileOtp>();
 builder.Services.AddScoped<Academy.Api.Operations.MobilePushProvider>();
 builder.Services.AddHostedService<Academy.Api.Operations.MobilePushWorker>();
 if (builder.Configuration.GetValue("Imports:WorkerEnabled", true)) builder.Services.AddHostedService<Academy.Api.Importing.ImportWorker>();
@@ -295,17 +308,24 @@ api.MapPost("/auth/login", async (LoginRequest request, UserManager<ApplicationU
     return Results.Ok(new { authenticated = true, requiresContextSelection });
 }).AddEndpointFilter<CsrfFilter>();
 
-api.MapPost("/auth/guardian/otp/request", async (GuardianOtpRequest request, FoundationDbContext db,
-    IOptions<DemoOptions> options, IHostEnvironment environment, TimeProvider clock) =>
+api.MapGet("/auth/guardian/otp/availability", (IOptions<DemoOptions> options, IHostEnvironment environment, HttpContext context) =>
 {
+    context.Response.Headers.CacheControl = "no-store";
+    return Results.Ok(new { enabled = environment.IsEnvironment("Demo") && options.Value.FixedOtpEnabled });
+});
+
+api.MapPost("/auth/guardian/otp/request", async (GuardianOtpRequest request, FoundationDbContext db,
+    IOptions<DemoOptions> options, IHostEnvironment environment, TimeProvider clock, HttpContext context) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true) return Program.ActiveSessionConflict();
+    if (!environment.IsEnvironment("Demo") || !options.Value.FixedOtpEnabled)
+        return Results.Problem(statusCode: 501, title: "دخول ولي الأمر عبر الويب غير متاح.");
     var phone = EgyptPhoneNormalizer.Normalize(request.PhoneNumber);
     if (phone is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["phoneNumber"] = ["رقم الهاتف غير صالح."] });
-    DemoSeed.ValidateEnvironment(environment, options.Value);
-    if (!environment.IsEnvironment("Demo") || !options.Value.FixedOtpEnabled)
-        return Results.Problem(statusCode: 501, title: "خدمة OTP الإنتاجية غير منفذة بعد");
+    var now = clock.GetUtcNow();
     var challenge = new GuardianOtpChallenge
     {
-        Id = Guid.NewGuid(), PhoneNumberNormalized = phone, CreatedAtUtc = clock.GetUtcNow(), ExpiresAtUtc = clock.GetUtcNow().AddMinutes(5)
+        Id = Guid.NewGuid(), PhoneNumberNormalized = phone, CreatedAtUtc = now, ExpiresAtUtc = now.AddMinutes(5)
     };
     db.GuardianOtpChallenges.Add(challenge);
     await db.SaveChangesAsync();
@@ -317,23 +337,24 @@ api.MapPost("/auth/guardian/otp/verify", async (GuardianOtpVerifyRequest request
     IHostEnvironment environment, TimeProvider clock, HttpContext context) =>
 {
     if (context.User.Identity?.IsAuthenticated == true) return Program.ActiveSessionConflict();
-    DemoSeed.ValidateEnvironment(environment, options.Value);
     if (!environment.IsEnvironment("Demo") || !options.Value.FixedOtpEnabled)
-        return Results.Problem(statusCode: 501, title: "خدمة OTP الإنتاجية غير منفذة بعد");
+        return Results.Problem(statusCode: 501, title: "دخول ولي الأمر عبر الويب غير متاح.");
+    static IResult InvalidCode() => Results.Problem(statusCode: 401, title: "تعذر التحقق", detail: "رمز التحقق غير صحيح أو منتهي.");
     var phone = EgyptPhoneNormalizer.Normalize(request.PhoneNumber);
-    var challenge = await db.GuardianOtpChallenges.SingleOrDefaultAsync(x => x.Id == request.ChallengeId);
-    if (phone is null || challenge is null || challenge.PhoneNumberNormalized != phone || challenge.ConsumedAtUtc is not null || challenge.FailedAttempts >= 5 ||
-        challenge.ExpiresAtUtc <= clock.GetUtcNow() || request.Code != options.Value.FixedOtp)
+    if (phone is null) return InvalidCode();
+    var now = clock.GetUtcNow();
+    var challenge = db.GuardianOtpChallenges.Where(x => x.Id == request.ChallengeId && x.PhoneNumberNormalized == phone &&
+        x.ConsumedAtUtc == null && x.FailedAttempts < 5 && x.ExpiresAtUtc > now);
+    if (request.Code != options.Value.FixedOtp)
     {
-        if (challenge is not null) { challenge.FailedAttempts++; await db.SaveChangesAsync(); }
-        return Results.Problem(statusCode: 401, title: "تعذر التحقق", detail: "رمز التحقق غير صحيح أو منتهي.");
+        await challenge.ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedAttempts, x => x.FailedAttempts + 1));
+        return InvalidCode();
     }
     var user = await users.Users.SingleOrDefaultAsync(x => x.PhoneNumber == phone && x.IsActive);
     var membership = user is null ? null : await db.AcademyMemberships.AsNoTracking()
         .FirstOrDefaultAsync(x => x.UserId == user.Id && x.IsActive && x.Role == AcademyRole.Guardian && x.Academy.IsActive);
-    if (user is null || membership is null) return Results.Problem(statusCode: 401, title: "تعذر التحقق", detail: "رمز التحقق غير صحيح أو منتهي.");
-    challenge.ConsumedAtUtc = clock.GetUtcNow();
-    await db.SaveChangesAsync();
+    if (user is null || membership is null) return InvalidCode();
+    if (await challenge.ExecuteUpdateAsync(set => set.SetProperty(x => x.ConsumedAtUtc, now)) != 1) return InvalidCode();
     await Program.SignInAsync(context, user, membership.AcademyId, membership.Id);
     return Results.Ok(new { authenticated = true });
 }).AddEndpointFilter<CsrfFilter>();
@@ -487,6 +508,7 @@ Academy.Api.Slice8.SubscriptionHomeEndpoints.MapSubscriptionHome(app);
 app.MapMonthlyPlayerStars();
 app.MapPageHelp();
 app.MapOwnerFollowUps();
+app.MapDecisionCenter();
 app.MapCoachTasks();
 app.MapHelp();
 app.MapHelpVideos();

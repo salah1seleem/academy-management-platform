@@ -64,6 +64,47 @@ Future<void> reach(WidgetTester tester, Finder f) async {
 }
 
 void main() {
+  testWidgets('Refreshing admin home reads the latest clock-in policy', (
+    tester,
+  ) async {
+    var enabled = true;
+    var reads = 0;
+    final auth = await authenticate('AcademyAdmin', (
+      method,
+      path,
+      body,
+      token,
+    ) async {
+      if (path.endsWith('/passkeys/attendance')) {
+        reads++;
+        return {
+          'branches': [
+            {'enabled': enabled},
+          ],
+          'hasOpenAttendance': false,
+        };
+      }
+      if (path.endsWith('/my-access')) return <String, dynamic>{};
+      if (path.endsWith('/my-match-access')) return {'canRead': false};
+      return [];
+    });
+    await tester.pumpWidget(shell(AdminHome(auth: auth)));
+    await tester.pumpAndSettle();
+    final action = find.text('حضور وانصراف');
+    expect(action, findsOneWidget);
+
+    enabled = false;
+    await tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator).first)
+        .onRefresh();
+    await tester.pumpAndSettle();
+    expect(reads, 2);
+    expect(action, findsNothing);
+    expect(find.text('يوم الأكاديمية'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    auth.dispose();
+  });
+
   testWidgets(
     'Decision return refresh survives token rotation in the same context',
     (tester) async {
@@ -106,6 +147,7 @@ void main() {
         if (p.endsWith('/my-permissions')) return ['attendance.read'];
         if (p.endsWith('/news')) return [];
         if (p.endsWith('/my-access')) return <String, dynamic>{};
+        if (p.endsWith('/my-match-access')) return {'canRead': false};
         if (p.endsWith('/passkeys/attendance')) {
           return {'branches': [], 'hasOpenAttendance': false};
         }
@@ -129,6 +171,7 @@ void main() {
       final allowed = {
         '/api/v1/my-permissions',
         '/api/v1/my-access',
+        '/api/v1/my-match-access',
         '/api/v1/attendance/sessions',
         '/api/v1/staff/passkeys/attendance',
         '/api/v1/news',

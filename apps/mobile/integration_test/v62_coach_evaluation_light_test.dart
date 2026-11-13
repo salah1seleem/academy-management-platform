@@ -4,7 +4,6 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/storage/refresh_store.dart';
 import 'package:academy_mobile/core/theme/appearance.dart';
 import 'package:academy_mobile/core/theme/ui_text.dart';
-import 'package:academy_mobile/core/widgets/app_widgets.dart';
 import 'package:academy_mobile/features/coach/coach_evaluation.dart';
 import 'package:academy_mobile/features/coach/coach_home.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
@@ -98,7 +97,7 @@ void main() {
       }
 
       Future<void> openDraft() async {
-        final row = find.byKey(ValueKey('evaluation-draft-${draft['id']}'));
+        final row = find.byKey(ValueKey('evaluation-history-${draft['id']}'));
         await wait(row);
         await locate(row);
         await t.tap(row);
@@ -118,7 +117,7 @@ void main() {
       await t.pumpWidget(
         AcademyApp(auth: auth, environment: 'Demo', appearance: appearance),
       );
-      await wait(find.text('المجموعات المسندة'));
+      await wait(find.text('تدريباتي'));
       await t.tap(
         find.descendant(
           of: find.byType(NavigationBar),
@@ -130,18 +129,15 @@ void main() {
       await wait(find.byType(CoachGroup));
       final name = find.text(textOf(enrollment['player']));
       await locate(name);
-      final card = find
-          .ancestor(of: name, matching: find.byType(AppCard))
-          .first;
-      final evaluate = find.descendant(
+      final card = find.ancestor(of: name, matching: find.byType(Card)).first;
+      final playerDetails = find.descendant(
         of: card,
-        matching: find.text('تقييم اللاعب'),
+        matching: find.textContaining(RegExp(r'^(تفاصيل اللاعب|عرض الملف)$')),
       );
-      await t.ensureVisible(evaluate);
-      await t.tap(evaluate);
-      await wait(find.byType(CoachEvaluation));
-      await tapText('مسودات اللاعب');
-      await wait(find.byType(NativeEvaluationDrafts));
+      await t.ensureVisible(playerDetails);
+      await t.tap(playerDetails);
+      await tapText('تقييمات اللاعب');
+      await wait(find.byType(CoachPlayerEvaluations));
       await openDraft();
       expect(
         Theme.of(t.element(find.byType(CoachEvaluation))).brightness,
@@ -201,7 +197,9 @@ void main() {
       );
       await t.tap(find.byType(BackButton));
       await t.pumpAndSettle();
-      await wait(find.byType(NativeEvaluationDrafts));
+      await t.tap(find.text('خروج دون حفظ'));
+      await t.pumpAndSettle();
+      await wait(find.byType(CoachPlayerEvaluations));
       await openDraft();
       await locate(first);
       expect(t.widget<Slider>(first).value, 50);

@@ -1,3 +1,4 @@
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/shared/player_badges.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -127,7 +128,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byType(DropdownButtonFormField<String>), findsNothing);
       expect(find.text('تأكيد سحب الشارة'), findsNothing);
-      expect(find.text('شارة مسحوبة — مستبعدة من الملخص'), findsOneWidget);
+      expect(find.text('شارة مسحوبة'), findsOneWidget);
       t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await t.pumpAndSettle();
       expect(find.text('روح التعاون'), findsNothing);
@@ -187,7 +188,7 @@ void main() {
       expect(writes[0], writes[1]);
       expect(writes.singleOrNull, null);
       expect(writes[0], containsPair('note', null));
-      expect(find.textContaining('تم حفظ الشارة'), findsNothing);
+      expect(find.textContaining('سُحبت الشارة'), findsNothing);
     },
   );
   for (final width in [360.0, 390.0, 430.0]) {
@@ -230,4 +231,87 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'opening from a report reads its enrollment, with an explicit route to all sports',
+    (t) async {
+      final requests = <String>[];
+      final auth = await f.owner((method, path, body, token) async {
+        requests.add(path);
+        return {
+          'enrollments': [
+            {
+              ...journey(),
+              'items': [badge()],
+            },
+            {
+              ...journey(),
+              'enrollment': {
+                'id': 'other',
+                'player': 'لاعب اختبار',
+                'sport': 'السباحة',
+              },
+              'items': <Object?>[],
+            },
+          ],
+          'hasMore': false,
+        };
+      });
+      await t.pumpWidget(
+        f.shell(
+          PlayerBadgesPage(auth: auth, playerId: 'child', enrollmentId: 'e'),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(
+        requests.single,
+        '/api/v1/guardian/children/child/badges?enrollmentId=e',
+      );
+      expect(find.text('لاعب اختبار · كرة القدم'), findsOneWidget);
+      expect(find.text('لاعب اختبار · السباحة'), findsNothing);
+      await t.tap(find.text('عرض شارات كل الرياضات'));
+      await t.pumpAndSettle();
+      expect(requests.last, '/api/v1/guardian/children/child/badges');
+      await t.scrollUntilVisible(
+        find.text('لاعب اختبار · السباحة'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('لاعب اختبار · السباحة'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a withdrawn enrollment link can recover to the authorized sports list',
+    (t) async {
+      final requests = <String>[];
+      final auth = await f.owner((method, path, body, token) async {
+        requests.add(path);
+        if (Uri.parse(path).queryParameters.containsKey('enrollmentId')) {
+          throw const ApiFailure(404, 'سجل هذا التسجيل الرياضي غير متاح.');
+        }
+        return {
+          'enrollments': [journey()],
+          'hasMore': false,
+        };
+      });
+      await t.pumpWidget(
+        f.shell(
+          PlayerBadgesPage(auth: auth, playerId: 'child', enrollmentId: 'old'),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('سجل هذا التسجيل الرياضي غير متاح.'), findsOneWidget);
+      final allSports = find.text('عرض شارات كل الرياضات');
+      expect(allSports.hitTestable(), findsOneWidget);
+      await t.tap(allSports);
+      await t.pumpAndSettle();
+      expect(requests, [
+        '/api/v1/guardian/children/child/badges?enrollmentId=old',
+        '/api/v1/guardian/children/child/badges',
+      ]);
+      expect(find.text('لاعب اختبار · كرة القدم'), findsOneWidget);
+      expect(find.text('سجل هذا التسجيل الرياضي غير متاح.'), findsNothing);
+    },
+  );
 }

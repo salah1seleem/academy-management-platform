@@ -4,6 +4,7 @@ using System.Text.Json;
 using Academy.Api.Auth;
 using Academy.Api.Finance;
 using Academy.Api.Operations;
+using Academy.Api.Slice8;
 using Academy.Api.Slice4;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.People;
@@ -87,12 +88,8 @@ public sealed class FamilyRequestService(FoundationDbContext db, CurrentTenant t
     }
     private async Task<object> View(FamilyRenewalRequest r, bool staff)
     {
-        var canReview = false;
-        if (staff && (await authorization.AuthorizeAsync(accessor.HttpContext!.User, AcademyPermissions.SubscriptionRenewManage)).Succeeded)
-        {
-            var t = (await tenant.ResolveAsync())!;
-            canReview = t.Role == AcademyRole.AcademyOwner || !await db.AcademyMemberships.AnyAsync(m => m.Id == t.MembershipId && m.UseActionGrants) || await db.StaffActionGrants.AnyAsync(g => g.MembershipId == t.MembershipId && g.IsActive && g.Module == "payments" && g.Read && g.Edit);
-        }
+        var canReview = staff && r.Status == FamilyRenewalStatus.Pending &&
+            await CanReview((await tenant.ResolveAsync())!, db, accessor.HttpContext!, authorization, r.Id);
         var day = await AttendanceCalendar.TodayAsync(r.AcademyId, db, realClock);
         var ids = r.Lines.Select(l => l.SportEnrollmentId).ToArray();
         var assigned = await db.SportEnrollments.Where(e => ids.Contains(e.Id)).Select(e => new { e.Id, group = FoundationDbContext.AssignedGroupAt(e.AcademyId, e.Id, day) }).ToDictionaryAsync(e => e.Id, e => e.group);
@@ -104,6 +101,11 @@ public sealed class FamilyRequestService(FoundationDbContext db, CurrentTenant t
             items = r.Lines.OrderBy(l => l.Id).Select(l => new { l.Id, l.SportEnrollmentId, player = l.SportEnrollment.Player.ArabicName, sport = l.SportEnrollment.Sport.ArabicName, branch = l.SportEnrollment.Branch.ArabicName, plan = JsonSerializer.Deserialize<PlanTerms>(l.PlanTermsJson)!.Name, originalAmount = Money(l.OriginalAmount), discountAmount = Money(l.DiscountAmount),discountReason=JsonSerializer.Deserialize<RenewalFinancialSnapshot>(l.FinancialSnapshotJson)?.DiscountReason, finalAmount = Money(l.FinalAmount), l.Currency, groupId = assigned[l.SportEnrollmentId], receiptId = l.ResultPaymentId.HasValue && receipts.TryGetValue(l.ResultPaymentId.Value, out var receipt) ? (Guid?)receipt : null,
                 groups = groups.Where(g => g.BranchId == l.BranchId && g.SportId == l.SportEnrollment.SportId && g.RegistrationFormat == l.SportEnrollment.RegistrationFormat && g.AgeCategory.MinimumBirthYear <= l.SportEnrollment.Player.DateOfBirth.Year && g.AgeCategory.MaximumBirthYear >= l.SportEnrollment.Player.DateOfBirth.Year).Select(g => new { g.Id, name = g.ArabicName }).ToArray() }).ToArray() };
     }
+    internal static Task<bool> CanReview(TenantMembership tenant, FoundationDbContext db, HttpContext http,
+        IAuthorizationService authorization, Guid id) =>
+        SubscriptionAdjustmentEndpoints.AllowsPeriodAction(tenant, db, http.User, authorization,
+            AcademyPermissions.SubscriptionRenewManage, $"/api/v1/manage/family-renewals/{id}/review", "POST", http);
+
     public async Task<object> Create(FamilyRequestWrite body)
     {
         var (t, user) = await Context(false);

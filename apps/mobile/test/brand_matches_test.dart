@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/academy_brand.dart';
 import 'package:academy_mobile/features/guardian/daily_nutrition.dart';
+import 'package:academy_mobile/features/guardian/guardian_payments.dart'
+    show receiptDateLabel;
 import 'package:academy_mobile/features/guardian/tournament_fees.dart';
 import 'package:academy_mobile/features/shared/matches.dart';
+import 'package:academy_mobile/features/shared/transfer_payment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +51,54 @@ void main() {
       auth.dispose();
     },
   );
+  for (final status in ['Pending', 'Rejected']) {
+    testWidgets('Tournament proof uses replacement controls for $status', (
+      tester,
+    ) async {
+      final reads = <String>[];
+      final auth = await logged((m, p, b, t) async {
+        reads.add(p);
+        return {
+          'id': 'payment',
+          'tournamentName': 'بطولة اصطناعية',
+          'player': 'لاعب اصطناعي',
+          'amount': 250,
+          'currency': 'EGP',
+          'status': status,
+          'proofUrl': '/api/v1/assets/10000000-0000-0000-0000-000000000001',
+          if (status == 'Rejected') 'reviewReason': 'الصورة غير واضحة.',
+        };
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          supportedLocales: const [Locale('ar')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: TournamentCheckout(auth: auth, id: 'payment'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TransferPayment>(find.byType(TransferPayment))
+            .replacement,
+        true,
+      );
+      expect(reads, ['/api/v1/guardian/tournament-payments/payment']);
+      expect(find.text('التحويل للأكاديمية'), findsNothing);
+      expect(find.text('إيصال رسم البطولة'), findsNothing);
+      expect(
+        find.text(
+          status == 'Pending'
+              ? 'وصل إثبات الدفع. انتظر المراجعة قبل إرسال مبلغ آخر.'
+              : 'الصورة غير واضحة.',
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    });
+  }
   testWidgets(
     'Daily Home preview is small and keeps detailed suggestions in the library',
     (tester) async {
@@ -73,7 +124,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('متابعة الغذاء اليومي لطفلك'), findsOneWidget);
+      expect(find.text('اقتراحات من مكتبة التغذية'), findsOneWidget);
       expect(find.text('قبل التدريب · موز'), findsNothing);
       expect(
         tester.getSize(find.byType(DailyNutritionCard)).height,
@@ -170,7 +221,15 @@ void main() {
       expect(submitted, {'enrollmentId': 'e', 'tournamentId': 't'});
       expect(api.keys.whereType<String>().single, isNotEmpty);
       expect(find.text('TRN-TEST-ONLY'), findsOneWidget);
-      expect(find.text('تم تأكيد التحصيل'), findsOneWidget);
+      expect(find.text('إيصال رسم البطولة'), findsOneWidget);
+      expect(find.text('المبلغ المحصّل'), findsOneWidget);
+      expect(find.text('رفع إيصال الدفع'), findsNothing);
+      final checkout = tester.element(find.byType(TournamentCheckout));
+      expect(
+        find.text(receiptDateLabel(checkout, '2026-09-28T12:00:00Z')!),
+        findsOneWidget,
+      );
+      expect(find.text('2026-09-28'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       auth.dispose();

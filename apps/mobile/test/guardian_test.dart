@@ -148,6 +148,10 @@ void main() {
           return {'paymentId': 'payment'};
         }
         return {
+          'id': 'payment',
+          'amount': 100,
+          'provider': 'InternalTest',
+          'simulationAvailable': true,
           'player': 'طفل',
           'sport': 'كرة القدم',
           'plan': 'شهري',
@@ -243,20 +247,8 @@ void main() {
         expect(find.byKey(const ValueKey('child-أ')), findsOneWidget);
         await tester.drag(find.byType(PageView), const Offset(310, 0));
         await tester.pumpAndSettle();
-        await expandChildDetails(tester);
         expect(find.byKey(const ValueKey('child-ب')), findsOneWidget);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('child-workspace-ب')),
-          160,
-          scrollable: find
-              .descendant(
-                of: find.byKey(const ValueKey('guardian-home-scroll')),
-                matching: find.byType(Scrollable),
-              )
-              .first,
-        );
-        expect(find.byKey(const ValueKey('child-workspace-أ')), findsNothing);
-        expect(find.byKey(const ValueKey('child-workspace-ب')), findsOneWidget);
+        expect(find.byKey(const ValueKey('child-home-details')), findsNothing);
         final rail = find.byKey(
           ValueKey(
             'guardian-home-actions-${auth.session!.selected!.academyId}:${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}',
@@ -435,17 +427,22 @@ void main() {
   );
   testWidgets('Demo payment is hidden in Production', (tester) async {
     final auth = await logged(
-      (m, p, b, t) async => {
-        'player': 'طفل',
-        'sport': 'كرة القدم',
-        'plan': 'شهري',
-        'status': 'Pending',
-        'isCurrent': true,
-        'originalAmount': 100,
-        'discountAmount': 10,
-        'finalAmount': 90,
-        'currency': 'EGP',
-      },
+      (m, p, b, t) async => p.endsWith('/payment-settings')
+          ? {'configured': false}
+          : {
+              'id': 'payment',
+              'amount': 90,
+              'provider': 'Manual',
+              'player': 'طفل',
+              'sport': 'كرة القدم',
+              'plan': 'شهري',
+              'status': 'Pending',
+              'isCurrent': true,
+              'originalAmount': 100,
+              'discountAmount': 10,
+              'finalAmount': 90,
+              'currency': 'EGP',
+            },
     );
     await tester.pumpWidget(
       shell(CheckoutPage(auth: auth, environment: 'Production', id: 'payment')),

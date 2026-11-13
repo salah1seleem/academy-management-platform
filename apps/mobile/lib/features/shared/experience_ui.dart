@@ -200,12 +200,14 @@ class ScopeDateTiles extends StatelessWidget {
     required this.to,
     required this.onChanged,
     this.onClear,
+    this.clearLabel = 'مسح الفلاتر',
     this.compact = false,
   });
   final bool compact;
   final String from, to;
   final void Function(String, String) onChanged;
   final VoidCallback? onClear;
+  final String clearLabel;
   Future<void> choose(BuildContext context, bool start) async {
     final date = DateTime.tryParse(start ? from : to) ?? DateTime.now();
     final chosen = await showDatePicker(
@@ -289,7 +291,7 @@ class ScopeDateTiles extends StatelessWidget {
               SizedBox(
                 width: 30,
                 child: IconButton(
-                  tooltip: 'مسح الفلاتر',
+                  tooltip: clearLabel,
                   padding: EdgeInsets.zero,
                   onPressed: onClear,
                   icon: const Icon(Icons.filter_alt_off_outlined, size: 17),
@@ -367,7 +369,7 @@ class ScopeDateTiles extends StatelessWidget {
             ],
             if (onClear != null)
               IconButton(
-                tooltip: 'مسح الفلاتر',
+                tooltip: clearLabel,
                 onPressed: onClear,
                 icon: const Icon(Icons.filter_alt_off_outlined, size: 20),
               ),

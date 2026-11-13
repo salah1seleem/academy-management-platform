@@ -138,9 +138,7 @@ void main() {
         );
         await wait(find.text('طلب مراجعة فنية للمستوى'));
         await t.tap(find.text('طلب مراجعة فنية للمستوى'));
-        await wait(
-          find.text('تم حفظ المراجعة؛ لم يتغير مستوى اللاعب أو مجموعته.'),
-        );
+        await wait(find.text('تم إرسال طلب المراجعة.'));
         final requests = obj(await owner.request('GET', path)),
             rid = textOf(obj(rows(requests['items']).first['request'])['id']);
         expect(
@@ -185,10 +183,10 @@ void main() {
           180,
           scrollable: find.byType(Scrollable).first,
         );
+        await t.ensureVisible(find.text('حفظ القرار ونشر الملخص'));
+        await t.pumpAndSettle();
         await t.tap(find.text('حفظ القرار ونشر الملخص'));
-        await wait(
-          find.text('تم حفظ المراجعة؛ لم يتغير مستوى اللاعب أو مجموعته.'),
-        );
+        await wait(find.text('تم حفظ القرار ونشره لولي الأمر المرتبط.'));
         final saved = obj(
           await owner.request(
             'GET',

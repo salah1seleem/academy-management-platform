@@ -13,8 +13,14 @@ namespace Academy.Api.Finance;
 public sealed record CashRegisterWrite(Guid BranchId, string Name);
 public sealed record CashierWrite(Guid MembershipId, bool Enabled);
 public sealed record CashOpenWrite([property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal OpeningAmount);
-public sealed record CashCloseWrite([property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal CountedAmount, string? Reason);
-public sealed record CashTransferWrite(Guid FromSessionId, Guid ToSessionId, [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal Amount, string? Reason);
+public sealed record CashCloseWrite(
+    [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal CountedAmount,
+    string? Reason,
+    [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal? ExpectedAmount = null);
+public sealed record CashTransferWrite(Guid FromSessionId, Guid ToSessionId,
+    [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal Amount, string? Reason,
+    [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal? ExpectedSourceBalance = null,
+    [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal? ExpectedTargetBalance = null);
 public sealed class CashRejected(string message, int status = 409) : Exception(message) { public int Status { get; } = status; }
 
 public static class CashRegisterEndpoints
@@ -185,19 +191,40 @@ public sealed partial class CashRegisterService(FoundationDbContext db, CurrentT
         // Disabling cash/branch or revoking a cashier must not strand money: the
         // scoped Owner can still reconcile and close. Admin must retain its grant.
         if(t.Role!=AcademyRole.AcademyOwner){await Cashier(register,t);if(session.OpenedByMembershipId!=t.MembershipId)throw new CashRejected("يمكنك إقفال ورديتك فقط.",403);}
-        var hash=AcademyConfigurationService.Hash($"{id}:{Money(body.CountedAmount)}:{Reason(body.Reason)}");
+        if (body.ExpectedAmount is decimal expected && expected != decimal.Round(expected, 2))
+            throw new CashRejected("راجع الرصيد الدفتري بخانتين عشريتين.",422);
+        var closeIdentity=$"{id}:{Money(body.CountedAmount)}:{Reason(body.Reason)}";
+        var hash=AcademyConfigurationService.Hash(body.ExpectedAmount is decimal reviewed ? $"{Money(reviewed)}:{closeIdentity}" : closeIdentity);
         if(session.ClosedAtUtc.HasValue){if(session.CloseKey!=request)throw new CashRejected("الوردية مقفلة ولا تعدل.");Same(session.CloseHash!,hash);return new{session.Id,replay=true};}
-        session.ExpectedAmount=await Balance(session);session.CountedAmount=body.CountedAmount;session.ClosingReason=Reason(body.Reason);session.ClosedAtUtc=time.GetUtcNow();session.ClosedByUserId=user;session.CloseKey=request;session.CloseHash=hash;session.UpdatedAtUtc=time.GetUtcNow();
+        var balance=await Balance(session);
+        if(body.ExpectedAmount.HasValue&&body.ExpectedAmount.Value!=balance)
+            throw new CashRejected("تغيّر الرصيد الدفتري. راجع الرصيد المحدّث قبل إقفال الوردية.");
+        session.ExpectedAmount=balance;session.CountedAmount=body.CountedAmount;session.ClosingReason=Reason(body.Reason);session.ClosedAtUtc=time.GetUtcNow();session.ClosedByUserId=user;session.CloseKey=request;session.CloseHash=hash;session.UpdatedAtUtc=time.GetUtcNow();
         await db.SaveChangesAsync();await tx.CommitAsync();return new{session.Id,expected=Money(session.ExpectedAmount.Value),counted=Money(body.CountedAmount),variance=Money(body.CountedAmount-session.ExpectedAmount.Value)};
     }
     public async Task<object> Transfer(CashTransferWrite body,string key)
     {
         var (t,user)=await Context(owner:true);Amount(body.Amount,false);ReasonLimit(body.Reason);if(body.FromSessionId==body.ToSessionId)throw new CashRejected("اختر ورديتين مختلفتين.",422);
+        var sourceExpected = body.ExpectedSourceBalance;
+        var targetExpected = body.ExpectedTargetBalance;
+        if (sourceExpected.HasValue != targetExpected.HasValue ||
+            (sourceExpected is decimal expectedSource && decimal.Round(expectedSource, 2) != expectedSource) ||
+            (targetExpected is decimal expectedTarget && decimal.Round(expectedTarget, 2) != expectedTarget))
+            throw new CashRejected("راجع الرصيد الدفتري للصندوقين.", 422);
         await using var tx=await db.Database.BeginTransactionAsync();var request=await Request(t.AcademyId,user,"transfer",key);
-        var hash=AcademyConfigurationService.Hash($"{body.FromSessionId}:{body.ToSessionId}:{Money(body.Amount)}:{Reason(body.Reason)}");var prior=await db.CashTransfers.SingleOrDefaultAsync(x=>x.RequestKey==request);if(prior is not null){Same(prior.RequestHash,hash);return new{prior.Id,replay=true};}
+        var payload = $"{body.FromSessionId}:{body.ToSessionId}:{Money(body.Amount)}:{Reason(body.Reason)}";
+        var hash = AcademyConfigurationService.Hash(sourceExpected is decimal source && targetExpected is decimal target
+            ? System.Text.Json.JsonSerializer.Serialize(new[] { payload, Money(source), Money(target) })
+            : payload);
+        var prior=await db.CashTransfers.SingleOrDefaultAsync(x=>x.RequestKey==request);if(prior is not null){Same(prior.RequestHash,hash);return new{prior.Id,replay=true};}
         foreach(var id in new[]{body.FromSessionId,body.ToSessionId}.Order())await Lock(t.AcademyId,$"session:{id}");
         var from=await Session(body.FromSessionId);var to=await Session(body.ToSessionId);var a=await Register(from.RegisterId);var b=await Register(to.RegisterId);await Enabled(t.AcademyId);await Usable(a);await Usable(b);
-        if(from.ClosedAtUtc.HasValue||to.ClosedAtUtc.HasValue)throw new CashRejected("التحويل بين ورديتين مفتوحتين فقط.");if(a.Currency!=b.Currency)throw new CashRejected("لا تحول بين عملتين مختلفتين.");if(await Balance(from)<body.Amount)throw new CashRejected("رصيد الصندوق المصدر لا يكفي.");
+        if(from.ClosedAtUtc.HasValue||to.ClosedAtUtc.HasValue)throw new CashRejected("التحويل بين ورديتين مفتوحتين فقط.");
+        if(a.Currency!=b.Currency)throw new CashRejected("لا تحول بين عملتين مختلفتين.");
+        var sourceBalance = await Balance(from);
+        if (sourceExpected.HasValue && (sourceBalance != sourceExpected || await Balance(to) != targetExpected))
+            throw new CashRejected("تغيّر الرصيد الدفتري. راجع أرصدة الصندوقين قبل تأكيد التحويل.");
+        if (sourceBalance < body.Amount) throw new CashRejected("رصيد الصندوق المصدر لا يكفي.");
         var now=time.GetUtcNow();var row=new CashTransfer{Id=Guid.NewGuid(),AcademyId=t.AcademyId,FromSessionId=from.Id,ToSessionId=to.Id,BranchId=from.BranchId,ToBranchId=to.BranchId,Amount=body.Amount,Currency=a.Currency,ActorUserId=user,Reason=Reason(body.Reason),RequestKey=request,RequestHash=hash,CreatedAtUtc=now,UpdatedAtUtc=now};db.CashTransfers.Add(row);
         foreach(var (s,amount,kind) in new[]{(from,-body.Amount,CashMovementKind.TransferOut),(to,body.Amount,CashMovementKind.TransferIn)})db.CashMovements.Add(new(){Id=Guid.NewGuid(),AcademyId=t.AcademyId,SessionId=s.Id,BranchId=s.BranchId,TransferId=row.Id,Kind=kind,Amount=amount,Currency=a.Currency,ActorUserId=user,CreatedAtUtc=now,UpdatedAtUtc=now});
         await db.SaveChangesAsync();await tx.CommitAsync();return new{row.Id};

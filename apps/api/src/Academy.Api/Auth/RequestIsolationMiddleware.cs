@@ -26,6 +26,7 @@ public sealed class RequestIsolationMiddleware(RequestDelegate next)
                 var actionGrants=t.Role==AcademyRole.AcademyAdmin&&await db.AcademyMemberships.Where(x=>x.Id==t.MembershipId).Select(x=>x.UseActionGrants).SingleAsync(context.RequestAborted);
                 db.BindRequestScope(t.AcademyId, Guid.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!), t.MembershipId, branches, sports,
                     StaffAccessRules.ForPath(path), StaffAccessRules.Operation(context.Request.Method, path), t.AdditionalContext, workflowRequirements:actionGrants?StaffWorkflowAccess.Requirements(path,context.Request.Method):[]);
+                context.Features.Set(t);
                 if ((sports is not null || t.AdditionalContext) && !MembershipScope.AllowsNarrowSportPath(path, context.Request.Method))
                 {
                     context.Response.StatusCode = 403;

@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Academy.Api.Auth;
 using Academy.Api.Slice3;
+using Academy.Api.Slice8;
 using Academy.Infrastructure.Operations;
 using Academy.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Operations;
@@ -56,12 +58,41 @@ public static class TournamentPayments
         var row = new TournamentPayment { Id = Guid.NewGuid(), AcademyId = t.AcademyId, EnrollmentId = body.EnrollmentId, TournamentId = body.TournamentId, RequestedByUserId = actor, TournamentName = tournament.Name, Amount = tournament.Fee, Currency = tournament.Currency, IdempotencyKey = key, CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow };
         db.TournamentPayments.Add(row); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Created($"/api/v1/guardian/tournament-payments/{row.Id}", new { row.Id });
     }
-    private static Task<IResult> GuardianDetails(Guid id, CurrentTenant t, ClaimsPrincipal user, FoundationDbContext db) => Details(id, t, db, Actor(user));
-    private static Task<IResult> StaffDetails(Guid id, CurrentTenant t, FoundationDbContext db) => Details(id, t, db, null);
-    private static async Task<IResult> Details(Guid id, CurrentTenant tenant, FoundationDbContext db, Guid? actor)
+    internal static IQueryable<TournamentPayment> GuardianPayments(FoundationDbContext db, Guid academyId, Guid userId) =>
+        db.TournamentPayments.Where(payment => payment.AcademyId == academyId && payment.RequestedByUserId == userId &&
+            db.SportEnrollments.Any(e => e.AcademyId == academyId && e.Id == payment.EnrollmentId &&
+                db.GuardianPlayerLinks.Any(link => link.AcademyId == academyId && link.PlayerId == e.PlayerId &&
+                    link.IsActive && link.Guardian.IsActive && link.Guardian.UserId == userId)));
+
+    private static async Task<IResult> GuardianDetails(Guid id, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, HttpResponse response)
     {
         var t = (await tenant.ResolveAsync())!;
-        var row = await db.TournamentPayments.Where(x => x.AcademyId == t.AcademyId && x.Id == id && (!actor.HasValue || x.RequestedByUserId == actor && db.SportEnrollments.Any(e => e.AcademyId == t.AcademyId && e.Id == x.EnrollmentId && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == e.PlayerId && l.IsActive && l.Guardian.IsActive && l.Guardian.UserId == actor)))).Select(x => new { x.Id, x.TournamentName, x.Amount, x.Currency, x.Status, x.ReceiptNumber, x.ConfirmedAtUtc, x.ReviewReason, proofUrl = x.ProofAssetId == null ? null : "/api/v1/assets/" + x.ProofAssetId, player = db.SportEnrollments.Where(e => e.AcademyId == t.AcademyId && e.Id == x.EnrollmentId).Select(e => e.Player.ArabicName).Single() }).SingleOrDefaultAsync();
+        return await Details(id, t.AcademyId, db, GuardianPayments(db, t.AcademyId, Actor(user)), false, true, response);
+    }
+
+    private static async Task<IResult> StaffDetails(Guid id, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db,
+        IAuthorizationService authorization, HttpResponse response)
+    {
+        var t = (await tenant.ResolveAsync())!;
+        var canReview = await SubscriptionAdjustmentEndpoints.AllowsPeriodAction(t, db, user, authorization,
+            AcademyPermissions.SubscriptionRenewManage, $"/api/v1/manage/tournament-payments/{id}/review", "POST");
+        var canReadProof = (await authorization.AuthorizeAsync(user, AcademyPermissions.PaymentRead)).Succeeded;
+        return await Details(id, t.AcademyId, db, db.TournamentPayments.Where(x => x.AcademyId == t.AcademyId), canReview, canReadProof, response);
+    }
+
+    private static async Task<IResult> Details(Guid id, Guid academyId, FoundationDbContext db, IQueryable<TournamentPayment> query,
+        bool canReview, bool canReadProof, HttpResponse response)
+    {
+        response.Headers.CacheControl = "private, no-store";
+        var row = await query.AsNoTracking().Where(x => x.Id == id).Select(x => new
+        {
+            x.Id, x.TournamentName, x.Amount, x.Currency, x.Status, x.ReceiptNumber, x.ConfirmedAtUtc, x.PaymentMethod, x.ReviewReason,
+            canReview = canReview && (canReadProof || x.ProofAssetId == null),
+            hasProof = x.ProofAssetId != null,
+            proofAssetId = canReadProof ? x.ProofAssetId : null,
+            proofUrl = !canReadProof || x.ProofAssetId == null ? null : "/api/v1/assets/" + x.ProofAssetId,
+            player = db.SportEnrollments.Where(e => e.AcademyId == academyId && e.Id == x.EnrollmentId).Select(e => e.Player.ArabicName).Single()
+        }).SingleOrDefaultAsync();
         return row == null ? Results.NotFound() : Results.Ok(row);
     }
     private static async Task<IResult> Proof(Guid id, ProofWrite body, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock)
@@ -70,23 +101,36 @@ public static class TournamentPayments
         var row = await db.TournamentPayments.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id && x.RequestedByUserId == actor);
         if (row == null || !await db.PrivateAssets.AnyAsync(x => x.AcademyId == t.AcademyId && x.Id == body.AssetId && x.Purpose == "Proof" && x.UploadedByUserId == actor)) return Results.NotFound();
         if (!await db.SportEnrollments.AnyAsync(e => e.AcademyId == t.AcademyId && e.Id == row.EnrollmentId && e.IsActive && e.Player.IsActive && db.GuardianPlayerLinks.Any(l => l.AcademyId == t.AcademyId && l.PlayerId == e.PlayerId && l.IsActive && l.Guardian.IsActive && l.Guardian.UserId == actor))) return Results.NotFound();
-        if (row.Status == "Confirmed") return Results.Conflict();
-        row.ProofAssetId = body.AssetId; row.Status = "Pending"; row.ReviewReason = null; row.UpdatedAtUtc = clock.UtcNow; await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { message = "وصل إثبات رسم البطولة للإدارة. لا يغير اشتراك التدريب." });
+        if (row.ProofAssetId == body.AssetId) return Results.Ok(new { row.Status, replay = true });
+        if (row.Status == "Confirmed") return Results.Conflict(new { message = "تم تحصيل الرسم بالفعل. حدّث الطلب لعرض الإيصال." });
+        row.ProofAssetId = body.AssetId; row.Status = "Pending"; row.ReviewReason = null; row.UpdatedAtUtc = clock.UtcNow;
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+        return Results.Ok(new { row.Status, message = "وصل إثبات رسم البطولة للإدارة." });
     }
     private static Task Lock(Guid academy, Guid id, FoundationDbContext db) => db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({$"tournament-review:{academy}:{id}"}, 0))");
-    private static async Task<IResult> Review(Guid id, TournamentReviewWrite body, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db, ISubscriptionClock clock)
+    private static async Task<IResult> Review(Guid id, TournamentReviewWrite body, CurrentTenant tenant, ClaimsPrincipal user, FoundationDbContext db,
+        ISubscriptionClock clock, IAuthorizationService authorization)
     {
-        var t = (await tenant.ResolveAsync())!; if (body.Reason?.Length > 500) return Results.UnprocessableEntity();
+        var t = (await tenant.ResolveAsync())!;
+        if (body.Reason?.Length > 500) return Results.UnprocessableEntity(new { message = "اكتب ملاحظة من 500 حرف أو أقل." });
+        var reason = string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim();
         await using var tx = await db.Database.BeginTransactionAsync(); await Lock(t.AcademyId, id, db);
         var row = await db.TournamentPayments.SingleOrDefaultAsync(x => x.AcademyId == t.AcademyId && x.Id == id); if (row == null) return Results.NotFound();
+        if (row.ProofAssetId.HasValue && !(await authorization.AuthorizeAsync(user, AcademyPermissions.PaymentRead)).Succeeded)
+            return Results.Forbid();
+        if (row.ProofAssetId != body.ExpectedProofAssetId)
+            return Results.Conflict(new { message = "تغيّر إثبات التحويل. حدّث الطلب وراجع الصورة الحالية." });
         var wanted = body.Accept ? "Confirmed" : "Rejected";
-        if (row.Status != "Pending") return row.Status == wanted ? Results.Ok(new { row.Id, row.ReceiptNumber, replay = true }) : Results.Conflict();
+        if (row.Status != "Pending")
+            return row.Status == wanted && (row.ReviewReason ?? "") == (reason ?? "")
+                ? Results.Ok(new { row.Id, row.ReceiptNumber, replay = true })
+                : Results.Conflict(new { message = "سُجّل قرار مختلف. راجع حالة الطلب الحالية." });
         if (body.Accept && (!row.ProofAssetId.HasValue || !await db.SportEnrollments.AnyAsync(e => e.AcademyId == t.AcademyId && e.Id == row.EnrollmentId && e.IsActive && e.Player.IsActive))) return Results.Conflict(new { message = "يلزم إثبات دفع وتسجيل لاعب قائم لقبول رسم البطولة." });
-        row.Status = wanted; row.ReviewReason = body.Reason?.Trim(); row.UpdatedAtUtc = clock.UtcNow;
+        row.Status = wanted; row.ReviewReason = reason; row.UpdatedAtUtc = clock.UtcNow;
         if (body.Accept) { row.ConfirmedByUserId = Actor(user); row.ConfirmedAtUtc = clock.UtcNow; row.PaymentMethod = "Online"; row.ReceiptNumber = $"TRN-{clock.Today:yyyyMMdd}-{row.Id.ToString("N")[..12].ToUpperInvariant()}"; }
-        db.AcademyNotices.Add(new AcademyNotice { EventKey="Payment", Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = row.RequestedByUserId, AudienceRole="Guardian",TargetKind="Tournament",TargetId=row.Id, Message = (await NoticeText.Render(db,t.AcademyId,"Payment","تحديث رسم البطولة."))+"\n"+(body.Accept ? $"تم قبول رسم {row.TournamentName}. الإيصال متاح في طلب البطولة؛ اشتراك التدريب لم يتغير." : $"رُفض إثبات رسم {row.TournamentName}. {body.Reason?.Trim() ?? "راجع الإدارة."}"), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
+        db.AcademyNotices.Add(new AcademyNotice { EventKey="Payment", Id = Guid.NewGuid(), AcademyId = t.AcademyId, UserId = row.RequestedByUserId, AudienceRole="Guardian",TargetKind="Tournament",TargetId=row.Id, Message = (await NoticeText.Render(db,t.AcademyId,"Payment","تحديث رسم البطولة."))+"\n"+(body.Accept ? $"تم قبول رسم {row.TournamentName}. يمكنك عرض الإيصال في طلب البطولة." : $"رُفض إثبات رسم {row.TournamentName}. {reason ?? "تواصل مع إدارة الأكاديمية."}"), CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow });
         await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { row.Id, row.ReceiptNumber });
     }
 }
 public sealed record TournamentPaymentWrite(Guid TournamentId, Guid EnrollmentId);
-public sealed record TournamentReviewWrite(bool Accept, string? Reason);
+public sealed record TournamentReviewWrite(bool Accept, string? Reason, Guid? ExpectedProofAssetId);

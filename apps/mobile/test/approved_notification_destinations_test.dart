@@ -57,11 +57,16 @@ void main() {
       });
       await t.pumpWidget(app(NotificationInbox(auth: auth)));
       await t.pumpAndSettle();
-      expect(find.text('1 غير مقروءة'), findsOneWidget);
-      await t.tap(find.text('تمت القراءة'));
+      expect(find.text('غير المقروءة 1'), findsOneWidget);
+      expect(find.textContaining(RegExp('2026|٢٠٢٦')), findsOneWidget);
+      await t.tap(find.text('تحديد كمقروء'));
       await t.pumpAndSettle();
       expect(write, {'isRead': true});
-      expect(find.text('0 غير مقروءة'), findsOneWidget);
+      expect(find.text('غير المقروءة 0'), findsOneWidget);
+      expect(
+        calls.where((p) => p == '/api/v1/notifications?page=1'),
+        hasLength(1),
+      );
       await t.tap(find.text('عرض الاشتراك وتعديلاته'));
       await t.pumpAndSettle();
       expect(find.text('باقة الطفل المقصود'), findsOneWidget);
@@ -76,6 +81,63 @@ void main() {
         calls.any((p) => p.contains('renewals') || p.contains('manage/')),
         isFalse,
       );
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'A lost read reply is recovered by checking the list at large text size',
+    (t) async {
+      t.view.physicalSize = const Size(360, 800);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      var saved = false, writes = 0, reads = 0;
+      final auth = await authenticate('Guardian', (
+        method,
+        path,
+        body,
+        _,
+      ) async {
+        if (method == 'PUT') {
+          writes++;
+          saved = (body as Map)['isRead'] == true;
+          throw const ApiFailure(503, 'انقطع الاتصال بعد الحفظ.');
+        }
+        reads++;
+        return {
+          'unread': saved ? 0 : 1,
+          'total': 1,
+          'items': [
+            {
+              'id': 'notice',
+              'message': 'تحديث اصطناعي لاختبار القراءة\nتفاصيل التحديث في السطر التالي.',
+              'isRead': saved,
+              'createdAtUtc': '2026-10-22T08:00:00Z',
+              'targetKind': 'SubscriptionPeriod',
+              'targetId': 'period',
+            },
+          ],
+        };
+      });
+      await t.pumpWidget(app(NotificationInbox(auth: auth), scale: 2));
+      await t.pumpAndSettle();
+      expect(find.text('غير المقروءة 1'), findsOneWidget);
+      final mark = find.text('تحديد كمقروء');
+      await t.ensureVisible(mark);
+      await t.pumpAndSettle();
+      await t.tap(mark);
+      await t.pumpAndSettle();
+      expect(mark, findsOneWidget);
+      final refresh = find.text('تحديث القائمة');
+      await t.ensureVisible(refresh);
+      await t.pumpAndSettle();
+      await t.tap(refresh);
+      await t.pumpAndSettle();
+      expect(find.text('غير المقروءة 0'), findsOneWidget);
+      expect(find.text('تحديد كغير مقروء'), findsOneWidget);
+      expect((writes, reads), (1, 2));
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();

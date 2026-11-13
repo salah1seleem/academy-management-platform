@@ -1,5 +1,50 @@
 import { expect, test } from "@playwright/test";
 
+test("staff navigation leaves scrolled mobile content unobstructed and keeps keyboard shortcuts", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+  await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
+  await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
+  await page.getByRole("button", { name: "دخول آمن" }).click();
+  await page.waitForURL("**/dashboard");
+  await page.goto("/dashboard/players");
+  await expect(page.getByRole("link", { name: "عرض", exact: true }).first()).toBeVisible();
+
+  const main = page.getByRole("main");
+  const skip = page.getByRole("link", { name: "انتقل إلى محتوى الصفحة" });
+  const menu = page.getByRole("button", { name: "فتح القائمة" });
+  await expect(skip).toHaveCSS("clip-path", "inset(50%)");
+  await page.keyboard.press("Tab");
+  await expect(skip).toBeFocused();
+  await expect(skip).toHaveCSS("clip-path", "none");
+  await page.keyboard.press("Enter");
+  await expect(main).toBeFocused();
+
+  await menu.click();
+  const drawer = page.getByRole("complementary", { name: "التنقل الرئيسي" });
+  await expect(drawer).toBeFocused();
+  await expect(skip).toHaveAttribute("inert", "");
+  const brandContent = await drawer.locator(".sidebar-brand > :first-child").evaluate(element => element.getBoundingClientRect());
+  const close = await page.getByRole("button", { name: "إغلاق القائمة" }).boundingBox();
+  if (!close) throw new Error("The drawer has no visible close button.");
+  expect(brandContent.right).toBeLessThanOrEqual(close.x);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeFocused();
+
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+  await expect(menu).not.toBeInViewport();
+  await expect(skip).toHaveCSS("clip-path", "inset(50%)");
+
+  await page.setViewportSize({ width: 768, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const home = page.getByRole("navigation", { name: "مسار مساحة العمل" }).getByRole("link", { name: "الرئيسية" });
+  await expect(home).toBeInViewport();
+  const homeRight = await home.evaluate(element => element.getBoundingClientRect().right);
+  const menuLeft = await menu.evaluate(element => element.getBoundingClientRect().left);
+  expect(homeRight).toBeLessThan(menuLeft);
+});
+
 for (const width of [360, 390, 430, 768, 1440]) {
   test(`V2 staff workspaces preserve routes and record context at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });
@@ -21,6 +66,7 @@ for (const width of [360, 390, 430, 768, 1440]) {
     const player = page.getByRole("link", { name: "عرض", exact: true }).first();
     await player.click();
     const tabs = page.getByRole("tablist", { name: "أقسام ملف اللاعب" });
+    await expect(tabs).toBeVisible({ timeout: 15_000 });
     await expect(tabs.getByRole("tab")).toHaveCount(6);
     await expect(tabs.getByRole("tab", { name: "المباريات", exact: true })).toBeVisible();
     await tabs.getByRole("tab", { name: "الاشتراكات والمالية" }).click();

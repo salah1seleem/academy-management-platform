@@ -102,7 +102,7 @@ void main() {
       await t.pumpAndSettle();
       await t.ensureVisible(find.text('حفظ المسودة'));
       await t.tap(find.text('حفظ المسودة'));
-      await wait(find.text('نشر الهدف للأسرة'));
+      await wait(find.text('مراجعة النشر'));
       final list = obj(
         await coach.request(
           'GET',
@@ -113,7 +113,9 @@ void main() {
       final id = textOf(goal['id']);
       final response =
           'مراجعة اصطناعية من المدرب: تحسن التمرير — ${id.substring(0, 4)}';
-      await t.ensureVisible(find.text('نشر الهدف للأسرة'));
+      await t.ensureVisible(find.text('مراجعة النشر'));
+      await t.tap(find.text('مراجعة النشر'));
+      await wait(find.text('نشر الهدف للأسرة؟'));
       await t.tap(find.text('نشر الهدف للأسرة'));
       await wait(find.text('قيد العمل · منشور للأسرة'));
       final note = find.widgetWithText(

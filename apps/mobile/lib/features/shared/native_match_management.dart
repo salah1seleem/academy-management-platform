@@ -29,6 +29,7 @@ class _NativeMatchManagementState
   Json? options;
   List<Json> matches = [];
   bool canAdd = false, canEdit = false;
+  String status = '';
   @override
   void initState() {
     super.initState();
@@ -73,6 +74,11 @@ class _NativeMatchManagementState
     if (current) await load();
   }
 
+  bool matchesStatus(Json match) =>
+      status.isEmpty ||
+      status == match['status'] ||
+      status == 'Draft' && match['status'] == 'ResultDraft';
+
   @override
   Widget build(BuildContext context) => page('إدارة المباريات والنتائج', [
     if (options == null && !busy)
@@ -107,15 +113,32 @@ class _NativeMatchManagementState
           ),
         ),
       ),
-    for (final match in matches) ...[
-      MatchResultCard(data: match),
-      if (canEdit)
-        OutlinedButton(
-          key: ValueKey('match-edit-${match['id']}'),
-          onPressed: () => edit(match),
-          child: const UiText('تفاصيل المباراة والنتيجة'),
+    if (matches.isNotEmpty)
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final tab in const [
+              ('', 'الكل'),
+              ('Published', 'مجدولة'),
+              ('Completed', 'النتائج'),
+              ('Draft', 'قيد المراجعة'),
+            ])
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 6),
+                child: ChoiceChip(
+                  label: UiText(tab.$2),
+                  selected: status == tab.$1,
+                  onSelected: (_) => setState(() => status = tab.$1),
+                ),
+              ),
+          ],
         ),
-    ],
+      ),
+    for (final match in matches.where(matchesStatus))
+      MatchResultCard(data: match, onEdit: canEdit ? () => edit(match) : null),
+    if (matches.isNotEmpty && !matches.any(matchesStatus))
+      const EmptyMessage('لا توجد مباريات في هذا التبويب.'),
   ]);
 }
 
@@ -160,6 +183,7 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
   List<Json> goals = [];
   final creationRequestId = followUpRequestId();
   bool resultFinalized = false;
+  int visibleGoalCount = 0;
   bool get football =>
       rows(widget.options['teams'])
           .any((t) => t['id'] == teamId && t['sportKind'] == 'Football');
@@ -167,6 +191,7 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
     final n = int.tryParse(ourScore.text) ?? 0;
     if (n < 0 || n > 100) return;
     setState(() {
+      visibleGoalCount = visibleGoalCount.clamp(0, n);
       goals = List.generate(
         n,
         (i) => i < goals.length
@@ -175,6 +200,15 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
       );
     });
   }
+
+  void refreshResultAction() => setState(() {});
+
+  bool get publishesResult =>
+      resultFinalized &&
+      active &&
+      (published || publish) &&
+      int.tryParse(ourScore.text) != null &&
+      int.tryParse(opponentScore.text) != null;
 
   final bench = <String>{};
   bool publish = false, active = true, uncertainCreate = false;
@@ -242,7 +276,10 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
           ? goals[i]
           : {'ordinal': i + 1, 'kind': 'Unknown', 'playerId': null},
     );
+    visibleGoalCount =
+        goals.lastIndexWhere((goal) => goal['kind'] != 'Unknown') + 1;
     ourScore.addListener(syncGoals);
+    opponentScore.addListener(refreshResultAction);
     bench.addAll(
       rows(m?['players'] ?? <Json>[])
           .where((p) => p['isBench'] == true)
@@ -253,6 +290,7 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
   @override
   void dispose() {
     ourScore.removeListener(syncGoals);
+    opponentScore.removeListener(refreshResultAction);
     for (final c in [
       opponent,
       venue,
@@ -441,6 +479,7 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
                     quoteHash = null;
                     roster = [];
                     bench.clear();
+                    visibleGoalCount = 0;
                     goals = List.generate(
                       (int.tryParse(ourScore.text) ?? 0).clamp(0, 100),
                       (i) => {
@@ -518,7 +557,7 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
                 keyboard: TextInputType.number,
               ),
               if (football)
-                for (var i = 0; i < goals.length; i++)
+                for (var i = 0; i < visibleGoalCount; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 14),
                     child: DropdownButtonFormField<String>(
@@ -561,14 +600,30 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
                       ),
                     ),
                   ),
-              SwitchListTile(
-                title: const UiText('اعتماد النتيجة وإرسال ملخص الأهداف'),
-                subtitle: const UiText(
-                  'الحفظ دون اعتماد يبقي النتيجة قيد المراجعة.',
+              if (football && visibleGoalCount < goals.length)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const UiText('إضافة هداف'),
+                  onPressed: published || roster.isNotEmpty
+                      ? () => setState(() => visibleGoalCount++)
+                      : null,
                 ),
-                value: resultFinalized,
-                onChanged: (v) => setState(() => resultFinalized = v),
-              ),
+              if (football && goals.isNotEmpty)
+                const UiText(
+                  'يمكنك ترك بقية الأهداف دون هداف.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              if ((published || publish) &&
+                  ourScore.text.isNotEmpty &&
+                  opponentScore.text.isNotEmpty)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const UiText(
+                    'نشر النتيجة وإشعار أولياء أمور الهدافين',
+                  ),
+                  value: resultFinalized,
+                  onChanged: (v) => setState(() => resultFinalized = v),
+                ),
               field('ملاحظات المباراة', notes, required: false, maxLines: 3),
               if (!published) ...[
                 OutlinedButton(
@@ -607,6 +662,8 @@ class _NativeMatchEditorState extends NativeOperationState<NativeMatchEditor> {
           child: UiText(
             verificationPending
                 ? 'إعادة التحقق من المباراة نفسها'
+                : publishesResult
+                ? 'حفظ ونشر النتيجة'
                 : 'حفظ المباراة',
           ),
         ),
@@ -619,6 +676,21 @@ class NativeMatchEntry extends StatefulWidget {
   const NativeMatchEntry({super.key, required this.auth, this.asLink = false});
   final AuthController auth;
   final bool asLink;
+
+  static Future<bool> canRead(AuthController auth) async {
+    final role = auth.session?.selected?.role;
+    if (role == 'AcademyOwner') return true;
+    if (role != 'Coach' && role != 'AcademyAdmin') return false;
+    final access = obj(await auth.request('GET', '/api/v1/my-match-access'));
+    return access['canRead'] == true;
+  }
+
+  static Widget link(BuildContext context, AuthController auth) => GLink(
+    'إدارة المباريات والنتائج',
+    Icons.scoreboard_outlined,
+    () => openPage(context, NativeMatchManagement(auth: auth)),
+  );
+
   @override
   State<NativeMatchEntry> createState() => _NativeMatchEntryState();
 }
@@ -628,26 +700,7 @@ class _NativeMatchEntryState extends State<NativeMatchEntry> {
       ? null
       : '${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final identity = contextId;
-  late final access = load();
-  Future<bool> load() async {
-    final role = widget.auth.session?.selected?.role;
-    if (role == 'AcademyOwner') return true;
-    if (role == 'Coach') {
-      final access = obj(
-        await widget.auth.request('GET', '/api/v1/my-match-access'),
-      );
-      return access['canRead'] == true;
-    }
-    if (role != 'AcademyAdmin') return false;
-    final permissions =
-        await widget.auth.request('GET', '/api/v1/my-permissions') as List;
-    final scope = obj(await widget.auth.request('GET', '/api/v1/my-access'));
-    final grant = rows(scope['actions'] ?? <Json>[])
-        .where((g) => g['module'] == 'matches')
-        .firstOrNull;
-    return permissions.contains('structure.manage') &&
-        (scope['useActionGrants'] != true || grant?['read'] == true);
-  }
+  late final access = NativeMatchEntry.canRead(widget.auth);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -667,11 +720,7 @@ class _NativeMatchEntryState extends State<NativeMatchEntry> {
           void open() =>
               openPage(context, NativeMatchManagement(auth: widget.auth));
           return widget.asLink
-              ? GLink(
-                  'إدارة المباريات والنتائج',
-                  Icons.scoreboard_outlined,
-                  open,
-                )
+              ? NativeMatchEntry.link(context, widget.auth)
               : IconButton(
                   onPressed: open,
                   tooltip: 'إدارة المباريات والنتائج',

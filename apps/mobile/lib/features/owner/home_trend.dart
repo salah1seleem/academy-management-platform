@@ -32,6 +32,18 @@ class HomeTrend extends StatelessWidget {
         : theme.colorScheme.primary;
     final first = monthly ? items.first['month'] : items.first['from'];
     final last = monthly ? items.last['asOf'] : items.last['to'];
+    final local = MaterialLocalizations.of(context);
+    final end = DateTime.tryParse(textOf(last));
+    final weeklyWindow = switch (items.length) {
+      1 => 'أسبوع واحد',
+      2 => 'آخر أسبوعين',
+      _ => 'آخر ${local.formatDecimal(items.length)} أسابيع',
+    };
+    String date(Object? value) {
+      final parsed = DateTime.tryParse(textOf(value));
+      return parsed == null ? 'تاريخ غير متاح' : local.formatShortDate(parsed);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
@@ -56,12 +68,20 @@ class HomeTrend extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+              if (!monthly && end != null)
+                UiText(
+                  '$weeklyWindow حتى ${local.formatShortDate(end)}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
               UiText(
                 monthly
                     ? 'تسجيلات لها اشتراك'
                     : currency == 'EGP'
-                    ? 'ج.م'
-                    : textOf(currency),
+                    ? '· ج.م'
+                    : '· ${textOf(currency)}',
                 style: TextStyle(
                   fontSize: 10,
                   color: theme.colorScheme.onSurfaceVariant,
@@ -70,71 +90,105 @@ class HomeTrend extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: monthly ? 52 : 64,
-            child: CustomPaint(
-              painter: _TrendPainter(
-                values,
-                color,
-                Theme.of(context).colorScheme.outlineVariant,
-                monthly,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < items.length; i++)
-                  Expanded(
-                    child: Tooltip(
-                      message: monthly
-                          ? '${items[i]['asOf']} · ${items[i][key]} اشتراكًا'
-                          : '${items[i]['from']} — ${items[i]['to']} · ${money(items[i][key], currency)}',
-                      child: InkWell(
-                        onTap: onOpen == null ? null : () => onOpen!(items[i]),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Column(
-                            children: [
-                              UiText(
-                                NumberFormat(
-                                  '#,##0.##',
-                                  'en',
-                                ).format(values[i]),
-                                textDirection: TextDirection.ltr,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: values[i] < 0
-                                      ? Theme.of(context).colorScheme.error
-                                      : null,
-                                ),
-                              ),
-                              UiText(
-                                monthly
-                                    ? DateFormat('MMM', 'ar_EG').format(
-                                        DateTime.parse(
-                                          textOf(items[i]['month']),
-                                        ),
-                                      )
-                                    : DateFormat('d/M', 'en').format(
-                                        DateTime.parse(textOf(items[i]['to'])),
-                                      ),
-                                textDirection: monthly
-                                    ? TextDirection.rtl
-                                    : TextDirection.ltr,
-                                style: const TextStyle(fontSize: 9),
-                              ),
-                            ],
+          LayoutBuilder(
+            builder: (context, bounds) => Directionality(
+              textDirection: TextDirection.ltr,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: SizedBox(
+                  width: math.max(
+                    bounds.maxWidth,
+                    items.length * MediaQuery.textScalerOf(context).scale(52),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        height: monthly ? 52 : 64,
+                        child: CustomPaint(
+                          painter: _TrendPainter(
+                            values,
+                            color,
+                            Theme.of(context).colorScheme.outlineVariant,
+                            monthly,
                           ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (var i = 0; i < items.length; i++)
+                              Expanded(
+                                child: Tooltip(
+                                  message: monthly
+                                      ? '${items[i]['asOf']} · ${items[i][key]} اشتراكًا'
+                                      : '${money(items[i][key], currency)} · من ${date(items[i]['from'])} إلى ${date(items[i]['to'])}',
+                                  child: InkWell(
+                                    onTap: onOpen == null
+                                        ? null
+                                        : () => onOpen!(items[i]),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          UiText(
+                                            NumberFormat(
+                                              '#,##0.##',
+                                              'en',
+                                            ).format(values[i]),
+                                            textDirection: TextDirection.ltr,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: values[i] < 0
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .error
+                                                  : null,
+                                            ),
+                                          ),
+                                          UiText(
+                                            monthly
+                                                ? DateFormat(
+                                                    'MMM',
+                                                    'ar_EG',
+                                                  ).format(
+                                                    DateTime.parse(
+                                                      textOf(items[i]['month']),
+                                                    ),
+                                                  )
+                                                : DateFormat(
+                                                    'd/M',
+                                                    'en',
+                                                  ).format(
+                                                    DateTime.parse(
+                                                      textOf(items[i]['to']),
+                                                    ),
+                                                  ),
+                                            textDirection: monthly
+                                                ? TextDirection.rtl
+                                                : TextDirection.ltr,
+                                            style: const TextStyle(fontSize: 9),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-              ],
+                ),
+              ),
             ),
           ),
         ],
@@ -154,7 +208,7 @@ class _TrendPainter extends CustomPainter {
         high = math.max(0.0, values.reduce(math.max));
     final span = math.max(1.0, high - low);
     Offset point(int i, double v) => Offset(
-      size.width * i / (values.length - 1).clamp(1, 999),
+      size.width * (i + .5) / values.length,
       4 + (high - v) / span * (size.height - 8),
     );
     final zero = point(0, 0).dy;

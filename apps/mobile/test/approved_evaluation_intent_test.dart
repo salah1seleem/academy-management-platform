@@ -19,6 +19,7 @@ void main() {
           b,
           token,
         ) async {
+          if (p == '/api/v1/academy/calendar') return {'today': '2026-09-28'};
           if (m == 'POST' && p == '/api/v1/evaluations') {
             return {'id': 'evaluation'};
           }
@@ -72,9 +73,14 @@ void main() {
           50,
           50,
         ]);
-        await t.ensureVisible(find.text('نشر التقييم لولي الأمر'));
-        await t.tap(find.text('نشر التقييم لولي الأمر'));
-        await t.pumpAndSettle();
+        expect(
+          t
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'مراجعة النشر'),
+              )
+              .onPressed,
+          isNull,
+        );
         expect(publishes, 0);
         expect(saved, isNull);
         if (explicitlyConfirm) {
@@ -89,8 +95,9 @@ void main() {
           t.widget<Slider>(slider).onChanged!(0);
           await t.pump();
         }
-        await t.ensureVisible(find.text('نشر التقييم بدون ولي الأمر'));
-        await t.tap(find.text('نشر التقييم بدون ولي الأمر'));
+        await t.tap(find.text('مراجعة النشر'));
+        await t.pumpAndSettle();
+        await t.tap(find.text('اعتماد داخلي'));
         await t.pumpAndSettle();
         final scores = (saved!['scores'] as List).cast<Map>();
         expect(scores[0]['score'], explicitlyConfirm ? 50 : 0);

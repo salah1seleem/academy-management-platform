@@ -136,7 +136,7 @@ class _CoachFeedbackPageState extends State<CoachFeedbackPage>
         return const SizedBox.shrink();
       }
       return GuardianPage(
-        title: 'رأيك في التدريب',
+        title: widget.initialKind == 'Complaint' ? 'الشكاوى والاقتراحات' : 'رأيك في التدريب',
         child: RemoteBody(
           key: ValueKey(revision),
           auth: widget.auth,

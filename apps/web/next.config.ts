@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   distDir: process.env.ACADEMY_WEB_DIST_DIR ?? ".next",
   poweredByHeader: false,
+  devIndicators: false,
   experimental: { proxyClientMaxBodySize: "55mb" },
   ...(process.env.ACADEMY_WEB_STANDALONE === "true" ? { output: "standalone" as const } : {}),
   async rewrites() {

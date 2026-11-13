@@ -60,7 +60,7 @@ void main() {
           'المباريات',
         ),
         ('AcademyAdmin', '01099900011', 'admin', 'حضور اللاعبين', 'الحضور'),
-        ('Coach', '01099900020', 'coach', 'المجموعات المسندة', 'المباريات'),
+        ('Coach', '01099900020', 'coach', 'تدريباتي', 'المباريات'),
         ('Guardian', '01099900100', 'guardian', 'أبنائي', 'المباريات'),
       ]) {
         if (roleFilter.isNotEmpty && sample.$1 != roleFilter) continue;

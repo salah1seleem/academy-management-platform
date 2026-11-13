@@ -4593,6 +4593,13 @@ namespace Academy.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<Guid?>("ProviderUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderVerificationSid")
+                        .HasMaxLength(34)
+                        .HasColumnType("character varying(34)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PhoneNumberNormalized", "CreatedAtUtc");

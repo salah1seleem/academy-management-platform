@@ -3,6 +3,10 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/guardian/guardian_home.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
+import 'package:academy_mobile/features/guardian/guardian_profile.dart';
+import 'package:academy_mobile/features/guardian/guardian_content.dart';
+import 'package:academy_mobile/features/guardian/guardian_payments.dart';
+import 'package:academy_mobile/features/shared/matches.dart';
 import 'package:academy_mobile/features/guardian/daily_nutrition.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -108,144 +112,126 @@ Widget app(
 
 void main() {
   testWidgets(
-    'Child selection scopes its session, subscription, report and nutrition; renewal preserves enrollment context without writes',
+    'Compact shortcuts keep training, match and nutrition scoped to the linked child',
     (tester) async {
       final paths = <String>[];
-      var writes = 0;
       final auth = await logged((m, p, b, t) async {
         paths.add(p);
-        if (m != 'GET') writes++;
+        if (p == '/api/v1/my-matches?upcomingOnly=true') {
+          return [
+            {
+              'id': 'match-b',
+              'isUpcoming': true,
+              'matchDate': '2026-10-17',
+              'startTime': '18:30:00',
+              'children': ['b'],
+            },
+          ];
+        }
         return response(p);
       });
       await tester.pumpWidget(app(auth));
       await tester.pumpAndSettle();
-      await expandChildDetails(tester);
-      await tester.tap(find.byKey(const ValueKey('select-child-a')));
+      final childA = find.byKey(const ValueKey('child-a'));
+      final childB = find.byKey(const ValueKey('child-b'));
+      Finder inCard(Finder card, String label) =>
+          find.descendant(of: card, matching: find.text(label));
+      expect(inCard(childA, 'المباراة القادمة'), findsNothing);
+      expect(inCard(childA, 'الحصة القادمة'), findsOneWidget);
+      expect(find.byKey(const ValueKey('child-home-details')), findsNothing);
+      expect(find.text('أقرب المواعيد لأبنائي'), findsNothing);
+      expect(find.text('أرصدة الأسرة'), findsNothing);
+      final session = inCard(childA, 'الحصة القادمة');
+      await revealTestTarget(tester, session);
+      await tester.tap(session);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('child-a')), findsOneWidget);
+      final records = tester.widget<ProfileRecords>(
+        find.byType(ProfileRecords),
+      );
+      expect(records.playerId, 'a');
+      expect(records.enrollmentId, 'enrollment-a');
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+      final sibling = find.byKey(const ValueKey('child-tab-b'));
+      await revealTestTarget(tester, sibling);
+      await tester.tap(sibling);
+      await tester.pumpAndSettle();
+      final nextMatch = inCard(childB, 'المباراة القادمة');
+      await revealTestTarget(tester, nextMatch);
+      await tester.tap(nextMatch);
+      await tester.pumpAndSettle();
+      final matches = tester.widget<MatchSchedule>(find.byType(MatchSchedule));
+      expect(matches.playerId, 'b');
+      expect(matches.matchId, 'match-b');
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+      final nutrition = inCard(childB, 'مكتبة التغذية');
+      await revealTestTarget(tester, nutrition);
+      await tester.tap(nutrition);
+      await tester.pumpAndSettle();
+      final library = tester.widget<NutritionLibrary>(
+        find.byType(NutritionLibrary),
+      );
+      expect(library.playerId, 'b');
+      expect(library.today, '2026-10-15');
       expect(
-        find.byKey(const ValueKey('child-b')),
-        findsOneWidget,
-      ); // next authorized sibling peeks into the carousel
-      // The active detail workspace is isolated; the family agenda may show every linked child.
-      await tester.scrollUntilVisible(
-        find.text('التقييمات'),
-        180,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('guardian-home-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
+        paths.where((p) => p == '/api/v1/my-matches?upcomingOnly=true').length,
+        1,
       );
-      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('child-section-2')));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('تطور لينا طفلة العرض'),
-        180,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('guardian-home-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(GuardianLatestProgress),
-          matching: find.text('0'),
-        ),
-        findsOneWidget,
-      );
-      expect(paths.where((p) => p == '/api/v1/guardian/home').length, 1);
-      await tester.scrollUntilVisible(
-        find.text('الاشتراك'),
-        -180,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('guardian-home-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      await tester.tap(find.text('الاشتراك'));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('home-renew-enrollment-a')),
-        180,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('guardian-home-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      await tester.tap(find.byKey(const ValueKey('home-renew-enrollment-a')));
-      await tester.pumpAndSettle();
-      expect(
-        paths,
-        contains(
-          '/api/v1/guardian/subscriptions/enrollments/enrollment-a/plans',
-        ),
-      );
-      expect(
-        paths,
-        isNot(contains('/api/v1/guardian/subscriptions/enrollments')),
-      );
-      expect(find.text('اختيار الباقة'), findsOneWidget);
-      expect(writes, 0);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       auth.dispose();
     },
   );
   testWidgets(
-    'Latest published progress opens that exact report and retains zero score',
+    'Receipts can switch to the selected linked child and back to all payments',
     (tester) async {
       final paths = <String>[];
-      final auth = await logged((m, p, b, t) async {
-        paths.add(p);
-        return response(p);
+      final auth = await logged((method, path, body, token) async {
+        paths.add(path);
+        final selected = Uri.parse(path).queryParameters['playerId'];
+        return {
+          'children': [
+            {'id': 'a', 'arabicName': 'لينا العرض'},
+            {'id': 'b', 'arabicName': 'آدم العرض'},
+          ],
+          'items': [
+            for (final id in ['a', 'b'])
+              if (selected == null || selected == id)
+                {
+                  'id': id,
+                  'receiptNumber': 'RC-$id',
+                  'player': 'لاعب $id',
+                  'amount': 1000,
+                  'currency': 'EGP',
+                  'paidAtUtc': '2026-10-18',
+                },
+          ],
+        };
       });
-      await tester.pumpWidget(app(auth));
-      await tester.pumpAndSettle();
-      await expandChildDetails(tester);
-      await tester.scrollUntilVisible(
-        find.text('التقييمات'),
-        180,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('guardian-home-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const ValueKey('child-section-2')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('child-section-2')));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('تطور لينا طفلة العرض'),
-        180,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const ValueKey('guardian-home-scroll')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          supportedLocales: const [Locale('ar')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: AcademyTheme.light(),
+          home: ReceiptsPage(auth: auth),
+        ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('تطور لينا طفلة العرض'));
+      expect(find.textContaining('RC-a'), findsOneWidget);
+      expect(find.textContaining('RC-b'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('family-filter-b')));
       await tester.pumpAndSettle();
-      expect(paths, contains('/api/v1/guardian/evaluations/report-a/report'));
-      expect(find.text('تقرير اللاعب'), findsOneWidget);
-      expect(find.text('0'), findsOneWidget);
+      expect(find.textContaining('RC-a'), findsNothing);
+      expect(find.textContaining('RC-b'), findsOneWidget);
+      expect(
+        paths.last,
+        '/api/v1/guardian/subscriptions/receipts?page=1&allIssued=true&playerId=b',
+      );
+      await tester.tap(find.byKey(const ValueKey('family-filter-')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('RC-a'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       auth.dispose();
@@ -276,7 +262,7 @@ void main() {
       fail = false;
       await tester.tap(find.byIcon(Icons.refresh));
       await tester.pumpAndSettle();
-      expect(find.text('متابعة الغذاء اليومي لطفلك'), findsOneWidget);
+      expect(find.text('اقتراحات من مكتبة التغذية'), findsOneWidget);
       expect(paths.every((p) => p.endsWith('?date=2026-10-15')), isTrue);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -326,58 +312,11 @@ void main() {
               app(auth, dark: dark, locale: locale, scale: 2),
             );
             await tester.pumpAndSettle();
-            await expandChildDetails(tester);
             expect(find.byKey(const ValueKey('child-a')), findsOneWidget);
-            await tester.scrollUntilVisible(
-              find.byKey(const ValueKey('child-section-3')),
-              180,
-              scrollable: find
-                  .descendant(
-                    of: find.byKey(const ValueKey('guardian-home-scroll')),
-                    matching: find.byType(Scrollable),
-                  )
-                  .first,
-            );
-            await tester.ensureVisible(
-              find.byKey(const ValueKey('child-section-3')),
-            );
-            await tester.pumpAndSettle();
-            await tester.ensureVisible(
-              find.byKey(const ValueKey('child-section-3')),
-            );
-            await tester.pumpAndSettle();
-            await tester.tap(find.byKey(const ValueKey('child-section-3')));
-            await tester.pumpAndSettle();
             expect(
-              find.byKey(const ValueKey('guardian-home-scroll')),
-              findsOneWidget,
-              reason: find
-                  .byType(Text)
-                  .evaluate()
-                  .map((e) => (e.widget as Text).data)
-                  .join(' | '),
+              find.byKey(const ValueKey('child-home-details')),
+              findsNothing,
             );
-            final vertical = tester.state<ScrollableState>(
-              find
-                  .descendant(
-                    of: find.byKey(const ValueKey('guardian-home-scroll')),
-                    matching: find.byType(Scrollable),
-                  )
-                  .first,
-            );
-            vertical.position.jumpTo(0);
-            await tester.pumpAndSettle();
-            await tester.scrollUntilVisible(
-              find.byKey(const ValueKey('owner-action-rail')),
-              180,
-              scrollable: find
-                  .descendant(
-                    of: find.byKey(const ValueKey('guardian-home-scroll')),
-                    matching: find.byType(Scrollable),
-                  )
-                  .first,
-            );
-            await tester.pumpAndSettle();
             for (final action in [
               'اشتراك جديد',
               'تجديد الاشتراك',
@@ -389,14 +328,6 @@ void main() {
               await revealTestTarget(tester, key);
               expect(key, findsOneWidget);
             }
-            expect(
-              paths.any(
-                (p) => p.contains(
-                  '/children/a/nutrition/recommendations?date=2026-10-15',
-                ),
-              ),
-              isTrue,
-            );
             expect(
               tester.takeException(),
               isNull,

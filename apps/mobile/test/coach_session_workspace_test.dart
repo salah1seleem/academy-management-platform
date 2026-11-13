@@ -48,6 +48,35 @@ Future<void> reach(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets('Successful response needs a matching attendance readback', (
+    tester,
+  ) async {
+    var writes = 0;
+    final auth = await coach((method, path, body, token) async {
+      if (method == 'PUT') {
+        writes++;
+        return {};
+      }
+      return roster(editable: true, players: [player(1)]);
+    });
+    await tester.pumpWidget(shell(CoachAttendance(auth: auth, sessionId: 's')));
+    await tester.pumpAndSettle();
+    await reach(tester, find.text('حاضر'));
+    await tester.tap(find.text('حاضر'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ الحضور'));
+    await tester.pumpAndSettle();
+    expect(find.text('تحقق من الحفظ'), findsOneWidget);
+    expect(find.text('تم حفظ الحضور.'), findsNothing);
+    await tester.tap(find.text('تحقق من الحفظ'));
+    await tester.pumpAndSettle();
+    expect(find.text('إعادة إرسال التغييرات'), findsOneWidget);
+    expect(writes, 1);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
   testWidgets(
     'Search is local, counters include the whole roster, clear restores all and never writes',
     (tester) async {
@@ -66,7 +95,7 @@ void main() {
       await reach(tester, find.byType(TextField));
       await tester.enterText(find.byType(TextField), 'fb-2');
       await tester.pumpAndSettle();
-      expect(find.text('1 من 3 لاعب'), findsOneWidget);
+      expect(find.text('النتائج: 1 من 3'), findsOneWidget);
       expect(find.text('لاعب التجربة 2'), findsOneWidget);
       expect(find.text('لاعب التجربة 1'), findsNothing);
       await tester.enterText(find.byType(TextField), 'غير موجود');
@@ -74,7 +103,7 @@ void main() {
       expect(find.text('لا توجد نتائج لهذا البحث.'), findsOneWidget);
       await tester.tap(find.byTooltip('مسح البحث'));
       await tester.pumpAndSettle();
-      expect(find.text('3 من 3 لاعب'), findsOneWidget);
+      expect(find.text('النتائج: 3 من 3'), findsOneWidget);
       expect(reads, 1);
       expect(writes, 0);
       expect(find.byType(FilterChip), findsNothing);
@@ -196,8 +225,8 @@ void main() {
       ]);
       expect(find.text('شرح هذه الخطوة'), findsOneWidget);
       expect(find.text('لاعب التجربة 2'), findsNothing);
-      await reach(tester, find.text('تقييم اللاعب'));
-      await tester.tap(find.text('تقييم اللاعب'));
+      await reach(tester, find.text('تقييم جديد'));
+      await tester.tap(find.text('تقييم جديد'));
       await tester.pumpAndSettle();
 
       await tester.pumpAndSettle();
@@ -297,7 +326,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ملف اللاعب'), findsOneWidget);
       expect(find.text('لاعب التجربة 1'), findsOneWidget);
-      expect(find.text('تقييم اللاعب'), findsNothing);
+      expect(find.text('تقييم جديد'), findsNothing);
       expect(paths.where((p) => p.endsWith('/options')).length, 2);
       await auth.logout();
       await tester.pumpAndSettle();
@@ -321,7 +350,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('لم يعد اللاعب ضمن هذا الكشف.'), findsOneWidget);
-      expect(find.text('تقييم اللاعب'), findsNothing);
+      expect(find.text('تقييم جديد'), findsNothing);
+      expect(find.text('تقييمات اللاعب'), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(
         shell(

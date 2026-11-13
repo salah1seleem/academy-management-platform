@@ -18,7 +18,20 @@ class ApprovedLoginLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final hero = keyboard ? 126.0 : 226.0;
+    final compactHeight =
+        MediaQuery.sizeOf(context).height -
+            MediaQuery.paddingOf(context).vertical <
+        680;
+    final hero = switch ((verifying, keyboard, compactHeight)) {
+      (true, true, _) => 80.0,
+      (true, false, true) => 96.0,
+      (true, false, false) => 136.0,
+      (false, true, true) => 88.0,
+      (false, true, false) => 126.0,
+      (false, false, true) => 120.0,
+      _ => 226.0,
+    };
+    final compactHero = verifying || keyboard || compactHeight;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -31,7 +44,7 @@ class ApprovedLoginLayout extends StatelessWidget {
                 Container(
                   key: const ValueKey('approved-login-hero'),
                   height: hero,
-                  padding: EdgeInsets.all(keyboard ? 20 : 32),
+                  padding: EdgeInsets.all(compactHero ? 16 : 32),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -48,7 +61,7 @@ class ApprovedLoginLayout extends StatelessWidget {
                   ),
                   child: Center(
                     child: SizedBox(
-                      width: keyboard ? 130 : 190,
+                      width: compactHero ? 130 : 190,
                       child: const FittedBox(child: PlatformWordmark()),
                     ),
                   ),
@@ -78,18 +91,21 @@ class ApprovedLoginLayout extends StatelessWidget {
                               child: Icon(
                                 verifying
                                     ? Icons.lock_outline_rounded
-                                    : Icons.waving_hand_outlined,
+                                    : Icons.login_rounded,
                                 color: c.primary,
                                 size: 23,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: UiText(
-                                verifying ? 'أدخل رمز التحقق' : 'تسجيل الدخول',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall,
+                              child: Semantics(
+                                header: true,
+                                child: UiText(
+                                  verifying ? 'رمز التحقق' : 'تسجيل الدخول',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall,
+                                ),
                               ),
                             ),
                           ],
@@ -97,65 +113,38 @@ class ApprovedLoginLayout extends StatelessWidget {
                         const SizedBox(height: 12),
                         UiText(
                           verifying
-                              ? 'أدخل رمز التحقق المكوّن من ٦ أرقام.'
+                              ? 'الرمز مكوّن من ٦ أرقام.'
                               : 'ادخل برقم هاتفك المسجل لدى الأكاديمية.',
                           style: Theme.of(context).textTheme.bodyMedium!
                               .copyWith(color: c.onSurfaceVariant),
                         ),
                         const SizedBox(height: 22),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  color: c.primary,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Container(
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  color: verifying
-                                      ? c.primary
-                                      : c.outlineVariant,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
                         form,
                       ],
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(30, 20, 30, 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.shield_outlined,
-                        size: 16,
-                        color: c.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: UiText(
-                          demo
-                              ? 'بيئة عرض تجريبي فقط — لا تُرسل رسالة SMS حقيقية.'
-                              : 'وصول آمن إلى حسابك وبيانات أكاديميتك.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                if (demo)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(30, 20, 30, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 16,
+                          color: c.onSurfaceVariant,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: UiText(
+                            'بيئة عرض تجريبي. لا تُرسل رسائل تحقق فعلية.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),

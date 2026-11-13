@@ -15,10 +15,37 @@ export function GroupMediaConsent({playerId,onSaved}:{playerId:string;onSaved?:(
  return <div className={styles.consent}><SectionCard title="خصوصية صور المجموعة"><ShieldCheck aria-hidden/>{(error||readError)&&<ErrorState message={error||readError}/>} {!data?!readError&&<LoadingState/>:<><p>{data.notice}</p><p role="status">{data.player} · {data.allowed?"المشاركة مسموحة باختيارك":"المشاركة غير مسموحة"}</p><p>إعادة السماح لاحقًا لا تعيد نشر النسخ القديمة تلقائيًا. لا يؤثر الرفض على صورة طفلك الخاصة أو اشتراكه.</p><Button disabled={busy} onClick={()=>void save(!data.allowed)}>{data.allowed?"سحب موافقة المشاركة":"السماح بالمشاركة داخل المجموعة"}</Button></>}</SectionCard></div>;
 }
 type Audience={eventOn:string;asOfDate:string;sessions?:{id:string;startTime:string;endTime:string}[];players:{id:string;name:string;consented:boolean}[];notice:string};
-export function GroupMediaAudienceFields({groupId,onReviewChanged}:{groupId:string;onReviewChanged?:()=>void}){
- const[day,setDay]=useState(""),[session,setSession]=useState(""),[selected,setSelected]=useState<string[]>([]),[noChildren,setNoChildren]=useState(false);
- const{data,error}=useGoalData<Audience>(`/api/v1/assets/media-audience?groupId=${groupId}${day?`&eventOn=${day}`:""}${session?`&sessionId=${session}`:""}`,0,"تعذر مراجعة جمهور المجموعة؛ لا تنشر قبل إعادة المراجعة.");
- return <fieldset className={styles.review}><legend>جمهور الواقعة وخصوصية الأطفال</legend>{error&&<ErrorState message={error}/>} {!data?!error&&<LoadingState/>:<><label>تاريخ الواقعة<input type="date" name="eventOn" value={day||data.eventOn} max={data.asOfDate} required onChange={e=>{setDay(e.target.value);setSession("");setSelected([]);setNoChildren(false);onReviewChanged?.();}}/></label><label>الحصة (اختياري)<select name="sessionId" value={session} onChange={e=>{setSession(e.target.value);setSelected([]);setNoChildren(false);onReviewChanged?.();}}><option value="">وسائط المجموعة دون حصة — الأعضاء المؤرخون فقط</option>{data.sessions?.map(s=><option key={s.id} value={s.id}>{s.startTime.slice(0,5)} — {s.endTime.slice(0,5)}</option>)}</select></label><p>{data.notice}</p><label className={styles.choice}><input type="checkbox" checked={noChildren} name="noRecognizableChildren" value="true" onChange={e=>{setNoChildren(e.target.checked);setSelected([]);onReviewChanged?.();}}/>لا يوجد طفل يمكن التعرف عليه في هذه اللقطة</label><div className={styles.choices}>{data.players.map(p=><label key={p.id} className={styles.choice}><input type="checkbox" checked={selected.includes(p.id)} disabled={noChildren||!p.consented} onChange={e=>{setSelected(old=>e.target.checked?[...old,p.id]:old.filter(id=>id!==p.id));onReviewChanged?.();}}/>{p.name} · {p.consented?"موافقة مستوفاة":"الموافقة غير مستوفاة — لا تنشر ظهوره"}</label>)}</div><input type="hidden" name="subjectPlayerIds" value={selected.join(",")}/>{!noChildren&&!selected.length&&<p>حدد طفلًا ظاهرًا على الأقل، أو أكد صراحة عدم ظهور أطفال.</p>}</>}</fieldset>;
+export function GroupMediaAudienceFields({groupId,onReviewChanged,disabled=false}:{groupId:string;onReviewChanged?:()=>void;disabled?:boolean}) {
+  const [day,setDay] = useState("");
+  const [session,setSession] = useState("");
+  const [selected,setSelected] = useState<string[]>([]);
+  const [noChildren,setNoChildren] = useState(false);
+  const {data,error,reload} = useGoalData<Audience>(`/api/v1/assets/media-audience?groupId=${groupId}${day?`&eventOn=${day}`:""}${session?`&sessionId=${session}`:""}`,0,"تعذر تحميل جمهور المجموعة.");
+  const lostConsent = data && selected.some(id => !data.players.some(player => player.id === id && player.consented));
+  function clearReview() { setSelected([]); setNoChildren(false); onReviewChanged?.(); }
+  return <fieldset className={styles.review} disabled={disabled}>
+    <legend>جمهور المجموعة</legend>
+    <label>تاريخ التصوير<input type="date" name="eventOn" value={day || data?.eventOn || ""} max={data?.asOfDate} required onChange={event => {
+      setDay(event.target.value); setSession(""); clearReview();
+    }} /></label>
+    {error ? <><ErrorState message={error} /><Button variant="secondary" onClick={() => { clearReview(); reload(); }}>إعادة المحاولة</Button></> : !data ? <LoadingState /> : <>
+      <label>الحصة · اختياري<select name="sessionId" value={session} onChange={event => { setSession(event.target.value); clearReview(); }}>
+        <option value="">دون حصة محددة</option>{data.sessions?.map(item => <option key={item.id} value={item.id}>{item.startTime.slice(0,5)} — {item.endTime.slice(0,5)}</option>)}
+      </select></label>
+      <details><summary>من يشاهد وسائط المجموعة؟</summary><p>{data.notice}</p></details>
+      <label className={styles.choice}><input type="checkbox" checked={noChildren} name="noRecognizableChildren" value="true" onChange={event => {
+        setNoChildren(event.target.checked); setSelected([]); onReviewChanged?.();
+      }} />لا يوجد طفل يمكن التعرف عليه في اللقطة</label>
+      <div className={styles.choices}>{data.players.map(player => <label key={player.id} className={styles.choice}>
+        <input type="checkbox" checked={player.consented && selected.includes(player.id)} disabled={noChildren || !player.consented} onChange={event => {
+          setSelected(previous => event.target.checked ? [...previous,player.id] : previous.filter(id => id !== player.id)); onReviewChanged?.();
+        }} />{player.name} · {player.consented ? "الموافقة مستوفاة" : "الموافقة غير مستوفاة"}
+      </label>)}</div>
+      <input type="hidden" name="subjectPlayerIds" value={lostConsent ? "" : selected.join(",")} />
+      {lostConsent ? <><ErrorState message="تغيّرت موافقات المشاركة. راجع الأطفال الظاهرين في اللقطة." /><Button variant="secondary" onClick={clearReview}>إعادة تحديد الأطفال</Button></> :
+        !noChildren && !selected.length && <p>حدد كل طفل يمكن التعرف عليه، أو أكد خلو اللقطة من الأطفال الذين يمكن التعرف عليهم.</p>}
+    </>}
+  </fieldset>;
 }
 export function MediaWithdrawal({id,onSaved}:{id:string;onSaved:()=>void}){
  const[open,setOpen]=useState(false),[note,setNote]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");const intent=useRef<{note:string;id:string}|null>(null);

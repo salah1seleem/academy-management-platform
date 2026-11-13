@@ -120,15 +120,27 @@ void main() {
             ),
           ),
         );
-        await wait(find.text(title));
+        await wait(find.text('الشهر السابق'));
+        await t.scrollUntilVisible(
+          find.text(title),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
         final copy = find.widgetWithText(
           OutlinedButton,
           'نسخ تقرير الشهر كاملًا',
         );
-        await t.ensureVisible(copy);
+        if (copy.evaluate().isEmpty) {
+          await t.scrollUntilVisible(
+            copy,
+            -180,
+            scrollable: find.byType(Scrollable).first,
+          );
+        }
+        await Scrollable.ensureVisible(t.element(copy), alignment: .45);
         await t.pumpAndSettle();
         await t.tap(copy);
-        await wait(find.textContaining('تم نسخ تقرير الشهر.'));
+        await wait(find.textContaining('تم نسخ تقرير الشهر إلى الحافظة.'));
         final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
         expect(clipboard?.text, contains(title));
         expect(

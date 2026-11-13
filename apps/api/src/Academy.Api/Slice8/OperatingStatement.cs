@@ -18,11 +18,11 @@ public sealed record OperatingStatementData(DateOnly From,DateOnly To,string Cur
     OperatingStatementLine[] Income,OperatingStatementLine[] Expenses,decimal TotalIncome,decimal TotalExpenses,decimal Surplus,
     decimal Refunds,decimal Discounts,decimal Receivables,decimal ApprovedPayrollPayable,decimal UnpaidOperatingExpenses,
     decimal AdvanceCashOut,decimal AdvanceApplied,decimal? EarnedRevenue,string[] Warnings,decimal ExternalReceivables=0,
-    OperatingStatementMonth[]? Monthly=null);
+    OperatingStatementMonth[]? Monthly=null,decimal? PreviousSurplus=null,decimal? SurplusChangePercentage=null);
 
 public static partial class ReportingEndpoints
 {
-    private static async Task<IResult> OperatingStatement(DateOnly? from,DateOnly? to,bool? allDates,Guid? branchId,Guid? sportId,string? format,bool? includeMonthly,
+    private static async Task<IResult> OperatingStatement(DateOnly? from,DateOnly? to,bool? allDates,Guid? branchId,Guid? sportId,string? format,bool? includeMonthly,bool? includeHistory,
         CurrentTenant tenant,FoundationDbContext db,ISubscriptionClock clock,HttpResponse response)
     {
         var t=(await tenant.ResolveAsync())!;if(t.Role!=AcademyRole.AcademyOwner)return Results.Forbid();
@@ -32,16 +32,17 @@ public static partial class ReportingEndpoints
         if(branchId.HasValue&&!await db.Branches.AnyAsync(b=>b.Id==branchId&&b.AcademyId==t.AcademyId))return Results.NotFound();
         if(sportId.HasValue&&!await db.Sports.AnyAsync(s=>s.Id==sportId&&s.AcademyId==t.AcademyId))return Results.NotFound();
         var d=await BuildOperatingStatement(t.AcademyId,range,branchId,sportId,db,clock);
-        if (includeMonthly == true && format is null)
+        if ((includeMonthly == true || includeHistory == true) && format is null)
         {
-            // At most three actual month intersections, with the exact canonical cash projection.
-            // The aggregate remains the whole requested range. No extra reads for ordinary/CSV callers.
+            // The dashboard can show recent complete months alongside the selected period.
+            // Ordinary monthly readers still see the intersections of their requested range.
+            var firstMonth = includeHistory == true ? DateOnly.MinValue : range.From;
             var months = new List<OperatingStatementMonth>();
             var month = new DateOnly(range.To.Year, range.To.Month, 1);
             for (var i = 0; i < 3; i++)
             {
                 var monthEnd = new DateOnly(month.Year, month.Month, DateTime.DaysInMonth(month.Year, month.Month));
-                var start = range.From > month ? range.From : month;
+                var start = firstMonth > month ? firstMonth : month;
                 var end = range.To < monthEnd ? range.To : monthEnd;
                 if (start <= end)
                 {
@@ -52,18 +53,31 @@ public static partial class ReportingEndpoints
                         : await BuildOperatingStatement(t.AcademyId, partRange, branchId, sportId, db, clock);
                     months.Add(new(start, end, part.TotalIncome, part.TotalExpenses, part.Surplus));
                 }
-                if (month == DateOnly.MinValue || month <= range.From) break;
+                if (month <= firstMonth) break;
                 month = month.AddMonths(-1);
             }
             months.Reverse();
             d = d with { Monthly = months.ToArray() };
+
+            var previousStartDay = range.From.DayNumber - (range.To.DayNumber - range.From.DayNumber) - 1;
+            if (previousStartDay >= new DateOnly(1900, 1, 1).DayNumber)
+            {
+                var previousRange = await FinancialRange(t.AcademyId, DateOnly.FromDayNumber(previousStartDay), range.From.AddDays(-1), db, clock);
+                var previous = await BuildOperatingStatement(t.AcademyId, previousRange, branchId, sportId, db, clock);
+                d = d with {
+                    PreviousSurplus = previous.Surplus,
+                    SurplusChangePercentage = previous.Surplus == 0
+                        ? null
+                        : Math.Round((d.Surplus - previous.Surplus) * 100 / Math.Abs(previous.Surplus), 1)
+                };
+            }
         }
         if(format!="csv")return Results.Ok(d);
         var rows=new List<string[]>{new[]{"قائمة تشغيلية بالأساس النقدي","من",d.From.ToString("yyyy-MM-dd"),"إلى",d.To.ToString("yyyy-MM-dd"),d.Currency},new[]{"القسم","البند","المبلغ"}};
         rows.AddRange(d.Income.Select(x=>new[]{"مقبوضات",x.Label,x.Amount.ToString("0.00",CultureInfo.InvariantCulture)}));
         rows.AddRange(d.Expenses.Select(x=>new[]{"مدفوعات تشغيلية",x.Label,x.Amount.ToString("0.00",CultureInfo.InvariantCulture)}));
         rows.Add(["الإجمالي","الفائض / العجز النقدي",d.Surplus.ToString("0.00",CultureInfo.InvariantCulture)]);
-        rows.AddRange(d.Warnings.Select(w=>new[]{"ملاحظة",w,""}));return Csv(rows,"operating-statement.csv");
+        rows.AddRange(d.Warnings.Select(w=>new[]{"ملاحظة",w,""}));return Csv(rows,"operating-statement.csv", decimalColumn: 2);
     }
 
     // Reuses receipt attribution and refund queries used by the collections report.
@@ -79,7 +93,7 @@ public static partial class ReportingEndpoints
         var visits=await DayPassFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,sport,branch,null,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0;
         var refunds=await RefundFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,sport,branch,null,null,null,db).SumAsync(c=>(decimal?)c.Amount)??0;
         var discounts=await db.Receipts.Where(x=>query.Any(c=>c.Id==x.CollectionId)).SumAsync(x=>(decimal?)x.DiscountAmount)??0;
-        var income=new List<OperatingStatementLine>{new("subscription","اشتراكات محصلة",subscriptions,"/dashboard/reports/financial?collectionType=Subscription"),new("private","برايفت محصل",privateIncome,"/dashboard/reports/financial?collectionType=Subscription"),new("product","مبيعات منتجات محصلة",products,"/dashboard/reports/financial?collectionType=Product"),new("tournament","رسوم بطولات محصلة",tournaments,"/dashboard/reports/financial?collectionType=Tournament"),new("refund","استردادات وعكس إيصالات",-refunds,"/dashboard/reports/financial")};
+        var income=new List<OperatingStatementLine>{new("subscription","اشتراكات محصلة",subscriptions,"/dashboard/reports/financial?collectionType=Subscription"),new("private","برايفت محصل",privateIncome,"/dashboard/reports/financial?collectionType=Subscription"),new("product","مبيعات منتجات محصلة",products,"/dashboard/reports/financial?collectionType=Product"),new("tournament","رسوم بطولات محصلة",tournaments,"/dashboard/reports/financial?collectionType=Tournament"),new("refund","استردادات وعكس إيصالات",-refunds,"/dashboard/reports/financial?collectionType=Refund")};
         if(visits!=0)income.Add(new("visits","زيارات وخدمات مرافق محصلة",visits,"/dashboard/reports/financial?collectionType=DayPass"));
         var external=ExternalFinancialQuery(academy,r.Currency,r.StartUtc,r.EndUtcExclusive,sport,branch,null,null,null,db);
         var rental=await external.Where(x=>x.Agreement.Kind==ExternalAgreementKind.PoolRental).SumAsync(x=>(decimal?)x.Amount)??0;
@@ -92,7 +106,8 @@ public static partial class ReportingEndpoints
         var operating=db.OperatingExpenses.Where(e=>e.AcademyId==academy&&e.Currency==r.Currency&&e.Status==OperatingExpenseStatus.Posted&&(!branch.HasValue||e.BranchId==branch));
         if(sport.HasValue)operating=operating.Where(e=>e.SportId==sport||e.TrainingGroupId.HasValue&&db.TrainingGroups.Any(g=>g.Id==e.TrainingGroupId&&g.SportId==sport));
         var categoryRows=await operating.Where(e=>e.PaidOn!=null&&(r.StartUtc==DateTimeOffset.MinValue||e.PaidOn>=r.From)&&(r.EndUtcExclusive==DateTimeOffset.MaxValue||e.PaidOn<=r.To)).GroupBy(e=>e.Category).Select(g=>new{key=g.Key,amount=g.Sum(e=>e.Amount)}).ToArrayAsync();
-        foreach(var c in categoryRows)expenses.Add(new(c.key,ExpenseLabel(c.key),c.amount,"/dashboard/finance/operating-expenses"));
+        foreach(var c in categoryRows)expenses.Add(new(c.key,ExpenseLabel(c.key),c.amount,
+            $"/dashboard/finance/operating-expenses?category={Uri.EscapeDataString(c.key)}&status=Posted&paid=true&dateBasis=payment"));
         decimal payrollCash=0,privateCash=0,advanceCash=0,advanceApplied=0,payable=0;
         if(!sport.HasValue)
         {

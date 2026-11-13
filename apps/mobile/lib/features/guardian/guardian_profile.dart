@@ -2,8 +2,10 @@ import '../shared/group_schedule.dart';
 
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
 import '../../core/theme/appearance.dart';
+import '../../core/widgets/page_status.dart';
 
 import '../../core/auth/auth_controller.dart';
 import 'guardian_ui.dart';
@@ -24,7 +26,13 @@ import '../shared/player_goals.dart';
 
 import 'guardian_profile_header.dart';
 import 'daily_nutrition.dart';
-import 'guardian_child_actions.dart';
+
+String _subscriptionDateLabel(Object? value) {
+  final date = DateTime.tryParse(day(value));
+  if (date == null) return 'تاريخ غير متاح';
+  final format = DateFormat.yMMMd('ar')..useNativeDigits = false;
+  return format.format(date);
+}
 
 class ChildProfile extends StatefulWidget {
   final AuthController auth;
@@ -101,44 +109,71 @@ class _ChildProfileState extends State<ChildProfile> {
 
   Widget link(String title, IconData icon, Widget page) =>
       GLink(title, icon, () => openPage(context, page));
-  Widget subscription(Json e, Json player) => GCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        UiText('${e['sport']} · ${e['group']}'),
-        UiText(trainingRegistrationLabel(e['registrationFormat'])),
-        if (e['period'] is Map) ...[
-          StatusPill(e['period']['status']),
-          UiText(textOf(e['period']['plan'])),
-          UiText(
-            '${day(e['period']['startDate'])} — ${day(e['period']['endDate'])}',
-            textDirection: TextDirection.ltr,
-          ),
-          if (e['period']['remainingSessions'] != null)
-            UiText('الحصص المتبقية: ${e['period']['remainingSessions']}'),
-          TextButton(
+  Widget subscription(Json e, Json player) {
+    final period = e['period'] is Json
+        ? obj(e['period'])
+        : const <String, dynamic>{};
+    final next = e['nextPeriod'] is Json
+        ? obj(e['nextPeriod'])
+        : const <String, dynamic>{};
+    final periodId = period['id'];
+    final nextId = next['id'];
+    return GCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          UiText('${e['sport']} · ${e['group']}'),
+          UiText(trainingRegistrationLabel(e['registrationFormat'])),
+          if (periodId is String) ...[
+            const SizedBox(height: 8),
+            StatusPill(period['status']),
+            UiText(textOf(period['plan'])),
+            UiText(
+              'بداية الاشتراك ${_subscriptionDateLabel(period['startDate'])}',
+            ),
+            if (period['endDate'] != null)
+              UiText(
+                'نهاية الاشتراك ${_subscriptionDateLabel(period['endDate'])}',
+              ),
+            if (period['remainingSessions'] != null)
+              UiText('الحصص المتبقية ${period['remainingSessions']}'),
+            TextButton(
+              onPressed: () =>
+                  openPage(context, PeriodPage(auth: auth, id: periodId)),
+              child: const UiText('تفاصيل حالة الاشتراك'),
+            ),
+          ] else
+            const UiText('لم يتم تفعيل اشتراك بعد'),
+          if (nextId is String && nextId != periodId) ...[
+            const Divider(),
+            UiText(
+              'الفترة التالية تبدأ ${_subscriptionDateLabel(next['startDate'])}',
+            ),
+            TextButton(
+              onPressed: () =>
+                  openPage(context, PeriodPage(auth: auth, id: nextId)),
+              child: const UiText('تفاصيل الفترة التالية'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          FilledButton(
             onPressed: () => openPage(
               context,
-              PeriodPage(auth: auth, id: e['period']['id']),
+              PlanPicker(
+                auth: auth,
+                environment: environment,
+                enrollmentId: e['id'],
+                childName: player['arabicName'],
+              ),
             ),
-            child: const UiText('تفاصيل حالة الاشتراك'),
+            child: UiText(
+              periodId is String ? 'تجديد الاشتراك' : 'اختيار باقة والاشتراك',
+            ),
           ),
         ],
-        FilledButton(
-          onPressed: () => openPage(
-            context,
-            PlanPicker(
-              auth: auth,
-              environment: environment,
-              enrollmentId: e['id'],
-              childName: player['arabicName'],
-            ),
-          ),
-          child: const UiText('تجديد الاشتراك'),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) =>
@@ -184,18 +219,6 @@ class _ChildProfileState extends State<ChildProfile> {
                       evaluationCount: stats?['evaluationCount'] as int?,
                       monthlyStars: data['monthlyStars'] as int?,
                     ),
-                  if (tab == 'card') ...[
-                    const SizedBox(height: 8),
-                    GuardianChildActions(
-                      auth: auth,
-                      playerId: playerId,
-                      playerName: textOf(player['arabicName']),
-                      nutritionDate: widget.nutritionDate ?? today,
-                      enrollmentId: selected?['id']?.toString(),
-                      nextSession: rows(selected?['upcoming'] ?? <Json>[])
-                          .firstOrNull,
-                    ),
-                  ],
                   if (tab != 'card')
                     GCard(
                       key: const ValueKey('profile-compact-identity'),
@@ -220,12 +243,13 @@ class _ChildProfileState extends State<ChildProfile> {
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                                UiText(
-                                  childContextLine(player, selected, today),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
+                                if (selected != null)
+                                  UiText(
+                                    '${selected['sport']} · ${selected['branch']}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
                                 if (selected?['group'] != null)
                                   UiText(
                                     textOf(selected!['group']),
@@ -388,6 +412,17 @@ class _ChildProfileState extends State<ChildProfile> {
                       Icons.sports_soccer,
                       ReportHistory(auth: auth, playerId: playerId),
                     ),
+                    if (selected != null)
+                      link(
+                        'التدريب والمواعيد',
+                        Icons.calendar_month_outlined,
+                        ProfileRecords(
+                          auth: auth,
+                          playerId: playerId,
+                          section: 'schedule',
+                          enrollmentId: selected['id'] as String?,
+                        ),
+                      ),
                     if (selected != null) subscription(selected, player),
                   ],
                   if (tab == 'att') ...[
@@ -422,11 +457,20 @@ class _ChildProfileState extends State<ChildProfile> {
                         section: 'attendance',
                       ),
                     ),
-                    if (rows(data['compensations'] ?? <Json>[]).isNotEmpty) ...[
-                      const Heading('تعويضات اللاعب المعتمدة'),
-                      for (final c in rows(data['compensations']))
-                        CompensationCard(data: c),
-                    ],
+                    if (compensationForEnrollment(
+                      data,
+                      selected?['id'],
+                    ).isNotEmpty)
+                      link(
+                        'التعويضات ومواعيد التدريب',
+                        Icons.calendar_month_outlined,
+                        ProfileRecords(
+                          auth: auth,
+                          playerId: playerId,
+                          section: 'schedule',
+                          enrollmentId: selected?['id'] as String?,
+                        ),
+                      ),
                   ],
                   if (tab == 'prog') ...[
                     const Heading('آخر التقييمات المنشورة'),
@@ -552,7 +596,7 @@ class _ChildProfileState extends State<ChildProfile> {
                     link(
                       'إيصالاتي',
                       Icons.receipt_long,
-                      ReceiptsPage(auth: auth),
+                      ReceiptsPage(auth: auth, playerId: playerId),
                     ),
                   ],
                 ],
@@ -573,6 +617,64 @@ class ProfileRecords extends StatelessWidget {
     required this.section,
     this.enrollmentId,
   });
+  List<Widget> schedule(Json e, Json profile) {
+    final grants = compensationForEnrollment(profile, e['id']).toList();
+    final makeups = makeupSessionIds(grants);
+    final recurring = rows(e['recurring'] ?? <Json>[]);
+    return [
+      Heading(textOf(e['sport'])),
+      UiText(trainingRegistrationLabel(e['registrationFormat'])),
+      UiText('${e['branch']} · ${e['group']}'),
+      for (final transfer
+          in e['transfers'] is List ? rows(e['transfers']) : <Json>[])
+        GroupTransferNotice(
+          group: textOf(transfer['group']),
+          date: day(transfer['effectiveDate']),
+        ),
+      for (final move in rows(e['sessionMoves'] ?? <Json>[]))
+        GroupTransferNotice(
+          group: textOf(move['group']),
+          date: day(move['date']),
+          occurrence: true,
+        ),
+      const Heading('الحصص القادمة'),
+      if (rows(e['upcoming']).isEmpty)
+        const EmptyMessage('لا توجد حصص قادمة منشورة.'),
+      for (final s in rows(e['upcoming']))
+        GCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(textOf(s['group'] ?? e['group'])),
+              if (makeups.contains(s['id']))
+                const UiText(
+                  'حصة تعويضية',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              UiText(
+                sessionDateLabel(s['sessionDate']),
+                textDirection: TextDirection.rtl,
+              ),
+              UiText(
+                trainingTimeRange(s['startTime'], s['endTime']),
+                textDirection: TextDirection.rtl,
+              ),
+            ],
+          ),
+        ),
+      if (grants.isNotEmpty) ...[
+        const Heading('التعويضات المعتمدة'),
+        for (final grant in grants)
+          CompensationCard(
+            key: ValueKey(grant['id']),
+            data: grant,
+            today: profile['trainingToday'] as String?,
+          ),
+      ],
+      if (recurring.isNotEmpty) WeeklyGroupSchedule(schedules: recurring),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: section == 'schedule' ? 'التدريب والمواعيد' : 'الحضور',
@@ -581,60 +683,23 @@ class ProfileRecords extends StatelessWidget {
       path: '/api/v1/guardian/children/$playerId/profile',
       builder: (context, value) {
         final d = obj(value);
+        final enrollments = rows(
+          d['enrollments'],
+        ).where((entry) => enrollmentId == null || entry['id'] == enrollmentId);
         return gList(
           section == 'schedule'
               ? [
-                  for (final e in rows(d['enrollments']).where(
-                    (e) => enrollmentId == null || e['id'] == enrollmentId,
-                  )) ...[
-                    Heading(textOf(e['sport'])),
-                    UiText(trainingRegistrationLabel(e['registrationFormat'])),
-                    UiText('${e['branch']} · ${e['group']}'),
-                    WeeklyGroupSchedule(
-                      schedules: rows(e['recurring'] ?? <Json>[]),
-                    ),
-                    for (final transfer
-                        in e['transfers'] is List
-                            ? rows(e['transfers'])
-                            : <Json>[])
-                      GroupTransferNotice(
-                        group: textOf(transfer['group']),
-                        date: day(transfer['effectiveDate']),
-                      ),
-                    for (final move in rows(e['sessionMoves']))
-                      GroupTransferNotice(
-                        group: textOf(move['group']),
-                        date: day(move['date']),
-                        occurrence: true,
-                      ),
-                    const Heading('الجلسات القادمة'),
-                    if (rows(e['upcoming']).isEmpty)
-                      const EmptyMessage('لا توجد جلسات قادمة منشورة.'),
-                    for (final s in rows(e['upcoming']))
-                      GCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            UiText(textOf(s['group'] ?? e['group'])),
-                            UiText(
-                              sessionDateLabel(s['sessionDate']),
-                              textDirection: TextDirection.rtl,
-                            ),
-                            UiText(
-                              trainingTimeRange(s['startTime'], s['endTime']),
-                              textDirection: TextDirection.rtl,
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
+                  if (enrollments.isEmpty)
+                    const EmptyMessage('لا توجد مواعيد تدريب لهذا التسجيل.'),
+                  for (final e in enrollments) ...schedule(e, d),
                 ]
               : [
                   Facts([
                     ('حاضر', textOf(d['attendanceSummary']['present'])),
                     ('غائب', textOf(d['attendanceSummary']['absent'])),
                   ]),
-                  if (rows(d['attendance']).isEmpty) const EmptyMessage(),
+                  if (rows(d['attendance']).isEmpty)
+                    const EmptyMessage('لم يُسجل حضور أو غياب بعد.'),
                   for (final a in rows(d['attendance']))
                     GCard(
                       child: Column(
@@ -657,31 +722,80 @@ class PeriodPage extends StatelessWidget {
   final AuthController auth;
   final String id;
   const PeriodPage({super.key, required this.auth, required this.id});
+
   @override
   Widget build(BuildContext context) => GuardianPage(
     title: 'حالة الاشتراك',
     child: RemoteBody(
       auth: auth,
       path: '/api/v1/guardian/subscriptions/periods/$id/adjustments',
+      notFound: const PageStatus(
+        child: StatusPanel(
+          message: 'هذا الاشتراك غير متاح.',
+          icon: Icons.event_busy_outlined,
+        ),
+      ),
       builder: (context, value) {
         final d = obj(value);
+        final adjustments = rows(d['adjustments']);
         return gList([
-          Heading(textOf(d['plan'])),
-          StatusPill(d['status']),
-          if (d['origin'] == 'ApprovedWaiver')
-            const UiText('تدريب مجاني بإعفاء معتمد'),
-          UiText('${day(d['startDate'])} — ${day(d['endDate'])}'),
-          if (d['frozenFromDate'] != null)
-            UiText('مجمد من ${day(d['frozenFromDate'])}'),
-          if (d['remainingSessions'] != null)
-            UiText('الحصص المتبقية: ${d['remainingSessions']}'),
+          GCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                UiText(
+                  textOf(d['plan']),
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                StatusPill(d['status']),
+                if (d['origin'] == 'ApprovedWaiver') ...[
+                  const SizedBox(height: 8),
+                  const UiText('تدريب مجاني بإعفاء معتمد'),
+                ],
+                const SizedBox(height: 12),
+                UiText(
+                  'بداية الاشتراك ${_subscriptionDateLabel(d['startDate'])}',
+                ),
+                if (d['endDate'] != null)
+                  UiText(
+                    'نهاية الاشتراك ${_subscriptionDateLabel(d['endDate'])}',
+                  ),
+                if (d['frozenFromDate'] != null)
+                  UiText(
+                    'مجمد من ${_subscriptionDateLabel(d['frozenFromDate'])}',
+                  ),
+                if (d['remainingSessions'] != null)
+                  UiText('الحصص المتبقية ${d['remainingSessions']}'),
+              ],
+            ),
+          ),
           const Heading('سجل التعديلات'),
-          if (rows(d['adjustments']).isEmpty)
-            const EmptyMessage('لا توجد تعديلات.'),
-          for (final a in rows(d['adjustments']))
+          if (adjustments.isEmpty) const EmptyMessage('لا توجد تعديلات.'),
+          for (final a in adjustments)
             GCard(
-              child: UiText(
-                '${label(a['type'])} · ${day(a['effectiveDate'])}\n${a['type'] == 'SessionsAdded' ? '+${a['sessionsDelta']} حصة · الرصيد ${a['oldRemainingSessions']} ← ${a['newRemainingSessions']}\n' : ''}نهاية الاشتراك: ${day(a['newEndDate'])}',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  UiText(
+                    a['type'] == 'Cancelled'
+                        ? 'إلغاء الاشتراك'
+                        : label(a['type']),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  UiText(_subscriptionDateLabel(a['effectiveDate'])),
+                  if (a['sessionsDelta'] != null)
+                    UiText('أضيفت ${a['sessionsDelta']} حصة'),
+                  if (a['oldRemainingSessions'] != null &&
+                      a['newRemainingSessions'] != null)
+                    UiText(
+                      'الرصيد من ${a['oldRemainingSessions']} إلى ${a['newRemainingSessions']} حصة',
+                    ),
+                  if (a['newEndDate'] != null)
+                    UiText(
+                      'نهاية الاشتراك ${_subscriptionDateLabel(a['newEndDate'])}',
+                    ),
+                ],
               ),
             ),
         ]);

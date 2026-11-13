@@ -11,7 +11,7 @@ namespace Academy.Api.Importing;
 
 public sealed partial class FriendlyImportHistory
 {
-    public async Task Publish(FoundationDbContext db, AcademyImportJob job, ResourceSessionCoordinator resources, CancellationToken token)
+    public async Task Publish(FoundationDbContext db, AcademyImportJob job, DateOnly publishedOn, ResourceSessionCoordinator resources, CancellationToken token)
     {
         var now = job.CreatedAtUtc;
         var mapped = await db.ImportedEnrollments.Where(m => m.SourceSystem == source && job.LegacyEnrollmentIds.Contains(m.LegacyEnrollmentId)).ToDictionaryAsync(m => m.LegacyEnrollmentId, token);
@@ -50,7 +50,7 @@ public sealed partial class FriendlyImportHistory
             var m = mapped[p.Enrollment]; var id = p.Current ? m.SubscriptionPeriodId : Id("period", code); periodIds[code] = id;
             if (storedPeriods.ContainsKey(id)) continue;
             var period = new SubscriptionPeriod { Id = id, AcademyId = academy, SportEnrollmentId = m.SportEnrollmentId, SportId = p.Plan.SportId, SubscriptionPlanId = p.Plan.Id, Origin = SubscriptionOrigin.ImportedHistorical, ImportJobId = job.Id, StartDate = p.Start, EndDate = p.End, InitialSessions = p.Entitled, RemainingSessions = p.Remaining, PriceSnapshot = p.Net, CurrencySnapshot = p.Currency, CreatedByUserId = job.ActorUserId, CreatedAtUtc = now, UpdatedAtUtc = now, PlanTypeSnapshot = p.Plan.PlanType, PlanNameSnapshot = p.Plan.ArabicName, ServiceKindSnapshot = p.Plan.ServiceKind, TrainingFormatSnapshot = p.Plan.TrainingFormat, PlanRevisionSnapshot = p.Plan.Revision, DurationDaysSnapshot = p.End.HasValue ? p.End.Value.DayNumber - p.Start.DayNumber + 1 : null, SessionCountSnapshot = p.Entitled };
-            period.Status = SubscriptionPeriodState.Resolve(SubscriptionPeriodStatus.Active, p.Start, p.End, p.Plan.PlanType, p.Remaining, cutoff);
+            period.Status = SubscriptionPeriodState.Resolve(SubscriptionPeriodStatus.Active, p.Start, p.End, p.Plan.PlanType, p.Remaining, publishedOn);
             db.SubscriptionPeriods.Add(period); storedPeriods[id] = period;
         }
         await db.SaveChangesAsync(token);

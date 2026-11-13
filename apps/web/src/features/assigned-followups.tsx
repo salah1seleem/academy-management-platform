@@ -11,10 +11,11 @@ import { PageHeader } from "../components/dashboard-shell";
 import { PrivateInvestigations } from "./feedback-investigations";
 type Item = { id: string; version: number; state: string; condition: string; conditionActive: boolean | null; overdue: boolean; dueOn: string | null; note: string | null; resolutionReason: string | null; sourceUrl: string; source: { name: string; branch: string; sport: string; enrollments: number; capacity: number | null; overdueFeedback?: OverdueFeedbackData | null; recordedAbsences?: RecordedAbsenceData | null; evaluationDrafts?: DraftReviewData | null; coverageGaps?: { sessionDate: string; startTime: string }[] } | null };
 type Data = { item?: Item; items?: Item[]; history?: { id: string; createdAtUtc: string; after: string }[]; canEdit: boolean; canOpenSource: boolean; hasMore?: boolean };
-export function AssignedFollowUps({ id }: { id?: string }) {
-  const [range, setRange] = useState<{ from?: string; to?: string; allDates?: string }>({});
+export function AssignedFollowUps({ id, initialAllDates = false }: { id?: string; initialAllDates?: boolean }) {
+  const [range, setRange] = useState<{ from?: string; to?: string; allDates?: string }>(initialAllDates ? { allDates: "true" } : {});
   const [state, setState] = useState("Open"), [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState("");
+  const allDatesSuffix = initialAllDates ? "?allDates=true" : "";
   const key = JSON.stringify([id, range, state, revision]);
   const [result, setResult] = useState<{ key: string; data?: Data; error?: string }>();
   const data = result?.key === key ? result.data : undefined, error = result?.key === key ? result.error : undefined;
@@ -22,15 +23,22 @@ export function AssignedFollowUps({ id }: { id?: string }) {
     const c = new AbortController();
     const path = id ? `/api/v1/my-followups/${id}` : `/api/v1/my-followups?${new URLSearchParams({ ...range, state })}`;
     void fetch(path, { cache: "no-store", signal: c.signal }).then(async r => {
-      if (!r.ok) throw new Error(r.status === 403 || r.status === 404 ? "المتابعة غير متاحة ضمن إسنادك وصلاحياتك الحالية." : "تعذر تحميل المتابعات. أعد المحاولة.");
-      const value = await r.json(); if (!c.signal.aborted) { setResult({ key, data: value }); if (!id && !range.allDates && !range.from && !range.to) setRange({ from: value.from, to: value.to }); }
-    }).catch(e => { if (!c.signal.aborted) setResult({ key, error: e.message }); });
+      if (r.status === 403 || r.status === 404) {
+        if (!c.signal.aborted) setResult({ key, error: id ? "المتابعة غير متاحة ضمن إسنادك وصلاحياتك الحالية." : "المتابعات غير متاحة ضمن صلاحياتك الحالية." });
+        return;
+      }
+      if (!r.ok) throw new Error();
+      const value = await r.json();
+      if (c.signal.aborted) return;
+      setResult({ key, data: value });
+      if (!id && !range.allDates && !range.from && !range.to && value.from && value.to) setRange({ from: value.from, to: value.to });
+    }).catch(() => { if (!c.signal.aborted) setResult({ key, error: "تعذر تحميل المتابعات. أعد المحاولة." }); });
     return () => c.abort();
   }, [key, id, range, state]);
   useEffect(() => { const refresh = () => setRevision(x => x + 1); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, []);
   return <section className="assigned-followups" dir="rtl"><PageHeader title={id ? "تفاصيل المتابعة المسندة" : "متابعاتي المسندة"} context="متابعات العمل" description="مهامك في نطاق فرعك ورياضتك. تحديثها لا يغيّر الحضور أو الإسناد أو أي مبلغ."/>
-    {id ? <Link href="/dashboard/my-followups"><ArrowRight/>العودة لمتابعاتي</Link> : <div className="assigned-filters"><label>من تاريخ<input type="date" value={range.from ?? ""} onChange={e => setRange(r => ({ ...r, from: e.target.value, allDates: "true" }))}/></label><label>إلى تاريخ<input type="date" value={range.to ?? ""} onChange={e => setRange(r => ({ ...r, to: e.target.value, allDates: "true" }))}/></label><label>الحالة<select value={state} onChange={e => setState(e.target.value)}><option value="">كل الحالات</option><option value="Open">المفتوحة</option>{Object.entries(followUpStates).map(([s, label]) => <option key={s} value={s}>{label}</option>)}</select></label><button className="secondary-button" onClick={() => { setRange({ allDates: "true" }); setState(""); }}>مسح</button></div>}
-    {notice && <p role="status">{notice}</p>}{error ? <p role="alert">{error}</p> : !data ? <p role="status">جارٍ تحميل متابعاتك…</p> : id && data.item ? <><Summary item={data.item} canOpenSource={data.canOpenSource}/>{data.canEdit ? <Update key={`${data.item.id}:${data.item.version}`} item={data.item} saved={() => { setNotice("تم تحديث المتابعة وتسجيل الإجراء."); setRevision(x => x + 1); }}/> : <p role="status">للقراءة فقط أو متابعة مغلقة. الإسناد وإعادة الفتح لدى المالك.</p>}<h2>سجل المتابعة</h2>{data.history?.map(h => { const after = JSON.parse(h.after); return <article key={h.id}><strong>{followUpStates[after.State]}</strong><time>{new Date(h.createdAtUtc).toLocaleString("ar-EG-u-nu-latn")}</time><p>{after.Note}</p>{after.ResolutionReason && <p>السبب: {after.ResolutionReason}</p>}</article>; })}</> : <><div className="assigned-grid">{data.items?.map(i => <article key={i.id}><Summary item={i} canOpenSource={false}/><Link href={`/dashboard/my-followups/${i.id}`}>فتح المتابعة</Link></article>)}</div>{!data.items?.length && <p role="status">لا توجد متابعات مسندة إليك ضمن الفلتر.</p>}{data.hasMore && <p>تظهر أول 100 متابعة؛ ضيق الفترة لعرض الباقي.</p>}</>}
+    {id ? <Link href={`/dashboard/my-followups${allDatesSuffix}`}><ArrowRight aria-hidden="true"/>العودة لمتابعاتي</Link> : <div className="assigned-filters"><label>من تاريخ<input type="date" value={range.from ?? ""} onChange={e => setRange(r => ({ ...r, from: e.target.value, allDates: "true" }))}/></label><label>إلى تاريخ<input type="date" value={range.to ?? ""} onChange={e => setRange(r => ({ ...r, to: e.target.value, allDates: "true" }))}/></label><label>الحالة<select value={state} onChange={e => setState(e.target.value)}><option value="">كل الحالات</option><option value="Open">المفتوحة</option>{Object.entries(followUpStates).map(([s, label]) => <option key={s} value={s}>{label}</option>)}</select></label><button className="secondary-button" onClick={() => { setRange({ allDates: "true" }); setState(""); }}>مسح</button></div>}
+    {notice && <p role="status">{notice}</p>}{error ? <p role="alert">{error}</p> : !data ? <p role="status">جارٍ تحميل متابعاتك…</p> : id && data.item ? <><Summary item={data.item} canOpenSource={data.canOpenSource}/>{data.canEdit ? <Update key={`${data.item.id}:${data.item.version}`} item={data.item} saved={() => { setNotice("تم تحديث المتابعة وتسجيل الإجراء."); setRevision(x => x + 1); }}/> : <p role="status">للقراءة فقط أو متابعة مغلقة. الإسناد وإعادة الفتح لدى المالك.</p>}<h2>سجل المتابعة</h2>{data.history?.map(h => { const after = JSON.parse(h.after); return <article key={h.id}><strong>{followUpStates[after.State]}</strong><time>{new Date(h.createdAtUtc).toLocaleString("ar-EG-u-nu-latn")}</time><p>{after.Note}</p>{after.ResolutionReason && <p>السبب: {after.ResolutionReason}</p>}</article>; })}</> : <><div className="assigned-grid">{data.items?.map(i => <article key={i.id}><Summary item={i} canOpenSource={false}/><Link href={`/dashboard/my-followups/${i.id}${allDatesSuffix}`}>فتح المتابعة</Link></article>)}</div>{!data.items?.length && <p role="status">لا توجد متابعات مسندة إليك ضمن الفلتر.</p>}{data.hasMore && <p>تظهر أول 100 متابعة؛ ضيق الفترة لعرض الباقي.</p>}</>}
     {!id && <PrivateInvestigations/>}
     <button className="secondary-button" onClick={() => setRevision(x => x + 1)}>تحديث المتابعات</button>
   </section>;

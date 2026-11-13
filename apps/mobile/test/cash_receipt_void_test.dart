@@ -1,5 +1,6 @@
 import 'package:academy_mobile/features/guardian/guardian_payments.dart';
 import 'package:academy_mobile/features/owner/owner_reports.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'guardian_test.dart' as guardian;
@@ -23,7 +24,10 @@ void main() {
           'isVoided': true,
           'enrollmentBranch': 'فرع التدريب',
           'collectionBranch': 'فرع الصندوق',
-          'paidAtUtc': '2026-09-28T06:00:00Z',
+          'paidAtUtc': '2026-11-11T21:59:00Z',
+          'paidAtAcademy': '2026-11-11T23:59:00+02:00',
+          'voidedAtUtc': '2026-11-11T22:01:00Z',
+          'voidedAtAcademy': '2026-11-12T00:01:00+02:00',
         },
       );
       await tester.pumpWidget(
@@ -31,7 +35,24 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('إيصال معكوس'), findsOneWidget);
-      expect(find.textContaining('المدفوع: 800'), findsOneWidget);
+      expect(find.text('المبلغ المدفوع'), findsOneWidget);
+      expect(find.textContaining('800'), findsOneWidget);
+      final locale = MaterialLocalizations.of(
+        tester.element(find.byType(ReceiptPage)),
+      );
+      final paidDay = locale.formatShortDate(DateTime.utc(2026, 11, 11));
+      final reversedDay = locale.formatShortDate(DateTime.utc(2026, 11, 12));
+      final paidTime = locale.formatTimeOfDay(
+        const TimeOfDay(hour: 23, minute: 59),
+      );
+      final reversedTime = locale.formatTimeOfDay(
+        const TimeOfDay(hour: 0, minute: 1),
+      );
+      expect(find.textContaining('$paidDay · $paidTime'), findsOneWidget);
+      expect(
+        find.textContaining('$reversedDay · $reversedTime'),
+        findsOneWidget,
+      );
       expect(find.textContaining('فرع التسجيل: فرع التدريب'), findsOneWidget);
       expect(find.textContaining('فرع التحصيل: فرع الصندوق'), findsOneWidget);
     },

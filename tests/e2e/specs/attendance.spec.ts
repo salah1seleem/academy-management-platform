@@ -15,7 +15,7 @@ async function openTodayFootballRoster(page: Page) {
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: "عمليات الأكاديمية", exact: true }).click();
   await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "تسجيل حضور اللاعبين", exact: true }).click();
-  await page.locator(`a[href='/dashboard/attendance/sessions/${session}/players']`).click();
+  await page.locator(`a[href^='/dashboard/attendance/sessions/${session}/players?']`).click();
   await expect(page.getByRole("heading", { name: "حضور اللاعبين" })).toBeVisible();
   return `/api/v1/attendance/sessions/${session}/players`;
 }
@@ -51,4 +51,22 @@ test("Coach cannot sign in to the web dashboard", async ({ page }) => {
 test("Guardian sees attendance for linked child only", async ({ page }) => {
   await guardianLogin(page);
   const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await child.getByRole("link", { name: "عرض الملف" }).click(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
+});
+
+test("Attendance list preserves its filters when returning from a roster", async ({ page }) => {
+  await staffLogin(page);
+  const group = "5a000000-0000-0000-0000-000000000130";
+  const session = await todaySession(page, group, "04:00", "04:15");
+  const data = await page.request.get(`/api/v1/attendance/sessions/${session}/players`).then(response => response.json());
+  const date = data.session.sessionDate;
+  const query = new URLSearchParams({ groupId: group, from: date, to: date });
+  await page.goto(`/dashboard/attendance/sessions?${query}`);
+  await page.getByRole("textbox", { name: "البحث بالاسم" }).fill(data.session.group);
+  await page.locator(`a[href^='/dashboard/attendance/sessions/${session}/players?']`).click();
+  await expect(page.getByRole("heading", { name: "حضور اللاعبين" })).toBeVisible();
+  await page.getByRole("link", { name: "العودة إلى الحصص" }).click();
+  await expect(page.getByRole("textbox", { name: "البحث بالاسم" })).toHaveValue(data.session.group);
+  await expect(page.getByLabel("فلتر المجموعة")).toHaveValue(group);
+  await expect(page.getByLabel("من تاريخ")).toHaveValue(date);
+  await expect(page.locator(`a[href^='/dashboard/attendance/sessions/${session}/players?']`)).toBeVisible();
 });

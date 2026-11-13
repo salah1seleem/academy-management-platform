@@ -29,7 +29,14 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
     {
         await using var scope = Scope(); var db = Db(scope);
         // Signed discrepancies are immutable evidence; retain their synthetic source graph too.
-        var retained = await db.ProviderEventQuarantines.Select(x => x.PaymentRequest.RenewalRequestId).ToArrayAsync();
+        var retained = await db.ProviderEventQuarantines.Where(x => renewals.Contains(x.PaymentRequest.RenewalRequestId))
+            .Select(x => x.PaymentRequest.RenewalRequestId).Distinct().ToArrayAsync();
+        // Close pending replacements on retained test graphs so their
+        // enrollment can be used by the next scenario.
+        var pendingRetainedPayments = await db.RenewalRequests.Where(x => retained.Contains(x.Id))
+            .Join(db.PaymentRequests, renewal => renewal.PaymentRequestId, payment => (Guid?)payment.Id, (_, payment) => payment)
+            .Where(payment => payment.Status == PaymentRequestStatus.Pending).Select(payment => payment.Id).ToArrayAsync();
+        foreach (var payment in pendingRetainedPayments) await Simulate(payment, "Failed");
         var ids = renewals.Distinct().Except(retained).ToArray();
         if (ids.Length > 0)
         {
@@ -72,7 +79,29 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
     [Fact] public async Task Financial_report_total_increases_by_final_only() { using var c = await Staff(DemoSeed.OwnerEmail); var before = (await Get(c, "/api/v1/reports/financial?from=2026-01-01&to=2026-12-31")).GetProperty("totalAmount").GetDecimal(); var r = await Apply(await NewRenewal(), RenewalDiscountType.Percentage, 10); await Simulate(r.PaymentRequestId!.Value, "Success"); var after = (await Get(c, "/api/v1/reports/financial?from=2026-01-01&to=2026-12-31")).GetProperty("totalAmount").GetDecimal(); Assert.Equal(810m, after - before); }
     [Fact] public async Task Owner_dashboard_revenue_increases_by_final_only() { using var c = await Staff(DemoSeed.OwnerEmail); var before = (await Get(c, "/api/v1/reports/owner-summary?from=2026-01-01&to=2026-12-31")).GetProperty("collections").GetProperty("total").GetDecimal(); var r = await Apply(await NewRenewal(), RenewalDiscountType.FixedAmount, 150); await Simulate(r.PaymentRequestId!.Value, "Success"); var after = (await Get(c, "/api/v1/reports/owner-summary?from=2026-01-01&to=2026-12-31")).GetProperty("collections").GetProperty("total").GetDecimal(); Assert.Equal(750m, after - before); }
     [Fact] public async Task Failed_discounted_payment_creates_no_collection() { var r = await Apply(await NewRenewal(), RenewalDiscountType.Percentage, 10); await Simulate(r.PaymentRequestId!.Value, "Failed"); await using var scope = Scope(); Assert.False(await Db(scope).Collections.AnyAsync(x => x.PaymentRequestId == r.PaymentRequestId)); }
-    [Fact] public async Task Retry_keeps_discounted_snapshot_and_amount() { var r = await Apply(await NewRenewal(), RenewalDiscountType.Percentage, 10); await Simulate(r.PaymentRequestId!.Value, "Failed"); using var c = await Guardian(); var response = await Post(c, $"/api/v1/guardian/subscriptions/payments/{r.PaymentRequestId}/retry", new { }, Guid.NewGuid().ToString()); response.EnsureSuccessStatusCode(); var created = (await response.Content.ReadFromJsonAsync<Created>())!; renewals.Add(created.RenewalId); await using var scope = Scope(); var db = Db(scope); Assert.Equal(810m, await db.PaymentRequests.Where(x => x.Id == created.PaymentId).Select(x => x.Amount).SingleAsync()); Assert.Equal(90m, await db.RenewalRequests.Where(x => x.Id == created.RenewalId).Select(x => x.DiscountAmount).SingleAsync()); }
+    [Fact]
+    public async Task Retry_keeps_discounted_snapshot_and_amount()
+    {
+        var discount = await Apply(await NewRenewal(), RenewalDiscountType.Percentage, 10);
+        await Simulate(discount.PaymentRequestId!.Value, "Failed");
+        using var guardian = await Guardian();
+        var retryPath = $"/api/v1/guardian/subscriptions/payments/{discount.PaymentRequestId}/retry";
+        var key = $"guardian-checkout-retry:{discount.PaymentRequestId}";
+        using var response = await Post(guardian, retryPath, new { }, key);
+        response.EnsureSuccessStatusCode();
+        var created = (await response.Content.ReadFromJsonAsync<Created>())!;
+        renewals.Add(created.RenewalId);
+
+        using var replayResponse = await Post(guardian, retryPath, new { }, key);
+        replayResponse.EnsureSuccessStatusCode();
+        Assert.Equal(created, await replayResponse.Content.ReadFromJsonAsync<Created>());
+        await using var scope = Scope();
+        var db = Db(scope);
+        Assert.Equal(810m, await db.PaymentRequests.Where(x => x.Id == created.PaymentId).Select(x => x.Amount).SingleAsync());
+        Assert.Equal(90m, await db.RenewalRequests.Where(x => x.Id == created.RenewalId).Select(x => x.DiscountAmount).SingleAsync());
+        Assert.Equal(1, await db.PaymentRequests.CountAsync(x => x.RenewalRequestId == created.RenewalId));
+        Assert.False(await db.Collections.AnyAsync(x => x.RenewalRequestId == created.RenewalId));
+    }
     [Fact] public async Task Remove_discount_restores_original_and_replaces_payment() { var s = await NewRenewal(); var applied = await Apply(s, RenewalDiscountType.Percentage, 10); await using var scope = Scope(); var service = scope.ServiceProvider.GetRequiredService<SubscriptionDiscountService>(); var removed = await service.RemoveAsync(DemoSeed.NogoomAcademyId, await Owner(), s.RenewalId, "إزالة للاختبار", applied.Version, Guid.NewGuid().ToString()); Assert.Equal(900m, removed.FinalAmount); Assert.NotEqual(applied.PaymentRequestId, removed.PaymentRequestId); }
     [Fact] public async Task Changing_discount_cancels_stale_payment() { var s = await NewRenewal(); var first = await Apply(s, RenewalDiscountType.Percentage, 10); var current = await Renewal(s.RenewalId); var second = await Apply(s with { Version = current.Version }, RenewalDiscountType.FixedAmount, 100); await using var scope = Scope(); var db = Db(scope); Assert.Equal(PaymentRequestStatus.Cancelled, await db.PaymentRequests.Where(x => x.Id == first.PaymentRequestId).Select(x => x.Status).SingleAsync()); Assert.Equal(800m, await db.PaymentRequests.Where(x => x.Id == second.PaymentRequestId).Select(x => x.Amount).SingleAsync()); }
     [Fact] public async Task Concurrent_updates_have_one_winner() { var s = await NewRenewal(); async Task<bool> Run(decimal v) { try { await Apply(s, RenewalDiscountType.FixedAmount, v); return true; } catch (DiscountConflictException) { return false; } } var outcomes = await Task.WhenAll(Run(100), Run(200)); Assert.Single(outcomes, x => x); }
@@ -80,6 +109,85 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
     [Fact] public async Task Renew_for_another_discount_does_not_grant_profile_access() { using var guardian = await Guardian(); var resolved = await Post(guardian, "/api/v1/guardian/subscriptions/external/resolve", new { reference = Slice3DemoSeed.ExternalRenewalCode }); resolved.EnsureSuccessStatusCode(); var response = await Post(guardian, "/api/v1/guardian/subscriptions/external/renewals", new { reference = Slice3DemoSeed.ExternalRenewalCode, subscriptionPlanId = Slice3DemoSeed.FootballMonthlyId }, Guid.NewGuid().ToString()); response.EnsureSuccessStatusCode(); var created = (await response.Content.ReadFromJsonAsync<Created>())!; renewals.Add(created.RenewalId); var row = await Renewal(created.RenewalId); await Apply(new Scenario(created.RenewalId, created.PaymentId, row.Version), RenewalDiscountType.Percentage, 10); Assert.Equal(HttpStatusCode.NotFound, (await guardian.GetAsync($"/api/v1/guardian/children/{Slice2DemoSeed.OtherPlayerId}")).StatusCode); }
     [Fact] public async Task Later_period_adjustments_do_not_change_paid_discount() { var r = await Apply(await NewRenewal(), RenewalDiscountType.Percentage, 10); await Simulate(r.PaymentRequestId!.Value, "Success"); await using var scope = Scope(); var db = Db(scope); var period = await db.SubscriptionPeriods.SingleAsync(x => x.Collection.PaymentRequestId == r.PaymentRequestId); period.EndDate = period.EndDate?.AddDays(5); period.Status = SubscriptionPeriodStatus.Cancelled; await db.SaveChangesAsync(); var renewal = await Renewal(r.RenewalRequestId); Assert.Equal((90m, 810m), (renewal.DiscountAmount, renewal.FinalAmount)); }
     [Fact] public async Task Financial_truth_is_consistent_across_all_records() { var r = await Apply(await NewRenewal(), RenewalDiscountType.FixedAmount, 125); await Simulate(r.PaymentRequestId!.Value, "Success"); await using var scope = Scope(); var db = Db(scope); var payment = await db.PaymentRequests.SingleAsync(x => x.Id == r.PaymentRequestId); var renewal = await db.RenewalRequests.SingleAsync(x => x.Id == r.RenewalRequestId); var collection = await db.Collections.SingleAsync(x => x.PaymentRequestId == r.PaymentRequestId); var receipt = await db.Receipts.SingleAsync(x => x.CollectionId == collection.Id); Assert.Equal([775m, 775m, 775m, 775m, 775m], [payment.Amount, renewal.FinalAmount, collection.Amount, receipt.FinalAmount, receipt.Amount]); }
+
+    [Fact]
+    public async Task Discount_attempt_reads_only_the_matching_actor_and_request()
+    {
+        var renewal = await NewRenewal();
+        var other = await NewDirectRenewal(DemoSeed.NogoomAcademyId);
+        var key = Guid.NewGuid().ToString();
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        using var admin = await Staff(DemoSeed.AdminEmail);
+        var saved = await ApplyHttp(owner, renewal, "Percentage", 10, key);
+        saved.EnsureSuccessStatusCode();
+        var changeId = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("adjustmentId").GetGuid();
+        async Task<HttpResponseMessage> Attempt(HttpClient client, Guid id)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/subscriptions/renewals/{id}/discount/attempt");
+            request.Headers.Add("Idempotency-Key", key);
+            return await client.SendAsync(request);
+        }
+        using var outcome = await Attempt(owner, renewal.RenewalId);
+        outcome.EnsureSuccessStatusCode();
+        Assert.Equal(changeId, (await outcome.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("adjustmentId").GetGuid());
+        Assert.Equal(HttpStatusCode.NotFound, (await Attempt(owner, other.RenewalId)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Attempt(admin, renewal.RenewalId)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await ApplyHttp(owner, other, "Percentage", 10, key)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await ApplyHttp(owner, renewal, "Percentage", 11, key)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Discount_rejects_precision_beyond_what_the_audit_can_store()
+    {
+        var renewal = await NewRenewal();
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await ApplyHttp(owner, renewal, "Percentage", 10.125m)).StatusCode);
+        Assert.Equal(renewal.Version, (await Renewal(renewal.RenewalId)).Version);
+    }
+
+    [Fact]
+    public async Task Late_confirmation_of_replaced_payment_keeps_the_discounted_request_unpaid()
+    {
+        var scenario = await NewRenewal();
+        await using var scope = Scope();
+        var db = Db(scope);
+        var oldAmount = await db.PaymentRequests.Where(row => row.Id == scenario.PaymentId).Select(row => row.Amount).SingleAsync();
+        var updated = await Apply(scenario, RenewalDiscountType.Percentage, 10);
+        var late = await Event(scenario.PaymentId, "succeeded", oldAmount);
+        using var callback = factory.CreateClient();
+        using var response = await callback.PostAsJsonAsync("/api/v1/payments/internal-test/events", late);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("request-terms-mismatch", await db.ProviderEventQuarantines.Where(row => row.ProviderEventId == late.ProviderEventId)
+            .Select(row => row.ReasonCode).SingleAsync());
+        var current = await Renewal(scenario.RenewalId);
+        Assert.Equal(updated.PaymentRequestId, current.PaymentRequestId);
+        Assert.Equal(810m, current.FinalAmount);
+        Assert.Equal(RenewalRequestStatus.PaymentInProgress, current.Status);
+        Assert.False(await db.Collections.AnyAsync(row => row.RenewalRequestId == scenario.RenewalId));
+        Assert.False(await db.Receipts.AnyAsync(row => row.Collection.RenewalRequestId == scenario.RenewalId));
+        Assert.False(await db.SubscriptionPeriods.AnyAsync(row => row.Collection != null && row.Collection.RenewalRequestId == scenario.RenewalId));
+    }
+
+    [Fact]
+    public async Task Replaced_payment_cannot_be_retried_by_the_guardian_or_staff()
+    {
+        var source = await NewRenewal();
+        var created = await Renewal(source.RenewalId);
+        var replacement = await Apply(source, RenewalDiscountType.FixedAmount, 125);
+        await using var scope = Scope();
+        var db = Db(scope);
+        var count = await db.RenewalRequests.CountAsync(row => row.AcademyId == created.AcademyId);
+        using var guardian = await Guardian();
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        var guardianPath = $"/api/v1/guardian/subscriptions/payments/{source.PaymentId}/retry";
+        var ownerPath = $"/api/v1/subscriptions/payments/{source.PaymentId}/retry";
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(guardian, guardianPath, new { }, Guid.NewGuid().ToString())).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(guardian, guardianPath, new { }, created.IdempotencyKey)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, ownerPath, new { }, Guid.NewGuid().ToString())).StatusCode);
+        Assert.Equal(count, await db.RenewalRequests.CountAsync(row => row.AcademyId == created.AcademyId));
+        Assert.Equal(replacement.PaymentRequestId, (await Renewal(source.RenewalId)).PaymentRequestId);
+        Assert.False(await db.Collections.AnyAsync(row => row.RenewalRequestId == source.RenewalId));
+    }
 
     private async Task<Scenario> NewRenewal()
     {
@@ -95,7 +203,7 @@ public sealed class SubscriptionDiscountIntegrationTests : IAsyncLifetime
 
     private async Task<RenewalDiscountResult> Apply(Scenario s, RenewalDiscountType type, decimal value, string reason = "خصم اختبار", string? key = null)
     { await using var scope = Scope(); return await scope.ServiceProvider.GetRequiredService<SubscriptionDiscountService>().ApplyAsync(await Academy(s.RenewalId), await Owner(), s.RenewalId, type, value, reason, s.Version, key ?? Guid.NewGuid().ToString()); }
-    private async Task<HttpResponseMessage> ApplyHttp(HttpClient c, Scenario s, string type, decimal value) => await Post(c, $"/api/v1/subscriptions/renewals/{s.RenewalId}/discount", new { type, value, reason = "خصم اختبار", expectedVersion = s.Version }, Guid.NewGuid().ToString());
+    private async Task<HttpResponseMessage> ApplyHttp(HttpClient c, Scenario s, string type, decimal value, string? key = null) => await Post(c, $"/api/v1/subscriptions/renewals/{s.RenewalId}/discount", new { type, value, reason = "خصم اختبار", expectedVersion = s.Version }, key ?? Guid.NewGuid().ToString());
     private async Task Simulate(Guid payment, string outcome) { using var c = await Guardian(); (await Post(c, $"/api/v1/guardian/subscriptions/payments/{payment}/simulate", new { outcome })).EnsureSuccessStatusCode(); }
     private async Task<ProviderEventEnvelope> Event(Guid paymentId, string status, decimal amount) { await using var scope = Scope(); var p = await Db(scope).PaymentRequests.SingleAsync(x => x.Id == paymentId); var unsigned = new ProviderEventEnvelope(p.AcademyId, p.Id, p.ProviderReference, $"evt-{Guid.NewGuid():N}", status, amount, p.Currency, ""); return unsigned with { Signature = Sign(unsigned) }; }
     private static string Sign(ProviderEventEnvelope e) { var payload = string.Join('|', e.AcademyId, e.PaymentRequestId, e.ProviderReference, e.ProviderEventId, e.Status, e.Amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), e.Currency); return Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes("Demo-Test-Signing-Key-Only-123456"), Encoding.UTF8.GetBytes(payload))); }

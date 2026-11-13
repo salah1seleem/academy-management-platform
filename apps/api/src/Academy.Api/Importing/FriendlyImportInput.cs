@@ -11,7 +11,8 @@ public sealed class FriendlyImportInput
         public string this[string key] => Cells.GetValueOrDefault(key)?.Value ?? "";
     }
     public Dictionary<string,(string Team,string Tournaments,string Photo)> Extras { get; private set; } = [];
-    public Dictionary<string,int> PrimaryRows { get; private set; } = [];
+    public Dictionary<int,int> PrimaryRows { get; private set; } = [];
+    public IReadOnlyList<ImportIssue> PlayerCellErrors { get; private set; } = [];
     public required ImportWorkbook Original { get; init; }
     public required ImportWorkbook Connected { get; set; }
     private readonly List<Row> memberRows = [];
@@ -44,10 +45,11 @@ public sealed class FriendlyImportInput
     public ImportIssue MapIssue(ImportIssue issue)
     {
         if (issue.Sheet == "الحصص") return issue with { Sheet = "المواعيد الأسبوعية" };
-        if (issue.Sheet == "التسجيلات" && PrimaryRows.Count>0) {
-            var e=Rows["التسجيلات"].FirstOrDefault(r=>r.Number==issue.Row);
-            if(e is not null && PrimaryRows.TryGetValue(e["Code"],out var n))return issue with{Sheet="اللاعبون",Row=n};
-        }
+        if (issue.Sheet == "التسجيلات" && PrimaryRows.TryGetValue(issue.Row, out var primaryRow))
+            return MapPlayerIssue(issue, primaryRow, FriendlyImportSchema.Sheets["التسجيلات"].FirstOrDefault(f => f.Header == issue.Column)?.Key ?? issue.Column);
+        if (issue.Sheet == "اللاعبون" && PrimaryRows.ContainsValue(issue.Row) &&
+            FriendlyImportSchema.Sheets["اللاعبون"].FirstOrDefault(f => f.Header == issue.Column) is { } playerField)
+            return MapPlayerIssue(issue, issue.Row, playerField.Key);
         if (issue.Sheet is not ("Enrollments" or "الأعضاء")) return issue;
         var index = issue.Row - 2;
         if (index < 0 || index >= memberRows.Count) return issue with { Sheet = "التسجيلات" };
@@ -60,14 +62,33 @@ public sealed class FriendlyImportInput
             if ((field is "Guardian" or "Phone" or "Family") && Guardians.TryGetValue(player["Guardian"], out var guardian)) { row = guardian; sheet = "أولياء الأمور"; field = field == "Guardian" ? "Name" : field == "Family" ? "Code" : "Phone"; }
         }
         if (field == "Enrollment") field = "Code";
-        if(PrimaryRows.TryGetValue(enrollment["Code"],out var primaryNumber) && sheet=="التسجيلات") return issue with {Sheet="اللاعبون",Row=primaryNumber};
+        if (sheet != "أولياء الأمور" && PrimaryRows.TryGetValue(enrollment.Number, out var primaryNumber))
+            return MapPlayerIssue(issue, primaryNumber, field);
         return issue with { Sheet = sheet, Row = row.Number, Column = FriendlyImportSchema.Sheets[sheet].FirstOrDefault(f => f.Key == field)?.Header ?? issue.Column };
+    }
+
+    private static ImportIssue MapPlayerIssue(ImportIssue issue, int row, string field)
+    {
+        var column = field switch
+        {
+            "Enrollment" or "Player" or "Period" => "Code",
+            "Registered" => "Start",
+            _ => field
+        };
+        return issue with
+        {
+            Sheet = "اللاعبون",
+            Row = row,
+            Column = column == "Name" ? "الاسم الأول وباقي الاسم" :
+                AcademyWorkbookSchema.Players.FirstOrDefault(f => f.Key == column)?.Header ?? issue.Column
+        };
     }
     public static FriendlyImportInput Parse(ImportWorkbook original)
     {
         var current = AcademyWorkbookSchema.IsCurrent(original) ? AcademyWorkbookSchema.Normalize(original) : null;
         if(current is not null) original = current.Book;
-        var result = new FriendlyImportInput { Original = original, Connected = original, Extras = current?.Extras ?? [], PrimaryRows = current?.PrimaryRows ?? [] };
+        var result = new FriendlyImportInput { Original = original, Connected = original, Extras = current?.Extras ?? [], PrimaryRows = current?.PrimaryRows ?? [], PlayerCellErrors = current?.Errors ?? [] };
+        result.Errors.AddRange(result.PlayerCellErrors);
         foreach (var (sheet, fields) in FriendlyImportSchema.Sheets)
         {
             result.Rows[sheet] = [];

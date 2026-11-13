@@ -24,13 +24,12 @@ class NextMatchStrip extends StatelessWidget {
           path:
               '/api/v1/my-matches?upcomingOnly=true${playerId == null ? '' : '&playerId=${Uri.encodeQueryComponent(playerId!)}'}',
           builder: (context, value) {
-            final matches =
-                rows(value).where((x) => x['isUpcoming'] == true).toList()
-                  ..sort(
-                    (a, b) => '${a['matchDate']} ${a['startTime']}'.compareTo(
-                      '${b['matchDate']} ${b['startTime']}',
-                    ),
-                  );
+            final matches = rows(value).where(isUpcomingMatch).toList()
+              ..sort(
+                (a, b) => '${a['matchDate']} ${a['startTime']}'.compareTo(
+                  '${b['matchDate']} ${b['startTime']}',
+                ),
+              );
             final nearest = matches.take(1).toList();
             if (nearest.isEmpty) return const SizedBox.shrink();
             return Column(
@@ -94,7 +93,7 @@ class NextMatchStrip extends StatelessWidget {
                                 ),
                               ),
                               UiText(
-                                '${m['tournament']} · ${m['startTime'].toString().substring(0, 5)}',
+                                '${m['tournament']} · ${trainingTimeOf(m['startTime'])}',
                                 style: Theme.of(context).textTheme.labelSmall,
                               ),
                               UiText(
@@ -106,7 +105,7 @@ class NextMatchStrip extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, size: 18),
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 16),
                       ],
                     ),
                   ),
@@ -141,26 +140,48 @@ class _MatchScheduleState extends State<MatchSchedule> {
     selectedChild = widget.playerId;
   }
 
-  Widget schedule() => RemoteBody(
-    key: ValueKey('matches-$selectedChild'),
-    auth: widget.auth,
-    path:
-        '/api/v1/my-matches${selectedChild == null ? '' : '?playerId=${Uri.encodeQueryComponent(selectedChild!)}'}',
-    builder: (context, v) => MatchExperience(
+  Widget schedule() {
+    final matchId = widget.matchId;
+    final query = Uri(
+      queryParameters: {'playerId': ?selectedChild, 'matchId': ?matchId},
+    ).query;
+    return RemoteBody(
+      key: ValueKey(query),
       auth: widget.auth,
-      items: widget.matchId == null
-          ? rows(v)
-          : rows(v).where((m) => m['id'] == widget.matchId).toList(),
-    ),
-  );
+      path: '/api/v1/my-matches${query.isEmpty ? '' : '?$query'}',
+      builder: (context, value) {
+        final items = rows(value);
+        if (matchId == null) {
+          return MatchExperience(auth: widget.auth, items: items);
+        }
+        final match = items
+            .where(
+              (item) =>
+                  item['id']?.toString().toLowerCase() == matchId.toLowerCase(),
+            )
+            .firstOrNull;
+        return gList([
+          if (match == null)
+            const EmptyMessage('المباراة غير متاحة في حسابك الحالي.')
+          else
+            MatchResultCard(data: match),
+        ]);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: BrandScope.maybeOf(context)?.sportTheme == 'swimming'
+    title: widget.matchId != null
+        ? localized(context, 'المباراة', 'Match')
+        : BrandScope.maybeOf(context)?.sportTheme == 'swimming'
         ? localized(context, 'المنافسات', 'Competitions')
         : localized(context, 'المباريات', 'Matches'),
     actions: [
-      NativeMatchEntry(auth: widget.auth),
-      PageVideoButton(auth: widget.auth, screen: 'matches'),
+      if (widget.matchId == null) ...[
+        NativeMatchEntry(auth: widget.auth),
+        PageVideoButton(auth: widget.auth, screen: 'matches'),
+      ],
     ],
     child: ListenableBuilder(
       listenable: widget.auth,
@@ -168,7 +189,8 @@ class _MatchScheduleState extends State<MatchSchedule> {
         if (identity == null || identity != contextKey()) {
           return const SizedBox.shrink();
         }
-        if (widget.auth.session?.selected?.role != 'Guardian') {
+        if (widget.matchId != null ||
+            widget.auth.session?.selected?.role != 'Guardian') {
           return schedule();
         }
         return RemoteBody(

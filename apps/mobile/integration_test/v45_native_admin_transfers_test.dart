@@ -216,21 +216,28 @@ void main() {
         await binding.takeScreenshot(name);
       }
 
-      Future<void> confirm(String image) async {
+      Future<void> confirm(String image, {bool group = false}) async {
         transport.preview = null;
-        await tap(find.text('معاينة الأثر والتعارضات'));
+        await tap(
+          find.text(group ? 'معاينة نقل المجموعة' : 'معاينة نقل الحصص'),
+        );
         for (var i = 0; i < 240 && transport.preview == null; i++) {
           await t.pump(const Duration(milliseconds: 150));
         }
         expect(transport.preview, isNotNull);
         expect(transport.preview!['conflicts'], isEmpty);
-        await reach(find.text('راجعت الأثر والحصص وأؤكد اعتماد الإجراء.'));
-        await tap(find.text('راجعت الأثر والحصص وأؤكد اعتماد الإجراء.'));
-        await reach(find.text('تأكيد الإجراء'));
+        final confirm = find.text(
+          group ? 'تأكيد نقل المجموعة' : 'تأكيد نقل الحصص',
+        );
+        await reach(confirm);
         await capture(image);
-        await t.tap(find.text('تأكيد الإجراء'));
+        await t.tap(confirm);
         await t.pump(const Duration(milliseconds: 400));
-        await wait(find.text('حُفظ الإجراء وأُعيدت قراءة سجله الفعلي.'));
+        await wait(
+          find.textContaining(
+            group ? 'تم تسجيل نقل المجموعة' : 'تم تسجيل نقل الحصص المختارة.',
+          ),
+        );
       }
 
       AuthController? parent;
@@ -322,7 +329,10 @@ void main() {
         await t.tap(find.text('1').last);
         await t.tap(find.text(localizations.okButtonLabel));
         await t.pumpAndSettle();
-        await confirm('phase-approved-admin-dated-transfer-review-w375');
+        await confirm(
+          'phase-approved-admin-dated-transfer-review-w375',
+          group: true,
+        );
         final dated = transport.commands.singleWhere(
           (c) => c.path.endsWith('/group-transfer'),
         );

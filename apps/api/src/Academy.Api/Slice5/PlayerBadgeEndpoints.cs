@@ -59,9 +59,25 @@ public static class PlayerBadgeEndpoints
         return new{enrollment=e,enrollmentVersion=version,asOfDate=await AttendanceCalendar.TodayAsync(t.AcademyId,db,clock),points,canGrant=!family&&await PlayerGoalEndpoints.CanWrite(t,db,h,true),canRevoke=!family&&await PlayerGoalEndpoints.CanWrite(t,db,h,false),rules=choices.Select(r=>RuleRow(r,false)),hasMore=grants.Length>100,items=grants.Take(100).Select(g=>new{g.Id,g.Version,g.RuleId,g.ObservedOn,g.FamilyNote,g.ActorName,g.CreatedAtUtc,title=rules[g.RuleId].Title,criterion=rules[g.RuleId].Criterion,points=rules[g.RuleId].Points,state=revocations.ContainsKey(g.Id)?"Revoked":"Granted",revocation=revocations.TryGetValue(g.Id,out var v)?new{v.ActorName,v.FamilyNote,v.CreatedAtUtc}:null})};
     }
     private static async Task<IResult> StaffRead(Guid id,CurrentTenant tenant,FoundationDbContext db,HttpContext h,TimeProvider clock){h.Response.Headers.CacheControl="private, no-store";var t=(await tenant.ResolveAsync())!;if(await PlayerGoalEndpoints.Enrollment(id,t,db,clock)==null)return Results.NotFound();return Results.Ok(new{enrollments=new[]{await View(id,t,db,h,clock,false)},hasMore=false});}
-    private static async Task<IResult> FamilyRead(Guid playerId,CurrentTenant tenant,FoundationDbContext db,HttpContext h,TimeProvider clock)
+    private static async Task<IResult> FamilyRead(Guid playerId, Guid? enrollmentId, CurrentTenant tenant, FoundationDbContext db, HttpContext h, TimeProvider clock)
     {
-        h.Response.Headers.CacheControl="private, no-store";var t=(await tenant.ResolveAsync())!;if(!await db.GuardianPlayerLinks.AnyAsync(l=>l.PlayerId==playerId&&l.IsActive&&l.Player.IsActive&&l.Guardian.IsActive&&l.Guardian.UserId==db.RequestUserId))return Results.NotFound();var ids=await db.SportEnrollments.AsNoTracking().Where(e=>e.PlayerId==playerId&&e.IsActive&&e.Sport.IsActive&&e.Branch.IsActive).OrderBy(e=>e.Id).Select(e=>e.Id).Take(21).ToArrayAsync();var data=new List<object>();foreach(var id in ids.Take(20))data.Add(await View(id,t,db,h,clock,true));return Results.Ok(new{enrollments=data,hasMore=ids.Length>20});
+        h.Response.Headers.CacheControl = "private, no-store";
+        var t = (await tenant.ResolveAsync())!;
+        if (!await db.GuardianPlayerLinks.AnyAsync(l => l.PlayerId == playerId && l.IsActive && l.Player.IsActive && l.Guardian.IsActive && l.Guardian.UserId == db.RequestUserId))
+            return Results.NotFound();
+
+        var enrollments = db.SportEnrollments.AsNoTracking()
+            .Where(e => e.PlayerId == playerId && e.IsActive && e.Sport.IsActive && e.Branch.IsActive);
+        if (enrollmentId is Guid requested)
+        {
+            if (!await enrollments.AnyAsync(e => e.Id == requested)) return Results.NotFound();
+            return Results.Ok(new { enrollments = new[] { await View(requested, t, db, h, clock, true) }, hasMore = false });
+        }
+
+        var ids = await enrollments.OrderBy(e => e.Id).Select(e => e.Id).Take(21).ToArrayAsync();
+        var data = new List<object>();
+        foreach (var id in ids.Take(20)) data.Add(await View(id, t, db, h, clock, true));
+        return Results.Ok(new { enrollments = data, hasMore = ids.Length > 20 });
     }
     private static async Task<IResult> Grant(Guid id,BadgeGrantWrite b,CurrentTenant tenant,FoundationDbContext db,HttpContext h,TimeProvider clock)
     {

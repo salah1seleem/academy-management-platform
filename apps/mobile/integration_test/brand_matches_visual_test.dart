@@ -48,7 +48,7 @@ void main() {
 
       await login('01099900100');
       await waitFor(find.text('أبنائي'));
-      await waitFor(find.text('متابعة الغذاء اليومي لطفلك'));
+      await waitFor(find.text('اقتراحات من مكتبة التغذية'));
       expect(find.byType(AcademyCrest), findsWidgets);
       expect(find.text('تعذر تحميل وجبات اليوم'), findsNothing);
       await capture('guardian-home');
@@ -62,7 +62,7 @@ void main() {
       await auth.logout();
       await tester.pumpAndSettle();
       await login('01099900020');
-      await waitFor(find.text('المجموعات المسندة'));
+      await waitFor(find.text('تدريباتي'));
       expect(find.byType(AcademyCrest), findsWidgets);
       await capture('coach-home');
       await auth.logout();

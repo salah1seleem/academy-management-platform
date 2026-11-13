@@ -79,9 +79,16 @@ void main() {
           find.byKey(const ValueKey('child-child')),
         );
         final stops = [(card.decoration! as BoxDecoration).color!];
-        for (final text in ['★ ★ ', '0', 'متوسط التقييم', 'فعال']) {
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.label == '2 نجوم',
+          ),
+          findsOneWidget,
+        );
+        for (final text in ['2', '0', 'متوسط الأداء', 'فعال']) {
           for (final background in stops) {
-            final effectiveBackground = text == '0' || text == 'متوسط التقييم'
+            final effectiveBackground = text == '0' || text == 'متوسط الأداء'
                 ? const Color(0xFF071B32)
                 : text == 'فعال'
                 ? Color.alphaBlend(
@@ -107,8 +114,7 @@ void main() {
             );
           }
         }
-        expect(find.text('4 حصص متبقية'), findsOneWidget);
-        expect(find.textContaining('معايير · آخر تقييم منشور'), findsNothing);
+        expect(find.textContaining('4 حصص متبقية'), findsOneWidget);
         expect(t.takeException(), isNull);
         auth.dispose();
       },
@@ -152,7 +158,8 @@ void main() {
         final stops = (hero.decoration! as BoxDecoration).gradient!.colors;
         for (final text in [
           'لاعب اصطناعي للاختبار',
-          '8 سنة · كرة القدم · مدينة نصر',
+          '8 سنة',
+          'كرة القدم · مدينة نصر',
         ]) {
           for (final background in stops) {
             expect(

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
+import '../guardian/guardian_payments.dart' show ReceiptPage;
 import '../guardian/guardian_ui.dart';
 import 'private_media.dart';
 
@@ -12,14 +13,18 @@ class TransferPayment extends StatefulWidget {
   final AuthController auth;
   final String proofPath;
   final VoidCallback? onSubmitted;
+  final bool showConfirmation;
   final bool subscription;
+  final bool replacement;
   final Json proofFields;
   const TransferPayment({
     super.key,
     required this.auth,
     required this.proofPath,
     this.onSubmitted,
+    this.showConfirmation = true,
     this.subscription = true,
+    this.replacement = false,
     this.proofFields = const {},
   });
   @override
@@ -60,6 +65,10 @@ class _TransferPaymentState extends State<TransferPayment> {
         body: {...widget.proofFields, 'assetId': uploadedAssetId},
       );
       if (mounted) {
+        if (!widget.showConfirmation) {
+          widget.onSubmitted?.call();
+          return;
+        }
         setState(
           () => message = localized(
             context,
@@ -101,100 +110,115 @@ class _TransferPaymentState extends State<TransferPayment> {
     }
   }
 
+  Widget uploadButton(BuildContext context) => FilledButton.icon(
+    onPressed: busy ? null : upload,
+    icon: const Icon(Icons.upload_file_outlined),
+    label: UiText(
+      localized(
+        context,
+        busy
+            ? 'جارٍ الإرسال'
+            : uploadedAssetId != null
+            ? 'إعادة تأكيد نفس الإثبات'
+            : 'رفع إيصال الدفع',
+        busy
+            ? 'Uploading'
+            : uploadedAssetId != null
+            ? 'Retry the same proof'
+            : 'Upload payment receipt',
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => GCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         UiText(
-          localized(context, 'التحويل للأكاديمية', 'Transfer to your academy'),
+          widget.replacement
+              ? localized(
+                  context,
+                  'استبدال إثبات الدفع',
+                  'Replace payment proof',
+                )
+              : localized(
+                  context,
+                  'التحويل للأكاديمية',
+                  'Transfer to your academy',
+                ),
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
-        RemoteBody(
-          auth: widget.auth,
-          path: '/api/v1/payment-settings',
-          builder: (context, value) {
-            final d = obj(value);
-            if (d['configured'] != true) {
-              return UiText(
-                localized(
-                  context,
-                  'لم تضبط الأكاديمية حسابات التحويل بعد. تواصل مع الإدارة قبل الدفع.',
-                  'Transfer accounts are not configured. Contact your academy before paying.',
-                ),
-              );
-            }
-            return Column(
-              children: [
-                if (d['recipientName'] != null)
-                  UiText(textOf(d['recipientName'])),
-                for (final entry in [
-                  ('إنستا باي', 'InstaPay', d['instaPayAddress']),
-                  ('المحفظة', 'Wallet', d['walletNumber']),
-                ])
-                  if (entry.$3 != null && '${entry.$3}'.isNotEmpty)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: UiText(localized(context, entry.$1, entry.$2)),
-                      subtitle: UiText(
-                        textOf(entry.$3),
-                        textDirection: TextDirection.ltr,
-                      ),
-                      trailing: IconButton(
-                        tooltip: localized(context, 'نسخ', 'Copy'),
-                        icon: const Icon(Icons.copy_outlined),
-                        onPressed: () async {
-                          await Clipboard.setData(
-                            ClipboardData(text: textOf(entry.$3)),
-                          );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: UiText(
-                                  localized(context, 'تم النسخ', 'Copied'),
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                UiText(
+        if (widget.replacement)
+          uploadButton(context)
+        else
+          RemoteBody(
+            auth: widget.auth,
+            path: '/api/v1/payment-settings',
+            builder: (context, value) {
+              final d = obj(value);
+              if (d['configured'] != true) {
+                return UiText(
                   localized(
                     context,
-                    widget.subscription
-                        ? 'حوّل المبلغ الموضح ثم ارفع صورة إيصالك هنا. يبدأ الاشتراك بعد موافقة الإدارة.'
-                        : 'حوّل المبلغ الموضح ثم ارفع صورة إيصالك هنا. يتأكد التحصيل بعد مراجعة الإدارة.',
-                    widget.subscription
-                        ? 'Transfer the displayed amount, then upload your receipt. Activation follows academy approval.'
-                        : 'Transfer the displayed amount, then upload your receipt. Payment is confirmed after staff review.',
+                    'لم تضبط الأكاديمية حسابات التحويل بعد. تواصل مع الإدارة قبل الدفع.',
+                    'Transfer accounts are not configured. Contact your academy before paying.',
                   ),
-                ),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: busy ? null : upload,
-                  icon: const Icon(Icons.upload_file_outlined),
-                  label: UiText(
+                );
+              }
+              return Column(
+                children: [
+                  if (d['recipientName'] != null)
+                    UiText(textOf(d['recipientName'])),
+                  for (final entry in [
+                    ('إنستا باي', 'InstaPay', d['instaPayAddress']),
+                    ('المحفظة', 'Wallet', d['walletNumber']),
+                  ])
+                    if (entry.$3 != null && '${entry.$3}'.isNotEmpty)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: UiText(localized(context, entry.$1, entry.$2)),
+                        subtitle: UiText(
+                          textOf(entry.$3),
+                          textDirection: TextDirection.ltr,
+                        ),
+                        trailing: IconButton(
+                          tooltip: localized(context, 'نسخ', 'Copy'),
+                          icon: const Icon(Icons.copy_outlined),
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: textOf(entry.$3)),
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: UiText(
+                                    localized(context, 'تم النسخ', 'Copied'),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                  UiText(
                     localized(
                       context,
-                      busy
-                          ? 'جارٍ الإرسال'
-                          : uploadedAssetId != null
-                          ? 'إعادة تأكيد نفس الإثبات'
-                          : 'رفع إيصال الدفع',
-                      busy
-                          ? 'Uploading'
-                          : uploadedAssetId != null
-                          ? 'Retry the same proof'
-                          : 'Upload payment receipt',
+                      widget.subscription
+                          ? 'حوّل المبلغ الموضح ثم ارفع صورة إيصالك هنا. يبدأ الاشتراك بعد موافقة الإدارة.'
+                          : 'حوّل المبلغ الموضح ثم ارفع صورة إيصالك هنا. يتأكد التحصيل بعد مراجعة الإدارة.',
+                      widget.subscription
+                          ? 'Transfer the displayed amount, then upload your receipt. Activation follows academy approval.'
+                          : 'Transfer the displayed amount, then upload your receipt. Payment is confirmed after staff review.',
                     ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
+                  const SizedBox(height: 14),
+                  uploadButton(context),
+                ],
+              );
+            },
+          ),
         if (message != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -225,41 +249,67 @@ class _EnrollmentPaymentPageState extends State<EnrollmentPaymentPage> {
   @override
   Widget build(BuildContext context) => GuardianPage(
     operation: true,
-    title: localized(context, 'دفع الاشتراك الجديد', 'New enrollment payment'),
+    title: localized(context, 'حالة طلب الاشتراك', 'Enrollment request status'),
     child: RemoteBody(
       key: ValueKey(revision),
       auth: widget.auth,
       path: '/api/v1/guardian/enrollment-requests/${widget.id}/payment',
       builder: (context, value) {
         final d = obj(value);
+        final amount = d['amount'];
+        final pending = ['Pending', 'UnderReview', 1, 2].contains(d['status']);
+        final paid = d['status'] == 'Approved' && d['paymentRequestId'] != null;
+        final receiptId = d['receiptId'];
+        final hasProof = isPrivateAsset(d['proofUrl']);
+        final discount = d['discountAmount'];
         return gList([
-          if (d['originalAmount'] != null)
+          if (d['child'] != null) Heading(textOf(d['child'])),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: StatusPill(d['status']),
+          ),
+          if (discount is num && discount > 0)
             UiText(
               'السعر الأصلي: ${money(d['originalAmount'], d['currency'])}',
             ),
-          if (d['discountAmount'] != null)
-            UiText('الخصم: ${money(d['discountAmount'], d['currency'])}'),
-          if (d['discountReason'] != null) UiText(textOf(d['discountReason'])),
-          Heading(money(d['amount'], d['currency'])),
-          if (d['status'] == 'Pending' ||
-              d['status'] == 'UnderReview' ||
-              d['status'] == 1 ||
-              d['status'] == 2)
+          if (discount is num && discount > 0)
+            UiText('الخصم: ${money(discount, d['currency'])}'),
+          if (discount is num && discount > 0 && d['discountReason'] != null)
+            UiText(textOf(d['discountReason'])),
+          if (amount is num) ...[
+            UiText(
+              paid
+                  ? 'المبلغ المحصّل'
+                  : pending
+                  ? 'المبلغ المطلوب'
+                  : 'مبلغ الطلب',
+            ),
+            Heading(money(amount, d['currency'])),
+          ],
+          if (pending && amount == null)
+            const UiText('لا يوجد مبلغ مطلوب لهذا الطلب.'),
+          if (pending && amount is num) ...[
+            if (hasProof)
+              const UiText(
+                'وصل إثبات الدفع. انتظر المراجعة قبل إرسال مبلغ آخر.',
+              ),
             TransferPayment(
               auth: widget.auth,
               proofPath:
                   '/api/v1/guardian/enrollment-requests/${widget.id}/proof',
+              replacement: hasProof,
+              showConfirmation: false,
               onSubmitted: () => setState(() => revision++),
             ),
-          if (d['proofUrl'] != null)
-            UiText(
-              localized(
+          ],
+          if (paid && receiptId is String && receiptId.isNotEmpty)
+            FilledButton(
+              onPressed: () => openPage(
                 context,
-                'تم رفع إثبات دفع لهذا الطلب.',
-                'Payment proof has been uploaded.',
+                ReceiptPage(auth: widget.auth, id: receiptId),
               ),
+              child: const UiText('عرض الإيصال'),
             ),
-          StatusPill(d['status']),
           if (d['guardianVisibleReason'] != null)
             UiText(textOf(d['guardianVisibleReason'])),
           TextButton(

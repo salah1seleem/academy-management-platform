@@ -1,8 +1,15 @@
+using Academy.Api.Auth;
+
 namespace Academy.Api.Slice3;
 
-public interface ISubscriptionClock { DateOnly Today { get; } DateTimeOffset UtcNow { get; } }
+public interface ISubscriptionClock
+{
+    DateOnly Today { get; }
+    DateTimeOffset UtcNow { get; }
+    DateOnly DateAt(DateTimeOffset instant, string timeZone);
+}
 
-public sealed class SubscriptionClock(IConfiguration configuration, IHostEnvironment environment, TimeProvider clock) : ISubscriptionClock
+public sealed class SubscriptionClock(IConfiguration configuration, IHostEnvironment environment, TimeProvider clock, IHttpContextAccessor? request = null) : ISubscriptionClock
 {
     // Demo business records share the reference date. Authentication/token expiry
     // continue to use TimeProvider directly and therefore real elapsed time.
@@ -20,13 +27,13 @@ public sealed class SubscriptionClock(IConfiguration configuration, IHostEnviron
             return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(referenceLocal, zone));
         }
     }
-    public DateOnly Today
+    public DateOnly Today => DateAt(clock.GetUtcNow(),
+        request?.HttpContext?.Features.Get<TenantMembership>()?.TimeZone ?? TimeZoneInfo.Utc.Id);
+
+    public DateOnly DateAt(DateTimeOffset instant, string timeZone)
     {
-        get
-        {
-            var configured = configuration["Demo:ReferenceDate"];
-            if (environment.IsEnvironment("Demo") && DateOnly.TryParse(configured, out var value)) return value;
-            return DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
-        }
+        var configured = configuration["Demo:ReferenceDate"];
+        if (environment.IsEnvironment("Demo") && DateOnly.TryParse(configured, out var value)) return value;
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, TimeZoneInfo.FindSystemTimeZoneById(timeZone)).DateTime);
     }
 }

@@ -75,9 +75,9 @@
 }
 .dashboard-shell[data-workspace-design="v5"] .workspace-skip-link {
   position: fixed; z-index: 100; inset-block-start: 8px; inset-inline-start: 12px;
-  padding: 12px 20px; transform: translateY(-180%); background: var(--staff-surface); color: var(--staff-text);
+  padding: 12px 20px; background: var(--staff-surface); color: var(--staff-text);
 }
-.dashboard-shell[data-workspace-design="v5"] .workspace-skip-link:focus { transform: none; }
+.dashboard-shell[data-workspace-design="v5"] .workspace-skip-link:not(:focus) { clip-path: inset(50%); pointer-events: none; }
 .dashboard-shell[data-workspace-design="v5"] .sidebar {
   background: var(--staff-surface); color: var(--staff-text);
   border-inline-end: 1px solid var(--staff-border); box-shadow: none;
@@ -191,6 +191,7 @@
 .dashboard-shell[data-workspace-design="v5"] .permissions-toolbar { display: grid; grid-template-columns: minmax(0,1fr) minmax(180px,300px); align-items: end; gap: 14px; padding: 18px; margin-block-end: 20px; border: 1px solid var(--staff-border); background: var(--staff-surface); }
 .dashboard-shell[data-workspace-design="v5"] .permissions-toolbar .section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; }
 .dashboard-shell[data-workspace-design="v5"] .permissions-toolbar h2 { font-size: 17px; margin: 0; }
+.dashboard-shell[data-workspace-design="v5"] .staff-account-back { background: transparent; padding-inline: 0; }
 .dashboard-shell[data-workspace-design="v5"] .permissions-toolbar>p { grid-column: 1/-1; margin: 0; font-size: 12px; }
 .dashboard-shell[data-workspace-design="v5"] .receivable-metric { background: var(--staff-surface); color: var(--staff-text); border: 1px solid var(--staff-border); border-radius: 4px; box-shadow: none; border-top: 3px solid var(--staff-info); }
 .dashboard-shell[data-workspace-design="v5"] .receivable-metric.rose { border-top-color: var(--staff-danger); }
@@ -239,6 +240,10 @@
   .dashboard-shell[data-workspace-design="v5"] .content-record-grid { grid-template-columns: minmax(0,1fr); }
   .dashboard-shell[data-workspace-design="v5"] .content-record-preview img { max-height: 200px; }
 }
+@media (600px < width < 72rem) {
+  .dashboard-shell[data-workspace-design="v5"] .workspace-route-bar { padding-inline-start: 32px; }
+  .dashboard-shell[data-workspace-design="v5"]:has(.workspace-route-bar) .nav-toggle[aria-expanded="false"] { inset-block-start: 22px; }
+}
 @media(max-width:600px) {
   .dashboard-shell[data-workspace-design="v5"] .dashboard-content:not(:has([data-approved-home])) { padding-block-start: 14px; }
   .dashboard-shell[data-workspace-design="v5"] .workspace-route-bar { gap: 8px; }
@@ -278,6 +283,7 @@
   .dashboard-shell[data-workspace-design="v5"] .page-header-actions .button { flex: 1; justify-content: center; }
   .dashboard-shell[data-workspace-design="v5"] .record-tabs button { padding-inline: 14px; }
   .dashboard-shell[data-workspace-design="v5"] :is(.filter-toolbar-fields,.report-filters) { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); width: 100%; }
+  .dashboard-shell[data-workspace-design="v5"] .report-filters.payroll-filters { grid-template-columns: minmax(0,1fr); }
   .dashboard-shell[data-workspace-design="v5"] :is(.filter-toolbar-fields,.report-filters)>.search-input { grid-column: 1/-1; width: 100%; min-width: 0; }
   .dashboard-shell[data-workspace-design="v5"] :is(.filter-toolbar-fields,.report-filters)>label { min-width: 0; }
   .dashboard-shell[data-workspace-design="v5"] .filter-toolbar-icon { display: none; }
@@ -287,6 +293,12 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-shell[data-workspace-design="v5"] * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.dashboard-shell .report-amount small { display: inline; }
+@media (max-width: 360px) {
+  .dashboard-shell[data-workspace-design="v5"] .report-filters:is(.receipt-report-filters,.financial-ledger-filters,.payment-request-filters) > label,
+  .dashboard-shell[data-workspace-design="v5"] .operating-statement-filters > label:has(input[type=date]) { grid-column: 1 / -1; }
 }
 
 /* V5.1: concise titles, deliberate hierarchy, help on demand. */
@@ -337,6 +349,9 @@
 .dashboard-shell[data-workspace-design="v5"] .private-gallery>article>[role="status"] { font-size: 12px; color: var(--staff-text-secondary); }
 .dashboard-shell[data-workspace-design="v5"] .form-shell>.form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); grid-column: 1/-1; gap: 18px; }
 .dashboard-shell[data-workspace-design="v5"] .form-shell>:is(h2,h3,fieldset,.form-actions,.compact-notice) { grid-column: 1/-1; }
+@media (min-width: 1080px) {
+  .dashboard-shell[data-workspace-design="v5"] .form-shell.coach-create > fieldset { grid-column: auto; }
+}
 .dashboard-shell[data-workspace-design="v5"] .group-creation-steps li { background: var(--staff-surface-muted); color: var(--staff-text-secondary); border-radius: 4px; }
 .dashboard-shell[data-workspace-design="v5"] .group-creation-steps li.active { color: var(--staff-primary-800); background: var(--staff-primary-50); }
 .dashboard-shell[data-workspace-design="v5"] .group-creation-steps li[aria-current] { box-shadow: inset 0 -3px var(--staff-primary-600); }
@@ -400,4 +415,46 @@
 .dashboard-shell[data-workspace-design="v5"] :is(.facility-summary article,.facility-resource-card,.cash-session-stats>div) { background:var(--staff-surface);color:var(--staff-text);border:1px solid var(--staff-border);border-radius:4px; }
 .dashboard-shell[data-workspace-design="v5"] :is(.facility-resource-symbol,.cash-symbol) { background:var(--staff-primary-50);color:var(--staff-primary-800);border-radius:4px; }
 .dashboard-shell[data-workspace-design="v5"] :is(.cash-balance,.cash-session-stats strong) { color:var(--staff-text); }
+.dashboard-shell[data-workspace-design="v5"] .cash-intro { background:var(--staff-surface);color:var(--staff-text);border:1px solid var(--staff-border);border-radius:4px;padding:12px 16px; }
+.dashboard-shell[data-workspace-design="v5"] .cash-intro > svg { color:var(--staff-primary-800); }
+.dashboard-shell[data-workspace-design="v5"] .cash-intro p { color:var(--staff-text-secondary); }
+.dashboard-shell[data-workspace-design="v5"] .cash-history .linked-list article small { display:block; }
+.dashboard-shell[data-workspace-design="v5"] .cash-policy { min-width:0;border:1px solid var(--staff-border);border-radius:4px;padding:10px 14px; }
+.dashboard-shell[data-workspace-design="v5"] .cash-policy legend { padding-inline:6px;font-weight:700; }
+.dashboard-shell[data-workspace-design="v5"] .cash-policy p { margin-block:0 8px;color:var(--staff-text-secondary);font-size:13px; }
+.dashboard-shell[data-workspace-design="v5"] .cash-policy .policy-switch { display:flex;align-items:center;gap:8px;min-height:44px; }
+.dashboard-shell[data-workspace-design="v5"] .cash-policy .policy-switch input { width:18px;min-height:18px;flex:none;margin:0; }
+.dashboard-shell[data-workspace-design="v5"] .cash-policy small { display:block;color:var(--staff-text-secondary);line-height:1.6; }
+@media (max-width:480px) {
+  .dashboard-shell[data-workspace-design="v5"] .cash-history .linked-list article { display:grid;grid-template-columns:minmax(0,1fr);gap:8px; }
+  .dashboard-shell[data-workspace-design="v5"] .cash-intro > a { width:auto; }
+}
 .dashboard-shell[data-workspace-design="v5"] .facility-summary span { color:var(--staff-text-secondary); }
+
+.dashboard-shell[data-workspace-design="v5"] .product-sale-total {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block-end: 16px;
+}
+.dashboard-shell[data-workspace-design="v5"] .product-sale-total strong {
+  color: var(--staff-primary-800);
+  font-size: 1.45rem;
+}
+.dashboard-shell[data-workspace-design="v5"] .product-sale-total span { color: var(--staff-text-secondary); }
+.dashboard-shell[data-workspace-design="v5"] .product-sale-detail .detail-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 0 18px;
+}
+.dashboard-shell[data-workspace-design="v5"] .product-sale-detail .detail-grid > div {
+  padding: 10px 0;
+  border: 0;
+  border-block-end: 1px solid var(--staff-border);
+  background: transparent;
+  align-items: baseline;
+}
+.dashboard-shell[data-workspace-design="v5"] .product-sale-detail .detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

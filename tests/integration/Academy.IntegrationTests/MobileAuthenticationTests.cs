@@ -79,6 +79,58 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
     }
     private void Bearer(string token) => client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
+    [Fact]
+    public async Task Legacy_payment_grant_changes_the_active_mobile_membership_without_rotating_credentials()
+    {
+        var member = await AddRole(AcademyRole.AcademyAdmin);
+        var session = await Login();
+        var initial = Assert.Single(session.Memberships).ContextRevision;
+        using var owner = factory.CreateClient();
+        var csrf = await owner.GetFromJsonAsync<CsrfBody>("/api/v1/auth/csrf");
+        using var login = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+        {
+            Content = JsonContent.Create(new { email = DemoSeed.OwnerEmail, password = "Demo-Only-123!" })
+        };
+        login.Headers.Add("X-CSRF-TOKEN", csrf!.Token);
+        (await owner.SendAsync(login)).EnsureSuccessStatusCode();
+
+        async Task Save(bool allowed)
+        {
+            var token = await owner.GetFromJsonAsync<CsrfBody>("/api/v1/auth/csrf");
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/manage/staff/{member}/grants")
+            {
+                Content = JsonContent.Create(new { grants = new[] { new { permission = AcademyPermissions.PaymentRead, allowed } } })
+            };
+            request.Headers.Add("X-CSRF-TOKEN", token!.Token);
+            Assert.Equal(HttpStatusCode.NoContent, (await owner.SendAsync(request)).StatusCode);
+        }
+
+        async Task<int> ReadRevision() => Assert.Single((await client.GetFromJsonAsync<MobileMembership[]>(Root + "/memberships"))!).ContextRevision;
+        const string queue = "/api/v1/manage/payment-requests?allDates=true&status=Pending";
+        try
+        {
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(queue)).StatusCode);
+            await Save(false);
+            Assert.Equal(initial + 1, await ReadRevision());
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(queue)).StatusCode);
+            await Save(false);
+            Assert.Equal(initial + 1, await ReadRevision());
+            await Save(true);
+            Assert.Equal(initial + 2, await ReadRevision());
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(queue)).StatusCode);
+            await Mutate(async db =>
+            {
+                var stored = await db.MobileSessions.SingleAsync(x => x.UserId == userId);
+                Assert.Equal(MobileAuthenticationHandler.Hash(session.AccessToken), stored.AccessTokenHash);
+                Assert.Equal(MobileAuthenticationHandler.Hash(session.RefreshToken), stored.RefreshTokenHash);
+            });
+        }
+        finally
+        {
+            await Mutate(async db => { await db.StaffGrants.Where(x => x.MembershipId == member).ExecuteDeleteAsync(); });
+        }
+    }
+
     [Theory]
     [InlineData(AcademyRole.Guardian)] [InlineData(AcademyRole.Coach)] [InlineData(AcademyRole.AcademyOwner)] [InlineData(AcademyRole.AcademyAdmin)]
     public async Task Each_supported_role_can_verify_phone_and_access_trusted_tenant(AcademyRole role)
@@ -301,6 +353,59 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Verify_sms_is_limited_to_one_recipient_and_cannot_issue_two_sessions()
+    {
+        var member = await AddRole(AcademyRole.Guardian);
+        using var twilio = new VerifyHandler(phone);
+        await using var production = new MobileFactory(connection, "Production", twilio, phone);
+        using var external = production.CreateClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await external.PostAsJsonAsync(Root + "/otp/request",
+            new { phoneNumber = "+201000000001" })).StatusCode);
+        var starts = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ =>
+            external.PostAsJsonAsync(Root + "/otp/request", new { phoneNumber = phone })));
+        var accepted = Assert.Single(starts, x => x.StatusCode == HttpStatusCode.Accepted);
+        Assert.Single(starts, x => x.StatusCode == HttpStatusCode.TooManyRequests);
+        Assert.Equal(1, twilio.Starts);
+        var id = (await accepted.Content.ReadFromJsonAsync<ChallengeBody>())!.ChallengeId;
+        Task<HttpResponseMessage> Check(string code) => external.PostAsJsonAsync(Root + "/otp/verify",
+            new { challengeId = id, phoneNumber = phone, code, deviceName = "Verify test" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Check("246810")).StatusCode);
+        var approvals = await Task.WhenAll(Check("483716"), Check("483716"));
+        var success = Assert.Single(approvals, x => x.StatusCode == HttpStatusCode.OK);
+        Assert.Single(approvals, x => x.StatusCode == HttpStatusCode.Unauthorized);
+        var credentials = (await success.Content.ReadFromJsonAsync<MobileCredentials>())!;
+        Assert.Equal(member, credentials.MembershipId);
+        external.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, (await external.GetAsync("/api/v1/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await external.GetAsync($"/api/v1/tenant/probe/{DemoSeed.FutureAcademyId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Check("483716")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Failed_sms_send_does_not_create_a_redeemable_challenge_or_retry_automatically()
+    {
+        await AddRole(AcademyRole.Guardian);
+        using var twilio = new VerifyHandler(phone, failSend: true);
+        await using var production = new MobileFactory(connection, "Production", twilio, phone);
+        using var external = production.CreateClient();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await external.PostAsJsonAsync(Root + "/otp/request",
+            new { phoneNumber = phone })).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await external.PostAsJsonAsync(Root + "/otp/request",
+            new { phoneNumber = phone })).StatusCode);
+        Assert.Equal(1, twilio.Starts);
+        await Mutate(async db =>
+        {
+            var challenge = await db.MobileOtpChallenges.SingleAsync(x => x.PhoneNumberNormalized == phone);
+            Assert.Null(challenge.ProviderVerificationSid);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await external.PostAsJsonAsync(Root + "/otp/verify",
+                new { challengeId = challenge.Id, phoneNumber = phone, code = "483716", deviceName = "Verify test" })).StatusCode);
+        });
+    }
+
+    [Fact]
     public async Task Disabled_academy_revokes_effective_access_and_refresh()
     {
         await AddRole(AcademyRole.Coach, DemoSeed.FutureAcademyId); var credentials = await Login();
@@ -334,7 +439,37 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
 
     private sealed record ChallengeBody(Guid ChallengeId);
     private sealed record CsrfBody(string Token);
-    private sealed class MobileFactory(string connection, string environment = "Demo") : WebApplicationFactory<Program>
+    private sealed class VerifyHandler(string phone, bool failSend = false) : HttpMessageHandler
+    {
+        private const string Sid = "VE11111111111111111111111111111111";
+        private int starts;
+        public int Starts => starts;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Assert.Equal("verify.twilio.com", request.RequestUri!.Host);
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("Basic", request.Headers.Authorization!.Scheme);
+            var body = await request.Content!.ReadAsStringAsync(ct);
+            if (request.RequestUri.AbsolutePath.EndsWith("/Verifications", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref starts);
+                Assert.Contains("To=" + Uri.EscapeDataString(phone), body);
+                Assert.Contains("Channel=sms", body);
+                Assert.Contains("Locale=ar", body);
+                if (failSend) return new HttpResponseMessage(HttpStatusCode.BadGateway);
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                { Content = JsonContent.Create(new { sid = Sid, status = "pending" }) };
+            }
+            Assert.EndsWith("/VerificationCheck", request.RequestUri.AbsolutePath);
+            Assert.Contains("VerificationSid=" + Sid, body);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = JsonContent.Create(new { sid = Sid, status = body.Contains("Code=483716") ? "approved" : "pending" }) };
+        }
+    }
+
+    private sealed class MobileFactory(string connection, string environment = "Demo",
+        HttpMessageHandler? verifyHandler = null, string? allowedPhone = null) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -343,6 +478,14 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
             builder.UseSetting("Demo:FixedOtpEnabled", (environment == "Demo").ToString());
             builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!");
             builder.UseSetting("Payments:InternalTest:Enabled", "false");
+            if (verifyHandler is null) return;
+            builder.UseSetting("MobileOtp:Provider", "TwilioVerify");
+            builder.UseSetting("MobileOtp:AllowedPhone", allowedPhone);
+            builder.UseSetting("MobileOtp:Twilio:ApiKeySid", "SK" + new string('1', 32));
+            builder.UseSetting("MobileOtp:Twilio:ServiceSid", "VA" + new string('1', 32));
+            builder.UseSetting("MobileOtp:Twilio:ApiKeySecret", "test-only");
+            builder.ConfigureServices(services => services.AddHttpClient(TwilioMobileOtp.ClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => verifyHandler));
         }
     }
 }

@@ -93,7 +93,9 @@ void main() {
               );
               await t.pumpAndSettle();
               expect(
-                find.text(locale == 'ar' ? 'من الأكاديمية' : 'Academy news'),
+                find.text(
+                  locale == 'ar' ? 'الأخبار والفعاليات' : 'News and events',
+                ),
                 findsOneWidget,
               );
               expect(find.textContaining('فعالية الأكاديمية'), findsOneWidget);
@@ -106,6 +108,58 @@ void main() {
       }
     }
   }
+  testWidgets(
+    'Activity detail rereads the exact item and returns to the events tab',
+    (t) async {
+      final calls = <String>[];
+      var available = true;
+      const event = {
+        'id': 'event-id',
+        'kind': 'Event',
+        'title': 'احتفال الموسم التجريبي',
+        'body': 'موعد الاحتفال مساء الجمعة.',
+        'publishedAtUtc': '2026-11-04T12:00:00Z',
+      };
+      final auth = await authenticate('Guardian', (m, p, b, token) async {
+        calls.add(p);
+        if (p.contains('item=')) {
+          return {
+            'items': available ? [event] : <Object>[],
+            'total': available ? 1 : 0,
+          };
+        }
+        return {
+          'items': p.contains('kind=Event') ? [event] : <Object>[],
+          'total': 1,
+        };
+      });
+      await t.pumpWidget(app(AcademyNewsPage(auth: auth)));
+      await t.pumpAndSettle();
+      await t.tap(find.text('الفعاليات'));
+      await t.pumpAndSettle();
+      await t.tap(find.text(event['title']!));
+      await t.pumpAndSettle();
+      expect(calls.last, '/api/v1/news?kind=Event&page=1&item=event-id');
+      expect(find.text(event['body']!), findsOneWidget);
+      expect(find.textContaining('نُشر في'), findsOneWidget);
+      Navigator.of(t.element(find.text(event['body']!))).pop();
+      await t.pumpAndSettle();
+      expect(
+        t
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'الفعاليات'))
+            .selected,
+        isTrue,
+      );
+      available = false;
+      await t.tap(find.text(event['title']!));
+      await t.pumpAndSettle();
+      expect(find.text('هذا النشاط غير متاح.'), findsOneWidget);
+      expect(find.text(event['body']!), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
   testWidgets(
     'Content list comes first, uses stored scheduled state and hides delete without its grant',
     (t) async {

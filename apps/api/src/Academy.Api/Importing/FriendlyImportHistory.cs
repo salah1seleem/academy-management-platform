@@ -39,13 +39,23 @@ public sealed partial class FriendlyImportHistory
     public ISet<string> ReviewedFamilies => guardians.Keys.Select(k => "H:" + k).ToHashSet();
     private Guid Id(string kind, string code) => ConnectedImportPlan.Id(academy, source, "history-" + kind, code);
     private bool Ref(R row, string field, string sheet) => input.Need(row, input.ByCode(sheet).ContainsKey(row[field]), field, "الكود غير موجود في ورقة " + sheet + ". استخدم الكود، وليس الاسم أو معرف قاعدة البيانات.");
-    public object Fingerprint(string enrollment)
+    public object Fingerprint(string enrollment, bool legacyWorksheetRows)
     {
         var e = input.Enrollments[enrollment]; var player = input.Players[e["Player"]];
         var links = input.Rows["علاقات أولياء الأمور"].Where(r => r["Player"] == player["Code"]).OrderBy(r => r["Code"]).ToArray();
         var ps = periods.Where(p => p.Value.Enrollment == enrollment).Select(p => p.Key).ToHashSet();
         var evaluations = assessments.Where(a => a.Value.Row["Enrollment"] == enrollment).Select(a => a.Key).ToHashSet();
-        return new { player, links, guardians = links.Select(l => input.Guardians.GetValueOrDefault(l["Guardian"])), periods = ps.Order().Select(k => periods[k].Row), attendance = input.Rows["حضور اختياري"].Where(r => r["Enrollment"] == enrollment).OrderBy(r => r["Code"]), evaluations = evaluations.Order().Select(k => assessments[k].Row), scores = input.Rows["درجات اختيارية"].Where(r => evaluations.Contains(r["Evaluation"])).OrderBy(r => r["Code"]), payments = input.Rows["تحصيلات سابقة اختيارية"].Where(r => ps.Contains(r["Period"])).OrderBy(r => r["Code"]) };
+        R? Snapshot(R? row) => row is null || legacyWorksheetRows ? row : row with { Number = 0 };
+        return new {
+            player = Snapshot(player),
+            links = links.Select(Snapshot),
+            guardians = links.Select(l => Snapshot(input.Guardians.GetValueOrDefault(l["Guardian"]))),
+            periods = ps.Order().Select(k => Snapshot(periods[k].Row)),
+            attendance = input.Rows["حضور اختياري"].Where(r => r["Enrollment"] == enrollment).OrderBy(r => r["Code"]).Select(Snapshot),
+            evaluations = evaluations.Order().Select(k => Snapshot(assessments[k].Row)),
+            scores = input.Rows["درجات اختيارية"].Where(r => evaluations.Contains(r["Evaluation"])).OrderBy(r => r["Code"]).Select(Snapshot),
+            payments = input.Rows["تحصيلات سابقة اختيارية"].Where(r => ps.Contains(r["Period"])).OrderBy(r => r["Code"]).Select(Snapshot)
+        };
     }
     public static async Task<FriendlyImportHistory> Build(FriendlyImportInput input, ConnectedImportPlan plan, FoundationDbContext db, Guid academy, string source, TimeProvider time, Dictionary<string, Dictionary<string, Guid>> maps)
     {

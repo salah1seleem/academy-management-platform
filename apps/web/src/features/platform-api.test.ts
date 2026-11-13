@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { platformRequest, PlatformSessionExpiredError } from "./platform-api";
+import { platformRequest, PlatformSessionExpiredError, PlatformTimeZoneLockedError } from "./platform-api";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("platform request boundary", () => {
@@ -21,7 +21,7 @@ describe("platform request boundary", () => {
   });
   it("stops before write when CSRF unavailable and reports Arabic error", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 401 })); vi.stubGlobal("fetch", fetcher);
-    await expect(platformRequest("/api/v1/platform/academies", "POST", {})).rejects.toThrow("تعذر بدء الطلب الآمن للمنصة.");
+    await expect(platformRequest("/api/v1/platform/academies", "POST", {})).rejects.toBeInstanceOf(PlatformSessionExpiredError);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
@@ -33,4 +33,10 @@ it("recognizes an expired session even when the server returns an empty 401 body
 it("explains denied platform authority without treating it as an expired session",async()=>{
  vi.stubGlobal("fetch",vi.fn().mockResolvedValueOnce(Response.json({token:"csrf"})).mockResolvedValueOnce(new Response(null,{status:403})));
  await expect(platformRequest("/api/v1/platform/academies","POST",{})).rejects.toThrow("لا يملك صلاحية");
+});
+
+it("preserves the saved zone and Arabic reason when a stale form is locked",async()=>{
+ const message="المنطقة الزمنية ثابتة بعد ترحيل تحصيلات سابقة.";
+ vi.stubGlobal("fetch",vi.fn().mockResolvedValueOnce(Response.json({token:"csrf"})).mockResolvedValueOnce(Response.json({code:"academy_time_zone_locked",message,timeZone:"Africa/Cairo"},{status:409})));
+ await expect(platformRequest("/api/v1/platform/academies/one/setup","PUT",{})).rejects.toEqual(new PlatformTimeZoneLockedError(message,"Africa/Cairo"));
 });

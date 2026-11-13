@@ -125,11 +125,13 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
     ScrollController? scrollController,
     Widget? bottom,
     VoidCallback? onRetry,
+    VoidCallback? onBack,
   }) => !current
       ? const SizedBox.shrink()
       : accessDenied
       ? GuardianPage(
           title: title,
+          onBack: onBack,
           child: PageStatus(
             child: StatusPanel(
               title: 'لا يمكن عرض هذه الصفحة',
@@ -143,6 +145,7 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
         )
       : GuardianPage(
           title: title,
+          onBack: onBack,
           bottom: bottom == null
               ? null
               : Theme(
@@ -192,15 +195,20 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
   Widget field(
     String label,
     TextEditingController controller, {
+    Key? fieldKey,
+    FocusNode? focusNode,
     bool required = true,
     bool? markRequired,
     TextInputType? keyboard,
     int? maxLines,
     bool readOnly = false,
     VoidCallback? changed,
+    String? Function(String value)? validate,
   }) => Padding(
+    key: fieldKey,
     padding: const EdgeInsets.only(bottom: 14),
     child: TextFormField(
+      focusNode: focusNode,
       controller: controller,
       readOnly: readOnly,
       textInputAction: (maxLines ?? 1) > 1
@@ -221,14 +229,17 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
             ? RequiredFieldLabel(label)
             : null,
       ),
-      validator: (v) =>
-          required && (v == null || v.trim().isEmpty) ? 'أدخل $label' : null,
+      validator: (v) => required && (v == null || v.trim().isEmpty)
+          ? 'أدخل $label'
+          : validate?.call(v?.trim() ?? ''),
     ),
   );
   Widget dateField(
     String label,
     TextEditingController controller, {
     VoidCallback? changed,
+    DateTime? firstDate,
+    DateTime? lastDate,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 14),
     child: TextFormField(
@@ -241,12 +252,18 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
       validator: (v) =>
           DateTime.tryParse(v ?? '') == null ? 'اختر $label' : null,
       onTap: () async {
+        final first = firstDate ?? DateTime(1900);
+        final last = lastDate ?? DateTime(2100);
         final initial = DateTime.tryParse(controller.text) ?? DateTime.now();
         final selected = await showDatePicker(
           context: context,
-          initialDate: initial,
-          firstDate: DateTime(1900),
-          lastDate: DateTime(2100),
+          initialDate: initial.isBefore(first)
+              ? first
+              : initial.isAfter(last)
+              ? last
+              : initial,
+          firstDate: first,
+          lastDate: last,
         );
         if (selected != null && current) {
           setState(() {

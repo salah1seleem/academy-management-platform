@@ -1,18 +1,122 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 
-test("Owner reviews a free training waiver, creates no fake receipt and Guardian sees the approved service", async ({ page }, info) => {
-  const enrollment = "84000015-0000-0000-0000-000000000006";
-  await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "دخول آمن" }).click(); await page.waitForURL("**/dashboard");
-  await page.goto("/dashboard/players/84000015-0000-0000-0000-000000000004"); await page.getByRole("tab", { name: "الاشتراكات والمالية", exact: true }).click(); await page.getByRole("link", { name: "اعتماد تدريب مجاني", exact: true }).click();
-  await page.getByLabel("الباقة المعفاة").selectOption("51000000-0000-0000-0000-000000000001"); await page.getByLabel("سبب الإعفاء").fill("منحة تدريب اصطناعية لا تتضمن قبضًا");
-  await page.getByRole("button", { name: "مراجعة الإعفاء", exact: true }).click(); await expect(page.getByRole("region", { name: "مراجعة الإعفاء" })).toBeVisible(); await expect(page.getByRole("button", { name: "اعتماد الإعفاء وتفعيل الفترة", exact: true })).toBeDisabled();
-  const photos = async (stage: string) => { for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 1000 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); await page.screenshot({ path: info.outputPath(`free-training-${stage}-${width}.png`), fullPage: true, animations: "disabled" }); } };
-  await photos("quote"); await page.getByRole("checkbox", { name: "أعتمد التدريب المجاني دون قبض أي مبلغ", exact: true }).check();
-  const posting = page.waitForResponse(r => r.url().endsWith("/api/v1/finance/free-training/approve") && r.request().method() === "POST"); await page.getByRole("button", { name: "اعتماد الإعفاء وتفعيل الفترة", exact: true }).click(); const reply = await posting; expect(reply.ok(), await reply.text()).toBe(true); const result = await reply.json(); await expect(page.getByRole("status").filter({ hasText: "تم اعتماد الإعفاء وتسجيل فترة التدريب" })).toBeVisible(); await photos("saved");
-  const replay = await page.request.fetch(reply.url(), { method: "POST", data: reply.request().postDataJSON(), headers: reply.request().headers() }); expect(replay.ok()).toBe(true); expect((await replay.json()).periodId).toBe(result.periodId);
-  await page.getByRole("link", { name: "عرض الاشتراك المعتمد" }).click(); await expect(page.getByText("تدريب مجاني بإعفاء معتمد — لا يوجد تحصيل أو إيصال")).toBeVisible(); await expect(page.getByRole("link", { name: "عرض الإيصال المحفوظ" })).toHaveCount(0);
-  const ownerPeriod = await page.request.get(`/api/v1/subscriptions/periods/${result.periodId}`).then(r => r.json()); expect(ownerPeriod.origin).toBe("ApprovedWaiver"); expect(ownerPeriod.receiptId).toBeNull(); expect(ownerPeriod.sportEnrollmentId).toBe(enrollment); expect(Number(ownerPeriod.priceSnapshot)).toBe(0);
-  await guardianLogin(page, "01000000015"); const url = `/api/v1/guardian/subscriptions/periods/${result.periodId}/adjustments`; const own = await page.request.get(url); expect(own.ok()).toBe(true); expect((await own.json()).origin).toBe("ApprovedWaiver"); expect(await own.text()).not.toContain("منحة تدريب اصطناعية لا تتضمن قبضًا");
-  await guardianLogin(page); expect((await page.request.get(url)).status()).toBe(404);
+const enrollment = "84000015-0000-0000-0000-000000000006";
+const player = "84000015-0000-0000-0000-000000000004";
+const monthly = "51000000-0000-0000-0000-000000000001";
+const waiverApi = "/api/v1/finance/free-training";
+const attemptPath = waiverApi + "/" + enrollment + "/attempt";
+const reason = "منحة تدريب اصطناعية";
+const approve = "اعتماد الإعفاء";
+const confirm = "أعتمد التدريب المجاني دون قبض أي مبلغ";
+const review = "مراجعة الإعفاء";
+const check = "التحقق من النتيجة";
+const periodLink = "عرض الاشتراك المعتمد";
+const action = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
+
+async function openWaiver(page: Page) {
+  await page.goto("/login");
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test");
+  await page.getByLabel("كلمة المرور").fill("Demo-Only-123!");
+  await action(page, "تسجيل الدخول").click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/dashboard/players/" + player);
+  await page.getByRole("tab", { name: "الاشتراكات والمالية", exact: true }).click();
+  await page.getByRole("link", { name: "اعتماد تدريب مجاني", exact: true }).click();
+  await page.getByRole("combobox", { name: "الباقة المعفاة" }).selectOption(monthly);
+  await page.getByRole("textbox", { name: "سبب الإعفاء" }).fill(reason);
+}
+
+async function reviewWaiver(page: Page) {
+  await action(page, review).click();
+  await expect(page.getByRole("region", { name: review })).toBeVisible();
+  await expect(action(page, approve)).toBeDisabled();
+}
+
+test("An owner can edit a stale waiver and must confirm the fresh quote", async ({ page }) => {
+  await openWaiver(page);
+  await reviewWaiver(page);
+  await page.route("**" + waiverApi + "/approve", async route => {
+    const response = await route.fetch({
+      postData: { ...route.request().postDataJSON(), quoteHash: "0".repeat(64) },
+    });
+    expect(response.status()).toBe(409);
+    await route.fulfill({ response });
+  });
+  await page.getByRole("checkbox", { name: confirm }).check();
+  await action(page, approve).click();
+  await expect(page.getByRole("alert").filter({ hasText: "حدّث المراجعة قبل الاعتماد" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "سبب الإعفاء" })).toHaveValue(reason);
+  await expect(page.getByRole("combobox", { name: "الباقة المعفاة" })).toHaveValue(monthly);
+  await reviewWaiver(page);
+  await expect(page.getByRole("checkbox", { name: confirm })).not.toBeChecked();
+});
+
+test("A saved waiver survives a lost response and reload, with no receipt and private owner notes", async ({ page }, info) => {
+  test.setTimeout(75_000);
+  await openWaiver(page);
+  await reviewWaiver(page);
+  const photos = async (stage: string) => {
+    for (const width of [320, 390, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      await page.screenshot({ path: info.outputPath("free-training-" + stage + "-" + width + ".png"), fullPage: true, animations: "disabled" });
+    }
+  };
+  await photos("quote");
+
+  let committed: { periodId: string } | undefined;
+  let sent = 0;
+  let key: string | undefined;
+  await page.route("**" + waiverApi + "/approve", async route => {
+    sent++;
+    key = route.request().headers()["idempotency-key"];
+    const response = await route.fetch();
+    expect(response.ok(), await response.text()).toBe(true);
+    committed = await response.json();
+    await route.abort("connectionreset");
+  });
+  await page.route("**" + attemptPath, async route => {
+    expect(route.request().headers()["idempotency-key"]).toBe(key);
+    await route.fulfill({ status: 503 });
+  });
+  await page.getByRole("checkbox", { name: confirm }).check();
+  await action(page, approve).click();
+  await expect(action(page, check)).toBeVisible();
+  await page.reload();
+  await expect(action(page, check)).toBeVisible();
+  await page.unroute("**" + attemptPath);
+  const readBack = page.waitForResponse(response => new URL(response.url()).pathname === attemptPath);
+  await action(page, check).click();
+  const response = await readBack;
+  expect(response.ok()).toBe(true);
+  expect(response.request().headers()["idempotency-key"]).toBe(key);
+  expect(committed).toBeDefined();
+  const result = await response.json();
+  expect(result).toMatchObject({ periodId: committed?.periodId, sportEnrollmentId: enrollment, playerId: player, replay: true });
+  expect(sent).toBe(1);
+
+  await expect(page.getByRole("link", { name: periodLink })).toBeVisible();
+  await photos("saved");
+  await page.getByRole("link", { name: periodLink }).click();
+  await expect(page.getByText("تدريب مجاني بإعفاء معتمد — لا يوجد تحصيل أو إيصال")).toBeVisible();
+  await expect(page.getByText(reason, { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "عرض الإيصال المحفوظ" })).toHaveCount(0);
+  const ownerPeriod = await page.request.get("/api/v1/subscriptions/periods/" + result.periodId);
+  expect(ownerPeriod.ok()).toBe(true);
+  const period = await ownerPeriod.json();
+  expect(period).toMatchObject({
+    origin: "ApprovedWaiver", receiptId: null, sportEnrollmentId: enrollment, waiver: { reason },
+  });
+  expect(Number(period.priceSnapshot)).toBe(0);
+
+  await guardianLogin(page, "01000000015");
+  const guardianApi = "/api/v1/guardian/subscriptions/periods/" + result.periodId + "/adjustments";
+  const own = await page.request.get(guardianApi);
+  expect(own.ok()).toBe(true);
+  expect(await own.json()).toMatchObject({ origin: "ApprovedWaiver" });
+  expect(await own.text()).not.toContain(reason);
+  await guardianLogin(page);
+  expect((await page.request.get(guardianApi)).status()).toBe(404);
 });

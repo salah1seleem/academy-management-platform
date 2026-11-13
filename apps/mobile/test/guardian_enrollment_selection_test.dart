@@ -1,4 +1,4 @@
-import 'package:academy_mobile/features/guardian/guardian_home.dart';
+import 'package:academy_mobile/features/guardian/guardian_profile.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/shared/subscription_home.dart';
 import 'package:flutter/material.dart';
@@ -61,7 +61,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byType(DropdownButtonFormField<String>).first);
       await t.pumpAndSettle();
-      await t.tap(find.text('كرة القدم · فرع الكرة').last);
+      await t.tap(find.textContaining('فرع الكرة').last);
       await t.pumpAndSettle();
       final input = t.widget<DropdownButtonFormField<String>>(
         find.byType(DropdownButtonFormField<String>).first,
@@ -72,54 +72,25 @@ void main() {
             .brightness,
         Brightness.light,
       );
-      final details = find.byKey(const ValueKey('child-home-details'));
-      await reveal(details);
-      await t.tap(details);
-      await t.pumpAndSettle();
-      await reveal(find.byType(GuardianSubscriptionSummary));
-      var summary = t.widget<GuardianSubscriptionSummary>(
-        find.byType(GuardianSubscriptionSummary),
-      );
-      expect((summary.childData['sports'] as List).single['id'], 'foot-a');
-      expect(
-        find.descendant(
-          of: find.byType(GuardianSubscriptionSummary),
-          matching: find.text('الاشتراك · السباحة'),
-        ),
-        findsNothing,
-      );
+      final card = find.byKey(const ValueKey('child-a'));
+      Finder inCard(Finder target) =>
+          find.descendant(of: card, matching: target);
+      expect(inCard(find.text('64')), findsOneWidget);
+      expect(inCard(find.text('91')), findsNothing);
       await reveal(find.byKey(const ValueKey('child-tab-b')), up: true);
       await t.tap(find.byKey(const ValueKey('child-tab-b')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('child-tab-a')));
       await t.pumpAndSettle();
-      await reveal(find.byType(GuardianSubscriptionSummary));
-      summary = t.widget<GuardianSubscriptionSummary>(
-        find.byType(GuardianSubscriptionSummary),
-      );
-      expect((summary.childData['sports'] as List).single['id'], 'foot-a');
-      await reveal(find.byKey(const ValueKey('child-section-2')), up: true);
-      await t.tap(find.byKey(const ValueKey('child-section-2')));
+      expect(inCard(find.text('64')), findsOneWidget);
+      final profileLink = inCard(find.text('ملف لينا والتقرير'));
+      await t.ensureVisible(profileLink);
       await t.pumpAndSettle();
-      await reveal(find.byType(GuardianLatestProgress));
-      final progress = t.widget<GuardianLatestProgress>(
-        find.byType(GuardianLatestProgress),
-      );
-      expect(progress.childData['latestEvaluation']['id'], 'foot-report');
-      expect(
-        find.descendant(
-          of: find.byType(GuardianLatestProgress),
-          matching: find.text('64'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(GuardianLatestProgress),
-          matching: find.text('91'),
-        ),
-        findsNothing,
-      );
+      await t.tap(profileLink);
+      await t.pumpAndSettle();
+      final profile = t.widget<ChildProfile>(find.byType(ChildProfile));
+      expect(profile.playerId, 'a');
+      expect(profile.initialEnrollmentId, 'foot-a');
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       auth.dispose();
@@ -127,7 +98,7 @@ void main() {
   );
 
   testWidgets(
-    'subscription helper remains readable on its light identity surface',
+    'subscription total label remains readable on its light identity surface',
     (t) async {
       final auth = await roles.authenticate(
         'AcademyOwner',
@@ -143,7 +114,7 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      final text = t.widget<Text>(find.text('قرب الانتهاء ضمن الفعالة'));
+      final text = t.widget<Text>(find.text('إجمالي الاشتراكات السارية'));
       final color = text.style!.color!;
       final contrast =
           (AcademyTheme.light().colorScheme.surface.computeLuminance() + .05) /

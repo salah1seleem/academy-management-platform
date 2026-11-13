@@ -97,27 +97,29 @@ public sealed class PaymentProcessor(FoundationDbContext db, IPaymentGateway gat
             return await Quarantine("registration-format-conflict");
         }
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SportEnrollments\" WHERE \"AcademyId\"={payment.AcademyId} AND \"Id\"={payment.RenewalRequest.SportEnrollmentId} FOR UPDATE", ct);
-        payment.Status = PaymentRequestStatus.Confirmed; payment.ConfirmedAtUtc = clock.UtcNow;
-        payment.RenewalRequest.Status = RenewalRequestStatus.Paid; payment.RenewalRequest.UpdatedAtUtc = clock.UtcNow;
+        // Callbacks have no member session. The accepted payment supplies the academy.
+        var zone = await db.Academies.Where(a => a.Id == payment.AcademyId).Select(a => a.TimeZone).SingleAsync(ct);
+        var paidAt = clock.UtcNow;
+        var today = clock.DateAt(paidAt, zone);
+        payment.Status = PaymentRequestStatus.Confirmed; payment.ConfirmedAtUtc = paidAt;
+        payment.RenewalRequest.Status = RenewalRequestStatus.Paid; payment.RenewalRequest.UpdatedAtUtc = paidAt;
         var (collection, receipt) = SubscriptionCollectionPosting.Create(payment, payment.RenewalRequest,
             payment.RenewalRequest.SportEnrollment.PlayerId, payment.RenewalRequest.SportEnrollment.Player.ArabicName,
             payment.RenewalRequest.SubscriptionPlan.Sport.ArabicName, PlanTerms.From(payment.RenewalRequest, payment.RenewalRequest.SubscriptionPlan).Name,
-            "Online", "الدفع الإلكتروني", clock.UtcNow, clock.UtcNow, "system/provider");
-        await Academy.Api.Operations.VipRewards.Consume(db,payment.RenewalRequest,clock.UtcNow);
+            "Online", "الدفع الإلكتروني", paidAt, paidAt, "system/provider", receiptDay: today);
+        await Academy.Api.Operations.VipRewards.Consume(db,payment.RenewalRequest,paidAt);
         db.Collections.Add(collection);
         var plan = payment.RenewalRequest.SubscriptionPlan;
         var terms = PlanTerms.From(payment.RenewalRequest, plan);
-        var latestEnd = await db.SubscriptionPeriods.Where(x => x.AcademyId == payment.AcademyId && x.SportEnrollmentId == payment.RenewalRequest.SportEnrollmentId && x.Status != SubscriptionPeriodStatus.Cancelled && x.EndDate != null)
-            .MaxAsync(x => x.EndDate, ct);
-        var start = latestEnd.HasValue && latestEnd.Value >= clock.Today ? latestEnd.Value.AddDays(1) : clock.Today;
+        var start = await RenewalCreationService.PreviewStartAsync(db, payment.AcademyId, payment.RenewalRequest.SportEnrollmentId, today, ct);
         var end = terms.EndDate(start);
         var period = new SubscriptionPeriod
         {
             Id = Guid.NewGuid(), AcademyId = payment.AcademyId, SportEnrollmentId = payment.RenewalRequest.SportEnrollmentId, SportId = payment.RenewalRequest.SportId,
             SubscriptionPlanId = plan.Id, CollectionId = collection.Id, StartDate = start, EndDate = end, InitialSessions = terms.Sessions,
-            RemainingSessions = terms.Sessions, Status = start > clock.Today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active,
+            RemainingSessions = terms.Sessions, Status = start > today ? SubscriptionPeriodStatus.Scheduled : SubscriptionPeriodStatus.Active,
             PriceSnapshot = payment.Amount, CurrencySnapshot = payment.Currency, CreatedByUserId = payment.RenewalRequest.RequestedByUserId,
-            CreatedAtUtc = clock.UtcNow, UpdatedAtUtc = clock.UtcNow
+            CreatedAtUtc = paidAt, UpdatedAtUtc = paidAt
         };
         var firstPeriod = !await db.SubscriptionPeriods.AnyAsync(x=>x.AcademyId==payment.AcademyId&&x.SportEnrollmentId==period.SportEnrollmentId,ct);
         terms.Capture(period); db.SubscriptionPeriods.Add(period);

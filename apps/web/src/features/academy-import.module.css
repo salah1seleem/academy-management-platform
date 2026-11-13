@@ -5,10 +5,35 @@
 .downloads{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:22px 0;}
 .downloads button{display:flex;align-items:center;gap:16px;padding:24px 18px;color:inherit;text-decoration:none;text-align:start;font:inherit;cursor:pointer;border-radius:10px;border:1px solid #394361;background:color-mix(in srgb,currentColor 3%,transparent);}
 .downloads strong,.downloads small{display:block;}.downloads small{font-size:12px;line-height:1.9;margin-top:8px;opacity:.75;}
-.upload{display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px;width:100%;border:1px dashed #526ca7;background:transparent;color:inherit;margin:20px 0;border-radius:0;}.upload small{font-size:12px;}.schema{padding:18px 0;}.schema summary{margin-bottom:16px;}.effects{margin:20px 0;}
+.upload{display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px;width:100%;border:1px dashed #526ca7;background:transparent;color:inherit;margin:20px 0;border-radius:0;}.upload small{font-size:12px;}.schema{padding:18px 0;}.schema summary{margin-bottom:16px;}
 @media(max-width:650px){.downloads{grid-template-columns:1fr;}.steps{font-size:10px;}}
 
-.effects :global(.import-counts article){border-radius:0;background:color-mix(in srgb,currentColor 4%,transparent);border:1px solid #394361;color:inherit;}
-.effects :global(.import-counts strong),.effects :global(.import-counts span){color:inherit;}
+.resultCounts { display: flex; flex-wrap: wrap; gap: .3rem 1.25rem; font-weight: 700; }
+.effects { margin-block: 1rem; border-block-start: 1px solid var(--staff-border, currentColor); }
+.effects > summary, .history summary { padding-block: .65rem; min-block-size: 44px; cursor: pointer; font-weight: 600; color: inherit; }
+.effectList { margin: 0; padding-inline: .25rem; }
+.effectList > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem 1rem; padding-block: .55rem; border-block-end: 1px solid var(--staff-border, currentColor); }
+.effectList dd { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: 0; }
+.historyList { display: grid; gap: .5rem; margin: .5rem 0 0; padding: 0; list-style: none; }
+.historyList button { display: block; inline-size: 100%; text-align: start; overflow-wrap: anywhere; }
+.historyList button[aria-current="true"] { border-color: var(--staff-border-strong, currentColor); font-weight: 700; }
+.historyList small { display: block; margin-block-start: .2rem; }
+.recordAmount small { display: inline; }
 
 .fileStatus{border:1px solid #526ca7;border-radius:10px;padding:16px;margin-block:16px;overflow-wrap:anywhere}.fileStatus p{margin-block:0 12px}.downloads button:disabled{opacity:.6;cursor:wait}
+
+.approvalFields { display: grid; gap: 1rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.recovery { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; }
+.recovery > [role="alert"] { flex-basis: 100%; }
+.playerExports { display: flex; flex-wrap: wrap; gap: .65rem; }
+@media (max-width: 480px) { .playerExports > button { width: 100%; } }
+
+.issues { display: grid; gap: .75rem; margin-block-start: 1rem; min-inline-size: 0; }
+.issueFilters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; }
+.issueFilters > label, .issueField { display: grid; gap: .3rem; flex: 1 1 11rem; min-inline-size: 0; max-inline-size: 19rem; }
+.issueFilters input, .issueFilters select { inline-size: 100%; min-inline-size: 0; min-block-size: 44px; }
+.issueCount { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: 0; }
+.issueCount strong { margin-inline-start: .2rem; }
+@media (max-width: 700px) {
+  .issues :global(.admin-data-row) > [role="cell"]::before { display: none; }
+}

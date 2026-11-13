@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/appearance.dart';
 import '../guardian/guardian_ui.dart';
@@ -25,7 +26,10 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
       ? null
       : '${widget.auth.session!.selected!.academyId}:${widget.auth.session!.selected!.id}:${widget.auth.session!.selected!.contextRevision}';
   late final original = identity;
-  bool foreground = true, busy = false;
+  bool foreground = true, busy = false, conflict = false, showAllSports = false;
+  bool get locked => busy || conflict;
+  bool get scoped =>
+      widget.playerId != null && widget.enrollmentId != null && !showAllSports;
   int revision = 0;
   String message = '', error = '';
   String? signature, request, choice, observed;
@@ -49,16 +53,18 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
     setState(() {
       foreground = s == AppLifecycleState.resumed;
       revision++;
-      choice = null;
-      observed = null;
-      note.clear();
       message = '';
-      error = '';
     });
   }
 
   Future<void> save(String path, Json body) async {
-    if (busy || widget.playerId != null) return;
+    if (locked ||
+        !foreground ||
+        identity == null ||
+        identity != original ||
+        widget.playerId != null) {
+      return;
+    }
     final next = jsonEncode({'path': path, 'body': body});
     if (signature != next) {
       signature = next;
@@ -67,6 +73,7 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
     setState(() {
       busy = true;
       error = '';
+      message = '';
     });
     try {
       await widget.auth.request(
@@ -82,19 +89,27 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
         choice = null;
         observed = null;
         note.clear();
-        message = l(
-          'تم حفظ الشارة وسجلها للأسرة، دون تغيير المستوى أو الاشتراك أو المال.',
-          'Badge action saved for authorized family; level, subscription and money unchanged.',
-        );
+        message = path.endsWith('/revoke')
+            ? l(
+                'سُحبت الشارة وحُدّث إجمالي النقاط.',
+                'Badge revoked and points updated.',
+              )
+            : l(
+                'مُنحت الشارة وأصبحت متاحة للأسرة.',
+                'Badge granted and visible to the family.',
+              );
       });
-    } catch (_) {
+    } catch (failure) {
       if (mounted && identity == original) {
-        setState(
-          () => error = l(
-            'تعذر تأكيد الحفظ؛ لم نسجل نجاحًا. أعد فتح المصدر والصلاحية.',
-            'Could not confirm; no success recorded. Reopen the source and permissions.',
-          ),
-        );
+        setState(() {
+          conflict = failure is ApiFailure && failure.status == 409;
+          error = failure is ApiFailure
+              ? failure.message
+              : l(
+                  'تعذر تأكيد الحفظ. حدّث السجل للتحقق.',
+                  'Could not confirm the save. Refresh the record to check.',
+                );
+        });
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -109,37 +124,98 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
       if (!foreground || identity == null || identity != original) {
         return const SizedBox.shrink();
       }
-      return GuardianPage(
-        title: l('شارات المجهود والتحسن', 'Effort and improvement badges'),
-        child: RemoteBody(
-          key: ValueKey('$identity:$revision'),
-          auth: widget.auth,
-          path: widget.playerId != null
-              ? '/api/v1/guardian/children/${widget.playerId}/badges'
-              : '$root/enrollments/${widget.enrollmentId}',
-          builder: (context, v) {
-            final d = obj(v);
-            return gList([
+      final records = RemoteBody(
+        key: ValueKey('$identity:$revision'),
+        auth: widget.auth,
+        path: widget.playerId != null
+            ? '/api/v1/guardian/children/${widget.playerId}/badges${scoped ? '?${Uri(queryParameters: {'enrollmentId': widget.enrollmentId}).query}' : ''}'
+            : '$root/enrollments/${widget.enrollmentId}',
+        builder: (context, v) {
+          final d = obj(v);
+          final journeys = rows(d['enrollments'])
+              .where(
+                (journey) =>
+                    !scoped ||
+                    obj(journey['enrollment'])['id'] == widget.enrollmentId,
+              )
+              .toList();
+          return gList([
+            if (message.isNotEmpty)
+              Semantics(liveRegion: true, child: Text(message)),
+            if (error.isNotEmpty) ...[
+              Semantics(liveRegion: true, child: Text(error)),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => setState(() {
+                        conflict = false;
+                        error = '';
+                        revision++;
+                      }),
+                child: Text(l('تحديث السجل', 'Refresh badge record')),
+              ),
+            ],
+            if (journeys.isEmpty)
+              EmptyMessage(
+                scoped
+                    ? l(
+                        'سجل هذا التسجيل الرياضي غير متاح.',
+                        'The badge record for this enrollment is unavailable.',
+                      )
+                    : l(
+                        'لا يوجد تسجيل رياضي لعرض شاراته.',
+                        'There are no sport enrollments to show badges for.',
+                      ),
+              ),
+            for (final journey in journeys) ...journeyWidgets(journey),
+            if (!scoped && d['hasMore'] == true)
               Text(
                 l(
-                  'تشجيع خاص لطفلك، لا ترتيب بين الأطفال أو أموال أو خصم اشتراك.',
-                  'Private encouragement, not a child leaderboard, money or subscription discount.',
+                  'تظهر أول 20 تسجيلًا رياضيًا.',
+                  'Showing the first 20 sport enrollments.',
                 ),
               ),
-              if (message.isNotEmpty) Text(message),
-              if (error.isNotEmpty) Text(error),
-              for (final journey in rows(d['enrollments']))
-                ...journeyWidgets(journey),
-              if (d['hasMore'] == true)
-                Text(
-                  l(
-                    'تظهر أول 20 تسجيلًا رياضيًا مخولًا.',
-                    'Showing the first20 authorized sport enrollments.',
+            if (widget.playerId != null && journeys.isNotEmpty)
+              ExpansionTile(
+                title: Text(l('عن نقاط الشارات', 'About badge points')),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      l(
+                        'النقاط للتشجيع. تُستبعد الشارات المسحوبة من الإجمالي، ويظل السحب ظاهرًا في السجل.',
+                        'Points are for encouragement. Revoked badges stay in the record and their points are excluded.',
+                      ),
+                    ),
                   ),
-                ),
-            ]);
-          },
-        ),
+                ],
+              ),
+          ]);
+        },
+      );
+      return GuardianPage(
+        title: l('شارات المجهود والتحسن', 'Effort and improvement badges'),
+        onBack: () => Navigator.of(context).maybePop(),
+        child: scoped
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: TextButton(
+                      onPressed: () => setState(() => showAllSports = true),
+                      child: Text(
+                        l(
+                          'عرض شارات كل الرياضات',
+                          'Show badges for all sports',
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(child: records),
+                ],
+              )
+            : records,
       );
     },
   );
@@ -157,30 +233,28 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
               '${e['player']} · ${e['sport']}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 12),
-            const Icon(Icons.auto_awesome, color: Color(0xffe3b448), size: 32),
-            Text(
-              '${d['points']}',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
-            ),
-            Text(
-              l(
-                'نقاط الشارات السارية لهذه الرياضة فقط',
-                'Active badge points for this sport only',
-              ),
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              l(
-                'السحب يستبعد نقاط الشارة ويحفظ سجلها، وليس عقوبة مالية.',
-                'Revocation excludes the badge points but preserves history; never a financial penalty.',
-              ),
+            const SizedBox(height: 8),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '${d['points']}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Text(
+                  l(
+                    'نقاط الشارات السارية في هذه الرياضة',
+                    'Active badge points for this sport',
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
-      if (widget.playerId == null && d['canGrant'] == true)
+      if (widget.playerId == null && d['canGrant'] == true && rules.isNotEmpty)
         GCard(
           key: ValueKey('badge-grant:${e['id']}'),
           child: Column(
@@ -203,7 +277,7 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
                       ),
                     )
                     .toList(),
-                onChanged: busy ? null : (v) => setState(() => choice = v),
+                onChanged: locked ? null : (v) => setState(() => choice = v),
               ),
               if (selected != null)
                 Text(
@@ -217,7 +291,7 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
                 label: Text(
                   '${l('تاريخ الملاحظة', 'Observation date')}: ${observed ?? d['asOfDate']}',
                 ),
-                onPressed: busy
+                onPressed: locked
                     ? null
                     : () async {
                         final date = await showDatePicker(
@@ -240,6 +314,7 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
               ),
               TextField(
                 controller: note,
+                enabled: !locked,
                 maxLength: 500,
                 decoration: InputDecoration(
                   labelText: l(
@@ -250,8 +325,8 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
               ),
               Text(
                 l(
-                  'كل قاعدة تمنح مرة واحدة للتسجيل، حتى بعد سحبها. لا ترقية أو حضور تلقائي.',
-                  'One grant per rule and enrollment, even after revocation. No automatic promotion or attendance.',
+                  'تُمنح كل شارة مرة واحدة لهذا التسجيل الرياضي. الملاحظة تظهر للأسرة.',
+                  'Each badge can be granted once per enrollment. The family sees the note.',
                 ),
               ),
               FilledButton.icon(
@@ -262,7 +337,7 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
                     'Grant badge and publish to family',
                   ),
                 ),
-                onPressed: busy || selected == null
+                onPressed: locked || selected == null
                     ? null
                     : () => save('$root/enrollments/${e['id']}/grant', {
                         'ruleId': selected,
@@ -276,64 +351,22 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
             ],
           ),
         ),
-      if (rows(d['items']).isEmpty)
+      if (widget.playerId == null && d['canGrant'] == true && rules.isEmpty)
         Text(
           l(
-            'لم تمنح شارة بعد؛ كل طفل يتقدم بطريقته.',
-            'No badges yet; every child progresses in their own way.',
+            'لا توجد شارات متاحة للمنح لهذا التسجيل.',
+            'No badges are available to grant for this enrollment.',
           ),
         ),
-      for (final b in rows(d['items']))
-        GCard(
-          key: ValueKey('badge:${b['id']}'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(
-                Icons.workspace_premium_outlined,
-                color: Color(0xffe3b448),
-                size: 38,
-              ),
-              Text(
-                textOf(b['title']),
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text(textOf(b['criterion'])),
-              Text(
-                '${b['points']} ${l('نقطة تشجيعية', 'encouragement points')}',
-              ),
-              Text(
-                b['state'] == 'Granted'
-                    ? l('شارة سارية', 'Active badge')
-                    : l(
-                        'شارة مسحوبة — مستبعدة من الملخص',
-                        'Revoked — excluded from summary',
-                      ),
-              ),
-              Text('${b['observedOn']} · ${b['actorName']}'),
-              if (b['familyNote'] != null) Text(textOf(b['familyNote'])),
-              if (b['revocation'] != null) ...[
-                const Divider(),
-                Text(
-                  '${l('سحبها', 'Revoked by')} ${obj(b['revocation'])['actorName']} · ${textOf(obj(b['revocation'])['createdAtUtc']).split('T').first}',
-                ),
-                if (obj(b['revocation'])['familyNote'] != null)
-                  Text(textOf(obj(b['revocation'])['familyNote'])),
-              ],
-              if (widget.playerId == null &&
-                  d['canRevoke'] == true &&
-                  b['state'] == 'Granted')
-                _BadgeRevoke(
-                  key: ValueKey('revoke:${b['id']}'),
-                  busy: busy,
-                  save: (n) => save('$root/grants/${b['id']}/revoke', {
-                    'version': b['version'],
-                    'note': n,
-                  }),
-                ),
-            ],
+      if (rows(d['items']).isEmpty)
+        EmptyMessage(
+          l(
+            'لا توجد شارات مسجلة لهذه الرياضة.',
+            'There are no badges for this sport yet.',
           ),
         ),
+      for (final badge in rows(d['items']))
+        badgeCard(badge, canRevoke: d['canRevoke'] == true),
       if (d['hasMore'] == true)
         Text(
           l(
@@ -342,6 +375,105 @@ class _BadgesState extends State<PlayerBadgesPage> with WidgetsBindingObserver {
           ),
         ),
     ];
+  }
+
+  String badgeDate(Object? value) {
+    final date = DateTime.tryParse(textOf(value));
+    return date == null
+        ? textOf(value)
+        : MaterialLocalizations.of(context).formatMediumDate(date);
+  }
+
+  Widget badgeCard(Json badge, {required bool canRevoke}) {
+    final active = badge['state'] == 'Granted';
+    final revocation = badge['revocation'] == null
+        ? null
+        : obj(badge['revocation']);
+    final colors = Theme.of(context).colorScheme;
+    return GCard(
+      key: ValueKey('badge:${badge['id']}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            textOf(badge['title']),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 5,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: active
+                      ? colors.secondaryContainer
+                      : colors.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    active
+                        ? l('شارة سارية', 'Active badge')
+                        : l('شارة مسحوبة', 'Revoked badge'),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: active
+                          ? colors.onSecondaryContainer
+                          : colors.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ),
+              Text(
+                active
+                    ? l("${badge['points']} نقطة", "${badge['points']} points")
+                    : l(
+                        "${badge['points']} نقطة عند المنح",
+                        "${badge['points']} points when granted",
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(textOf(badge['criterion'])),
+          Text(
+            l(
+              "تاريخ الملاحظة ${badgeDate(badge['observedOn'])} · منحها ${badge['actorName']}",
+              "Observed ${badgeDate(badge['observedOn'])} · Granted by ${badge['actorName']}",
+            ),
+          ),
+          if (badge['familyNote'] is String &&
+              textOf(badge['familyNote']).isNotEmpty)
+            Text(textOf(badge['familyNote'])),
+          if (revocation != null) ...[
+            const Divider(),
+            Text(
+              l(
+                "سحبها ${revocation['actorName']} · ${badgeDate(textOf(revocation['createdAtUtc']).split('T').first)}",
+                "Revoked by ${revocation['actorName']} · ${badgeDate(textOf(revocation['createdAtUtc']).split('T').first)}",
+              ),
+            ),
+            if (revocation['familyNote'] is String &&
+                textOf(revocation['familyNote']).isNotEmpty)
+              Text(textOf(revocation['familyNote'])),
+          ],
+          if (widget.playerId == null && canRevoke && active)
+            _BadgeRevoke(
+              key: ValueKey('revoke:${badge['id']}'),
+              busy: locked,
+              save: (note) => save("$root/grants/${badge['id']}/revoke", {
+                'version': badge['version'],
+                'note': note,
+              }),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -371,8 +503,17 @@ class _BadgeRevokeState extends State<_BadgeRevoke> {
       ),
     ),
     children: [
+      Text(
+        localized(
+          context,
+          'تُستبعد نقاط الشارة من الإجمالي، ويظل السحب ظاهرًا في سجل الأسرة.',
+          'The points are removed from the total and the family can still see the revocation.',
+        ),
+      ),
+      const SizedBox(height: 8),
       TextField(
         controller: note,
+        enabled: !widget.busy,
         maxLength: 500,
         decoration: InputDecoration(
           labelText: localized(

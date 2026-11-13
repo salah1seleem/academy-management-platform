@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
+import '../../core/widgets/page_status.dart';
 import '../admin/native_operation_form.dart';
 import '../shared/transfer_payment.dart';
 import 'guardian_ui.dart';
@@ -23,36 +24,70 @@ class _ProductPurchaseState extends NativeOperationState<ProductPurchase> {
   String intent = commandKey();
   List<Json> contexts = [];
   Json? inventory, sale;
-  bool numberConfirmed = false, uncertain = false, inventoryBusy = false;
+  bool numberConfirmed = false,
+      uncertain = false,
+      inventoryBusy = false,
+      refreshRequired = false;
   late Future<void> loaded;
-  bool get variantsRequired => widget.product['usesVariants'] == true;
+  bool get variantsRequired => inventory?['usesVariants'] == true;
   bool get numbered => inventory?['numberedUniform'] == true;
-  List<Json> get variants => rows(inventory?['variants'] ?? []);
+  List<Json> get variants =>
+      rows(inventory?['variants'] ?? [])
+          .where((row) => (row['quantity'] as num? ?? 0) > 0)
+          .toList();
+  String variantColor(Json variant) => textOf(variant['color'] ?? '');
+  Set<String> get colors => variants.map(variantColor).toSet();
+  bool get chooseColor => colors.any((value) => value.isNotEmpty);
+  List<Json> get colorVariants => variants
+      .where(
+        (row) => !chooseColor || color != null && variantColor(row) == color,
+      )
+      .toList();
+  Set<String> get sizes =>
+      colorVariants.map((row) => textOf(row['size'])).toSet();
+  List<Json> get sizeVariants =>
+      colorVariants.where((row) => row['size'] == size).toList();
   Json? get selectedVariant =>
       variants.where((v) => v['id'] == variant).firstOrNull;
   Json? get selectedChild =>
       contexts.where((e) => e['id'] == enrollment).firstOrNull;
   int get available => variantsRequired
       ? (selectedVariant?['quantity'] as num? ?? 0).toInt()
-      : (widget.product['stockQuantity'] as num? ?? 0).toInt();
-  double? get unit {
-    if (variantsRequired) return double.tryParse('${inventory?['unitPrice']}');
-    final price = double.tryParse('${widget.product['displayPrice']}');
-    final discount =
-        double.tryParse('${widget.product['discountPercentage']}') ?? 0;
-    return price == null ? null : (price * (100 - discount)).round() / 100;
+      : ((inventory?['stockQuantity'] ?? widget.product['stockQuantity'])
+                    as num? ??
+                0)
+            .toInt();
+  int? get unitMinor {
+    final value = double.tryParse('${inventory?['unitPrice']}');
+    return value == null || !value.isFinite || value < 0
+        ? null
+        : (value * 100).round();
   }
+
+  String? get total {
+    final unit = unitMinor;
+    if (unit == null) return null;
+    final amount = unit * quantity;
+    return '${amount ~/ 100}.${(amount % 100).toString().padLeft(2, '0')}';
+  }
+
+  Object? get currency => inventory?['currency'] ?? widget.product['currency'];
+  bool get inStock =>
+      inventory != null &&
+      (variantsRequired ? variants.isNotEmpty : available > 0);
+  bool get canChange => !busy && !uncertain && !inventoryBusy;
 
   bool get ready =>
       !busy &&
       !inventoryBusy &&
-      enrollment != null &&
-      unit != null &&
+      !refreshRequired &&
+      selectedChild != null &&
+      inStock &&
+      total != null &&
       quantity <= available &&
       (!variantsRequired ||
           selectedVariant != null &&
-              (!variants.any((v) => textOf(v['color'] ?? '').isNotEmpty) ||
-                  color != null) &&
+              (!chooseColor || color != null) &&
               (!numbered || numberConfirmed));
   @override
   void initState() {
@@ -69,44 +104,45 @@ class _ProductPurchaseState extends NativeOperationState<ProductPurchase> {
     contexts = rows(result)
         .where((e) => e['sportId'] == widget.product['sportId'])
         .toList();
-    if (contexts.length == 1) enrollment = textOf(contexts.single['id']);
-    if (variantsRequired) await loadInventory();
+    enrollment = contexts.length == 1 ? textOf(contexts.single['id']) : null;
+    if (enrollment != null) await loadInventory();
   }
 
   Future<void> loadInventory() async {
+    if (!current || enrollment == null || uncertain) return;
     final epoch = ++inventoryEpoch;
-    if (current) {
-      setState(() {
-        inventoryBusy = true;
-        variant = null;
-        numberConfirmed = false;
-        error = null;
-      });
-    }
+    final selectedEnrollment = enrollment!;
+    setState(() {
+      inventoryBusy = true;
+      inventory = null;
+      variant = null;
+      numberConfirmed = false;
+      error = null;
+    });
     try {
       final data = obj(
         await auth.request(
           'GET',
-          '/api/v1/guardian/catalog/${widget.product['id']}/variants${enrollment == null ? '' : '?enrollmentId=${Uri.encodeComponent(enrollment!)}'}',
+          '/api/v1/guardian/catalog/${widget.product['id']}/variants?enrollmentId=${Uri.encodeComponent(selectedEnrollment)}',
         ),
       );
       if (!current || epoch != inventoryEpoch) return;
       setState(() {
         inventory = data;
-        if (!variants.any((v) => textOf(v['color'] ?? '') == color)) {
-          color = null;
+        refreshRequired = false;
+        final choices = colors;
+        if (!choices.contains(color)) {
+          color = choices.length == 1 ? choices.single : null;
         }
-        final colors = variants.map((v) => textOf(v['color'] ?? '')).toSet();
-        if (color == null && colors.length == 1) {
-          color = colors.single;
-        }
-        selectSize(size);
+        selectSize(sizes.contains(size) ? size : null);
       });
     } catch (e) {
       if (current && epoch == inventoryEpoch) {
         setState(() {
           inventory = null;
-          error = e is ApiFailure ? e.message : 'تعذر تحديث المقاسات والأرقام.';
+          error = e is ApiFailure && [403, 404].contains(e.status)
+              ? 'المنتج غير متاح لهذا التسجيل.'
+              : 'تعذر تحميل السعر والتوفّر.';
         });
       }
     } finally {
@@ -122,13 +158,7 @@ class _ProductPurchaseState extends NativeOperationState<ProductPurchase> {
     numberConfirmed = false;
     quantity = 1;
     intent = commandKey();
-    final choices = variants
-        .where(
-          (v) =>
-              v['size'] == size &&
-              (color == null || textOf(v['color'] ?? '') == color),
-        )
-        .toList();
+    final choices = sizeVariants;
     if (!numbered && choices.length == 1) {
       variant = textOf(choices.single['id']);
     }
@@ -152,7 +182,7 @@ class _ProductPurchaseState extends NativeOperationState<ProductPurchase> {
             body: {
               'productId': widget.product['id'],
               'quantity': quantity,
-              'expectedAmount': (unit! * quantity).toStringAsFixed(2),
+              'expectedAmount': total!,
               'playerId': child['playerId'],
               'branchId': child['branchId'],
               if (variantsRequired) 'variantId': variant,
@@ -169,14 +199,123 @@ class _ProductPurchaseState extends NativeOperationState<ProductPurchase> {
         }
       } catch (e) {
         if (current) {
-          setState(
-            () => uncertain =
-                e is! ApiFailure || e.status == 0 || e.status >= 500,
-          );
+          setState(() {
+            uncertain = e is! ApiFailure || e.status == 0 || e.status >= 500;
+            refreshRequired =
+                e is ApiFailure && [404, 409, 422].contains(e.status);
+          });
         }
         rethrow;
       }
     });
+  }
+
+  Widget selector(
+    String label,
+    String? value,
+    List<DropdownMenuItem<String>> items,
+    ValueChanged<String?> change, {
+    Key? key,
+  }) => DropdownButtonFormField<String>(
+    key: key,
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(labelText: label),
+    items: items,
+    onChanged: canChange && items.isNotEmpty ? change : null,
+  );
+
+  List<Widget> variantControls() => [
+    if (chooseColor)
+      selector(
+        'اللون',
+        color,
+        [
+          for (final value in colors)
+            DropdownMenuItem(
+              value: value,
+              child: UiText(value.isEmpty ? 'اللون الأساسي' : value),
+            ),
+        ],
+        (value) => setState(() {
+          color = value;
+          selectSize(null);
+        }),
+        key: ValueKey('color:$color:$inventoryEpoch'),
+      ),
+    if (sizes.isNotEmpty)
+      selector(
+        'المقاس',
+        size,
+        [
+          for (final value in sizes)
+            DropdownMenuItem(value: value, child: UiText(value)),
+        ],
+        (value) => setState(() => selectSize(value)),
+        key: ValueKey('size:$size:$inventoryEpoch'),
+      ),
+    if (numbered && size != null) ...[
+      if (inventory?['assignedShirtNumber'] != null &&
+          !sizeVariants.any(
+            (row) => row['shirtNumber'] == inventory!['assignedShirtNumber'],
+          ))
+        const UiText('رقم الطفل غير متاح بهذا المقاس. اختر رقمًا متاحًا.'),
+      selector(
+        'رقم القميص المتاح',
+        variant,
+        [
+          for (final row in sizeVariants)
+            DropdownMenuItem(
+              value: textOf(row['id']),
+              child: UiText(
+                '${row['shirtNumber']} · المتاح ${row['quantity']}',
+              ),
+            ),
+        ],
+        (value) => setState(() {
+          variant = value;
+          numberConfirmed = false;
+          quantity = 1;
+          intent = commandKey();
+        }),
+        key: ValueKey('number:$size:$variant:$inventoryEpoch'),
+      ),
+      if (selectedVariant case final row?)
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: numberConfirmed,
+          title: UiText('أؤكد رقم القميص المختار: ${row['shirtNumber']}'),
+          onChanged: canChange
+              ? (value) => setState(() => numberConfirmed = value == true)
+              : null,
+        ),
+    ],
+  ];
+
+  Widget orderSummary({required bool confirmed}) {
+    final shirt = selectedVariant?['shirtNumber'];
+    final choice = [
+      if (color != null && color!.isNotEmpty) color!,
+      if (size != null) 'مقاس $size',
+      if (shirt != null) 'رقم $shirt',
+      'الكمية $quantity',
+    ].join(' · ');
+    return GCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Heading(confirmed ? 'بيانات الطلب' : 'مراجعة الطلب'),
+          if (selectedChild case final child?)
+            UiText('${child['player']} · ${child['branch']}'),
+          UiText(choice),
+          MoneyText(
+            confirmed ? sale!['amount'] : total,
+            confirmed ? sale!['currency'] : currency,
+            size: 22,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -188,319 +327,344 @@ class _ProductPurchaseState extends NativeOperationState<ProductPurchase> {
           child: FutureBuilder<void>(
             future: loaded,
             builder: (context, data) {
-              if (data.hasError) {
-                return Center(
-                  child: TextButton(
-                    onPressed: () => setState(() => loaded = load()),
-                    child: const UiText('إعادة المحاولة'),
+              if (data.connectionState != ConnectionState.done) {
+                return const Center(
+                  child: CircularProgressIndicator(
+                    semanticsLabel: 'جارٍ تحميل بيانات الطلب',
                   ),
                 );
               }
-              if (data.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
+              if (data.hasError) {
+                return gList([
+                  const EmptyMessage('تعذر تحميل تسجيلات الأبناء.'),
+                  OutlinedButton(
+                    onPressed: () => setState(() => loaded = load()),
+                    child: const UiText('إعادة المحاولة'),
+                  ),
+                ]);
               }
+              if (sale != null) {
+                return gList([
+                  orderSummary(confirmed: true),
+                  _ProductProof(auth: auth, id: textOf(sale!['id'])),
+                ]);
+              }
+              final selectionComplete =
+                  inStock && (!variantsRequired || selectedVariant != null);
+              final canReview = selectionComplete && total != null;
               return gList([
-                DemoImage(widget.product['imageReference'], height: 190),
-                Heading(textOf(widget.product['arabicName'])),
+                if ((widget.product['imageReference']?.toString().trim() ?? '')
+                    .isNotEmpty)
+                  DemoImage(widget.product['imageReference'], height: 160),
                 if ((widget.product['arabicDescription']?.toString().trim() ??
                         '')
                     .isNotEmpty)
                   UiText(textOf(widget.product['arabicDescription'])),
-                Heading(
-                  money(
-                    unit == null ? null : unit! * quantity,
-                    widget.product['currency'],
-                  ),
-                ),
-                if (sale == null) ...[
-                  if (contexts.isEmpty)
-                    const EmptyMessage('لا توجد تسجيلات متاحة لهذه الرياضة.'),
-                  DropdownButtonFormField<String>(
-                    initialValue: enrollment,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'الطفل والفرع',
-                    ),
-                    items: [
-                      for (final e in contexts)
+                if (contexts.isEmpty)
+                  const EmptyMessage('لا توجد تسجيلات للأبناء في هذه الرياضة.')
+                else ...[
+                  selector(
+                    'الطفل والفرع',
+                    enrollment,
+                    [
+                      for (final child in contexts)
                         DropdownMenuItem(
-                          value: textOf(e['id']),
+                          value: textOf(child['id']),
                           child: UiText(
-                            '${e['player']} · ${e['branch']}',
+                            '${child['player']} · ${child['branch']}',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                     ],
-                    onChanged: busy || uncertain
-                        ? null
-                        : (v) {
-                            setState(() {
-                              enrollment = v;
-                              intent = commandKey();
-                            });
-                            if (variantsRequired) loadInventory();
-                          },
+                    (value) {
+                      setState(() {
+                        enrollment = value;
+                        intent = commandKey();
+                      });
+                      loadInventory();
+                    },
                   ),
-                  if (variantsRequired) ...[
-                    if (inventoryBusy) const LinearProgressIndicator(),
+                  if (inventoryBusy)
+                    const LinearProgressIndicator(
+                      semanticsLabel: 'جارٍ تحميل السعر والتوفّر',
+                    ),
+                  if (!canReview && error != null)
+                    Semantics(liveRegion: true, child: UiText(error!)),
+                  if (enrollment != null &&
+                      !inventoryBusy &&
+                      !canReview &&
+                      (inventory == null || !inStock || total == null))
                     OutlinedButton(
-                      onPressed: busy || uncertain || inventoryBusy
-                          ? null
-                          : loadInventory,
-                      child: const UiText('تحديث المقاسات والأرقام'),
+                      onPressed: canChange ? loadInventory : null,
+                      child: const UiText('تحديث السعر والتوفّر'),
                     ),
-                    if (variants.any(
-                      (v) => textOf(v['color'] ?? '').isNotEmpty,
-                    ))
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('color:$color:$inventoryEpoch'),
-                        initialValue: color,
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'اللون'),
-                        items: [
-                          for (final value
-                              in variants
-                                  .map((v) => textOf(v['color'] ?? ''))
-                                  .toSet())
-                            DropdownMenuItem(
-                              value: value,
-                              child: UiText(
-                                value.isEmpty ? 'اللون الأساسي' : value,
-                              ),
-                            ),
-                        ],
-                        onChanged: busy || uncertain || inventoryBusy
-                            ? null
-                            : (v) => setState(() {
-                                color = v;
-                                selectSize(null);
-                              }),
-                      ),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('size:$size:$inventoryEpoch'),
-                      initialValue: variants.any((v) => v['size'] == size)
-                          ? size
-                          : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'المقاس'),
-                      items: [
-                        for (final value
-                            in variants
-                                .where(
-                                  (v) =>
-                                      color == null ||
-                                      textOf(v['color'] ?? '') == color,
-                                )
-                                .map((v) => textOf(v['size']))
-                                .toSet())
-                          DropdownMenuItem(value: value, child: UiText(value)),
+                  if (inventory != null && !inStock)
+                    const EmptyMessage('المنتج غير متاح حاليًا.'),
+                  if (inventory != null && inStock && total == null)
+                    const EmptyMessage('السعر غير متاح حاليًا.'),
+                  if (inStock && variantsRequired) ...variantControls(),
+                  if (canReview) ...[
+                    UiText('المتاح: $available قطعة'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          tooltip: 'تقليل الكمية',
+                          onPressed: canChange && quantity > 1
+                              ? () => setState(() {
+                                  quantity--;
+                                  intent = commandKey();
+                                })
+                              : null,
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                        Semantics(label: 'الكمية', child: UiText('$quantity')),
+                        IconButton(
+                          tooltip: 'زيادة الكمية',
+                          onPressed:
+                              canChange &&
+                                  quantity < available &&
+                                  quantity < 100
+                              ? () => setState(() {
+                                  quantity++;
+                                  intent = commandKey();
+                                })
+                              : null,
+                          icon: const Icon(Icons.add_circle_outline),
+                        ),
                       ],
-                      onChanged: busy || uncertain || inventoryBusy
-                          ? null
-                          : (v) => setState(() => selectSize(v)),
                     ),
-                    if (numbered && size != null) ...[
-                      if (inventory?['assignedShirtNumber'] != null &&
-                          !variants.any(
-                            (v) =>
-                                v['size'] == size &&
-                                (color == null ||
-                                    textOf(v['color'] ?? '') == color) &&
-                                v['shirtNumber'] ==
-                                    inventory!['assignedShirtNumber'],
-                          ))
-                        const UiText(
-                          'رقم الطفل غير متاح بهذا المقاس. اختر رقمًا متاحًا وراجعه قبل المتابعة.',
-                        ),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('number:$size:$variant:$inventoryEpoch'),
-                        initialValue: variant,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'رقم القميص المتاح',
-                        ),
-                        items: [
-                          for (final v in variants.where(
-                            (v) =>
-                                v['size'] == size &&
-                                (color == null ||
-                                    textOf(v['color'] ?? '') == color),
-                          ))
-                            DropdownMenuItem(
-                              value: textOf(v['id']),
-                              child: UiText(
-                                '${v['shirtNumber']} · المتاح ${v['quantity']}',
-                              ),
-                            ),
-                        ],
-                        onChanged: busy || uncertain || inventoryBusy
-                            ? null
-                            : (v) => setState(() {
-                                variant = v;
-                                numberConfirmed = false;
-                                quantity = 1;
-                                intent = commandKey();
-                              }),
+                    orderSummary(confirmed: false),
+                    if (error != null)
+                      Semantics(liveRegion: true, child: UiText(error!)),
+                    if (refreshRequired)
+                      OutlinedButton(
+                        onPressed: canChange ? loadInventory : null,
+                        child: const UiText('تحديث السعر والتوفّر'),
                       ),
-                      CheckboxListTile(
-                        value: numberConfirmed,
-                        title: UiText(
-                          'أؤكد رقم القميص المختار: ${selectedVariant?['shirtNumber'] ?? 'اختر رقمًا'}',
-                        ),
-                        onChanged: busy || uncertain || variant == null
-                            ? null
-                            : (v) =>
-                                  setState(() => numberConfirmed = v == true),
+                    if (uncertain)
+                      const UiText(
+                        'لم يتأكد إنشاء الطلب. أعد إرسال نفس الاختيارات أو راجع طلباتك.',
                       ),
-                    ],
+                    FilledButton(
+                      onPressed: ready ? submit : null,
+                      child: UiText(
+                        uncertain
+                            ? 'إعادة تأكيد الطلب نفسه'
+                            : 'متابعة إلى الدفع',
+                      ),
+                    ),
                   ],
-                  UiText(
-                    variantsRequired && selectedVariant == null
-                        ? 'اختر المقاس${numbered ? ' ورقم القميص' : ''} لعرض الرصيد.'
-                        : 'المتاح للاختيار: $available',
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        tooltip: 'تقليل الكمية',
-                        onPressed: busy || uncertain || quantity <= 1
-                            ? null
-                            : () => setState(() {
-                                quantity--;
-                                intent = commandKey();
-                              }),
-                        icon: const Icon(Icons.remove_circle_outline),
+                  if (busy)
+                    const Center(
+                      child: CircularProgressIndicator(
+                        semanticsLabel: 'جارٍ فتح الطلب',
                       ),
-                      UiText('$quantity'),
-                      IconButton(
-                        tooltip: 'زيادة الكمية',
-                        onPressed:
-                            busy ||
-                                uncertain ||
-                                quantity >= available ||
-                                quantity >= 100
-                            ? null
-                            : () => setState(() {
-                                quantity++;
-                                intent = commandKey();
-                              }),
-                        icon: const Icon(Icons.add_circle_outline),
-                      ),
-                    ],
-                  ),
-                  GCard(
-                    child: UiText(
-                      'مراجعة الطلب: ${selectedChild?['player'] ?? 'اختر الطفل'} · ${selectedChild?['branch'] ?? ''}\n${color == null || color!.isEmpty ? '' : '$color · '}${size ?? 'مقاس عام'}${selectedVariant?['shirtNumber'] == null ? '' : ' · رقم ${selectedVariant!['shirtNumber']}'} · الكمية $quantity\n${money(unit == null ? null : unit! * quantity, widget.product['currency'])}',
                     ),
-                  ),
-                  if (uncertain)
-                    const UiText(
-                      'لم يتأكد إنشاء الطلب. أعد نفس الطلب دون تغيير الاختيار أو راجع طلباتك.',
-                    ),
-                  FilledButton(
-                    onPressed: ready ? submit : null,
-                    child: UiText(
-                      uncertain ? 'إعادة تأكيد الطلب نفسه' : 'متابعة إلى الدفع',
-                    ),
-                  ),
-                ] else ...[
-                  Heading(money(sale!['amount'], sale!['currency'])),
-                  GCard(
-                    child: UiText(
-                      '${selectedChild?['player'] ?? ''} · ${color == null || color!.isEmpty ? '' : '$color · '}${size ?? 'مقاس عام'}${selectedVariant?['shirtNumber'] == null ? '' : ' · رقم ${selectedVariant!['shirtNumber']}'} · الكمية $quantity',
-                    ),
-                  ),
-                  TransferPayment(
-                    auth: auth,
-                    proofPath:
-                        '/api/v1/guardian/product-sales/${sale!['id']}/proof',
-                    subscription: false,
-                  ),
-                  const UiText(
-                    'تُراجع الإدارة الدفع وتوافر المقاس والرقم قبل التأكيد. الاستلام من الأكاديمية.',
-                  ),
                 ],
-                if (error != null) UiText(error!),
-                if (busy) const Center(child: CircularProgressIndicator()),
               ]);
             },
           ),
         );
 }
 
-class GuardianProductOrders extends StatelessWidget {
+String? _productStatusLabel(Object? status) => switch (status) {
+  'Confirmed' => 'تم تأكيد الدفع',
+  'Rejected' => 'الطلب مرفوض',
+  _ => null,
+};
+
+String _productVariant(Json order) => [
+  if (textOf(order['colorSnapshot'] ?? '').trim().isNotEmpty)
+    textOf(order['colorSnapshot']),
+  if (textOf(order['sizeSnapshot'] ?? '').trim().isNotEmpty)
+    textOf(order['sizeSnapshot']),
+  if (order['shirtNumberSnapshot'] != null)
+    'رقم ${order['shirtNumberSnapshot']}',
+].join(' · ');
+
+class GuardianProductOrders extends StatefulWidget {
   const GuardianProductOrders({super.key, required this.auth});
   final AuthController auth;
   @override
+  State<GuardianProductOrders> createState() => _GuardianProductOrdersState();
+}
+
+class _GuardianProductOrdersState extends State<GuardianProductOrders> {
+  int revision = 0, page = 1;
+
+  void reload() => setState(() => revision++);
+  void changePage(int number) => setState(() => page = number);
+
+  Future<void> open(String id) async {
+    final session = widget.auth.session;
+    await openPage(context, GuardianProductOrder(auth: widget.auth, id: id));
+    if (mounted &&
+        widget.auth.session?.selected?.id == session?.selected?.id &&
+        widget.auth.session?.selected?.contextRevision ==
+            session?.selected?.contextRevision &&
+        widget.auth.session?.selected?.academyId ==
+            session?.selected?.academyId &&
+        widget.auth.session?.userId == session?.userId) {
+      reload();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => GuardianPage(
     operation: true,
-    title: 'طلباتي من المنتجات الرياضية',
+    title: 'طلبات المنتجات',
+    actions: [
+      IconButton(
+        tooltip: ui(context, 'تحديث الطلبات'),
+        onPressed: reload,
+        icon: const Icon(Icons.refresh_rounded),
+      ),
+    ],
     child: RemoteBody(
-      auth: auth,
-      path: '/api/v1/guardian/product-sales',
+      key: ValueKey((page, revision)),
+      auth: widget.auth,
+      path: '/api/v1/guardian/product-sales?page=$page&pageSize=25',
+      autoPaginate: false,
       builder: (context, value) {
-        final items = rows(value);
-        return gList([
-          if (items.isEmpty) const EmptyMessage('لا توجد طلبات منتجات بعد.'),
+        final items = rows(value is List ? value : obj(value)['items']);
+        final hasMore = value is Map && value['hasMore'] == true;
+        final list = gList([
+          if (items.isEmpty)
+            EmptyMessage(
+              page == 1
+                  ? 'لا توجد طلبات منتجات بعد.'
+                  : 'لا توجد طلبات في هذه الصفحة.',
+            ),
           for (final row in items)
             GCard(
+              key: ValueKey('product-order:${row['id']}'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Heading(textOf(row['productName'])),
-                  StatusPill(row['status']),
-                  UiText(
-                    '${row['player'] ?? 'منتج للأسرة'} · الكمية ${row['quantity']}\n${row['colorSnapshot'] == null || textOf(row['colorSnapshot'] ?? '').isEmpty ? '' : '${row['colorSnapshot']} · '}${row['sizeSnapshot'] ?? 'مقاس عام'}${row['shirtNumberSnapshot'] == null ? '' : ' · رقم ${row['shirtNumberSnapshot']}'}\n${money(row['amount'], row['currency'])}',
+                  StatusPill(
+                    row['status'],
+                    displayLabel: _productStatusLabel(row['status']),
                   ),
+                  UiText(
+                    '${row['player'] ?? 'طلب للأسرة'} · الكمية ${row['quantity']}',
+                  ),
+                  if (_productVariant(row).isNotEmpty)
+                    UiText(_productVariant(row)),
+                  PaymentRequestReference(order: row),
+                  MoneyText(row['amount'], row['currency'], size: 22),
                   TextButton(
-                    onPressed: () => openPage(
-                      context,
-                      GuardianProductOrder(auth: auth, id: textOf(row['id'])),
+                    onPressed: () => open(textOf(row['id'])),
+                    child: UiText(
+                      row['status'] == 'Pending' ? 'متابعة الطلب' : 'عرض الطلب',
                     ),
-                    child: const UiText('عرض الطلب والدفع'),
                   ),
                 ],
               ),
             ),
-        ]);
+        ], key: PageStorageKey('guardian-product-orders-$page'));
+        if (page == 1 && !hasMore) return list;
+        return Column(
+          children: [
+            Expanded(child: list),
+            PageActionBar(
+              child: Row(
+                children: [
+                  if (page > 1)
+                    IconButton(
+                      tooltip: ui(context, 'الصفحة السابقة'),
+                      onPressed: () => changePage(page - 1),
+                      icon: const Icon(Icons.chevron_left),
+                    )
+                  else
+                    const SizedBox(width: 48),
+                  Expanded(
+                    child: UiText(
+                      '${ui(context, 'الصفحة')} $page',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  if (hasMore)
+                    IconButton(
+                      tooltip: ui(context, 'الصفحة التالية'),
+                      onPressed: () => changePage(page + 1),
+                      icon: const Icon(Icons.chevron_right),
+                    )
+                  else
+                    const SizedBox(width: 48),
+                ],
+              ),
+            ),
+          ],
+        );
       },
     ),
   );
 }
 
-class GuardianProductOrder extends StatelessWidget {
+class GuardianProductOrder extends StatefulWidget {
   const GuardianProductOrder({super.key, required this.auth, required this.id});
   final AuthController auth;
   final String id;
+
+  @override
+  State<GuardianProductOrder> createState() => _GuardianProductOrderState();
+}
+
+class _GuardianProductOrderState extends State<GuardianProductOrder> {
+  int revision = 0;
+
   @override
   Widget build(BuildContext context) => GuardianPage(
     operation: true,
-    title: 'طلب المنتج الرياضي',
+    title: 'طلب المنتج',
     child: RemoteBody(
-      auth: auth,
-      path: '/api/v1/guardian/product-sales/$id',
+      key: ValueKey(revision),
+      auth: widget.auth,
+      path: '/api/v1/guardian/product-sales/${widget.id}',
+      notFound: const PageStatus(
+        child: StatusPanel(message: 'طلب المنتج غير متاح لحسابك.'),
+      ),
       builder: (context, value) {
         final r = obj(value);
+        if (r['id'] != widget.id) {
+          return PageStatus(
+            child: StatusPanel(
+              message: 'تعذر قراءة طلب المنتج.',
+              onAction: () => setState(() => revision++),
+              actionLabel: 'إعادة المحاولة',
+            ),
+          );
+        }
         return gList([
           Heading(textOf(r['productName'])),
-          StatusPill(r['status']),
+          StatusPill(
+            r['status'],
+            displayLabel: _productStatusLabel(r['status']),
+          ),
+          PaymentRequestReference(order: r),
           GCard(
             child: Column(
               children:
                   [
-                        ('الطفل', textOf(r['player'] ?? 'منتج للأسرة')),
-                        ('المقاس', textOf(r['sizeSnapshot'] ?? 'مقاس عام')),
+                        if (textOf(r['player'] ?? '').trim().isNotEmpty)
+                          ('الطفل', textOf(r['player'])),
+                        if (textOf(r['sizeSnapshot'] ?? '').trim().isNotEmpty)
+                          ('المقاس', textOf(r['sizeSnapshot'])),
                         if (textOf(r['colorSnapshot'] ?? '').isNotEmpty)
                           ('اللون', textOf(r['colorSnapshot'] ?? '')),
                         if (r['shirtNumberSnapshot'] != null)
                           ('رقم القميص', textOf(r['shirtNumberSnapshot'])),
                         ('الكمية', textOf(r['quantity'])),
-                        ('المبلغ', money(r['amount'], r['currency'])),
                         (
-                          'رد الإدارة',
-                          textOf(r['reviewReason'] ?? 'لا توجد ملاحظة'),
+                          r['status'] == 'Confirmed'
+                              ? 'المبلغ المدفوع'
+                              : 'مبلغ الطلب',
+                          money(r['amount'], r['currency']),
                         ),
+                        if (textOf(r['reviewReason'] ?? '').trim().isNotEmpty)
+                          ('رد الإدارة', textOf(r['reviewReason'])),
                       ]
                       .map(
                         (item) => Padding(
@@ -537,14 +701,70 @@ class GuardianProductOrder extends StatelessWidget {
                       .toList(),
             ),
           ),
+          if (r['status'] == 'Confirmed')
+            const UiText('تواصل مع الأكاديمية لترتيب استلام المنتج.'),
           if (r['status'] == 'Pending')
-            TransferPayment(
-              auth: auth,
-              proofPath: '/api/v1/guardian/product-sales/$id/proof',
-              subscription: false,
+            _ProductProof(
+              auth: widget.auth,
+              id: widget.id,
+              received: r['hasProof'] == true,
             ),
+          OutlinedButton(
+            onPressed: () => setState(() => revision++),
+            child: const UiText('تحديث حالة الطلب'),
+          ),
         ]);
       },
     ),
   );
+}
+
+class _ProductProof extends StatefulWidget {
+  const _ProductProof({
+    required this.auth,
+    required this.id,
+    this.received = false,
+  });
+  final AuthController auth;
+  final String id;
+  final bool received;
+
+  @override
+  State<_ProductProof> createState() => _ProductProofState();
+}
+
+class _ProductProofState extends State<_ProductProof> {
+  bool submitted = false, replacing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if ((widget.received || submitted) && !replacing) {
+      return GCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Heading('إثبات الدفع قيد المراجعة'),
+            TextButton(
+              onPressed: () => setState(() => replacing = true),
+              child: const UiText('استبدال إثبات الدفع'),
+            ),
+          ],
+        ),
+      );
+    }
+    return TransferPayment(
+      auth: widget.auth,
+      proofPath: '/api/v1/guardian/product-sales/${widget.id}/proof',
+      subscription: false,
+      replacement: replacing,
+      onSubmitted: () {
+        if (mounted) {
+          setState(() {
+            submitted = true;
+            replacing = false;
+          });
+        }
+      },
+    );
+  }
 }

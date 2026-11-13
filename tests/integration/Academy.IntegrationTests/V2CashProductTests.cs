@@ -65,6 +65,48 @@ public sealed partial class V2ReceivablesTests
         Assert.Contains(report.GetProperty("items").EnumerateArray(), p => p.GetProperty("collectionId").GetGuid() == sale);
     }
     [Fact]
+    public async Task Cash_product_confirmation_uses_the_exact_actor_branch_and_posting()
+    {
+        using var owner = await Staff(DemoSeed.OwnerEmail);
+        using var otherAcademy = await Staff(DemoSeed.FutureOwnerEmail);
+        using var noGrant = await Staff(DemoSeed.AdminEmail);
+        using var guardian = await Guardian();
+        var fixture = await CashProductFixture(owner);
+        var body = fixture.Body;
+        var key = Guid.NewGuid().ToString();
+        string Lookup(Guid productId, Guid? branchId, string requestKey)
+            => $"{SalesRoot}/by-request?productId={productId}&branchId={branchId}&requestKey={requestKey}";
+        var path = Lookup(body.ProductId, body.BranchId, key);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(path)).StatusCode);
+        var saved = await Post(owner, SalesRoot, body, key);
+        saved.EnsureSuccessStatusCode();
+        var id = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var response = await owner.GetAsync(path);
+        response.EnsureSuccessStatusCode();
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        var exact = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(id, exact.GetProperty("id").GetGuid());
+        Assert.Equal("180.00", exact.GetProperty("amount").GetString());
+        Assert.Equal("Confirmed", exact.GetProperty("status").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(Lookup(body.ProductId, body.BranchId, Guid.NewGuid().ToString()))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(Lookup(Guid.NewGuid(), body.BranchId, key))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(Lookup(body.ProductId, Guid.NewGuid(), key))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherAcademy.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noGrant.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await guardian.GetAsync(path)).StatusCode);
+        var detail = await owner.GetFromJsonAsync<JsonElement>($"{SalesRoot}/{id}");
+        Assert.Equal(body.CashSessionId, detail.GetProperty("cashSessionId").GetGuid());
+        Assert.Equal("Cash", detail.GetProperty("paymentMethod").GetString());
+        Assert.Equal(90, detail.GetProperty("unitPrice").GetDecimal());
+        Assert.Equal(180, detail.GetProperty("amount").GetDecimal());
+        Assert.False(string.IsNullOrWhiteSpace(detail.GetProperty("branchName").GetString()));
+
+        (await Post(owner, $"{CashRoot}/sessions/{body.CashSessionId}/close", new { countedAmount = "280" })).EnsureSuccessStatusCode();
+        Assert.Equal(id, (await owner.GetFromJsonAsync<JsonElement>(path)).GetProperty("id").GetGuid());
+    }
+
+    [Fact]
     public async Task Cash_product_missing_stale_price_or_shift_rolls_back_stock_and_all_financial_effects()
     {
         using var owner = await Staff(DemoSeed.OwnerEmail); var b = (await CashProductFixture(owner)).Body;
@@ -96,6 +138,8 @@ public sealed partial class V2ReceivablesTests
             Quantity = b.Quantity, UnitPrice = 90, Amount = 180, Currency = "EGP", ProductName = "بيع تاريخي اصطناعي", SportId = Slice2DemoSeed.FootballId, SportName = "كرة القدم",
             Status = "Confirmed", PaymentMethod = "Cash", RequestedByUserId = user, ConfirmedByUserId = user, ConfirmedAtUtc = DateTimeOffset.UtcNow, IdempotencyKey = key }); await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.Conflict, (await Post(owner, SalesRoot, b, key)).StatusCode);
+        var lookup = $"{SalesRoot}/by-request?productId={b.ProductId}&branchId={b.BranchId}&requestKey={key}";
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(lookup)).StatusCode);
         Assert.False(await db.CashProductPostings.AnyAsync(p => p.SessionId == b.CashSessionId)); Assert.Equal(3, await db.SportCatalogItems.Where(p => p.Id == b.ProductId).Select(p => p.StockQuantity).SingleAsync());
     }
     [Fact]
@@ -167,7 +211,13 @@ public sealed partial class V2ReceivablesTests
         Assert.Equal(f.Body.BranchId, Assert.Single(branches.EnumerateArray()).GetProperty("id").GetGuid());
         Assert.Equal(HttpStatusCode.Forbidden, (await Post(admin, SalesRoot, f.Body)).StatusCode);
         (await Post(owner, $"{CashRoot}/sessions/{f.Body.CashSessionId}/close", new { countedAmount = "100" })).EnsureSuccessStatusCode(); var shift = await CashOpen(admin, f.Register, "0");
-        (await Post(admin, SalesRoot, f.Body with { CashSessionId = shift })).EnsureSuccessStatusCode();
+        var adminKey = Guid.NewGuid().ToString();
+        var recorded = await Post(admin, SalesRoot, f.Body with { CashSessionId = shift }, adminKey);
+        recorded.EnsureSuccessStatusCode();
+        var lookup = $"{SalesRoot}/by-request?productId={f.Body.ProductId}&branchId={f.Body.BranchId}&requestKey={adminKey}";
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(lookup)).StatusCode);
+        Assert.Equal((await recorded.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(),
+            (await admin.GetFromJsonAsync<JsonElement>(lookup)).GetProperty("id").GetGuid());
         await using var scope = factory.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<FoundationDbContext>();
         var otherBranch = await db.Branches.Where(x => x.AcademyId == DemoSeed.NogoomAcademyId && x.Id != f.Body.BranchId).Select(x => x.Id).FirstAsync();
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(ProductQuoteUrl(f.Body with { BranchId = otherBranch }))).StatusCode);

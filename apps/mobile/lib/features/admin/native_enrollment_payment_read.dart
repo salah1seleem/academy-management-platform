@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/ui_text.dart';
+import '../guardian/guardian_payments.dart' show ReceiptPage;
 import '../guardian/guardian_ui.dart';
 import '../owner/owner_operations.dart' show OwnerScopedRead;
-import '../shared/private_media.dart';
+import '../shared/payment_proof_image.dart';
+import '../shared/private_media.dart' show isPrivateAsset;
 
 /// An existing request, including processed history; registration and collection
 /// remain with their existing authorized workflows.
@@ -18,63 +20,104 @@ class NativeEnrollmentPaymentRead extends StatelessWidget {
   final String id;
   @override
   Widget build(BuildContext context) => GuardianPage(
-    title: 'طلب دفع الاشتراك الجديد',
+    title: 'طلب الاشتراك الجديد',
     child: OwnerScopedRead(
       auth: auth,
       path: '/api/v1/manage/enrollment-requests/$id/payment',
       builder: (context, value) {
         final data = obj(value);
         if (data['id'] != id) {
-          return const EmptyMessage(
-            'لم تتأكد هوية الطلب. أعد فتحه من التنبيه.',
-          );
+          return const EmptyMessage('لم تتأكد هوية الطلب. أعد فتحه.');
         }
+        final discount = data['discountAmount'];
+        final hasDiscount = discount is num && discount > 0;
+        final status = data['status'];
+        final open = status == 'Pending' || status == 'UnderReview';
+        final amount = data['amount'];
+        final currency = data['currency'];
+        final validAmount =
+            amount is num &&
+            amount.isFinite &&
+            amount >= 0 &&
+            currency is String &&
+            RegExp(r'^[A-Z]{3}$').hasMatch(currency);
+        final collected =
+            status == 'Approved' &&
+            data['paymentRequestId'] is String &&
+            (data['paymentRequestId'] as String).isNotEmpty;
+        final receipt = data['receiptId'];
         return gList([
-          if (textOf(data['child']).isNotEmpty)
+          if (data['child'] case final String child when child.isNotEmpty)
             GCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   UiText(
-                    textOf(data['child']),
+                    child,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (textOf(data['guardian']).isNotEmpty)
-                    UiText('ولي الأمر: ${data['guardian']}'),
-                  UiText(
-                    [
-                      textOf(data['sport']),
-                      textOf(data['branch']),
-                    ].where((v) => v.isNotEmpty).join(' · '),
-                  ),
+                  PaymentRequestReference(order: data),
+                  if (data['guardian'] case final String guardian
+                      when guardian.isNotEmpty)
+                    UiText('ولي الأمر: $guardian'),
+                  if (data['sport'] != null || data['branch'] != null)
+                    UiText(
+                      [
+                        data['sport'],
+                        data['branch'],
+                      ].whereType<String>().join(' · '),
+                    ),
                 ],
               ),
             ),
           _PaymentSummary([
-            ('الحالة', label(data['status'])),
-            if (data['originalAmount'] != null)
-              ('السعر الأصلي', money(data['originalAmount'], data['currency'])),
-            if (data['amount'] != null)
-              ('الخصم', money(data['discountAmount'], data['currency'])),
-            if (data['amount'] != null)
-              ('المبلغ النهائي', money(data['amount'], data['currency'])),
+            ('الحالة', label(status)),
+            if (validAmount && hasDiscount && data['originalAmount'] != null)
+              ('السعر الأصلي', money(data['originalAmount'], currency)),
+            if (validAmount && hasDiscount)
+              ('الخصم', money(discount, currency)),
+            if (validAmount)
+              (
+                collected
+                    ? 'المبلغ المحصّل'
+                    : open
+                    ? 'المبلغ المطلوب'
+                    : 'مبلغ الطلب',
+                money(amount, currency),
+              ),
           ]),
-          if (data['amount'] == null)
-            const EmptyMessage('لم تُحدد قيمة الدفع لهذا الطلب بعد.'),
+          if (!validAmount)
+            EmptyMessage(
+              amount == null && data['subscriptionPlanId'] == null
+                  ? 'لم تُحدد قيمة الدفع لهذا الطلب بعد.'
+                  : 'تعذر التحقق من مبلغ الطلب وعملته.',
+            ),
+          if (collected && receipt is String && receipt.isNotEmpty)
+            FilledButton(
+              onPressed: () => openPage(
+                context,
+                ReceiptPage(
+                  auth: auth,
+                  id: receipt,
+                  staff: true,
+                  onBack: () => Navigator.of(context).pop(),
+                ),
+              ),
+              child: const UiText('عرض الإيصال'),
+            ),
           if (data['guardianVisibleReason'] != null)
             UiText(textOf(data['guardianVisibleReason'])),
-          if (isPrivateAsset(data['proofUrl'])) ...[
-            const Heading('إثبات الدفع'),
-            PrivateImage(
+          if (isPrivateAsset(data['proofUrl']))
+            PaymentProofImage(
+              key: ValueKey(data['proofUrl']),
               auth: auth,
               path: textOf(data['proofUrl']),
-              height: 280,
-              fit: BoxFit.contain,
             ),
-          ],
+          if (!isPrivateAsset(data['proofUrl']) && open)
+            const UiText('لم يصل إثبات دفع.'),
         ]);
       },
     ),

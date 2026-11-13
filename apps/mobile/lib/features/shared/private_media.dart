@@ -24,6 +24,7 @@ class PrivateImage extends StatefulWidget {
   final BoxFit fit;
   final AlignmentGeometry alignment;
   final Widget? fallback;
+  final ValueChanged<bool>? onAvailabilityChanged;
   const PrivateImage({
     super.key,
     required this.auth,
@@ -32,6 +33,7 @@ class PrivateImage extends StatefulWidget {
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
     this.fallback,
+    this.onAvailabilityChanged,
   });
   @override
   State<PrivateImage> createState() => _PrivateImageState();
@@ -42,10 +44,30 @@ String? _mediaIdentity(AuthController auth) => auth.session?.selected == null
     : '${auth.session!.selected!.id}:${auth.session!.selected!.contextRevision}';
 
 class _PrivateImageState extends State<PrivateImage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   Future<Uint8List>? bytes;
   late String? original;
   bool foreground = true;
+  bool? reportedAvailable;
+
+  @override
+  bool get wantKeepAlive => widget.onAvailabilityChanged != null;
+
+  void reportAvailability(bool available, Future<Uint8List>? source) {
+    if (widget.onAvailabilityChanged == null ||
+        available == reportedAvailable) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          identical(source, bytes) &&
+          available != reportedAvailable) {
+        reportedAvailable = available;
+        widget.onAvailabilityChanged?.call(available);
+      }
+    });
+  }
+
   void refresh() {
     if (!mounted) return;
     setState(() {
@@ -53,14 +75,19 @@ class _PrivateImageState extends State<PrivateImage>
           foreground &&
               original != null &&
               _mediaIdentity(widget.auth) == original
-          ? widget.auth.asset(widget.path)
+          ? readBytes()
           : null;
     });
+    reportAvailability(false, bytes);
   }
 
   void authorityChanged() {
     if (_mediaIdentity(widget.auth) != original) refresh();
   }
+
+  // The request can fail before the next frame, including when its route is
+  // replaced. FutureBuilder still observes the result if it is mounted.
+  Future<Uint8List> readBytes() => widget.auth.asset(widget.path)..ignore();
 
   @override
   void initState() {
@@ -68,12 +95,16 @@ class _PrivateImageState extends State<PrivateImage>
     original = _mediaIdentity(widget.auth);
     WidgetsBinding.instance.addObserver(this);
     widget.auth.addListener(authorityChanged);
-    bytes = original == null ? null : widget.auth.asset(widget.path);
+    bytes = original == null ? null : readBytes();
   }
 
   @override
   void didUpdateWidget(covariant PrivateImage old) {
     super.didUpdateWidget(old);
+    if ((old.onAvailabilityChanged == null) !=
+        (widget.onAvailabilityChanged == null)) {
+      updateKeepAlive();
+    }
     if (old.path != widget.path || old.auth != widget.auth) {
       old.auth.removeListener(authorityChanged);
       widget.auth.addListener(authorityChanged);
@@ -97,32 +128,53 @@ class _PrivateImageState extends State<PrivateImage>
   }
 
   @override
-  Widget build(BuildContext context) =>
-      !foreground || original == null || _mediaIdentity(widget.auth) != original
-      ? const SizedBox.shrink()
-      : FutureBuilder<Uint8List>(
-          future: bytes,
-          builder: (context, data) => SizedBox(
-            height: widget.height,
-            width: double.infinity,
-            child: data.hasData
-                ? Image.memory(
-                    data.data!,
-                    fit: widget.fit,
-                    alignment: widget.alignment,
-                    gaplessPlayback: false,
-                    errorBuilder: (_, error, stack) =>
-                        widget.fallback ??
-                        const Icon(Icons.broken_image_outlined),
-                  )
-                : Center(
-                    child: data.hasError
-                        ? widget.fallback ??
-                              const Icon(Icons.image_not_supported_outlined)
-                        : const CircularProgressIndicator(strokeWidth: 2),
-                  ),
-          ),
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (!foreground ||
+        original == null ||
+        _mediaIdentity(widget.auth) != original) {
+      return const SizedBox.shrink();
+    }
+    return FutureBuilder<Uint8List>(
+      future: bytes,
+      builder: (context, data) {
+        final source = bytes;
+        if (data.hasError) reportAvailability(false, source);
+        return SizedBox(
+          height: widget.height,
+          width: double.infinity,
+          child:
+              widget.onAvailabilityChanged != null &&
+                  data.connectionState != ConnectionState.done
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : data.hasData
+              ? Image.memory(
+                  data.data!,
+                  fit: widget.fit,
+                  alignment: widget.alignment,
+                  gaplessPlayback: false,
+                  frameBuilder: widget.onAvailabilityChanged == null
+                      ? null
+                      : (_, child, frame, _) {
+                          if (frame != null) reportAvailability(true, source);
+                          return child;
+                        },
+                  errorBuilder: (_, error, stack) {
+                    reportAvailability(false, source);
+                    return widget.fallback ??
+                        const Icon(Icons.broken_image_outlined);
+                  },
+                )
+              : Center(
+                  child: data.hasError
+                      ? widget.fallback ??
+                            const Icon(Icons.image_not_supported_outlined)
+                      : const CircularProgressIndicator(strokeWidth: 2),
+                ),
         );
+      },
+    );
+  }
 }
 
 Future<Json?> pickAndUpload(
@@ -303,7 +355,6 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
           builder: (context, value) {
             final audience = obj(value);
             return gList([
-              Text(textOf(audience['notice'])),
               OutlinedButton.icon(
                 onPressed: busy
                     ? null
@@ -379,6 +430,24 @@ class _UploadSessionMediaState extends State<UploadSessionMedia>
                       }),
               ),
               const SizedBox(height: 16),
+              Text(
+                localized(
+                  context,
+                  'حدد كل طفل يمكن التعرف عليه. إذا ظهر طفل بلا موافقة، عدّل اللقطة قبل النشر.',
+                  'Select every identifiable child. If a child appears without consent, edit the media before publishing.',
+                ),
+              ),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  localized(
+                    context,
+                    'قواعد النشر والموافقة',
+                    'Publishing and consent rules',
+                  ),
+                ),
+                children: [Text(textOf(audience['notice']))],
+              ),
               CheckboxListTile(
                 value: noChildren,
                 onChanged: busy

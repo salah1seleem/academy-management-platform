@@ -44,7 +44,20 @@ public sealed partial class SubscriptionPaymentTests
         {
             var shift=await FamilyCashShift(owner);var body=await FamilyCashBody(owner,shift.Session,f);var key=Guid.NewGuid().ToString("N");var results=await Task.WhenAll(CashFamilySend(owner,shift.Session,body,key),CashFamilySend(owner,shift.Session,body,key));Assert.All(results,r=>r.EnsureSuccessStatusCode());var first=await results[0].Content.ReadFromJsonAsync<JsonElement>();var again=await results[1].Content.ReadFromJsonAsync<JsonElement>();Assert.Equal(first.GetProperty("items").ToString(),again.GetProperty("items").ToString());
             await using var s=factory.Services.CreateAsyncScope();var db=s.ServiceProvider.GetRequiredService<FoundationDbContext>();var ids=f.Choices.Select(l=>l.SportEnrollmentId).ToArray();Assert.Equal(2,await db.Receipts.CountAsync(r=>ids.Contains(r.SportEnrollmentId)));Assert.Equal(2,await db.SubscriptionPeriods.CountAsync(r=>ids.Contains(r.SportEnrollmentId)));var posts=await db.CashReceiptPostings.Where(p=>p.SessionId==shift.Session).ToListAsync();Assert.Equal(2,posts.Count);Assert.Single(posts.Select(p=>p.RequestHash).Distinct());Assert.Equal(Decimal(first,"amount"),posts.Sum(p=>p.Amount));
-            foreach(var item in first.GetProperty("items").EnumerateArray())Assert.Equal(HttpStatusCode.OK,(await f.Client.GetAsync($"/api/v1/guardian/subscriptions/receipts/{item.GetProperty("receiptId").GetGuid()}")).StatusCode);
+            foreach (var item in first.GetProperty("items").EnumerateArray())
+            {
+                var receiptId = item.GetProperty("receiptId").GetGuid();
+                var stored = await db.Receipts.AsNoTracking().SingleAsync(receipt => receipt.Id == receiptId);
+                Assert.StartsWith("manual-", stored.ProviderReference);
+                var guardianReceipt = await f.Client.GetFromJsonAsync<JsonElement>($"/api/v1/guardian/subscriptions/receipts/{receiptId}");
+                var ownerReceipt = await owner.GetFromJsonAsync<JsonElement>($"/api/v1/subscriptions/receipts/{receiptId}");
+                foreach (var receipt in new[] { guardianReceipt, ownerReceipt })
+                {
+                    Assert.Equal(JsonValueKind.Null, receipt.GetProperty("providerReference").ValueKind);
+                    Assert.Equal(stored.ReceiptNumber, receipt.GetProperty("receiptNumber").GetString());
+                    Assert.Equal(stored.Amount, receipt.GetProperty("amount").GetDecimal());
+                }
+            }
             (await Post(owner,$"{FamilyCashRoot}/sessions/{shift.Session}/close",new{countedAmount=CashRegisterService.Money(100+posts.Sum(p=>p.Amount))},await Csrf(owner),Guid.NewGuid().ToString("N"))).EnsureSuccessStatusCode();(await CashFamilySend(owner,shift.Session,body,key)).EnsureSuccessStatusCode();Assert.Equal(HttpStatusCode.Conflict,(await CashFamilySend(owner,shift.Session,body with{QuoteHash=new string('A',64)},key)).StatusCode);
         }
         finally{await FamilyCashConfiguration(owner,settings);}
@@ -62,6 +75,45 @@ public sealed partial class SubscriptionPaymentTests
             _=await CreateFamily(f);Assert.Equal(HttpStatusCode.Conflict,(await CashFamilySend(owner,shift.Session,body)).StatusCode);Assert.False(await db.CashReceiptPostings.AnyAsync(p=>p.SessionId==shift.Session));Assert.False(await db.Receipts.AnyAsync(r=>f.Choices.Select(l=>l.SportEnrollmentId).Contains(r.SportEnrollmentId)));
         }
         finally{await FamilyCashConfiguration(owner,settings);}
+    }
+    [Fact]
+    public async Task Cash_family_preserves_each_sport_and_rejects_a_plan_for_the_other_child()
+    {
+        await using var family = await NewFamily(mixedSports: true);
+        using var owner = await InboxStaff(DemoSeed.OwnerEmail);
+        var settings = await FamilyCashSettings();
+        await FamilyCashConfiguration(owner, settings with { CashEnabled = true });
+        try
+        {
+            var swimmingEnrollment = family.Choices[1].SportEnrollmentId;
+            var shift = await FamilyCashShift(owner);
+            var quotePath = $"{FamilyCashRoot}/sessions/{shift.Session}/family-quote";
+            var choices = family.Choices;
+            var invalidChoices = new[] { choices[0], choices[1] with { SubscriptionPlanId = choices[0].SubscriptionPlanId } };
+            var wrongPlan = await Post(owner, quotePath, new CashFamilyQuote(family.Guardian, invalidChoices), await Csrf(owner));
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, wrongPlan.StatusCode);
+
+            var quote = await Post(owner, quotePath, new CashFamilyQuote(family.Guardian, choices), await Csrf(owner));
+            quote.EnsureSuccessStatusCode();
+            var reviewed = await quote.Content.ReadFromJsonAsync<JsonElement>();
+            var hash = reviewed.GetProperty("quoteHash").GetString()!;
+            var paid = await CashFamilySend(owner, shift.Session, new CashFamilyCollect(family.Guardian, choices, hash));
+            paid.EnsureSuccessStatusCode();
+            var result = await paid.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(Decimal(reviewed.GetProperty("family"), "totalAmount"), Decimal(result, "amount"));
+            var items = result.GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(2, items.Length);
+            Assert.Contains(items, item => item.GetProperty("sport").GetString() == "كرة القدم");
+            Assert.Contains(items, item => item.GetProperty("sport").GetString() == "السباحة");
+            await using var proof = factory.Services.CreateAsyncScope();
+            var read = proof.ServiceProvider.GetRequiredService<FoundationDbContext>();
+            var enrollments = choices.Select(choice => choice.SportEnrollmentId).ToArray();
+            var periods = await read.SubscriptionPeriods.Where(period => enrollments.Contains(period.SportEnrollmentId)).ToListAsync();
+            Assert.Equal(2, periods.Count);
+            Assert.Equal(Slice2DemoSeed.SwimmingId, periods.Single(period => period.SportEnrollmentId == swimmingEnrollment).SportId);
+            Assert.Equal(2, await read.CashReceiptPostings.CountAsync(posting => posting.SessionId == shift.Session));
+        }
+        finally { await FamilyCashConfiguration(owner, settings); }
     }
     [Fact]
     public async Task Owner_collects_two_branch_family_in_one_shift_without_moving_service_or_double_collecting()
@@ -110,6 +162,14 @@ public sealed partial class SubscriptionPaymentTests
             var review=await Post(admin,root+"/quote",new{reference,lines=f.Choices},await Csrf(admin));review.EnsureSuccessStatusCode();var hash=(await review.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("quoteHash").GetString()!;var key=Guid.NewGuid().ToString("N");var body=new{reference,lines=f.Choices,quoteHash=hash};
             var paid=await Post(admin,root+"/collect",body,await Csrf(admin),key);Assert.True(paid.IsSuccessStatusCode,await paid.Content.ReadAsStringAsync());var result=await paid.Content.ReadFromJsonAsync<JsonElement>();Assert.Equal(2,result.GetProperty("items").GetArrayLength());Assert.Equal(HttpStatusCode.Conflict,(await Post(admin,root+"/collect",body,await Csrf(admin),Guid.NewGuid().ToString("N"))).StatusCode);
             var recovered=await Post(admin,$"{FamilyCashRoot}/sessions/{session}/family-collection-result",new{key,reference},await Csrf(admin));recovered.EnsureSuccessStatusCode();var recoveredBody=await recovered.Content.ReadFromJsonAsync<JsonElement>();Assert.Equal("Confirmed",recoveredBody.GetProperty("status").GetString());Assert.Equal(2,recoveredBody.GetProperty("items").GetArrayLength());
+            var originalReceipts = result.GetProperty("items").EnumerateArray().ToDictionary(item => item.GetProperty("receiptId").GetGuid());
+            foreach (var restored in recoveredBody.GetProperty("items").EnumerateArray())
+            {
+                var original = originalReceipts[restored.GetProperty("receiptId").GetGuid()];
+                Assert.Equal(original.GetProperty("player").GetString(), restored.GetProperty("player").GetString());
+                Assert.Equal(original.GetProperty("sport").GetString(), restored.GetProperty("sport").GetString());
+                Assert.Equal(original.GetProperty("amount").GetString(), restored.GetProperty("amount").GetString());
+            }
             await using var proof=factory.Services.CreateAsyncScope();var proofDb=proof.ServiceProvider.GetRequiredService<FoundationDbContext>();var ids=f.Choices.Select(x=>x.SportEnrollmentId).ToArray();Assert.Equal(2,await proofDb.CashReceiptPostings.CountAsync(p=>p.SessionId==session));Assert.All(await proofDb.CashReceiptPostings.Where(p=>p.SessionId==session).ToArrayAsync(),p=>Assert.Equal(Slice2DemoSeed.CityBranchId,p.BranchId));var foreign=await proofDb.SportEnrollments.Where(e=>e.Id==f.Choices[1].SportEnrollmentId).Select(e=>new{e.PlayerId,e.BranchId}).SingleAsync();Assert.Equal(Slice2DemoSeed.FifthBranchId,foreign.BranchId);Assert.Equal(HttpStatusCode.NotFound,(await admin.GetAsync($"/api/v1/people/players/{foreign.PlayerId}")).StatusCode);
             foreach(var receipt in result.GetProperty("items").EnumerateArray())Assert.Equal(HttpStatusCode.OK,(await f.Client.GetAsync($"/api/v1/guardian/subscriptions/receipts/{receipt.GetProperty("receiptId").GetGuid()}")).StatusCode);
             Assert.Equal(2,await proofDb.Receipts.CountAsync(r=>ids.Contains(r.SportEnrollmentId)));

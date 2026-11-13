@@ -19,12 +19,32 @@ public sealed partial class GroupPlacementService
         var t=await Authority("players","Edit");await Authority("academy","Edit");
         if(!await PlayerTechnicalReviewEndpoints.CanDecide(t,db,h))throw new FacilityRejected("تنفيذ التوصية يحتاج قراءة التقييمات وتعديل اللاعبين.",403);
         var r=await db.PlayerTechnicalReviewRequests.AsNoTracking().SingleOrDefaultAsync(r=>r.Id==requestId)??throw new FacilityRejected("المراجعة غير متاحة.",404);
-        var e=await db.SportEnrollments.AsNoTracking().SingleOrDefaultAsync(e=>e.Id==r.SportEnrollmentId&&e.IsActive&&e.Player.IsActive)??throw new FacilityRejected("التسجيل غير متاح.",404);
+        var e = await db.SportEnrollments.AsNoTracking()
+            .Where(e => e.Id == r.SportEnrollmentId && e.IsActive && e.Player.IsActive)
+            .Select(e => new
+            {
+                e.BranchId, e.SportId, e.TrainingLevelId, e.RegistrationFormat, e.Version,
+                Player = e.Player.ArabicName, Sport = e.Sport.ArabicName, Branch = e.Branch.ArabicName
+            }).SingleOrDefaultAsync() ?? throw new FacilityRejected("التسجيل غير متاح.", 404);
+        await Authority("players", "Edit", e.BranchId);
         var d=await db.PlayerTechnicalReviewDecisions.AsNoTracking().SingleOrDefaultAsync(d=>d.TechnicalRequestId==r.Id&&d.Outcome=="ReadyForPlacement")??throw new FacilityRejected("لا توجد توصية استعداد قابلة للتنفيذ.",409);
-        var applied=await db.PlayerLevelReviews.AsNoTracking().Where(x=>x.TechnicalDecisionId==d.Id).Select(x=>new{x.Id,x.ToLevelName,x.GroupTransferId,x.CreatedAtUtc}).SingleOrDefaultAsync();
+        var applied = await db.PlayerLevelReviews.AsNoTracking().Where(x => x.TechnicalDecisionId == d.Id)
+            .Select(x => new
+            {
+                x.Id, x.ToLevelName, x.GroupTransferId, x.CreatedAtUtc,
+                EffectiveDate = db.EnrollmentGroupTransfers.Where(t => t.Id == x.GroupTransferId)
+                    .Select(t => (DateOnly?)t.EffectiveDate).FirstOrDefault()
+            }).SingleOrDefaultAsync();
         var p=await db.PlayerSkillPlans.AsNoTracking().SingleAsync(p=>p.Id==r.PlanId);var evidence=await PlayerSkillEvidence.Read(p,e.TrainingLevelId,db);
         var groups=await db.TrainingGroups.AsNoTracking().Where(g=>g.IsActive&&g.BranchId==e.BranchId&&g.SportId==e.SportId&&g.TrainingLevelId==d.RecommendedLevelId&&g.RegistrationFormat==e.RegistrationFormat&&g.AgeCategory.IsActive).OrderBy(g=>g.ArabicName).Select(g=>new{g.Id,name=g.ArabicName,g.Capacity}).Take(101).ToArrayAsync();
-        return new{enrollmentVersion=e.Version,effectiveDate=await AttendanceCalendar.TodayAsync(t.AcademyId,db,time),recommendedLevel=d.RecommendedLevelName,applied,canPreview=applied==null&&evidence.Eligible&&evidence.Head==r.SourceReviewSequence,groups=groups.Take(100),hasMore=groups.Length>100};
+        return new
+        {
+            e.Player, e.Sport, e.Branch, EnrollmentVersion = e.Version,
+            EffectiveDate = await AttendanceCalendar.TodayAsync(t.AcademyId, db, time),
+            RecommendedLevel = d.RecommendedLevelName, applied,
+            CanPreview = applied == null && evidence.Eligible && evidence.Head == r.SourceReviewSequence,
+            Groups = groups.Take(100), HasMore = groups.Length > 100
+        };
     }
     public async Task<object> TechnicalPromotion(Guid requestId,TechnicalPromotionWrite b,bool save,HttpContext h)
     {

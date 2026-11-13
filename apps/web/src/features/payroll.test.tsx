@@ -54,6 +54,17 @@ it("does not replace the selected payroll month with a slower previous response"
   expect(screen.queryByText("0 يوم عقد في الشهر")).not.toBeInTheDocument();
 });
 
+it("removes payroll filters and restricted destinations when the server denies access", async () => {
+  global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response([]) : response({}, 403)) as typeof fetch;
+  renderPage(<PayrollWorkspace />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("الرواتب والمستحقات متاحة للحسابات المخولة فقط.");
+  expect(screen.queryByLabelText("شهر الرواتب")).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "الخصومات" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "المبالغ الإضافية" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "الموظفون" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "العودة إلى الرئيسية" })).toHaveAttribute("href", "/dashboard");
+});
+
 it("shows employees without accounts and opens an editable fixed contract", async () => {
   global.fetch = vi.fn(input => String(input).includes("my-permissions") ? response(["payroll.manage", "payroll.pay", "payroll.addition.review"]) : response(options)) as typeof fetch;
   renderPage(<EmployeeList />); expect(await screen.findByText("بدون حساب دخول")).toBeVisible();

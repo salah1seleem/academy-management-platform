@@ -11,3 +11,170 @@
 :global(.dashboard-shell[data-workspace-design="v5"]) .report .notice { color:var(--staff-text-secondary); }
 :global(.dashboard-shell[data-workspace-design="v5"]) .timeline a { color:var(--staff-primary-800); }
 :global(.dashboard-shell[data-workspace-design="v5"]) .report :global(.button) { border-radius:4px;background:var(--staff-primary-700);border-color:var(--staff-primary-700); }
+
+.monthlyFamily,
+.monthlyStaff {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.monthlyHeader h1 {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+}
+
+.monthlyPanel {
+  min-width: 0;
+  padding: clamp(.8rem, 3vw, 1.25rem);
+  border: 1px solid var(--border);
+  border-radius: .9rem;
+  background: var(--surface, #fff);
+  color: var(--text);
+}
+
+.monthlyStaff .monthlyPanel {
+  border-color: var(--staff-border, var(--border));
+  border-radius: 4px;
+  background: var(--staff-surface, var(--surface));
+  color: var(--staff-text, var(--text));
+}
+
+.monthlyPanel h2,
+.monthlyPanel p {
+  margin: 0 0 .5rem;
+}
+
+.monthlyPanel h2 {
+  font-size: 1.15rem;
+}
+
+.monthlyFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .7rem;
+  margin-block-start: 1rem;
+}
+
+.monthlyFilters label {
+  display: grid;
+  flex: 1 1 8rem;
+  min-width: 0;
+  gap: .35rem;
+  font-weight: 700;
+}
+
+.monthlyFilters label.sportField {
+  flex-basis: 14rem;
+}
+
+.monthlyFilters select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: .5rem;
+  border: 1px solid var(--staff-border, var(--border));
+  border-radius: .45rem;
+  background: var(--staff-surface, var(--surface, #fff));
+  color: inherit;
+  font: inherit;
+}
+
+.monthlyTotals,
+.monthlyTimeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: .6rem;
+  margin: 0;
+}
+
+.monthlyTotals div {
+  padding: .65rem .8rem;
+  background: var(--staff-surface, var(--surface, #fff));
+  color: var(--staff-text, var(--text));
+  border: 1px solid var(--staff-border, var(--border));
+  border-radius: .55rem;
+}
+
+.monthlyTotals dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.monthlyTotals {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
+}
+
+.monthlyTimeline section {
+  margin: 0;
+}
+
+.monthlyFamily .monthlyTimeline section {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: .9rem;
+  background: var(--surface, #fff);
+  color: var(--text);
+}
+
+.monthlyFamily .monthlyTimeline h2 {
+  margin-block-start: 0;
+}
+
+.monthlyFamily .monthlyTimeline a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.monthlyFamily :global(.error-message) {
+  color: #8c2525;
+}
+
+.monthlyActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem;
+}
+
+.monthlyPanel details {
+  margin-block-start: .65rem;
+}
+
+.monthlyPanel summary {
+  align-content: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.monthlyFamily :global(.button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 44px;
+  padding: .55rem .75rem;
+  border: 1px solid var(--primary);
+  border-radius: .5rem;
+  background: var(--primary);
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.monthlyFamily :global(.button):disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.monthlyEmpty :global(.empty-state) {
+  padding: 1rem;
+  border: 0;
+  background: transparent;
+}

@@ -141,6 +141,72 @@ void main() {
       expect(t.takeException(), isNull);
     },
   );
+  testWidgets(
+    'draft edits survive a same-version resume and must be saved before sharing',
+    (t) async {
+      var saved = {...goal(), 'state': 'Draft'};
+      final writes = <Map<String, dynamic>>[];
+      final auth = await fixture.owner((method, path, body, _) async {
+        if (method == 'PUT' || method == 'POST') {
+          final payload = Map<String, dynamic>.from(body as Map);
+          writes.add(payload);
+          saved = method == 'PUT'
+              ? {...saved, 'title': payload['title'], 'version': 8}
+              : {...saved, 'state': 'Published', 'version': 9};
+          return {'id': 'g'};
+        }
+        return {...detail(), 'item': saved};
+      });
+      await t.pumpWidget(fixture.shell(PlayerGoalsPage(auth: auth, id: 'g')));
+      await t.pumpAndSettle();
+      final title = find.widgetWithText(TextFormField, 'عنوان الهدف');
+      const update = 'نص الهدف بعد التعديل';
+      await t.enterText(title, update);
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await t.pumpAndSettle();
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await t.pump();
+      expect(find.text(update), findsNothing);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await t.pumpAndSettle();
+      expect(find.text(update), findsOneWidget);
+      final review = find.widgetWithText(FilledButton, 'مراجعة النشر');
+      expect(t.widget<FilledButton>(review).onPressed, isNull);
+      await t.ensureVisible(find.text('حفظ المسودة'));
+      await t.tap(find.text('حفظ المسودة'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(review);
+      await t.tap(review);
+      await t.pumpAndSettle();
+      expect(find.text('نشر الهدف للأسرة؟'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text(update),
+        ),
+        findsOneWidget,
+      );
+      expect(writes, hasLength(1));
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await t.pumpAndSettle();
+      expect(find.text('نشر الهدف للأسرة؟'), findsNothing);
+      expect(find.text(update), findsNothing);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await t.pumpAndSettle();
+      expect(writes, hasLength(1));
+      await t.ensureVisible(review);
+      await t.tap(review);
+      await t.pumpAndSettle();
+      await t.tap(find.text('نشر الهدف للأسرة'));
+      await t.pumpAndSettle();
+      expect(writes, hasLength(2));
+      expect(writes.last, containsPair('version', 8));
+      expect(writes.last, containsPair('action', 'Published'));
+      expect(find.text('قيد العمل · منشور للأسرة'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
   for (final width in [360.0, 390.0, 430.0]) {
     testWidgets(
       'Guardian reads real goal reviews without draft or staff controls at RTL $width and 200 percent text',
@@ -158,6 +224,7 @@ void main() {
                 'goal': goal(),
                 'sport': 'كرة القدم',
                 'reviews': [
+                  {'action': 'Edited', 'note': 'ملاحظة خاصة بالفريق'},
                   {
                     'action': 'Reviewed',
                     'note': 'مراجعة منشورة حقيقية',
@@ -185,6 +252,7 @@ void main() {
         expect(find.text('هدف جديد'), findsNothing);
         expect(find.text('حفظ المسودة'), findsNothing);
         expect(find.text('حفظ المراجعة'), findsNothing);
+        expect(find.text('ملاحظة خاصة بالفريق'), findsNothing);
         await t.ensureVisible(find.text('مراجعة منشورة حقيقية'));
         await t.pumpAndSettle();
         expect(find.text('مراجعة منشورة حقيقية'), findsOneWidget);

@@ -99,6 +99,7 @@ public static class PlatformSetup
         response.Headers.CacheControl = "private, no-store";
         var profile = await db.AcademyPlatformProfiles.AsNoTracking().SingleOrDefaultAsync(p => p.AcademyId == id) ?? new() { AcademyId = id, OperationalState = a.IsActive ? "Active" : "Draft", EditVersion = 0 };
         return Results.Ok(new { a.Id, a.ArabicName, a.Slug, a.TimeZone, a.DefaultCurrency, a.IsActive, profile,
+            timeZoneLockReason = await TimeZoneLockReason(db, id, a.IsActive),
             branding = await db.AcademyExperiences.Where(x => x.AcademyId == id).Select(x => new { x.DisplayName, x.PrimaryColor, x.SecondaryColor, hasLogo = x.Logo != null }).SingleOrDefaultAsync(),
             branches = await db.Branches.Where(x => x.AcademyId == id && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName, x.Address }).ToArrayAsync(),
             sports = await db.Sports.Where(x => x.AcademyId == id && x.IsActive).OrderBy(x => x.ArabicName).Select(x => new { x.Id, name = x.ArabicName, kind = x.Kind.ToString() }).ToArrayAsync(),
@@ -110,11 +111,21 @@ public static class PlatformSetup
     }
     private static void Audit(FoundationDbContext db, Guid id, Guid actor, string action, object details, TimeProvider clock) => db.PlatformAudits.Add(new() { Id = Guid.NewGuid(), TargetAcademyId = id, ActorUserId = actor, Action = action, Details = JsonSerializer.Serialize(details), AtUtc = clock.GetUtcNow() });
     private static Task<int> Lock(FoundationDbContext db, Guid id) => db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"config:" + id}, 0))");
+    private static async Task<string?> TimeZoneLockReason(FoundationDbContext db, Guid id, bool active)
+    {
+        if (active) return "المنطقة الزمنية ثابتة بعد تفعيل الأكاديمية.";
+        if (await db.TrainingSessions.AnyAsync(s => s.AcademyId == id)) return "المنطقة الزمنية ثابتة بعد تسجيل حصص فعلية.";
+        if (await db.ImportedHistoricalPayments.IgnoreQueryFilters().AnyAsync(p => p.AcademyId == id))
+            return "المنطقة الزمنية ثابتة بعد ترحيل تحصيلات سابقة حتى يطابق يوم القبض التاريخ الوارد في الشيت.";
+        return null;
+    }
     public sealed record SetupWrite(int Version, string Name, string Location, string ContactPhone, string OwnerPhone, string TimeZone, string CommercialState, decimal? PlatformFee, string FeeCurrency, string BillingPeriod, DateOnly? SubscriptionFrom, DateOnly? SubscriptionTo);
-    private static async Task<IResult> Save(Guid id, SetupWrite body, FoundationDbContext db, ClaimsPrincipal actor, TimeProvider clock)
+    private static async Task<IResult> Save(Guid id, SetupWrite body, FoundationDbContext db, ClaimsPrincipal actor, TimeProvider clock, AcademyConfigurationService service)
     {
         var contact = EgyptPhoneNormalizer.Normalize(body.ContactPhone); var phone = EgyptPhoneNormalizer.Normalize(body.OwnerPhone);
-        if (string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 200 || string.IsNullOrWhiteSpace(body.Location) || body.Location.Length > 240 || contact is null || phone is null || !TimeZoneInfo.TryFindSystemTimeZoneById(body.TimeZone ?? "", out _) || body.CommercialState is not ("Unspecified" or "Trial" or "Subscribed" or "Expired") || body.PlatformFee is < 0 or > 1_000_000_000 || body.PlatformFee.HasValue && decimal.Round(body.PlatformFee.Value,2) != body.PlatformFee || body.FeeCurrency is not ("EGP" or "USD" or "SAR" or "AED") || body.BillingPeriod is not ("Monthly" or "Yearly") || body.SubscriptionTo.HasValue && (!body.SubscriptionFrom.HasValue || body.SubscriptionTo < body.SubscriptionFrom)) return Results.UnprocessableEntity(new { message = "راجع الاسم والموقع والهاتف وشروط الاشتراك." });
+        var zone = body.TimeZone?.Trim() ?? "";
+        if (!TimeZoneInfo.TryFindSystemTimeZoneById(zone, out _)) return Results.UnprocessableEntity(new { message = "أدخل منطقة زمنية صحيحة، مثل Africa/Cairo." });
+        if (string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 200 || string.IsNullOrWhiteSpace(body.Location) || body.Location.Length > 240 || contact is null || phone is null || body.CommercialState is not ("Unspecified" or "Trial" or "Subscribed" or "Expired") || body.PlatformFee is < 0 or > 1_000_000_000 || body.PlatformFee.HasValue && decimal.Round(body.PlatformFee.Value,2) != body.PlatformFee || body.FeeCurrency is not ("EGP" or "USD" or "SAR" or "AED") || body.BillingPeriod is not ("Monthly" or "Yearly") || body.SubscriptionTo.HasValue && (!body.SubscriptionFrom.HasValue || body.SubscriptionTo < body.SubscriptionFrom)) return Results.UnprocessableEntity(new { message = "راجع الاسم والموقع والهاتف وشروط الاشتراك." });
         await using var tx = await db.Database.BeginTransactionAsync(); await Lock(db,id);
         var a = await db.Academies.SingleOrDefaultAsync(a => a.Id == id); if (a is null) return Results.NotFound();
         var p = await Profile(db,id); if (body.Version != (db.Entry(p).State == EntityState.Added ? 0 : p.EditVersion)) return Results.Conflict(new { message = "تغيرت البيانات؛ حدّث الصفحة قبل الحفظ." });
@@ -122,16 +133,32 @@ public static class PlatformSetup
         if (owners.Length != 1) return Results.Conflict(new { message = "يلزم مراجعة مالك الأكاديمية الأساسي قبل تغيير الهاتف." });
         var owner = owners[0];
         if (await db.Users.AnyAsync(u => u.Id != owner.Id && u.PhoneNumber == phone)) return Results.Conflict(new { message = "الهاتف مرتبط بهوية قائمة. راجع العضوية دون دمج الحسابين أو تغيير بياناتهما." });
-        if (a.TimeZone != body.TimeZone && (a.IsActive || await db.TrainingSessions.AnyAsync(s => s.AcademyId == id))) return Results.Conflict(new { message = "لا يمكن تغيير المنطقة الزمنية بعد التشغيل أو إنشاء حصص فعلية." });
-        var before = new { a.ArabicName, p.Location, p.CommercialState, p.PlatformFee, p.FeeCurrency, p.BillingPeriod };
-        a.ArabicName = body.Name.Trim(); a.TimeZone = body.TimeZone!; a.UpdatedAtUtc = clock.GetUtcNow();
+        var zoneChanged = a.TimeZone != zone;
+        if (zoneChanged && await TimeZoneLockReason(db, id, a.IsActive) is { } reason)
+            return Results.Conflict(new { code = "academy_time_zone_locked", message = reason, timeZone = a.TimeZone });
+        var before = new { a.ArabicName, a.TimeZone, p.Location, p.CommercialState, p.PlatformFee, p.FeeCurrency, p.BillingPeriod };
+        a.ArabicName = body.Name.Trim(); a.TimeZone = zone; a.UpdatedAtUtc = clock.GetUtcNow();
         var phoneChanged = owner.PhoneNumber != phone;
         if (phoneChanged) owner.PhoneNumberConfirmed = false;
         owner.PhoneNumber = phone; owner.UpdatedAtUtc = clock.GetUtcNow();
         p.Location = body.Location.Trim(); p.ContactPhone = contact; p.CommercialState = body.CommercialState; p.PlatformFee = body.PlatformFee; p.FeeCurrency = body.FeeCurrency; p.BillingPeriod = body.BillingPeriod; p.SubscriptionFrom = body.SubscriptionFrom; p.SubscriptionTo = body.SubscriptionTo; p.EditVersion++;
         var experience = await db.AcademyExperiences.SingleOrDefaultAsync(x => x.AcademyId == id); if (experience is not null) experience.DisplayName = a.ArabicName;
-        Audit(db,id,Actor(actor),"academy.setup",new { before, after = new { a.ArabicName,p.Location,p.CommercialState,p.PlatformFee,p.FeeCurrency,p.BillingPeriod }, ownerPhoneChanged = phoneChanged },clock);
-        await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { version = p.EditVersion });
+        var actorId = Actor(actor);
+        Audit(db,id,actorId,"academy.setup",new { before, after = new { a.ArabicName,a.TimeZone,p.Location,p.CommercialState,p.PlatformFee,p.FeeCurrency,p.BillingPeriod }, ownerPhoneChanged = phoneChanged },clock);
+        await db.SaveChangesAsync();
+        if (zoneChanged)
+        {
+            var active = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == id && x.State == ConfigurationState.Active);
+            if (active is not null)
+            {
+                var settings = AcademyRuntimeSettings.Read(active.Payload) with { TimeZone = zone };
+                var (revision, errors) = await PublishConfiguration(id, actorId, settings, active, service, clock);
+                if (errors.Length > 0) return Results.UnprocessableEntity(new { message = "تعذر تغيير المنطقة الزمنية في إعدادات التشغيل.", errors });
+                Audit(db, id, actorId, "academy.configuration", new { revision, reason = "academy-time-zone" }, clock);
+                await db.SaveChangesAsync();
+            }
+        }
+        await tx.CommitAsync(); return Results.Ok(new { version = p.EditVersion });
     }
     public sealed record SubscriptionWrite(int Version, string CommercialState, decimal? PlatformFee, string FeeCurrency, string BillingPeriod, DateOnly? SubscriptionFrom, DateOnly? SubscriptionTo);
     private static async Task<IResult> SaveSubscription(Guid id, SubscriptionWrite body, FoundationDbContext db, ClaimsPrincipal actor, TimeProvider clock)
@@ -212,12 +239,23 @@ public static class PlatformSetup
         var a = await db.Academies.SingleOrDefaultAsync(a => a.Id == id); if (a is null) return Results.NotFound();
         var old = await db.AcademyConfigurationVersions.SingleOrDefaultAsync(x => x.AcademyId == id && x.State == ConfigurationState.Active);
         var settings = (old is null ? AcademyRuntimeSettings.Initial(a.DefaultCurrency,a.TimeZone) : AcademyRuntimeSettings.Read(old.Payload)) with { Features = body.Features };
-        var draft = await service.CreateDraft(id,Actor(actor),settings);
-        var errors = await service.Validate(draft); if (errors.Length > 0) return Results.UnprocessableEntity(new { message = "راجع تراخيص الخدمات قبل حفظ الإعدادات.", errors });
-        await service.Transition(draft,ConfigurationState.Validated,Actor(actor)); draft.EffectiveAtUtc = clock.GetUtcNow(); await service.Transition(draft,ConfigurationState.Staged,Actor(actor));
-        if (old is not null) await service.Transition(old,ConfigurationState.Superseded,Actor(actor));
-        await service.Transition(draft,ConfigurationState.Active,Actor(actor));
-        Audit(db,id,Actor(actor),"academy.configuration",new { draft.Revision, body.Features },clock); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { draft.Revision });
+        var actorId = Actor(actor);
+        var (revision, errors) = await PublishConfiguration(id, actorId, settings, old, service, clock);
+        if (errors.Length > 0) return Results.UnprocessableEntity(new { message = "راجع تراخيص الخدمات قبل حفظ الإعدادات.", errors });
+        Audit(db,id,actorId,"academy.configuration",new { revision, body.Features },clock); await db.SaveChangesAsync(); await tx.CommitAsync(); return Results.Ok(new { revision });
+    }
+    private static async Task<(int Revision, string[] Errors)> PublishConfiguration(Guid id, Guid actor, AcademyRuntimeSettings settings,
+        AcademyConfigurationVersion? active, AcademyConfigurationService service, TimeProvider clock)
+    {
+        var draft = await service.CreateDraft(id, actor, settings);
+        var errors = await service.Validate(draft);
+        if (errors.Length > 0) return (0, errors);
+        await service.Transition(draft, ConfigurationState.Validated, actor);
+        draft.EffectiveAtUtc = clock.GetUtcNow();
+        await service.Transition(draft, ConfigurationState.Staged, actor);
+        if (active is not null) await service.Transition(active, ConfigurationState.Superseded, actor);
+        await service.Transition(draft, ConfigurationState.Active, actor);
+        return (draft.Revision, []);
     }
     public sealed record StateWrite(string Target, int Version);
     private static async Task<IResult> State(Guid id, StateWrite body, FoundationDbContext db, ClaimsPrincipal actor, TimeProvider clock, AcademyConfigurationService config)

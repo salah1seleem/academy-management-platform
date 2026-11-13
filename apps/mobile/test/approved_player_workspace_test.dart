@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/features/admin/native_player_workspace.dart';
 import 'package:academy_mobile/features/shared/staff_capabilities.dart';
 import 'package:flutter/material.dart';
@@ -265,6 +266,145 @@ void main() {
       auth.dispose();
     },
   );
+  for (final today in ['2026-10-21', '2026-10-22']) {
+    testWidgets('Frozen period shows resume according to server day $today', (
+      t,
+    ) async {
+      final auth = await authenticate(
+        'AcademyOwner',
+        (m, p, b, token) async => {
+          ...period,
+          'status': 'Frozen',
+          'frozenFromDate': '2026-10-21',
+          'asOfDate': today,
+          'canPause': true,
+          'canDeductDays': false,
+          'canCancel': false,
+          'financialValuesVisible': false,
+        },
+      );
+      await t.pumpWidget(
+        app(
+          NativeSubscriptionPeriod(
+            auth: auth,
+            id: 'period',
+            access: const StaffCapabilities(
+              owner: true,
+              permissions: [],
+              scope: {},
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.textContaining('القيمة المسجلة'), findsNothing);
+      final actions = find.widgetWithText(
+        DropdownButtonFormField<String>,
+        'الإجراء',
+      );
+      if (today == '2026-10-21') {
+        expect(actions, findsNothing);
+        expect(
+          find.textContaining('يمكن الاستئناف ابتداءً من'),
+          findsOneWidget,
+        );
+      } else {
+        expect(find.textContaining('يمكن الاستئناف ابتداءً من'), findsNothing);
+        await t.tap(actions);
+        await t.pumpAndSettle();
+        expect(find.text('استئناف الاشتراك'), findsOneWidget);
+      }
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    });
+  }
+
+  testWidgets('A stale write reloads the period and removes revoked actions', (
+    t,
+  ) async {
+    var writes = 0;
+    final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+      if (m == 'POST') {
+        writes++;
+        throw const ApiFailure(409, 'تغير الاشتراك منذ فتح الصفحة.');
+      }
+      return {
+        ...period,
+        'asOfDate': '2026-10-21',
+        'canPause': false,
+        'canCancel': false,
+        'canDeductDays': writes == 0,
+        'version': 12 + writes,
+      };
+    });
+    await t.pumpWidget(
+      app(
+        NativeSubscriptionPeriod(
+          auth: auth,
+          id: 'period',
+          access: const StaffCapabilities(
+            owner: true,
+            permissions: [],
+            scope: {},
+          ),
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, 'الإجراء'),
+    );
+    await t.pumpAndSettle();
+    await t.tap(find.text('خصم أيام').last);
+    await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField, 'عدد الأيام'), '2');
+    await tap(t, 'راجعت أثر التعديل على الاشتراك وأؤكد تنفيذه.');
+    await tap(t, 'تأكيد تعديل الاشتراك');
+    expect(writes, 1);
+    expect(find.text('تغير الاشتراك منذ فتح الصفحة.'), findsOneWidget);
+    expect(find.text('باقة اختبار'), findsOneWidget);
+    expect(
+      find.widgetWithText(DropdownButtonFormField<String>, 'الإجراء'),
+      findsNothing,
+    );
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
+  testWidgets('Period retry never renders a mismatched response', (t) async {
+    var attempts = 0;
+    final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+      if (!p.endsWith('/period')) return {'today': '2026-10-21'};
+      if (++attempts == 1) throw const ApiFailure(503, 'تعذر تحميل الفترة.');
+      if (attempts == 2) return {...period, 'id': 'another', 'plan': 'سجل آخر'};
+      return {...period, 'asOfDate': '2026-10-21'};
+    });
+    await t.pumpWidget(
+      app(
+        NativeSubscriptionPeriod(
+          auth: auth,
+          id: 'period',
+          access: const StaffCapabilities(
+            owner: true,
+            permissions: [],
+            scope: {},
+          ),
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(find.text('تعذر تحميل الفترة.'), findsOneWidget);
+    await t.tap(find.text('إعادة المحاولة'));
+    await t.pumpAndSettle();
+    expect(find.text('الفترة المطلوبة غير متاحة.'), findsOneWidget);
+    expect(find.text('سجل آخر'), findsNothing);
+    await t.tap(find.text('إعادة المحاولة'));
+    await t.pumpAndSettle();
+    expect(find.text('باقة اختبار'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
   testWidgets('Logout during player read never displays the previous child', (
     t,
   ) async {

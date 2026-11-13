@@ -107,7 +107,7 @@ public static partial class PayrollEndpoints
         var first = Month(month); var last = first.AddMonths(1).AddDays(-1);
         var employees = await db.Employees.Where(x => x.AcademyId == academy && (!branchId.HasValue || x.BranchId == branchId) && (x.IsActive || db.PayrollSettlements.Any(p => p.AcademyId == academy && p.EmployeeId == x.Id && p.Month == first)||db.PayrollStatements.Any(s=>s.EmployeeId==x.Id&&s.Month==first))).OrderBy(x => x.Name).ToListAsync();
         var adjustments = await db.PayrollAdjustments.Where(x => x.AcademyId == academy && x.DueDate >= first && x.DueDate <= last).ToListAsync();
-        var daily = await db.StaffDailyAttendances.Where(x => x.AcademyId == academy && x.WorkDate >= first && x.WorkDate <= last).ToListAsync();
+        var dailyDeductions = await db.StaffDailyAttendances.Where(x => x.AcademyId == academy && x.WorkDate >= first && x.WorkDate <= last && x.ApprovedDeduction > 0).ToListAsync();
         var paid = await db.PayrollSettlements.Where(x => x.AcademyId == academy && x.Month == first).ToListAsync();
         var openingPeriods=await db.PayrollStatements.Where(s=>s.AcademyId==academy&&s.Kind=="Opening"&&s.OpeningAsOf>first).Select(s=>s.EmployeeId).ToArrayAsync();
         employees=employees.Where(e=>!openingPeriods.Contains(e.Id)).ToList();
@@ -118,7 +118,7 @@ public static partial class PayrollEndpoints
         var contracts=await db.ContractVersions.AsNoTracking().Where(v=>v.AcademyId==academy&&v.EffectiveFrom<=first).ToArrayAsync();
         return employees.Select(e => {
             var snapshot = paid.SingleOrDefault(p => p.EmployeeId == e.Id);var version=SalaryHistory.At(salaryVersions,e.Id,first);var rate=version?.MonthlySalary??e.MonthlySalary;var contract=ContractHistory.Bounds(e,contracts,first); var basic = PayrollCalculator.BaseDue(rate, contract.ContractStart, contract.ContractEnd, first);
-            var deduct = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Deduction").Sum(x => x.Amount) + daily.Where(x => x.MembershipId == e.MembershipId).Sum(x => x.ApprovedDeduction);
+            var deduct = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Deduction").Sum(x => x.Amount) + dailyDeductions.Where(x => x.MembershipId == e.MembershipId).Sum(x => x.ApprovedDeduction);
             var add = adjustments.Where(x => x.EmployeeId == e.Id && x.Kind == "Addition").Sum(x => x.Amount);
             var statement=statements.SingleOrDefault(s=>s.EmployeeId==e.Id);var net=snapshot?.NetDue??statement?.NetDue??basic.Due-deduct+add;
             var paidAmount=snapshot?.NetDue??disbursements.Where(p=>p.EmployeeId==e.Id).Sum(p=>p.Amount);var paidAt=snapshot?.PaidAtUtc??disbursements.Where(p=>p.EmployeeId==e.Id).Select(p=>(DateTimeOffset?)p.CreatedAtUtc).Max();
