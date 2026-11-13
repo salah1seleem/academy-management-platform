@@ -78,6 +78,8 @@ public sealed class AdminRenewalIntegrationTests : IAsyncLifetime
             period.StartDate = DateOnly.ParseExact(start, "yyyy-MM-dd");
             period.EndDate = end is null ? null : DateOnly.ParseExact(end, "yyyy-MM-dd");
             period.RemainingSessions = sessions;
+            period.UpdatedAtUtc = previous.Select(x => x.Period.UpdatedAtUtc)
+                .Append(period.UpdatedAtUtc).Max().AddSeconds(1);
             await db.SaveChangesAsync();
 
             var results = await Search(code);
