@@ -13,7 +13,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'support/role_intro.dart';
+import '../test/introduction_test_helpers.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -83,8 +83,16 @@ void main() {
       await tester.pumpWidget(
         AcademyApp(auth: auth, environment: 'Demo', appearance: appearance),
       );
-      await skipRoleIntroIfPresent(tester);
       final nav = find.byType(NativeRoleTabs);
+      final intro = find.byType(AcademyOnboarding);
+      for (
+        var tick = 0;
+        tick < 120 && nav.evaluate().isEmpty && intro.evaluate().isEmpty;
+        tick++
+      ) {
+        await tester.pump(const Duration(milliseconds: 150));
+      }
+      if (intro.evaluate().isNotEmpty) await finishRoleIntroduction(tester);
       final loaded = find.text(content);
       for (var tick = 0; tick < 120 && loaded.evaluate().isEmpty; tick++) {
         await tester.pump(const Duration(milliseconds: 150));
