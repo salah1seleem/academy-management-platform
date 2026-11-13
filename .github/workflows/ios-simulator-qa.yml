@@ -19,7 +19,7 @@ concurrency:
 jobs:
   role-homes:
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:
@@ -36,6 +36,9 @@ jobs:
         run: |
           if ! brew list --versions postgresql@17 >/dev/null; then
             brew install postgresql@17
+          fi
+          if ! command -v gtimeout >/dev/null; then
+            brew install coreutils
           fi
           echo "$(brew --prefix postgresql@17)/bin" >> "$GITHUB_PATH"
       - name: Resolve locked Flutter dependencies

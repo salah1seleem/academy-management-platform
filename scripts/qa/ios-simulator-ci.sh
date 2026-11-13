@@ -21,8 +21,8 @@ simulator=''
 api_pid=''
 cleanup() {
   if [[ -n "$simulator" ]]; then
-    xcrun simctl shutdown "$simulator" || true
-    xcrun simctl delete "$simulator" || true
+    gtimeout 45s xcrun simctl shutdown "$simulator" || true
+    gtimeout 45s xcrun simctl delete "$simulator" || true
   fi
   if [[ -n "$api_pid" ]]; then
     kill "$api_pid" 2>/dev/null || true
@@ -57,19 +57,31 @@ curl -fsS --max-time 2 "$ASPNETCORE_URLS/health/ready" > "$qa_dir/evidence/ready
 echo 'Starting one disposable iOS 26.2 simulator.'
 xcrun simctl list runtimes > "$qa_dir/evidence/runtimes.log"
 simulator=$(xcrun simctl create 'Academy QA iOS' com.apple.CoreSimulator.SimDeviceType.iPhone-16e com.apple.CoreSimulator.SimRuntime.iOS-26-2)
-xcrun simctl boot "$simulator"
-xcrun simctl bootstatus "$simulator" -b
+gtimeout --kill-after=20s 8m xcrun simctl bootstatus "$simulator" -b
 xcrun simctl status_bar "$simulator" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100 || echo 'The simulator kept its default status bar.' >&2
 
 cd apps/mobile
-test_status=0
-ACADEMY_VISUAL_RUN=ios-cloud flutter drive \
-  -d "$simulator" \
-  --driver=test_driver/visual_driver.dart \
+echo 'Building the Flutter test application for iOS.'
+gtimeout --kill-after=20s 12m flutter build ios --simulator --debug --no-pub \
   --target=integration_test/cloud_role_homes_test.dart \
+  --dart-define=APP_ENV=Demo \
   --dart-define=ACADEMY_ISOLATED_IOS_QA=true \
   --dart-define=API_BASE_URL="$ASPNETCORE_URLS" \
+  2>&1 | tee "$qa_dir/evidence/flutter-ios-build.log"
+
+echo 'Installing and launching the iOS test app.'
+test_status=0
+ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbose --no-pub \
+  -d "$simulator" \
+  --use-application-binary=build/ios/iphonesimulator/Runner.app \
+  --driver=test_driver/visual_driver.dart \
+  --target=integration_test/cloud_role_homes_test.dart \
+  --no-publish-port --timeout=240 --screenshot="$qa_dir/evidence" \
   2>&1 | tee "$qa_dir/evidence/flutter-ios.log" || test_status=$?
+
+if [[ "$test_status" != 0 ]]; then
+  gtimeout 20s xcrun simctl io "$simulator" screenshot "$qa_dir/evidence/ios-last-frame.png" || true
+fi
 
 for role in owner admin coach guardian; do
   if [[ -s "../../tmp/mobile-visuals/phase-cloud-$role.png" ]]; then
