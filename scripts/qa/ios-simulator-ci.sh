@@ -38,6 +38,7 @@ initdb -D "$qa_dir/postgres" -U academy_ci --auth=trust > "$qa_dir/evidence/post
 pg_ctl -D "$qa_dir/postgres" -l "$qa_dir/evidence/postgres.log" -o "-h 127.0.0.1 -p 55432 -k $qa_dir/socket" -w start
 createdb -h 127.0.0.1 -p 55432 -U academy_ci academy_ios_qa
 
+echo 'Building the isolated Demo API and applying migrations.'
 dotnet tool restore
 dotnet build apps/api/src/Academy.Api -c Release -m:1 > "$qa_dir/evidence/api-build.log" 2>&1
 dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --no-build --configuration Release > "$qa_dir/evidence/migrate.log" 2>&1
@@ -53,6 +54,7 @@ for (( attempt=0; attempt<120; attempt++ )); do
 done
 curl -fsS --max-time 2 "$ASPNETCORE_URLS/health/ready" > "$qa_dir/evidence/ready.json"
 
+echo 'Starting one disposable iOS 26.2 simulator.'
 xcrun simctl list runtimes > "$qa_dir/evidence/runtimes.log"
 simulator=$(xcrun simctl create 'Academy QA iOS' com.apple.CoreSimulator.SimDeviceType.iPhone-16e com.apple.CoreSimulator.SimRuntime.iOS-26-2)
 xcrun simctl boot "$simulator"
