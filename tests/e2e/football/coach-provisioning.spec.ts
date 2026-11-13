@@ -16,8 +16,10 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   const screenshot = info.outputPath(`create-coach-${width}.png`);
   await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" }); await info.attach("Coach create form", { path: screenshot, contentType: "image/png" });
   const phone = `011${String(Date.now()).slice(-8)}`;
-  await page.getByLabel("الاسم بالعربية").fill(`مدرب رحلة عرض ${width}`);
-  await page.getByLabel("براعم 2018 — مجموعة أ").check();
+  const coachName = `مدرب رحلة عرض ${width}`;
+  const groupName = "براعم 2018 — مجموعة أ";
+  await page.getByLabel("الاسم بالعربية").fill(coachName);
+  await page.getByLabel(groupName).check();
   const mobile = page.getByLabel("رقم الهاتف المصري");
   const save = page.getByRole("button", { name: "حفظ المدرب", exact: true });
   const coachPath = "/api/v1/manage/coaches";
@@ -35,7 +37,7 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
     expect(writes).toBe(0);
     const rejected = await page.request.post(coachPath, {
       headers: { "X-CSRF-TOKEN": csrf.token },
-      data: { displayName: `مدرب رحلة عرض ${width}`, phoneNumber: invalid, isActive: true },
+      data: { displayName: coachName, phoneNumber: invalid, isActive: true },
     });
     expect(rejected.status()).toBe(400);
   }
@@ -44,15 +46,34 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   await save.click();
   const response = await created; expect(response.status()).toBe(201);
   expect(writes).toBe(1);
-  const { membershipId } = await response.json();
   await expect(page).toHaveURL(/\/academy\/coaches$/);
-  await page.getByLabel("بحث المدربون").fill(`مدرب رحلة عرض ${width}`);
-  await page.locator(`a[href="/dashboard/academy/coaches/${membershipId}"]`).click();
-  await expect(page).toHaveURL(/\/academy\/coaches\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole("heading", { name: `مدرب رحلة عرض ${width}` })).toBeVisible();
-  await expect(page.getByRole("link", { name: "براعم 2018 — مجموعة أ", exact: true })).toBeVisible();
-  const request = await page.request.post("/api/v1/mobile/auth/otp/request", { data: { phoneNumber: phone } }); expect(request.status()).toBe(202);
-  const verified = await page.request.post("/api/v1/mobile/auth/otp/verify", { data: { phoneNumber: phone, challengeId: (await request.json()).challengeId, code: "246810", deviceName: "Coach web flow E2E" } }); expect(verified.ok()).toBeTruthy();
+  const stored = await page.request.get("/api/v1/manage/structure/coaches");
+  expect(stored.status()).toBe(200);
+  const matches = (await stored.json() as { id: string; arabicName: string }[])
+    .filter(coach => coach.arabicName === coachName);
+  expect(matches).toHaveLength(1);
+  const details = `/dashboard/academy/coaches/${matches[0].id}`;
+  await page.getByLabel("بحث المدربين").fill(coachName);
+  const profile = page.getByRole("link", { name: "عرض المجموعات", exact: true });
+  await expect(profile).toHaveAttribute("href", details);
+  await profile.click();
+  await expect(page).toHaveURL(url => url.pathname === details);
+  await expect(page.getByRole("heading", { name: coachName, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: groupName, exact: true })).toBeVisible();
+
+  await page.context().clearCookies();
+  const challenge = await page.request.post("/api/v1/mobile/auth/otp/request", { data: { phoneNumber: phone } });
+  expect(challenge.status()).toBe(202);
+  const { challengeId } = await challenge.json();
+  const verified = await page.request.post("/api/v1/mobile/auth/otp/verify", {
+    data: { phoneNumber: phone, challengeId, code: "246810", deviceName: "Coach web flow E2E" },
+  });
+  expect(verified.status()).toBe(200);
   const credentials = await verified.json();
-  const denied = await page.request.get("/api/v1/reports/owner-summary", { headers: { Authorization: `Bearer ${credentials.accessToken}` } }); expect(denied.status()).toBe(403);
+  const headers = { Authorization: `Bearer ${credentials.accessToken}` };
+  const groups = await page.request.get("/api/v1/coach/groups", { headers });
+  expect(groups.status()).toBe(200);
+  expect((await groups.json() as { arabicName: string }[]).map(group => group.arabicName)).toEqual([groupName]);
+  const denied = await page.request.get("/api/v1/reports/owner-summary", { headers });
+  expect(denied.status()).toBe(403);
 });
