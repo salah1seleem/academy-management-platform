@@ -29,7 +29,7 @@ for (const width of [1440, 390]) test(`Football Demo and create coach ${width}`,
   for (const invalid of [phone.slice(1), `${phone}1`, `013${phone.slice(3)}`, `+971${phone.slice(1)}`]) {
     await mobile.fill(invalid);
     await save.click();
-    await expect(page.getByRole("alert").filter({ hasText: "اكتب رقم موبايل مصريًا" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "اكتب رقم موبايل مصري صحيح." })).toBeVisible();
     await expect(mobile).toBeFocused();
     await expect(mobile).toHaveAttribute("aria-invalid", "true");
     expect(writes).toBe(0);
