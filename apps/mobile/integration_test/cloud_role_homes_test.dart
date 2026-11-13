@@ -77,7 +77,9 @@ void main() {
       await appearance.load();
       tester.platformDispatcher.accessibilityFeaturesTestValue =
           const FakeAccessibilityFeatures(disableAnimations: true);
-      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
       await tester.pumpWidget(
         AcademyApp(auth: auth, environment: 'Demo', appearance: appearance),
       );

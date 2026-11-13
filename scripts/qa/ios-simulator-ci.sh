@@ -59,7 +59,7 @@ xcrun simctl list runtimes > "$qa_dir/evidence/runtimes.log"
 simulator=$(xcrun simctl create 'Academy QA iOS' com.apple.CoreSimulator.SimDeviceType.iPhone-16e com.apple.CoreSimulator.SimRuntime.iOS-26-2)
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
-xcrun simctl status_bar "$simulator" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState unplugged --batteryLevel 100
+xcrun simctl status_bar "$simulator" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100 || echo 'The simulator kept its default status bar.' >&2
 
 cd apps/mobile
 test_status=0

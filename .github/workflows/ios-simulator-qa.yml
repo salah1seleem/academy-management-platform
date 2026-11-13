@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: ios-simulator-qa-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   role-homes:
