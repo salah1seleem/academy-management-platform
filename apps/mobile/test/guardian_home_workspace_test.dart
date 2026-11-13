@@ -111,6 +111,61 @@ Widget app(
 );
 
 void main() {
+  testWidgets('A loaded child card stays above family quick actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final auth = await logged((method, path, body, token) async {
+      if (path != '/api/v1/guardian/home') return response(path);
+      final player = child('b');
+      final sport = (player['sports'] as List<Json>).single;
+      sport['coaches'] = [
+        {'id': 'coach', 'name': 'مدرب العرض', 'groupId': 'group'},
+      ];
+      sport['performance'] = {
+        'meanPerformance': 73.8,
+        'scoredCriteria': 18,
+        'applicableCriteria': 18,
+        'isFootballReport': true,
+        'axes': [
+          for (final axis in ['التمرير', 'التسديد', 'السرعة', 'الدفاع'])
+            {'axis': axis, 'value': 74},
+        ],
+      };
+      return {
+        ...home(),
+        'children': [player],
+      };
+    });
+    for (final scale in [1.0, 2.0]) {
+      await tester.pumpWidget(app(auth, scale: scale));
+      await tester.pumpAndSettle();
+      final footer = find.widgetWithText(FilledButton, 'ملف آدم والتقرير');
+      final quickActions = find.text('العمليات السريعة');
+      final vertical = find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.down,
+      );
+      for (var step = 0; quickActions.evaluate().isEmpty && step < 20; step++) {
+        final scroll = tester.state<ScrollableState>(vertical.first).position;
+        scroll.jumpTo(scroll.pixels + 80);
+        await tester.pumpAndSettle();
+      }
+      expect(quickActions, findsOneWidget);
+      final card = tester.getRect(find.byKey(const ValueKey('child-b')));
+      final carousel = tester.getRect(find.byType(GuardianChildCarousel));
+      final actions = tester.getRect(quickActions);
+      expect(tester.getRect(footer).bottom, lessThanOrEqualTo(card.bottom));
+      expect(card.bottom, closeTo(carousel.bottom, 1));
+      expect(actions.top - card.bottom, greaterThanOrEqualTo(12));
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+
   testWidgets(
     'Compact shortcuts keep training, match and nutrition scoped to the linked child',
     (tester) async {

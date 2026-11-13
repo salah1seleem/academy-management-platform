@@ -147,6 +147,30 @@ void main() {
         expect(pendingOperations, findsNothing);
         expect(find.text('إعادة تحميل الإجراءات'), findsNothing);
       }
+      if (role == 'Guardian') {
+        final carousel = find.byType(GuardianChildCarousel);
+        final profile = find.descendant(
+          of: carousel,
+          matching: find.byType(FilledButton),
+        );
+        final actions = find.text('العمليات السريعة');
+        var laidOut = false;
+        final deadline = Stopwatch()..start();
+        while (!laidOut && deadline.elapsed.inSeconds < 15) {
+          await tester.pump(const Duration(milliseconds: 150));
+          laidOut =
+              profile.evaluate().length == 1 &&
+              tester.getBottomRight(profile).dy <=
+                  tester.getBottomRight(carousel).dy &&
+              (actions.evaluate().isEmpty ||
+                  tester.getBottomRight(profile).dy <
+                      tester.getTopLeft(actions).dy);
+        }
+        if (!laidOut) {
+          await binding.takeScreenshot('phase-cloud-guardian-incomplete');
+        }
+        expect(laidOut, isTrue, reason: 'The child action must fit its card.');
+      }
       await binding.takeScreenshot('phase-cloud-$label');
       if (role == 'AcademyAdmin') {
         final permissions = await auth.request('GET', '/api/v1/my-permissions');
