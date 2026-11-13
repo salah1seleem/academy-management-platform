@@ -12,8 +12,16 @@ test("Owner opens stored operational signals and private family feedback", async
   await expect(page.getByRole("heading", { name: "تقرير الأرباح والخسائر" })).toBeVisible();
   await page.getByRole("link", { name: "كل القرارات", exact: true }).click();
   await expect(page.getByRole("heading", { name: "مركز القرارات الذكية", exact: true, level: 1 })).toBeVisible();
-  const activeFollowups = page.locator("section").filter({ has: page.getByRole("heading", { name: "متابعات مفتوحة", exact: true }) });
-  await activeFollowups.getByRole("link", { name: "عرض المتابعات", exact: true }).click();
+  const coverage = page.getByRole("link", { name: "مراجعة المجموعة وفتح متابعة", exact: true }).first();
+  await expect(coverage).toBeVisible();
+  const group = new URL((await coverage.getAttribute("href"))!, page.url());
+  expect(group.pathname).toMatch(/^\/dashboard\/academy\/groups\/[a-f0-9-]+$/);
+  await coverage.click();
+  await expect(page).toHaveURL(url => url.pathname === group.pathname);
+  await expect(page.getByRole("heading", { name: "ملخص المجموعة", exact: true })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "مساحة الإدارة" });
+  await navigation.getByRole("button", { name: "المتابعات والطلبات", exact: true }).click();
+  await navigation.getByRole("link", { name: "المتابعات واتخاذ القرار", exact: true }).click();
   await expect(page.getByRole("heading", { name: "المتابعات واتخاذ القرار" })).toBeVisible();
   await expect(page.getByRole("link",{name:"إنشاء متابعة",exact:true})).toBeVisible();
   await page.screenshot({ path: info.outputPath("owner-operations.png"), fullPage: true, animations: "disabled" });
