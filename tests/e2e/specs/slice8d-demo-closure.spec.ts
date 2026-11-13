@@ -73,7 +73,7 @@ test.describe.serial("Slice 8D demo closure journeys", () => {
     await expect(page.getByText("مؤكد", { exact: true })).toBeVisible();
     await attachScreen(page, testInfo, "admin-payment-success-390");
     await page.getByRole("link", { name: "عرض الإيصال" }).click();
-    await expect(page.getByRole("article").getByRole("heading", { name: "إيصال دفع" })).toBeVisible();
+    await expect(page.getByRole("article", { name: "إيصال دفع", exact: true })).toBeVisible();
     await assertMobileArabicSurface(page);
     await attachScreen(page, testInfo, "admin-receipt-390");
   });

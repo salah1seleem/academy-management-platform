@@ -28,7 +28,11 @@ test("Cashier reviews a price, collects once, sees the receipt and closes an exa
   const amountCents = (value: string) => BigInt(value.replace(".", "")); expect(amountCents(detail.balance)).toBe(amountCents(detail.receipts[0].amount) + 5000n);
   const retry = await page.request.fetch(response.url(), { method: "POST", data: response.request().postDataJSON(), headers: { ...response.request().headers() } }); expect(retry.ok()).toBe(true); expect((await retry.json()).receiptId).toBe(saved.receiptId);
   const receipt = await page.request.get(`/api/v1/subscriptions/receipts/${saved.receiptId}`).then(r => r.json()); expect(receipt.paymentMethod).toBe("Cash");
-  await page.getByLabel("المبلغ الموجود فعليًا", { exact: true }).fill(detail.balance); await page.getByRole("button", { name: "تثبيت المطابقة وإقفال الوردية", exact: true }).click(); await page.waitForURL("**/dashboard/finance/cash-registers");
+  await page.getByLabel("المبلغ الموجود فعليًا", { exact: true }).fill(detail.balance); await page.getByRole("button", { name: "مراجعة المطابقة", exact: true }).click();
+  const reconciliation = page.getByRole("dialog", { name: "راجع المطابقة قبل الإقفال", exact: true });
+  await expect(reconciliation).toContainText("المبلغ المعدود");
+  await reconciliation.getByRole("button", { name: "تأكيد إقفال الوردية", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^وردية مقفلة/ })).toBeVisible();
   await page.goto(`/dashboard/finance/cash-registers/sessions/${shift.id}`); await expect(page.getByText("إيصالات القبض في الوردية", { exact: true })).toBeVisible(); await expect(page.getByRole("heading", { name: "قبض اشتراك نقدي", exact: true })).toHaveCount(0);
   const closed = await page.request.get(`${root}/sessions/${shift.id}`).then(r => r.json()); expect(closed.variance).toBe("0.00"); expect(closed.receipts).toHaveLength(1);
   await page.screenshot({ path: info.outputPath("cash-receipt-closed.png"), animations: "disabled" });

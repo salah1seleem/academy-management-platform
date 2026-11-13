@@ -57,10 +57,12 @@ test("One family transfer is approved atomically and exposes both child receipts
     const staffPath = `/api/v1/manage/family-renewals/${id}`;
     await staff.route(`**${staffPath}`, route => route.fulfill({ status: 503, body: "Service Unavailable" }));
     await staff.goto("/dashboard/subscriptions/payments?type=Renewal&status=Pending&allDates=true");
-    const row = staff.getByRole("table",{name:"طلبات الدفع",exact:true}).getByRole("row").filter({ has: staff.locator(`a[href='/dashboard/family-renewals/${id}']`) });
+    await staff.getByRole("textbox", { name: "رقم الطلب", exact: true }).fill(id);
+    await staff.getByRole("button", { name: "بحث", exact: true }).click();
+    const row = staff.getByRole("table",{name:"طلبات الدفع",exact:true}).getByRole("row").filter({ has: staff.locator(`a[href^='/dashboard/family-renewals/${id}?']`) });
     await expect(row).toHaveCount(1);
     await row.getByRole("link", { name: "مراجعة" }).click();
-    await expect(staff).toHaveURL(`/dashboard/family-renewals/${id}`, { timeout: 20_000 });
+    await expect(staff).toHaveURL(url => url.pathname === `/dashboard/family-renewals/${id}`, { timeout: 20_000 });
     await expect(staff.getByRole("heading", { name: "مراجعة تجديد الأسرة" })).toBeVisible({ timeout: 20_000 });
     await expect(staff.locator("main").getByRole("alert")).toContainText("تعذر تحميل طلب الأسرة");
     await staff.unroute(`**${staffPath}`);
@@ -137,7 +139,12 @@ test("One family transfer is approved atomically and exposes both child receipts
       await expect(page.getByRole("heading", { name: "طلب تجديد الأسرة" })).toBeVisible();
     }
     await expect(page.getByRole("link", { name: "العودة للطلبات", exact: true })).toHaveAttribute("href", "/guardian/family-renewals");
-    await expect(staff.getByRole("link", { name: "العودة لطلبات الدفع" })).toHaveAttribute("href", "/dashboard/subscriptions/payments?type=Renewal&allDates=true");
+    const back = staff.getByRole("link", { name: "العودة إلى طلبات الدفع", exact: true });
+    const returnUrl = new URL((await back.getAttribute("href"))!, staff.url());
+    expect(returnUrl.pathname).toBe("/dashboard/subscriptions/payments");
+    expect(returnUrl.searchParams.get("type")).toBe("Renewal");
+    expect(returnUrl.searchParams.get("status")).toBe("Pending");
+    expect(returnUrl.searchParams.get("reference")).toBe(id);
     await staff.reload(); await expect(staff.getByRole("button", { name: "قبول وتجديد كل التسجيلات" })).toHaveCount(0); expect(await page.request.get("/api/v1/guardian/subscriptions/receipts").then(r => r.json())).toEqual(after); await page.screenshot({ path: info.outputPath("family-approved-390.png"), fullPage: true, animations: "disabled" });
   } finally {
     try {

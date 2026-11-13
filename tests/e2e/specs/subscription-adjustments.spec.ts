@@ -38,7 +38,7 @@ async function attendance(page: Page, session: string, state: string) {
   await player.selectOption({ label: state });
   await page.getByRole("button", { name: "حفظ الحضور" }).click();
   await expect(page.getByText("تم حفظ الحضور بنجاح.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "حفظ الحضور" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "حفظ الحضور" })).toBeDisabled();
   return player;
 }
 

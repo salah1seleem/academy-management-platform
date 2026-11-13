@@ -75,7 +75,7 @@ async function fixture(page: Page) {
 
 async function openReview(page: Page, receiptRoute: string) {
   await page.goto(receiptRoute);
-  await page.getByRole("link", { name: "مراجعة عكس الإيصال (للمالك)" }).click();
+  await page.getByRole("link", { name: "مراجعة عكس الإيصال", exact: true }).click();
   await expect(page.getByRole("heading", { name: "عكس إيصال نقدي" })).toBeVisible();
 }
 

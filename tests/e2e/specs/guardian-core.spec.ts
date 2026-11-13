@@ -58,6 +58,6 @@ test.describe.serial("Guardian core mobile journeys", () => {
   });
 
   test("Journey D — child profile integrates report, schedule, attendance and subscriptions", async ({ page }) => {
-    await guardianLogin(page); const omar = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await omar.getByRole("link", { name: "عرض الملف" }).click(); await expect(page.getByRole("heading", { name: "تقرير اللاعب" })).toBeVisible(); await expect(page.getByRole("heading", { name: "التدريب والمواعيد" })).toBeVisible(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByRole("heading", { name: "الاشتراكات" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByRole("link", { name: "عرض التقرير" }).first()).toBeVisible();
+    await guardianLogin(page); const omar = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await omar.getByRole("link", { name: "ملف عمر والتقرير", exact: true }).click(); await expect(page.getByRole("heading", { name: "تقرير اللاعب" })).toBeVisible(); await expect(page.getByRole("heading", { name: "التدريب والمواعيد" })).toBeVisible(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByRole("heading", { name: "الاشتراكات" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByRole("link", { name: "عرض التقرير" }).first()).toBeVisible();
   });
 });

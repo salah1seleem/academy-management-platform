@@ -12,11 +12,11 @@ test("Owner sees only server-authorized refund availability including allocated 
   expect(Number(available.available)).toBe(available.amount - available.refunded - available.allocated);
   await page.goto(`/dashboard/players/${player}?tab=subscriptions`);
   await expect(page.getByRole("heading", { name: "الاسترداد", exact: true })).toBeVisible();
-  await expect(page.getByText(/المبالغ المخصصة لمطالبات ليست متاحة/)).toBeVisible();
-  await page.getByText("تسجيل استرداد جزئي", { exact: true }).click();
+  await page.getByText("تسجيل استرداد", { exact: true }).click();
+  await expect(page.getByText("المبلغ المخصص لمطالبة مستبعد من المتاح للاسترداد.", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "التحصيل", exact: true }).selectOption(available.id);
   const amount = page.getByLabel("قيمة الاسترداد", { exact: true });
-  await expect(amount).toHaveAttribute("max", available.available);
+  await expect(amount).toHaveAttribute("max", String(Number(available.available)));
   await amount.fill((Number(available.available) + 0.01).toFixed(2));
   expect(await amount.evaluate((input: HTMLInputElement) => input.validity.rangeOverflow)).toBe(true);
   for (const width of [390, 1440]) {

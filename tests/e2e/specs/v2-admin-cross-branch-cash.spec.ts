@@ -38,5 +38,5 @@ test("Branch Admin collects for a foreign enrollment and reload recovers a lost 
   expect((await page.request.get(`/api/v1/people/players/${playerId}`)).status()).toBe(404);
   await page.setViewportSize({ width: 390, height: 1000 }); await page.screenshot({ path: info.outputPath("admin-cross-recovered.png"), animations: "disabled" });
   await write(`${root}/sessions/${shift.id}/close`, { countedAmount: saved.balance });
-  await guardianLogin(page); await page.goto(`/guardian/receipts/${receiptId}`); await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible(); await expect(page.getByText(receipt.collectionBranch, { exact: true })).toBeVisible();
+  await guardianLogin(page); await page.goto(`/guardian/receipts/${receiptId}`); await expect(page.getByRole("article", { name: "إيصال دفع", exact: true })).toBeVisible(); await expect(page.getByText(receipt.collectionBranch, { exact: true })).toBeVisible();
 });

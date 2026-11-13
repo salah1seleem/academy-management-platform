@@ -30,8 +30,12 @@ test("Owner collects at another branch without moving the child; guardian receip
   const receipt = await page.request.get(`/api/v1/subscriptions/receipts/${receiptId}`).then(r => r.json()); expect(receipt.enrollmentBranch).not.toBe(receipt.collectionBranch);
   const after = await page.request.get(reports + collectingBranchId).then(r => r.json()); expect(after.totalAmount - before.totalAmount).toBe(receipt.amount);
   expect((await page.request.get(reports + homeBranchId).then(r => r.json())).totalAmount).toBe(atHomeBefore.totalAmount);
-  await page.getByLabel("المبلغ الموجود فعليًا", { exact: true }).fill(saved.balance); await page.getByRole("button", { name: "تثبيت المطابقة وإقفال الوردية", exact: true }).click(); await page.waitForURL("**/dashboard/finance/cash-registers");
-  await guardianLogin(page); await page.goto(`/guardian/receipts/${receiptId}`); await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible();
+  await page.getByLabel("المبلغ الموجود فعليًا", { exact: true }).fill(saved.balance); await page.getByRole("button", { name: "مراجعة المطابقة", exact: true }).click();
+  const reconciliation = page.getByRole("dialog", { name: "راجع المطابقة قبل الإقفال", exact: true });
+  await expect(reconciliation).toContainText("المبلغ المعدود");
+  await reconciliation.getByRole("button", { name: "تأكيد إقفال الوردية", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^وردية مقفلة/ })).toBeVisible();
+  await guardianLogin(page); await page.goto(`/guardian/receipts/${receiptId}`); await expect(page.getByRole("article", { name: "إيصال دفع", exact: true })).toBeVisible();
   await expect(page.getByText(receipt.enrollmentBranch, { exact: true })).toBeVisible(); await expect(page.getByText(receipt.collectionBranch, { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 1000 }); await page.screenshot({ path: info.outputPath("cross-branch-guardian-receipt.png"), animations: "disabled" });
 });

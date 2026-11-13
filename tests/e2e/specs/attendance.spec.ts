@@ -10,8 +10,8 @@ async function staffLogin(page: Page, email = "admin.nogoom@example.test") {
   if (email !== "coach.nogoom@example.test") await page.waitForURL("**/dashboard");
 }
 
-async function openTodayFootballRoster(page: Page) {
-  const session = await todaySession(page, "5a000000-0000-0000-0000-000000000130", "04:00", "04:15");
+async function openTodayFootballRoster(page: Page, start = "04:00", end = "04:15") {
+  const session = await todaySession(page, "5a000000-0000-0000-0000-000000000130", start, end);
   await page.getByRole("button", { name: "فتح القائمة" }).click();
   await page.getByRole("button", { name: "عمليات الأكاديمية", exact: true }).click();
   await page.getByRole("navigation", { name: "مساحة الإدارة" }).getByRole("link", { name: "تسجيل حضور اللاعبين", exact: true }).click();
@@ -20,37 +20,52 @@ async function openTodayFootballRoster(page: Page) {
   return `/api/v1/attendance/sessions/${session}/players`;
 }
 
-test("Admin records player attendance and session balance is consumed once", async ({ page }) => {
-  await staffLogin(page); const path = await openTodayFootballRoster(page);
+async function saveAttendance(page: Page, state: "Present" | "Absent") {
   const player = page.getByRole("combobox", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true });
   const save = page.getByRole("button", { name: "حفظ الحضور" });
-  await player.selectOption({label:"غائب"}); await expect(player).toHaveValue("Absent"); await save.click(); await expect(page.getByText(/تم حفظ الحضور بنجاح\.|لا توجد تغييرات جديدة للحفظ\./)).toBeVisible(); await expect(save).toBeEnabled();
+  await expect(player).toBeVisible();
+  if (await player.inputValue() !== state) {
+    await player.selectOption(state);
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(page.getByText("تم حفظ الحضور بنجاح.", { exact: true })).toBeVisible();
+  }
+  await expect(player).toHaveValue(state);
+  await expect(save).toBeDisabled();
+  return player;
+}
+
+test("Admin records player attendance and session balance is consumed once", async ({ page }) => {
+  await staffLogin(page); const path = await openTodayFootballRoster(page);
+  const player = await saveAttendance(page, "Absent");
   const baseline = (await page.request.get(path).then(r => r.json())).players.find((p: { sportEnrollmentId: string }) => p.sportEnrollmentId === "5a000000-0000-0000-0000-000000000111").remainingSessions;
   const card = page.getByRole("row").filter({ has: player }).locator('[data-label="رصيد الحصص"]');
   await expect(card).toHaveText(`${baseline}`);
-  await player.selectOption({label:"حاضر"}); await expect(player).toHaveValue("Present"); await save.click(); await expect(save).toBeEnabled();
+  await saveAttendance(page, "Present");
   await expect(card).toHaveText(`${baseline - 1}`);
-  await page.reload(); const reloaded = page.getByRole("combobox", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true }); await reloaded.selectOption({label:"حاضر"}); await expect(reloaded).toHaveValue("Present"); const reloadSave = page.getByRole("button", { name: "حفظ الحضور" }); await reloadSave.click(); await expect(reloadSave).toBeEnabled(); await expect(page.getByRole("row").filter({ has: reloaded }).locator('[data-label="رصيد الحصص"]')).toHaveText(`${baseline - 1}`);
+  await page.reload();
+  await expect(player).toHaveValue("Present");
+  await expect(page.getByRole("button", { name: "حفظ الحضور" })).toBeDisabled();
+  await expect(card).toHaveText(`${baseline - 1}`);
 });
 
 test("Admin correction restores the consumed session", async ({ page }) => {
-  await staffLogin(page); const path = await openTodayFootballRoster(page); const player = page.getByRole("combobox", { name: "حضور لاعب حالات حضور اصطناعي 110", exact: true });
-  const save = page.getByRole("button", { name: "حفظ الحضور" });
-  await player.selectOption({label:"حاضر"}); await expect(player).toHaveValue("Present"); await save.click(); await expect(page.getByText(/تم حفظ الحضور بنجاح\.|لا توجد تغييرات جديدة للحفظ\./)).toBeVisible(); await expect(save).toBeEnabled();
+  await staffLogin(page); const path = await openTodayFootballRoster(page);
+  const player = await saveAttendance(page, "Present");
   const consumed = (await page.request.get(path).then(r => r.json())).players.find((p: { sportEnrollmentId: string }) => p.sportEnrollmentId === "5a000000-0000-0000-0000-000000000111").remainingSessions;
-  await player.selectOption({label:"غائب"}); await expect(player).toHaveValue("Absent"); await save.click(); await expect(save).toBeEnabled();
+  await saveAttendance(page, "Absent");
   await expect(page.getByRole("row").filter({ has: player }).locator('[data-label="رصيد الحصص"]')).toHaveText(`${consumed + 1}`); await expect(player).toHaveValue("Absent");
 });
 
 test("Coach cannot sign in to the web dashboard", async ({ page }) => {
   await staffLogin(page, "coach.nogoom@example.test");
-  await expect(page.locator("main").getByRole("alert")).toContainText("بيانات الدخول غير صحيحة");
+  await expect(page.locator("main").getByRole("alert")).toContainText("لوحة الأكاديمية متاحة للمالك والإداري.");
   await expect(page).toHaveURL(/\/login$/);
 });
 
 test("Guardian sees attendance for linked child only", async ({ page }) => {
   await guardianLogin(page);
-  const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await child.getByRole("link", { name: "عرض الملف" }).click(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
+  const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await child.getByRole("link", { name: "ملف عمر والتقرير", exact: true }).click(); await expect(page.getByRole("heading", { name: "الحضور" })).toBeVisible(); await expect(page.getByText("حاضر", { exact: true }).first()).toBeVisible(); await expect(page.getByText("عمر أحمد حسن")).toHaveCount(0);
 });
 
 test("Attendance list preserves its filters when returning from a roster", async ({ page }) => {

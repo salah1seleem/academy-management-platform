@@ -12,6 +12,14 @@ jobs:
   core-browser:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: payments-and-import
+            specs: '/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|subscriptions-payments|v2-family-renewal-request)\.spec\.ts$'
+          - group: attendance-and-cash
+            specs: '/(attendance|v2-attendance-draft|v2-cash-collections|v2-cash-family|v2-cash-receipt-void|v2-cash-registers|v2-admin-cross-branch-cash|v2-cross-branch-cash|v2-pending-cash|v2-collection-funds|v2-receivable-credit|v2-platform|v2-session-lifecycle|reports-exports)\.spec\.ts$'
     services:
       postgres:
         image: postgres:17
@@ -47,14 +55,13 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Run core browser journeys
-        run: >-
-          npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/core
-          authentication.spec.ts core-expense-post-recovery.spec.ts core-player-import-recovery.spec.ts
-          enrollment-request-review.spec.ts subscriptions-payments.spec.ts v2-family-renewal-request.spec.ts
+        env:
+          CORE_BROWSER_SPECS: ${{ matrix.specs }}
+        run: npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/core "$CORE_BROWSER_SPECS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: core-browser-results
+          name: core-browser-results-${{ matrix.group }}
           path: tests/e2e/test-results/core/
           if-no-files-found: warn
           retention-days: 7

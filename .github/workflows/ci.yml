@@ -123,12 +123,16 @@ jobs:
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+        id: browser_setup
       - run: npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/regression
       - name: Build football demo web
+        if: ${{ !cancelled() && steps.browser_setup.outcome == 'success' }}
+        id: football_web
         run: npm run build:web
         env:
           API_INTERNAL_URL: http://127.0.0.1:5190
       - name: Football demo and coach provisioning E2E
+        if: ${{ !cancelled() && steps.football_web.outcome == 'success' }}
         env:
           PGPASSWORD: academy_ci_only
           ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_v3_help_video_ci;Username=academy;Password=academy_ci_only
@@ -137,6 +141,7 @@ jobs:
           dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
           npx playwright test --config tests/e2e/playwright.football.config.ts --output tests/e2e/test-results/football
       - name: Staff passkey browser verification E2E
+        if: ${{ !cancelled() && steps.football_web.outcome == 'success' }}
         env:
           PGPASSWORD: academy_ci_only
           ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_passkeys_ci;Username=academy;Password=academy_ci_only

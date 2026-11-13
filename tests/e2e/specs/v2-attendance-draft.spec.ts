@@ -14,16 +14,16 @@ test("Admin recovers offline attendance and reviews a concurrent correction with
   const player=page.getByRole('combobox',{name:'حضور لاعب حالات حضور اصطناعي 110',exact:true});await expect(player).toBeVisible();
   await player.selectOption({label:"حاضر"});
   await page.route(`**${path}`,route=>route.request().method()==='PUT'?route.abort('internetdisconnected'):route.continue());
-  await page.getByRole('button',{name:'حفظ الحضور',exact:true}).click();await expect(page.getByText('بانتظار المزامنة',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'حفظ الحضور',exact:true}).click();await expect(page.getByText('الحفظ غير مؤكد',{exact:true})).toBeVisible();
   await expect(player).toBeDisabled();
-  await write(5);await page.unroute(`**${path}`);await page.getByRole('button',{name:'مراجعة وإعادة المزامنة'}).click();
+  await write(5);await page.unroute(`**${path}`);await page.getByRole('button',{name:'تحقق من الحفظ',exact:true}).click();
   const conflict=page.getByRole('region',{name:'تعارض حضور لاعب حالات حضور اصطناعي 110'});await expect(conflict).toContainText('الخادم: معتذر');
   for(const width of[390,1440]){await page.setViewportSize({width,height:1000});await page.screenshot({path:info.outputPath(`attendance-conflict-${width}.png`),fullPage:true,animations:'disabled'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);}
-  await conflict.getByRole('button',{name:'الاحتفاظ باختياري بعد المراجعة'}).click();await page.getByRole('button',{name:'مراجعة وإعادة المزامنة'}).click();await expect(page.getByText('تم حفظ الحضور بنجاح.',{exact:true})).toBeVisible();
+  await conflict.getByRole('button',{name:'الاحتفاظ باختياري بعد المراجعة'}).click();await page.getByRole('button',{name:'تحقق من الحفظ',exact:true}).click();await page.getByRole('button',{name:'إعادة إرسال التغييرات',exact:true}).click();await expect(page.getByText('تم حفظ الحضور بنجاح.',{exact:true})).toBeVisible();
   const confirmed=await snapshot(),saved=confirmed.players.find((p:{sportEnrollmentId:string})=>p.sportEnrollmentId===id(111));expect(saved.attendanceStatus).toBe('Present');
   // Simulate a lost response after the API has accepted the write; recheck, never replay.
   await player.selectOption({label:"متأخر"});let writes=0;
   await page.route(`**${path}`,async route=>{if(route.request().method()!=='PUT')return route.continue();writes++;const response=await route.fetch();expect(response.ok()).toBe(true);await route.abort('connectionreset');});
-  await page.getByRole('button',{name:'حفظ الحضور',exact:true}).click();await expect(page.getByText('بانتظار المزامنة',{exact:true})).toBeVisible();await page.getByRole('button',{name:'مراجعة وإعادة المزامنة'}).click();await expect(page.getByText(/الحضور محفوظ بالفعل دون إعادة الإرسال/)).toBeVisible();expect(writes).toBe(1);
+  await page.getByRole('button',{name:'حفظ الحضور',exact:true}).click();await expect(page.getByText('الحفظ غير مؤكد',{exact:true})).toBeVisible();await page.getByRole('button',{name:'تحقق من الحفظ',exact:true}).click();await expect(page.getByText(/الحضور محفوظ بالفعل دون إعادة الإرسال/)).toBeVisible();expect(writes).toBe(1);
   const final=(await snapshot()).players.find((p:{sportEnrollmentId:string})=>p.sportEnrollmentId===id(111));expect(final.attendanceStatus).toBe('Late');expect(final.remainingSessions).toBe(saved.remainingSessions);
 });

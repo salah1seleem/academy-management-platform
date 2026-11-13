@@ -1,6 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
-async function openOmar(page: Page) { const card = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await card.getByRole("link", { name: "عرض الملف" }).click(); }
+async function openOmar(page: Page) { const card = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" }); await card.getByRole("link", { name: "ملف عمر والتقرير", exact: true }).click(); }
 
 test.describe("Slice 7 Guardian content journeys", () => {
   test("Journey A — linked sports catalog is deduplicated and catalog-only", async ({ page }) => {

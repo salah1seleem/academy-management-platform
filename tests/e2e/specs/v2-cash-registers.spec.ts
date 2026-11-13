@@ -37,7 +37,11 @@ test("Owner creates a cashier shift, transfers conserved float and closes with e
   await transfer.getByRole("combobox", { name: "الصندوق المصدر", exact: true }).selectOption(sessions[0]);
   await transfer.getByRole("combobox", { name: "الصندوق المستلم", exact: true }).selectOption(sessions[1]);
   await transfer.getByLabel("المبلغ المحول", { exact: true }).fill("100.00");
-  await transfer.getByRole("button", { name: "تأكيد التحويل", exact: true }).click();
+  await transfer.getByRole("button", { name: "مراجعة التحويل", exact: true }).click();
+  const transferReview = page.getByRole("dialog", { name: "راجع تحويل العهدة", exact: true });
+  await expect(transferReview).toContainText("الرصيد المقدّر بعد التحويل");
+  expect(await page.request.get(`${root}/sessions/${sessions[0]}`).then(r => r.json()).then(d => d.balance)).toBe("200.00");
+  await transferReview.getByRole("button", { name: "تأكيد التحويل", exact: true }).click();
   await expect.poll(async () => page.request.get(`${root}/sessions/${sessions[0]}`).then(r => r.json()).then(d => d.balance)).toBe("100.00");
   expect(await page.request.get(`${root}/sessions/${sessions[1]}`).then(r => r.json()).then(d => d.balance)).toBe("150.00");
   for (const width of [390, 1440]) {
@@ -48,11 +52,13 @@ test("Owner creates a cashier shift, transfers conserved float and closes with e
   }
   await page.goto(`/dashboard/finance/cash-registers/sessions/${sessions[0]}`);
   await page.getByLabel("المبلغ الموجود فعليًا", { exact: true }).fill("90.00");
-  await page.getByRole("button", { name: "تثبيت المطابقة وإقفال الوردية" }).click();
-  await page.waitForURL("**/dashboard/finance/cash-registers");
-  await page.goto(`/dashboard/finance/cash-registers/sessions/${sessions[0]}`);
+  await page.getByRole("button", { name: "مراجعة المطابقة", exact: true }).click();
+  const reconciliation = page.getByRole("dialog", { name: "راجع المطابقة قبل الإقفال", exact: true });
+  await expect(reconciliation).toContainText("المبلغ المعدود");
+  await reconciliation.getByRole("button", { name: "تأكيد إقفال الوردية", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^وردية مقفلة/ })).toBeVisible();
   await expect(page.getByText("فرق المطابقة", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "تثبيت المطابقة وإقفال الوردية" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "مراجعة المطابقة", exact: true })).toHaveCount(0);
   const detail = await page.request.get(`${root}/sessions/${sessions[0]}`).then(r => r.json()); expect(detail.variance).toBe("-10.00"); expect(detail.movements).toHaveLength(1);
   // Opening float and transfer never become subscription income or receivables.
   const after = await page.request.get("/api/v1/finance/receivables").then(r => r.json()); expect(after.outstanding).toBe(collections.outstanding);

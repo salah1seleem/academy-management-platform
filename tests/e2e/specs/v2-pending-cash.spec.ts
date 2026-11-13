@@ -42,6 +42,7 @@ test("Existing staff renewal collects through its authorized shift once and reac
   const detail = await page.request.get(`${root}/sessions/${shift.id}`).then(r => r.json()); expect(detail.receipts).toHaveLength(1);
   expect(detail.receipts[0].amount).toBe(pending.amount);
   const cents = (v: string) => BigInt(v.replace(".", "")); expect(cents(detail.balance)).toBe(cents(pending.amount) + 5000n);
-  await page.getByRole("link", { name: "عرض الإيصال", exact: true }).click(); await expect(page).toHaveURL(new RegExp(`/receipts/${result.receiptId}$`));
+  await page.getByRole("link", { name: "عرض الإيصال", exact: true }).click(); await expect(page).toHaveURL(url => url.pathname === `/dashboard/subscriptions/receipts/${result.receiptId}`);
+  await expect(page.getByRole("article", { name: "إيصال دفع", exact: true })).toBeVisible();
   const receipt = await page.request.get(`/api/v1/subscriptions/receipts/${result.receiptId}`).then(r => r.json()); expect(receipt.paymentMethod).toBe("Cash");
 });

@@ -8,8 +8,8 @@ test.describe("Slice 8A operational reporting journeys", () => {
   test("Journey A — owner dashboard uses stored financial and subscription metrics", async ({ page }) => {
     test.setTimeout(60_000);
     await staffLogin(page, "owner.nogoom@example.test");
-    await expect(page.getByRole("region", { name: "ملخص الأكاديمية", exact: true })).toBeVisible();
-    for (const label of ["التحصيل اليومي", "التحصيل الشهري"]) await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+    const summary = page.getByRole("region", { name: "ملخص الأكاديمية", exact: true });
+    await expect(summary.getByRole("heading", { name: "التحصيل الأسبوعي", exact: true })).toBeVisible();
     const subscriptions = page.getByRole("region", {name:"اشتراكات الأكاديمية", exact:true});
     const calendarForCounts = await (await page.request.get("/api/v1/academy/calendar")).json();
     const stored = await (await page.request.get(`/api/v1/subscriptions/home?asOf=${calendarForCounts.today}`)).json();
@@ -22,8 +22,11 @@ test.describe("Slice 8A operational reporting journeys", () => {
     const requests=page.locator("section").filter({has:page.getByRole("heading",{name:"طلبات الدفع",exact:true})});
     await expect(requests.getByRole("link",{name:"عرض الكل",exact:true})).toHaveAttribute("href",/subscriptions\/payments/);
     const calendar=await (await page.request.get("/api/v1/academy/calendar")).json();
-    await expect(page.getByLabel("من تاريخ")).toHaveValue(calendar.trailingMonthFrom);
-    const totalLink=page.getByRole("region",{name:"ملخص الأكاديمية",exact:true}).getByRole("link").first();
+    const totalLink = summary.getByRole("link").first();
+    const ledger = new URL((await totalLink.getAttribute("href"))!, page.url());
+    expect(ledger.pathname).toBe("/dashboard/reports/financial");
+    expect(ledger.searchParams.get("from")).toBe(calendar.trailingMonthFrom);
+    expect(ledger.searchParams.get("to")).toBe(calendar.today);
     await totalLink.scrollIntoViewIfNeeded();
     expect(await page.evaluate(()=>innerWidth)).toBeLessThanOrEqual(page.viewportSize()!.width+1);
     await totalLink.click();
@@ -72,7 +75,7 @@ test.describe("Slice 8A operational reporting journeys", () => {
 
   test("Journey D — guardian payment history opens printable Arabic receipt", async ({ page }) => {
     await guardianLogin(page); await page.getByRole("link", { name: "الإيصالات" }).click();
-    await expect(page.getByRole("heading", { name: "إيصالات الدفع" })).toBeVisible(); await page.getByRole("link").filter({ hasText: /DEMO-|RC-/ }).first().click();
-    await expect(page.locator(".printable-receipt").getByRole("heading", { name: "إيصال دفع", exact: true })).toBeVisible(); await expect(page.getByText("أكاديمية النجوم الرياضية")).toBeVisible(); await expect(page.getByRole("button", { name: "طباعة الإيصال" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "إيصالاتي", exact: true })).toBeVisible(); await page.getByRole("link").filter({ hasText: /DEMO-|RC-/ }).first().click();
+    await expect(page.getByRole("article", { name: "إيصال دفع", exact: true })).toBeVisible(); await expect(page.getByText("أكاديمية النجوم الرياضية")).toBeVisible(); await expect(page.getByRole("button", { name: "طباعة الإيصال" })).toBeVisible();
   });
 });
