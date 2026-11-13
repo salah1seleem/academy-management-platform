@@ -1,5 +1,10 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
+const familyFixtureEnrollments = new Set([
+  "84000014-0000-0000-0003-000000000001",
+  "84000014-0000-0000-0003-000000000002",
+]);
+
 async function write(api: APIRequestContext, path: string, data: unknown, method = "POST") {
   const { token } = await api.get("/api/v1/auth/csrf").then(r => r.json());
   return api.fetch(path, { method, headers: { "X-CSRF-TOKEN": token }, data });
@@ -15,12 +20,13 @@ test("One family transfer is approved atomically and exposes both child receipts
     expect((await write(owner.request, "/api/v1/payment-settings", { instaPayAddress: "family-demo@example.test", walletNumber: null, recipientName: "حساب اصطناعي — لا تحول إليه", isActive: true }, "PUT")).ok()).toBe(true);
     const phoneNumber = "01000000014"; const challenge = await write(page.request, "/api/v1/auth/guardian/otp/request", { phoneNumber }); expect(challenge.ok()).toBe(true);
     expect((await write(page.request, "/api/v1/auth/guardian/otp/verify", { phoneNumber, challengeId: (await challenge.json()).challengeId, code: "246810" })).ok()).toBe(true);
-    // Only cancel this explicit fixture's leftover pending requests; never reset money/history.
-    const previous = await page.request.get(root).then(r => r.json());
-    for (const r of previous.items.filter((x: { status: string }) => x.status === "Pending")) { const d = await page.request.get(`${root}/${r.id}`).then(r => r.json()); expect((await write(page.request, `${root}/${r.id}/cancel`, { revision: d.revision })).ok()).toBe(true); }
     const before = await page.request.get("/api/v1/guardian/subscriptions/receipts").then(r => r.json());
-    await page.goto("/guardian/renew-family"); const options = await page.request.get("/api/v1/guardian/subscriptions/family/options").then(r => r.json()); expect(options.items).toHaveLength(2);
-    for (const e of options.items) { await page.getByRole("checkbox", { name: `تجديد ${e.player} · ${e.sport}`, exact: true }).check(); await page.getByRole("combobox", { name: `الباقة لـ${e.player} · ${e.sport}`, exact: true }).selectOption("51000000-0000-0000-0000-000000000001"); }
+    await page.goto("/guardian/renew-family");
+    const options = await page.request.get("/api/v1/guardian/subscriptions/family/options").then(r => r.json());
+    const enrollments = options.items.filter((item: { id: string }) => familyFixtureEnrollments.has(item.id));
+    expect(enrollments).toHaveLength(2);
+    for (const e of enrollments) { await page.getByRole("checkbox", { name: `تجديد ${e.player} · ${e.sport}`, exact: true }).check(); await page.getByRole("combobox", { name: `الباقة لـ${e.player} · ${e.sport}`, exact: true }).selectOption("51000000-0000-0000-0000-000000000001"); }
+    await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(2);
     await page.getByRole("button", { name: "مراجعة إجمالي 2 تسجيل" }).click(); await expect(page.getByRole("region", { name: "ملخص تجديد الأسرة" })).toBeVisible(); await page.getByRole("button", { name: "متابعة الدفع للأسرة" }).click(); await expect(page).toHaveURL(/\/guardian\/family-renewals\/[a-f0-9-]+$/); const id = page.url().split("/").at(-1)!;
     requestId = id;
     await expect(page.getByText("family-demo@example.test", { exact: true })).toBeVisible(); expect(await page.request.get("/api/v1/guardian/subscriptions/receipts").then(r => r.json())).toEqual(before);
@@ -126,7 +132,7 @@ test("One family transfer is approved atomically and exposes both child receipts
     for (const line of detail.items) {
       const receipt = page.locator(`a[href="/guardian/receipts/${line.receiptId}"]`);
       await receipt.click();
-      await expect(page.getByRole("heading", { name: "إيصال دفع" })).toBeVisible();
+      await expect(page.getByRole("article", { name: "إيصال دفع", exact: true })).toBeVisible();
       await page.goBack();
       await expect(page.getByRole("heading", { name: "طلب تجديد الأسرة" })).toBeVisible();
     }
@@ -155,6 +161,7 @@ test("Family rejection and cancellation remain outside collections and receipts"
   const staff = await owner.newPage();
   expect((await write(owner.request, "/api/v1/auth/login", { email: "owner.nogoom@example.test", password: "Demo-Only-123!" })).ok()).toBe(true);
   const prior = await owner.request.get("/api/v1/payment-settings").then(response => response.json());
+  const requestIds: string[] = [];
   try {
     expect((await write(owner.request, "/api/v1/payment-settings", {
       instaPayAddress: "family-demo@example.test", walletNumber: null, recipientName: "حساب اصطناعي", isActive: true,
@@ -167,14 +174,17 @@ test("Family rejection and cancellation remain outside collections and receipts"
     const receipts = async () => (await page.request.get("/api/v1/guardian/subscriptions/receipts")).json();
     const beforeReceipts = await receipts();
     const options = await page.request.get(`${family}/options`).then(response => response.json());
-    const lines = options.items.map((item: { id: string }) => ({ sportEnrollmentId: item.id, subscriptionPlanId: "51000000-0000-0000-0000-000000000001" }));
+    const lines = options.items.filter((item: { id: string }) => familyFixtureEnrollments.has(item.id))
+      .map((item: { id: string }) => ({ sportEnrollmentId: item.id, subscriptionPlanId: "51000000-0000-0000-0000-000000000001" }));
     expect(lines).toHaveLength(2);
     async function newRequest() {
       const quote = await write(page.request, `${family}/quote`, { lines });
       expect(quote.ok(), await quote.text()).toBe(true);
       const created = await write(page.request, `${family}/requests`, { lines, quoteHash: (await quote.json()).quoteHash, idempotencyKey: crypto.randomUUID() });
       expect(created.ok(), await created.text()).toBe(true);
-      return created.json();
+      const request = await created.json();
+      requestIds.push(request.id);
+      return request;
     }
     const reject = await newRequest();
     const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(reject.createdAtUtc));
@@ -222,7 +232,17 @@ test("Family rejection and cancellation remain outside collections and receipts"
     expect(await receipts()).toEqual(beforeReceipts);
     expect(await report()).toEqual(beforeReport);
   } finally {
-    await write(owner.request, "/api/v1/payment-settings", { ...prior, isActive: prior.isActive ?? prior.configured }, "PUT");
-    await owner.close();
+    try {
+      for (const id of requestIds) {
+        const path = `${family}/requests/${id}`;
+        const detail = await page.request.get(path).then(response => response.json());
+        if (detail.status === "Pending") {
+          expect((await write(page.request, `${path}/cancel`, { revision: detail.revision })).ok()).toBe(true);
+        }
+      }
+    } finally {
+      await write(owner.request, "/api/v1/payment-settings", { ...prior, isActive: prior.isActive ?? prior.configured }, "PUT");
+      await owner.close();
+    }
   }
 });

@@ -359,7 +359,10 @@ test("One enrollment proof creates one matching receipt and collection after app
     await expect(row.getByRole("link", { name: /اختيار الباقة/ })).toHaveCount(0);
     await row.getByRole("link", { name: "عرض الإيصالات" }).click();
     await expect(familyPage).toHaveURL("/guardian/receipts");
-    await expect(familyPage.getByText(name, { exact: true }).first()).toBeVisible();
+    const receipt = familyPage.getByRole("region", { name: "إيصالات الدفع" })
+      .getByRole("link").filter({ hasText: name });
+    await expect(receipt).toBeVisible();
+    await expect(receipt).toHaveAttribute("href", `/guardian/receipts/${payment.receiptId}`);
   } finally {
     await family.close();
   }
