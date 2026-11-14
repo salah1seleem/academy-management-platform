@@ -125,6 +125,21 @@ jobs:
       - run: npx playwright install --with-deps chromium
         id: browser_setup
       - run: npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/regression
+        env:
+          ACADEMY_E2E_PROVIDER_QUARANTINE: "false"
+        # A pending provider discrepancy intentionally blocks renewal of the shared demo enrollment.
+        # Exercise that flow in a freshly migrated database so the other journeys can create renewals.
+        # Playwright excludes the provider-only spec from this run through its config.
+      - name: Provider payment reconciliation E2E
+        if: ${{ !cancelled() && steps.browser_setup.outcome == 'success' }}
+        env:
+          PGPASSWORD: academy_ci_only
+          ConnectionStrings__Default: Host=127.0.0.1;Port=5432;Database=academy_provider_ci;Username=academy;Password=academy_ci_only
+          ACADEMY_E2E_PROVIDER_QUARANTINE: "true"
+        run: |
+          createdb -h 127.0.0.1 -U academy academy_provider_ci
+          dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
+          npx playwright test --config tests/e2e/playwright.config.ts --output tests/e2e/test-results/provider 'v2-provider-quarantine\.spec\.ts$'
       - name: Build football demo web
         if: ${{ !cancelled() && steps.browser_setup.outcome == 'success' }}
         id: football_web

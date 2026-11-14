@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           - group: payments-and-import
-            specs: '/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|subscriptions-payments|v2-family-renewal-request)\.spec\.ts$'
+            specs: '/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|slice8d-demo-closure|subscription-discounts|subscriptions-payments|v2-family-renewal-request|v2-renewal-opportunities|v2-staff-family-quote)\.spec\.ts$'
             config: regression
             provider_quarantine: 'false'
           - group: attendance-and-cash
@@ -25,7 +25,7 @@ jobs:
             config: regression
             provider_quarantine: 'false'
           - group: operations-and-pricing
-            specs: '/(owner-review|owner-priority-ux|sports-dashboard|branding-matches|v2-provider-quarantine|v2-family-renewal-quote|v2-staff-family-quote|v2-plan-publication|v2-season-plans|staff-payroll-ux)\.spec\.ts$'
+            specs: '/(owner-review|owner-priority-ux|sports-dashboard|branding-matches|v2-provider-quarantine|v2-family-renewal-quote|v2-plan-publication|v2-season-plans|staff-payroll-ux)\.spec\.ts$'
             config: regression
             provider_quarantine: 'true'
           - group: football-staff-and-receipts

@@ -33,6 +33,7 @@ const localConnectionFallback = process.env.ConnectionStrings__Default
 
 export default defineConfig({
   testDir: "./specs",
+  testIgnore: process.env.ACADEMY_E2E_PROVIDER_QUARANTINE === "false" ? "**/v2-provider-quarantine.spec.ts" : undefined,
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

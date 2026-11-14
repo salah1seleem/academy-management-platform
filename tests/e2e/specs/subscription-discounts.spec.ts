@@ -32,14 +32,27 @@ async function applyDiscount(page: Page, renewalId: string, type: "نسبة مئ
 test.describe.serial("Slice 8C subscription discount journeys", () => {
   test("Journey A — Admin applies 10 percent and final amount updates", async ({ page }) => {
     const renewal = await startRenewal(page); originalCheckout = renewal.url; originalAmount = renewal.originalAmount; await applyDiscount(page, renewal.renewalId, "نسبة مئوية", "10", "خصم إخوة تجريبي");
-    await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(`10% (-${formatMoneyAr(Math.round(originalAmount * 10) / 100)})`); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100)); await expect(page.getByText("خصم إخوة تجريبي")).toBeVisible();
+    const discount = Math.round(originalAmount * 10) / 100;
+    const adjustment = await page.request.get(`/api/v1/subscriptions/renewals/${renewal.renewalId}`);
+    expect(adjustment.status()).toBe(200);
+    expect(await adjustment.json()).toMatchObject({ discountType: "Percentage", discountValue: 10, discountAmount: discount, finalAmount: originalAmount - discount });
+    const shownDiscount = page.getByText("الخصم", { exact: true }).locator("..");
+    await expect(shownDiscount).toContainText("10%");
+    await expect(shownDiscount).toContainText(formatMoneyAr(discount));
+    await expect(page.getByText("المبلغ المطلوب", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - discount));
   });
 
   test("Journey B — Guardian pays the discounted final amount and sees receipt", async ({ page }) => {
     await guardianLogin(page); await page.goto(originalCheckout); await page.getByRole("link", { name: "فتح طلب الدفع الحالي" }).click();
     await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(`10% (-${formatMoneyAr(Math.round(originalAmount * 10) / 100)})`); await expect(page.getByText("الإجمالي بعد الخصم", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100));
     await page.getByRole("button", { name: "محاكاة نجاح الدفع" }).click(); await expect(page.getByText("تم الدفع وتجديد الاشتراك بنجاح")).toBeVisible();
-    await page.getByRole("link", { name: "عرض الإيصال" }).click(); await expect(page.getByText("السعر الأصلي")).toBeVisible(); await expect(page.getByText("الخصم", { exact: true }).locator("..")).toContainText(`10% (-${formatMoneyAr(Math.round(originalAmount * 10) / 100)})`); await expect(page.getByText("المبلغ المدفوع", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100));
+    await page.getByRole("link", { name: "عرض الإيصال" }).click();
+    const receipt = page.getByRole("article", { name: "إيصال دفع", exact: true });
+    await expect(receipt.getByText("السعر الأصلي", { exact: true })).toBeVisible();
+    const receiptDiscount = receipt.getByText("الخصم", { exact: true }).locator("..");
+    await expect(receiptDiscount).toContainText("10%");
+    await expect(receiptDiscount).toContainText(formatMoneyAr(Math.round(originalAmount * 10) / 100));
+    await expect(receipt.getByText("المبلغ المدفوع", { exact: true }).locator("..")).toContainText(formatMoneyAr(originalAmount - Math.round(originalAmount * 10) / 100));
   });
 
   test("Journey C — Failed discounted payment has no receipt and retry retains amount", async ({ page }) => {
