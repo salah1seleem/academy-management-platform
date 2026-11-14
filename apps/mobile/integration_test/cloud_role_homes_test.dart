@@ -68,6 +68,10 @@ void main() {
         auth.session?.selected?.academyId,
         '30000000-0000-0000-0000-000000000003',
       );
+      const academy = String.fromEnvironment('ACADEMY_IOS_QA_NAME');
+      if (academy == 'Z Professional Academy') {
+        expect(auth.session?.selected?.academyName, academy);
+      }
 
       final appearance = Appearance(storage: const FlutterSecureStorage());
       await appearance.load();
@@ -125,6 +129,9 @@ void main() {
         }
       }
       expect(loaded, findsWidgets);
+      if (academy == 'Z Professional Academy') {
+        expect(find.text(academy).hitTestable(), findsWidgets);
+      }
       if (role == 'AcademyAdmin') {
         final subscriptionHero = find.text('اشتراكات نطاقك');
         final operations = find.byType(NativeOperationActions);

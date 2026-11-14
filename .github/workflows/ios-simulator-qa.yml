@@ -3,10 +3,12 @@ name: iOS Simulator QA
 on:
   workflow_dispatch:
   push:
-    branches: ["codex/qa-off-mac", "codex/qa-staging-release"]
+    branches: ["codex/qa-off-mac", "codex/qa-staging-release", "codex/qa-ios-z-professional"]
     paths:
       - .github/workflows/ios-simulator-qa.yml
       - scripts/qa/ios-simulator-ci.sh
+      - scripts/demo/prepare_professional_demo.py
+      - scripts/demo/professional_nov05_data.py
       - apps/mobile/**
       - apps/api/**
       - Directory.Packages.props
@@ -26,6 +28,10 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        if: github.ref == 'refs/heads/codex/qa-ios-z-professional'
+        with:
+          python-version: '3.12'
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
@@ -46,7 +52,12 @@ jobs:
       - name: Resolve locked Flutter dependencies
         working-directory: apps/mobile
         run: flutter pub get --enforce-lockfile
+      - name: Install the synthetic Z Professional fixture dependency
+        if: github.ref == 'refs/heads/codex/qa-ios-z-professional'
+        run: python -m pip install 'psycopg[binary]==3.2.13'
       - name: Exercise four roles on one iOS simulator
+        env:
+          ACADEMY_IOS_Z_PROFESSIONAL: ${{ github.ref == 'refs/heads/codex/qa-ios-z-professional' }}
         run: bash scripts/qa/ios-simulator-ci.sh
       - name: Preserve iOS results and diagnostics
         if: always()

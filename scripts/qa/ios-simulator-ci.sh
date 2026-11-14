@@ -9,7 +9,13 @@ fi
 
 qa_dir="$RUNNER_TEMP/academy-ios-qa"
 mkdir -p "$qa_dir/evidence" "$qa_dir/socket"
-export ConnectionStrings__Default='Host=127.0.0.1;Port=55432;Database=academy_ios_qa;Username=academy_ci'
+db_name=academy_ios_qa
+academy_name='The Professional Academy'
+if [[ "${ACADEMY_IOS_Z_PROFESSIONAL:-false}" == true ]]; then
+  db_name=academy_professional_demo_20261105
+  academy_name='Z Professional Academy'
+fi
+export ConnectionStrings__Default="Host=127.0.0.1;Port=55432;Database=$db_name;Username=academy_ci"
 export ASPNETCORE_ENVIRONMENT=Demo
 export ASPNETCORE_URLS=http://127.0.0.1:5397
 export Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__StaffPassword=Demo-Only-123!
@@ -36,7 +42,7 @@ trap cleanup EXIT
 
 initdb -D "$qa_dir/postgres" -U academy_ci --auth=trust > "$qa_dir/evidence/postgres-init.log"
 pg_ctl -D "$qa_dir/postgres" -l "$qa_dir/evidence/postgres.log" -o "-h 127.0.0.1 -p 55432 -k $qa_dir/socket" -w start
-createdb -h 127.0.0.1 -p 55432 -U academy_ci academy_ios_qa
+createdb -h 127.0.0.1 -p 55432 -U academy_ci "$db_name"
 
 echo 'Building the isolated Demo API and applying migrations.'
 dotnet tool restore
@@ -54,6 +60,13 @@ for (( attempt=0; attempt<120; attempt++ )); do
 done
 curl -fsS --max-time 2 "$ASPNETCORE_URLS/health/ready" > "$qa_dir/evidence/ready.json"
 
+if [[ "${ACADEMY_IOS_Z_PROFESSIONAL:-false}" == true ]]; then
+  echo 'Preparing Z Professional Academy with a synthetic fixture in the temporary PostgreSQL.'
+  ACADEMY_DEMO_CONNECTION="$ConnectionStrings__Default" \
+  ACADEMY_DEMO_PROFILE=Nov05Football ACADEMY_DEMO_DATE=2026-11-05 \
+    python scripts/demo/prepare_professional_demo.py > "$qa_dir/evidence/z-professional-seed.log" 2>&1
+fi
+
 echo 'Starting one disposable iOS 26.2 simulator.'
 xcrun simctl list runtimes > "$qa_dir/evidence/runtimes.log"
 simulator=$(xcrun simctl create 'Academy QA iOS' com.apple.CoreSimulator.SimDeviceType.iPhone-16e com.apple.CoreSimulator.SimRuntime.iOS-26-2)
@@ -66,6 +79,7 @@ gtimeout --kill-after=20s 12m flutter build ios --simulator --debug --no-pub \
   --target=integration_test/cloud_role_homes_test.dart \
   --dart-define=APP_ENV=Demo \
   --dart-define=ACADEMY_ISOLATED_IOS_QA=true \
+  --dart-define="ACADEMY_IOS_QA_NAME=$academy_name" \
   --dart-define=API_BASE_URL="$ASPNETCORE_URLS" \
   2>&1 | tee "$qa_dir/evidence/flutter-ios-build.log"
 
