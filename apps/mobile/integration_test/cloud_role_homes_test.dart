@@ -156,8 +156,13 @@ void main() {
       }
       if (role == 'Guardian') {
         final carousel = find.byType(GuardianChildCarousel);
+        final carouselWidget = tester.widget<GuardianChildCarousel>(carousel);
+        final playerId =
+            carouselWidget.selectedPlayerId ??
+            carouselWidget.children.first['id'];
+        final card = find.byKey(ValueKey('large-child-$playerId'));
         final profile = find.descendant(
-          of: carousel,
+          of: card,
           matching: find.byType(FilledButton),
         );
         final actions = find.text('العمليات السريعة');
@@ -167,11 +172,11 @@ void main() {
           await tester.pump(const Duration(milliseconds: 150));
           laidOut =
               profile.evaluate().length == 1 &&
-              tester.getBottomRight(profile).dy <=
-                  tester.getBottomRight(carousel).dy &&
+              tester.getRect(profile).bottom <= tester.getRect(card).bottom &&
+              tester.getRect(card).bottom <=
+                  tester.getRect(carousel).bottom + 1 &&
               (actions.evaluate().isEmpty ||
-                  tester.getBottomRight(profile).dy <
-                      tester.getTopLeft(actions).dy);
+                  tester.getRect(actions).top > tester.getRect(card).bottom);
         }
         if (!laidOut) {
           await binding.takeScreenshot('phase-cloud-guardian-incomplete');
@@ -179,6 +184,31 @@ void main() {
         expect(laidOut, isTrue, reason: 'The child action must fit its card.');
       }
       await binding.takeScreenshot('phase-cloud-$label');
+      if (role == 'Guardian' && academy == 'Z Professional Academy') {
+        final carousel = tester.widget<GuardianChildCarousel>(
+          find.byType(GuardianChildCarousel),
+        );
+        final playerId =
+            carousel.selectedPlayerId ?? carousel.children.first['id'];
+        final profile = find.descendant(
+          of: find.byKey(ValueKey('large-child-$playerId')),
+          matching: find.byType(FilledButton),
+        );
+        final vertical = find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
+        );
+        final position = tester.state<ScrollableState>(vertical.first).position;
+        position.jumpTo(
+          (position.pixels + 160)
+              .clamp(0.0, position.maxScrollExtent)
+              .toDouble(),
+        );
+        await tester.pumpAndSettle();
+        expect(profile.hitTestable(), findsOneWidget);
+        await binding.takeScreenshot('phase-cloud-guardian-actions');
+      }
       if (role == 'AcademyAdmin') {
         final permissions = await auth.request('GET', '/api/v1/my-permissions');
         expect(permissions, contains('subscription.read'));

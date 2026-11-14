@@ -97,7 +97,7 @@ if [[ "$test_status" != 0 ]]; then
   gtimeout 20s xcrun simctl io "$simulator" screenshot "$qa_dir/evidence/ios-last-frame.png" || true
 fi
 
-for capture in ../../tmp/mobile-visuals/phase-cloud-*-incomplete.png ../../tmp/mobile-visuals/phase-cloud-admin-initial-error.png; do
+for capture in ../../tmp/mobile-visuals/phase-cloud-*-incomplete.png ../../tmp/mobile-visuals/phase-cloud-admin-initial-error.png ../../tmp/mobile-visuals/phase-cloud-guardian-actions.png; do
   if [[ -s "$capture" ]]; then cp "$capture" "$qa_dir/evidence/"; fi
 done
 for role in owner admin coach guardian; do
