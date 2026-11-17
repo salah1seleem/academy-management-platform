@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ensurePlacement, placementRead, preparePlacementSessions, serviceIdentity, type PlacementPlayer } from "../support/placement";
+import { assertPlacementViewport, ensurePlacement, placementRead, preparePlacementSessions, serviceIdentity, type PlacementPlayer } from "../support/placement";
 test("Guardian and Owner distinguish parallel registration formats without duplicate player or unintended collection", async ({ page }, info) => {
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const player = "5a000000-0000-0000-0000-000000000020"; const privateId = "5a000000-0000-0000-0000-000000000041";
@@ -12,7 +12,7 @@ test("Guardian and Owner distinguish parallel registration formats without dupli
   const detail = await page.request.get(`/api/v1/people/players/${player}`).then(r => r.json()); expect(detail.enrollments.map((e: { registrationFormat: string }) => e.registrationFormat).sort()).toEqual(["Group", "Private"]); expect(detail.enrollments.find((e: { id: string }) => e.id === privateId).subscription).toBeNull();
   const services = serviceIdentity(detail);
   await page.goto(`/dashboard/players/${player}?tab=training`); const track = page.locator("section.detail-card").filter({ has: page.locator(".team-chip", { hasText: /^خاص$/ }) }); await track.getByText("اقتراح مجموعات مناسبة", { exact: true }).click(); await track.getByRole("button", { name: "عرض البدائل المؤهلة" }).click(); await expect(track.getByText(/لا توجد مجموعة تستوفي/)).toBeVisible();
-  for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await track.screenshot({ path: info.outputPath(`registration-formats-${width}.png`), animations: "disabled" }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); }
+  for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await track.screenshot({ path: info.outputPath(`registration-formats-${width}.png`), animations: "disabled" }); await assertPlacementViewport(page, width); }
   const root = `/api/v1/manage/groups/${groupId}`;
   const original = await placementRead<{ group: { registrationFormat: string } }>(page.request, `${root}/details`);
   try {

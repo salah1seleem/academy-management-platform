@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ensurePlacement, placementEnrollment, placementRead, preparePlacementSessions, serviceIdentity } from "../support/placement";
+import { assertPlacementViewport, ensurePlacement, placementEnrollment, placementRead, preparePlacementSessions, serviceIdentity } from "../support/placement";
 test("Owner previews a dated transfer; Guardian sees the correct new schedule without losing history", async ({ page }, info) => {
   const csrf = await page.request.get("/api/v1/auth/csrf").then(r => r.json());
   const login = await page.request.post("/api/v1/auth/login", {
@@ -19,7 +19,7 @@ test("Owner previews a dated transfer; Guardian sees the correct new schedule wi
     await page.getByLabel("تعديل المجموعة", { exact: true }).selectOption(id(50)); await page.getByLabel("بدء النقل").fill(sessions.date); await page.getByRole("button", { name: "معاينة نقل المجموعة" }).click();
     const preview = page.getByRole("region", { name: "معاينة النقل" }); await expect(preview).toBeVisible(); await expect(preview.getByRole("button", { name: "تأكيد نقل المجموعة" })).toBeEnabled();
     await expect(preview.getByRole("heading", { name: "مواعيد تضاف إلى جدول اللاعب" })).toBeVisible();
-    for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await preview.screenshot({ path: info.outputPath(`dated-transfer-${width}.png`), animations: "disabled" }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); }
+    for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await preview.screenshot({ path: info.outputPath(`dated-transfer-${width}.png`), animations: "disabled" }); await assertPlacementViewport(page, width); }
     await preview.getByRole("button", { name: "تأكيد نقل المجموعة" }).click(); await expect(page.getByLabel("سجل نقل المجموعة")).toBeVisible();
   }
   detail = await page.request.get(`/api/v1/people/players/${id(10)}`).then(r => r.json()); expect(placementEnrollment(detail, id(11)).transfers).toContainEqual({ effectiveDate: sessions.date, groupName: "نقل السباحة — موعد مسائي تجريبي" });

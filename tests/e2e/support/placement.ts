@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const placementId = (n: number) => `5a000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 type SessionApi = Pick<APIRequestContext, "get" | "post">;
@@ -102,4 +102,15 @@ export async function ensurePlacement(api: APIRequestContext, player: number, en
   expect(preview.status(), await preview.text()).toBe(200);
   const response = await placementWrite(api, root, { enrollmentIds: [current.id], fingerprint: (await preview.json()).fingerprint });
   expect(response.ok(), await response.text()).toBe(true);
+}
+
+export async function assertPlacementViewport(page: Page, width: number) {
+  const measured = await page.evaluate(() => ({
+    viewport: innerWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  // A mobile browser can expand its layout viewport to accommodate overflow.
+  // Comparing scrollWidth only with innerWidth would accept that expanded page.
+  expect(measured.viewport, JSON.stringify(measured)).toBe(width);
+  expect(measured.document, JSON.stringify(measured)).toBeLessThanOrEqual(width + 1);
 }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { formatDateAr } from '../../../apps/web/src/lib/formatters';
-import { ensurePlacement, placementEnrollment, placementRead, preparePlacementSessions, serviceIdentity } from '../support/placement';
+import { assertPlacementViewport, ensurePlacement, placementEnrollment, placementRead, preparePlacementSessions, serviceIdentity } from '../support/placement';
 test('Selected session replacement updates the roster and Guardian schedule, not the recurring group or subscription', async ({ page }, info) => {
   const initialCsrf = await page.request.get('/api/v1/auth/csrf').then(r => r.json());
   const login = await page.request.post('/api/v1/auth/login', {
@@ -25,7 +25,7 @@ test('Selected session replacement updates the roster and Guardian schedule, not
     await page.getByRole('combobox', { name: /بديل حصة/ }).selectOption(sessions.target.id);
     await page.getByRole('button', { name: 'معاينة نقل الحصص' }).click();
     const preview = page.getByRole('region', { name: 'معاينة نقل الحصص', exact: true }); await expect(preview).toBeVisible(); await expect(preview.getByRole('button', { name: 'تأكيد نقل الحصص' })).toBeEnabled();
-    for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await preview.screenshot({ path: info.outputPath(`session-transfer-${width}.png`), animations: 'disabled' }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true); }
+    for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await preview.screenshot({ path: info.outputPath(`session-transfer-${width}.png`), animations: 'disabled' }); await assertPlacementViewport(page, width); }
     await preview.getByRole('button', { name: 'تأكيد نقل الحصص' }).click(); await expect(page.getByLabel('حصص منقولة')).toBeVisible();
   }
   detail = await page.request.get(`/api/v1/people/players/${id(20)}`).then(r => r.json());

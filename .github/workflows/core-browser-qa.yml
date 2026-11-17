@@ -78,6 +78,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install private media inspection tools
+        if: ${{ matrix.group != 'placement-and-transfers' }}
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet build apps/api/src/Academy.Api --configuration Release -m:1
