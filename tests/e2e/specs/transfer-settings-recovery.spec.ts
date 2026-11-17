@@ -31,12 +31,12 @@ test("Transfer settings keep the owner form readable and editable after validati
   await account.fill("");
   await form.getByRole("textbox", { name: "رقم المحفظة" }).fill("");
   await form.getByRole("button", { name: saveName }).click();
-  await expect(page.getByRole("alert")).toContainText("أدخل حساب إنستا باي أو رقم المحفظة");
+  await expect(page.getByRole("tabpanel", { name: "المالية والتحصيل" }).getByRole("alert")).toContainText("أدخل حساب إنستا باي أو رقم المحفظة");
   expect(writes).toBe(0);
 
   await account.fill("synthetic-transfer@example.test");
   await form.getByRole("button", { name: saveName }).click();
-  await expect(page.getByRole("alert")).toHaveText("راجع حساب التحويل المدخل.");
+  await expect(page.getByRole("tabpanel", { name: "المالية والتحصيل" }).getByRole("alert")).toHaveText("راجع حساب التحويل المدخل.");
   await expect(account).toBeEnabled();
   await expect(account).toHaveValue("synthetic-transfer@example.test");
   await expect(page.getByRole("button", { name: "إعادة التحقق من الحفظ" })).toHaveCount(0);
@@ -65,14 +65,14 @@ test("Transfer settings reject broken reads and recover without technical messag
     ? route.fulfill({ status: 200, json: { configured: false, walletNumber: 123 } })
     : route.continue());
   await page.goto("/dashboard/settings?tab=finance");
-  await expect(page.getByRole("alert")).toHaveText("تعذر تحميل إعدادات التحويل.");
+  await expect(page.getByRole("tabpanel", { name: "المالية والتحصيل" }).getByRole("alert")).toHaveText("تعذر تحميل إعدادات التحويل.");
   await expect(page.getByRole("form", { name: formName })).toHaveCount(0);
   broken = false;
   await page.getByRole("button", { name: "إعادة تحميل إعدادات التحويل" }).click();
   await expect(page.getByRole("textbox", { name: "حساب إنستا باي" })).toBeVisible();
   await page.route(`**${endpoint}`, route => route.abort());
   await page.reload();
-  await expect(page.getByRole("alert")).toHaveText("تعذر تحميل إعدادات التحويل.");
+  await expect(page.getByRole("tabpanel", { name: "المالية والتحصيل" }).getByRole("alert")).toHaveText("تعذر تحميل إعدادات التحويل.");
   await expect(page.getByText(/Failed to fetch|NetworkError/)).toHaveCount(0);
 });
 
@@ -85,7 +85,7 @@ test("A revoked transfer write removes the form and retains the Arabic access me
     ? route.fulfill({ status: 403, json: { message: "إعدادات التحويل غير متاحة لحسابك." } })
     : route.continue());
   await form.getByRole("button", { name: saveName }).click();
-  await expect(page.getByRole("alert")).toHaveText("إعدادات التحويل غير متاحة لحسابك.");
+  await expect(page.getByRole("tabpanel", { name: "المالية والتحصيل" }).getByRole("alert")).toHaveText("إعدادات التحويل غير متاحة لحسابك.");
   await expect(form).toHaveCount(0);
   await expect(page.getByRole("button", { name: "إعادة التحقق من الحفظ" })).toHaveCount(0);
 });
