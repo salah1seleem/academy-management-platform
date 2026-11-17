@@ -1,0 +1,105 @@
+import { expect, type APIRequestContext } from "@playwright/test";
+
+export const placementId = (n: number) => `5a000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+type SessionApi = Pick<APIRequestContext, "get" | "post">;
+type Session = { id: string; trainingGroupId: string; sessionDate: string; startTime: string; endTime: string; status: string };
+type Enrollment = {
+  id: string; trainingGroupId: string | null; registrationFormat: string;
+  subscription: { id: string; remainingSessions?: number | null; endDate?: string | null } | null;
+  transfers?: { effectiveDate: string; groupName: string }[];
+  sessionMoves?: unknown[];
+  upcoming?: { id: string; startTime: string }[];
+};
+export type PlacementPlayer = { playerCode: string; enrollments: Enrollment[] };
+
+export async function placementRead<T>(api: Pick<APIRequestContext, "get">, path: string): Promise<T> {
+  const response = await api.get(path);
+  expect(response.status(), `${path}: ${await response.text()}`).toBe(200);
+  return response.json() as Promise<T>;
+}
+
+export async function placementWrite(api: APIRequestContext, path: string, data: unknown, key = crypto.randomUUID()) {
+  const csrf = await placementRead<{ token: string }>(api, "/api/v1/auth/csrf");
+  return api.post(path, { headers: { "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": key }, data });
+}
+
+export function placementEnrollment(player: PlacementPlayer, id: string) {
+  const found = player.enrollments.find(row => row.id === id);
+  if (!found) throw new Error(`Synthetic enrollment ${id} is missing`);
+  return found;
+}
+
+export function serviceIdentity(player: PlacementPlayer) {
+  return { playerCode: player.playerCode, services: player.enrollments.map(row => ({
+    id: row.id, format: row.registrationFormat, periodId: row.subscription?.id ?? null,
+    remaining: row.subscription?.remainingSessions ?? null, endDate: row.subscription?.endDate ?? null,
+  })).sort((a, b) => a.id.localeCompare(b.id)) };
+}
+
+export function afterDays(day: string, days: number) {
+  expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const date = new Date(`${day}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+// Reuse only the exact dated session. Never move a historical fixture, change
+// the application clock, or silently substitute a cancelled/different slot.
+export async function ensurePlacementSession(api: SessionApi, group: string, date: string, start: string, end: string) {
+  const path = `/api/v1/attendance/sessions?${new URLSearchParams({ groupId: group, from: date, to: date })}`;
+  const find = async () => {
+    const rows = await placementRead<Session[]>(api, path);
+    const matches = rows.filter(row => row.trainingGroupId === group && row.sessionDate === date && row.startTime === `${start}:00`);
+    expect(matches.length).toBeLessThanOrEqual(1);
+    if (!matches.length) return null;
+    expect(matches[0]).toMatchObject({ endTime: `${end}:00`, status: "Scheduled" });
+    return matches[0];
+  };
+  const prior = await find();
+  if (prior) return prior;
+  const csrf = await placementRead<{ token: string }>(api, "/api/v1/auth/csrf");
+  let response;
+  try {
+    response = await api.post("/api/v1/attendance/sessions", {
+      headers: { "X-CSRF-TOKEN": csrf.token },
+      data: { trainingGroupId: group, sessionDate: date, startTime: `${start}:00`, endTime: `${end}:00`, notes: "حصة قبول اصطناعية للتسكين — لا بيانات عملاء" },
+    });
+  } catch (cause) {
+    const saved = await find();
+    if (saved) return saved;
+    throw cause;
+  }
+  if (response.status() === 409) {
+    const concurrent = await find();
+    if (concurrent) return concurrent;
+  }
+  expect(response.status(), await response.text()).toBe(201);
+  const saved = await find();
+  expect(saved?.id).toBe((await response.json()).id);
+  return saved!;
+}
+
+export async function preparePlacementSessions(api: APIRequestContext) {
+  const calendar = await placementRead<{ today: string }>(api, "/api/v1/academy/calendar");
+  const date = afterDays(calendar.today, 7);
+  const group = await placementRead<{ group: { registrationFormat: string } }>(api, `/api/v1/manage/groups/${placementId(1)}/details`);
+  expect(group.group.registrationFormat).toBe("Group");
+  const source = await ensurePlacementSession(api, placementId(1), date, "15:00", "16:00");
+  const target = await ensurePlacementSession(api, placementId(50), date, "17:00", "18:00");
+  return { today: calendar.today, date, source, target };
+}
+
+export async function ensurePlacement(api: APIRequestContext, player: number, enrollment: number) {
+  const row = await placementRead<PlacementPlayer>(api, `/api/v1/people/players/${placementId(player)}`);
+  const current = placementEnrollment(row, placementId(enrollment));
+  expect(current.subscription?.id).toBeTruthy();
+  if (current.trainingGroupId) {
+    expect(current.trainingGroupId).toBe(placementId(1));
+    return;
+  }
+  const root = `/api/v1/manage/groups/${placementId(1)}/placement`;
+  const preview = await placementWrite(api, `${root}/preview`, { enrollmentIds: [current.id] });
+  expect(preview.status(), await preview.text()).toBe(200);
+  const response = await placementWrite(api, root, { enrollmentIds: [current.id], fingerprint: (await preview.json()).fingerprint });
+  expect(response.ok(), await response.text()).toBe(true);
+}

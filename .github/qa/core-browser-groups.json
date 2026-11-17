@@ -1,0 +1,36 @@
+[
+  {
+    "group": "payments-and-import",
+    "specs": "/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|slice8d-demo-closure|subscription-discounts|subscriptions-payments|transfer-settings-recovery|v2-family-renewal-request|v2-renewal-opportunities|v2-staff-family-quote)\\.spec\\.ts$",
+    "config": "regression",
+    "provider_quarantine": "false"
+  },
+  {
+    "group": "attendance-and-cash",
+    "specs": "/(attendance|v2-attendance-draft|v2-cash-collections|v2-cash-family|v2-cash-receipt-void|v2-cash-registers|v2-admin-cross-branch-cash|v2-cross-branch-cash|v2-pending-cash|v2-collection-funds|v2-receivable-credit|v2-platform|v2-session-lifecycle|reports-exports)\\.spec\\.ts$",
+    "config": "regression",
+    "provider_quarantine": "false"
+  },
+  {
+    "group": "operations-and-pricing",
+    "specs": "/(owner-review|owner-priority-ux|record-tabs-navigation|sports-dashboard|branding-matches|v2-provider-quarantine|v2-family-renewal-quote|v2-plan-publication|v2-season-plans|staff-payroll-ux)\\.spec\\.ts$",
+    "config": "regression",
+    "provider_quarantine": "true"
+  },
+  {
+    "group": "football-staff-and-receipts",
+    "specs": "/(coach-provisioning|v3-overnight-staff-attendance|v3-opening-correction|v3-payroll-account|v3-payroll-opening|v4-integrated-workspace|v4-vip-rewards)\\.spec\\.ts$",
+    "config": "football"
+  },
+  {
+    "group": "staff-verification",
+    "specs": "/v3-staff-(passkeys|verified-attendance)\\.spec\\.ts$",
+    "config": "passkeys"
+  },
+  {
+    "group": "placement-and-transfers",
+    "specs": "/(core-placement-recovery|v2-group-placement|v2-group-transfers|v2-registration-formats|v2-session-transfers)\\.spec\\.ts$",
+    "config": "regression",
+    "provider_quarantine": "false"
+  }
+]

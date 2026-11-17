@@ -2,6 +2,19 @@ name: Core Browser QA
 
 on:
   workflow_dispatch:
+    inputs:
+      group:
+        description: Browser journey group
+        type: choice
+        default: all
+        options:
+          - all
+          - payments-and-import
+          - attendance-and-cash
+          - operations-and-pricing
+          - football-staff-and-receipts
+          - staff-verification
+          - placement-and-transfers
   push:
     branches: ["codex/qa-core-release"]
 
@@ -9,31 +22,34 @@ permissions:
   contents: read
 
 jobs:
+  select-groups:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: select
+        env:
+          QA_GROUP: ${{ inputs.group || 'all' }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          groups = json.loads(Path('.github/qa/core-browser-groups.json').read_text())
+          requested = os.environ['QA_GROUP']
+          selected = groups if requested == 'all' else [row for row in groups if row['group'] == requested]
+          if not selected:
+              raise SystemExit(f'Unknown browser journey group: {requested}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('matrix=' + json.dumps({'include': selected}, separators=(',', ':')) + '\n')
+          PYTHON
   core-browser:
+    needs: select-groups
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - group: payments-and-import
-            specs: '/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|slice8d-demo-closure|subscription-discounts|subscriptions-payments|transfer-settings-recovery|v2-family-renewal-request|v2-renewal-opportunities|v2-staff-family-quote)\.spec\.ts$'
-            config: regression
-            provider_quarantine: 'false'
-          - group: attendance-and-cash
-            specs: '/(attendance|v2-attendance-draft|v2-cash-collections|v2-cash-family|v2-cash-receipt-void|v2-cash-registers|v2-admin-cross-branch-cash|v2-cross-branch-cash|v2-pending-cash|v2-collection-funds|v2-receivable-credit|v2-platform|v2-session-lifecycle|reports-exports)\.spec\.ts$'
-            config: regression
-            provider_quarantine: 'false'
-          - group: operations-and-pricing
-            specs: '/(owner-review|owner-priority-ux|record-tabs-navigation|sports-dashboard|branding-matches|v2-provider-quarantine|v2-family-renewal-quote|v2-plan-publication|v2-season-plans|staff-payroll-ux)\.spec\.ts$'
-            config: regression
-            provider_quarantine: 'true'
-          - group: football-staff-and-receipts
-            specs: '/(coach-provisioning|v3-overnight-staff-attendance|v3-opening-correction|v3-payroll-account|v3-payroll-opening|v4-integrated-workspace|v4-vip-rewards)\.spec\.ts$'
-            config: football
-          - group: staff-verification
-            specs: '/v3-staff-(passkeys|verified-attendance)\.spec\.ts$'
-            config: passkeys
+      matrix: ${{ fromJSON(needs.select-groups.outputs.matrix) }}
     services:
       postgres:
         image: postgres:17
