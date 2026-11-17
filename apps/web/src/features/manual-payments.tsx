@@ -187,10 +187,10 @@ export function TransferSettings({ expanded = false }: { expanded?: boolean }) {
   finally{if(mounted.current){locked.current=intent.current!==null;setBusy(false);}}
  }
  async function retryRead(){if(busy||!intent.current)return;setBusy(true);setError('');try{await verify(intent.current);}catch(e){if(mounted.current)setError(e instanceof Error?e.message:'تعذر تأكيد إعدادات التحويل.');}finally{if(mounted.current){locked.current=intent.current!==null;setBusy(false);}}}
- if(allowed===false)return error ? <ErrorState message={error}/> : null;
+ if(allowed===false)return error ? <p role="alert" className={`error-message ${transferStyles.feedback}`}>{error}</p> : null;
  return <details className={`detail-card ${transferStyles.panel}`} open={expanded||undefined}>
   <summary>إعدادات الدفع — إنستا باي والمحفظة</summary>
-  {error&&<ErrorState message={error}/>}
+  {error&&<p role="alert" className={`error-message ${transferStyles.feedback}`}>{error}</p>}
   {!settings ? !error ? <LoadingState/> : <button type="button" className="secondary-button" onClick={()=>void load()}>إعادة تحميل إعدادات التحويل</button> :
    <form key={revision} aria-label="إعداد حسابات التحويل" className={`form-shell ${transferStyles.form}`} onSubmit={e=>void save(e)}>
     <fieldset className={transferStyles.fields} disabled={busy||pending!==null}>

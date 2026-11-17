@@ -2,8 +2,19 @@
   line-height: 1.6;
 }
 
-.form {
+.panel .form {
   margin-block-start: 16px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.feedback {
+  margin-block: 12px;
+  line-height: 1.8;
 }
 
 .fields {

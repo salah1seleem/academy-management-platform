@@ -34,6 +34,11 @@ it('does not announce saved transfer settings until a matching readback confirms
  await screen.findByText(/لم تتأكد مطابقة إعدادات التحويل المحفوظة/);
  expect(screen.queryByText('تم حفظ حسابات التحويل وتأكيد قراءتها.')).not.toBeInTheDocument();
  expect(f.reads).toBe(2);expect(f.puts).toBe(1);
+ fireEvent.click(screen.getByRole('button',{name:'إعادة قراءة الإعدادات الحالية'}));
+ await waitFor(()=>expect(screen.getByRole('textbox',{name:'حساب إنستا باي'})).toBeEnabled());
+ expect(screen.getByRole('textbox',{name:'حساب إنستا باي'})).toHaveValue(initial.instaPayAddress);
+ expect(screen.queryByRole('button',{name:'إعادة التحقق من الحفظ'})).not.toBeInTheDocument();
+ expect(f.puts).toBe(1);expect(f.reads).toBe(3);
 });
 it('preserves the disabled state and retained payment details through save and remount',async()=>{
  const f=setup();const view=render(<TransferSettings expanded/>);
@@ -142,4 +147,14 @@ it('retains an uncertain save and localizes an interrupted readback', async () =
  fireEvent.click(screen.getByRole('button', {name:'إعادة التحقق من الحفظ'}));
  await screen.findByText('تم حفظ حسابات التحويل وتأكيد قراءتها.');
  expect(base.puts).toBe(1);
+});
+
+it.each([{permissions: []}, {permissions: ['players.read']}])('does not request settings or render management controls without the required permission: $permissions', async ({permissions}) => {
+ const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(permissions));
+ global.fetch = fetcher;
+ const view = render(<TransferSettings expanded/>);
+ await waitFor(() => expect(view.container).toBeEmptyDOMElement());
+ expect(fetcher).toHaveBeenCalledTimes(1);
+ expect(String(fetcher.mock.calls[0][0])).toBe('/api/v1/my-permissions');
+ expect(screen.queryByRole('form')).not.toBeInTheDocument();
 });
