@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { AdminDataTable, ConfirmationDialog, EmptyState, ErrorState, LoadingState, PageHeader } from "../components/dashboard-shell";
 import { csrfRequest, DashboardRequestError } from "./dashboard-api";
 import { PaymentProofPreview } from "../components/payment-proof-preview";
+import transferStyles from "./transfer-settings.module.css";
+import { apiTransportError } from "../lib/api-problem";
 import { formatDateAr, formatMoneyAr } from "../lib/formatters";
 import { useDateFilterDefaults } from "../components/date-filter-defaults";
 import { clearFinancialIntent, matchesFinancialIntent, pendingFinancialIntent, readFinancialIntentKey } from "../lib/pending-financial-intent";
@@ -118,11 +120,24 @@ export function PaymentRequestQueue() {
 type Settings = { instaPayAddress?: string|null; walletNumber?: string|null; recipientName?: string|null; configured: boolean; isActive?:boolean };
 type TransferDraft={instaPayAddress:string;walletNumber:string;recipientName:string;isActive:boolean};
 const transferDraft=(s:Settings):TransferDraft=>({instaPayAddress:s.instaPayAddress?.trim()??"",walletNumber:s.walletNumber?.trim()??"",recipientName:s.recipientName?.trim()??"",isActive:s.isActive??s.configured});
-async function readTransferSettings(signal?:AbortSignal){const r=await fetch('/api/v1/payment-settings',{cache:'no-store',signal});if(!r.ok)throw Error('تعذر تحميل إعدادات التحويل.');return await r.json() as Settings;}
+async function readTransferSettings(signal?: AbortSignal): Promise<Settings> {
+ const response = await fetch('/api/v1/payment-settings', { cache: 'no-store', signal })
+  .catch(cause => { throw apiTransportError(cause, 'تعذر تحميل إعدادات التحويل.'); });
+ if (!response.ok) throw Error('تعذر تحميل إعدادات التحويل.');
+ const value = await response.json().catch(() => null) as Settings | null;
+ if (!value || typeof value.configured !== 'boolean' ||
+     value.isActive != null && typeof value.isActive !== 'boolean' ||
+     [value.instaPayAddress, value.walletNumber, value.recipientName].some(field => field != null && typeof field !== 'string')) {
+  throw Error('تعذر تحميل إعدادات التحويل.');
+ }
+ return value;
+}
 async function readTransferContext(signal?:AbortSignal){
  const permission=await fetch('/api/v1/my-permissions',{cache:'no-store',signal});
  if(!permission.ok)throw Error('تعذر التحقق من صلاحية إعدادات التحويل.');
- const values=await permission.json();const allowed=Array.isArray(values)&&values.includes('academy.settings.manage');
+ const values=await permission.json();
+ if (!Array.isArray(values) || values.some(value => typeof value !== 'string')) throw Error('تعذر التحقق من صلاحية إعدادات التحويل.');
+ const allowed=values.includes('academy.settings.manage');
  return {allowed,settings:allowed?await readTransferSettings(signal):null};
 }
 export function TransferSettings({ expanded = false }: { expanded?: boolean }) {
@@ -134,10 +149,10 @@ export function TransferSettings({ expanded = false }: { expanded?: boolean }) {
  },[]);
  const load=useCallback(async()=>{
   try{accept(await readTransferContext());}
-  catch(e){if(mounted.current)setError(e instanceof Error?e.message:'تعذر تحميل إعدادات التحويل.');}
+  catch{if(mounted.current)setError('تعذر تحميل إعدادات التحويل.');}
  },[accept]);
  useEffect(()=>{mounted.current=true;const c=new AbortController();
-  readTransferContext(c.signal).then(next=>{if(!c.signal.aborted)accept(next);}).catch(e=>{if(!c.signal.aborted)setError(e instanceof Error?e.message:'تعذر تحميل إعدادات التحويل.');});
+  readTransferContext(c.signal).then(next=>{if(!c.signal.aborted)accept(next);}).catch(()=>{if(!c.signal.aborted)setError('تعذر تحميل إعدادات التحويل.');});
   return()=>{mounted.current=false;c.abort();};
  },[accept]);
  async function verify(expected:TransferDraft){
@@ -151,13 +166,47 @@ export function TransferSettings({ expanded = false }: { expanded?: boolean }) {
   const f=new FormData(e.currentTarget);const expected:TransferDraft={instaPayAddress:String(f.get('instapay')??'').trim(),walletNumber:String(f.get('wallet')??'').trim(),recipientName:String(f.get('recipient')??'').trim(),isActive:f.get('active')==='on'};
   if(expected.isActive&&!expected.instaPayAddress&&!expected.walletNumber){setError('أدخل حساب إنستا باي أو رقم المحفظة قبل تفعيل التحويل.');return;}
   locked.current=true;intent.current=expected;setPending(expected);setBusy(true);setError('');setMessage('');
-  try{await csrfRequest('/api/v1/payment-settings','PUT',expected,{}, {announce:false});await verify(expected);}
-  catch(e){if(mounted.current)setError(e instanceof Error?e.message:'تعذر تأكيد حفظ إعدادات التحويل.');}
+  let acknowledged = false;
+  try{
+   await csrfRequest('/api/v1/payment-settings','PUT',expected,{}, {announce:false});
+   acknowledged = true;
+   await verify(expected);
+  }
+  catch(e){
+   if (!mounted.current) return;
+   if (!acknowledged && e instanceof DashboardRequestError && e.status >= 400 && e.status < 500 && e.status !== 408) {
+    intent.current = null;
+    setPending(null);
+    if (e.status === 401 || e.status === 403) {
+     setAllowed(false);
+     setSettings(null);
+    }
+   }
+   setError(e instanceof Error ? e.message : 'تعذر تأكيد حفظ إعدادات التحويل.');
+  }
   finally{if(mounted.current){locked.current=intent.current!==null;setBusy(false);}}
  }
  async function retryRead(){if(busy||!intent.current)return;setBusy(true);setError('');try{await verify(intent.current);}catch(e){if(mounted.current)setError(e instanceof Error?e.message:'تعذر تأكيد إعدادات التحويل.');}finally{if(mounted.current){locked.current=intent.current!==null;setBusy(false);}}}
- if(allowed===false)return null;
- return <details className="detail-card" open={expanded||undefined}><summary>إعدادات الدفع — إنستا باي والمحفظة</summary>{error&&<ErrorState message={error}/>} {!settings?!error?<LoadingState/>:<button onClick={()=>void load()}>إعادة تحميل إعدادات التحويل</button>:<form key={revision} className="form-shell" onSubmit={e=>void save(e)}><fieldset disabled={busy||pending!==null}><legend>وسائل التحويل المتاحة للأسرة</legend><label className="check-inline"><input type="checkbox" name="active" defaultChecked={transferDraft(settings).isActive}/>تفعيل استقبال إثباتات التحويل</label><label>حساب إنستا باي<input name="instapay" dir="ltr" maxLength={120} defaultValue={settings.instaPayAddress??''}/></label><label>رقم المحفظة<input name="wallet" dir="ltr" maxLength={30} defaultValue={settings.walletNumber??''}/></label><label>اسم المستلم<input name="recipient" maxLength={120} defaultValue={settings.recipientName??''}/></label><button className="primary-button">{busy?'جارٍ الحفظ…':'حفظ'}</button></fieldset>{pending&&!busy&&<div className="form-actions"><button type="button" onClick={()=>void retryRead()}>إعادة التحقق من الحفظ</button><button type="button" onClick={()=>void load()}>إعادة قراءة الإعدادات الحالية</button></div>}{message&&<p role="status">{message}</p>}</form>}</details>;
+ if(allowed===false)return error ? <ErrorState message={error}/> : null;
+ return <details className={`detail-card ${transferStyles.panel}`} open={expanded||undefined}>
+  <summary>إعدادات الدفع — إنستا باي والمحفظة</summary>
+  {error&&<ErrorState message={error}/>}
+  {!settings ? !error ? <LoadingState/> : <button type="button" className="secondary-button" onClick={()=>void load()}>إعادة تحميل إعدادات التحويل</button> :
+   <form key={revision} aria-label="إعداد حسابات التحويل" className={`form-shell ${transferStyles.form}`} onSubmit={e=>void save(e)}>
+    <fieldset className={transferStyles.fields} disabled={busy||pending!==null}>
+     <label className={transferStyles.toggle}><input type="checkbox" name="active" defaultChecked={transferDraft(settings).isActive}/><span>تفعيل استقبال إثباتات التحويل</span></label>
+     <label>حساب إنستا باي<input name="instapay" dir="ltr" maxLength={120} defaultValue={settings.instaPayAddress??''}/></label>
+     <label>رقم المحفظة<input name="wallet" dir="ltr" inputMode="tel" maxLength={30} defaultValue={settings.walletNumber??''}/></label>
+     <label>اسم المستلم<input name="recipient" maxLength={120} defaultValue={settings.recipientName??''}/></label>
+     <button className="primary-button">{busy?'جارٍ الحفظ…':'حفظ حسابات التحويل'}</button>
+    </fieldset>
+    {pending&&!busy&&<div className="form-actions">
+     <button type="button" className="secondary-button" onClick={()=>void retryRead()}>إعادة التحقق من الحفظ</button>
+     <button type="button" className="secondary-button" onClick={()=>void load()}>إعادة قراءة الإعدادات الحالية</button>
+    </div>}
+    {message&&<p role="status">{message}</p>}
+   </form>}
+ </details>;
 }
 type RenewalProof = { id: string; assetId: string; url: string; status: string; reviewReason?: string | null };
 type RenewalProofGroup = { id: string; arabicName: string; branchId: string; sportId: string };
