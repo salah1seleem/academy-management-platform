@@ -1,12 +1,32 @@
-import { expect, Page, test } from "@playwright/test";
+import { expect, Page, Request, test } from "@playwright/test";
 import { guardianLogin } from "../support/auth";
 import { formatMoneyAr } from "../../../apps/web/src/lib/formatters";
 
 async function startFootballRenewal(page: Page) {
   const child = page.locator("article.guardian-child-card").filter({ hasText: "عمر أحمد محمود" });
   await child.locator(".subscription-mini > div").filter({ hasText: "كرة القدم" }).getByRole("link").click();
-  await page.getByText("اشتراك شهري", { exact: true }).click();
-  await page.getByRole("button", { name: /متابعة إلى طلب الدفع/ }).click();
+  const plan = page.getByText("اشتراك شهري", { exact: true });
+  const continuation = page.getByRole("link", { name: "متابعة طلب الدفع", exact: true });
+  await expect(plan.or(continuation)).toBeVisible();
+  if (await continuation.isVisible()) {
+    const destination = await continuation.getAttribute("href");
+    expect(destination).toMatch(/^\/guardian\/checkout\/[a-f0-9-]+$/);
+    const creations: string[] = [];
+    const trackCreation = (request: Request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/renewals")) creations.push(request.url());
+    };
+    page.on("request", trackCreation);
+    try {
+      await continuation.click();
+      await expect(page).toHaveURL(destination!);
+      expect(creations).toHaveLength(0);
+    } finally {
+      page.off("request", trackCreation);
+    }
+  } else {
+    await plan.click();
+    await page.getByRole("button", { name: /متابعة إلى طلب الدفع/ }).click();
+  }
   await expect(page.getByText("بيئة دفع تجريبية — لا توجد أموال حقيقية")).toBeVisible();
 }
 
