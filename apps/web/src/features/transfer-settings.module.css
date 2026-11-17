@@ -14,7 +14,13 @@
 
 .feedback {
   margin-block: 12px;
+  padding: 12px 16px;
   line-height: 1.8;
+  font-size: .9rem;
+  color: var(--staff-danger, #a51414);
+  background: var(--staff-danger-soft, #fff1f2);
+  border: 1px solid #f5cbd0;
+  border-radius: var(--staff-radius-md, 8px);
 }
 
 .fields {

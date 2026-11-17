@@ -54,6 +54,7 @@ test("Transfer settings keep the owner form readable and editable after validati
     expect(await checkbox.locator("..").evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     expect(await form.locator("fieldset").evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
     expect(await form.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
+    expect(await page.getByRole("tabpanel", { name: "المالية والتحصيل" }).getByRole("alert").evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(85);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`transfer-settings-${width}.png`), fullPage: true, animations: "disabled" });
   }
