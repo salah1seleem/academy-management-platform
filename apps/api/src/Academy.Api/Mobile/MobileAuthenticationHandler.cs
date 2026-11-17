@@ -12,10 +12,11 @@ namespace Academy.Api.Mobile;
 
 public sealed class MobileAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder,
-    FoundationDbContext db, TimeProvider clock)
+    FoundationDbContext db, TimeProvider clock, IOptions<MobileOtpOptions> mobileOtp)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "Academy.Mobile";
+    internal const string StagingMembershipClaim = "staging_otp_membership_id";
     public static string Hash(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
     public static string NewToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
@@ -31,8 +32,11 @@ public sealed class MobileAuthenticationHandler(
             .Include(x => x.Membership!).ThenInclude(x => x.Academy)
             .SingleOrDefaultAsync(x => x.AccessTokenHash == hash, Context.RequestAborted);
         if (session is null || session.RevokedAtUtc != null || session.AccessExpiresAtUtc <= now ||
-            session.ExpiresAtUtc <= now || !session.User.IsActive || session.SecurityStamp != session.User.SecurityStamp)
+            session.ExpiresAtUtc <= now || !session.User.IsActive ||
+            !mobileOtp.Value.MatchesSession(session, out var stagingAccount))
             return AuthenticateResult.Fail("Expired or revoked mobile session");
+        if (stagingAccount is not null && session.Membership?.AcademyId != stagingAccount.AcademyId)
+            return AuthenticateResult.Fail("Invalid staging membership");
         if (session.MembershipId is not null && (session.Membership is null || !session.Membership.IsActive ||
             !session.Membership.Academy.IsActive || session.Membership.UserId != session.UserId ||
             session.Membership.Role is not (AcademyRole.Guardian or AcademyRole.Coach or AcademyRole.AcademyOwner or AcademyRole.AcademyAdmin)))
@@ -43,6 +47,7 @@ public sealed class MobileAuthenticationHandler(
         identity.AddClaim(new(ClaimTypes.NameIdentifier, session.UserId.ToString()));
         identity.AddClaim(new(ClaimTypes.Name, session.User.UserName ?? session.UserId.ToString()));
         identity.AddClaim(new("mobile_session_id", session.Id.ToString()));
+        if (stagingAccount is not null) identity.AddClaim(new(StagingMembershipClaim, stagingAccount.MembershipId.ToString()));
         if (session.Membership is { } member)
         {
             identity.AddClaim(new("academy_id", member.AcademyId.ToString()));

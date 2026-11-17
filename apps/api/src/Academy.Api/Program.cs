@@ -233,7 +233,7 @@ builder.Services.AddScoped<Academy.Api.Importing.ImportRequestContext>();
 if (builder.Configuration.GetValue("Notifications:WorkerEnabled", builder.Environment.IsProduction())) builder.Services.AddHostedService<Academy.Api.Operations.NotificationSchedule>();
 builder.Services.AddHttpClient();
 builder.Services.AddOptions<MobileOtpOptions>().Bind(builder.Configuration.GetSection("MobileOtp"))
-    .Validate(options => options.IsValid(), "Mobile OTP requires a Verify service, an API key, and one Egyptian test number.")
+    .Validate(options => options.IsValid(builder.Environment.IsStaging()), "Invalid mobile OTP provider configuration. Fixed OTP is restricted to Staging test fixtures.")
     .ValidateOnStart();
 builder.Services.AddHttpClient(TwilioMobileOtp.ClientName, client =>
 {

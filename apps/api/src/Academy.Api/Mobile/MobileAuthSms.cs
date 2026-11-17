@@ -55,7 +55,8 @@ public static partial class MobileAuthEndpoints
             var now = clock.GetUtcNow();
             var challenge = await candidate.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.ExpiresAtUtc > now && x.FailedAttempts < 5, ct);
-            if (challenge?.ProviderVerificationSid is not { } verificationSid) return Invalid();
+            if (challenge?.ProviderVerificationSid is not { } verificationSid || !TwilioMobileOtp.IsSid(verificationSid, "VE"))
+                return Invalid();
             sid = verificationSid;
             await candidate.ExecuteUpdateAsync(update => update.SetProperty(x => x.FailedAttempts, x => x.FailedAttempts + 1), ct);
             await tx.CommitAsync(ct);

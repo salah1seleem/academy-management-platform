@@ -25,7 +25,7 @@ public static partial class MobileAuthEndpoints
         auth.MapPost("/refresh", Refresh);
         var session = auth.MapGroup("").RequireAuthorization("mobile-session");
         session.MapGet("/memberships", async (ClaimsPrincipal principal, FoundationDbContext db) =>
-            Results.Ok(await Memberships(db, UserId(principal))));
+            Results.Ok(await Memberships(db, UserId(principal), StagingMembership(principal))));
         session.MapPost("/select-role", SelectRole);
         session.MapPost("/logout", async (ClaimsPrincipal principal, FoundationDbContext db, TimeProvider clock) =>
         {
@@ -52,34 +52,46 @@ public static partial class MobileAuthEndpoints
     private static IResult Invalid() => Results.Problem(statusCode: 401, title: "تعذر التحقق من بيانات الدخول");
     private static Guid UserId(ClaimsPrincipal p) => Guid.Parse(p.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static Guid SessionId(ClaimsPrincipal p) => Guid.Parse(p.FindFirstValue("mobile_session_id")!);
+    private static Guid? StagingMembership(ClaimsPrincipal p) =>
+        Guid.TryParse(p.FindFirstValue(MobileAuthenticationHandler.StagingMembershipClaim), out var id) ? id : null;
     private static IQueryable<AcademyMembership> Eligible(FoundationDbContext db, Guid user) =>
         db.AcademyMemberships.Where(x => x.UserId == user && x.IsActive && x.User.IsActive && x.Academy.IsActive && (x.PrimaryMembershipId == null || x.PrimaryMembership!.IsActive && x.PrimaryMembership.PrimaryMembershipId == null && x.PrimaryMembership.Role == AcademyRole.AcademyAdmin) &&
             (x.Role == AcademyRole.Guardian || x.Role == AcademyRole.Coach || x.Role == AcademyRole.AcademyOwner || x.Role == AcademyRole.AcademyAdmin));
-    private static Task<List<MobileMembership>> Memberships(FoundationDbContext db, Guid user) =>
-        Eligible(db, user).OrderBy(x => x.Academy.ArabicName).ThenBy(x => x.Id)
+    private static Task<List<MobileMembership>> Memberships(FoundationDbContext db, Guid user, Guid? allowedMembership = null) =>
+        Eligible(db, user).Where(x => allowedMembership == null || x.Id == allowedMembership)
+        .OrderBy(x => x.Academy.ArabicName).ThenBy(x => x.Id)
             .Select(x => new MobileMembership(x.Id, x.AcademyId, x.Academy.ArabicName, x.Role.ToString(), x.AccessContextName, x.AllBranches, x.AllSports,
                 db.Branches.Where(b => db.MembershipBranchAccesses.Any(a => a.MembershipId == x.Id && a.BranchId == b.Id && a.IsActive)).Select(b => b.ArabicName).ToArray(),
                 db.Sports.Where(s => db.MembershipSportAccesses.Any(a => a.MembershipId == x.Id && a.SportId == s.Id && a.IsActive)).Select(s => s.ArabicName).ToArray(), x.ContextRevision)).ToListAsync();
 
     private static async Task<IResult> RequestOtp(MobileOtpRequest request, FoundationDbContext db,
-        IOptions<DemoOptions> options, IHostEnvironment env, TimeProvider clock, TwilioMobileOtp sms, CancellationToken ct)
+        IOptions<DemoOptions> options, IOptions<MobileOtpOptions> mobileOtp, IHostEnvironment env,
+        TimeProvider clock, TwilioMobileOtp sms, CancellationToken ct)
     {
         var demo = DemoOtpAvailable(env, options.Value);
-        if (!demo && !sms.Enabled) return Unavailable();
+        var staging = mobileOtp.Value.IsStagingFixed;
+        if (!demo && !staging && !sms.Enabled) return Unavailable();
         var phone = EgyptPhoneNormalizer.Normalize(request.PhoneNumber);
         if (phone is null) return Results.Problem(statusCode: 400, title: "رقم الهاتف غير صالح");
-        if (!demo) return sms.Allows(phone) ? await StartSmsOtp(phone, db, clock, sms, ct) : Invalid();
+        if (!demo && !staging) return sms.Allows(phone) ? await StartSmsOtp(phone, db, clock, sms, ct) : Invalid();
+        var account = mobileOtp.Value.StagingAccounts.SingleOrDefault(x => staging && x.Phone == phone);
+        if (staging && account is null) return Invalid();
         var now = clock.GetUtcNow();
-        await using var tx = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"mobile-otp:" + phone}, 0))");
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await LockSmsPhone(db, phone, ct);
         if (await db.MobileOtpChallenges.CountAsync(x => x.PhoneNumberNormalized == phone && x.CreatedAtUtc > now.AddMinutes(-15)) >= 3)
             return Results.Problem(statusCode: 429, title: "محاولات كثيرة، يرجى الانتظار قبل طلب رمز جديد");
-        var user = await db.Users.SingleOrDefaultAsync(x => x.PhoneNumber == phone && x.IsActive);
-        if (user is null || !await Eligible(db, user.Id).AnyAsync()) return Invalid();
+        if (account is null)
+        {
+            var user = await db.Users.SingleOrDefaultAsync(x => x.PhoneNumber == phone && x.IsActive, ct);
+            if (user is null || !await Eligible(db, user.Id).AnyAsync(ct)) return Invalid();
+        }
+        else if (await StagingFixture(db, account, ct) is null) return Invalid();
         // Invalidate earlier challenges so only the latest SMS/OTP can be used.
         await db.MobileOtpChallenges.Where(x => x.PhoneNumberNormalized == phone && x.ConsumedAtUtc == null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.ConsumedAtUtc, now));
         var challenge = new MobileOtpChallenge { Id = Guid.NewGuid(), PhoneNumberNormalized = phone,
+            ProviderUserId = account?.UserId, ProviderVerificationSid = account is null ? null : StagingChallengeMarker,
             CreatedAtUtc = now, ExpiresAtUtc = now.AddMinutes(5) };
         db.MobileOtpChallenges.Add(challenge);
         await db.SaveChangesAsync();
@@ -88,43 +100,62 @@ public static partial class MobileAuthEndpoints
     }
 
     private static async Task<IResult> VerifyOtp(MobileOtpVerify request, FoundationDbContext db,
-        IOptions<DemoOptions> options, IHostEnvironment env, TimeProvider clock, TwilioMobileOtp sms, CancellationToken ct)
+        IOptions<DemoOptions> options, IOptions<MobileOtpOptions> mobileOtp, IHostEnvironment env,
+        TimeProvider clock, TwilioMobileOtp sms, CancellationToken ct)
     {
         var demo = DemoOtpAvailable(env, options.Value);
-        if (!demo && !sms.Enabled) return Unavailable();
+        var staging = mobileOtp.Value.IsStagingFixed;
+        if (!demo && !staging && !sms.Enabled) return Unavailable();
         if (string.IsNullOrWhiteSpace(request.DeviceName) || request.DeviceName.Length > 100)
             return Results.Problem(statusCode: 400, title: "اسم الجهاز غير صالح");
         var phone = EgyptPhoneNormalizer.Normalize(request.PhoneNumber);
         if (phone is null) return Invalid();
-        if (!demo) return sms.Allows(phone) && request.Code is { Length: 6 } && request.Code.All(char.IsAsciiDigit)
+        if (!demo && !staging) return sms.Allows(phone) && request.Code is { Length: 6 } && request.Code.All(char.IsAsciiDigit)
             ? await VerifySmsOtp(request, phone, db, clock, sms, ct) : Invalid();
-        await using var tx = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"mobile-otp:" + phone}, 0))");
+        var account = mobileOtp.Value.StagingAccounts.SingleOrDefault(x => staging && x.Phone == phone);
+        if (staging && account is null) return Invalid();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await LockSmsPhone(db, phone, ct);
         var now = clock.GetUtcNow();
         var challenge = await db.MobileOtpChallenges.SingleOrDefaultAsync(x => x.Id == request.ChallengeId && x.PhoneNumberNormalized == phone);
-        if (challenge is null || challenge.ProviderUserId != null || challenge.ConsumedAtUtc != null || challenge.ExpiresAtUtc <= now || challenge.FailedAttempts >= 5)
+        if (challenge is null || challenge.ProviderUserId != account?.UserId ||
+            challenge.ProviderVerificationSid != (staging ? StagingChallengeMarker : null) ||
+            challenge.ConsumedAtUtc != null || challenge.ExpiresAtUtc <= now || challenge.FailedAttempts >= 5)
             return Invalid();
-        if (request.Code != options.Value.FixedOtp)
+        if (request.Code != (staging ? mobileOtp.Value.StagingCode : options.Value.FixedOtp))
         {
             challenge.FailedAttempts++;
             await db.SaveChangesAsync(); await tx.CommitAsync();
             return Invalid();
         }
-        return await CompleteOtp(db, tx, challenge, request.DeviceName, now);
+        return await CompleteOtp(db, tx, challenge, request.DeviceName, now, account, ct);
+    }
+
+    private const string StagingChallengeMarker = "staging-fixed";
+
+    private static async Task<ApplicationUser?> StagingFixture(FoundationDbContext db, StagingOtpAccount account, CancellationToken ct)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == account.UserId && x.IsActive, ct);
+        return user is not null && StagingOtpAccount.IsFixture(user) &&
+            await Eligible(db, user.Id).AnyAsync(x => x.Id == account.MembershipId && x.AcademyId == account.AcademyId, ct)
+            ? user : null;
     }
 
     private static async Task<IResult> CompleteOtp(FoundationDbContext db, IDbContextTransaction tx,
-        MobileOtpChallenge challenge, string deviceName, DateTimeOffset now)
+        MobileOtpChallenge challenge, string deviceName, DateTimeOffset now, StagingOtpAccount? account = null,
+        CancellationToken ct = default)
     {
-        var user = await db.Users.SingleOrDefaultAsync(x => x.PhoneNumber == challenge.PhoneNumberNormalized && x.IsActive);
+        var user = account is null
+            ? await db.Users.SingleOrDefaultAsync(x => x.PhoneNumber == challenge.PhoneNumberNormalized && x.IsActive, ct)
+            : await StagingFixture(db, account, ct);
         if (challenge.ProviderUserId is Guid expectedUser && user?.Id != expectedUser) return Invalid();
-        var memberships = user is null ? [] : await Memberships(db, user.Id);
+        var memberships = user is null ? [] : await Memberships(db, user.Id, account?.MembershipId);
         if (user is null || memberships.Count == 0) return Invalid();
         challenge.ConsumedAtUtc = now;
-        user.PhoneNumberConfirmed = true;
+        if (account is null) user.PhoneNumberConfirmed = true;
         var session = new MobileSession { Id = Guid.NewGuid(), UserId = user.Id, User = user,
             MembershipId = memberships.Count == 1 ? memberships[0].Id : null,
-            DeviceName = deviceName.Trim(), SecurityStamp = user.SecurityStamp ?? "",
+            DeviceName = deviceName.Trim(), SecurityStamp = account?.Stamp(user) ?? user.SecurityStamp ?? "",
             AccessTokenHash = "", RefreshTokenHash = "", CreatedAtUtc = now, LastUsedAtUtc = now,
             ExpiresAtUtc = now.AddDays(30) };
         db.MobileSessions.Add(session);
@@ -133,7 +164,8 @@ public static partial class MobileAuthEndpoints
         return Results.Ok(result);
     }
 
-    private static async Task<IResult> Refresh(MobileRefresh request, FoundationDbContext db, TimeProvider clock)
+    private static async Task<IResult> Refresh(MobileRefresh request, FoundationDbContext db, TimeProvider clock,
+        IOptions<MobileOtpOptions> mobileOtp)
     {
         if (request.RefreshToken is null || request.RefreshToken.Length != 64) return Invalid();
         var hash = MobileAuthenticationHandler.Hash(request.RefreshToken);
@@ -142,12 +174,13 @@ public static partial class MobileAuthEndpoints
         var session = await db.MobileSessions.Include(x => x.User).SingleOrDefaultAsync(x => x.RefreshTokenHash == hash);
         var now = clock.GetUtcNow();
         if (session is null || session.RevokedAtUtc != null || session.ExpiresAtUtc <= now || !session.User.IsActive ||
-            session.SecurityStamp != session.User.SecurityStamp) return Invalid();
+            !mobileOtp.Value.MatchesSession(session, out var stagingAccount)) return Invalid();
         // Serialize role switch / refresh / logout as well as same-token refreshes.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"mobile-session:" + session.Id}, 0))");
         await db.Entry(session).ReloadAsync();
         if (session.RefreshTokenHash != hash || session.RevokedAtUtc != null) return Invalid();
-        var memberships = await Memberships(db, session.UserId);
+        var memberships = await Memberships(db, session.UserId, stagingAccount?.MembershipId);
+        if (stagingAccount is not null && !memberships.Any(m => m.AcademyId == stagingAccount.AcademyId)) return Invalid();
         if (memberships.Count == 0 || (session.MembershipId is Guid selected && !memberships.Any(x => x.Id == selected)))
         {
             session.RevokedAtUtc = now;
@@ -167,7 +200,7 @@ public static partial class MobileAuthEndpoints
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"mobile-session:" + sessionId}, 0))");
         var session = await db.MobileSessions.Include(x => x.User).SingleAsync(x => x.Id == sessionId);
         if (session.RevokedAtUtc != null || session.ExpiresAtUtc <= clock.GetUtcNow()) return Invalid();
-        var memberships = await Memberships(db, UserId(principal));
+        var memberships = await Memberships(db, UserId(principal), StagingMembership(principal));
         if (!memberships.Any(x => x.Id == request.MembershipId)) return Results.Forbid();
         session.MembershipId = request.MembershipId;
         var result = Issue(session, memberships, clock.GetUtcNow());

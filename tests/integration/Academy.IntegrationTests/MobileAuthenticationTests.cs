@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Academy.IntegrationTests;
 
@@ -78,6 +79,66 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
         Bearer(credentials.AccessToken); return credentials;
     }
     private void Bearer(string token) => client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+    [Fact]
+    public async Task Staging_fixed_otp_only_grants_the_configured_synthetic_membership_and_sends_no_sms()
+    {
+        var member = await AddRole(AcademyRole.AcademyOwner);
+        var otherMember = await AddRole(AcademyRole.AcademyOwner, DemoSeed.FutureAcademyId);
+        var fixture = new StagingOtpAccount { Phone = phone, UserId = userId, MembershipId = member, AcademyId = DemoSeed.NogoomAcademyId };
+        using var noSms = new RejectSmsHandler();
+        await using var staged = new MobileFactory(connection, "Staging", verifyHandler: noSms, stagingAccount: fixture);
+        using var tester = staged.CreateClient();
+
+        async Task<HttpResponseMessage> Request(string number) =>
+            await tester.PostAsJsonAsync(Root + "/otp/request", new { phoneNumber = number });
+        // A binding to an active account is insufficient without the synthetic account marker.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Request(phone)).StatusCode);
+        await Mutate(async db => (await db.Users.SingleAsync(x => x.Id == userId)).Email = "staff@test.iacademy.invalid");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Request(DemoSeed.GuardianPhone)).StatusCode);
+
+        var requested = await Request(phone);
+        Assert.Equal(HttpStatusCode.Accepted, requested.StatusCode);
+        var id = (await requested.Content.ReadFromJsonAsync<ChallengeBody>())!.ChallengeId;
+        Task<HttpResponseMessage> Confirm(string code) => tester.PostAsJsonAsync(Root + "/otp/verify",
+            new { challengeId = id, phoneNumber = phone, code, deviceName = "جهاز اختبار staging" });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Confirm("917385")).StatusCode);
+        var verified = await Confirm("483716");
+        Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
+        var credentials = (await verified.Content.ReadFromJsonAsync<MobileCredentials>())!;
+        Assert.Equal(member, Assert.Single(credentials.Memberships).Id);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Confirm("483716")).StatusCode);
+        await Mutate(async db => Assert.False((await db.Users.SingleAsync(x => x.Id == userId)).PhoneNumberConfirmed));
+
+        tester.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
+        Assert.Equal(member, Assert.Single((await tester.GetFromJsonAsync<MobileMembership[]>(Root + "/memberships"))!).Id);
+        Assert.Equal(HttpStatusCode.Forbidden, (await tester.PostAsJsonAsync(Root + "/select-role", new { membershipId = otherMember })).StatusCode);
+        var refresh = await tester.PostAsJsonAsync(Root + "/refresh", new { credentials.RefreshToken });
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+        var refreshed = (await refresh.Content.ReadFromJsonAsync<MobileCredentials>())!;
+        Assert.Equal(member, Assert.Single(refreshed.Memberships).Id);
+
+        await using var disabled = new MobileFactory(connection, "Staging");
+        using var disabledClient = disabled.CreateClient();
+        disabledClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", refreshed.AccessToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await disabledClient.GetAsync(Root + "/memberships")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await disabledClient.PostAsJsonAsync(Root + "/refresh", new { refreshed.RefreshToken })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Production_rejects_staging_fixed_otp_settings_at_startup()
+    {
+        var member = await AddRole(AcademyRole.AcademyOwner);
+        var fixture = new StagingOtpAccount { Phone = phone, UserId = userId, MembershipId = member, AcademyId = DemoSeed.NogoomAcademyId };
+        await using var production = new MobileFactory(connection, "Production", stagingAccount: fixture);
+        Assert.Throws<OptionsValidationException>(() => production.CreateClient());
+    }
+
+    private sealed class RejectSmsHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Staging OTP must never contact the SMS provider.");
+    }
 
     [Fact]
     public async Task Legacy_payment_grant_changes_the_active_mobile_membership_without_rotating_credentials()
@@ -469,7 +530,7 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
     }
 
     private sealed class MobileFactory(string connection, string environment = "Demo",
-        HttpMessageHandler? verifyHandler = null, string? allowedPhone = null) : WebApplicationFactory<Program>
+        HttpMessageHandler? verifyHandler = null, string? allowedPhone = null, StagingOtpAccount? stagingAccount = null) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -478,6 +539,19 @@ public sealed class MobileAuthenticationTests : IAsyncLifetime
             builder.UseSetting("Demo:FixedOtpEnabled", (environment == "Demo").ToString());
             builder.UseSetting("Demo:FixedOtp", "246810"); builder.UseSetting("Demo:StaffPassword", "Demo-Only-123!");
             builder.UseSetting("Payments:InternalTest:Enabled", "false");
+            if (stagingAccount is not null)
+            {
+                builder.UseSetting("MobileOtp:Provider", "StagingFixed");
+                builder.UseSetting("MobileOtp:StagingCode", "483716");
+                builder.UseSetting("MobileOtp:StagingAccounts:0:Phone", stagingAccount.Phone);
+                builder.UseSetting("MobileOtp:StagingAccounts:0:UserId", stagingAccount.UserId.ToString());
+                builder.UseSetting("MobileOtp:StagingAccounts:0:AcademyId", stagingAccount.AcademyId.ToString());
+                builder.UseSetting("MobileOtp:StagingAccounts:0:MembershipId", stagingAccount.MembershipId.ToString());
+                if (verifyHandler is not null)
+                    builder.ConfigureServices(services => services.AddHttpClient(TwilioMobileOtp.ClientName)
+                        .ConfigurePrimaryHttpMessageHandler(() => verifyHandler));
+                return;
+            }
             if (verifyHandler is null) return;
             builder.UseSetting("MobileOtp:Provider", "TwilioVerify");
             builder.UseSetting("MobileOtp:AllowedPhone", allowedPhone);
