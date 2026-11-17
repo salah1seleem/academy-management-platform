@@ -1,0 +1,49 @@
+.workspace :global(.placement-candidates) article {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.workspace :global(.placement-candidates) article:global(.is-selected) {
+  background: var(--staff-info-soft, var(--primary-soft));
+  border-color: var(--staff-info, var(--primary));
+  box-shadow: none;
+}
+
+.workspace :global(.placement-choice) small {
+  color: var(--muted);
+}
+
+.workspace :global(.placement-choice) > svg,
+.workspace :global(.placement-candidates) a {
+  color: var(--staff-info, var(--primary));
+}
+
+.workspace :global(.placement-candidates) ul,
+.workspace :global(.placement-conflicts) {
+  color: var(--staff-danger, #8b3340);
+}
+
+.workspace :global(.placement-preview) {
+  color: var(--text);
+  background: var(--staff-surface-muted, var(--surface));
+  border-color: var(--border);
+  border-inline-start-color: var(--staff-info, var(--primary));
+}
+
+.workspace :global(.placement-preview) h4 {
+  color: var(--staff-info, var(--primary));
+}
+
+.workspace :global(.placement-preview) > div {
+  border-color: var(--border);
+}
+
+.workspace :global(.placement-icon) {
+  color: var(--staff-info, var(--primary));
+  background: var(--staff-info-soft, var(--primary-soft));
+}
+
+.workspace :global(.placement-success) {
+  color: var(--staff-success, #165c44);
+  background: var(--staff-success-soft, #eaf7f0);
+}

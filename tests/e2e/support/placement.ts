@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Page, type Locator } from "@playwright/test";
 
 export const placementId = (n: number) => `5a000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 type SessionApi = Pick<APIRequestContext, "get" | "post">;
@@ -113,4 +113,45 @@ export async function assertPlacementViewport(page: Page, width: number) {
   // Comparing scrollWidth only with innerWidth would accept that expanded page.
   expect(measured.viewport, JSON.stringify(measured)).toBe(width);
   expect(measured.document, JSON.stringify(measured)).toBeLessThanOrEqual(width + 1);
+}
+
+export async function setPlacementAppearance(page: Page, mode: "light" | "dark") {
+  const shell = page.locator('[data-workspace-design="v5"]');
+  if (await shell.getAttribute("data-mode") !== mode) {
+    await page.getByRole("button", { name: mode === "light" ? "تفعيل المظهر الفاتح" : "تفعيل المظهر الداكن", exact: true }).click();
+  }
+  await expect(shell).toHaveAttribute("data-mode", mode);
+}
+
+export async function assertPlacementContrast(region: Locator) {
+  const samples = await region.locator(".placement-choice strong, .placement-choice small, .placement-candidates a, .placement-candidates li, .placement-preview h4, .placement-preview p, .placement-preview strong, .placement-preview span").evaluateAll(nodes => {
+    type RGB = [number, number, number];
+    const rgba = (value: string) => {
+      const match = /^rgba?\((.+)\)$/.exec(value);
+      if (!match) throw new Error(`Unsupported computed color: ${value}`);
+      const values = match[1].split(/[,\s/]+/).map(Number);
+      return { rgb: values.slice(0, 3) as RGB, alpha: values[3] ?? 1 };
+    };
+    const over = (rgb: RGB, alpha: number, backdrop: RGB) => rgb.map((channel, i) => channel * alpha + backdrop[i] * (1 - alpha)) as RGB;
+    const luminance = (rgb: RGB) => rgb.map(channel => {
+      const c = channel / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
+    return nodes.filter(node => node.getClientRects().length && node.textContent?.trim()).map(node => {
+      const ancestry: Element[] = [];
+      for (let current: Element | null = node; current; current = current.parentElement) ancestry.unshift(current);
+      let background: RGB = [255, 255, 255];
+      for (const ancestor of ancestry) {
+        const style = getComputedStyle(ancestor);
+        if (Number(style.opacity) !== 1) throw new Error("Contrast sample has translucent ancestry");
+        const color = rgba(style.backgroundColor);
+        background = over(color.rgb, color.alpha, background);
+      }
+      const foreground = rgba(getComputedStyle(node).color);
+      const ink = luminance(over(foreground.rgb, foreground.alpha, background)), paper = luminance(background);
+      return { text: node.textContent?.trim().slice(0, 100), ratio: (Math.max(ink, paper) + 0.05) / (Math.min(ink, paper) + 0.05) };
+    });
+  });
+  expect(samples.length).toBeGreaterThan(0);
+  for (const sample of samples) expect(sample.ratio, JSON.stringify(sample)).toBeGreaterThanOrEqual(4.5);
 }

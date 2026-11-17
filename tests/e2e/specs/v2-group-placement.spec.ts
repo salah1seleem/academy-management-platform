@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { assertPlacementViewport, placementEnrollment, placementRead, preparePlacementSessions, serviceIdentity, type PlacementPlayer } from "../support/placement";
+import { assertPlacementContrast, setPlacementAppearance, assertPlacementViewport, placementEnrollment, placementRead, preparePlacementSessions, serviceIdentity, type PlacementPlayer } from "../support/placement";
 test("Owner reviews an eligible bulk placement and unpaid child stays waiting; Guardian receives the new session", async ({ page }, info) => {
   await page.goto("/login"); await page.getByLabel("البريد الإلكتروني").fill("owner.nogoom@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByRole("button", { name: "تسجيل الدخول" }).click(); await page.waitForURL("**/dashboard");
   const group = "5a000000-0000-0000-0000-000000000001", player = "5a000000-0000-0000-0000-000000000010", unpaid = "5a000000-0000-0000-0000-000000000030";
@@ -18,7 +18,25 @@ test("Owner reviews an eligible bulk placement and unpaid child stays waiting; G
   await expect(unpaidCard.getByRole("checkbox")).toBeDisabled(); await expect(unpaidCard.getByText(/لا يوجد استحقاق تدريب سار/)).toBeVisible();
   if (!detail.enrollments[0].trainingGroupId) {
     await region.getByRole("checkbox", { name: /لاعب تسكين مستوفٍ تجريبي 10/ }).check(); await region.getByRole("button", { name: "معاينة التسكين" }).click(); await expect(region.getByRole("region", { name: "معاينة التسكين" })).toBeVisible(); await expect(region.getByRole("button", { name: "تأكيد تسكين الدفعة" })).toBeEnabled();
-    for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await region.screenshot({ path: info.outputPath(`placement-${width}.png`), animations: "disabled" }); await assertPlacementViewport(page, width); }
+    const selected = region.getByRole("checkbox", { name: /لاعب تسكين مستوفٍ تجريبي 10/ });
+    await selected.uncheck(); await expect(selected).not.toBeChecked();
+    await selected.check();
+    // Selection changes invalidate the old preview; review the same player again.
+    await expect(region.getByRole("region", { name: "معاينة التسكين" })).toHaveCount(0);
+    await region.getByRole("button", { name: "معاينة التسكين" }).click();
+    await expect(region.getByRole("region", { name: "معاينة التسكين" })).toBeVisible();
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const mode of ["dark", "light"] as const) {
+        await setPlacementAppearance(page, mode);
+        await expect(selected).toBeChecked();
+        await expect(unpaidCard.getByRole("checkbox")).toBeDisabled();
+        await expect(region.getByRole("region", { name: "معاينة التسكين" })).toBeVisible();
+        await region.screenshot({ path: info.outputPath(`placement-${mode}-${width}.png`), animations: "disabled" });
+        await assertPlacementViewport(page, width);
+        await assertPlacementContrast(region);
+      }
+    }
     await region.getByRole("button", { name: "تأكيد تسكين الدفعة" }).click(); await expect(region.getByText(/تم تسكين 1 لاعب بنجاح/)).toBeVisible();
   }
   const placed = await page.request.get(`/api/v1/people/players/${player}`).then(r => r.json()); expect(placed.enrollments[0].trainingGroupId).toBe(group); const waiting = await page.request.get(`/api/v1/people/players/${unpaid}`).then(r => r.json()); expect(waiting.enrollments[0].trainingGroupId).toBeNull();
