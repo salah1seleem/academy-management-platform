@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useId } from "react";
+import { ReactNode, useId, useLayoutEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export type RecordTab = { id: string; label: string; content: ReactNode };
@@ -12,6 +12,26 @@ export function RecordTabs({ tabs, label, keepMounted = false }: { tabs: RecordT
   const prefix = useId();
   const selected = tabs.findIndex(tab => tab.id === query.get("tab"));
   const index = selected < 0 ? 0 : selected;
+  const tabList = useRef<HTMLDivElement>(null);
+  const activeTab = tabs[index]?.id;
+  const tabOrder = tabs.map(tab => tab.id).join("\0");
+  useLayoutEffect(() => {
+    const list = tabList.current;
+    const active = list?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    if (!list || !active) return;
+    const reveal = () => {
+      const bounds = list.getBoundingClientRect();
+      const target = active.getBoundingClientRect();
+      const offset = target.left < bounds.left ? target.left - bounds.left
+        : target.right > bounds.right ? target.right - bounds.right : 0;
+      if (offset) list.scrollBy({ left: offset, behavior: "instant" });
+    };
+    reveal();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reveal);
+    observer?.observe(list);
+    observer?.observe(active);
+    return () => observer?.disconnect();
+  }, [activeTab, tabOrder]);
   function select(next: number, focus = false) {
     const params = new URLSearchParams(query.toString());
     params.set("tab", tabs[next].id);
@@ -20,7 +40,7 @@ export function RecordTabs({ tabs, label, keepMounted = false }: { tabs: RecordT
   }
   if (!tabs.length) return null;
   return <div className="record-workspace">
-    <div role="tablist" aria-label={label} className="record-tabs" dir="rtl">{tabs.map((tab, i) => <button key={tab.id} id={`${prefix}-${tab.id}`} type="button" role="tab" aria-selected={i === index} aria-controls={`${prefix}-panel-${tab.id}`} tabIndex={i === index ? 0 : -1} onClick={() => select(i)} onKeyDown={event => {
+    <div ref={tabList} role="tablist" aria-label={label} className="record-tabs" dir="rtl">{tabs.map((tab, i) => <button key={tab.id} id={`${prefix}-${tab.id}`} type="button" role="tab" aria-selected={i === index} aria-controls={`${prefix}-panel-${tab.id}`} tabIndex={i === index ? 0 : -1} onClick={() => select(i)} onKeyDown={event => {
       const next = event.key === "ArrowLeft" ? (i + 1) % tabs.length : event.key === "ArrowRight" ? (i + tabs.length - 1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
       if (next !== null) { event.preventDefault(); select(next, true); }
     }}>{tab.label}</button>)}</div>
