@@ -18,6 +18,7 @@ describe("owner-review operations", () => {
     let fails = true;
     global.fetch = vi.fn(input => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/my-permissions")) return response([]);
       if (!url.pathname.endsWith("/payment-requests")) return response({});
       requests.push(url);
       if (url.searchParams.has("reference") && fails) {
@@ -88,7 +89,8 @@ describe("owner-review operations", () => {
     }
   });
   it("defaults to month-to-date, omits empty branches and never leaves a loader after a queue failure", async () => {
-    global.fetch = vi.fn(input => String(input).includes("payment-requests") ? response({}, 503) : response({})) as typeof fetch;
+    global.fetch = vi.fn(input => String(input).includes("payment-requests") ? response({}, 503)
+      : String(input).endsWith("/my-permissions") ? response([]) : response({})) as typeof fetch;
     render(<DateFilterDefaults range={{ from: "2026-09-01", to: "2026-09-28" }}><PaymentRequestQueue /></DateFilterDefaults>);
     expect(await screen.findByRole("alert")).toHaveTextContent("تعذر تحميل طلبات الدفع");
     expect(fetch).toHaveBeenCalledWith("/api/v1/manage/payment-requests?status=Pending&from=2026-09-01&to=2026-09-28&page=1&pageSize=25", expect.objectContaining({ cache: "no-store", signal: expect.anything() }));
