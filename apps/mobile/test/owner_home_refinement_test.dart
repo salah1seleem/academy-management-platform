@@ -282,10 +282,21 @@ void main() {
             final income = find.text('الإيرادات'),
                 expenses = find.text('المصروفات');
             await t.ensureVisible(income);
-            expect(
-              t.getTopLeft(income).dy,
-              closeTo(t.getTopLeft(expenses).dy, 1),
-            );
+            if (scale > 1.3) {
+              expect(
+                t.getTopLeft(expenses).dy,
+                greaterThan(t.getBottomLeft(income).dy),
+              );
+              expect(
+                t.getTopRight(income).dx,
+                closeTo(t.getTopRight(expenses).dx, 1),
+              );
+            } else {
+              expect(
+                t.getTopLeft(income).dy,
+                closeTo(t.getTopLeft(expenses).dy, 1),
+              );
+            }
             final action = find.text('استكمال المتابعات');
             await t.ensureVisible(action);
             await t.tap(action);
