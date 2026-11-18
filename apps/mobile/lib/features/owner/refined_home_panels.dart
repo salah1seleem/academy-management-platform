@@ -909,6 +909,7 @@ class HomeOperatingStatement extends StatelessWidget {
     );
     final result = UiText(
       money(surplus, data['currency']),
+      key: const ValueKey('operating-result'),
       style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: color),
     );
     return GCard(
@@ -932,19 +933,23 @@ class HomeOperatingStatement extends StatelessWidget {
                 bottom: BorderSide(color: color),
               ),
             ),
-            child: MediaQuery.textScalerOf(context).scale(1) > 1.3
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [label, const SizedBox(height: 8), result],
-                  )
-                : Row(
-                    children: [
-                      Icon(Icons.balance_rounded, size: 20, color: color),
-                      const SizedBox(width: 10),
-                      Expanded(child: label),
-                      Flexible(child: result),
-                    ],
-                  ),
+            child: LayoutBuilder(
+              builder: (context, constraints) =>
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                      constraints.maxWidth < 340
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [label, const SizedBox(height: 8), result],
+                    )
+                  : Row(
+                      children: [
+                        Icon(Icons.balance_rounded, size: 20, color: color),
+                        const SizedBox(width: 10),
+                        Expanded(child: label),
+                        Flexible(child: result),
+                      ],
+                    ),
+            ),
           ),
           if (change != null)
             Padding(

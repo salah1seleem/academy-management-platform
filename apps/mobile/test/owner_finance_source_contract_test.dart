@@ -263,6 +263,26 @@ void main() {
             'statement-${width.toInt()}-text${scale.toInt()}-${dark ? 'dark' : 'light'}',
           );
           expect(t.takeException(), isNull);
+          final result = t.renderObject<RenderParagraph>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('operating-result')),
+                  matching: find.byType(RichText),
+                )
+                .first,
+          );
+          final resultBoxes = result.getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: amountText(statement()['surplus']).length,
+            ),
+          );
+          expect(
+            resultBoxes.map((box) => box.top).toSet().length,
+            1,
+            reason:
+                'The operating result must keep all its digits on one line.',
+          );
           if (scale == 2) {
             final layout = t.widget<Flex>(
               find.byKey(const ValueKey('operating-halves')),
