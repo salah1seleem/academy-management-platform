@@ -11,7 +11,7 @@ const playerURL = `/dashboard/players/${player}?tab=training`, grantRoot = `/api
 type GroupRecord = { id: string; arabicName: string; englishName?: string | null; branchId: string; sportId: string; ageCategoryId: string; capacity: number };
 type Receipt = { id: string; amount: number };
 type Session = { id: string; trainingGroupId: string; sessionDate: string; startTime: string; endTime: string; status: string };
-type Review = { fingerprint: string; units: number; available: number; expectedPlayers: number; capacity: number; target: { id: string; date: string; start: string; end: string } };
+type Review = { fingerprint: string; units: number; available: number; expectedPlayers: number; capacity: number; target: { id: string; group: string; date: string; start: string; end: string } };
 const groupBody = (record: GroupRecord, capacity: number) => ({ arabicName: record.arabicName, englishName: record.englishName ?? null, branchId: record.branchId, sportId: record.sportId, ageCategoryId: record.ageCategoryId, capacity });
 async function put(api: APIRequestContext, path: string, data: unknown) { const csrf = await placementRead<{ token: string }>(api, "/api/v1/auth/csrf"); return api.put(path, { headers: { "X-CSRF-TOKEN": csrf.token }, data }); }
 async function grants(api: APIRequestContext) { return placementRead<CompensationGrant[]>(api, `${grantRoot}/compensations`); }
@@ -21,6 +21,7 @@ async function financial(api: APIRequestContext, today: string) {
   expect(first.totalCount).toBeGreaterThan(0); const rows = [...first.items];
   for (let page = 2; page <= Math.ceil(first.totalCount / 100); page++) rows.push(...(await placementRead<{ items: Receipt[] }>(api, `/api/v1/reports/receipts?${query}&page=${page}`)).items);
   expect(rows).toHaveLength(first.totalCount); expect(new Set(rows.map(r => r.id)).size).toBe(first.totalCount);
+  expect(rows.every(row => Number.isFinite(row.amount))).toBe(true); expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBeGreaterThan(0);
   return { receipts: rows.sort((a, b) => a.id.localeCompare(b.id)), collections: await placementRead(api, "/api/v1/subscriptions/collections") };
 }
 async function identity(api: APIRequestContext) { const value = await placementRead<PlacementPlayer>(api, `/api/v1/people/players/${player}`); expect(placementEnrollment(value, enrollment).trainingGroupId).toBe(id(70)); return serviceIdentity(value); }
@@ -33,6 +34,7 @@ async function setCapacity(page: Page, value: number, previous: GroupRecord) {
   await page.goto(`/dashboard/academy/groups/${group}/edit`);
   await expect(page.getByRole("textbox", { name: "الاسم بالعربية", exact: true })).toHaveValue(previous.arabicName);
   await expect(page.getByRole("textbox", { name: "الاسم بالإنجليزية", exact: true })).toHaveAttribute("dir", "ltr");
+  await expect(page.getByRole("textbox", { name: "الاسم بالإنجليزية", exact: true })).toHaveValue(previous.englishName ?? "");
   for (const [label, key] of [["الفرع", "branchId"], ["الرياضة", "sportId"], ["الفئة العمرية", "ageCategoryId"]] as const) await expect(page.getByRole("combobox", { name: label, exact: true })).toHaveValue(previous[key]);
   await page.getByRole("spinbutton", { name: "السعة", exact: true }).fill(String(value));
   const response = page.waitForResponse(r => r.url().endsWith(groupPath) && r.request().method() === "PUT");
@@ -78,7 +80,8 @@ test("Minutes, a real capacity change, lost release acknowledgement and Guardian
     const pending = page.waitForResponse(r => r.url().endsWith(`${bookingPath}/preview`)); await panel.getByRole("button", { name: "معاينة حجز التعويض" }).click(); const answer = await pending;
     expect(answer.status(), await answer.text()).toBe(200); const data: Review = await answer.json();
     const current = await placementRead<GroupRecord>(page.request, groupPath);
-    expect(data).toMatchObject({ units: 30, available, expectedPlayers: before.players.length + 1, capacity: current.capacity, target: { id: target.id, date: target.sessionDate, start: "11:00:00", end: "11:30:00" } });
+    expect(data).toMatchObject({ units: 30, available, expectedPlayers: before.players.length + 1, capacity: current.capacity, target: { id: target.id, group: original.arabicName, date: target.sessionDate, start: "11:00:00", end: "11:30:00" } });
+    await expect(fact(review, "المجموعة")).toHaveText(original.arabicName); await expect(fact(review, "الموعد")).toContainText("من 11:00 صباحًا إلى 11:30 صباحًا");
     await expect(fact(review, "يُحجز من التعويض")).toHaveText("30 دقيقة"); await expect(fact(review, "المتاح قبل الحجز")).toHaveText(`${available} دقيقة`);
     await expect(fact(review, "العدد بعد الحجز")).toHaveText(`${data.expectedPlayers} من ${data.capacity}`); await expect(review).toContainText(formatDateAr(target.sessionDate)); reviews.push(data); return data;
   };
@@ -111,7 +114,7 @@ test("Minutes, a real capacity change, lost release acknowledgement and Guardian
     type Profile = { enrollments: { id: string; upcoming: { id: string }[] }[] };
     const profile = await placementRead<Profile>(family.request, profilePath); expect(profile.enrollments.find(e => e.id === enrollment)?.upcoming.map(s => s.id)).toEqual(expect.arrayContaining(targets.slice(0, 2).map(t => t.id)));
     const firstBooking = row.bookings.find(b => b.trainingSessionId === targets[0].id)!; const cancelPath = `/api/v1/people/compensation-bookings/${firstBooking.id}/cancel`; let cancellations = 0;
-    await page.route(`**${cancelPath}`, async route => { cancellations++; const saved = await route.fetch(); expect(saved.status()).toBe(204); await route.abort("failed"); });
+    await page.route(`**${cancelPath}`, async route => { cancellations++; const saved = await route.fetch(); expect(saved.status()).toBe(200); await route.abort("failed"); });
     await panel.getByRole("button", { name: "تحرير حجز التعويض", exact: true }).first().click(); const dialog = page.getByRole("dialog", { name: "تحرير حجز التعويض", exact: true }); await expect(dialog).toContainText(formatDateAr(targets[0].sessionDate)); await dialog.screenshot({ path: info.outputPath("minute-release-dialog.png"), animations: "disabled" });
     await dialog.getByRole("button", { name: "تأكيد تحرير الحجز" }).click(); await expect(panel.getByRole("alert")).toContainText("تعذر تأكيد الحفظ"); expect(cancellations).toBe(1);
     let corrupted = true;
