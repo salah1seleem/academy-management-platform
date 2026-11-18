@@ -1,11 +1,28 @@
 import 'package:academy_mobile/core/theme/app_theme.dart';
+import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:academy_mobile/features/owner/refined_home_panels.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'shared_ui_quality_test.dart' show capture;
-import 'v2_role_workspaces_test.dart' show app;
+
+Widget app(Widget page, {double scale = 1}) => MaterialApp(
+  debugShowCheckedModeBanner: false,
+  locale: const Locale('ar'),
+  supportedLocales: const [Locale('ar')],
+  localizationsDelegates: GlobalMaterialLocalizations.delegates,
+  theme: AcademyTheme.light(),
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(
+      context,
+    ).copyWith(textScaler: TextScaler.linear(scale), disableAnimations: true),
+    child: child!,
+  ),
+  home: page,
+);
 
 Map<String, dynamic> statement() => {
   'currency': 'EGP',
@@ -247,6 +264,46 @@ void main() {
             'statement-${width.toInt()}-text${scale.toInt()}-${dark ? 'dark' : 'light'}',
           );
           expect(t.takeException(), isNull);
+          if (scale == 2) {
+            final layout = t.widget<Flex>(
+              find.byKey(const ValueKey('operating-halves')),
+            );
+            expect(layout.direction, Axis.vertical);
+          }
+          for (final element
+              in find
+                  .descendant(
+                    of: find.byType(HomeOperatingStatement),
+                    matching: find.byType(MoneyText),
+                  )
+                  .evaluate()) {
+            final money = element.widget as MoneyText;
+            final paragraph = t.renderObject<RenderParagraph>(
+              find
+                  .descendant(
+                    of: find.byWidget(money),
+                    matching: find.byType(RichText),
+                  )
+                  .first,
+            );
+            final boxes = paragraph.getBoxesForSelection(
+              TextSelection(
+                baseOffset: 0,
+                extentOffset: amountText(money.value).length,
+              ),
+            );
+            expect(
+              boxes.map((box) => box.top).toSet().length,
+              1,
+              reason: 'The digits of one amount must stay on one line.',
+            );
+          }
+          await t.ensureVisible(find.text('المصروفات'));
+          await t.pumpAndSettle();
+          await capture(
+            t,
+            'expense-${width.toInt()}-text${scale.toInt()}-${dark ? 'dark' : 'light'}',
+          );
           final card = t.getRect(find.byType(HomeOperatingStatement));
           expect(card.left, greaterThanOrEqualTo(0));
           expect(card.right, lessThanOrEqualTo(width));

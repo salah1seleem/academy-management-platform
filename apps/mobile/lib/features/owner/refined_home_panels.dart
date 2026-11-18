@@ -967,26 +967,27 @@ class HomeOperatingStatement extends StatelessWidget {
             onOpen: onMonth,
           ),
           const SizedBox(height: 14),
-          Row(
-            key: const ValueKey('operating-halves'),
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final section in [
-                (
-                  'income',
-                  'الإيرادات',
-                  'totalIncome',
-                  ExperienceColors.positive(context),
-                ),
-                (
-                  'expenses',
-                  'المصروفات',
-                  'totalExpenses',
-                  ExperienceColors.negative(context),
-                ),
-              ])
-                Expanded(
-                  child: Container(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked =
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                  constraints.maxWidth < 280;
+              final sections = <Widget>[
+                for (final section in [
+                  (
+                    'income',
+                    'الإيرادات',
+                    'totalIncome',
+                    ExperienceColors.positive(context),
+                  ),
+                  (
+                    'expenses',
+                    'المصروفات',
+                    'totalExpenses',
+                    ExperienceColors.negative(context),
+                  ),
+                ])
+                  Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: section.$4.withValues(alpha: .035),
@@ -1028,8 +1029,26 @@ class HomeOperatingStatement extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-            ],
+              ];
+              return Flex(
+                key: const ValueKey('operating-halves'),
+                direction: stacked ? Axis.vertical : Axis.horizontal,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: stacked
+                    ? CrossAxisAlignment.stretch
+                    : CrossAxisAlignment.start,
+                children: [
+                  for (final child in sections)
+                    if (stacked)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: child,
+                      )
+                    else
+                      Expanded(child: child),
+                ],
+              );
+            },
           ),
           if (showBalances &&
               ((showReceivables && (data['receivables'] as num? ?? 0) != 0) ||
