@@ -5,10 +5,14 @@ import { PlayerCompensation } from "./player-compensation";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const grant = { id: "g", sport: "السباحة", cause: "CancelledSession", unit: "Minute", units: 60, consumed: 0, allocated: 0, validFrom: "2026-11-18", validTo: "2026-12-18", sourceDate: "2026-09-28", sourceSessionId: "s", bookings: [] };
 const options = { today: "2026-11-18", sources: [{ id: "s", group: "أصل اختباري", date: "2026-09-28" }], targets: [{ id: "t", group: "موعد اختباري", date: "2026-11-25", start: "11:00", end: "11:30" }] };
+const booking = { id: "b", trainingSessionId: "t", group: "موعد اختباري", date: "2026-11-25", state: "Reserved", version: 1, units: 30, consumed: 0 };
 const review = { fingerprint: "review", units: 30, available: 60, expectedPlayers: 1, capacity: 2, conflicts: [], target: options.targets[0] };
 
 it.each([
   { name: "missing bookings", path: "grants", data: [{ ...grant, bookings: null }] },
+  { name: "missing display field", path: "grants", data: [{ ...grant, sport: "" }] },
+  { name: "fractional booking units", path: "grants", data: [{ ...grant, allocated: 30, bookings: [{ ...booking, units: 1.5 }] }] },
+  { name: "missing booking date", path: "grants", data: [{ ...grant, allocated: 30, bookings: [{ ...booking, date: "" }] }] },
   { name: "negative credit", path: "grants", data: [{ ...grant, units: -1 }] },
   { name: "overallocated credit", path: "grants", data: [{ ...grant, allocated: 61 }] },
   { name: "invalid consumption", path: "grants", data: [{ ...grant, consumed: 1 }] },
@@ -44,6 +48,7 @@ it.each([
   { name: "negative roster", data: { ...review, expectedPlayers: -1 } },
   { name: "text capacity", data: { ...review, capacity: "2" } },
   { name: "malformed target", data: { ...review, target: { ...review.target, date: "not-a-date" } } },
+  { name: "malformed target time", data: { ...review, target: { ...review.target, end: "25:00" } } },
   { name: "malformed conflicts", data: { ...review, conflicts: [{}] } },
 ])("rejects $name before enabling a compensation confirmation", async failure => {
   let broken = true;

@@ -4,7 +4,7 @@ import { signInCompensationGuardian, type CompensationGrant } from "../support/c
 import { afterDays, assertPlacementContrast, assertPlacementViewport, ensurePlacementSession, placementEnrollment, placementId as id, placementRead, placementWrite, serviceIdentity, setPlacementAppearance, type PlacementPlayer } from "../support/placement";
 import { formatDateAr } from "../../../apps/web/src/lib/formatters";
 
-test.describe.configure({ mode: "serial", retries: 0 });
+test.describe.configure({ retries: 0 });
 test.beforeEach(async ({ page }) => { expect((await placementWrite(page.request, "/api/v1/auth/login", { email: "owner.nogoom@example.test", password: "Demo-Only-123!" })).status()).toBe(200); });
 const enrollment = id(101), player = id(100), group = id(90), groupPath = `/api/v1/manage/structure/groups/${group}`;
 const playerURL = `/dashboard/players/${player}?tab=training`, grantRoot = `/api/v1/people/enrollments/${enrollment}`;
@@ -36,11 +36,13 @@ async function setCapacity(page: Page, value: number, previous: GroupRecord) {
   for (const [label, key] of [["الفرع", "branchId"], ["الرياضة", "sportId"], ["الفئة العمرية", "ageCategoryId"]] as const) await expect(page.getByRole("combobox", { name: label, exact: true })).toHaveValue(previous[key]);
   await page.getByRole("spinbutton", { name: "السعة", exact: true }).fill(String(value));
   const response = page.waitForResponse(r => r.url().endsWith(groupPath) && r.request().method() === "PUT");
-  await page.getByRole("button", { name: "حفظ التعديلات", exact: true }).click(); const saved = await response; expect(saved.status(), await saved.text()).toBe(200);
+  await page.getByRole("button", { name: "حفظ التعديلات", exact: true }).click(); const saved = await response; expect(saved.status()).toBe(204);
   await expect(page).toHaveURL(/\/dashboard\/academy\/groups$/); expect(await placementRead(page.request, groupPath)).toEqual({ ...previous, capacity: value });
 }
 const fact = (review: ReturnType<Page["getByRole"]>, label: string) => review.getByText(label, { exact: true }).locator("..").locator("dd");
 
+test.describe("Minute credit and read recovery", () => {
+test.describe.configure({ mode: "serial" });
 test("Minutes, a real capacity change, lost release acknowledgement and Guardian refresh preserve the exact receipt ledger", async ({ page, browser }, info) => {
   test.setTimeout(90_000);
   const { today } = await placementRead<{ today: string }>(page.request, "/api/v1/academy/calendar");
@@ -109,7 +111,7 @@ test("Minutes, a real capacity change, lost release acknowledgement and Guardian
     type Profile = { enrollments: { id: string; upcoming: { id: string }[] }[] };
     const profile = await placementRead<Profile>(family.request, profilePath); expect(profile.enrollments.find(e => e.id === enrollment)?.upcoming.map(s => s.id)).toEqual(expect.arrayContaining(targets.slice(0, 2).map(t => t.id)));
     const firstBooking = row.bookings.find(b => b.trainingSessionId === targets[0].id)!; const cancelPath = `/api/v1/people/compensation-bookings/${firstBooking.id}/cancel`; let cancellations = 0;
-    await page.route(`**${cancelPath}`, async route => { cancellations++; const saved = await route.fetch(); expect(saved.status(), await saved.text()).toBe(200); await route.abort("failed"); });
+    await page.route(`**${cancelPath}`, async route => { cancellations++; const saved = await route.fetch(); expect(saved.status()).toBe(204); await route.abort("failed"); });
     await panel.getByRole("button", { name: "تحرير حجز التعويض", exact: true }).first().click(); const dialog = page.getByRole("dialog", { name: "تحرير حجز التعويض", exact: true }); await expect(dialog).toContainText(formatDateAr(targets[0].sessionDate)); await dialog.screenshot({ path: info.outputPath("minute-release-dialog.png"), animations: "disabled" });
     await dialog.getByRole("button", { name: "تأكيد تحرير الحجز" }).click(); await expect(panel.getByRole("alert")).toContainText("تعذر تأكيد الحفظ"); expect(cancellations).toBe(1);
     let corrupted = true;
@@ -135,14 +137,16 @@ test("Malformed compensation options, balances and previews recover without a bu
   const { today } = await placementRead<{ today: string }>(page.request, "/api/v1/academy/calendar"); const money = await financial(page.request, today), service = await identity(page.request); let mode = "options-json", saves = 0; const crashes: string[] = [];
   page.on("pageerror", e => crashes.push(e.message)); page.on("request", r => { if (r.method() === "POST" && /\/(compensation|booking|cancel)\/?$/.test(r.url())) saves++; });
   await page.route(`**${grantRoot}/compensation/options`, async route => { if (mode === "options-json") await route.fulfill({ status: 200, contentType: "application/json", body: "{invalid-json" }); else if (mode === "options-shape") { const real = await route.fetch(); const data = await real.json(); data.targets = {}; await route.fulfill({ response: real, json: data }); } else await route.continue(); });
-  await page.route(`**${grantRoot}/compensations`, async route => { if (mode === "grants-shape") { const real = await route.fetch(); const data = await real.json(); data[0].bookings = null; await route.fulfill({ response: real, json: data }); } else await route.continue(); });
+  await page.route(`**${grantRoot}/compensations`, async route => { if (mode === "grants-json") await route.fulfill({ status: 200, contentType: "application/json", body: "{invalid-grants-json" }); else if (mode === "grants-shape") { const real = await route.fetch(); const data = await real.json(); data[0].bookings = null; await route.fulfill({ response: real, json: data }); } else await route.continue(); });
   const panel = await openPanel(page);
-  for (const next of ["options-shape", "grants-shape", "healthy"]) { await expect(panel.getByRole("alert")).toContainText("تعذر تحميل التعويضات والمواعيد"); await expect(panel.getByRole("button", { name: "معاينة حجز التعويض" })).toHaveCount(0); mode = next; await panel.getByRole("button", { name: "إعادة تحميل التعويضات" }).click(); }
+  for (const next of ["grants-json", "options-shape", "grants-shape", "healthy"]) { await expect(panel.getByRole("alert")).toContainText("تعذر تحميل التعويضات والمواعيد"); await expect(panel.getByRole("button", { name: "معاينة حجز التعويض" })).toHaveCount(0); mode = next; await panel.getByRole("button", { name: "إعادة تحميل التعويضات" }).click(); }
   await expect(panel.getByRole("combobox", { name: "الحصة التعويضية", exact: true })).toBeEnabled(); const [credit] = await grants(page.request); const target = (await placementRead<{ targets: { id: string }[] }>(page.request, `${grantRoot}/compensation/options`)).targets.find(t => ![id(71), id(91)].includes(t.id))!;
   await panel.getByRole("combobox", { name: "الحصة التعويضية", exact: true }).selectOption(target.id);
   await page.route(`**/api/v1/people/compensations/${credit.id}/booking/preview`, async route => { const real = await route.fetch(); if (mode === "preview-shape") { const data = await real.json(); data.units = "bad"; await route.fulfill({ response: real, json: data }); } else await route.fulfill({ response: real }); });
   mode = "preview-shape"; await panel.getByRole("button", { name: "معاينة حجز التعويض" }).click(); await expect(panel.getByRole("alert")).toContainText("تعذر عرض المعاينة"); await expect(panel.getByRole("button", { name: "تأكيد حجز التعويض" })).toHaveCount(0); await expect(panel).not.toContainText(/invalid-json|TypeError|bad دقيقة/);
   mode = "healthy"; await panel.getByRole("button", { name: "معاينة حجز التعويض" }).click(); await expect(panel.getByRole("region", { name: "معاينة التعويض", exact: true })).toBeVisible(); await page.screenshot({ path: info.outputPath("compensation-data-recovered.png"), fullPage: true, animations: "disabled" }); expect(saves).toBe(0); expect(crashes).toEqual([]); expect(await financial(page.request, today)).toEqual(money); expect(await identity(page.request)).toEqual(service);
+});
+
 });
 
 test("Group editor guards invalid capacity, cancels its draft and rejects untrusted identities without changing receipts", async ({ page, browser }, info) => {
@@ -154,7 +158,7 @@ test("Group editor guards invalid capacity, cancels its draft and rejects untrus
   for (const value of ["0", "1.5"]) { await capacity.fill(value); await page.getByRole("button", { name: "حفظ التعديلات", exact: true }).click(); expect(await capacity.evaluate((el: HTMLInputElement) => el.validity.valid)).toBe(false); } expect(puts).toBe(0);
   await page.getByRole("link", { name: "العودة إلى الملف", exact: true }).click(); await expect(page).toHaveURL(new RegExp(`/groups/${group}$`));
   try { for (const value of [0, -1, 1.5]) { const response = await put(page.request, groupPath, groupBody(original, value)); expect(response.status(), await response.text()).toBe(Number.isInteger(value) ? 422 : 400); expect(await placementRead(page.request, groupPath)).toEqual(original); } }
-  finally { expect((await put(page.request, groupPath, groupBody(original, original.capacity))).status()).toBe(200); }
+  finally { expect((await put(page.request, groupPath, groupBody(original, original.capacity))).status()).toBe(204); }
   for (const role of ["visitor", "coach", "other-academy"] as const) {
     const context = await browser.newContext({ baseURL: info.project.use.baseURL }); try { let headers: Record<string, string> | undefined;
       if (role === "coach") { const token = await mobileDemoToken(context.request, "01000000020", "رفض تعديل سعة من مدرب اصطناعي"); headers = { Authorization: `Bearer ${token}` }; expect((await context.request.get("/api/v1/coach/groups", { headers })).status()).toBe(200); }
