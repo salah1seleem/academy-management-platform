@@ -26,11 +26,13 @@ class ProofTransport extends FakeApi implements AssetTransport {
     this.amount = 720,
     this.currency = 'EGP',
     this.plan = 'plan',
+    this.status = 'Pending',
   }) : super((_, _, _, _) async => null);
   final Future<Uint8List> Function(int read) response;
   final bool hasProof;
   final num? amount;
   final String? currency, plan;
+  final String status;
   int reads = 0, detailReads = 0;
 
   @override
@@ -61,7 +63,7 @@ class ProofTransport extends FakeApi implements AssetTransport {
     return {
       'id': 'source',
       'child': 'لاعب اختبار',
-      'status': 'Pending',
+      'status': status,
       'amount': amount,
       'currency': currency,
       'subscriptionPlanId': plan,
@@ -165,6 +167,29 @@ void main() {
       );
     }
   }
+  testWidgets('a rejected unpriced request never presents an amount as due', (
+    t,
+  ) async {
+    final api = ProofTransport(
+      (_) async => pixel,
+      hasProof: false,
+      amount: null,
+      currency: null,
+      plan: null,
+      status: 'Rejected',
+    );
+    final auth = await openProof(t, api, width: 390, scale: 1);
+    await until(t, find.text('لم يُحدد بعد'));
+    expect(find.text('مبلغ الطلب'), findsOneWidget);
+    expect(find.text('المبلغ المطلوب'), findsNothing);
+    expect(find.text('عرض الإيصال'), findsNothing);
+    expect(find.text('لم يصل إثبات دفع.'), findsNothing);
+    expect(find.byType(EmptyMessage), findsNothing);
+    expect(api.reads, 0);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
   testWidgets(
     'a real zero amount remains valid rather than being called unset',
     (t) async {

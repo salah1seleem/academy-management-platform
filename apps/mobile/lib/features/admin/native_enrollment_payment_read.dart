@@ -46,6 +46,11 @@ class NativeEnrollmentPaymentRead extends StatelessWidget {
             data['paymentRequestId'] is String &&
             (data['paymentRequestId'] as String).isNotEmpty;
         final receipt = data['receiptId'];
+        final amountTitle = collected
+            ? 'المبلغ المحصّل'
+            : open
+            ? 'المبلغ المطلوب'
+            : 'مبلغ الطلب';
         return gList([
           if (data['child'] case final String child when child.isNotEmpty)
             GCard(
@@ -79,18 +84,10 @@ class NativeEnrollmentPaymentRead extends StatelessWidget {
               ('السعر الأصلي', money(data['originalAmount'], currency)),
             if (validAmount && hasDiscount)
               ('الخصم', money(discount, currency)),
-            if (validAmount)
-              (
-                collected
-                    ? 'المبلغ المحصّل'
-                    : open
-                    ? 'المبلغ المطلوب'
-                    : 'مبلغ الطلب',
-                money(amount, currency),
-              ),
+            if (validAmount) (amountTitle, money(amount, currency)),
             if (!validAmount)
               (
-                'المبلغ المطلوب',
+                amountTitle,
                 amount == null && data['subscriptionPlanId'] == null
                     ? 'لم يُحدد بعد'
                     : 'تعذر التحقق من مبلغ الطلب وعملته.',
