@@ -57,8 +57,7 @@ Map<String, dynamic> summary() => {
   },
   'attendance': {'percentage': 80},
   'capacity': {'seats': 12},
-  'members': {'players': 24},
-  'groups': {'active': 3},
+  'members': {'players': 24, 'groups': 3},
 };
 
 Widget panel(Map<String, dynamic> data) =>

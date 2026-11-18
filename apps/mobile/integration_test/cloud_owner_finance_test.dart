@@ -115,8 +115,9 @@ void main() {
           final membership = auth.session!.memberships.singleWhere(
             (m) => m.role == role && m.academyId == academy,
           );
-          if (auth.session!.selected?.id != membership.id)
+          if (auth.session!.selected?.id != membership.id) {
             await auth.selectRole(membership.id);
+          }
           expect(auth.session!.selected?.id, membership.id);
           addTearDown(auth.dispose);
           return auth;
@@ -289,8 +290,9 @@ void main() {
         for (var i = 0; i < 80; i++) {
           await pump();
           if (s.api.requests.length > before &&
-              find.byType(CircularProgressIndicator).evaluate().isEmpty)
+              find.byType(CircularProgressIndicator).evaluate().isEmpty) {
             break;
+          }
         }
         expect(s.api.requests.length, greaterThan(before));
       }
@@ -311,8 +313,9 @@ void main() {
             t.widget<AcademySummaryPanel>(panel).data['overdue'],
           );
           if (_minor(data['amount']) == amount * 100 &&
-              data['players'] == players)
+              data['players'] == players) {
             break;
+          }
           await pump();
         }
         final data = obj(t.widget<AcademySummaryPanel>(panel).data['overdue']);
@@ -346,8 +349,9 @@ void main() {
         while (timer.elapsed.inSeconds < 30) {
           final data = t.widget<HomeOperatingStatement>(panel).data;
           if (_minor(data['totalIncome']) == income &&
-              _minor(data['totalExpenses']) == expenses)
+              _minor(data['totalExpenses']) == expenses) {
             break;
+          }
           await pump();
         }
         final data = t.widget<HomeOperatingStatement>(panel).data;
