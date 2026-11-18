@@ -147,18 +147,18 @@ void main() {
       });
       final s = setup!;
       Future<Json> get(AuthController auth, String path) async =>
-          obj(await t.runAsync(() => auth.request('GET', path)));
+          (await t.runAsync(() async => obj(await auth.request('GET', path))))!;
       Future<Json> post(String path, Json body, String key) async {
-        final result = obj(
-          await t.runAsync(
-            () => s.witness.request(
+        final result = (await t.runAsync(
+          () async => obj(
+            await s.witness.request(
               'POST',
               path,
               body: body,
               idempotencyKey: key,
             ),
           ),
-        );
+        ))!;
         writes.add({'path': path, 'body': body, 'key': key, 'result': result});
         return result;
       }
@@ -171,21 +171,36 @@ void main() {
         String key,
         Set<int> statuses,
       ) async {
-        ApiFailure? failure;
-        try {
-          await t.runAsync(
-            () => auth.request(method, path, body: body, idempotencyKey: key),
-          );
-        } on ApiFailure catch (error) {
-          failure = error;
-        }
-        expect(failure, isNotNull, reason: '$method $path must be rejected');
-        expect(statuses, contains(failure!.status));
-        evidence.add({
-          'deniedMethod': method,
-          'path': path,
-          'status': failure.status,
+        final response = await t.runAsync(() async {
+          final client = HttpClient();
+          try {
+            final request = await client.openUrl(
+              method,
+              Uri.parse('http://127.0.0.1:5397$path'),
+            );
+            request.followRedirects = false;
+            request.headers.set(
+              HttpHeaders.authorizationHeader,
+              'Bearer ${auth.session!.accessToken}',
+            );
+            request.headers.set('Idempotency-Key', key);
+            if (body != null) {
+              request.headers.contentType = ContentType.json;
+              request.write(jsonEncode(body));
+            }
+            final result = await request.close();
+            return {
+              'status': result.statusCode,
+              'body': await utf8.decoder.bind(result).join(),
+            };
+          } finally {
+            client.close(force: true);
+          }
         });
+        expect(response, isNotNull);
+        expect(statuses, contains(response!['status']));
+        expect(response['body'], isNot(contains('صيانة ديمو مثبتة')));
+        evidence.add({'deniedMethod': method, 'path': path, ...response});
       }
 
       Future<void> pump() async {
@@ -238,6 +253,24 @@ void main() {
         await reach(finder);
         expect(finder.hitTestable(), findsWidgets);
         await t.tap(finder.hitTestable().first);
+        await pump();
+      }
+
+      Future<void> branch(String label) async {
+        final rail = find.byKey(const ValueKey('owner-branch-rail'));
+        await reach(rail);
+        final scroll = find
+            .descendant(of: rail, matching: find.byType(Scrollable))
+            .first;
+        await t.scrollUntilVisible(
+          find.text(label),
+          160,
+          scrollable: scroll,
+          maxScrolls: 20,
+        );
+        await t.pumpAndSettle();
+        expect(find.text(label).hitTestable(), findsOneWidget);
+        await t.tap(find.text(label).hitTestable());
         await pump();
       }
 
@@ -380,7 +413,7 @@ void main() {
         'overdue': 925,
         'players': 2,
       });
-      await tap(find.text('فرع مدينة نصر'));
+      await branch('فرع مدينة نصر');
       await overdue(800, 1);
       passed('OHF03', {
         'layer': 'installed-ios-and-api',
@@ -413,14 +446,14 @@ void main() {
         'futureCharge': 500,
         'overdue': 925,
       });
-      await tap(find.text('فرع الزقازيق'));
+      await branch('فرع الزقازيق');
       await overdue(125, 1);
       passed('OHF06', {
         'layer': 'installed-ios-and-api',
         'overdue': 125,
         'players': 1,
       });
-      await tap(find.text('فرع التجمع الخامس'));
+      await branch('فرع التجمع الخامس');
       await overdue(0, 0);
       passed('OHF07', {
         'layer': 'installed-ios-and-api',
