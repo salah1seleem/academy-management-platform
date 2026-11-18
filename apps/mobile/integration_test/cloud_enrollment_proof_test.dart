@@ -543,7 +543,7 @@ void main() {
           'businessWritesAfterFixture': api.writes,
         },
       };
-      expect(binding.reportData!['screenshots'], hasLength(11));
+      expect((binding.reportData!['screenshots'] as List).length, 11);
       await t.pumpWidget(const SizedBox());
     },
   );

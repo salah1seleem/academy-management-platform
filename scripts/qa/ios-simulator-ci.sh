@@ -99,13 +99,48 @@ gtimeout --kill-after=20s 12m flutter build ios --simulator --debug --no-pub \
 
 echo 'Installing and launching the iOS test app.'
 test_status=0
-ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbose --no-pub \
-  -d "$simulator" \
-  --use-application-binary=build/ios/iphonesimulator/Runner.app \
-  --driver=test_driver/visual_driver.dart \
-  --target="$target" \
-  --no-publish-port --timeout=300 --screenshot="$qa_dir/evidence" \
-  2>&1 | tee "$qa_dir/evidence/flutter-ios.log" || test_status=$?
+if [[ "$suite" == enrollment-proof ]]; then
+  # Attach through a known loopback VM port. Simulator OS log discovery can
+  # leave an installed app paused forever even though the build succeeded.
+  # These are debug-only flags on the disposable hosted simulator, not API auth.
+  bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+  xcrun simctl install "$simulator" build/ios/iphonesimulator/Runner.app
+  xcrun simctl launch "$simulator" "$bundle_id" \
+    --enable-dart-profiling --disable-vm-service-publication \
+    --start-paused --enable-checked-mode --verify-entry-points \
+    --disable-service-auth-codes --vm-service-host=127.0.0.1 --vm-service-port=9159 \
+    > "$qa_dir/evidence/native-launch.log" 2>&1
+  python3 - "$qa_dir/evidence/vm-ready.json" <<'PYVM'
+import json, pathlib, sys, time, urllib.error, urllib.request
+deadline = time.monotonic() + 120
+while time.monotonic() < deadline:
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:9159/getVM', timeout=2) as response:
+            data = json.load(response)
+        vm = data.get('result', data)
+        if vm.get('type') == 'VM':
+            pathlib.Path(sys.argv[1]).write_text(json.dumps({'type': 'VM', 'isolateCount': len(vm.get('isolates', [])), 'host': '127.0.0.1', 'port': 9159}))
+            break
+    except (OSError, ValueError, urllib.error.URLError):
+        pass
+    time.sleep(1)
+else:
+    raise SystemExit('Installed test app did not expose its loopback VM service within 120 seconds.')
+PYVM
+  ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbose --no-pub \
+    -d "$simulator" --use-existing-app=http://127.0.0.1:9159/ --keep-app-running \
+    --driver=test_driver/visual_driver.dart --target="$target" \
+    --no-publish-port --timeout=300 --screenshot="$qa_dir/evidence" \
+    2>&1 | tee "$qa_dir/evidence/flutter-ios.log" || test_status=$?
+else
+  ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbose --no-pub \
+    -d "$simulator" \
+    --use-application-binary=build/ios/iphonesimulator/Runner.app \
+    --driver=test_driver/visual_driver.dart \
+    --target="$target" \
+    --no-publish-port --timeout=300 --screenshot="$qa_dir/evidence" \
+    2>&1 | tee "$qa_dir/evidence/flutter-ios.log" || test_status=$?
+fi
 
 if [[ "$test_status" != 0 ]]; then
   gtimeout 20s xcrun simctl io "$simulator" screenshot "$qa_dir/evidence/ios-last-frame.png" || true
