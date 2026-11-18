@@ -61,7 +61,14 @@ jobs:
       - name: Exercise selected suite on one iOS simulator
         env:
           ACADEMY_IOS_SUITE: ${{ inputs.suite || 'role-homes' }}
-        run: bash scripts/qa/ios-simulator-ci.sh
+        run: |
+          bash scripts/qa/ios-simulator-ci.sh
+          # The macOS Bash EXIT trap must never turn an early abort into green.
+          test -s "$RUNNER_TEMP/academy-ios-qa/evidence/suite-completed.txt"
+          test "$(cat "$RUNNER_TEMP/academy-ios-qa/evidence/suite-completed.txt")" = "$ACADEMY_IOS_SUITE"
+          if [[ "$ACADEMY_IOS_SUITE" == enrollment-proof ]]; then
+            test -s "$RUNNER_TEMP/academy-ios-qa/evidence/proof-summary.json"
+          fi
       - name: Preserve iOS results and diagnostics
         if: always()
         uses: actions/upload-artifact@v4

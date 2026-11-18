@@ -392,6 +392,12 @@ void main() {
       passed('IP18');
       api.fault = 'unavailable';
       await open(owner, scale: 2);
+      await reach(find.text(money(detail['amount'], detail['currency'])));
+      expect(
+        find.text(money(detail['amount'], detail['currency'])).hitTestable(),
+        findsOneWidget,
+      );
+      await capture('large-text-amount');
       await reach(find.text('إعادة تحميل الصورة'));
       await capture('large-text-unavailable');
       await t.tap(find.text('إعادة تحميل الصورة').hitTestable());

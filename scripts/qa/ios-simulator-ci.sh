@@ -9,7 +9,8 @@ fi
 
 qa_dir="$RUNNER_TEMP/academy-ios-qa"
 mkdir -p "$qa_dir/evidence" "$qa_dir/socket"
-export ConnectionStrings__Default='Host=127.0.0.1;Port=55432;Database=academy_ios_qa;Username=academy_ci'
+db_name=academy_ios_qa
+export ConnectionStrings__Default="Host=127.0.0.1;Port=55432;Database=$db_name;Username=academy_ci"
 export ASPNETCORE_ENVIRONMENT=Demo
 export ASPNETCORE_URLS=http://127.0.0.1:5397
 export Demo__SeedProfile=Football Demo__SeedEnabled=true Demo__StaffPassword=Demo-Only-123!
@@ -29,6 +30,9 @@ export Logging__LogLevel__Default=Warning Logging__LogLevel__Microsoft__EntityFr
 simulator=''
 api_pid=''
 cleanup() {
+  local status=$?
+  trap - EXIT
+  set +e
   if [[ -n "$simulator" ]]; then
     gtimeout 45s xcrun simctl shutdown "$simulator" || true
     gtimeout 45s xcrun simctl delete "$simulator" || true
@@ -40,12 +44,13 @@ cleanup() {
   if [[ -f "$qa_dir/postgres/postmaster.pid" ]]; then
     pg_ctl -D "$qa_dir/postgres" -m fast stop || true
   fi
+  exit "$status"
 }
 trap cleanup EXIT
 
 initdb -D "$qa_dir/postgres" -U academy_ci --auth=trust > "$qa_dir/evidence/postgres-init.log"
 pg_ctl -D "$qa_dir/postgres" -l "$qa_dir/evidence/postgres.log" -o "-h 127.0.0.1 -p 55432 -k $qa_dir/socket" -w start
-createdb -h 127.0.0.1 -p 55432 -U academy_ci academy_ios_qa
+createdb -h 127.0.0.1 -p 55432 -U academy_ci "$db_name"
 
 echo 'Building the isolated Demo API and applying migrations.'
 dotnet tool restore
@@ -123,7 +128,7 @@ expected = {f'IP{i:02}' for i in range(1, 25)} - {'IP20', 'IP22'}
 assert set(proof['executedPassed']) == expected
 assert proof['businessWritesAfterFixture'] == []
 assert set(proof['successfulAssetHashes']) == {proof['originalPngSha256']}
-assert len(list(folder.glob('phase-iosproof-*.png'))) == 9
+assert len(list(folder.glob('phase-iosproof-*.png'))) == 10
 money = json.loads((folder / 'money-after.json').read_text())
 summary = {'executedAutomated': sorted(expected | {'IP22'}),
            'visualReviewPending': ['IP20'],
@@ -145,5 +150,8 @@ for role in owner admin coach guardian; do
     test_status=1
   fi
 done
+fi
+if [[ "$test_status" == 0 ]]; then
+  printf '%s\n' "$suite" > "$qa_dir/evidence/suite-completed.txt"
 fi
 exit "$test_status"
