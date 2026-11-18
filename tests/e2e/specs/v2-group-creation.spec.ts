@@ -1,6 +1,6 @@
 import { formatDateAr } from "../../../apps/web/src/lib/formatters";
 import { expect, test } from "@playwright/test";
-import { creationDayLabel, creationDraft, creationState, fillCreationIdentity, fillCreationSchedule } from "../support/group-creation";
+import { assertCreationMetricWords, creationDayLabel, creationDraft, creationState, fillCreationIdentity, fillCreationSchedule } from "../support/group-creation";
 import { afterDays, assertPlacementContrast, assertPlacementViewport, placementEnrollment, placementId as id, placementRead, placementWrite, serviceIdentity, setPlacementAppearance, type PlacementPlayer } from "../support/placement";
 
 test.beforeEach(async ({ page }) => {
@@ -34,7 +34,7 @@ test("Owner creates one reviewed group after a lost save reply; Guardian receive
   for (const label of ["الحصص بعد الحفظ", "اللاعبون المختارون"]) await expect(review.locator(".timetable-preview-counts p").filter({ hasText: label }).locator("strong")).toHaveText("1");
   await expect(page.getByRole("button", { name: "تأكيد إنشاء المجموعة" })).toBeEnabled();
   expect(await creationState(page.request, draft.timetable.from)).toEqual(before);
-  for (const width of [390, 1440]) {
+  for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     for (const mode of ["dark", "light"] as const) {
       await setPlacementAppearance(page, mode);

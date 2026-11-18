@@ -85,7 +85,24 @@ jobs:
       - run: dotnet build apps/api/src/Academy.Api --configuration Release -m:1
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Install Chromium with system dependencies
+        if: ${{ matrix.group != 'group-creation' }}
+        run: npx playwright install --with-deps chromium
+      - name: Prepare pinned Chromium for group creation
+        if: ${{ matrix.group == 'group-creation' }}
+        run: |
+          npx playwright install chromium
+          if ! node - <<'JAVASCRIPT'
+          const { chromium } = require('@playwright/test');
+          (async () => {
+            const browser = await chromium.launch();
+            process.stdout.write(`Pinned Chromium launch succeeded: ${browser.version()}\n`);
+            await browser.close();
+          })().catch(error => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+          JAVASCRIPT
+          then
+            npx playwright install-deps chromium
+          fi
       - name: Build Football demo web
         if: ${{ matrix.config != 'regression' }}
         env:

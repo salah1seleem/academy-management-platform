@@ -23,3 +23,18 @@
 .workspace :global(.placement-preview) [role="alert"] {
   color: var(--staff-danger, #8b3340);
 }
+
+@media (max-width: 680px) {
+  .workspace :global(.timetable-preview-counts) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .workspace :global(.timetable-preview-counts) p {
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    overflow-wrap: normal;
+  }
+}
