@@ -11,9 +11,12 @@ class NativePlayerRefund extends StatefulWidget {
     super.key,
     required this.auth,
     required this.playerId,
+    this.playerName,
+    this.playerCode,
   });
   final AuthController auth;
   final String playerId;
+  final String? playerName, playerCode;
   @override
   State<NativePlayerRefund> createState() => _NativePlayerRefundState();
 }
@@ -267,6 +270,11 @@ class _NativePlayerRefundState
   Widget build(BuildContext context) => page(
     'استرداد مبلغ للاعب',
     [
+      if (named(widget.playerName))
+        UiText(
+          '${widget.playerName}${named(widget.playerCode) ? ' · ${widget.playerCode}' : ''}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
       const UiText(
         'راجع التحصيل والمبلغ وطريقة الرد. الاسترداد لا يلغي الاشتراك أو يعيد فتح الدين تلقائيًا.',
       ),

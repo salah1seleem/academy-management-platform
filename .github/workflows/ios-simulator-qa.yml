@@ -88,7 +88,7 @@ jobs:
         if: inputs.suite == 'player-refund'
         working-directory: apps/mobile
         run: |
-          flutter analyze lib/features/admin/native_refund.dart test/native_refund_negative_test.dart integration_test/cloud_player_refund_test.dart
+          flutter analyze lib/features/admin/native_refund.dart lib/features/admin/native_player_workspace.dart test/native_refund_negative_test.dart integration_test/cloud_player_refund_test.dart
           flutter test test/native_refund_negative_test.dart test/approved_native_refund_test.dart test/approved_refund_readback_test.dart
       - name: Exercise selected suite on one iOS simulator
         if: inputs.checks_only != true

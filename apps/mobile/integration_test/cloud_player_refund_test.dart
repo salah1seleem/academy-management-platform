@@ -209,6 +209,10 @@ void main() {
           '/api/v1/subscriptions/receipts/$receiptId',
         );
         final periods = <String, Object?>{
+          'player': await witness.request(
+            'GET',
+            '/api/v1/people/players/$_player',
+          ),
           'all': await witness.request('GET', '/api/v1/subscriptions/periods'),
           'guardianReceipt': await family.request(
             'GET',
@@ -267,8 +271,15 @@ void main() {
       }
 
       Future<void> reach(Finder f) async {
-        await wait(find.byType(Scrollable));
-        final scroll = find.byType(Scrollable).last;
+        final scroll = find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  (widget.axisDirection == AxisDirection.down ||
+                      widget.axisDirection == AxisDirection.up),
+            )
+            .last;
+        await wait(scroll);
         final p = t.state<ScrollableState>(scroll).position;
         p.jumpTo(0);
         await t.pump();
@@ -321,7 +332,12 @@ void main() {
         await t.pumpAndSettle();
         await t.pumpWidget(
           _app(
-            NativePlayerRefund(auth: owner, playerId: _player),
+            NativePlayerRefund(
+              auth: owner,
+              playerId: _player,
+              playerName: obj(periods['player'])['arabicName'] as String,
+              playerCode: obj(periods['player'])['playerCode'] as String,
+            ),
             dark: dark,
             scale: scale,
           ),
@@ -398,8 +414,9 @@ void main() {
         find.widgetWithText(DropdownButtonFormField<String>, 'التحصيل'),
       );
       await capture('entry-light');
+      expect(find.textContaining('NG-0001'), findsWidgets);
       passed('RFN01');
-      await t.pageBack();
+      await t.tap(find.byType(BackButton).last);
       await t.pumpAndSettle();
       expect(find.byType(NativePlayerWorkspace), findsOneWidget);
       await assertCount(0);
@@ -633,6 +650,19 @@ void main() {
         },
         statuses: [422],
       );
+      final maximumReason = await t.runAsync(
+        () => witness.request(
+          'POST',
+          '$_root/quote',
+          body: {
+            'collectionId': collection['id'],
+            'amount': '1.00',
+            'reason': 'أ' * 500,
+          },
+        ),
+      );
+      expect(obj(maximumReason)['amount'], '1.00');
+      passed('RFN31');
       passed('RFN26');
 
       for (final dark in [false, true]) {

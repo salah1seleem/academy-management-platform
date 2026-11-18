@@ -11,7 +11,7 @@ driver = read('ios-cloud-response.json')
 assert driver['allTestsPassed'] is True
 review = driver['refundReview']
 assert review['source'] == 'installed-ios-real-isolated-api'
-native_ids = {f'RFN{i:02}' for i in [1,3,4,5,6,7,8,9,12,13,14,15,16,17,18,19,20,21,22,23,25,26,27,29,30]}
+native_ids = {f'RFN{i:02}' for i in [1,3,4,5,6,7,8,9,12,13,14,15,16,17,18,19,20,21,22,23,25,26,27,29,30,31]}
 assert set(review['executedPassed']) == native_ids
 assert len(review['executedPassed']) == len(native_ids)
 reconciliation = review['reconciliation']
@@ -38,7 +38,7 @@ summary = {
  'executedAutomated':sorted(native_ids | {'RFN28'}),
  'visualReviewPending':['RFN29'],
  'nativeCasesWithWidgetBranches':['RFN09','RFN13','RFN21','RFN25','RFN29'],
- 'widgetOnlyCases':['RFN02','RFN10','RFN11','RFN24','RFN31','RFN32'],
+ 'widgetOnlyCases':['RFN02','RFN10','RFN11','RFN24','RFN32'],
  'newRefundCount':6,'newRefundAmount':'36.25','currency':'EGP',
  'unchangedTables':sorted(set(before)-{'refunds'}),
  'beforeSha256':hashlib.sha256((folder/'refund-money-before.json').read_bytes()).hexdigest(),

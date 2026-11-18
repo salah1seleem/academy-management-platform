@@ -24,11 +24,36 @@ Map<String, dynamic> quote() => {
 Future<void> amount(WidgetTester t, String value) async {
   final f = find.widgetWithText(TextFormField, 'قيمة الاسترداد');
   await t.ensureVisible(f);
+  await t.pumpAndSettle();
   await t.enterText(f, value);
   await t.pumpAndSettle();
 }
 
 void main() {
+  testWidgets(
+    'RFN01 refund form retains the player identity passed by its file',
+    (t) async {
+      final auth = await authenticate(
+        'AcademyOwner',
+        (m, p, b, token) async => source(),
+      );
+      await t.pumpWidget(
+        app(
+          NativePlayerRefund(
+            auth: auth,
+            playerId: 'player',
+            playerName: 'لاعب اختبار',
+            playerCode: 'TST-001',
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('لاعب اختبار · TST-001'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
   testWidgets(
     'RFN24 disabled cash never enables confirmation despite a selected shift',
     (t) async {
@@ -192,8 +217,11 @@ void main() {
               .text('RC-20261118-ABCD1234 · 2026-10-21 · المتاح 100 ج.م')
               .first;
           final bounds = t.getRect(sourceField);
-          final origin = t.getTopLeft(sourceLabel);
-          final paragraph = t.renderObject<RenderParagraph>(sourceLabel);
+          final richText = find
+              .descendant(of: sourceLabel, matching: find.byType(RichText))
+              .first;
+          final origin = t.getTopLeft(richText);
+          final paragraph = t.renderObject<RenderParagraph>(richText);
           final boxes = paragraph.getBoxesForSelection(
             TextSelection(
               baseOffset: 0,

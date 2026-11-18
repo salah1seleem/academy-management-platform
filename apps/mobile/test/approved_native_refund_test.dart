@@ -21,6 +21,7 @@ Future<void> tap(WidgetTester t, String text) async {
 Future<void> choose(WidgetTester t, String label, String value) async {
   final f = find.widgetWithText(DropdownButtonFormField<String>, label);
   await t.ensureVisible(f);
+  await t.pumpAndSettle();
   await t.tap(f);
   await t.pumpAndSettle();
   await t.tap(find.text(value).last);

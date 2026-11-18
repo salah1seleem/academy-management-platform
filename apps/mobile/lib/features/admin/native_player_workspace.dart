@@ -375,7 +375,14 @@ class _NativePlayerWorkspaceState
           actionLink(
             'تسجيل استرداد',
             Icons.undo_outlined,
-            () => open(NativePlayerRefund(auth: auth, playerId: widget.id)),
+            () => open(
+              NativePlayerRefund(
+                auth: auth,
+                playerId: widget.id,
+                playerName: textOf(p['arabicName']),
+                playerCode: textOf(p['playerCode']),
+              ),
+            ),
           ),
         if (tab == 'training' && e != null) ...[
           WeeklyGroupSchedule(schedules: rows(e['recurring'] ?? <Json>[])),
