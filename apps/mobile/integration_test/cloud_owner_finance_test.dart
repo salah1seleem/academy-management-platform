@@ -40,7 +40,8 @@ class _OwnerTransport extends HttpApiTransport {
     String? token,
     String? idempotencyKey,
   }) => io.run(() async {
-    if (method == 'GET') requests.add({'method': method, 'path': path});
+    final read = <String, dynamic>{'method': method, 'path': path};
+    if (method == 'GET') requests.add(read);
     final uri = Uri.parse(path);
     final name = uri.path.endsWith('/owner-cockpit')
         ? 'cockpit'
@@ -49,15 +50,25 @@ class _OwnerTransport extends HttpApiTransport {
         : '';
     if (fault == '$name-503' && name.isNotEmpty) {
       fault = null;
+      read['status'] = 503;
+      read['controlledFault'] = true;
       throw const ApiFailure(503, 'تعذر تحميل البيانات.');
     }
-    final value = await super.send(
-      method,
-      path,
-      body: body,
-      token: token,
-      idempotencyKey: idempotencyKey,
-    );
+    Object? value;
+    try {
+      value = await super.send(
+        method,
+        path,
+        body: body,
+        token: token,
+        idempotencyKey: idempotencyKey,
+      );
+      read['status'] = 200;
+    } on ApiFailure catch (error) {
+      read['status'] = error.status;
+      read['message'] = error.message;
+      rethrow;
+    }
     if (fault == 'statement-contract' && name == 'statement') {
       fault = null;
       return Map<String, dynamic>.from(obj(value))..remove('surplus');
@@ -233,17 +244,38 @@ void main() {
         final scroll = outer();
         await wait(scroll);
         final position = t.state<ScrollableState>(scroll).position;
-        for (
-          var attempt = 0;
-          attempt < 45 && finder.evaluate().isEmpty;
-          attempt++
-        ) {
-          final forward = position.pixels < position.maxScrollExtent - 1;
+        Future<void> top() async {
+          for (var i = 0; i < 60 && position.pixels > 1; i++) {
+            await t.dragFrom(
+              Offset(t.getRect(scroll).left + 8, t.getRect(scroll).center.dy),
+              const Offset(0, 800),
+            );
+            await t.pumpAndSettle();
+          }
+          expect(position.pixels, lessThanOrEqualTo(1));
+        }
+
+        if (finder.evaluate().isEmpty) await top();
+        final deadline = Stopwatch()..start();
+        while (finder.evaluate().isEmpty && deadline.elapsed.inSeconds < 45) {
+          // Async sections can finish after their placeholder has left the lazy
+          // viewport. Restart at the top instead of waiting below that section.
+          if (position.pixels >= position.maxScrollExtent - 1) {
+            await top();
+            await pump();
+            continue;
+          }
           await t.dragFrom(
             Offset(t.getRect(scroll).left + 8, t.getRect(scroll).center.dy),
-            Offset(0, forward ? -220 : 650),
+            const Offset(0, -160),
           );
           await pump();
+        }
+        if (finder.evaluate().isEmpty) {
+          debugPrint(
+            'IOS-OWNER target unavailable: ${jsonEncode({'target': '$finder', 'pixels': position.pixels, 'maxScrollExtent': position.maxScrollExtent, 'requests': s.api.requests, 'mountedLabels': t.allWidgets.whereType<Text>().map((w) => w.data ?? w.textSpan?.toPlainText()).whereType<String>().toSet().toList()})}',
+          );
+          await binding.takeScreenshot('phase-iosowner-target-unavailable');
         }
         await wait(finder);
         await t.ensureVisible(finder.first);
