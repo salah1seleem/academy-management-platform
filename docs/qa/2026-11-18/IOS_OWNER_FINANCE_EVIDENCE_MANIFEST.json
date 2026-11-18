@@ -3,7 +3,7 @@
   "goalComplete": false,
   "fullScreenClosure": false,
   "latestSource": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
-  "currentRun": 44302593315,
+  "currentRun": 44306777550,
   "currentJob": 134795866649,
   "currentConclusion": "pending",
   "baselineRun": 44295386495,
@@ -19,7 +19,7 @@
   "baselineRawLogSha256": "2f2f5caf9cbfc05b1b14fd786fb09053dbb25d4e1d6a7d2a4694baa623ffe0b3",
   "cloudBuildOnly": true,
   "stagingDeployment": false,
-  "currentSource": "81fede9495df1eb099ee4402289c085f515f6c0f",
+  "currentSource": "03ad8291976fc5e0555440b4671ca0b7dce2e5a5",
   "widgetReview": {
     "source": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
     "run": 44298675435,
@@ -107,5 +107,18 @@
       "expense-390-text2-dark.png": "d761d400cb574c176f8e24d5ab3e4e3e6570273ae8b828558a58faae2317318d",
       "expense-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60"
     }
+  },
+  "lastNativeAttempt": {
+    "run": 44302593315,
+    "artifact": 14427368579,
+    "archiveSha256": "3bc5d3958b2a0c167af0943820a8bd28fdee2d4bba78f6d63d6b4539be6c0cf0",
+    "completedBusinessCases": 0,
+    "selected13TablesUnchanged": true,
+    "capturesActuallyOpened": [
+      "drive_01.png",
+      "phase-iosowner-target-unavailable.png"
+    ],
+    "readResponseEvidence": "not durably captured; new attempt persists screenshot diagnostic arguments",
+    "sourceChange": "QA helper and driver only; production UI unchanged"
   }
 }

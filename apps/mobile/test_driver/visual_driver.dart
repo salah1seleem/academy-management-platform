@@ -70,11 +70,10 @@ Future<void> main() async {
       final folder = Directory('../../tmp/mobile-visuals')
         ..createSync(recursive: true);
       await File('${folder.path}/$name.png').writeAsBytes(bytes);
-      if (name.startsWith('phase-iosowner-') &&
-          args is Map &&
-          args['diagnostics'] is Map) {
+      final diagnostics = args?['diagnostics'];
+      if (name.startsWith('phase-iosowner-') && diagnostics is Map) {
         await File('${folder.path}/$name.json')
-            .writeAsString(jsonEncode(args['diagnostics']));
+            .writeAsString(jsonEncode(diagnostics));
       }
       captures.add({'name': name, 'byteLength': bytes.length});
       return bytes.isNotEmpty; // Capture only. Visual pass requires human/model inspection separately.
