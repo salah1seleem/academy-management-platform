@@ -153,6 +153,7 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
       await issues.screenshot({ path: info.outputPath(`import-errors-${mode}-${width}.png`), animations: "disabled" });
     }
   }
+  await page.setViewportSize({ width: 390, height: 900 }); await assertPlacementViewport(page, 390);
   const pagination = issues.getByRole("navigation", { name: "صفحات مشكلات الاستيراد" });
   expect(mixed.errors.length).toBeGreaterThan(25);
   async function expectIssuePage(expected: Issue[]) {
@@ -168,8 +169,10 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
   await pagination.getByRole("button", { name: "الصفحة السابقة" }).click(); await expectIssuePage(mixed.errors.slice(0, 25));
   await pagination.getByLabel("صفوف الصفحة").selectOption("10"); await expectIssuePage(mixed.errors.slice(0, 10));
   await pagination.getByRole("button", { name: "الصفحة التالية" }).click(); await expectIssuePage(mixed.errors.slice(10, 20));
-  await pagination.getByLabel("صفوف الصفحة").selectOption("25"); await expectIssuePage(mixed.errors.slice(0, 25));
-  await writeFile(info.outputPath("issue-review-metrics.json"), JSON.stringify({ reviewMetrics, totalIssues: mixed.errors.length, paginationSizes: [25, 10, 25] }, null, 2));
+  await pagination.getByLabel("صفوف الصفحة").selectOption("50"); await expectIssuePage(mixed.errors);
+  await expect(pagination.getByRole("button", { name: "الصفحة التالية" })).toBeDisabled(); await expect(pagination.getByRole("button", { name: "الصفحة السابقة" })).toBeDisabled();
+  await pagination.getByLabel("صفوف الصفحة").selectOption("25"); await expectIssuePage(mixed.errors.slice(0, 25)); await assertPlacementViewport(page, 390);
+  await writeFile(info.outputPath("issue-review-metrics.json"), JSON.stringify({ reviewMetrics, totalIssues: mixed.errors.length, paginationSizes: [25, 10, 50, 25] }, null, 2));
   const clean = await download(page, /تنزيل ملف اللاعبين السليمين/), correction = await download(page, /تنزيل صفوف التصحيح/);
   const cleanRows = playerRows(clean), correctionRows = playerRows(correction), expectedClean = cohort.originals.slice(22).map(row => row.cells.A);
   expect(cleanRows.map(row => row.cells.A)).toEqual(expectedClean); expect(correctionRows.map(row => row.cells)).toEqual(playerRows(cohort.mixed).slice(0, 22).map(row => row.cells));
