@@ -42,6 +42,57 @@ void main() {
       ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
     await Future.wait([arabic.load(), icons.load()]);
   });
+  for (final latest in ['99.00', '100.00']) {
+    testWidgets(
+      'RFN23 explains rejected availability only when fresh data proves it: $latest',
+      (t) async {
+        var posts = 0;
+        final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+          if (p.endsWith('/quote')) return {...quote(), 'amount': '100.00'};
+          if (m == 'POST') {
+            posts++;
+            throw const ApiFailure(
+              409,
+              'تغيرت البيانات. حدّث الصفحة قبل المحاولة.',
+            );
+          }
+          final data = source();
+          data['collections'] = [
+            {
+              ...(data['collections'] as List).first as Map<String, dynamic>,
+              'available': posts == 0 ? '100.00' : latest,
+            },
+          ];
+          return data;
+        });
+        await t.pumpWidget(
+          app(NativePlayerRefund(auth: auth, playerId: 'player')),
+        );
+        await t.pumpAndSettle();
+        await flow.choose(t, 'التحصيل', '2026-10-21 · المتاح 100 ج.م');
+        await amount(t, '100');
+        await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+        await flow.tap(
+          t,
+          'أؤكد أن التحويل تم خارج النظام وأوثق رده مرة واحدة.',
+        );
+        await flow.tap(t, 'تأكيد تسجيل الاسترداد');
+        expect(
+          find.text(
+            latest == '99.00'
+                ? 'الاسترداد يتجاوز المبلغ المتاح حاليًا. راجع المبلغ قبل المحاولة.'
+                : 'تغيرت البيانات. حدّث الصفحة قبل المحاولة.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(CheckboxListTile), findsNothing);
+        expect(posts, 1);
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
   testWidgets(
     'RFN01 refund form retains the player identity passed by its file',
     (t) async {

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
+import 'package:academy_mobile/core/widgets/arabic_number_input.dart';
 import 'package:academy_mobile/features/admin/native_player_workspace.dart';
 import 'package:academy_mobile/features/admin/native_refund.dart';
 import 'package:academy_mobile/features/guardian/guardian_ui.dart';
@@ -134,7 +135,11 @@ void main() {
       );
       final previous = HttpOverrides.current;
       addTearDown(() => HttpOverrides.global = previous);
+      binding.testTextInput.register();
+      addTearDown(binding.testTextInput.unregister);
       final done = <String>[];
+      final denialEvidence = <Json>[];
+      final inputEvidence = <Json>[];
       void passed(String id) {
         expect(done, isNot(contains(id)));
         done.add(id);
@@ -311,8 +316,26 @@ void main() {
       Future<void> field(String name, String value) async {
         final f = find.widgetWithText(TextFormField, name);
         await reach(f);
-        await t.enterText(f, value);
+        await t.tap(f);
         await t.pumpAndSettle();
+        await t.enterText(f, value);
+        final editor = find.descendant(
+          of: f,
+          matching: find.byType(EditableText),
+        );
+        final expected = name == 'قيمة الاسترداد'
+            ? canonicalNumericInput(value)
+            : value;
+        expect(binding.testTextInput.hasAnyClients, true);
+        expect(t.widget<EditableText>(editor).controller.text, expected);
+        await t.pumpAndSettle();
+        final actual = t.widget<EditableText>(editor).controller.text;
+        expect(actual, expected);
+        inputEvidence.add({
+          'field': name,
+          'expected': expected,
+          'actual': actual,
+        });
       }
 
       Future<void> capture(String phase) async {
@@ -363,6 +386,10 @@ void main() {
               '${current['receiptNumber']} · ${day(current['confirmedAtUtc'])} · المتاح ${money(current['available'], current['currency'])}';
           await t.tap(find.text(choice).last);
           await t.pumpAndSettle();
+          expect(
+            t.state<FormFieldState<String>>(selector).value,
+            collection['id'],
+          );
         }
       }
 
@@ -444,6 +471,7 @@ void main() {
       await capture('selector-light');
       await t.tap(find.text(label).last);
       await t.pumpAndSettle();
+      expect(t.state<FormFieldState<String>>(selector).value, collection['id']);
       for (final (id, value) in [
         ('RFN03', ''),
         ('RFN04', '0'),
@@ -574,6 +602,59 @@ void main() {
         expect(status, isIn(statuses));
       }
 
+      Future<void> rawDenied(
+        AuthController actor,
+        String method, {
+        Object? body,
+      }) async {
+        final result = await t.runAsync(() async {
+          final client = HttpClient();
+          try {
+            final request = await client.openUrl(
+              method,
+              Uri.parse('http://127.0.0.1:5397$_root'),
+            );
+            request.followRedirects = false;
+            request.headers.set(
+              HttpHeaders.authorizationHeader,
+              'Bearer ${actor.session!.accessToken}',
+            );
+            if (body != null) {
+              request.headers.contentType = ContentType.json;
+              request.headers.set('Idempotency-Key', 'ios-refund-raw-denied');
+              request.write(jsonEncode(body));
+            }
+            final response = await request.close().timeout(
+              const Duration(seconds: 20),
+            );
+            final raw = await utf8.decoder
+                .bind(response)
+                .join()
+                .timeout(const Duration(seconds: 20));
+            expect(response.statusCode, isIn([403, 404]));
+            expect(raw.length, lessThan(4096));
+            for (final forbidden in [
+              collection['id'],
+              collection['receiptNumber'],
+              obj(periods['player'])['arabicName'],
+            ]) {
+              expect(raw, isNot(contains(forbidden as String)));
+            }
+            return <String, dynamic>{
+              'role': actor.session!.selected!.role,
+              'academyId': actor.session!.selected!.academyId,
+              'method': method,
+              'status': response.statusCode,
+              'rawBody': raw,
+            };
+          } finally {
+            client.close(force: true);
+          }
+        });
+        expect(result, isNotNull);
+        denialEvidence.add(result!);
+      }
+
       await rejected(
         witness,
         'POST',
@@ -618,6 +699,7 @@ void main() {
 
       for (final actor in [family, coach, admin, foreign]) {
         await rejected(actor, 'GET', _root);
+        await rawDenied(actor, 'GET');
         await rejected(
           actor,
           'POST',
@@ -628,6 +710,15 @@ void main() {
             'reason': 'رفض دور',
           },
           key: 'ios-refund-role-denial',
+        );
+        await rawDenied(
+          actor,
+          'POST',
+          body: {
+            'collectionId': collection['id'],
+            'amount': '0.01',
+            'reason': 'رفض دور',
+          },
         );
       }
       await rejected(
@@ -754,6 +845,7 @@ void main() {
         }
         return {
           'source': collection,
+          'playerName': obj(periods['player'])['arabicName'],
           'refundIds': savedIds,
           'totalRefundMinor': 3625,
           'financialBefore': financialBefore,
@@ -764,6 +856,9 @@ void main() {
           'receiptUnchanged': true,
           'periodsUnchanged': true,
           'attempts': api.attempts,
+          'denialEvidence': denialEvidence,
+          'inputEvidence': inputEvidence,
+          'textInputMode': 'registered-framework-text-channel',
         };
       });
       expect(finalState, isNotNull);

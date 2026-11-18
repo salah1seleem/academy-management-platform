@@ -18,6 +18,24 @@ reconciliation = review['reconciliation']
 assert reconciliation['totalRefundMinor'] == 3625
 assert reconciliation['receiptUnchanged'] is True
 assert reconciliation['periodsUnchanged'] is True
+assert reconciliation['textInputMode'] == 'registered-framework-text-channel'
+inputs = reconciliation['inputEvidence']
+assert len(inputs) >= 20 and all(row['actual'] == row['expected'] for row in inputs)
+amounts = {row['actual'] for row in inputs if row['field'] == 'قيمة الاسترداد'}
+assert {'', '0', '-1', '1.001', '25.75'} <= amounts
+assert format(Decimal(str(reconciliation['source']['available'])) + 1, '.2f') in amounts
+denials = reconciliation['denialEvidence']
+expected_denials = {(role,academy,method) for role,academy in [
+ ('Guardian','10000000-0000-0000-0000-000000000001'),
+ ('Coach','10000000-0000-0000-0000-000000000001'),
+ ('AcademyAdmin','10000000-0000-0000-0000-000000000001'),
+ ('AcademyOwner','20000000-0000-0000-0000-000000000002'),
+] for method in ['GET','POST']}
+assert len(denials) == 8
+assert {(row['role'],row['academyId'],row['method']) for row in denials} == expected_denials
+for row in denials:
+    assert row['status'] in [403,404] and len(row['rawBody']) < 4096
+    assert all(secret not in row['rawBody'] for secret in [reconciliation['source']['id'],reconciliation['source']['receiptNumber'],reconciliation['playerName']])
 ids = set(reconciliation['refundIds'])
 assert len(ids) == 6
 before, after = read('refund-money-before.json'), read('refund-money-after.json')

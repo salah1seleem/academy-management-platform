@@ -239,6 +239,10 @@ class _NativePlayerRefundState
         });
       }
     } catch (e) {
+      final attemptedAmount = minor(frozen?['amount']);
+      final attemptedCollection = frozen?['collectionId'];
+      final attemptedCurrency = quote?['currency'];
+      var exceedsFreshAvailable = false;
       final pending =
           written || e is! ApiFailure || e.status == 0 || e.status >= 500;
       if (current) {
@@ -253,6 +257,18 @@ class _NativePlayerRefundState
           if (current) {
             setState(() {
               data = validSource(refreshed) ? refreshed : null;
+              if (data != null &&
+                  e is ApiFailure &&
+                  e.status == 409 &&
+                  attemptedAmount != null) {
+                final latest = rows(data!['collections'])
+                    .where((row) => row['id'] == attemptedCollection)
+                    .firstOrNull;
+                exceedsFreshAvailable =
+                    latest != null &&
+                    latest['currency'] == attemptedCurrency &&
+                    minor(latest['available'])! < attemptedAmount;
+              }
               if (!eligible.any((row) => row['id'] == collection)) {
                 collection = null;
                 session = null;
@@ -262,6 +278,12 @@ class _NativePlayerRefundState
         } catch (_) {
           if (current) setState(() => data = null);
         }
+      }
+      if (exceedsFreshAvailable) {
+        throw const ApiFailure(
+          409,
+          'الاسترداد يتجاوز المبلغ المتاح حاليًا. راجع المبلغ قبل المحاولة.',
+        );
       }
       rethrow;
     }
