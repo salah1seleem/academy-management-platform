@@ -41,6 +41,7 @@ class _OwnerTransport extends HttpApiTransport {
     String? idempotencyKey,
   }) => io.run(() async {
     final read = <String, dynamic>{'method': method, 'path': path};
+    final elapsed = Stopwatch()..start();
     if (method == 'GET') requests.add(read);
     final uri = Uri.parse(path);
     final name = uri.path.endsWith('/owner-cockpit')
@@ -64,9 +65,11 @@ class _OwnerTransport extends HttpApiTransport {
         idempotencyKey: idempotencyKey,
       );
       read['status'] = 200;
+      read['elapsedMs'] = elapsed.elapsedMilliseconds;
     } on ApiFailure catch (error) {
       read['status'] = error.status;
       read['message'] = error.message;
+      read['elapsedMs'] = elapsed.elapsedMilliseconds;
       rethrow;
     }
     if (fault == 'statement-contract' && name == 'statement') {
@@ -92,6 +95,9 @@ void main() {
       );
       expect(fixture['academyId'], _a);
       expect(fixture['otherAcademyId'], _b);
+      t.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(t.platformDispatcher.clearAccessibilityFeaturesTestValue);
       final previous = HttpOverrides.current;
       addTearDown(() => HttpOverrides.global = previous);
       binding.testTextInput.register();
@@ -256,30 +262,34 @@ void main() {
         }
 
         if (finder.evaluate().isEmpty) await top();
-        final deadline = Stopwatch()..start();
-        while (finder.evaluate().isEmpty && deadline.elapsed.inSeconds < 45) {
-          // Async sections can finish after their placeholder has left the lazy
-          // viewport. Restart at the top instead of waiting below that section.
-          if (position.pixels >= position.maxScrollExtent - 1) {
-            await top();
-            await pump();
-            continue;
-          }
-          await t.dragFrom(
-            Offset(t.getRect(scroll).left + 8, t.getRect(scroll).center.dy),
-            const Offset(0, -160),
+        try {
+          await t.scrollUntilVisible(
+            finder,
+            160,
+            scrollable: scroll,
+            maxScrolls: 160,
+            duration: const Duration(milliseconds: 150),
+            continuous: true,
           );
-          await pump();
+          await t.pumpAndSettle();
+          expect(finder, findsWidgets);
+        } catch (_) {
+          await binding.takeScreenshot('phase-iosowner-target-unavailable', {
+            'diagnostics': {
+              'target': '$finder',
+              'pixels': position.pixels,
+              'maxScrollExtent': position.maxScrollExtent,
+              'requests': s.api.requests,
+              'mountedLabels': t.allWidgets
+                  .whereType<Text>()
+                  .map((w) => w.data ?? w.textSpan?.toPlainText())
+                  .whereType<String>()
+                  .toSet()
+                  .toList(),
+            },
+          });
+          rethrow;
         }
-        if (finder.evaluate().isEmpty) {
-          debugPrint(
-            'IOS-OWNER target unavailable: ${jsonEncode({'target': '$finder', 'pixels': position.pixels, 'maxScrollExtent': position.maxScrollExtent, 'requests': s.api.requests, 'mountedLabels': t.allWidgets.whereType<Text>().map((w) => w.data ?? w.textSpan?.toPlainText()).whereType<String>().toSet().toList()})}',
-          );
-          await binding.takeScreenshot('phase-iosowner-target-unavailable');
-        }
-        await wait(finder);
-        await t.ensureVisible(finder.first);
-        await t.pumpAndSettle();
       }
 
       Future<void> tap(Finder finder) async {
@@ -421,6 +431,57 @@ void main() {
         ),
       );
       await wait(find.byType(OwnerDashboard));
+      final expectedReads = [
+        '/reports/owner-cockpit',
+        '/reports/owner-summary',
+        '/reports/operating-statement',
+        '/manage/structure/options',
+      ];
+      final initialReadDeadline = Stopwatch()..start();
+      Json? latestRead(String path) {
+        for (final read in s.api.requests.reversed) {
+          if (Uri.parse(read['path'] as String).path.endsWith(path)) {
+            return read;
+          }
+        }
+        return null;
+      }
+
+      bool allInitialReadsComplete() => expectedReads.every(
+        (path) => latestRead(path)?.containsKey('status') == true,
+      );
+      while (!allInitialReadsComplete() &&
+          initialReadDeadline.elapsed.inSeconds < 45) {
+        await pump();
+      }
+      final failedInitial = expectedReads
+          .map(latestRead)
+          .whereType<Json>()
+          .where((read) => read['status'] != 200)
+          .toList();
+      if (!allInitialReadsComplete() || failedInitial.isNotEmpty) {
+        await binding.takeScreenshot(
+          'phase-iosowner-initial-read-unavailable',
+          {
+            'diagnostics': {
+              'requests': s.api.requests,
+              'incomplete': !allInitialReadsComplete(),
+            },
+          },
+        );
+      }
+      expect(
+        allInitialReadsComplete(),
+        true,
+        reason: 'Initial home reads must finish before journey actions.',
+      );
+      expect(
+        failedInitial,
+        isEmpty,
+        reason:
+            'Real API read failures must not be hidden by scrolling retries.',
+      );
+      await t.pumpAndSettle();
       await overdue(0, 0);
       await capture('zero-confirmed', find.text('لا توجد مستحقات متأخرة'));
       passed('OHF01', {

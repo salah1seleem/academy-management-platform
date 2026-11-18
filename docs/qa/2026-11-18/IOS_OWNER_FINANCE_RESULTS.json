@@ -1,0 +1,429 @@
+{
+  "task": "IOS-OWNER-01",
+  "wholeGoalComplete": false,
+  "fullScreenClosure": false,
+  "writtenBusinessCases": 48,
+  "baseline": {
+    "run": 44295386495,
+    "source": "cbbafbd9195084e196d9f9cf643246a2e3d05ec5",
+    "flutterPassed": 41,
+    "flutterFailed": 25,
+    "confirmedProductNegativeVariants": 22,
+    "fixtureFailures": 3
+  },
+  "currentRun": 44302593315,
+  "currentSource": "81fede9495df1eb099ee4402289c085f515f6c0f",
+  "currentConclusion": "pending",
+  "cases": [
+    {
+      "id": "OHF01",
+      "startAndSteps": "افتح الرئيسية بعد التهيئة بمتأخر0 وعدد0؛ افحص البطاقة وتاريخ الرصيد.",
+      "expected": "فراغ مؤكد مؤرخ، لا قيمة قديمة أو صفر قبل وصول القراءة؛ iOS/API.",
+      "status": "installed-attempt-incomplete",
+      "actual": "summary target not mounted when helper searched; no business case completed; helper corrected, repeat pending",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF02",
+      "startAndSteps": "أنشئ540 و260 و125 بالمصدر المصرح، ثم اسحب الرئيسية لإعادة القراءة.",
+      "expected": "925 على لاعبين من ثلاثة مستندات، والتحصيل ثابت؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF03",
+      "startAndSteps": "افحص الفرع الأول بعد مطالبتين لنفس اللاعب.",
+      "expected": "800 ولاعب واحد، لا عدّ المستندات كلاعبين؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF04",
+      "startAndSteps": "أضف40 بتاريخ اليوم ثم أعد القراءة.",
+      "expected": "القائم يزيد40، والمتأخر والعدد يبقيان925 و2؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF05",
+      "startAndSteps": "أضف500 بعد اليوم ثم اقرأ الكشف.",
+      "expected": "500 ضمن غير المستحق، ولا تدخل المتأخر؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF06",
+      "startAndSteps": "اختر الفرع الثاني من الرئيسية.",
+      "expected": "125 ولاعب واحد، والكشف يحفظ الفرع؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF07",
+      "startAndSteps": "اختر فرعA الثالث الخالي من مطالبات الجولة.",
+      "expected": "صفر مؤكد بعد قراءة ناجحة، لا تظهر أرقام فرع سابق؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF08",
+      "startAndSteps": "انتقل سريعًا من فرع925/800 إلى فرع125 مع تأخير الرد الأول.",
+      "expected": "التحميل لا يحمل الرقم القديم تحت الاسم الجديد، والرد المتأخر لا يستبدل125؛ iOS برد مؤخر وWidget.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF09",
+      "startAndSteps": "اقطع قراءة cockpit مرة503 ثم اضغط إعادة تحميل القسم.",
+      "expected": "خطأ عربي بدل رقم قديم، ثم استعادة الرصيد والفرع نفسه؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF10",
+      "startAndSteps": "اقطع Academy calendar عند الفتح ثم أعد المحاولة.",
+      "expected": "لا أصفار مالية قبل التاريخ، ثم الرئيسية الصحيحة؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF11",
+      "startAndSteps": "رد cockpit بلاamount أو بقيمة سالبة/تالفـة.",
+      "expected": "رصيد غير متاح، لا صفر أو فراغ مؤكد؛ iOS لفرع وWidget لبقية القيم.",
+      "status": "partial-widget-evidence-native-branches-open",
+      "actual": "4 invalid amount variants passed",
+      "layer": "Widget only",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF12",
+      "startAndSteps": "مقدار925 معplayers ناقص أو سالب أو كسري.",
+      "expected": "يبقى المبلغ الموثوق ويظهر تعذر العدد، لا0 ولا2 مخمّنة؛ iOS/Widget.",
+      "status": "partial-widget-evidence-native-branches-open",
+      "actual": "4 invalid player-count variants passed",
+      "layer": "Widget only",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF13",
+      "startAndSteps": "مقدار925 وعدد2 معasOf مفقود أو غير صالح.",
+      "expected": "بيان عربي أن تاريخ الرصيد غير متاح؛ لا تأريخ زائف أو رقم غير مؤهل بصمت؛ iOS/Widget.",
+      "status": "partial-widget-evidence-native-branches-open",
+      "actual": "3 invalid balance-date variants passed",
+      "layer": "Widget only",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF14",
+      "startAndSteps": "اضغط بطاقة المتأخرات من فرع معلوم.",
+      "expected": "يفتح كشف متأخرة في الفرع نفسه، دون تقييد المتأخر بفترة التحصيل؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF15",
+      "startAndSteps": "بدّل حالات الكشف:الكل، قائمة، متأخرة، مستقبلية، مسددة، دائن.",
+      "expected": "الصفوف تطابق تصنيف الخادم؛ ملخص الفرع لا يُحسب من الصفوف المصفاة؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF16",
+      "startAndSteps": "افتح مساعدة طريقة حساب المستحقات وأغلقها.",
+      "expected": "شرح اختياري دون تغيير حالة أو رصيد أو طلب كتابة؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF17",
+      "startAndSteps": "افتح المستند540 من الكشف وافحص أصل المطالبة والرصيد والتاريخ.",
+      "expected": "الهوية والمصدر والفرع ومبلغ الأصل مطابقون، والرجوع يحفظ الحالة؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF18",
+      "startAndSteps": "رد كشف بلاتاريخ أو مبلغ صف أو علامة تأخر أو معرّف.",
+      "expected": "تعذر عربي وإعادة محاولة، دون فراغ/سداد أو صف قابل للفتح من بيانات ناقصة؛ iOS لفرع وWidget للبقية.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF19",
+      "startAndSteps": "كشف فرع به رصيد ثم تأخير أو403 لفرع جديد ثم فرع خالٍ مصرح.",
+      "expected": "يختفي الرصيد القديم خلال الانتقال والرفض، ويظهر0 بعد جواب الفرع الخالي؛ Widget، وفرع التعافي علىiOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF20",
+      "startAndSteps": "خصص40 من تحصيل محفوظ للمستند540 ثم حدّث الرئيسية والكشف.",
+      "expected": "المتأخر885، الأصل540، المخصص40، القائم500؛ لا قبض/إيصال جديد؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF21",
+      "startAndSteps": "أعد تخصيص40 بنفس المفتاح والجسم ثم غيّر المبلغ مع المفتاح.",
+      "expected": "نفسid عند التطابق،409 عند الاختلاف، وحركة تخصيص واحدة؛ API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF22",
+      "startAndSteps": "تخصيص أو إشعار يتجاوز القائم، أو دقة ثالثة، أو مصدر تحصيل أجنبي.",
+      "expected": "رفض محدد دون قيد أو تغيير رصيد؛ API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF23",
+      "startAndSteps": "أضف إشعار500 للمستند الأول ثم اقرأ الرئيسية.",
+      "expected": "المتأخر385 على لاعبين، الأصل ثابت، والتاريخ يحوي التخصيص والإشعار؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF24",
+      "startAndSteps": "أضف إشعار260 للمستند الثاني.",
+      "expected": "125 على لاعب واحد؛ وجود40اليوم و500مستقبلية للاعب الأول لا يبقيه متأخرًا؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF25",
+      "startAndSteps": "سوّ125 في الفرع الثاني وأعد القراءة وافتح الكشف.",
+      "expected": "المتأخر0 والعدد0 وفراغ متأخرات صحيح، والمستندات لا تحذف؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF26",
+      "startAndSteps": "ارجع من المستند والكشف إلى الرئيسية بعد تغيير الفرع والفترة.",
+      "expected": "أزرار الرجوع تعمل، ويحفظ النطاق والفترة دون تبديل رقم؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF27",
+      "startAndSteps": "غيّر فترة ملخص الأكاديمية بين اليوم والشهر ونطاق واسع.",
+      "expected": "التواريخ الفعلية تتغير للقسم المختار، وتاريخ المتأخرات الحالي ومبلغها لا يتغيران بسبب فترة التحصيل؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF28",
+      "startAndSteps": "اقرأ الأسرة المرتبطة وغير المرتبطة للمطالبات الجديدة.",
+      "expected": "الصفوف والمجاميع مشتقة من الأطفال المرتبطين فقط، دون مطالباتB أو الأسرة الأخرى؛ API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF29",
+      "startAndSteps": "اختر عضويةB أثناء وجود أرقامA ثم ارجعA.",
+      "expected": "تختفي أرقامA فور الانتقال، وتظهر85 ومصروف19.99 منB؛ العودة تعيد قراءةA دون تداخل نطاق؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF30",
+      "startAndSteps": "الأسرة والمدرب وإداري غيرمخول ومالكB يطلبون مصادرA والكتابة عليها.",
+      "expected": "403/404 خام بلا بيانات المطالبة/المصروف أو قيد جديد؛ API/SQL.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF31",
+      "startAndSteps": "أنشئ مصروف137.65 مسودة لفترة خدمة سابقة وسداد اليوم.",
+      "expected": "لا زيادة مصروف مدفوع أو نقص فائض بعد تحديث الرئيسية؛ إنشاءAPI وقراءةiOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF32",
+      "startAndSteps": "اعتمد المصروف دون ترحيل.",
+      "expected": "لا أثر نقدي حتى الترحيل؛ حالة الأصلApproved؛ API وقراءةiOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF33",
+      "startAndSteps": "مبلغ0/سالب/ثلاث منازل أو فرع أجنبي، ثمpost ببصمة صحيحة الشكل خاطئة أو ناقصة.",
+      "expected": "رفض422/404/409 بحسب السبب، بلا أنصبة أو أثر نقدي؛ API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF34",
+      "startAndSteps": "اعرض quote ثم رحّل137.65 مرة واحدة.",
+      "expected": "المصروف يزيد137.65 والفائض ينقصها، ومجموع الأنصبة137.65، والتحصيل/المتأخرات ثابتان؛ iOS/API/SQL.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF35",
+      "startAndSteps": "أعدpost بنفس المفتاح والجسم، ثم بمفتاح جديد لمصروف مرحّل.",
+      "expected": "إعادة آمنة أورفض409 بحسب الحالة، دون أنصبة أو أثر مالي إضافي؛ API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF36",
+      "startAndSteps": "أنشئ واعتمد ورحّل200 بلاPaidOn.",
+      "expected": "ذمة غير مسددة200 منفصلة؛ لا تدخل المصروف النقدي أو تغير الفائض؛ API وقراءةiOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF37",
+      "startAndSteps": "فرع أول به المصروف؛ افحص فرعA الثاني واليوم السابق وB.",
+      "expected": "الأثر فقط فرع السداد ويومه؛ بياناتB الموجبة19.99 و85 ثابتة؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF38",
+      "startAndSteps": "اختر نطاقًا واسعًا قبل السداد ثم قارنه بعده.",
+      "expected": "إيراد موجب من البذرة ثابت، وفائض موجب ينقص137.65؛ يساوي مجموع الدخل ناقص المصروف، لا رقم مستقل؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF39",
+      "startAndSteps": "اختر اليوم ثم أول الشهر ثم افتح محرر النطاق وألغِه، ثم طبّق نطاقًا واسعًا صحيحًا.",
+      "expected": "التواريخ والعنوان والطلب متطابقة؛ الإلغاء يحفظ السابق؛ بقية أقسام الرئيسية لا تتغير؛ iOS/Widget.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF40",
+      "startAndSteps": "في يوم بلا قبض، اعرض المصروف المرحّل137.65.",
+      "expected": "إيراد0 صحيح ومصروف137.65 وعجز-137.65 بتسمية/لون مناسبين، لا فائض0؛ iOS/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF41",
+      "startAndSteps": "اضغط مصدر بند الصيانة من الرئيسية.",
+      "expected": "الطلب يحمل الفرع والفترة وMaintenance/Posted/paid=true/dateBasis=payment؛ تُصوّر قائمة المصروف وتفاصيله للجرد فقط، ولا تُغلق وظائفهما؛ iOS لتوصيلة المصدر/API.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF42",
+      "startAndSteps": "افتح عنوان تقرير التشغيل من الرئيسية ثم ارجع.",
+      "expected": "التقرير والفلاتر يطابقان بيانات البطاقة والنطاق، والرجوع يحفظها؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF43",
+      "startAndSteps": "افشل statement503 ثم استعده.",
+      "expected": "خطأ عربي وإعادة قراءة بدلاً من أرقام قديمة؛ يعود العجز/الفائض الصحيح مع بقاء الأقسام الأخرى؛ iOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF44",
+      "startAndSteps": "رد statement ناقص surplus/totalIncome/totalExpenses، أو سطر/عملة/قيمة غير صالحة أو إجماليات متناقضة.",
+      "expected": "لا استثناء واجهة أو صفر زائف؛ تعذر عربي واستعادة قراءة صحيحة؛ iOS لفرع وWidget لبقية البنى.",
+      "status": "partial-widget-evidence-native-branches-open",
+      "actual": "20 invalid statement variants passed; native retry remains open",
+      "layer": "Widget only",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF45",
+      "startAndSteps": "أخّر statement القديم ثم بدّل الفرع أو الفترة، واختبر ردًا بعدالخروج.",
+      "expected": "لا تظهر بيانات النطاق السابق أو تعود الأرقام بعد انتهاء الجلسة؛ Widget، وتبديل فعلي علىiOS.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    },
+    {
+      "id": "OHF46",
+      "startAndSteps": "ضع بيانات صحيحة بصفر، وقيمة سالبة صحيحة للعجز، وقارنها بفقد المبلغ.",
+      "expected": "الصفر والعجز حقيقتان مع تسميات صحيحة، والفقد عدم إتاحة؛ Widget.",
+      "status": "passed-within-declared-layer",
+      "actual": "verified zero, deficit and refund-negative-income variants passed",
+      "layer": "Widget only",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF47",
+      "startAndSteps": "اعرض الأرقام والبطاقات والكشف ومحرر الفترة عند390، ونص2 بالمظهرين؛320بـWidget.",
+      "expected": "النص والإجراءات مقروءة بلاoverflow أو قص للحروف، وتعمل المساعدة والرجوع وتغيير المظهر؛ صور ومراجعة فعلية منفصلة.",
+      "status": "partial-widget-evidence-native-branches-open",
+      "actual": "8 viewport/theme/text combinations passed; 24 PNG files actually reviewed; native and other screens remain open",
+      "layer": "Widget only",
+      "evidenceRun": 44298675435
+    },
+    {
+      "id": "OHF48",
+      "startAndSteps": "طابق SQL كاملًا قبل عملياتA وبعدها، مع مصادر التقارير والأنصبة والحركات وB.",
+      "expected": "الاختلاف فقط المستندات والحركات والمصروفات المخططة فيA؛ ثبات التحصيل والإيصالات والفترات واللاعبين والتسجيلات وكل صفوفB؛ مقارنة مستقلة لا تعتمد علىعداد الواجهة.",
+      "status": "written-awaiting-complete-evidence",
+      "actual": null
+    }
+  ],
+  "currentJob": 134795866649,
+  "postFixPreflight": {
+    "run": 44297654252,
+    "analyze": "passed",
+    "flutterPassed": 79,
+    "flutterFailed": 4,
+    "newContractTestsPassed": 42,
+    "nativeBusinessExecuted": 0,
+    "remainingFailure": "legacy horizontal alignment expectation at enlarged text, now amended for adaptive layout"
+  },
+  "widgetComponentReview": {
+    "artifact": 14423829337,
+    "all24FilesOpened": true,
+    "scope": "financial components only, not full screen",
+    "productionSource": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
+    "focusedAnalyzeAndFlutterJobStep": "completed-success",
+    "exactTestCount": "await final raw log"
+  },
+  "productionSourceUnchangedSince": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
+  "nativeFailure": {
+    "run": 44298675435,
+    "artifact": 14426816095,
+    "firstBusinessCaseCompleted": false,
+    "selected13BusinessTablesUnchanged": true,
+    "reason": "summary target not mounted after lazy-list traversal; helper reset/rescan added"
+  },
+  "focusedFlutterTestsPassed": 83,
+  "runnerExitGuardsPassed": 6,
+  "currentWidgetByteComparison": {
+    "run": 44302593315,
+    "artifact": 14426466923,
+    "files": 24,
+    "byteIdenticalToActuallyViewedFcbImages": true,
+    "changedFiles": [],
+    "sha256": {
+      "overdue-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60",
+      "statement-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "statement-320-text2-dark.png": "9edef7a834c9523e1b8ba262fb33572e83f90619b11d6c5bc50e261915a7b062",
+      "overdue-390-text2-dark.png": "0b6cbb79e0b29f6be112c20e2be2303afeb538573122d8e81212d1187db1403a",
+      "statement-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "overdue-390-text2-light.png": "11fab748de472c0d4c6a51f6e46fd1dee1158bb68feb58d6f2462838f0d0f0e7",
+      "statement-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "overdue-320-text2-light.png": "d1af5507abefcae15335d075798f6526a661d3b51d7774b34afd0bfe849fbdf9",
+      "expense-320-text2-dark.png": "358bba613335f12bdc9bcc1a0238438debc76be6a79cccba1aa91a5071503533",
+      "expense-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "expense-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "expense-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "overdue-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "statement-390-text2-light.png": "e3acfdd8502b237050ff796092c88577b3c2c09f0b63a3045c917f12f5332deb",
+      "overdue-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "statement-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60",
+      "statement-320-text2-light.png": "39a871945f358932142559ec5ef6a2625e12ff39e8101ed31f0c35fd95f7966f",
+      "overdue-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "expense-320-text2-light.png": "c4f4e1688d6f4acc2876b0e5dac02ee68612d2b9b2e097992a19764c26516ac0",
+      "statement-390-text2-dark.png": "bc38daa1311fe114f7264f33ffef2a68c4f3442e13fe5ab5597256e7062916fb",
+      "expense-390-text2-light.png": "a451fa18c0b1b314aa8de5b0c437a037017f4b0ad0bf6fd8e5d5dc0d3c3ba630",
+      "overdue-320-text2-dark.png": "dbc604080b949082417e81ffde550beebc23862ab24ea60e80bd356b0b8589ab",
+      "expense-390-text2-dark.png": "d761d400cb574c176f8e24d5ab3e4e3e6570273ae8b828558a58faae2317318d",
+      "expense-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60"
+    }
+  }
+}

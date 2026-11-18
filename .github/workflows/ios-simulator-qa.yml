@@ -102,7 +102,7 @@ jobs:
         if: inputs.suite == 'owner-finance'
         working-directory: apps/mobile
         run: |
-          flutter analyze lib/features/owner/refined_home_panels.dart lib/features/owner/owner_dashboard.dart test/owner_finance_source_contract_test.dart integration_test/cloud_owner_finance_test.dart
+          flutter analyze lib/features/owner/refined_home_panels.dart lib/features/owner/owner_dashboard.dart test/owner_finance_source_contract_test.dart integration_test/cloud_owner_finance_test.dart test_driver/visual_driver.dart
           flutter test --dart-define=UI_QUALITY_CAPTURE_DIR=../../tmp/qa-ios-owner-widget test/owner_finance_source_contract_test.dart test/owner_home_refinement_test.dart test/receivable_balances_test.dart test/receivable_document_test.dart test/owner_expense_source_test.dart
       - name: Preserve focused owner finance evidence
         if: always() && inputs.suite == 'owner-finance'

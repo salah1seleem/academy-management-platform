@@ -1,0 +1,111 @@
+{
+  "task": "IOS-OWNER-01",
+  "goalComplete": false,
+  "fullScreenClosure": false,
+  "latestSource": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
+  "currentRun": 44302593315,
+  "currentJob": 134795866649,
+  "currentConclusion": "pending",
+  "baselineRun": 44295386495,
+  "baselineArtifact": 14424145490,
+  "baselineArchiveSha256": "9171e35045c71aede348f756c712a004f13a4411a3e46806fad34b8d4d0ab26d",
+  "baselineImagesViewed": [
+    "overdue-320-text2-light",
+    "statement-320-text2-light",
+    "overdue-320-text2-dark",
+    "statement-320-text2-dark"
+  ],
+  "baselineFinding": "digits wrap across lines at text scale 2; adaptive layout now awaits remote proof",
+  "baselineRawLogSha256": "2f2f5caf9cbfc05b1b14fd786fb09053dbb25d4e1d6a7d2a4694baa623ffe0b3",
+  "cloudBuildOnly": true,
+  "stagingDeployment": false,
+  "currentSource": "81fede9495df1eb099ee4402289c085f515f6c0f",
+  "widgetReview": {
+    "source": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
+    "run": 44298675435,
+    "artifact": 14423829337,
+    "archiveSha256": "569aa480110580768920d5b64ae01b7ceb67d73fe6c475aece74ead9781bca01",
+    "all24FilesActuallyOpened": true,
+    "scope": "financial component viewports only; some captures share an identical frame",
+    "logicalWidths": [
+      320,
+      390
+    ],
+    "textScales": [
+      1,
+      2
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "finding": "Operating result, income and expense digits remain intact; large text stacks sections; dates and Arabic labels readable. No full-screen or native acceptance implied.",
+    "sha256": {
+      "overdue-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60",
+      "statement-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "statement-320-text2-dark.png": "9edef7a834c9523e1b8ba262fb33572e83f90619b11d6c5bc50e261915a7b062",
+      "overdue-390-text2-dark.png": "0b6cbb79e0b29f6be112c20e2be2303afeb538573122d8e81212d1187db1403a",
+      "statement-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "overdue-390-text2-light.png": "11fab748de472c0d4c6a51f6e46fd1dee1158bb68feb58d6f2462838f0d0f0e7",
+      "statement-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "overdue-320-text2-light.png": "d1af5507abefcae15335d075798f6526a661d3b51d7774b34afd0bfe849fbdf9",
+      "expense-320-text2-dark.png": "358bba613335f12bdc9bcc1a0238438debc76be6a79cccba1aa91a5071503533",
+      "expense-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "expense-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "expense-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "overdue-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "statement-390-text2-light.png": "e3acfdd8502b237050ff796092c88577b3c2c09f0b63a3045c917f12f5332deb",
+      "overdue-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "statement-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60",
+      "statement-320-text2-light.png": "39a871945f358932142559ec5ef6a2625e12ff39e8101ed31f0c35fd95f7966f",
+      "overdue-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "expense-320-text2-light.png": "c4f4e1688d6f4acc2876b0e5dac02ee68612d2b9b2e097992a19764c26516ac0",
+      "statement-390-text2-dark.png": "bc38daa1311fe114f7264f33ffef2a68c4f3442e13fe5ab5597256e7062916fb",
+      "expense-390-text2-light.png": "a451fa18c0b1b314aa8de5b0c437a037017f4b0ad0bf6fd8e5d5dc0d3c3ba630",
+      "overdue-320-text2-dark.png": "dbc604080b949082417e81ffde550beebc23862ab24ea60e80bd356b0b8589ab",
+      "expense-390-text2-dark.png": "d761d400cb574c176f8e24d5ab3e4e3e6570273ae8b828558a58faae2317318d",
+      "expense-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60"
+    }
+  },
+  "productionSourceUnchangedSince": "fcb69a405a25d8941f8e2e9d13f5893dd7df00ac",
+  "nativeFailure": {
+    "run": 44298675435,
+    "artifact": 14426816095,
+    "firstBusinessCaseCompleted": false,
+    "selected13BusinessTablesUnchanged": true,
+    "reason": "summary target not mounted after lazy-list traversal; helper reset/rescan added"
+  },
+  "currentWidgetByteComparison": {
+    "run": 44302593315,
+    "artifact": 14426466923,
+    "files": 24,
+    "byteIdenticalToActuallyViewedFcbImages": true,
+    "changedFiles": [],
+    "sha256": {
+      "overdue-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60",
+      "statement-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "statement-320-text2-dark.png": "9edef7a834c9523e1b8ba262fb33572e83f90619b11d6c5bc50e261915a7b062",
+      "overdue-390-text2-dark.png": "0b6cbb79e0b29f6be112c20e2be2303afeb538573122d8e81212d1187db1403a",
+      "statement-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "overdue-390-text2-light.png": "11fab748de472c0d4c6a51f6e46fd1dee1158bb68feb58d6f2462838f0d0f0e7",
+      "statement-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "overdue-320-text2-light.png": "d1af5507abefcae15335d075798f6526a661d3b51d7774b34afd0bfe849fbdf9",
+      "expense-320-text2-dark.png": "358bba613335f12bdc9bcc1a0238438debc76be6a79cccba1aa91a5071503533",
+      "expense-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "expense-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "expense-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "overdue-390-text1-dark.png": "7cd32ecb28a644da5ce21315ba264aa1e4d0b9fd1a5add3e066446399decc108",
+      "statement-390-text2-light.png": "e3acfdd8502b237050ff796092c88577b3c2c09f0b63a3045c917f12f5332deb",
+      "overdue-390-text1-light.png": "c42335c22fc21951e7abd629a6fba0257fe4f1d6926e0b05b4dda5fe7f063aed",
+      "statement-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60",
+      "statement-320-text2-light.png": "39a871945f358932142559ec5ef6a2625e12ff39e8101ed31f0c35fd95f7966f",
+      "overdue-320-text1-light.png": "a282f87726d480b67fc7346d4b18ab6acb442be7889880e03d6907600396b18d",
+      "expense-320-text2-light.png": "c4f4e1688d6f4acc2876b0e5dac02ee68612d2b9b2e097992a19764c26516ac0",
+      "statement-390-text2-dark.png": "bc38daa1311fe114f7264f33ffef2a68c4f3442e13fe5ab5597256e7062916fb",
+      "expense-390-text2-light.png": "a451fa18c0b1b314aa8de5b0c437a037017f4b0ad0bf6fd8e5d5dc0d3c3ba630",
+      "overdue-320-text2-dark.png": "dbc604080b949082417e81ffde550beebc23862ab24ea60e80bd356b0b8589ab",
+      "expense-390-text2-dark.png": "d761d400cb574c176f8e24d5ab3e4e3e6570273ae8b828558a58faae2317318d",
+      "expense-320-text1-dark.png": "95f528ba2befc55394f661f4d6558f1a8ee621e57583826df914a8b759e12d60"
+    }
+  }
+}

@@ -221,7 +221,7 @@ elif [[ "$suite" == player-refund ]]; then
     python3 ../../scripts/qa/summarize_ios_refund.py "$qa_dir/evidence"
   fi
 elif [[ "$suite" == owner-finance ]]; then
-  for capture in ../../tmp/mobile-visuals/phase-iosowner-*.png ../../tmp/mobile-visuals/ios-cloud-response.json; do
+  for capture in ../../tmp/mobile-visuals/phase-iosowner-*.png ../../tmp/mobile-visuals/phase-iosowner-*.json ../../tmp/mobile-visuals/ios-cloud-response.json; do
     if [[ -s "$capture" ]]; then cp "$capture" "$qa_dir/evidence/"; fi
   done
   psql -h 127.0.0.1 -p 55432 -U academy_ci -d "$db_name" -At -v ON_ERROR_STOP=1 \
