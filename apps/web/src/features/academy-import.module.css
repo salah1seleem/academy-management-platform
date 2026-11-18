@@ -5,7 +5,7 @@
 .downloads{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:22px 0;}
 .downloads button{display:flex;align-items:center;gap:16px;padding:24px 18px;color:inherit;text-decoration:none;text-align:start;font:inherit;cursor:pointer;border-radius:10px;border:1px solid #394361;background:color-mix(in srgb,currentColor 3%,transparent);}
 .downloads strong,.downloads small{display:block;}.downloads small{font-size:12px;line-height:1.9;margin-top:8px;opacity:.75;}
-.upload{display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px;width:100%;border:1px dashed #526ca7;background:transparent;color:inherit;margin:20px 0;border-radius:0;}.upload small{font-size:12px;}.schema{padding:18px 0;}.schema summary{margin-bottom:16px;}
+.upload{display:flex;flex-direction:column;align-items:center;gap:12px;padding:30px;width:100%;border:1px dashed #526ca7;background:transparent;color:inherit;margin:20px 0;border-radius:0;}.upload small{font-size:12px;}.schema{padding:18px 0;}.schema > summary{margin-bottom:16px;cursor:pointer;}
 @media(max-width:650px){.downloads{grid-template-columns:1fr;}.steps{font-size:10px;}}
 
 .resultCounts { display: flex; flex-wrap: wrap; gap: .3rem 1.25rem; font-weight: 700; }
@@ -37,3 +37,16 @@
 @media (max-width: 700px) {
   .issues :global(.admin-data-row) > [role="cell"]::before { display: none; }
 }
+
+.schemaNote { margin-block: 0 1rem; font-size: .875rem; line-height: 1.8; opacity: .8; }
+.schemaSheet { border-block-start: 1px solid color-mix(in srgb, currentColor 20%, transparent); }
+.schemaSheet > summary { min-block-size: 44px; padding-block: .75rem; cursor: pointer; font-size: .9375rem; }
+.schemaSheet > summary small { display: inline-block; margin-inline-start: .75rem; font-size: .75rem; opacity: .8; }
+.schemaColumns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; padding-block: .5rem 1.25rem; }
+.schemaFields { min-inline-size: 0; }
+.schemaFields h4 { margin: 0 0 .5rem; font-size: .875rem; font-weight: 600; }
+.schemaFields h4 span { font-weight: 400; }
+.schemaFields ul { margin: 0; padding-inline-start: 1.25rem; font-size: .875rem; line-height: 1.8; }
+.schemaFields li { margin-block: .25rem; overflow-wrap: anywhere; }
+.schemaFields bdi { white-space: nowrap; }
+@media (max-width: 600px) { .schemaColumns { grid-template-columns: minmax(0, 1fr); } }

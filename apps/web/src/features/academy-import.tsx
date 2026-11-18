@@ -4,6 +4,8 @@ import { CheckCheck, Download, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { ApprovedWorkspace } from "../components/approved-workspace";
 import styles from "./academy-import.module.css";
+import { validImportPreview } from "./academy-import-preview";
+import { ImportSchemaGuide } from "./academy-import-schema";
 
 import { MoneyValue } from "../components/money-value";
 import { AdminDataTable, ErrorState, PageHeader } from "../components/dashboard-shell";
@@ -242,9 +244,9 @@ function ImportWorkspace({ academyId, onCompleted }: ImportProps) {
       const response = await fetch(`${apiBase}/preview`, { method: "POST", body: data, headers: { "X-CSRF-TOKEN": token }, signal: controller.signal });
       requireImportAccess(response.status, false);
       if (!response.ok) throw new Error(await apiProblemMessage(response, "تعذر فحص الملف. تحقق من القالب وأعد المحاولة."));
-      const value = await response.json();
-      if (!Array.isArray(value.errors) || !Array.isArray(value.rows)) throw new Error("تعذر قراءة نتيجة الفحص.");
-      setPreview(value);
+      const value: unknown = await response.json();
+      if (!validImportPreview(value)) throw new Error("تعذر قراءة نتيجة الفحص.");
+      setPreview(value as Preview);
     } catch (caught) { if (!controller.signal.aborted) setError(caught instanceof Error && /[\u0600-\u06ff]/.test(caught.message) ? caught.message : "تعذر الاتصال أثناء المعاينة. أعد المحاولة؛ لم يتم اعتماد الملف."); }
     finally { if (!controller.signal.aborted) setBusy(false); if (input.current) input.current.value = ""; }
   }
@@ -356,9 +358,9 @@ function ImportWorkspace({ academyId, onCompleted }: ImportProps) {
   return <Wrapper><PageHeader title="استيراد بيانات الأكاديمية" context="الإعدادات والمساعدة / نقل البيانات" description="قالب خاص بأكاديميتك، ثم معاينة واضحة قبل اعتماد أي تغيير." />
     {(!job || newImport) && <ol className={styles.steps} aria-label="مراحل الاستيراد">{["القالب والرفع","التحقق","المعاينة والتأكيد","التنفيذ","الملخص"].map((label,index)=><li key={label} aria-current={(preview?2:busy?1:0)===index?"step":undefined}>{label}</li>)}</ol>}
     {job && newImport && <div className="import-view-actions"><button type="button" className="secondary-button" onClick={() => setNewImport(false)}>العودة إلى نتيجة الدفعة</button></div>}
-    {(!job||newImport)&&<section className={styles.setup} onFocusCapture={()=>{generation.current++;}} onPointerDownCapture={()=>{generation.current++;}}><h2>بيانات البداية المترابطة لأكاديمية واحدة</h2><p>المدربون ← المجموعات ← الحصص · أولياء الأمور ← الأبناء ← الاشتراكات · اللاعبون ← البطولات</p>
+    {(!job || newImport) && <section className={styles.setup} onFocusCapture={() => { generation.current++; }} onPointerDownCapture={() => { generation.current++; }}>
       <div className={styles.downloads}><button type="button" disabled={downloadBusy||busy} onClick={()=>void download("connected-template")}><Download size={26}/><span><strong>تنزيل قالب فارغ</strong><small>ملف XLSX يشمل اللاعبين وكل أوراق الربط</small></span></button><button type="button" disabled={downloadBusy||busy} onClick={()=>void download("connected-sample")}><Download size={26}/><span><strong>تنزيل نموذج مكتمل</strong><small>50 لاعبًا بأسماء مصرية خيالية، وأسر ومجموعات ومدربون وبطولات</small></span></button></div>
-      {schema&&<details className={styles.schema}><summary>الحقول المطلوبة والاختيارية</summary><AdminDataTable label="أوراق ملف الأكاديمية" rows={schema.connectedSheets} rowKey={s=>s.name} columns={[{key:"sheet",header:"الورقة",primary:true,render:s=>s.name},{key:"columns",header:"الحقول",render:s=>s.columns.filter(c=>c.key!=="ExistingId").map(c=>c.label+(c.required?" *":"")).join("، ")||"تعليمات وأمثلة الأكواد"},{key:"optional",header:"الاستخدام",render:s=>s.optional?"اختياري بحسب بياناتك":"أساسي عند الربط"}]}/><p>النجمة تحدد الحقل المطلوب. اكتب أرقام الموبايل في خلايا نصية لحفظ الصفر الأول.</p></details>}
+      {schema && <ImportSchemaGuide sheets={schema.connectedSheets} />}
       <button className={styles.upload} aria-label="استيراد ملف" aria-describedby="import-upload-limit" disabled={busy||downloadBusy||uncertain} onClick={()=>input.current?.click()}><UploadCloud size={28}/><strong>استيراد ملف</strong><small id="import-upload-limit">اختر ملف .xlsx · حتى {schema?schema.maxRows:1000} تسجيل · الحد {schema?Math.floor(schema.maxFileBytes/1024/1024):5} ميجابايت</small></button>
       <input ref={input} className="import-file-input" type="file" accept=".xlsx" aria-label="ملف بيانات الأكاديمية" disabled={busy||downloadBusy||uncertain} onChange={e => selectFile(e.target.files?.[0])} />
       {selectedFile&&<section className={styles.fileStatus} aria-label="الملف المختار"><p role="status"><strong>{selectedFile.name}</strong> · {Math.ceil(selectedFile.size/1024)} كيلوبايت</p><p>{busy&&!preview?"جارٍ فحص الملف…":preview?"تم فحص الملف. راجع النتيجة أدناه.":"تم اختيار الملف، ولم يُحفظ أي سجل بعد."}</p><button className="primary-button" disabled={busy||downloadBusy||uncertain} onClick={()=>void upload(selectedFile)}>{busy&&!preview?"جارٍ فحص الملف…":preview?"إعادة فحص الملف":"متابعة لفحص الملف"}</button></section>}
