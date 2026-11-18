@@ -41,7 +41,7 @@
   },
   {
     "group": "compensation-and-alternatives",
-    "specs": "/(core-compensation-recovery|v2-compensation|v2-placement-recommendations)\\.spec\\.ts$",
+    "specs": "/(core-compensation-(recovery|boundaries)|v2-compensation|v2-placement-recommendations)\\.spec\\.ts$",
     "config": "regression",
     "provider_quarantine": "false"
   }

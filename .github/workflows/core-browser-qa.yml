@@ -17,6 +17,10 @@ on:
           - placement-and-transfers
           - group-creation
           - compensation-and-alternatives
+      spec:
+        description: Optional spec filename within the selected group
+        type: string
+        default: ""
   push:
     branches: ["codex/qa-core-release"]
 
@@ -33,15 +37,23 @@ jobs:
       - id: select
         env:
           QA_GROUP: ${{ inputs.group || 'all' }}
+          QA_SPEC: ${{ inputs.spec || '' }}
         run: |
           python3 - <<'PYTHON'
-          import json, os
+          import json, os, re
           from pathlib import Path
           groups = json.loads(Path('.github/qa/core-browser-groups.json').read_text())
           requested = os.environ['QA_GROUP']
           selected = groups if requested == 'all' else [row for row in groups if row['group'] == requested]
           if not selected:
               raise SystemExit(f'Unknown browser journey group: {requested}')
+          focus = os.environ.get('QA_SPEC', '').strip()
+          if focus:
+              if requested == 'all' or not re.fullmatch(r'[a-z][a-z0-9-]*\.spec\.ts', focus):
+                  raise SystemExit('Choose one group and a spec filename within it')
+              if not Path('tests/e2e/specs', focus).is_file() or not re.search(selected[0]['specs'], '/' + focus):
+                  raise SystemExit('The requested spec is not part of the selected group')
+              selected[0]['specs'] = '/' + re.escape(focus) + '$'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('matrix=' + json.dumps({'include': selected}, separators=(',', ':')) + '\n')
           PYTHON
