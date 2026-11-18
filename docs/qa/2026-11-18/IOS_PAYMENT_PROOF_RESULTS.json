@@ -1,0 +1,614 @@
+{
+  "task": "IOS-PROOF-01",
+  "source": "df08dc8b51dca6c3eb8805e292f8a59e062aa4e5",
+  "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353",
+  "jobId": 134649455282,
+  "artifact": {
+    "id": 14408941939,
+    "sha256": "a40a6df1f2733528ac9f8ccfe622dd0be3d7d567d5335f098a097bc00c953540",
+    "fileCount": 30,
+    "pngCount": 12,
+    "expiresAt": "2026-11-25T07:55:52Z"
+  },
+  "counts": {
+    "written": 27,
+    "executedWithinDeclaredLayer": 27,
+    "passedWithinDeclaredLayer": 27,
+    "blockedWithinDeclaredLayer": 0,
+    "nativeAndSqlAutomated": 24,
+    "manualVisualCases": 1,
+    "widgetOnlyCases": 2,
+    "flutterUnitTests": 58,
+    "runnerExitRegressions": 6
+  },
+  "fullScreenClosure": false,
+  "wholeGoalComplete": false,
+  "stagingTestedThisRound": false,
+  "deployed": false,
+  "localHeavyBuildOrSimulator": false,
+  "data": "LegacyRegression synthetic two academies; not persistent ZProfessional credentials",
+  "financial": {
+    "rows": {
+      "collections": 25,
+      "receipts": 25,
+      "periods": 25
+    },
+    "fullRowsSha256": "c8ab2980a3cd6bf994d16cefbe1df8baf2173b0e103921029493607ce8ae3981",
+    "collectionAmountAllTenants": 16910,
+    "currency": "EGP",
+    "pendingRequestAmount": 8500,
+    "unchanged": true
+  },
+  "gestureEvidence": [
+    {
+      "direction": "horizontal",
+      "before": [
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -157.0,
+        -130.0,
+        0.0,
+        1.0
+      ],
+      "after": [
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -109.0,
+        -130.0,
+        0.0,
+        1.0
+      ],
+      "scrollBefore": 0.0,
+      "scrollAfter": 0.0
+    },
+    {
+      "direction": "vertical",
+      "before": [
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -157.0,
+        -130.0,
+        0.0,
+        1.0
+      ],
+      "after": [
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -157.0,
+        -170.0,
+        0.0,
+        1.0
+      ],
+      "scrollBefore": 0.0,
+      "scrollAfter": 0.0
+    },
+    {
+      "direction": "diagonal",
+      "before": [
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -157.0,
+        -130.0,
+        0.0,
+        1.0
+      ],
+      "after": [
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -97.0,
+        -170.0,
+        0.0,
+        1.0
+      ],
+      "scrollBefore": 0.0,
+      "scrollAfter": 0.0
+    }
+  ],
+  "pinchScale": 2.4,
+  "originalPngSha256": "ffb0959a88b959ea88f02e2e48c41fcae82c0d71a3e1cd376fb5fcfa5939cac6",
+  "screenshots": [
+    {
+      "file": "phase-iosproof-admin.png",
+      "bytes": 288477,
+      "sha256": "4e22d5d695c3132ed5ee56b69bb9472d45c2f63bd26b04900c671e415610e6da",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "نفس هوية ومبلغ وصورة المالك في غلاف الإداري؛ ليست مراجعة رئيسية الإداري."
+    },
+    {
+      "file": "phase-iosproof-context-cleared.png",
+      "bytes": 180792,
+      "sha256": "6fa9e4416426a59ecb8407ddcf3153f8673a2a1c6a6399d10f4f8f806f80e935",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "لا صورة أو بيانات أسرة أو تكبير؛ الإطار الفارغ خصوصية في غلاف الاختبار فقط."
+    },
+    {
+      "file": "phase-iosproof-decoded.png",
+      "bytes": 288477,
+      "sha256": "4e22d5d695c3132ed5ee56b69bb9472d45c2f63bd26b04900c671e415610e6da",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "الأصل المصطنع ظاهر مع زر التكبير، والمبلغ8500ج.م ومرجع الطلب ثابتان."
+    },
+    {
+      "file": "phase-iosproof-large-text-amount.png",
+      "bytes": 332919,
+      "sha256": "52d6348aed0a4fc062631c8e9ffeb31233201902ae0f26e0bdc08b3733168a3d",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "8500ج.م مقروء عند نص2، والملخص في عمود واحد؛ قص البطاقة العلوية ناتج عن تمرير القائمة."
+    },
+    {
+      "file": "phase-iosproof-large-text-decoded.png",
+      "bytes": 260543,
+      "sha256": "13a2286e1b93e1c3a59c732f93bf453aaf8d960604afd2a9846c467c3ddf41f6",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "الصورة الأصلية وزر التكبير ظاهران عند نص2 بعد إعادة التحميل، دون قص أفقي."
+    },
+    {
+      "file": "phase-iosproof-large-text-unavailable.png",
+      "bytes": 332919,
+      "sha256": "52d6348aed0a4fc062631c8e9ffeb31233201902ae0f26e0bdc08b3733168a3d",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "رسالة الصورة وزر التعافي مقروءان عند نص2. تطابقها مع لقطة المبلغ مشروع لأنهما في مجال العرض نفسه."
+    },
+    {
+      "file": "phase-iosproof-logout-cleared.png",
+      "bytes": 180792,
+      "sha256": "6fa9e4416426a59ecb8407ddcf3153f8673a2a1c6a6399d10f4f8f806f80e935",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "لا بيانات أو صورة أو أداة تكبير بعد وصول البايتات المتأخرة؛ ليست رحلة دخول كاملة."
+    },
+    {
+      "file": "phase-iosproof-panned.png",
+      "bytes": 290534,
+      "sha256": "3ff5703e17110fb2a138b0843b1ab172ae45bf3ddecd69447e6215154762820e",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "الإطار يعرض موضعًا مختلفًا للصورة المكبرة؛ زر الحجم الأصلي ظاهر دون تحريك الصفحة."
+    },
+    {
+      "file": "phase-iosproof-pinched.png",
+      "bytes": 291774,
+      "sha256": "345c6b3cd7a1577f3b20abd3a134a4df777c6feecc8f2dddf5fe5ee199d39d70",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "زيادة التكبير ظاهرة داخل الإطار دون تمدد البطاقة؛ المقياس المسجل2.4."
+    },
+    {
+      "file": "phase-iosproof-unavailable.png",
+      "bytes": 286661,
+      "sha256": "63cdcdcb95d2199117f101d55d98711ec7f424e19e42461ba81fa2146e9f4849",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "رسالة عربية وزر إعادة تحميل واضحان؛ ملخص الحالة والمبلغ على صف واحد."
+    },
+    {
+      "file": "phase-iosproof-unset-large-text.png",
+      "bytes": 355766,
+      "sha256": "764ed6d8fc125a6323685724c6255c66c8a191a1b1f008c8b14b6a75fc4e3e3d",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "نص2 في عمود واحد؛ المبلغ غير المحدد مقروء، والاسم يلتف طبيعيًا دون overflow."
+    },
+    {
+      "file": "phase-iosproof-unset.png",
+      "bytes": 264466,
+      "sha256": "3d3dc7f3a40bb157a2b64ed0d0f51e450540a4aeedb6831c02e1148e82d57ac7",
+      "dimensions": [
+        1170,
+        2532
+      ],
+      "manualReview": "accepted-in-declared-scope",
+      "review": "الحالة والمبلغ في عمودين؛ لم يُحدد بعد داخل الملخص، وبلا أيقونةInbox أو فراغ مضلل."
+    }
+  ],
+  "limitations": [
+    "Production page opened in test Arabic MaterialApp, not from role home; light native appearance only.",
+    "API fixture upload, not OS gallery/camera picker.",
+    "No native enrollment approval/payment activation/receipt navigation in this round.",
+    "No Android, physical-device or biometric acceptance.",
+    "QA branch excludes later local POOL/Arm Square work; shared workspace integration is not cloud-tested as a whole.",
+    "4 role homes and coach journeys were not re-executed.",
+    "GitHub Actions cloud, not DigitalOcean staging; no billing claims."
+  ],
+  "cases": [
+    {
+      "id": "IP01",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "8500EGP وهوية ومرجع الطلب مطابقان؛ Pending بلا إيصال مدفوع.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "phase-iosproof-decoded.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP02",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-injected-asset-fault",
+      "actual": "فشل503 يعرض خطأ عربيًا وإعادة تحميل دون أدوات تكبير.",
+      "evidence": [
+        "phase-iosproof-unavailable.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP03",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "إعادة التحميل تستعيد PNG الأصلي بنفس البصمة دون إعادة تفاصيل الطلب.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "phase-iosproof-decoded.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP04",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "ضغط التكبير يحققscale2 دون تنزيل جديد.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP05",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-touch",
+      "actual": "سحب H/V/diagonal يغير المحاور الصحيحة والصفحة ثابتة؛ pinch2.4؛ reset بين الاتجاهات منUI. حدود السحب والتمرير الخارجي مثبتة فيWidget.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "phase-iosproof-panned.png",
+        "phase-iosproof-pinched.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP06",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-touch",
+      "actual": "زر الحجم الأصلي يعيدidentity1 دون تنزيل.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP07",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "إعادة الفتح تستعيد نفس الأصل وهوية الطلب بمقياس1.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP08",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-injected-asset-fault",
+      "actual": "بايتات تالفة تعرض خطأ وتعطّل التكبير دون استثناءFlutter.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP09",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "إعادة التحميل بعد التلف تفك الأصل وتعيد التكبير.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP10",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "الإداري يقرأ نفس طلب وصورة ومبلغ المالك.",
+      "evidence": [
+        "phase-iosproof-admin.png",
+        "ios-cloud-response.json"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP11",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-isolation",
+      "actual": "هوية أسرة أخرى رُفضت في قراءة التفاصيل403/404.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP12",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-isolation",
+      "actual": "هوية أسرة أخرى رُفضت في تنزيل الصورة403/404.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP13",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-isolation",
+      "actual": "مالك أكاديمية ثانية رُفض في قراءة تفاصيل الأولى403/404.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP14",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-isolation",
+      "actual": "مالك الأكاديمية الثانية رُفض في تنزيل الأصل403/404.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP15",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "طلب بلا باقة/مبلغ/صورة يعرض عدم التحديد وغياب الإثبات بلا طلبasset.",
+      "evidence": [
+        "phase-iosproof-unset.png",
+        "ios-cloud-response.json"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP16",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "تبديل العضوية الفعلية يزيل بيانات وصورة وأدوات الأولى.",
+      "evidence": [
+        "phase-iosproof-context-cleared.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP17",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-isolation",
+      "actual": "نفس المالك ذو العضويتين رُفض من قراءة الأولى بعد اختيار الثانية.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP18",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "استعادة عضوية الأولى تعيد قراءة الأصل بمقياس1.",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP19",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api-delayed-asset",
+      "actual": "الخروج يمحو البيانات ويمنع عرض بايتات ملف أصل حُجز وصوله ثم اكتمل بعد الخروج.",
+      "evidence": [
+        "phase-iosproof-logout-cleared.png",
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP20",
+      "status": "passed-in-declared-layer",
+      "layer": "manual-actual-simulator-png",
+      "actual": "فُتحت12صورة. قُبل الملخص الموجز والتعافي والتكبير والنص2 ضمن الغلاف؛ رفضت سابقًا أيقونةInbox والعرض القديم ثم أعيد التصوير.",
+      "evidence": [
+        "../final-manifest.json",
+        "phase-iosproof-admin.png",
+        "phase-iosproof-context-cleared.png",
+        "phase-iosproof-decoded.png",
+        "phase-iosproof-large-text-amount.png",
+        "phase-iosproof-large-text-decoded.png",
+        "phase-iosproof-large-text-unavailable.png",
+        "phase-iosproof-logout-cleared.png",
+        "phase-iosproof-panned.png",
+        "phase-iosproof-pinched.png",
+        "phase-iosproof-unavailable.png",
+        "phase-iosproof-unset-large-text.png",
+        "phase-iosproof-unset.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP21",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-finance-report-comparison",
+      "actual": "استجابة تقرير المالك كاملة مطابقة قبل القراءة وبعدها.",
+      "evidence": [
+        "flutter-ios.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP22",
+      "status": "passed-in-declared-layer",
+      "layer": "postgresql-full-row-byte-comparison",
+      "actual": "جميع صفوفCollections/Receipts/Periods متطابقة حرفيًا:25لكل جدول، وإجمالي16910EGP عبر الأكاديميتين؛ طلب8500ظل بلا تحصيل.",
+      "evidence": [
+        "money-before.json",
+        "money-after.json",
+        "money-comparison.log",
+        "proof-summary.json"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP23",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-transport-audit",
+      "actual": "صفرbusinesswrites بعد تجهيز البيانات؛ عملياتauth المطلوبة للسياق والخروج مستثناة.",
+      "evidence": [
+        "ios-cloud-response.json"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP24",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-text-scale-2",
+      "actual": "المبلغ وإعادة التحميل والتكبير يمكن الوصول لها بالتمرير عند نص2 دون استثناء.",
+      "evidence": [
+        "phase-iosproof-large-text-amount.png",
+        "phase-iosproof-large-text-unavailable.png",
+        "phase-iosproof-large-text-decoded.png"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP25",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-and-widget",
+      "actual": "ملخصPending غير المسعّر صف واحد فيiOS390/1 وعمود واحد390/2 بلاInbox. Widget320/390 نص1/2 ناجحة، والمرفوض التاريخي يعرض مبلغ الطلب دون مبلغ مطلوب.",
+      "evidence": [
+        "phase-iosproof-unset.png",
+        "phase-iosproof-unset-large-text.png",
+        "../final-checks-excerpt.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP26",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "الصفر الحقيقي يبقى مبلغًا صالحًا بلا إيصال أو تحذير أو لم يُحدد بعد؛ لا ادعاء إنشاء إعفاء بالخادم.",
+      "evidence": [
+        "../final-checks-excerpt.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    },
+    {
+      "id": "IP27",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "عملة مفقودة مع مبلغ720 تبقي تحذير التحقق دون عرض صفر أو سعر غير محدد.",
+      "evidence": [
+        "../final-checks-excerpt.log"
+      ],
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44259600353"
+    }
+  ]
+}
