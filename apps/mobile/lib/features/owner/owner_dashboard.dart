@@ -554,6 +554,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         'الموقف التشغيلي',
         (statement) => HomeOperatingStatement(
           data: statement,
+          onRetry: () => _loadSection(_OwnerSection.statement),
           showTitle: false,
           showHistoryLabel: true,
           showReceivables: false,

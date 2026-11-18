@@ -33,7 +33,11 @@ Map<String, dynamic> summary() => {
   'currency': 'EGP',
   'collections': {'net': 16910, 'changePercentage': null},
   'target': {'amount': null, 'achievement': null},
-  'overdue': {'amount': 925, 'players': 2, 'asOf': '2026-11-18'},
+  'overdue': <String, dynamic>{
+    'amount': 925,
+    'players': 2,
+    'asOf': '2026-11-18',
+  },
   'attendance': {'percentage': 80},
   'capacity': {'seats': 12},
   'members': {'players': 24},

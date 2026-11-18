@@ -25,6 +25,10 @@ case "$suite" in
     target=integration_test/cloud_player_refund_test.dart
     export Demo__SeedProfile=LegacyRegression
     ;;
+  owner-finance)
+    target=integration_test/cloud_owner_finance_test.dart
+    export Demo__SeedProfile=LegacyRegression
+    ;;
   *) echo 'Unknown isolated iOS suite.' >&2; exit 1 ;;
 esac
 export Demo__FixedOtpEnabled=true Demo__FixedOtp=246810
@@ -93,6 +97,12 @@ if [[ "$suite" == player-refund ]]; then
     -f scripts/qa/ios-refund-financial-snapshot.sql > "$qa_dir/evidence/refund-money-before.json"
 fi
 
+if [[ "$suite" == owner-finance ]]; then
+  psql -h 127.0.0.1 -p 55432 -U academy_ci -d "$db_name" -v ON_ERROR_STOP=1 \
+    -f scripts/qa/ios-refund-fixture.sql > "$qa_dir/evidence/owner-auth-fixture.log"
+  python3 scripts/qa/prepare_ios_owner_fixture.py
+fi
+
 echo 'Starting one disposable iOS 26.2 simulator.'
 xcrun simctl list runtimes > "$qa_dir/evidence/runtimes.log"
 simulator=$(xcrun simctl create 'Academy QA iOS' com.apple.CoreSimulator.SimDeviceType.iPhone-16e com.apple.CoreSimulator.SimRuntime.iOS-26-2)
@@ -101,16 +111,22 @@ xcrun simctl status_bar "$simulator" override --time '9:41' --dataNetwork wifi -
 
 cd apps/mobile
 echo 'Building the Flutter test application for iOS.'
+owner_defines=()
+if [[ "$suite" == owner-finance ]]; then
+  flutter analyze integration_test/cloud_owner_finance_test.dart
+  owner_defines=("--dart-define-from-file=$qa_dir/owner-defines.json")
+fi
 gtimeout --kill-after=20s 12m flutter build ios --simulator --debug --no-pub \
   --target="$target" \
   --dart-define=APP_ENV=Demo \
   --dart-define=ACADEMY_ISOLATED_IOS_QA=true \
   --dart-define=API_BASE_URL="$ASPNETCORE_URLS" \
+  ${owner_defines[@]+"${owner_defines[@]}"} \
   2>&1 | tee "$qa_dir/evidence/flutter-ios-build.log"
 
 echo 'Installing and launching the iOS test app.'
 test_status=0
-if [[ "$suite" == enrollment-proof || "$suite" == player-refund ]]; then
+if [[ "$suite" == enrollment-proof || "$suite" == player-refund || "$suite" == owner-finance ]]; then
   # Attach through a known loopback VM port. Simulator OS log discovery can
   # leave an installed app paused forever even though the build succeeded.
   # These are debug-only flags on the disposable hosted simulator, not API auth.
@@ -138,10 +154,13 @@ while time.monotonic() < deadline:
 else:
     raise SystemExit('Installed test app did not expose its loopback VM service within 120 seconds.')
 PYVM
-  ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbose --no-pub \
+  drive_budget=7m
+  drive_timeout=300
+  if [[ "$suite" == owner-finance ]]; then drive_budget=11m; drive_timeout=540; fi
+  ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s "$drive_budget" flutter drive --verbose --no-pub \
     -d "$simulator" --use-existing-app=http://127.0.0.1:9159/ --keep-app-running \
     --driver=test_driver/visual_driver.dart --target="$target" \
-    --no-publish-port --timeout=300 --screenshot="$qa_dir/evidence" \
+    --no-publish-port --timeout="$drive_timeout" --screenshot="$qa_dir/evidence" \
     2>&1 | tee "$qa_dir/evidence/flutter-ios.log" || test_status=$?
 else
   ACADEMY_VISUAL_RUN=ios-cloud gtimeout --kill-after=20s 7m flutter drive --verbose --no-pub \
@@ -200,6 +219,15 @@ elif [[ "$suite" == player-refund ]]; then
     -f ../../scripts/qa/ios-refund-financial-snapshot.sql > "$qa_dir/evidence/refund-money-after.json"
   if [[ "$test_status" == 0 ]]; then
     python3 ../../scripts/qa/summarize_ios_refund.py "$qa_dir/evidence"
+  fi
+elif [[ "$suite" == owner-finance ]]; then
+  for capture in ../../tmp/mobile-visuals/phase-iosowner-*.png ../../tmp/mobile-visuals/ios-cloud-response.json; do
+    if [[ -s "$capture" ]]; then cp "$capture" "$qa_dir/evidence/"; fi
+  done
+  psql -h 127.0.0.1 -p 55432 -U academy_ci -d "$db_name" -At -v ON_ERROR_STOP=1 \
+    -f ../../scripts/qa/ios-owner-financial-snapshot.sql > "$qa_dir/evidence/owner-money-after.json"
+  if [[ "$test_status" == 0 ]]; then
+    python3 ../../scripts/qa/reconcile_ios_owner_finance.py "$qa_dir/evidence"
   fi
 else
 for capture in ../../tmp/mobile-visuals/phase-cloud-*-incomplete.png ../../tmp/mobile-visuals/phase-cloud-admin-initial-error.png; do

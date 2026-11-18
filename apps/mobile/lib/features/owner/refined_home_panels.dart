@@ -10,6 +10,90 @@ import '../../core/theme/academy_home_skin.dart';
 import 'summary_surface.dart';
 import 'operating_monthly_chart.dart';
 
+DateTime? _accountingDay(Object? value) {
+  if (value is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
+    return null;
+  }
+  final date = DateTime.tryParse(value);
+  return date != null &&
+          date.year >= 1 &&
+          date.toIso8601String().substring(0, 10) == value
+      ? date
+      : null;
+}
+
+BigInt? _statementMinor(Object? value) {
+  if (value is! num || !value.isFinite) return null;
+  final match = RegExp(r'^(-?\d+)(?:\.(\d{1,2}))?$').firstMatch('$value');
+  return match == null
+      ? null
+      : BigInt.parse('${match[1]}${(match[2] ?? '').padRight(2, '0')}');
+}
+
+bool _verifiedStatement(Json data) {
+  if (data['currency'] is! String ||
+      !RegExp(r'^[A-Z]{3}$').hasMatch(data['currency'] as String)) {
+    return false;
+  }
+  final income = _statementMinor(data['totalIncome']);
+  final expenses = _statementMinor(data['totalExpenses']);
+  final surplus = _statementMinor(data['surplus']);
+  if (income == null ||
+      expenses == null ||
+      surplus == null ||
+      expenses < BigInt.zero ||
+      income - expenses != surplus) {
+    return false;
+  }
+  for (final section in [('income', income), ('expenses', expenses)]) {
+    final lines = data[section.$1];
+    if (lines is! List) return false;
+    var sum = BigInt.zero;
+    for (final line in lines) {
+      if (line is! Json ||
+          line['label'] is! String ||
+          (line['label'] as String).trim().isEmpty) {
+        return false;
+      }
+      final amount = _statementMinor(line['amount']);
+      if (amount == null || section.$1 == 'expenses' && amount < BigInt.zero) {
+        return false;
+      }
+      sum += amount;
+    }
+    if (sum != section.$2) return false;
+  }
+  final change = data['surplusChangePercentage'];
+  if (change != null && (change is! num || !change.isFinite)) return false;
+  for (final key in ['receivables', 'approvedPayrollPayable']) {
+    if (data[key] != null && _statementMinor(data[key]) == null) return false;
+  }
+  final monthly = data['monthly'];
+  if (monthly != null) {
+    if (monthly is! List) return false;
+    for (final month in monthly) {
+      if (month is! Json) return false;
+      final from = _accountingDay(month['from']),
+          to = _accountingDay(month['to']);
+      final i = _statementMinor(month['income']),
+          e = _statementMinor(month['expenses']);
+      final s = _statementMinor(month['surplus']);
+      // History covers separate months, not necessarily the selected cash period.
+      if (from == null ||
+          to == null ||
+          from.isAfter(to) ||
+          i == null ||
+          e == null ||
+          s == null ||
+          e < BigInt.zero ||
+          i - e != s) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 class AcademySummaryPanel extends StatelessWidget {
   const AcademySummaryPanel({
     super.key,
@@ -45,7 +129,7 @@ class AcademySummaryPanel extends StatelessWidget {
     final players = overdue['players'];
     final hasAmount = amount is num && amount.isFinite && amount >= 0;
     final hasPlayers = players is int && players >= 0;
-    final asOf = DateTime.tryParse('${overdue['asOf']}');
+    final asOf = _accountingDay(overdue['asOf']);
     final colors = Theme.of(context).colorScheme;
     Widget measure(
       String title,
@@ -236,6 +320,9 @@ class AcademySummaryPanel extends StatelessWidget {
                           color: colors.onSurfaceVariant,
                         ),
                       ),
+                    ] else if (hasAmount) ...[
+                      const SizedBox(height: 6),
+                      const UiText('تاريخ رصيد المتأخرات غير متاح'),
                     ],
                   ],
                 ),
@@ -740,6 +827,7 @@ class HomeOperatingStatement extends StatelessWidget {
     required this.data,
     required this.onOpen,
     this.onMonth,
+    this.onRetry,
     this.expenseAction,
     this.showTitle = true,
     this.showBalances = true,
@@ -750,6 +838,7 @@ class HomeOperatingStatement extends StatelessWidget {
   final VoidCallback? onOpen;
   final bool showTitle, showBalances, showReceivables, showHistoryLabel;
   final ValueChanged<Json>? onMonth;
+  final VoidCallback? onRetry;
   final VoidCallback? Function(Json)? expenseAction;
 
   Widget _line(Json line, Color color, VoidCallback? action) {
@@ -794,6 +883,21 @@ class HomeOperatingStatement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!_verifiedStatement(data)) {
+      return GCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const UiText('تعذر التحقق من أرقام التقرير.'),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                child: const UiText('إعادة تحميل التقرير'),
+              ),
+          ],
+        ),
+      );
+    }
     final surplus = data['surplus'] as num;
     final change = data['surplusChangePercentage'] as num?;
     final color = surplus < 0
