@@ -1,3 +1,8 @@
+.loadState {
+  display: grid;
+  gap: 12px;
+}
+
 .workspace :global(.placement-preview) {
   color: var(--text);
   background: var(--staff-surface-muted, var(--surface));
