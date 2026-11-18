@@ -17,6 +17,16 @@ type Schedule = { from: string; to: string; days: number[]; startTime: string; e
 type Draft = { arabicName: string; branchId: string; sportId: string; ageCategoryId: string; levelId: string; capacity: number; registrationFormat: string; capacityReviewed: boolean; coachMembershipId: string; timetable: Schedule; enrollmentIds: string[] };
 type Preview = { fingerprint: string; name: string; sessions: number; players: number; resource?: string; conflicts: string[] };
 const steps = [{ title: "المجموعة", icon: Layers3 }, { title: "الجدول والمدرب", icon: CalendarDays }, { title: "اللاعبون", icon: UsersRound }, { title: "المراجعة", icon: CheckCheck }];
+const loadMessage = "تعذر تحميل خيارات إنشاء المجموعة. أعد المحاولة.";
+function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
+function option(value: unknown): value is Option { return record(value) && typeof value.id === "string" && typeof value.arabicName === "string"; }
+function optionList(value: unknown): value is Option[] { return Array.isArray(value) && value.every(option); }
+function textList(value: unknown): value is string[] { return Array.isArray(value) && value.every(item => typeof item === "string"); }
+function validOptions(value: unknown): value is Options { return record(value) && [value.branches, value.sports, value.categories, value.coaches].every(optionList); }
+function validFacilities(value: unknown): value is { resources: Resource[]; spaces: { id: string; sportId: string; name: string }[] } {
+  return record(value) && Array.isArray(value.spaces) && value.spaces.every(s => record(s) && typeof s.id === "string" && typeof s.sportId === "string" && typeof s.name === "string")
+    && Array.isArray(value.resources) && value.resources.every(r => record(r) && [r.id, r.name, r.facilitySpaceId, r.branchId].every(item => typeof item === "string") && typeof r.capacity === "number" && Number.isFinite(r.capacity) && r.capacity > 0 && (r.approvedAtUtc == null || typeof r.approvedAtUtc === "string") && textList(r.serviceKinds));
+}
 export function GroupCreation() {
   const router = useRouter(), today = monthToDate().to;
   const [options, setOptions] = useState<Options>(), [levels, setLevels] = useState<Option[]>([]), [resources, setResources] = useState<Resource[]>([]), [spaces, setSpaces] = useState<{ id: string; sportId: string; name: string }[]>([]);
@@ -24,12 +34,18 @@ export function GroupCreation() {
   const [step, setStep] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState(""), [review, setReview] = useState<Preview>(), [key, setKey] = useState("");
   const [search, setSearch] = useState(""), [offset, setOffset] = useState(0), [total, setTotal] = useState(0), [candidates, setCandidates] = useState<Candidate[]>([]);
   const [levelName, setLevelName] = useState(""), [levelRank, setLevelRank] = useState(1);
+  const [loadAttempt, setLoadAttempt] = useState(0), [loadError, setLoadError] = useState("");
   useEffect(() => { let active = true; void (async () => {
-    const [o, l, p] = await Promise.all([fetch("/api/v1/manage/structure/options"), fetch("/api/v1/manage/training-levels"), fetch("/api/v1/my-permissions")]); if (!o.ok || !l.ok || !p.ok) throw new Error("تعذر تحميل خيارات إنشاء المجموعة في نطاق صلاحياتك.");
-    const opts = await o.json() as Options, list = await l.json() as Option[], permissions = await p.json() as string[];
-    if (active) { setOptions(opts); setLevels(list); setDraft(d => ({ ...d, branchId: opts.branches.length === 1 ? opts.branches[0].id : "", sportId: opts.sports.length === 1 ? opts.sports[0].id : "" })); }
-    if (permissions.includes("facilities.read")) { const response = await fetch("/api/v1/facilities"); if (response.ok) { const data = await response.json(); if (active) { setResources(data.resources ?? []); setSpaces(data.spaces ?? []); } } }
-  })().catch(e => { if (active) setError(e instanceof Error ? e.message : "تعذر التحميل."); }); return () => { active = false; }; }, []);
+    const [o, l, p] = await Promise.all([fetch("/api/v1/manage/structure/options"), fetch("/api/v1/manage/training-levels"), fetch("/api/v1/my-permissions")]); if (!o.ok || !l.ok || !p.ok) throw new Error(loadMessage);
+    const [opts, list, permissions]: unknown[] = await Promise.all([o.json(), l.json(), p.json()]);
+    if (!validOptions(opts) || !optionList(list) || !list.every(level => typeof level.sportId === "string") || !textList(permissions)) throw new Error(loadMessage);
+    let facilityData: { resources: Resource[]; spaces: { id: string; sportId: string; name: string }[] } = { resources: [], spaces: [] };
+    if (permissions.includes("facilities.read")) {
+      const response = await fetch("/api/v1/facilities"); if (!response.ok) throw new Error(loadMessage);
+      const data: unknown = await response.json(); if (!validFacilities(data)) throw new Error(loadMessage); facilityData = data;
+    }
+    if (active) { setResources(facilityData.resources); setSpaces(facilityData.spaces); setLevels(list); setOptions(opts); setDraft(d => ({ ...d, branchId: opts.branches.length === 1 ? opts.branches[0].id : "", sportId: opts.sports.length === 1 ? opts.sports[0].id : "" })); }
+  })().catch(() => { if (active) setLoadError(loadMessage); }); return () => { active = false; }; }, [loadAttempt]);
   function change<T extends keyof Draft>(field: T, value: Draft[T]) { setDraft(d => ({ ...d, [field]: value })); setReview(undefined); setKey(""); setError(""); }
   async function addLevel() {
     if (!draft.sportId || !levelName.trim()) return;
@@ -56,7 +72,7 @@ export function GroupCreation() {
   }
   const allowed = resources.filter(r => r.approvedAtUtc && r.serviceKinds.includes("Training") && r.branchId === draft.branchId && r.capacity >= draft.capacity && spaces.some(s => s.id === r.facilitySpaceId && s.sportId === draft.sportId));
   const select = (label: string, field: "branchId" | "sportId" | "ageCategoryId" | "levelId" | "coachMembershipId", list: Option[]) => <label>{label}<select aria-label={label} required value={draft[field]} onChange={e => { change(field, e.target.value); if (field === "sportId") change("levelId", ""); if (field !== "coachMembershipId") change("enrollmentIds", []); }}><option value="">اختر {label}</option>{list.map(o => <option key={o.id} value={o.id}>{o.arabicName}</option>)}</select></label>;
-  return <><PageHeader title="إنشاء مجموعة متكاملة" context="الأكاديمية / المجموعات / إنشاء" />{!options ? error ? <ErrorState message={error} /> : <LoadingState /> : <section className={`detail-card group-creation ${styles.workspace}`}>
+  return <><PageHeader title="إنشاء مجموعة متكاملة" context="الأكاديمية / المجموعات / إنشاء" />{!options ? loadError ? <section className="detail-card" aria-label="تحميل إنشاء المجموعة"><ErrorState message={loadError} /><button type="button" className="secondary-button" onClick={() => { setLoadError(""); setLoadAttempt(attempt => attempt + 1); }}>إعادة تحميل خيارات المجموعة</button></section> : <LoadingState /> : <section className={`detail-card group-creation ${styles.workspace}`}>
     <ol className="group-creation-steps" aria-label="خطوات إنشاء المجموعة">{steps.map((s, i) => <li key={s.title} aria-current={i === step ? "step" : undefined} className={i <= step ? "active" : ""}><s.icon size={19} aria-hidden="true" /><span>{i + 1}. {s.title}</span></li>)}</ol>
     <form className="form-shell" onSubmit={e => void next(e)}>
       {step === 0 && <><h2>هوية المجموعة وأهليتها</h2><div className="form-grid"><label>اسم المجموعة<input required maxLength={160} value={draft.arabicName} onChange={e => change("arabicName", e.target.value)} /></label><label>السعة<input required type="number" min={1} max={10000} value={Number.isNaN(draft.capacity) ? "" : draft.capacity} onChange={e => change("capacity", e.target.valueAsNumber)} /></label>{select("الفرع", "branchId", options.branches)}{select("الرياضة", "sportId", options.sports)}{select("الفئة العمرية", "ageCategoryId", options.categories)}{select("مستوى التدريب", "levelId", levels.filter(l => l.sportId === draft.sportId))}<label>نمط التدريب<select aria-label="نمط التدريب" value={draft.registrationFormat} onChange={e => { change("registrationFormat", e.target.value); change("enrollmentIds", []); }}><option value="Group">جماعي · يشمل الموسمي</option><option value="Private">خاص</option><option value="SemiPrivate">شبه خاص</option></select></label></div>{draft.registrationFormat !== "Group" && <label className="checkbox-line"><input type="checkbox" required checked={draft.capacityReviewed} onChange={e => change("capacityReviewed", e.target.checked)} />راجعت السعة المناسبة لهذا التدريب</label>}<details><summary>إضافة مستوى تدريب للرياضة</summary><div className="form-grid"><label>اسم المستوى الجديد<input maxLength={100} value={levelName} onChange={e => setLevelName(e.target.value)} /></label><label>ترتيب المستوى<input type="number" min={1} max={1000} value={levelRank} onChange={e => setLevelRank(Number(e.target.value))} /></label></div><button type="button" className="secondary-button" disabled={busy || !draft.sportId || !levelName.trim()} onClick={() => void addLevel()}>حفظ المستوى</button></details></>}

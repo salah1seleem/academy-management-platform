@@ -7,6 +7,61 @@ test.beforeEach(async ({ page }) => {
   expect((await placementWrite(page.request, "/api/v1/auth/login", { email: "owner.nogoom@example.test", password: "Demo-Only-123!" })).status()).toBe(200);
 });
 
+test("Initial group options recover network, malformed responses and facility failure without a partial form or a write", async ({ page }, info) => {
+  const { draft } = await creationDraft(page.request, 21);
+  const before = await creationState(page.request, draft.timetable.from);
+  let phase = "network", writes = 0, optionsReads = 0, facilityReads = 0;
+  const crashes: string[] = [];
+  page.on("pageerror", error => crashes.push(error.message));
+  page.on("request", request => { if (request.url().includes("/api/v1/manage/group-creation") && request.method() === "POST") writes++; });
+  await page.route("**/api/v1/manage/structure/options", async route => {
+    optionsReads++;
+    if (phase === "network") await route.abort("failed");
+    else if (phase === "json") await route.fulfill({ status: 200, contentType: "application/json", body: "{invalid-json" });
+    else if (phase === "shape") await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ branches: [] }) });
+    else await route.continue();
+  });
+  await page.route("**/api/v1/facilities", async route => {
+    facilityReads++;
+    if (phase === "facilities") await route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({ title: "Synthetic upstream failure" }) });
+    else await route.continue();
+  });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/dashboard/academy/groups/new");
+  for (const next of ["json", "shape", "facilities", "healthy"]) {
+    const state = page.getByRole("region", { name: "تحميل إنشاء المجموعة" });
+    await expect(state.getByRole("alert")).toHaveText("تعذر تحميل خيارات إنشاء المجموعة. أعد المحاولة.");
+    await expect(page.getByRole("heading", { name: "إنشاء مجموعة متكاملة", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "اسم المجموعة", exact: true })).toHaveCount(0);
+    await expect(state).not.toContainText(/Failed to fetch|invalid-json|Synthetic upstream/);
+    expect(writes).toBe(0);
+    if (phase === "network" || phase === "facilities") {
+      const width = phase === "network" ? 390 : 1440;
+      await page.setViewportSize({ width, height: 900 });
+      await assertPlacementViewport(page, width);
+      await page.screenshot({ path: info.outputPath(`group-load-${phase}-${width}.png`), fullPage: true, animations: "disabled" });
+    }
+    phase = next;
+    await state.getByRole("button", { name: "إعادة تحميل خيارات المجموعة" }).click();
+  }
+  await expect(page.getByRole("textbox", { name: "اسم المجموعة", exact: true })).toBeEnabled();
+  await expect(page.getByRole("region", { name: "تحميل إنشاء المجموعة" })).toHaveCount(0);
+  expect(optionsReads).toBeGreaterThanOrEqual(5);
+  expect(facilityReads).toBeGreaterThanOrEqual(2);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.screenshot({ path: info.outputPath("group-load-restored-390.png"), fullPage: true, animations: "disabled" });
+  await page.getByLabel("اسم المجموعة", { exact: true }).fill(draft.arabicName);
+  for (const [label, value] of [["الفرع", draft.branchId], ["الرياضة", draft.sportId], ["الفئة العمرية", draft.ageCategoryId], ["مستوى التدريب", draft.levelId]] as const) {
+    await page.getByRole("combobox", { name: label, exact: true }).selectOption(value);
+  }
+  await page.getByRole("button", { name: "متابعة", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "متى وأين ومع من؟" })).toBeVisible();
+  await page.getByRole("button", { name: "إلغاء", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/academy\/groups$/);
+  expect(await creationState(page.request, draft.timetable.from)).toEqual(before);
+  expect(writes).toBe(0); expect(crashes).toEqual([]);
+});
+
 test("Owner creates one reviewed group after a lost save reply; Guardian receives the dated session without a new service or collection", async ({ page }, info) => {
   const { draft, coach } = await creationDraft(page.request, 14, [id(101)]);
   const before = await creationState(page.request, draft.timetable.from);
@@ -38,6 +93,7 @@ test("Owner creates one reviewed group after a lost save reply; Guardian receive
     await page.setViewportSize({ width, height: 900 });
     for (const mode of ["dark", "light"] as const) {
       await setPlacementAppearance(page, mode);
+      await assertCreationMetricWords(page);
       await page.screenshot({ path: info.outputPath(`group-review-${mode}-${width}.png`), fullPage: true, animations: "disabled" });
       await assertPlacementViewport(page, width);
       await assertPlacementContrast(page.locator(".group-creation"));
