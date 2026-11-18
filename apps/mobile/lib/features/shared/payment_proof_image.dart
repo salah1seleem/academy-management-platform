@@ -42,6 +42,24 @@ class _PaymentProofImageState extends State<PaymentProofImage> {
         : Matrix4.identity();
   }
 
+  void panVertically(DragUpdateDetails details) {
+    final size = preview.currentContext?.size;
+    if (!mounted || !zoomed || size == null) return;
+    final value = transformation.value.clone();
+    final scale = value.getMaxScaleOnAxis();
+    if (scale <= 1) return;
+    // The surrounding page also recognizes vertical drags. Claim this direction
+    // inside the enlarged preview and keep the image within its existing bounds.
+    value.setEntry(
+      1,
+      3,
+      (value.getTranslation().y + details.delta.dy)
+          .clamp(-size.height * (scale - 1), 0.0)
+          .toDouble(),
+    );
+    transformation.value = value;
+  }
+
   void retry() => setState(() {
     available = null;
     attempt++;
@@ -64,27 +82,30 @@ class _PaymentProofImageState extends State<PaymentProofImage> {
                 label: UiText(zoomed ? 'الحجم الأصلي' : 'تكبير'),
               ),
             ),
-          InteractiveViewer(
-            key: preview,
-            transformationController: transformation,
-            panEnabled: zoomed,
-            scaleEnabled: zoomed,
-            child: PrivateImage(
-              key: ValueKey(source),
-              auth: widget.auth,
-              path: widget.path,
-              height: available == false ? 0 : 260,
-              fit: BoxFit.contain,
-              onAvailabilityChanged: (value) {
-                if (!mounted || attempt != source) return;
-                if (!value) transformation.value = Matrix4.identity();
-                setState(() {
-                  available = value;
-                  if (!value) zoomed = false;
-                });
-                widget.onAvailabilityChanged?.call(value);
-              },
-              fallback: const SizedBox.shrink(),
+          GestureDetector(
+            onVerticalDragUpdate: zoomed ? panVertically : null,
+            child: InteractiveViewer(
+              key: preview,
+              transformationController: transformation,
+              panEnabled: zoomed,
+              scaleEnabled: zoomed,
+              child: PrivateImage(
+                key: ValueKey(source),
+                auth: widget.auth,
+                path: widget.path,
+                height: available == false ? 0 : 260,
+                fit: BoxFit.contain,
+                onAvailabilityChanged: (value) {
+                  if (!mounted || attempt != source) return;
+                  if (!value) transformation.value = Matrix4.identity();
+                  setState(() {
+                    available = value;
+                    if (!value) zoomed = false;
+                  });
+                  widget.onAvailabilityChanged?.call(value);
+                },
+                fallback: const SizedBox.shrink(),
+              ),
             ),
           ),
           if (available == false) ...[
