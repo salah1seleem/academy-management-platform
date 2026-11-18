@@ -1104,3 +1104,12 @@ Spaces خاص: مفاتيح {AcademyId}/{StorageName} وhelp/ للأصول ال�
 ### CB-20261118-CAP — رفض سعة صفر في المورد الخالي
 
 أثبتت الجولة 44220965114 على60993da8 قبول API لسعة صفر برد204، بعد نجاح رحلة الدقائق وتحرير حجوزاتها. يضاف رفض422 برسالة عربية داخل تعديل مجموعة مصرح بها، بعد حماية المقاعد الحالية والمجدولة. تبقى حماية السعة دون المقاعد409، بما فيها السالب، وnull دون تغيير، والكسر400 عند ارتباط الطلب بحقلint. لا تعديل للحد الأعلى أو سلوك الباقات أو مالية الاشتراكات. يُختبر الصفر أيضًا أثناء وجود الحجز للتأكد من بقاء409 وثبات المورد، ثم رفض الصفر في المورد الخالي، وثباته بعد كل طلب، مع عزل المدرب والزائر والأكاديمية الثانية. لم يُعد تشغيل مجموعةBackend القديمة؛ الدليل الجديد بناءAPI وطلبات الخادم الفعلية عبرCore، ولا تُنسب إليه نتيجة1686 السابقة.
+
+
+### IF-20261118: Import field boundaries and schema guidance
+
+Owner import was visually reviewed in both themes at390/1440 and with its schema expanded (Core44223955028).41 cases were written before product edits/tests:22 invalid records out of50,28 valid records followed by22 corrected records, optional blanks, legitimate phone formats, malformed responses, identity/tenant isolation and independent nonzero financial reconciliation. Evidence JSON must be written to output files, not only attached in memory.
+
+The limited UI direction removes the repeated relationship explanation from the initial form while retaining page guidance/warnings, and replaces record-management table tools in static schema guidance with expandable sheets and separate required/optional lists, initially showing Players. Date format fragments remain LTR. Requirements, fields, authentication and commit semantics stay intact. The existing theme is the direction, following unslop by Damir Sokolovsky (@heydamir); execution is already authorized by the user.
+
+Only the focused core-player-import-fields.spec.ts run skips irrelevant ffmpeg preparation and uses the pinned Chromium launch check with conditional system-dependency installation.7 condition combinations passed; ordinary group defaults are preserved.44223310700 was cancelled during setup, and44223955028 is a visual inventory only, not business acceptance. No local heavy builds/simulators, deployment or unrelated POOL changes.
