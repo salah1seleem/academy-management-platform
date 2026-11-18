@@ -4,6 +4,7 @@ import 'package:academy_mobile/core/api/api_client.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/admin/native_refund.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'approved_native_refund_test.dart' as flow;
@@ -54,6 +55,11 @@ void main() {
       await flow.choose(t, 'وردية الصرف', 'وردية اختبار');
       await flow.tap(t, 'مراجعة مبلغ الاسترداد');
       final checkbox = find.byType(CheckboxListTile);
+      await t.scrollUntilVisible(
+        checkbox,
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await t.ensureVisible(checkbox);
       expect(t.widget<CheckboxListTile>(checkbox).onChanged, isNull);
       expect(find.text('النقدي غير مفعل لهذه الأكاديمية.'), findsOneWidget);
@@ -93,7 +99,10 @@ void main() {
     (t) async {
       final data = source();
       data['collections'] = [
-        {...(data['collections'] as List).first as Map, 'available': '0.00'},
+        {
+          ...(data['collections'] as List).first as Map<String, dynamic>,
+          'available': '0.00',
+        },
       ];
       final auth = await authenticate(
         'AcademyOwner',
@@ -152,7 +161,7 @@ void main() {
           final data = source();
           data['collections'] = [
             {
-              ...(data['collections'] as List).first as Map,
+              ...(data['collections'] as List).first as Map<String, dynamic>,
               'receiptNumber': 'RC-20261118-ABCD1234',
             },
           ];
@@ -175,6 +184,35 @@ void main() {
             'التحصيل',
             'RC-20261118-ABCD1234 · 2026-10-21 · المتاح 100 ج.م',
           );
+          final sourceField = find.widgetWithText(
+            DropdownButtonFormField<String>,
+            'التحصيل',
+          );
+          final sourceLabel = find
+              .text('RC-20261118-ABCD1234 · 2026-10-21 · المتاح 100 ج.م')
+              .first;
+          final bounds = t.getRect(sourceField);
+          final origin = t.getTopLeft(sourceLabel);
+          final paragraph = t.renderObject<RenderParagraph>(sourceLabel);
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset:
+                  'RC-20261118-ABCD1234 · 2026-10-21 · المتاح 100 ج.م'.length,
+            ),
+          );
+          expect(boxes, isNotEmpty);
+          for (final box in boxes) {
+            expect(
+              origin.dy + box.bottom,
+              lessThanOrEqualTo(bounds.bottom + .5),
+            );
+            expect(
+              origin.dx + box.left,
+              greaterThanOrEqualTo(bounds.left - .5),
+            );
+            expect(origin.dx + box.right, lessThanOrEqualTo(bounds.right + .5));
+          }
           expect(t.takeException(), isNull);
           await amount(t, '13.34');
           await flow.tap(t, 'مراجعة مبلغ الاسترداد');
@@ -306,11 +344,11 @@ void main() {
       final data = source();
       data['collections'] = [
         {
-          ...(data['collections'] as List).first as Map,
+          ...(data['collections'] as List).first as Map<String, dynamic>,
           'receiptNumber': 'RC-A',
         },
         {
-          ...(data['collections'] as List).first as Map,
+          ...(data['collections'] as List).first as Map<String, dynamic>,
           'id': 'second',
           'receiptNumber': 'RC-B',
         },
@@ -364,7 +402,10 @@ void main() {
       if (fault == 'missing authority') data.remove('canRecord');
       if (fault == 'broken available') {
         data['collections'] = [
-          {...(data['collections'] as List).first as Map, 'available': 'bad'},
+          {
+            ...(data['collections'] as List).first as Map<String, dynamic>,
+            'available': 'bad',
+          },
         ];
       }
       if (fault == 'duplicate source') {

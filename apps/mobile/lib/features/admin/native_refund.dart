@@ -287,6 +287,7 @@ class _NativePlayerRefundState
               key: ValueKey('refund-source:$collection'),
               initialValue: collection,
               isExpanded: true,
+              isDense: false,
               itemHeight: null,
               decoration: const InputDecoration(
                 label: RequiredFieldLabel('التحصيل'),
