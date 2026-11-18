@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   role-homes:
-    name: ${{ inputs.checks_only && 'Flutter proof checks' || 'Installed iOS QA' }}
+    name: ${{ inputs.checks_only && 'Flutter focused checks' || 'Installed iOS QA' }}
     runs-on: macos-26
     timeout-minutes: 50
     env:
@@ -88,7 +88,7 @@ jobs:
         if: inputs.suite == 'player-refund'
         working-directory: apps/mobile
         run: |
-          flutter analyze lib/features/admin/native_refund.dart test/native_refund_negative_test.dart
+          flutter analyze lib/features/admin/native_refund.dart test/native_refund_negative_test.dart integration_test/cloud_player_refund_test.dart
           flutter test test/native_refund_negative_test.dart test/approved_native_refund_test.dart test/approved_refund_readback_test.dart
       - name: Exercise selected suite on one iOS simulator
         if: inputs.checks_only != true
@@ -101,6 +101,9 @@ jobs:
           test "$(cat "$RUNNER_TEMP/academy-ios-qa/evidence/suite-completed.txt")" = "$ACADEMY_IOS_SUITE"
           if [[ "$ACADEMY_IOS_SUITE" == enrollment-proof ]]; then
             test -s "$RUNNER_TEMP/academy-ios-qa/evidence/proof-summary.json"
+          fi
+          if [[ "$ACADEMY_IOS_SUITE" == player-refund ]]; then
+            test -s "$RUNNER_TEMP/academy-ios-qa/evidence/refund-summary.json"
           fi
       - name: Preserve iOS results and diagnostics
         if: always() && inputs.checks_only != true

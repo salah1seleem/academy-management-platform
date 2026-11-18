@@ -21,6 +21,10 @@ case "$suite" in
     target=integration_test/cloud_enrollment_proof_test.dart
     export Demo__SeedProfile=LegacyRegression
     ;;
+  player-refund)
+    target=integration_test/cloud_player_refund_test.dart
+    export Demo__SeedProfile=LegacyRegression
+    ;;
   *) echo 'Unknown isolated iOS suite.' >&2; exit 1 ;;
 esac
 export Demo__FixedOtpEnabled=true Demo__FixedOtp=246810
@@ -82,6 +86,13 @@ if [[ "$suite" == enrollment-proof ]]; then
     -f scripts/qa/ios-proof-financial-snapshot.sql > "$qa_dir/evidence/money-before.json"
 fi
 
+if [[ "$suite" == player-refund ]]; then
+  psql -h 127.0.0.1 -p 55432 -U academy_ci -d "$db_name" -v ON_ERROR_STOP=1 \
+    -f scripts/qa/ios-refund-fixture.sql > "$qa_dir/evidence/refund-fixture.log"
+  psql -h 127.0.0.1 -p 55432 -U academy_ci -d "$db_name" -At -v ON_ERROR_STOP=1 \
+    -f scripts/qa/ios-refund-financial-snapshot.sql > "$qa_dir/evidence/refund-money-before.json"
+fi
+
 echo 'Starting one disposable iOS 26.2 simulator.'
 xcrun simctl list runtimes > "$qa_dir/evidence/runtimes.log"
 simulator=$(xcrun simctl create 'Academy QA iOS' com.apple.CoreSimulator.SimDeviceType.iPhone-16e com.apple.CoreSimulator.SimRuntime.iOS-26-2)
@@ -99,7 +110,7 @@ gtimeout --kill-after=20s 12m flutter build ios --simulator --debug --no-pub \
 
 echo 'Installing and launching the iOS test app.'
 test_status=0
-if [[ "$suite" == enrollment-proof ]]; then
+if [[ "$suite" == enrollment-proof || "$suite" == player-refund ]]; then
   # Attach through a known loopback VM port. Simulator OS log discovery can
   # leave an installed app paused forever even though the build succeeded.
   # These are debug-only flags on the disposable hosted simulator, not API auth.
@@ -180,6 +191,15 @@ summary = {'executedAutomated': sorted(expected | {'IP22'}),
 (folder / 'proof-summary.json').write_text(json.dumps(summary, indent=2))
 print(json.dumps(summary))
 PYREPORT
+  fi
+elif [[ "$suite" == player-refund ]]; then
+  for capture in ../../tmp/mobile-visuals/phase-iosrefund-*.png ../../tmp/mobile-visuals/ios-cloud-response.json; do
+    if [[ -s "$capture" ]]; then cp "$capture" "$qa_dir/evidence/"; fi
+  done
+  psql -h 127.0.0.1 -p 55432 -U academy_ci -d "$db_name" -At -v ON_ERROR_STOP=1 \
+    -f ../../scripts/qa/ios-refund-financial-snapshot.sql > "$qa_dir/evidence/refund-money-after.json"
+  if [[ "$test_status" == 0 ]]; then
+    python3 ../../scripts/qa/summarize_ios_refund.py "$qa_dir/evidence"
   fi
 else
 for capture in ../../tmp/mobile-visuals/phase-cloud-*-incomplete.png ../../tmp/mobile-visuals/phase-cloud-admin-initial-error.png; do

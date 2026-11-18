@@ -57,6 +57,8 @@ Future<void> main() async {
                 key: data?[key],
             },
           if (data?['proofReview'] is Map) 'proofReview': data!['proofReview'],
+          if (data?['refundReview'] is Map)
+            'refundReview': data!['refundReview'],
           'responseKeys': data?.keys.toList() ?? <String>[],
         }),
       );

@@ -28,6 +28,7 @@ Future<void> choose(WidgetTester t, String label, String value) async {
 }
 
 Map<String, dynamic> source(String method, bool saved) => {
+  'canRecord': true,
   'collections': [
     {
       'id': 'collection',

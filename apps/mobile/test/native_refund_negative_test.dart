@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:academy_mobile/core/api/api_client.dart';
+import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/admin/native_refund.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +28,192 @@ Future<void> amount(WidgetTester t, String value) async {
 }
 
 void main() {
+  testWidgets('RFN25 late source cannot restore a logged-out refund form', (
+    t,
+  ) async {
+    final response = Completer<Object?>();
+    final auth = await authenticate(
+      'AcademyOwner',
+      (m, p, b, token) => response.future,
+    );
+    await t.pumpWidget(app(NativePlayerRefund(auth: auth, playerId: 'player')));
+    await t.pump();
+    await auth.logout();
+    response.complete(source());
+    await t.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNothing);
+    expect(find.text('سجل الاستردادات'), findsNothing);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+  testWidgets(
+    'RFN32 legitimate zero availability remains an empty read-only source',
+    (t) async {
+      final data = source();
+      data['collections'] = [
+        {...(data['collections'] as List).first as Map, 'available': '0.00'},
+      ];
+      final auth = await authenticate(
+        'AcademyOwner',
+        (m, p, b, token) async => data,
+      );
+      await t.pumpWidget(
+        app(NativePlayerRefund(auth: auth, playerId: 'player')),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('لا يوجد مبلغ متاح للاسترداد المباشر.'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.text('مراجعة مبلغ الاسترداد'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  for (final text in ['', '   ', 'أ' * 500]) {
+    testWidgets(
+      'RFN09 RFN31 optional reason has exact boundary ${text.length}',
+      (t) async {
+        Map? body;
+        final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+          if (p.endsWith('/quote')) {
+            body = b as Map;
+            return quote();
+          }
+          return source();
+        });
+        await t.pumpWidget(
+          app(NativePlayerRefund(auth: auth, playerId: 'player')),
+        );
+        await t.pumpAndSettle();
+        await flow.choose(t, 'التحصيل', '2026-10-21 · المتاح 100 ج.م');
+        await amount(t, '13.34');
+        await t.enterText(
+          find.widgetWithText(TextFormField, 'سبب الاسترداد'),
+          text,
+        );
+        await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+        expect(body!['reason'], text.trim().isEmpty ? null : text);
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
+  for (final width in [320.0, 390.0]) {
+    for (final scale in [1.0, 2.0]) {
+      for (final dark in [false, true]) {
+        testWidgets('RFN29 full review fits $width text $scale dark $dark', (
+          t,
+        ) async {
+          t.view.physicalSize = Size(width, 844);
+          t.view.devicePixelRatio = 1;
+          addTearDown(t.view.reset);
+          final data = source();
+          data['collections'] = [
+            {
+              ...(data['collections'] as List).first as Map,
+              'receiptNumber': 'RC-20261118-ABCD1234',
+            },
+          ];
+          final auth = await authenticate(
+            'AcademyOwner',
+            (m, p, b, token) async => p.endsWith('/quote') ? quote() : data,
+          );
+          await t.pumpWidget(
+            app(
+              Theme(
+                data: dark ? AcademyTheme.dark() : AcademyTheme.light(),
+                child: NativePlayerRefund(auth: auth, playerId: 'player'),
+              ),
+              scale: scale,
+            ),
+          );
+          await t.pumpAndSettle();
+          await flow.choose(
+            t,
+            'التحصيل',
+            'RC-20261118-ABCD1234 · 2026-10-21 · المتاح 100 ج.م',
+          );
+          expect(t.takeException(), isNull);
+          await amount(t, '13.34');
+          await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+          await flow.tap(
+            t,
+            'أؤكد أن التحويل تم خارج النظام وأوثق رده مرة واحدة.',
+          );
+          final confirm = find.widgetWithText(
+            FilledButton,
+            'تأكيد تسجيل الاسترداد',
+          );
+          await t.ensureVisible(confirm);
+          await t.pumpAndSettle();
+          expect(t.widget<FilledButton>(confirm).onPressed, isNotNull);
+          final rect = t.getRect(confirm);
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(width));
+          expect(t.takeException(), isNull);
+          await t.pumpWidget(const SizedBox());
+          auth.dispose();
+        });
+      }
+    }
+  }
+  testWidgets('RFN15 failed re-review removes an earlier approval', (t) async {
+    var requests = 0;
+    final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+      if (p.endsWith('/quote')) {
+        if (++requests == 2)
+          throw const ApiFailure(503, 'تعذر تحميل المراجعة.');
+        return quote();
+      }
+      return source();
+    });
+    await t.pumpWidget(app(NativePlayerRefund(auth: auth, playerId: 'player')));
+    await t.pumpAndSettle();
+    await flow.choose(t, 'التحصيل', '2026-10-21 · المتاح 100 ج.م');
+    await amount(t, '13.34');
+    await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+    await flow.tap(t, 'أؤكد أن التحويل تم خارج النظام وأوثق رده مرة واحدة.');
+    await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+    expect(find.text('تأكيد تسجيل الاسترداد'), findsNothing);
+    expect(find.byType(CheckboxListTile), findsNothing);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
+  testWidgets('RFN24 stale cash quote cannot remain approved after rejection', (
+    t,
+  ) async {
+    final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+      if (p.endsWith('/quote'))
+        return {
+          ...quote(),
+          'cashEnabled': true,
+          'quoteHash': 'reviewed-hash',
+          'sessions': [
+            {'id': 'shift', 'name': 'وردية اختبار'},
+          ],
+        };
+      if (m == 'POST') throw const ApiFailure(409, 'تغير رصيد الوردية.');
+      return {...flow.source('Cash', false), 'canRecord': true};
+    });
+    await t.pumpWidget(app(NativePlayerRefund(auth: auth, playerId: 'player')));
+    await t.pumpAndSettle();
+    await flow.choose(t, 'التحصيل', '2026-10-21 · المتاح 100 ج.م');
+    await amount(t, '13.34');
+    await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+    await flow.choose(t, 'وردية الصرف', 'وردية اختبار');
+    await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+    await flow.tap(
+      t,
+      'راجعت الوردية والمبلغ وأؤكد توثيق صرف الاسترداد مرة واحدة.',
+    );
+    await flow.tap(t, 'تأكيد تسجيل الاسترداد');
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(find.text('تأكيد تسجيل الاسترداد'), findsNothing);
+    expect(find.text('تغير رصيد الوردية.'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    auth.dispose();
+  });
   final badQuotes = <String, Map<String, dynamic>>{
     'different amount': {...quote(), 'amount': '13.35'},
     'zero amount': {...quote(), 'amount': '0.00'},

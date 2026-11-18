@@ -28,9 +28,75 @@ class _NativePlayerRefundState
   String method = 'Online', intent = commandKey();
   bool confirmed = false, uncertain = false;
   final amount = TextEditingController(), reason = TextEditingController();
+  BigInt? minor(Object? value) {
+    final match = RegExp(r'^(\d+)(?:\.(\d{1,2}))?$').firstMatch('$value');
+    return match == null
+        ? null
+        : BigInt.parse('${match[1]}${(match[2] ?? '').padRight(2, '0')}');
+  }
+
+  bool currency(Object? value) =>
+      value is String && RegExp(r'^[A-Z]{3}$').hasMatch(value);
+  bool named(Object? value) => value is String && value.trim().isNotEmpty;
+  bool validSource(Json value) {
+    if (value['collections'] is! List ||
+        value['refunds'] is! List ||
+        value['canRecord'] is! bool) {
+      return false;
+    }
+    final ids = <String>{};
+    for (final row in value['collections'] as List) {
+      if (row is! Map ||
+          !named(row['id']) ||
+          !ids.add(row['id'] as String) ||
+          minor(row['available']) == null ||
+          !currency(row['currency']) ||
+          !named(row['paymentMethod'])) {
+        return false;
+      }
+    }
+    final refundIds = <String>{};
+    for (final row in value['refunds'] as List) {
+      if (row is! Map ||
+          !named(row['id']) ||
+          !refundIds.add(row['id'] as String) ||
+          !named(row['collectionId']) ||
+          minor(row['amount']) == null ||
+          !currency(row['currency']) ||
+          (row['payoutMethod'] != null && !named(row['payoutMethod']))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool validQuote(Json value) {
+    final requested = minor(amount.text.trim()),
+        available = minor(value['available']);
+    if (requested == null ||
+        available == null ||
+        available < requested ||
+        !storedAmountMatches(value['amount'], amount.text.trim()) ||
+        value['currency'] != source?['currency'] ||
+        !currency(value['currency']) ||
+        value['sessions'] is! List) {
+      return false;
+    }
+    final ids = <String>{};
+    for (final row in value['sessions'] as List) {
+      if (row is! Map ||
+          !named(row['id']) ||
+          !named(row['name']) ||
+          !ids.add(row['id'] as String)) {
+        return false;
+      }
+    }
+    return method != 'Cash' || value['cashEnabled'] is bool;
+  }
+
   List<Json> get eligible =>
       rows(data?['collections'] ?? [])
-          .where((c) => (double.tryParse('${c['available']}') ?? 0) > 0)
+          .where((c) => minor(c['available'])! > BigInt.zero)
           .toList();
   Json? get source => eligible.where((c) => c['id'] == collection).firstOrNull;
   String get root => '/api/v1/people/players/${widget.playerId}/refunds';
@@ -49,6 +115,12 @@ class _NativePlayerRefundState
 
   Future<void> load() => run(() async {
     final result = obj(await auth.request('GET', root));
+    if (!validSource(result)) {
+      throw const ApiFailure(
+        0,
+        'تعذر التحقق من سجل الاستردادات. أعد تحميل السجل.',
+      );
+    }
     if (current) setState(() => data = result);
   });
   void invalidate() {
@@ -58,11 +130,15 @@ class _NativePlayerRefundState
     intent = commandKey();
   }
 
-  bool get validAmount =>
-      RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(amount.text.trim()) &&
-      (double.tryParse(amount.text) ?? 0) > 0 &&
-      (double.tryParse(amount.text) ?? 0) <=
-          (double.tryParse('${source?['available']}') ?? 0);
+  bool get validAmount {
+    final requested = minor(amount.text.trim()),
+        available = minor(source?['available']);
+    return requested != null &&
+        available != null &&
+        requested > BigInt.zero &&
+        requested <= available;
+  }
+
   Json body() => {
     'collectionId': collection,
     'amount': amount.text.trim(),
@@ -70,6 +146,11 @@ class _NativePlayerRefundState
     if (method == 'Cash' && session != null) 'cashSessionId': session,
   };
   Future<void> review() => run(() async {
+    setState(invalidate);
+    if (data?['canRecord'] != true) return;
+    if (reason.text.trim().length > 500) {
+      throw const ApiFailure(422, 'السبب لا يتجاوز 500 حرف.');
+    }
     if (source == null || !validAmount) {
       setState(
         () => error = 'أدخل مبلغًا صحيحًا ضمن المتاح للاسترداد، بحد أقصى منزلتين عشريتين.',
@@ -77,11 +158,10 @@ class _NativePlayerRefundState
       return;
     }
     final q = obj(await auth.request('POST', '$root/quote', body: body()));
-    if ((double.tryParse('${q['amount']}') ?? 0) >
-        (double.tryParse('${q['available']}') ?? 0)) {
+    if (!validQuote(q)) {
       throw const ApiFailure(
-        409,
-        'المبلغ يتجاوز المتاح الحالي. حدّث التحصيل قبل المراجعة.',
+        0,
+        'تعذر التحقق من مراجعة الاسترداد. أعد المراجعة قبل الصرف.',
       );
     }
     if (current) {
@@ -95,10 +175,14 @@ class _NativePlayerRefundState
     }
   });
   Future<void> commit() => run(() async {
-    if (!confirmed ||
+    if (data?['canRecord'] != true ||
+        !confirmed ||
         quote == null ||
         !validAmount ||
-        method == 'Cash' && (session == null || quote!['quoteHash'] == null)) {
+        method == 'Cash' &&
+            (quote!['cashEnabled'] != true ||
+                session == null ||
+                quote!['quoteHash'] == null)) {
       return;
     }
     frozen ??= {
@@ -112,6 +196,12 @@ class _NativePlayerRefundState
       );
       written = true;
       final read = obj(await auth.request('GET', root));
+      if (!validSource(read)) {
+        throw const ApiFailure(
+          0,
+          'تعذر التحقق من سجل الاستردادات. أعد تحميل السجل.',
+        );
+      }
       final saved = rows(read['refunds'] ?? [])
           .where((r) => r['id'] == recorded!['id'])
           .firstOrNull;
@@ -147,149 +237,183 @@ class _NativePlayerRefundState
       }
     } catch (e) {
       if (current) {
-        setState(
-          () => uncertain =
-              written || e is! ApiFailure || e.status == 0 || e.status >= 500,
-        );
+        setState(() {
+          uncertain =
+              written || e is! ApiFailure || e.status == 0 || e.status >= 500;
+          if (!uncertain) invalidate();
+        });
       }
       rethrow;
     }
   });
   @override
-  Widget build(BuildContext context) => page('استرداد مبلغ للاعب', [
-    const UiText(
-      'راجع التحصيل والمبلغ وطريقة الرد. الاسترداد لا يلغي الاشتراك أو يعيد فتح الدين تلقائيًا.',
-    ),
-    if (data != null) ...[
-      if (eligible.isEmpty)
-        const EmptyMessage('لا يوجد مبلغ متاح للاسترداد المباشر.')
-      else ...[
-        choice(
-          'التحصيل',
-          collection,
-          [
-            for (final c in eligible)
-              {
-                ...c,
-                'arabicName':
-                    '${day(c['confirmedAtUtc'])} · المتاح ${money(c['available'], c['currency'])}',
-              },
-          ],
-          uncertain
-              ? null
-              : (v) => setState(() {
-                  collection = v;
-                  method = source?['paymentMethod'] == 'Cash'
-                      ? 'Cash'
-                      : 'Online';
-                  session = null;
-                  sessions = [];
-                  amount.clear();
-                  invalidate();
-                }),
+  Widget build(BuildContext context) => page(
+    'استرداد مبلغ للاعب',
+    [
+      const UiText(
+        'راجع التحصيل والمبلغ وطريقة الرد. الاسترداد لا يلغي الاشتراك أو يعيد فتح الدين تلقائيًا.',
+      ),
+      if (data == null && error != null)
+        OutlinedButton(
+          onPressed: busy ? null : load,
+          child: const UiText('إعادة تحميل السجل'),
         ),
-        AbsorbPointer(
-          absorbing: uncertain,
-          child: Column(
-            children: [
-              field(
-                'قيمة الاسترداد',
-                amount,
-                keyboard: const TextInputType.numberWithOptions(decimal: true),
-                changed: () => setState(invalidate),
+      if (data != null) ...[
+        if (data!['canRecord'] != true)
+          const UiText('هذا السجل للقراءة فقط.')
+        else if (eligible.isEmpty)
+          const EmptyMessage('لا يوجد مبلغ متاح للاسترداد المباشر.')
+        else ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('refund-source:$collection'),
+              initialValue: collection,
+              isExpanded: true,
+              itemHeight: null,
+              decoration: const InputDecoration(
+                label: RequiredFieldLabel('التحصيل'),
               ),
-              choice(
-                'طريقة رد المبلغ',
-                method,
-                [
-                  {'id': 'Online', 'arabicName': 'تحويل مُنفذ خارج النظام'},
-                  {'id': 'Cash', 'arabicName': 'صرف نقدي من وردية مخولة'},
-                ],
-                source?['paymentMethod'] == 'Cash'
-                    ? null
-                    : (v) => setState(() {
-                        method = v ?? 'Online';
-                        session = null;
-                        sessions = [];
-                        invalidate();
-                      }),
-              ),
-              field(
-                'سبب الاسترداد',
-                reason,
-                required: false,
-                maxLines: 3,
-                changed: () => setState(invalidate),
-              ),
-              if (method == 'Cash') ...[
-                if (sessions.isEmpty)
-                  const UiText(
-                    'اضغط مراجعة المبلغ لتحميل ورديات الصرف المتاحة في فرع التحصيل وعملته.',
-                  ),
-                if (sessions.isNotEmpty)
-                  choice(
-                    'وردية الصرف',
-                    session,
-                    [
-                      for (final s in sessions) {...s, 'arabicName': s['name']},
-                    ],
-                    (v) => setState(() {
-                      session = v;
-                      invalidate();
-                    }),
+              items: [
+                for (final c in eligible)
+                  DropdownMenuItem<String>(
+                    value: c['id'] as String,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: UiText(
+                        '${named(c['receiptNumber']) ? '${c['receiptNumber']} · ' : ''}${day(c['confirmedAtUtc'])} · المتاح ${money(c['available'], c['currency'])}',
+                      ),
+                    ),
                   ),
               ],
-            ],
+              onChanged: uncertain
+                  ? null
+                  : (v) => setState(() {
+                      collection = v;
+                      method = source?['paymentMethod'] == 'Cash'
+                          ? 'Cash'
+                          : 'Online';
+                      session = null;
+                      sessions = [];
+                      amount.clear();
+                      invalidate();
+                    }),
+            ),
           ),
-        ),
-        if (!uncertain)
-          OutlinedButton(
-            onPressed: source == null ? null : review,
-            child: const UiText('مراجعة مبلغ الاسترداد'),
+          AbsorbPointer(
+            absorbing: uncertain,
+            child: Column(
+              children: [
+                field(
+                  'قيمة الاسترداد',
+                  amount,
+                  keyboard: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  changed: () => setState(invalidate),
+                ),
+                choice(
+                  'طريقة رد المبلغ',
+                  method,
+                  [
+                    {'id': 'Online', 'arabicName': 'تحويل مُنفذ خارج النظام'},
+                    {'id': 'Cash', 'arabicName': 'صرف نقدي من وردية مخولة'},
+                  ],
+                  source?['paymentMethod'] == 'Cash'
+                      ? null
+                      : (v) => setState(() {
+                          method = v ?? 'Online';
+                          session = null;
+                          sessions = [];
+                          invalidate();
+                        }),
+                ),
+                field(
+                  'سبب الاسترداد',
+                  reason,
+                  required: false,
+                  maxLines: 3,
+                  changed: () => setState(invalidate),
+                ),
+                if (method == 'Cash') ...[
+                  if (sessions.isEmpty)
+                    const UiText(
+                      'اضغط مراجعة المبلغ لتحميل ورديات الصرف المتاحة في فرع التحصيل وعملته.',
+                    ),
+                  if (sessions.isNotEmpty)
+                    choice(
+                      'وردية الصرف',
+                      session,
+                      [
+                        for (final s in sessions)
+                          {...s, 'arabicName': s['name']},
+                      ],
+                      (v) => setState(() {
+                        session = v;
+                        invalidate();
+                      }),
+                    ),
+                ],
+              ],
+            ),
           ),
-        if (quote != null) ...[
+          if (!uncertain)
+            OutlinedButton(
+              onPressed: source == null ? null : review,
+              child: const UiText('مراجعة مبلغ الاسترداد'),
+            ),
+          if (quote != null) ...[
+            GCard(
+              child: UiText(
+                'المبلغ ${money(quote!['amount'], quote!['currency'])}\nالمتاح ${money(quote!['available'], quote!['currency'])}${quote!['balance'] == null ? '' : '\nرصيد الوردية ${money(quote!['balance'], quote!['currency'])}'}',
+              ),
+            ),
+            if (method == 'Cash' && quote!['cashEnabled'] != true)
+              const UiText('النقدي غير مفعل لهذه الأكاديمية.'),
+            CheckboxListTile(
+              value: confirmed,
+              title: UiText(
+                method == 'Cash'
+                    ? 'راجعت الوردية والمبلغ وأؤكد توثيق صرف الاسترداد مرة واحدة.'
+                    : 'أؤكد أن التحويل تم خارج النظام وأوثق رده مرة واحدة.',
+              ),
+              onChanged:
+                  uncertain ||
+                      method == 'Cash' &&
+                          (quote!['cashEnabled'] != true ||
+                              session == null ||
+                              quote!['quoteHash'] == null)
+                  ? null
+                  : (v) => setState(() => confirmed = v == true),
+            ),
+            if (uncertain)
+              UiText(
+                recorded != null
+                    ? 'وصل تأكيد الطلب ولم تتأكد قراءة السجل. تحقق من تسجيله دون صرف المبلغ مرة أخرى.'
+                    : 'لم تتأكد نتيجة الطلب. أعد تأكيد الطلب نفسه دون صرف المبلغ مرة أخرى.',
+              ),
+            FilledButton(
+              onPressed: confirmed ? commit : null,
+              child: UiText(
+                uncertain
+                    ? recorded != null
+                          ? 'التحقق من تسجيل الاسترداد'
+                          : 'إعادة تأكيد الاسترداد نفسه'
+                    : 'تأكيد تسجيل الاسترداد',
+              ),
+            ),
+          ],
+        ],
+        const Heading('سجل الاستردادات'),
+        for (final r in rows(data!['refunds'] ?? []))
           GCard(
             child: UiText(
-              'المبلغ ${money(quote!['amount'], quote!['currency'])}\nالمتاح ${money(quote!['available'], quote!['currency'])}${quote!['balance'] == null ? '' : '\nرصيد الوردية ${money(quote!['balance'], quote!['currency'])}'}',
+              '${money(r['amount'], r['currency'])} · ${day(r['createdAtUtc'])}\n${r['reason'] ?? 'لا توجد ملاحظة'}',
             ),
           ),
-          if (method == 'Cash' && quote!['cashEnabled'] != true)
-            const UiText('النقدي غير مفعل لهذه الأكاديمية.'),
-          CheckboxListTile(
-            value: confirmed,
-            title: UiText(
-              method == 'Cash'
-                  ? 'راجعت الوردية والمبلغ وأؤكد توثيق صرف الاسترداد مرة واحدة.'
-                  : 'أؤكد أن التحويل تم خارج النظام وأوثق رده مرة واحدة.',
-            ),
-            onChanged:
-                uncertain ||
-                    method == 'Cash' &&
-                        (session == null || quote!['quoteHash'] == null)
-                ? null
-                : (v) => setState(() => confirmed = v == true),
-          ),
-          if (uncertain)
-            const UiText(
-              'لم تتأكد نتيجة الطلب. أعد تأكيد الطلب نفسه دون صرف المبلغ مرة أخرى.',
-            ),
-          FilledButton(
-            onPressed: confirmed ? commit : null,
-            child: UiText(
-              uncertain
-                  ? 'إعادة تأكيد الاسترداد نفسه'
-                  : 'تأكيد تسجيل الاسترداد',
-            ),
-          ),
-        ],
       ],
-      const Heading('سجل الاستردادات'),
-      for (final r in rows(data!['refunds'] ?? []))
-        GCard(
-          child: UiText(
-            '${money(r['amount'], r['currency'])} · ${day(r['createdAtUtc'])}\n${r['reason'] ?? 'لا توجد ملاحظة'}',
-          ),
-        ),
     ],
-  ], screen: 'players');
+    screen: 'players',
+    onRetry: load,
+  );
 }

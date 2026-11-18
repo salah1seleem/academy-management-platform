@@ -86,7 +86,7 @@ void main() {
           expect(find.text(success), findsNothing);
           expect(writes, 1);
           recovered = true;
-          await flow.tap(t, 'إعادة تأكيد الاسترداد نفسه');
+          await flow.tap(t, 'التحقق من تسجيل الاسترداد');
         }
         expect(find.text(success), findsOneWidget);
         expect(
