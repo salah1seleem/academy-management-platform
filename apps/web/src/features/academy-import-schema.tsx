@@ -9,7 +9,7 @@ function valid(value: unknown): value is Sheet[] {
     && typeof sheet.optional === "boolean" && Array.isArray(sheet.columns) && sheet.columns.every(field => object(field)
       && typeof field.key === "string" && typeof field.label === "string" && typeof field.required === "boolean"));
 }
-function FieldLabel({ label }: { label: string }) {
+export function ImportFieldLabel({ label }: { label: string }) {
   return label.split(/(yyyy-MM-dd|yyyy-MM|HH:mm)/).map((part, index) => /^(yyyy-MM-dd|yyyy-MM|HH:mm)$/.test(part)
     ? <bdi key={index} dir="ltr">{part}</bdi> : <Fragment key={index}>{part}</Fragment>);
 }
@@ -17,7 +17,7 @@ function Fields({ title, fields }: { title: string; fields: Field[] }) {
   if (!fields.length) return null;
   return <div className={styles.schemaFields}>
     <h4>{title} <span>({fields.length})</span></h4>
-    <ul>{fields.map(field => <li key={field.key}><FieldLabel label={field.label} /></li>)}</ul>
+    <ul>{fields.map(field => <li key={field.key}><ImportFieldLabel label={field.label} /></li>)}</ul>
   </div>;
 }
 export function ImportSchemaGuide({ sheets }: { sheets: unknown }) {

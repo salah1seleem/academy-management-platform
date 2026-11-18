@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ApprovedWorkspace } from "../components/approved-workspace";
 import styles from "./academy-import.module.css";
 import { validImportPreview } from "./academy-import-preview";
-import { ImportSchemaGuide } from "./academy-import-schema";
+import { ImportFieldLabel, ImportSchemaGuide } from "./academy-import-schema";
 
 import { MoneyValue } from "../components/money-value";
 import { AdminDataTable, ErrorState, PageHeader } from "../components/dashboard-shell";
@@ -505,8 +505,9 @@ function ImportIssues({ issues }: { issues: Issue[] }) {
       showTableControls={false}
       rows={filtered}
       rowKey={importIssueKey}
+      rowClassName={() => styles.issueRow}
       columns={[
-        { key: "row", header: "الورقة والصف", primary: true, width: "minmax(0, .6fr)", render: issue => <>{issue.sheetLabel ?? issue.sheet}{issue.row > 0 && <> · الصف {issue.row}</>}<small>{issue.columnLabel ?? issue.column}</small></> },
+        { key: "row", header: "الورقة والصف", primary: true, width: "minmax(0, .6fr)", render: issue => <>{issue.sheetLabel ?? issue.sheet}{issue.row > 0 && <> · الصف {issue.row}</>}<small><ImportFieldLabel label={issue.columnLabel ?? issue.column} /></small></> },
         { key: "problem", header: "التصحيح المطلوب", render: issue => issue.message },
       ]}
     />}

@@ -36,6 +36,30 @@
 .issueCount strong { margin-inline-start: .2rem; }
 @media (max-width: 700px) {
   .issues :global(.admin-data-row) > [role="cell"]::before { display: none; }
+  .issues :global(.admin-data-table) > :global(.admin-data-body)[role="rowgroup"] { display: block; }
+  .issues :global(.admin-data-body) > article.issueRow {
+    display: block;
+    min-block-size: 0;
+    margin: 0;
+    padding: .75rem 0;
+    border: 0;
+    border-block-end: 1px solid var(--staff-border, currentColor);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .issues :global(.admin-data-body) > article.issueRow > [role="cell"] {
+    display: block;
+    font-size: .875rem;
+    line-height: 1.7;
+  }
+  .issues :global(.admin-data-body) > article.issueRow > [role="cell"]:first-child {
+    padding: 0;
+    border: 0;
+    font-size: .875rem;
+  }
+  .issues :global(.admin-data-body) > article.issueRow > [role="cell"]:last-child { margin-block-start: .35rem; }
+  .issues :global(.admin-data-body) > article.issueRow small { font-size: .875rem; }
 }
 
 .schemaNote { margin-block: 0 1rem; font-size: .875rem; line-height: 1.8; opacity: .8; }

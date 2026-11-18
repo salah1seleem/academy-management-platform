@@ -43,6 +43,7 @@ async function download(page: Page, name: RegExp) {
 async function choose(page: Page, buffer: Buffer, name: string) {
   await prepareImportUpload(page); const chooser = page.waitForEvent("filechooser"); await page.getByRole("button", { name: "استيراد ملف", exact: true }).click(); await (await chooser).setFiles({ name, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
   await expect(page.getByRole("region", { name: "الملف المختار" })).toContainText(name);
+  await expect(page.getByRole("region", { name: "الملف المختار" })).toContainText(`${Math.ceil(buffer.byteLength / 1024)} كيلوبايت`);
 }
 async function requestPreview(page: Page, apiBase = root) {
   const pending = page.waitForResponse(response => response.url().endsWith(`${apiBase}/preview`) && response.request().method() === "POST");
@@ -133,7 +134,36 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
   await expect(issues.getByRole("status").locator("span").filter({ hasText: /^المشكلات المعروضة/ }).locator("strong")).toHaveText(String(mixed.errors.length));
   const affectedRows = new Set(mixed.errors.filter(issue => issue.row > 0).map(issue => `${issue.sheet}:${issue.row}`)).size;
   await expect(issues.getByRole("status").locator("span").filter({ hasText: /^الصفوف المتأثرة/ }).locator("strong")).toHaveText(String(affectedRows));
-  for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); for (const mode of ["dark", "light"] as const) { await setPlacementAppearance(page, mode); await assertPlacementViewport(page, width); await assertPlacementContrast(issues, "th, td, label, button, p, h3, h4"); await issues.screenshot({ path: info.outputPath(`import-errors-${mode}-${width}.png`), animations: "disabled" }); } }
+  const reviewMetrics: { width: number; mode: string; height: number; fontSizes: number[] }[] = [];
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["dark", "light"] as const) {
+      await setPlacementAppearance(page, mode); await assertPlacementViewport(page, width);
+      await assertPlacementContrast(issues, '[role="cell"], [role="cell"] small, label, button, p, h3, h4');
+      await expect(table.locator('bdi[dir="ltr"]')).not.toHaveCount(0);
+      const measured = await table.locator(".admin-data-row").first().evaluate(row => ({ height: row.getBoundingClientRect().height, fontSizes: [...row.querySelectorAll('[role="cell"], small')].map(node => parseFloat(getComputedStyle(node).fontSize)) }));
+      if (width === 390) { expect(measured.height).toBeLessThanOrEqual(140); expect(measured.fontSizes.every(size => size >= 14)).toBe(true); }
+      reviewMetrics.push({ width, mode, ...measured });
+      await issues.screenshot({ path: info.outputPath(`import-errors-${mode}-${width}.png`), animations: "disabled" });
+    }
+  }
+  const pagination = issues.getByRole("navigation", { name: "صفحات مشكلات الاستيراد" });
+  expect(mixed.errors.length).toBeGreaterThan(25);
+  async function expectIssuePage(expected: Issue[]) {
+    const rows = table.locator(".admin-data-row"); await expect(rows).toHaveCount(expected.length);
+    for (const [index, issue] of expected.entries()) {
+      await expect(rows.nth(index).getByRole("cell").first()).toContainText(`${issue.sheetLabel ?? issue.sheet} · الصف ${issue.row}`);
+      await expect(rows.nth(index).getByRole("cell").last()).toHaveText(issue.message);
+    }
+  }
+  await expect(pagination.getByRole("button", { name: "الصفحة السابقة" })).toBeDisabled();
+  await expectIssuePage(mixed.errors.slice(0, 25)); await pagination.getByRole("button", { name: "الصفحة التالية" }).click(); await expectIssuePage(mixed.errors.slice(25));
+  await expect(pagination.getByRole("button", { name: "الصفحة التالية" })).toBeDisabled();
+  await pagination.getByRole("button", { name: "الصفحة السابقة" }).click(); await expectIssuePage(mixed.errors.slice(0, 25));
+  await pagination.getByLabel("صفوف الصفحة").selectOption("10"); await expectIssuePage(mixed.errors.slice(0, 10));
+  await pagination.getByRole("button", { name: "الصفحة التالية" }).click(); await expectIssuePage(mixed.errors.slice(10, 20));
+  await pagination.getByLabel("صفوف الصفحة").selectOption("25"); await expectIssuePage(mixed.errors.slice(0, 25));
+  await writeFile(info.outputPath("issue-review-metrics.json"), JSON.stringify({ reviewMetrics, totalIssues: mixed.errors.length, paginationSizes: [25, 10, 25] }, null, 2));
   const clean = await download(page, /تنزيل ملف اللاعبين السليمين/), correction = await download(page, /تنزيل صفوف التصحيح/);
   const cleanRows = playerRows(clean), correctionRows = playerRows(correction), expectedClean = cohort.originals.slice(22).map(row => row.cells.A);
   expect(cleanRows.map(row => row.cells.A)).toEqual(expectedClean); expect(correctionRows.map(row => row.cells)).toEqual(playerRows(cohort.mixed).slice(0, 22).map(row => row.cells));
@@ -160,15 +190,23 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
   }
   const expectedHouseholds = new Set(cohort.originals.map(row => row.cells.D)); expect(new Set(identities.map(row => row.guardian)).size).toBe(expectedHouseholds.size);
   for (const phone of expectedHouseholds) expect(new Set(identities.filter(row => row.normalizedPhone === `+20${phone.slice(1)}`).map(row => row.guardian)).size).toBe(1);
+  const denials: { role: string; resource: string; status: number; body: string }[] = [];
   for (const role of ["visitor", "coach", "other-academy"] as const) {
     const context = await browser.newContext({ baseURL: info.project.use.baseURL }); try { let headers: Record<string, string> | undefined;
       if (role === "coach") headers = { Authorization: `Bearer ${await mobileDemoToken(context.request, "01000000020", "رفض استيراد من مدرب اصطناعي")}` };
       else if (role === "other-academy") expect((await placementWrite(context.request, "/api/v1/auth/login", { email: "owner.future@example.test", password: "Demo-Only-123!" })).status()).toBe(200);
-      for (const suffix of ["", "/records"]) expect((await context.request.get(`${root}/jobs/${second.id}${suffix}`, { headers })).status()).toBe(role === "visitor" ? 401 : role === "coach" ? 403 : 404);
+      for (const suffix of ["", "/records"]) {
+        const response = await context.request.get(`${root}/jobs/${second.id}${suffix}`, { headers });
+        expect(response.status()).toBe(role === "visitor" ? 401 : role === "coach" ? 403 : 404);
+        const text = await response.text(), body = text ? JSON.stringify(JSON.parse(text)) : "";
+        for (const record of saved) expect(body).not.toContain(record.player);
+        expect(body).not.toContain("corrected-player-fields.xlsx");
+        denials.push({ role, resource: suffix || "/job", status: response.status(), body });
+      }
     } finally { await context.close(); }
   }
   const after = await financial(page.request, today); expect(after).toEqual(before); expect(crashes).toEqual([]); expect(remoteImages).toEqual([]); expect(writes.filter(path => path.endsWith("/commit"))).toHaveLength(2);
-  await writeFile(info.outputPath("field-import-reconciliation.json"), JSON.stringify({ sourceHash, fixtureHash, first, second, identities, before, after, writes, receiptCount: after.receipts.length, receiptTotal: after.receipts.reduce((sum, row) => sum + row.amount, 0) }, null, 2));
+  await writeFile(info.outputPath("field-import-reconciliation.json"), JSON.stringify({ sourceHash, fixtureHash, first, second, identities, denials, before, after, writes, receiptCount: after.receipts.length, receiptTotal: after.receipts.reduce((sum, row) => sum + row.amount, 0) }, null, 2));
   await page.screenshot({ path: info.outputPath("field-correction-completed.png"), fullPage: true, animations: "disabled" });
 });
 
@@ -208,26 +246,28 @@ test("Other academy owner sees real metadata and header rejection details withou
   await expect(page.getByRole("heading", { name: "استيراد بيانات الأكاديمية", exact: true })).toBeVisible();
   const jobs = await placementRead(page.request, `${root}/jobs`);
   const collections = await placementRead(page.request, "/api/v1/subscriptions/collections");
-  const source = isolateImportFieldPlans(await download(page, /تنزيل نموذج مكتمل/)), metadata = readImportCells(source, "إعدادات الملف");
+  const source = await download(page, /تنزيل نموذج مكتمل/);
+  const flatResponse = await page.request.get(`${root}/template`); expect(flatResponse.status()).toBe(200);
+  const flatSource = await flatResponse.body(), metadata = readImportCells(flatSource, "Metadata");
   const metadataCell = (label: string) => {
     const key = [...metadata].find(([cell, data]) => /^A\d+$/.test(cell) && data.value === label)?.[0];
     expect(key, label).toBeTruthy(); return key!.replace(/^A/, "B");
   };
-  const metadataFile = editImportCells(source, ["كود المصدر", "تاريخ القطع"].map(label => ({ sheet: "إعدادات الملف", cell: metadataCell(label), value: "" })));
+  const metadataFile = editImportCells(flatSource, ["SourceSystem", "CutoffDate"].map(label => ({ sheet: "Metadata", cell: metadataCell(label), value: "" })));
   const writes: string[] = [], crashes: string[] = [];
   page.on("request", request => { if (request.method() === "POST" && request.url().includes(`${root}/`)) writes.push(new URL(request.url()).pathname); });
   page.on("pageerror", error => crashes.push(error.message));
   await choose(page, metadataFile, "missing-import-metadata.xlsx"); const metadataPreview = await preview(page);
   await writeFile(info.outputPath("real-metadata-rejection.json"), JSON.stringify(metadataPreview, null, 2));
   expect(metadataPreview.canApprove).toBe(false); expect(metadataPreview.sourceSystem ?? "").toBe(""); expect(metadataPreview.cutoffDate).toBeNull();
+  if (new Set(metadataPreview.errors.map(issue => issue.sheet)).size > 1) await page.getByRole("region", { name: "مراجعة أخطاء الملف" }).getByLabel("الورقة", { exact: true }).selectOption("Metadata");
   for (const column of ["SourceSystem", "CutoffDate"]) {
     const issue = metadataPreview.errors.find(issue => issue.sheet === "Metadata" && issue.column === column); expect(issue, column).toBeTruthy();
     await expect(page.getByRole("table", { name: "مشكلات الاستيراد" })).toContainText(issue!.message);
   }
   await expect(page.getByRole("heading", { name: "الملف يحتاج تصحيحًا", exact: true })).toBeVisible();
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0); await expect(page.getByRole("button", { name: "اعتماد وبدء الاستيراد" })).toHaveCount(0);
-  const flatResponse = await page.request.get(`${root}/template`); expect(flatResponse.status()).toBe(200);
-  const flat = editImportCells(await flatResponse.body(), [{ sheet: "Enrollments", cell: "A1", value: "عنوان غير مطابق" }]);
+  const flat = editImportCells(flatSource, [{ sheet: "Enrollments", cell: "A1", value: "عنوان غير مطابق" }]);
   await choose(page, flat, "legacy-invalid-header.xlsx"); const legacyPreview = await preview(page);
   await writeFile(info.outputPath("real-empty-column-rejection.json"), JSON.stringify(legacyPreview, null, 2));
   const headerIssue = legacyPreview.errors.find(issue => issue.sheet === "Enrollments" && issue.row === 1 && issue.column === "");

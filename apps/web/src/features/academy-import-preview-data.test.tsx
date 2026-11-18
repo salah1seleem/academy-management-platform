@@ -83,3 +83,18 @@ it("preserves a legitimate sheet-header rejection with an empty column key", asy
   expect(screen.getByRole("table", { name: "مشكلات الاستيراد" })).toHaveTextContent("بنية الملف");
   expect(screen.queryByRole("button", { name: "اعتماد وبدء الاستيراد" })).not.toBeInTheDocument();
 });
+
+it("keeps the rejected field date notation LTR inside the Arabic issue label", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/jobs")) return Response.json([]);
+    if (path.endsWith("/schema")) return Response.json({ connectedSheets: [], maxRows: 1000, maxFileBytes: 5242880 });
+    if (path.endsWith("/csrf")) return Response.json({ token: "test-csrf" });
+    return Response.json({ ...split, errors: [{ ...issue, column: "الميلاد yyyy-MM-dd *" }] });
+  }));
+  render(<AcademyImport />);
+  fireEvent.change(screen.getByLabelText("ملف بيانات الأكاديمية"), { target: { files: [new File(["synthetic"], "invalid-date.xlsx")] } });
+  fireEvent.click(screen.getByRole("button", { name: "متابعة لفحص الملف" }));
+  expect(await screen.findByText("yyyy-MM-dd")).toHaveAttribute("dir", "ltr");
+  expect(screen.getByText("yyyy-MM-dd").closest("small")).toHaveTextContent("الميلاد yyyy-MM-dd *");
+});

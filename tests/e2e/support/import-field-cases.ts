@@ -33,10 +33,10 @@ export function fieldCohort(original: Buffer) {
   return { original, originals, mixed, failures: failures.map(entry => ({ ...entry, row: Number(entry.cell.replace(/^[A-Z]+/, "")), issueRow: Number(entry.issueCell.replace(/^[A-Z]+/, "")), field: originalCells.get(`${entry.issueCell.replace(/\d+$/, "")}1`)!.value })) };
 }
 export function repairCohort(correction: Buffer, original: Buffer) {
-  const before = readImportCells(original, "اللاعبون");
-  const changes = playerRows(correction).flatMap((row, index) => columns.map(column => ({ sheet: "اللاعبون", cell: `${column}${row.row}`, value: before.get(`${column}${index + 2}`)!.value })));
+  const originals = playerRows(original), rows = playerRows(correction);
   // The selected correction file owns exactly the first22 original records.
-  expect(playerRows(correction)).toHaveLength(22);
+  expect(originals).toHaveLength(50); expect(rows).toHaveLength(22);
+  const changes = rows.flatMap((row, index) => columns.map(column => ({ sheet: "اللاعبون", cell: `${column}${row.row}`, value: originals[index].cells[column] })));
   return editImportCells(correction, changes);
 }
 export function parseCsv(value: string) {
