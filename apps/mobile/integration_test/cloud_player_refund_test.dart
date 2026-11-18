@@ -276,15 +276,21 @@ void main() {
       }
 
       Future<void> reach(Finder f) async {
-        final scroll = find
+        final list = find
             .byWidgetPredicate(
               (widget) =>
-                  widget is Scrollable &&
-                  (widget.axisDirection == AxisDirection.down ||
-                      widget.axisDirection == AxisDirection.up),
+                  widget is ListView && widget.scrollDirection == Axis.vertical,
             )
-            .last;
+            .first;
+        await wait(list);
+        final scroll = find
+            .descendant(of: list, matching: find.byType(Scrollable))
+            .first;
         await wait(scroll);
+        expect(
+          t.widget<Scrollable>(scroll).controller,
+          same(t.widget<ListView>(list).controller),
+        );
         final p = t.state<ScrollableState>(scroll).position;
         p.jumpTo(0);
         await t.pump();
