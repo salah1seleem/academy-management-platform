@@ -139,7 +139,13 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
     await page.setViewportSize({ width, height: 900 });
     for (const mode of ["dark", "light"] as const) {
       await setPlacementAppearance(page, mode); await assertPlacementViewport(page, width);
-      await assertPlacementContrast(issues, '[role="cell"], [role="cell"] small, label, button, p, h3, h4');
+      const colorSamples = await table.locator('[role="cell"], [role="cell"] small').evaluateAll(nodes => nodes.map(node => {
+        const row = node.closest("article"), style = getComputedStyle(node);
+        return { text: node.textContent, color: style.color, background: row ? getComputedStyle(row).backgroundColor : "", hovered: row?.matches(":hover") };
+      }));
+      await writeFile(info.outputPath(`import-error-colors-${mode}-${width}.json`), JSON.stringify(colorSamples, null, 2));
+      try { await assertPlacementContrast(issues, '[role="cell"], [role="cell"] small, label, button, p, h3, h4'); }
+      catch (error) { await issues.screenshot({ path: info.outputPath(`import-contrast-failure-${mode}-${width}.png`), animations: "disabled" }); throw error; }
       await expect(table.locator('bdi[dir="ltr"]')).not.toHaveCount(0);
       const measured = await table.locator(".admin-data-row").first().evaluate(row => ({ height: row.getBoundingClientRect().height, fontSizes: [...row.querySelectorAll('[role="cell"], small')].map(node => parseFloat(getComputedStyle(node).fontSize)) }));
       if (width === 390) { expect(measured.height).toBeLessThanOrEqual(140); expect(measured.fontSizes.every(size => size >= 14)).toBe(true); }
