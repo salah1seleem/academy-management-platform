@@ -130,15 +130,17 @@ void main() {
       final data = source();
       if (fault == 'missing collections') data.remove('collections');
       if (fault == 'missing authority') data.remove('canRecord');
-      if (fault == 'broken available')
+      if (fault == 'broken available') {
         data['collections'] = [
           {...(data['collections'] as List).first as Map, 'available': 'bad'},
         ];
-      if (fault == 'duplicate source')
+      }
+      if (fault == 'duplicate source') {
         data['collections'] = [
           ...(data['collections'] as List),
           ...(data['collections'] as List),
         ];
+      }
       final auth = await authenticate(
         'AcademyOwner',
         (m, p, b, token) async => data,

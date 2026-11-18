@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "codex/**", "!codex/qa-web-*"]
+    branches: [main, "codex/**", "!codex/qa-web-*", "!codex/qa-ios-*"]
   pull_request:
 
 concurrency:
