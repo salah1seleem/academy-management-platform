@@ -25,6 +25,42 @@ const causes = {
   CoachAbsent: "غياب المدربين",
   ApprovedAbsence: "غياب اللاعب بموافقة الإدارة",
 };
+function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
+function text(value: unknown): value is string { return typeof value === "string" && value.trim().length > 0; }
+function count(value: unknown, minimum = 0): value is number { return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum; }
+function day(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = Date.parse(`${value}T12:00:00Z`);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+}
+function time(value: unknown): value is string { return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,7})?)?$/.test(value); }
+function source(value: unknown): value is Source { return record(value) && text(value.id) && text(value.group) && day(value.date); }
+function slot(value: unknown): value is Slot { return record(value) && time(value.start) && time(value.end) && source(value); }
+function validOptions(value: unknown): value is Options {
+  return record(value) && day(value.today) && Array.isArray(value.sources) && value.sources.every(source) && Array.isArray(value.targets) && value.targets.every(slot);
+}
+function validBooking(value: unknown): value is Booking {
+  return record(value) && text(value.id) && text(value.trainingSessionId) && text(value.group) && day(value.date)
+    && count(value.units, 1) && count(value.consumed) && value.consumed <= value.units && count(value.version)
+    && (value.state === "Reserved" || value.state === "Cancelled")
+    && (value.startTime == null && value.endTime == null || time(value.startTime) && time(value.endTime));
+}
+function validGrant(value: unknown): value is Compensation {
+  if (!record(value) || !text(value.id) || !text(value.sport) || !text(value.cause) || !Object.hasOwn(causes, value.cause)
+    || (value.unit !== "Session" && value.unit !== "Minute") || !count(value.units, 1) || !count(value.allocated) || !count(value.consumed)
+    || value.allocated > value.units || value.consumed > value.allocated || !day(value.validFrom) || !day(value.validTo) || value.validTo < value.validFrom
+    || !day(value.sourceDate) || (value.sourceSessionId != null && !text(value.sourceSessionId)) || !Array.isArray(value.bookings) || !value.bookings.every(validBooking)) return false;
+  return new Set(value.bookings.map(b => b.id)).size === value.bookings.length
+    && value.bookings.filter(b => b.state === "Reserved").reduce((sum, b) => sum + b.units, 0) === value.allocated
+    && value.bookings.reduce((sum, b) => sum + b.consumed, 0) === value.consumed;
+}
+function validReview(value: unknown): value is Review {
+  if (!record(value) || !text(value.fingerprint) || !count(value.units, 1) || !Array.isArray(value.conflicts) || !value.conflicts.every(c => typeof c === "string")) return false;
+  if (value.available != null && !count(value.available) || value.expectedPlayers != null && !count(value.expectedPlayers)
+    || value.capacity != null && !count(value.capacity) || value.target != null && !slot(value.target)) return false;
+  return value.conflicts.length > 0 || ((value.available == null || value.units <= (value.available as number))
+    && (value.capacity == null || value.expectedPlayers == null || (value.expectedPlayers as number) <= (value.capacity as number)));
+}
 function amount(value: number, unit: string) {
   const minutes = unit === "Minute";
   const singular = minutes ? "دقيقة" : "حصة";
@@ -137,8 +173,8 @@ function CompensationPanel({ enrollmentId, onSaved }: { enrollmentId: string; on
     const response = await fetch(`${root}/compensations`, { cache: "no-store", signal });
     if (!response.ok) throw new Error();
     const data: unknown = await response.json();
-    if (!Array.isArray(data)) throw new Error();
-    return data as Compensation[];
+    if (!Array.isArray(data) || !data.every(validGrant) || new Set(data.map(g => g.id)).size !== data.length) throw new Error();
+    return data;
   }
 
   async function load() {
@@ -155,7 +191,8 @@ function CompensationPanel({ enrollmentId, onSaved }: { enrollmentId: string; on
         readGrants(controller.signal),
       ]);
       if (!response.ok) throw new Error();
-      const next = await response.json() as Options;
+      const next: unknown = await response.json();
+      if (!validOptions(next)) throw new Error();
       const defaultEnd = addDays(next.today, 30);
       if (controller.signal.aborted) return;
       setOptions(next);
@@ -197,8 +234,8 @@ function CompensationPanel({ enrollmentId, onSaved }: { enrollmentId: string; on
     invalidate();
     try {
       const response = await csrfRequest(`${command.path}/preview`, "POST", command.body);
-      const data = await response.json() as Review;
-      if (!data.fingerprint || !Array.isArray(data.conflicts)) throw new Error();
+      const data: unknown = await response.json();
+      if (!validReview(data)) throw new Error();
       if (command.kind === "book" && data.target && data.target.id !== command.slot.id) {
         throw new DashboardRequestError("تغيّر موعد الحجز. أعد المعاينة.", 409);
       }
