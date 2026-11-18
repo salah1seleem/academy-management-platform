@@ -226,13 +226,27 @@ void main() {
       }
 
       Future<void> reach(Finder finder) async {
-        await wait(finder);
-        await t.scrollUntilVisible(
-          finder.first,
-          160,
-          scrollable: find.byType(Scrollable).last,
-          maxScrolls: 30,
-        );
+        await wait(find.byType(Scrollable));
+        final scroll = find.byType(Scrollable).last;
+        final position = t.state<ScrollableState>(scroll).position;
+        position.jumpTo(0);
+        await t.pump(const Duration(milliseconds: 50));
+        final clock = Stopwatch()..start();
+        while (finder.evaluate().isEmpty && clock.elapsed.inSeconds < 35) {
+          if (position.pixels < position.maxScrollExtent) {
+            final bounds = t.getRect(scroll);
+            // Scroll through the page gutter, outside the zoomed image.
+            await t.dragFrom(
+              Offset(bounds.left + 8, bounds.center.dy),
+              const Offset(0, -160),
+            );
+          }
+          await t.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 30)),
+          );
+          await t.pump(const Duration(milliseconds: 50));
+        }
+        expect(finder, findsWidgets);
         await t.ensureVisible(finder.first);
         await t.pumpAndSettle();
       }

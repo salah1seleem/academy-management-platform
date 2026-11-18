@@ -238,6 +238,7 @@ void main() {
         closeTo(-t.getSize(target).height, .01),
       );
       await dragProofFrames(t, target, const Offset(0, 60), frames: 4);
+      await dragProofFrames(t, target, const Offset(0, 60), frames: 4);
       expect(viewer.transformationController!.value.getTranslation().y, 0);
       expect(viewer.transformationController!.value.getMaxScaleOnAxis(), 2);
       expect(api.reads, 1);
@@ -253,6 +254,11 @@ void main() {
       final auth = await openProof(t, api);
       t.view.physicalSize = const Size(320, 600);
       await t.pump();
+      await t.scrollUntilVisible(
+        find.text('إثبات الدفع'),
+        140,
+        scrollable: find.byType(Scrollable).last,
+      );
       final zoom = find.text('تكبير');
       await until(t, zoom);
       final target = find.byType(InteractiveViewer);
