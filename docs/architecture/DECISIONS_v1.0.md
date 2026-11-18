@@ -1117,3 +1117,7 @@ Only the focused core-player-import-fields.spec.ts run skips irrelevant ffmpeg p
 ### IF-U04 — compact import error review after cloud screenshots, 2026-11-18
 
 Visual review of the owner import issue list found 25 repeated mobile cards occupying over 4300 logical pixels. Keep the existing semantic rows, exact sheet/Excel row/field/reason, filters, download and pagination; use a scoped flat list with separators below 700px. Preserve 14px text and at most 140px for the first short issue at 390px in both appearances. Reuse the field-label formatter for LTR date notation in issues and schema help. No global table redesign or business/import contract change. The direction continues unslop by Damir Sokolovsky (@heydamir); cases and evidence are in `docs/qa/2026-11-18/IMPORT_FIELD_BOUNDARIES_AR.md`. Cloud verification remains required.
+
+## IOS-PROOF-01 — 18 نوفمبر 2026: غلق فجوة التطبيق المثبت في قراءة الإثبات
+
+جولة محدودة على فرع QA مشتق من `d84c816f`؛ لا تحمل تغييرات POOL المحلية ولا تغيّر المتطلبات أو النشر. اختيار suite اختياري ومحصور في workflow iOS الموجود؛ الافتراضي للأدوار الأربعة محفوظ. محاكي مستضاف واحد وAPI وقاعدة ووسائط مؤقتة، مع عزل أكاديميتين وSQL كامل للتحصيل والإيصالات والفترات. لا شراء ولا تشغيل أربعة محاكيات على Mac. المراجعة البصرية سبقت 24 حالة موثقة؛ منهج unslop لـ Damir Sokolovsky (@heydamir). نتيجة المحاكي والمراجعة الفعلية لم تثبت بعد.

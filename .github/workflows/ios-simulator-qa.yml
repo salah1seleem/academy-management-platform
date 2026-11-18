@@ -2,6 +2,12 @@ name: iOS Simulator QA
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Isolated suite on one hosted iOS simulator
+        type: choice
+        options: [role-homes, enrollment-proof]
+        default: role-homes
   push:
     branches: ["codex/qa-off-mac", "codex/qa-staging-release"]
     paths:
@@ -46,7 +52,15 @@ jobs:
       - name: Resolve locked Flutter dependencies
         working-directory: apps/mobile
         run: flutter pub get --enforce-lockfile
-      - name: Exercise four roles on one iOS simulator
+      - name: Check focused proof test sources
+        if: inputs.suite == 'enrollment-proof'
+        working-directory: apps/mobile
+        run: |
+          flutter analyze integration_test/cloud_enrollment_proof_test.dart
+          flutter test test/enrollment_payment_source_context_test.dart
+      - name: Exercise selected suite on one iOS simulator
+        env:
+          ACADEMY_IOS_SUITE: ${{ inputs.suite || 'role-homes' }}
         run: bash scripts/qa/ios-simulator-ci.sh
       - name: Preserve iOS results and diagnostics
         if: always()
