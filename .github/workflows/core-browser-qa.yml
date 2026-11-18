@@ -16,6 +16,7 @@ on:
           - staff-verification
           - placement-and-transfers
           - group-creation
+          - compensation-and-alternatives
   push:
     branches: ["codex/qa-core-release"]
 
@@ -79,17 +80,17 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install private media inspection tools
-        if: ${{ matrix.group != 'placement-and-transfers' && matrix.group != 'group-creation' }}
+        if: ${{ matrix.group != 'placement-and-transfers' && matrix.group != 'group-creation' && matrix.group != 'compensation-and-alternatives' }}
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet build apps/api/src/Academy.Api --configuration Release -m:1
       - run: dotnet ef database update --project apps/api/src/Academy.Infrastructure --startup-project apps/api/src/Academy.Api --configuration Release --no-build
       - run: npm ci
       - name: Install Chromium with system dependencies
-        if: ${{ matrix.group != 'group-creation' }}
+        if: ${{ matrix.group != 'group-creation' && matrix.group != 'compensation-and-alternatives' }}
         run: npx playwright install --with-deps chromium
-      - name: Prepare pinned Chromium for group creation
-        if: ${{ matrix.group == 'group-creation' }}
+      - name: Prepare pinned Chromium for scheduling journeys
+        if: ${{ matrix.group == 'group-creation' || matrix.group == 'compensation-and-alternatives' }}
         run: |
           npx playwright install chromium
           if ! node - <<'JAVASCRIPT'

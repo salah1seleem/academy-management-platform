@@ -18,7 +18,7 @@ export async function placementRead<T>(api: Pick<APIRequestContext, "get">, path
   return response.json() as Promise<T>;
 }
 
-export async function placementWrite(api: APIRequestContext, path: string, data: unknown, key = crypto.randomUUID()) {
+export async function placementWrite(api: APIRequestContext, path: string, data: unknown, key: string = crypto.randomUUID()) {
   const csrf = await placementRead<{ token: string }>(api, "/api/v1/auth/csrf");
   return api.post(path, { headers: { "X-CSRF-TOKEN": csrf.token, "Idempotency-Key": key }, data });
 }
@@ -123,8 +123,8 @@ export async function setPlacementAppearance(page: Page, mode: "light" | "dark")
   await expect(shell).toHaveAttribute("data-mode", mode);
 }
 
-export async function assertPlacementContrast(region: Locator) {
-  const samples = await region.locator(".placement-choice strong, .placement-choice small, .placement-candidates a, .placement-candidates li, .placement-preview h4, .placement-preview p, .placement-preview strong, .placement-preview span").evaluateAll(nodes => {
+export async function assertPlacementContrast(region: Locator, selector = ".placement-choice strong, .placement-choice small, .placement-candidates a, .placement-candidates li, .placement-preview h4, .placement-preview p, .placement-preview strong, .placement-preview span") {
+  const samples = await region.locator(selector).evaluateAll(nodes => {
     type RGB = [number, number, number];
     const rgba = (value: string) => {
       const match = /^rgba?\((.+)\)$/.exec(value);

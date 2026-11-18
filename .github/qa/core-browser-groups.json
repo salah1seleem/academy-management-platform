@@ -38,5 +38,11 @@
     "specs": "/(core-group-creation-recovery|v2-group-creation)\\.spec\\.ts$",
     "config": "regression",
     "provider_quarantine": "false"
+  },
+  {
+    "group": "compensation-and-alternatives",
+    "specs": "/(core-compensation-recovery|v2-compensation|v2-placement-recommendations)\\.spec\\.ts$",
+    "config": "regression",
+    "provider_quarantine": "false"
   }
 ]
