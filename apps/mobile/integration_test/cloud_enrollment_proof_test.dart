@@ -346,6 +346,22 @@ void main() {
         );
         if (after == matrix) await capture('pan-failed-${direction.key}');
         expect(after, isNot(matrix));
+        if (direction.value.dx != 0) {
+          expect(after.getTranslation().x, isNot(matrix.getTranslation().x));
+        } else {
+          expect(
+            after.getTranslation().x,
+            closeTo(matrix.getTranslation().x, .01),
+          );
+        }
+        if (direction.value.dy != 0) {
+          expect(after.getTranslation().y, isNot(matrix.getTranslation().y));
+        } else {
+          expect(
+            after.getTranslation().y,
+            closeTo(matrix.getTranslation().y, .01),
+          );
+        }
         expect(after.getMaxScaleOnAxis(), 2);
         expect(api.imageReads, imageReads);
         gestures.add({
@@ -380,6 +396,7 @@ void main() {
       expect(pinchScale, greaterThan(2));
       expect(pinchScale, lessThanOrEqualTo(viewer().maxScale + 0.000001));
       expect(api.imageReads, imageReads);
+      await capture('pinched');
       passed('IP05');
       await reach(find.text('الحجم الأصلي'));
       await t.tap(find.text('الحجم الأصلي').hitTestable());

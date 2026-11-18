@@ -132,8 +132,11 @@ proof = report['proofReview']
 expected = {f'IP{i:02}' for i in range(1, 25)} - {'IP20', 'IP22'}
 assert set(proof['executedPassed']) == expected
 assert proof['businessWritesAfterFixture'] == []
+assert {row['direction'] for row in proof['gestures']} == {'horizontal', 'vertical', 'diagonal'}
+assert all(row['before'] != row['after'] for row in proof['gestures'])
+assert proof['pinchScale'] > 2
 assert set(proof['successfulAssetHashes']) == {proof['originalPngSha256']}
-assert len(list(folder.glob('phase-iosproof-*.png'))) == 10
+assert len(list(folder.glob('phase-iosproof-*.png'))) == 11
 money = json.loads((folder / 'money-after.json').read_text())
 summary = {'executedAutomated': sorted(expected | {'IP22'}),
            'visualReviewPending': ['IP20'],

@@ -190,8 +190,25 @@ void main() {
         }
         await touch.up();
         await t.pumpAndSettle();
-        expect(viewer.transformationController!.value, isNot(before));
-        expect(viewer.transformationController!.value.getMaxScaleOnAxis(), 2);
+        final after = viewer.transformationController!.value;
+        expect(after, isNot(before));
+        if (direction.value.dx != 0) {
+          expect(after.getTranslation().x, isNot(before.getTranslation().x));
+        } else {
+          expect(
+            after.getTranslation().x,
+            closeTo(before.getTranslation().x, .01),
+          );
+        }
+        if (direction.value.dy != 0) {
+          expect(after.getTranslation().y, isNot(before.getTranslation().y));
+        } else {
+          expect(
+            after.getTranslation().y,
+            closeTo(before.getTranslation().y, .01),
+          );
+        }
+        expect(after.getMaxScaleOnAxis(), 2);
         expect(api.reads, 1);
         expect(api.detailReads, 1);
         expect(t.takeException(), isNull);
