@@ -377,6 +377,7 @@ void main() {
           );
         }
         expect(after.getMaxScaleOnAxis(), 2);
+        expect(scroll.pixels, closeTo(scrollBefore, .01));
         expect(api.imageReads, imageReads);
         gestures.add({
           'direction': direction.key,
