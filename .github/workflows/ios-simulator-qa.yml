@@ -6,7 +6,7 @@ on:
       suite:
         description: Isolated suite on one hosted iOS simulator
         type: choice
-        options: [role-homes, enrollment-proof]
+        options: [role-homes, enrollment-proof, player-refund]
         default: role-homes
       checks_only:
         description: Analyze and run focused Flutter/runner regressions without native build
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Reject unsupported checks-only selection
-        if: inputs.checks_only == true && inputs.suite != 'enrollment-proof'
+        if: inputs.checks_only == true && inputs.suite != 'enrollment-proof' && inputs.suite != 'player-refund'
         run: exit 1
       - name: Verify runner failure propagation
         run: python3 scripts/qa/test_ios_runner_exit.py
@@ -84,6 +84,12 @@ jobs:
         run: |
           flutter analyze lib/features/admin/native_enrollment_payment_read.dart lib/features/shared/payment_proof_image.dart integration_test/cloud_enrollment_proof_test.dart test/enrollment_payment_source_context_test.dart
           flutter test test/enrollment_payment_source_context_test.dart test/approved_native_product_orders_test.dart
+      - name: Check focused refund sources
+        if: inputs.suite == 'player-refund'
+        working-directory: apps/mobile
+        run: |
+          flutter analyze lib/features/admin/native_refund.dart test/native_refund_negative_test.dart
+          flutter test test/native_refund_negative_test.dart test/approved_native_refund_test.dart test/approved_refund_readback_test.dart
       - name: Exercise selected suite on one iOS simulator
         if: inputs.checks_only != true
         env:
