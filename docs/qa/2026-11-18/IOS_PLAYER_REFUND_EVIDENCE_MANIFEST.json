@@ -1,0 +1,205 @@
+{
+  "run": 44285205824,
+  "job": 134735979804,
+  "sourceCommit": "8644c1890cf1790a5ae4903c5455f104e1271407",
+  "artifactId": 14420347354,
+  "artifactSha256": "c3c184163313c269014cc043a516fb1336b8ff359a14a61d414cb2c0c30bbffd",
+  "originalArtifactFileCount": 31,
+  "localSupplementFiles": [
+    "ledger-reconciliation.json",
+    "visual-review.json"
+  ],
+  "files": {
+    "api-build.log": "fbada5be02b6de2e3bd4124f9b8cc7a54a27acfac692279c7179ce46a1b58ae8",
+    "api.log": "7b7ae5763249c7fc6a8b415c9f1539ede8d86955c5ab8bab20f1c228b72b9fa7",
+    "flutter-ios-build.log": "a269166e7bdd443ca6f82382e96476af736da83033ee7b6ae7870bb974cd5316",
+    "flutter-ios.log": "e2c83fc683ee2ac15c001e54fe3f578980515cda0e3c0a37cdf16e05bc208fb3",
+    "ios-cloud-response.json": "6b32b8aefacc685925994310182e060b607243c9b33148071d362f311372dad7",
+    "ledger-reconciliation.json": "a5c7ce507e8a619562521d06eccec22cad09930598d3948640108b5a58540661",
+    "migrate.log": "d9fe98e5ac66dd2c93b0d5aa3b62232204b9f2e4ce1bbe7a465d1bbbd36cfb65",
+    "native-launch.log": "ff7b553233b0bbbaf0e83fd5865c65dd3d18f6859ba77bef6965113fc140e780",
+    "phase-iosrefund-context-cleared.png": "90bfeab7d981278a2788f0c8c27b6e8278af9411bcd2707ad40e436374a820c7",
+    "phase-iosrefund-entry-light.png": "8cd86744557ce70b966ed536dc7dd7b389b4c2e9bd82bcadc36f67d2c7dd11ca",
+    "phase-iosrefund-history-reopened.png": "c116cbd4578e4e82b9322144821b5d49011996a84d81dfd369127e62e446c75d",
+    "phase-iosrefund-invalid-light.png": "39506c149910e681bc169319c9390bf7d7d00b5171d83227e0e6e76419b5f4ee",
+    "phase-iosrefund-large-text-dark.png": "9c0341203444f60a374450ada4f1fec31e3c55cb1f4742a0fc1ebb784abf61ea",
+    "phase-iosrefund-large-text-light.png": "cff6d267861509563cedda1a1323005eb5a11227700ddc12876dacdc3d468176",
+    "phase-iosrefund-pending-before.png": "0f10216b05ccc6e78ed32240cba285e1dda722152f809150ed0f87c67ea3cf98",
+    "phase-iosrefund-pending-lost.png": "6e920ce9b6ea7b8e971099dfe5025db4444eeb0c95aa3404f1dd9086a47e1095",
+    "phase-iosrefund-pending-mismatch.png": "4cda978c5a8ff94c9ad7795eecf4b7b97460eddbe8b9059286b9b681da28e37e",
+    "phase-iosrefund-pending-read.png": "795789eaf63e8aeaf48dce81e6554b94874041e0baaa95f0704c483f456b7be2",
+    "phase-iosrefund-review-dark.png": "22de4b701729673dd344482d4e4b8cf8a2d9a359b117c25c56772db5c9648b6f",
+    "phase-iosrefund-saved-dark.png": "d61a8077e32c00eb25b3a6d6e93275b7906915b4c4dd87565bedf0f630a282ed",
+    "phase-iosrefund-selector-light.png": "bae17260710bb4939f13582f96ca08343592614e97e6147f365236a91e48221f",
+    "phase-iosrefund-source-load-failed.png": "08d5f6733497ea96e562b8f2c7623941940f079c10703a47bf0bc68d43c0410c",
+    "postgres-init.log": "7e4d56b8123fac69e409021007ce55f4c53eb1a5ecd27f4f3639bf608ce33f17",
+    "postgres.log": "df719523f48b65be8195711a9d28b2108bc8f4cf1789387294a30f1d06850022",
+    "ready.json": "bb29ae37a5da17d9898befa86ab184546fc3040b19f1cc9552af25cfb8bcfbb0",
+    "refund-fixture.log": "3edc8c1da5eb4df0afef0d77294fc4efecac1acdd50d66d2f64165bcf42e99e3",
+    "refund-money-after.json": "342ab984274ecbf38d3dc4f50f4333817ef7378c5fc74e1a7f7534264641bdb8",
+    "refund-money-before.json": "b1dfb87b01535fe3285b497cf6e0c4fad738fa4218e050945efb1b80ce34c149",
+    "refund-summary.json": "0b7aa59de02cca296fe72a5bf4eaee6709d7a2dd64e4a63fae3f39e4ed19ac9e",
+    "runtimes.log": "5301354c2673a5773dbeb2411638abc41fb29b0397be55bc138c1731129d53c0",
+    "suite-completed.txt": "5394afef3263ad0725de1a997b9600d56bbefb63545cab5c2a23154d2a1fe683",
+    "visual-review.json": "377f8ac290ee92952ef38030befbea92f9982de0d60569736c0454b961a8893b",
+    "vm-ready.json": "360ec78c130bb3b7882012df74380b67b10a872920e0dfc9c4fc9cc611c1c450"
+  },
+  "nativePngs": {
+    "phase-iosrefund-context-cleared.png": {
+      "sha256": "90bfeab7d981278a2788f0c8c27b6e8278af9411bcd2707ad40e436374a820c7",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-entry-light.png": {
+      "sha256": "8cd86744557ce70b966ed536dc7dd7b389b4c2e9bd82bcadc36f67d2c7dd11ca",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-history-reopened.png": {
+      "sha256": "c116cbd4578e4e82b9322144821b5d49011996a84d81dfd369127e62e446c75d",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-invalid-light.png": {
+      "sha256": "39506c149910e681bc169319c9390bf7d7d00b5171d83227e0e6e76419b5f4ee",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-large-text-dark.png": {
+      "sha256": "9c0341203444f60a374450ada4f1fec31e3c55cb1f4742a0fc1ebb784abf61ea",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-large-text-light.png": {
+      "sha256": "cff6d267861509563cedda1a1323005eb5a11227700ddc12876dacdc3d468176",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-pending-before.png": {
+      "sha256": "0f10216b05ccc6e78ed32240cba285e1dda722152f809150ed0f87c67ea3cf98",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-pending-lost.png": {
+      "sha256": "6e920ce9b6ea7b8e971099dfe5025db4444eeb0c95aa3404f1dd9086a47e1095",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-pending-mismatch.png": {
+      "sha256": "4cda978c5a8ff94c9ad7795eecf4b7b97460eddbe8b9059286b9b681da28e37e",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-pending-read.png": {
+      "sha256": "795789eaf63e8aeaf48dce81e6554b94874041e0baaa95f0704c483f456b7be2",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-review-dark.png": {
+      "sha256": "22de4b701729673dd344482d4e4b8cf8a2d9a359b117c25c56772db5c9648b6f",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-saved-dark.png": {
+      "sha256": "d61a8077e32c00eb25b3a6d6e93275b7906915b4c4dd87565bedf0f630a282ed",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-selector-light.png": {
+      "sha256": "bae17260710bb4939f13582f96ca08343592614e97e6147f365236a91e48221f",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    },
+    "phase-iosrefund-source-load-failed.png": {
+      "sha256": "08d5f6733497ea96e562b8f2c7623941940f079c10703a47bf0bc68d43c0410c",
+      "dimensions": [
+        1170,
+        2532
+      ]
+    }
+  },
+  "all14NativePngsManuallyOpened": true,
+  "widgetEvidence": {
+    "run": 44285205824,
+    "source": "8644c1890cf1790a5ae4903c5455f104e1271407",
+    "artifact": 14419271555,
+    "artifactSha256": "1e057d9639d2a2220ad2b6b737a4b10d074f77f1b376363b888ce06a61fed3af",
+    "pngHashes": {
+      "source-390-text1-dark.png": "0c138e7b6de5d86ff2b79336970f7123e9a064e197999eb04654d74765c32bd3",
+      "review-390-text2-light.png": "2a8ec1c77382a5d8d16b02f9ceb2493e8bec0a82436b66166315ffd3c3e60ab7",
+      "source-320-text2-light.png": "0622660f2b17f18f2ffe3db5e3957b1acfc0f7cd6017aec697daea3a6387a1be",
+      "source-320-text2-dark.png": "e2ac38c12225ec8be1ea9bc33b4714b60814c88df38c38d1571b802e5e3f66b6",
+      "source-390-text2-light.png": "e32959b6201d8bc2ed586c6f750a52eda01b7664f2c7702f6cdd57d27c67a325",
+      "review-320-text2-light.png": "3f6043701a9c3fbfe998e9f9b5c5b91f32941b40c66197560a2ebf407feade81",
+      "review-390-text1-dark.png": "243de0f924a64522eed0e42bc24a8aac6a64abac4745859a40412c5407cd7b98",
+      "review-320-text2-dark.png": "8222045c4659444dd61f34293ce2784957964f06e5eb1b52da66bc8577f3a26f",
+      "source-320-text1-dark.png": "8dbf71bff0712218c3ad1b3128ab1cb5ac6d98fe51f7971d0ba64a2c82961b4a",
+      "source-390-text2-dark.png": "86761abfcea5a42c0f15ae4a763a2d7b9317ef6e79799974f86b6d178b7027f3",
+      "review-320-text1-dark.png": "9825d4f05cd75e8f4146c0f73035a9892b930ef5b596ef2e730a62e2531563d2",
+      "review-390-text2-dark.png": "fba44d6a51e88d0c752a301610f48e3191a7e4407a2ca0ef2a0db4f54e7fd933",
+      "source-320-text1-light.png": "e1124b37a69039fd1aba8e076f0f8a2743283786ba0912d577bbe5fe9d7d34f3",
+      "review-390-text1-light.png": "0cb708ceb51c42d950463e7bb45dd2cde12ad0919a98da8ff1b57f01b51fe7d0",
+      "review-320-text1-light.png": "b2a48d63b1ab183d149faab5897c8d29e0334f30d11be57b6ba96a033f9f1ac4",
+      "source-390-text1-light.png": "7bfbb63376df433f2a0550a1fdc67886b7dd26da2f32d29efe2d3766913042ab"
+    },
+    "reviewReusedByExactByteEqualityToArtifact": 14417460171,
+    "nativeAcceptance": false
+  },
+  "sqlRowsByAcademyBefore": {
+    "periods": {
+      "10000000-0000-0000-0000-000000000001": 25
+    },
+    "players": {
+      "10000000-0000-0000-0000-000000000001": 24,
+      "20000000-0000-0000-0000-000000000002": 1
+    },
+    "refunds": {},
+    "receipts": {
+      "10000000-0000-0000-0000-000000000001": 25
+    },
+    "collections": {
+      "10000000-0000-0000-0000-000000000001": 25
+    },
+    "enrollments": {
+      "20000000-0000-0000-0000-000000000002": 1,
+      "10000000-0000-0000-0000-000000000001": 25
+    },
+    "cashSessions": {},
+    "cashRefundPostings": {},
+    "receivableDocuments": {
+      "10000000-0000-0000-0000-000000000001": 4
+    },
+    "receivableMovements": {
+      "10000000-0000-0000-0000-000000000001": 3
+    }
+  },
+  "inputEventsVerified": 26,
+  "rawRoleDenialsVerified": 8,
+  "ledgerVerifierSha256": "773a38ef5e7f504031991db5ab43c55e4cb72275402d00e2cb6f47a357d362ea"
+}

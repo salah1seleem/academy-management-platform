@@ -1,0 +1,513 @@
+{
+  "task": "IOS-REFUND-01",
+  "wholeGoalComplete": false,
+  "fullScreenClosure": false,
+  "cases": [
+    {
+      "id": "RFN01",
+      "startAndSteps": "افتح المصدر الفعلي من ملف اللاعب، قارن GET الاسم والرمز والمبلغ والعملة والمتاح.",
+      "expected": "هوية اللاعب ظاهرة داخل نموذج الاسترداد نفسه ومطابقة للملف، بلا كتابة عند الفتح؛ iOS/API مع Widget للعرض.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "فتح نموذج الإنتاج من ملف اللاعب وأظهر الاسم والرمز NG-0001؛ المصدر الفعلي متاحه1100.00EGP.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN02",
+      "startAndSteps": "تحصيلان بنفس التاريخ والمبلغ المتاح، مرجعاهما مختلفان. افتح القائمة واختر أحدهما.",
+      "expected": "يظهر مرجع كل إيصال وتبقى هوية الاختيار صحيحة؛ Widget، مع مراجعة قائمة المصدر الحقيقي علىiOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "Widget ميّز إيصالين متساويين بالتاريخ والمتاح بالمرجع؛ روجعت قائمة المصادر الفعلية علىiOS.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "refund-widget-qa artifact14419271555",
+        "native_refund_negative_test.dart",
+        "approved_native_refund_test.dart"
+      ]
+    },
+    {
+      "id": "RFN03",
+      "startAndSteps": "اختر مصدرًا واترك المبلغ فارغًا واضغط مراجعة.",
+      "expected": "خطأ عربي بلا POST quote أو صرف؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "القيمة الفارغة مثبتة من EditableText؛ رفض محلي بلاquote أوصرف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN04",
+      "startAndSteps": "المبلغ0.",
+      "expected": "رفض قبل الصرف بلا قيد؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "القيمة0 مثبتة؛ رفض محلي بلاquote أوصرف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN05",
+      "startAndSteps": "المبلغ-1.",
+      "expected": "رفض قبل الصرف بلا قيد؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "القيمة-1 مثبتة؛ رفض محلي بلاquote أوصرف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN06",
+      "startAndSteps": "المبلغ1.001.",
+      "expected": "لا تقريب ولا صرف؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "القيمة1.001 مثبتة؛ رفض دون تقريب أوصرف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN07",
+      "startAndSteps": "المبلغ أكبر من المتاح بجنيه.",
+      "expected": "رفض بلا صرف؛ iOS وAPI مستقل لحماية الخادم.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "1101.00 مقابل1100.00 رُفض محليًا؛ طلبAPI مستقل متجاوز رُفض409 دون صف إضافي.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN08",
+      "startAndSteps": "أدخل أرقامًا عربية25.75 بالفاصل العشري العربي ثم راجع.",
+      "expected": "التطبيع يحفظ القيمة الدقيقة25.75 لا2575؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "٢٥٫٧٥ طُبعت25.75 في الحقل وطلبquote الفعلي، وحُفظت25.75.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN09",
+      "startAndSteps": "سبب فارغ ثم محاط بمسافات. راجع جسم الطلب والسجل.",
+      "expected": "فارغ=null، والموجود بعدtrim، بلا تغيير القيمة؛ Widget وiOS للحركة المحفوظة.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api-and-widget-branches",
+      "actual": "حُفظ السبب بعدtrim؛ فرع الفارغ=null والمسافات مثبت فيWidget.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN10",
+      "startAndSteps": "ردquote بمبلغ مختلف/صفر/تالف، أو عملة مختلفة/ناقصة، أو متاح تالف/أقل من المبلغ.",
+      "expected": "لا عرض صفر زائف أو تأكيد صرف؛ رسالة عربية وإعادة المراجعة فقط. Widget برد متحكم فيه.",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "عشرة ردودquote متناقضة/تالفة محكومة رُفضت دون تأكيد صرف؛ Widget فقط.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "refund-widget-qa artifact14419271555",
+        "native_refund_negative_test.dart",
+        "approved_native_refund_test.dart"
+      ]
+    },
+    {
+      "id": "RFN11",
+      "startAndSteps": "GET صالح مع canRecord=false.",
+      "expected": "السجل للقراءة بلا حقول صرف أو زر تأكيد؛ Widget، لا ادعاء تفويضAPI منfixture.",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "canRecord=false أخفى حقول الصرف وأبقى القراءة؛ Widget فقط، وليس رحلة إداري للقراءة الفعلية.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "refund-widget-qa artifact14419271555",
+        "native_refund_negative_test.dart",
+        "approved_native_refund_test.dart"
+      ]
+    },
+    {
+      "id": "RFN12",
+      "startAndSteps": "راجع وأقر ثم غيّر المبلغ.",
+      "expected": "تختفي المراجعة ويصبح التأكيد غير متاح حتى مراجعة الرقم الجديد؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "تغيير المبلغ بعد الإقرار أزال المراجعة السابقة علىiOS.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN13",
+      "startAndSteps": "راجع وأقر ثم غيّر السبب أو مصدر التحصيل.",
+      "expected": "تمحى الموافقة والنسخة المجمدة؛ اختيار المصدر يمسح المبلغ. Widget وiOS للسبب.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api-and-widget-branches",
+      "actual": "تغيير السبب أزال الإقرار علىiOS؛ تغيير المصدر وإلغاء النسخة المجمدة مدعوم بفحوصWidget.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN14",
+      "startAndSteps": "تحميل المصدر يفشل503، ثم أعد المحاولة.",
+      "expected": "خطأ عربي مع زر قراءة آمن، ثم بيانات حقيقية بلا صرف؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "503 محقون للقراءة أظهر زر إعادة تحميل فعليًا، ثم استعاد بياناتAPI دون صرف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN15",
+      "startAndSteps": "quote يفشل503 مرة ثم ينجح.",
+      "expected": "لا صرف ولا إقرار قديم؛ إعادة المراجعة تستعيد أرقام الخادم؛ iOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "503 محقون للمراجعة لم يبق إقرارًا قديمًا؛ إعادة الضغط استعادتquote فعليًا.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN16",
+      "startAndSteps": "افتح النموذج من ملف اللاعب ثم ارجع دون صرف.",
+      "expected": "الرجوع يعمل وتبقى البيانات المالية ثابتة؛ iOS بمسارNavigator، لا ادعاء دخول منرئيسية الدور إن لم ينفذ.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "رجوع BackButton الفعلي أعاد ملف اللاعب، وعدد الاستردادات ظل0 قبل الصرف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN17",
+      "startAndSteps": "راجع25.75، افحص تعطيل التأكيد قبل الإقرار، ثم أقر واحفظ مرة.",
+      "expected": "يتحقق من السجل المطابق قبل النجاح، حركة واحدة، والمتاح ينقص25.75؛ iOS/API.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "إقرار صريح وحركة25.75 واحدة؛ النجاح بعد قراءة السجل المطابق.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN18",
+      "startAndSteps": "الخادم يحفظ3.25 ثم تُفقد استجابةPOST. اضغط استعادة نفس المحاولة.",
+      "expected": "لا نجاح كاذب أو تعديل تفاصيل؛ المفتاح والجسم ثابتان والسجل نفسه مرة واحدة؛ iOS/API.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "فقد ردPOST بعد حفظ3.25؛ إعادة بنفس المفتاح والجسم، وصف واحد فقط.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN19",
+      "startAndSteps": "انقطعPOST قبل وصوله؛ أعد المحاولة نفسها.",
+      "expected": "لا حفظ قبل الإعادة، ثم حركة واحدة بالمفتاح والجسم نفسهما؛ iOS/API.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "قطع قبل إرسالPOST4.50؛ إعادة بنفس المفتاح والجسم حفظت مرة واحدة.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN20",
+      "startAndSteps": "POST يقر الحفظ ثم GET يفشل503. استعد القراءة.",
+      "expected": "لاPOST ثانٍ، واسم زر واضح أنه فحص السجل؛ iOS/API.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "إقرارPOST1.00 ثم فشلGET503؛ استعادة قراءة دونPOST ثانٍ، وصف واحد.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN21",
+      "startAndSteps": "بعد إقرار الحفظ، GET يحملid نفسه مع اختلاف المبلغ/العملة/المصدر/الطريقة/الوردية/السبب، ثم يعود صحيحًا.",
+      "expected": "لا نجاح حتى تتطابق جميع الحقول، وإعادة القراءة لا تصرف ثانية؛ Widget معiOS لفرع المبلغ.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api-and-widget-branches",
+      "actual": "إقرارPOST1.25 ثم قراءة بمبلغ مختلف0.01 لم تُقبل؛ إعادةGET تحققت دون صرف ثانٍ. بقية الحقول فيWidget.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN22",
+      "startAndSteps": "أعد طلبًا محفوظًا بنفس المفتاح والجسم، ثم بنفس المفتاح ومبلغ مختلف.",
+      "expected": "نفسid عند التطابق و409 عند اختلاف الجسم، بلا قيد إضافي؛ API فعلي.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "إعادة المفتاح والجسم أعادتid نفسه؛ اختلاف المبلغ مع المفتاح نفسه رُفض409.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN23",
+      "startAndSteps": "راجع كامل المتاح ثم غيّره برد استرداد آخر مصرح، وأكد المعاينة القديمة.",
+      "expected": "يرفض الخادم التجاوز409 ويتيح مراجعة حديثة دون صرف زائد؛ iOS/API.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "حركة مصرح بها0.50 غيرت المتاح بعدquote؛ تأكيد المبلغ القديم رُفض409، وعُرض المتاح المحدث وأُلغي الإقرار. النهائي1063.75.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN24",
+      "startAndSteps": "مصدرCash بلا وردية مخولة، ثم اختر وردية وراجع؛ اسحب صلاحيتها/غيرالرصيد.",
+      "expected": "لا تأكيد بلاquoteHash حديث ولا تجاوز النقدي؛ Widget لهذه الجولة، ولا يُنسب لرحلة صندوق كاملة.",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "النقدي المغلق والوردية/الاقتباس القديم حُجبت فيWidget؛ لم تنفذ رحلة صندوق نقدي حقيقية.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "refund-widget-qa artifact14419271555",
+        "native_refund_negative_test.dart",
+        "approved_native_refund_test.dart"
+      ]
+    },
+    {
+      "id": "RFN25",
+      "startAndSteps": "افتح مراجعة ثم غيّر العضوية، وخروج معGET معلق.",
+      "expected": "تمحى التفاصيل والإقرار ولا تظهر نتيجة متأخرة؛ iOS/API للعضوية وWidget للتأخير إذا لم ينفذ علىiOS.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api-and-widget-branches",
+      "actual": "اختيار عضويةB أخفى حقول نموذجA والإقرار، ورُفضت قراءة موردA؛ Widget منع ردGET المتأخر بعد الخروج.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN26",
+      "startAndSteps": "أسرة ومدرب وإداري غيرمخول ومالك ثانية يطلبون القراءة أوالصرف.",
+      "expected": "رفض403/404 دون قيد أوكشف المصدر؛ API مستقل معثبات بيانات الثانية.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "8ردود خام مستقلة:Guardian/Coach/Admin غيرمخول GET/POST403، وOwnerB GET/POST404؛ دون اسم اللاعب أو مرجع الإيصال أو معرف التحصيل.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN27",
+      "startAndSteps": "قارِن financial وoperating-statement وreceipt وperiod قبل الحركات وبعدها.",
+      "expected": "زيادة المسترد وانخفاضnet/surplus بالفرق الدقيق؛ بقية الأرصدة والوثائق ثابتة. API فعلي، لا يعادل اختبار أزرار صفحة التقرير.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "16910.00 تحصيل ثابت؛36.25 مسترد؛16873.75 صافي وفائض.31صف دفتر بدل25؛ الست طابقتSQL و25صفًا أصليًا ثابتة. الإيصال عند المالك والأسرة والفترات ثابتة؛ مجاميع الدخل والمصروفات مطابقة.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log",
+        "ledger-reconciliation.json"
+      ]
+    },
+    {
+      "id": "RFN28",
+      "startAndSteps": "SQL كامل قبل وبعد للمال والتسجيلات وبيانات الأكاديمية الثانية.",
+      "expected": "الفرق فقط حركات الاسترداد المتوقعة وعداداتها؛ لا مضاعفة لاعب/إيصال/فترة أوقيدصندوق إلكتروني. PostgreSQL.",
+      "status": "passed-in-declared-layer",
+      "layer": "postgresql-full-row-reconciliation",
+      "actual": "10جداول كاملة:6استردادات جديدة فقط36.25EGP/Online فيA، و9جداول ثابتة؛25تحصيلًا/إيصالًا/فترة و25لاعبًا و26تسجيلًا. B بها لاعب وتسجيل ثابتان ولا تحصيلات موجبة.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "refund-money-before.json",
+        "refund-money-after.json",
+        "refund-summary.json"
+      ]
+    },
+    {
+      "id": "RFN29",
+      "startAndSteps": "اعرض النموذج/المراجعة/التعليق/النجاح في390، و320ونص2بالمظهرين.",
+      "expected": "لاoverflow أوتداخل، العنوان والإقرار والإجراء مقروءة، ورسائل عربية؛ iOS390 وWidget320/390 بنص1/2 ومظهرين، مع مراجعة الصور الفعلية منفصلة.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api-and-widget-branches",
+      "actual": "فُتحت14PNG نهائية1170×2532، منها13واجهة وحالة حجب سياق متوقعة؛ Widget320/390 ونص1/2 ومظهرين:حدود الحروف ونمو السبب وضغط الاختيار الفارغ ناجحة.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log",
+        "visual-review.json",
+        "14 phase-iosrefund PNGs",
+        "widget-8644c189-manifest.json"
+      ]
+    },
+    {
+      "id": "RFN30",
+      "startAndSteps": "أزل النموذج وافتحه بعد الحفظ.",
+      "expected": "السجل والمتاح منالخادم، لا إعادة صرف؛ iOS. لا ادعاءإعادة تشغيلOS إذا لم ينفذ.",
+      "status": "passed-in-declared-layer",
+      "layer": "installed-ios-real-api",
+      "actual": "فتح نموذج جديد قرأ سجل25.75 منAPI والمتاح1074.25 قبل بقية الحركات؛ ليس إعادة تشغيلOS.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN31",
+      "startAndSteps": "سبب500حرف و501، ثم مسافات فقط.",
+      "expected": "optional واضح؛500يقبل عندصحةالقيمة،501يرفض برسالة محددة بلاصرف؛Widget/API للتحقق، لا تُسجل حركة اختبار زائدة بلا حاجة.",
+      "status": "passed-in-declared-layer",
+      "layer": "real-api-quote-boundary-and-widget-only-field-boundaries",
+      "actual": "quote فعلي بسبب500حرف قُبل؛501 رُفض422 بلا صرف. Widget يغطي الرفض المحلي والسبب الاختياري والمسافات.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "ios-cloud-response.json",
+        "flutter-ios.log"
+      ]
+    },
+    {
+      "id": "RFN32",
+      "startAndSteps": "لا تحصيل متاح، أوكلالمبلغ مخصص، أوGET تالف لايحمل القائمة.",
+      "expected": "فراغ واضح بلا صرف عندالفراغ المشروع؛ ردتالف رسالة تحقق وإعادةقراءة وليس صفرًا وهميًا؛Widget.",
+      "status": "passed-in-declared-layer",
+      "layer": "widget-controlled-response-only",
+      "actual": "Widget فصل الفراغ المشروع/المتاح0 عن الرد التالف برسالة وإعادة قراءة دون صفر زائف.",
+      "run": "https://github.com/salah1seleem/academy-management-platform/actions/runs/44285205824",
+      "evidence": [
+        "refund-widget-qa artifact14419271555",
+        "native_refund_negative_test.dart",
+        "approved_native_refund_test.dart"
+      ]
+    }
+  ],
+  "expectedNativeCases": 26,
+  "expectedNativeAndSqlCases": 27,
+  "widgetOnlyCaseIds": [
+    "RFN02",
+    "RFN10",
+    "RFN11",
+    "RFN24",
+    "RFN32"
+  ],
+  "notCovered": [
+    "native OS keyboard/IME",
+    "physical device",
+    "Android",
+    "staging",
+    "cashbox end-to-end",
+    "all four role homes",
+    "latest shared POOL integration",
+    "OS restart",
+    "two academies with nonzero financial ledgers",
+    "whole report-page actions and pagination",
+    "returning to the old form after switching back to the original role"
+  ],
+  "sourceCommit": "8644c1890cf1790a5ae4903c5455f104e1271407",
+  "run": 44285205824,
+  "job": 134735979804,
+  "evidenceRoot": "tmp/qa-20261118/ios-refund/final-8644c189",
+  "counts": {
+    "written": 32,
+    "executedWithinDeclaredLayers": 32,
+    "passedWithinDeclaredLayers": 32,
+    "blocked": 0,
+    "nativeApiSqlCases": 27,
+    "widgetOnlyCases": 5,
+    "flutterTests": 49,
+    "runnerExitGuards": 6,
+    "nativePngsOpened": 14,
+    "widgetPngsVerified": 16
+  },
+  "artifact": {
+    "id": 14420347354,
+    "sha256": "c3c184163313c269014cc043a516fb1336b8ff359a14a61d414cb2c0c30bbffd",
+    "originalFiles": 31
+  },
+  "textInput": {
+    "mode": "registered-framework-text-channel",
+    "valuesVerified": 26,
+    "nativeImeTested": false
+  },
+  "stagingTested": false,
+  "financialProof": {
+    "case": "RFN27",
+    "source": "actual-api-responses-and-full-sql-refund-rows",
+    "refundRowsMatchedToSql": 6,
+    "newRefundAmount": "36.25",
+    "netAndSurplusDelta": "-36.25",
+    "unchangedCommonLedgerRows": 25,
+    "financialBefore": {
+      "totalCount": 25,
+      "totalAmount": "16910.0",
+      "totalRefunds": "0.0",
+      "netAmount": "16910.0"
+    },
+    "financialAfter": {
+      "totalCount": 31,
+      "totalAmount": "16910.0",
+      "totalRefunds": "36.25",
+      "netAmount": "16873.75"
+    },
+    "operatingBefore": {
+      "totalIncome": "16910.0",
+      "totalExpenses": "0.0",
+      "surplus": "16910.0"
+    },
+    "operatingAfter": {
+      "totalIncome": "16873.75",
+      "totalExpenses": "0.0",
+      "surplus": "16873.75"
+    },
+    "fullLedgerPaginationTested": false
+  }
+}
