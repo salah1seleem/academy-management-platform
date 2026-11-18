@@ -261,6 +261,19 @@ void main() {
             expect(origin.dx + box.right, lessThanOrEqualTo(bounds.right + .5));
           }
           expect(t.takeException(), isNull);
+          final reason = find.widgetWithText(TextFormField, 'سبب الاسترداد');
+          await t.ensureVisible(reason);
+          await t.pumpAndSettle();
+          final compactHeight = t.getSize(reason).height;
+          await t.enterText(
+            reason,
+            'سبب اختبار متعدد الأسطر طويل لقياس نمو الحقل. ' * 12,
+          );
+          await t.pumpAndSettle();
+          expect(t.getSize(reason).height, greaterThan(compactHeight));
+          await t.enterText(reason, '');
+          await t.pumpAndSettle();
+          expect(t.getSize(reason).height, closeTo(compactHeight, .5));
           await amount(t, '13.34');
           await flow.tap(t, 'مراجعة مبلغ الاسترداد');
           await flow.tap(

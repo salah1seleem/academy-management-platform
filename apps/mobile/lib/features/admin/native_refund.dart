@@ -359,6 +359,7 @@ class _NativePlayerRefundState
                   reason,
                   required: false,
                   maxLines: 3,
+                  minLines: 1,
                   changed: () => setState(invalidate),
                 ),
                 if (method == 'Cash') ...[

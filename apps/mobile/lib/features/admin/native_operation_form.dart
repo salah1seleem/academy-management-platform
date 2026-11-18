@@ -201,6 +201,7 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
     bool? markRequired,
     TextInputType? keyboard,
     int? maxLines,
+    int? minLines,
     bool readOnly = false,
     VoidCallback? changed,
     String? Function(String value)? validate,
@@ -223,6 +224,7 @@ abstract class NativeOperationState<T extends StatefulWidget> extends State<T> {
           const ArabicNumberInputFormatter(),
       ],
       maxLines: maxLines ?? 1,
+      minLines: minLines,
       decoration: InputDecoration(
         labelText: (markRequired ?? (required && !readOnly)) ? null : label,
         label: (markRequired ?? (required && !readOnly))
