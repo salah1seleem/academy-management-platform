@@ -51,6 +51,20 @@ jobs:
             brew install coreutils
           fi
           echo "$(brew --prefix postgresql@17)/bin" >> "$GITHUB_PATH"
+      - name: Prepare real file inspection tools
+        if: inputs.suite == 'enrollment-proof'
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 gtimeout --kill-after=20s 8m brew install ffmpeg
+          fi
+          python3 - <<'PYMEDIA'
+          import subprocess
+          subprocess.run(['ffprobe', '-version'], check=True)
+          for encoder in ['png', 'libx264', 'aac']:
+              result = subprocess.run(['ffmpeg', '-hide_banner', '-h', 'encoder=' + encoder], capture_output=True, text=True, check=True)
+              assert 'Encoder ' + encoder + ' [' in result.stdout, encoder
+              print('Verified real encoder:', encoder)
+          PYMEDIA
       - name: Resolve locked Flutter dependencies
         working-directory: apps/mobile
         run: flutter pub get --enforce-lockfile

@@ -98,7 +98,7 @@ void main() {
         debugPrint('IOS-PROOF $id executed successfully');
       }
 
-      final setup = (await t.runAsync(() async {
+      final setup = await t.runAsync(() async {
         HttpOverrides.global = null;
         final api = _Transport(Zone.current);
         addTearDown(api.close);
@@ -195,7 +195,9 @@ void main() {
           detail,
           sha256.convert(bytes).toString(),
         );
-      }))!;
+      });
+      // runAsync already reports the original fixture failure to the binding.
+      if (setup == null) return;
       final (
         api,
         owner,
