@@ -236,12 +236,29 @@ class _NativePlayerRefundState
         });
       }
     } catch (e) {
+      final pending =
+          written || e is! ApiFailure || e.status == 0 || e.status >= 500;
       if (current) {
         setState(() {
-          uncertain =
-              written || e is! ApiFailure || e.status == 0 || e.status >= 500;
+          uncertain = pending;
           if (!uncertain) invalidate();
         });
+      }
+      if (!pending && current) {
+        try {
+          final refreshed = obj(await auth.request('GET', root));
+          if (current) {
+            setState(() {
+              data = validSource(refreshed) ? refreshed : null;
+              if (!eligible.any((row) => row['id'] == collection)) {
+                collection = null;
+                session = null;
+              }
+            });
+          }
+        } catch (_) {
+          if (current) setState(() => data = null);
+        }
       }
       rethrow;
     }

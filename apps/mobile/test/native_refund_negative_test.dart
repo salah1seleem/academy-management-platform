@@ -28,6 +28,47 @@ Future<void> amount(WidgetTester t, String value) async {
 }
 
 void main() {
+  testWidgets(
+    'RFN24 disabled cash never enables confirmation despite a selected shift',
+    (t) async {
+      final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
+        if (p.endsWith('/quote')) {
+          return {
+            ...quote(),
+            'cashEnabled': false,
+            'quoteHash': 'unexpected-hash',
+            'sessions': [
+              {'id': 'shift', 'name': 'وردية اختبار'},
+            ],
+          };
+        }
+        return {...flow.source('Cash', false), 'canRecord': true};
+      });
+      await t.pumpWidget(
+        app(NativePlayerRefund(auth: auth, playerId: 'player')),
+      );
+      await t.pumpAndSettle();
+      await flow.choose(t, 'التحصيل', '2026-10-21 · المتاح 100 ج.م');
+      await amount(t, '13.34');
+      await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+      await flow.choose(t, 'وردية الصرف', 'وردية اختبار');
+      await flow.tap(t, 'مراجعة مبلغ الاسترداد');
+      final checkbox = find.byType(CheckboxListTile);
+      await t.ensureVisible(checkbox);
+      expect(t.widget<CheckboxListTile>(checkbox).onChanged, isNull);
+      expect(find.text('النقدي غير مفعل لهذه الأكاديمية.'), findsOneWidget);
+      expect(
+        t
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'تأكيد تسجيل الاسترداد'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
   testWidgets('RFN25 late source cannot restore a logged-out refund form', (
     t,
   ) async {
@@ -162,8 +203,9 @@ void main() {
     var requests = 0;
     final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
       if (p.endsWith('/quote')) {
-        if (++requests == 2)
+        if (++requests == 2) {
           throw const ApiFailure(503, 'تعذر تحميل المراجعة.');
+        }
         return quote();
       }
       return source();
@@ -184,7 +226,7 @@ void main() {
     t,
   ) async {
     final auth = await authenticate('AcademyOwner', (m, p, b, token) async {
-      if (p.endsWith('/quote'))
+      if (p.endsWith('/quote')) {
         return {
           ...quote(),
           'cashEnabled': true,
@@ -193,6 +235,7 @@ void main() {
             {'id': 'shift', 'name': 'وردية اختبار'},
           ],
         };
+      }
       if (m == 'POST') throw const ApiFailure(409, 'تغير رصيد الوردية.');
       return {...flow.source('Cash', false), 'canRecord': true};
     });

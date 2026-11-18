@@ -202,7 +202,7 @@ void main() {
         final receipt = rows(
           receipts['items'],
         ).singleWhere((r) => r['receiptNumber'] == collection['receiptNumber']);
-        final receiptId = receipt['id'] ?? receipt['receiptId'];
+        final receiptId = receipt['receiptId'];
         expect(receiptId, isA<String>());
         final savedReceipt = await witness.request(
           'GET',
@@ -210,6 +210,10 @@ void main() {
         );
         final periods = <String, Object?>{
           'all': await witness.request('GET', '/api/v1/subscriptions/periods'),
+          'guardianReceipt': await family.request(
+            'GET',
+            '/api/v1/guardian/subscriptions/receipts/$receiptId',
+          ),
         };
         return (
           api,
@@ -369,9 +373,10 @@ void main() {
       }
 
       Future<void> recordId() async {
-        final data = obj(
-          (await t.runAsync(() => witness.request('GET', _root)))!,
+        final raw = await t.runAsync<Object?>(
+          () => witness.request('GET', _root),
         );
+        final data = obj(raw);
         final fresh = rows(data['refunds'])
             .where(
               (r) =>
@@ -582,6 +587,14 @@ void main() {
       await tap('تأكيد تسجيل الاسترداد');
       await wait(find.textContaining('الاسترداد يتجاوز المبلغ'));
       expect(find.text(_success), findsNothing);
+      expect(find.byType(CheckboxListTile), findsNothing);
+      expect(
+        _minor(
+          rows(api.sourceReads.last['collections'])
+              .singleWhere((row) => row['id'] == collection['id'])['available'],
+        ),
+        _minor(current['available']) - 50,
+      );
       await assertCount(6);
       passed('RFN23');
 
@@ -670,6 +683,13 @@ void main() {
         expect(
           await witness.request('GET', '/api/v1/subscriptions/periods'),
           periods['all'],
+        );
+        expect(
+          await family.request(
+            'GET',
+            '/api/v1/guardian/subscriptions/receipts/$receiptId',
+          ),
+          periods['guardianReceipt'],
         );
         final financial = obj(await witness.request('GET', _financial));
         expect(
