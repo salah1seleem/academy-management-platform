@@ -82,7 +82,7 @@ test("Owner creates one reviewed group after a lost save reply; Guardian receive
   expect(after.collections).toEqual(before.collections);
   expect((await placementWrite(page.request, "/api/v1/auth/logout", {})).status()).toBe(204);
   const challenge = await placementWrite(page.request, "/api/v1/auth/guardian/otp/request", { phoneNumber: "01000000001" });
-  expect(challenge.status()).toBe(200);
+  expect(challenge.status()).toBe(202);
   expect((await placementWrite(page.request, "/api/v1/auth/guardian/otp/verify", { phoneNumber: "01000000001", code: "246810", challengeId: (await challenge.json()).challengeId })).status()).toBe(200);
   const profile = await placementRead<{ enrollments: { id: string; group: string; upcoming: { id: string; sessionDate: string; startTime: string }[] }[] }>(page.request, `/api/v1/guardian/children/${id(100)}/profile`);
   expect(profile.enrollments.find(row => row.id === id(101))).toMatchObject({ group: draft.arabicName, upcoming: [expect.objectContaining({ id: session.id, sessionDate: draft.timetable.from, startTime: "13:00:00" })] });
