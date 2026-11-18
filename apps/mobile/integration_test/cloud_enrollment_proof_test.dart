@@ -149,7 +149,7 @@ void main() {
           await guardian.request(
             'POST',
             '/api/v1/guardian/enrollment-requests',
-            idempotencyKey: 'ios-proof-cloud-$suffix',
+            idempotencyKey: 'ios-proof-cloud-${priced ? 'priced' : 'unset'}',
             body: {
               'requestType': 'NewChild',
               'newChildArabicName': 'لاعب اختبار إثبات الدفع $suffix',
@@ -187,7 +187,6 @@ void main() {
           api,
           owner,
           admin,
-          guardian,
           other,
           foreign,
           before,
@@ -201,7 +200,6 @@ void main() {
         api,
         owner,
         admin,
-        guardian,
         other,
         foreign,
         before,
@@ -286,6 +284,10 @@ void main() {
       await open(owner);
       await wait(find.text(detail['child'] as String));
       expect(find.text('قيد الانتظار'), findsWidgets);
+      expect(
+        find.textContaining(detail['reference'] as String),
+        findsOneWidget,
+      );
       expect(
         find.text(money(detail['amount'], detail['currency'])),
         findsWidgets,
