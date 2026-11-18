@@ -141,12 +141,16 @@ export async function assertPlacementContrast(region: Locator, selector = ".plac
       const ancestry: Element[] = [];
       for (let current: Element | null = node; current; current = current.parentElement) ancestry.unshift(current);
       let background: RGB = [255, 255, 255];
+      let uncoveredImage = false;
       for (const ancestor of ancestry) {
         const style = getComputedStyle(ancestor);
         if (Number(style.opacity) !== 1) throw new Error("Contrast sample has translucent ancestry");
         const color = rgba(style.backgroundColor);
+        if (color.alpha === 1) uncoveredImage = false;
+        if (style.backgroundImage !== "none") uncoveredImage = true;
         background = over(color.rgb, color.alpha, background);
       }
+      if (uncoveredImage) throw new Error("Contrast sample has an uncovered background image; visual review required");
       const foreground = rgba(getComputedStyle(node).color);
       const ink = luminance(over(foreground.rgb, foreground.alpha, background)), paper = luminance(background);
       return { text: node.textContent?.trim().slice(0, 100), ratio: (Math.max(ink, paper) + 0.05) / (Math.min(ink, paper) + 0.05) };

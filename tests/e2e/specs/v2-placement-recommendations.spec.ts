@@ -27,7 +27,7 @@ test("Owner sees explained eligible alternatives, exercises every preference and
   const dayName = weekdays[new Date(`${date}T12:00:00Z`).getUTCDay()];
   await panel.getByRole("checkbox", { name: dayName, exact: true }).check();
   for (const [label, value] of [["الساعة", "11"], ["الدقيقة", "00"], ["الفترة", "am"]]) await panel.getByRole("combobox", { name: `وقت مفضل اختياري — ${label}`, exact: true }).selectOption(value);
-  await panel.getByLabel("مدرب مفضل اختياري", { exact: true }).selectOption(coach.id);
+  await panel.getByRole("combobox", { name: "مدرب مفضل اختياري", exact: true }).selectOption(coach.id);
   const choices = page.getByRole("region", { name: "بدائل التسكين" });
   const query = async () => {
     const response = page.waitForResponse(r => r.url().endsWith(`/enrollments/${id(195)}/placement-recommendations`) && r.request().method() === "POST");
@@ -46,13 +46,13 @@ test("Owner sees explained eligible alternatives, exercises every preference and
     for (const mode of ["dark", "light"] as const) {
       await setPlacementAppearance(page, mode); await page.screenshot({ path: info.outputPath(`recommendations-${mode}-${width}.png`), fullPage: true, animations: "disabled" });
       await panel.screenshot({ path: info.outputPath(`recommendations-panel-${mode}-${width}.png`), animations: "disabled" });
-      await assertPlacementViewport(page, width); await assertPlacementContrast(choices, "p, h4, li, a");
+      await assertPlacementViewport(page, width); await assertPlacementContrast(choices, "p, h4, li, a, header > span");
     }
   }
   await panel.getByRole("checkbox", { name: dayName, exact: true }).uncheck(); await expect(choices).toHaveCount(0);
   await panel.getByRole("checkbox", { name: dayName, exact: true }).check(); await query();
-  await panel.getByLabel("مدرب مفضل اختياري", { exact: true }).selectOption(""); await expect(choices).toHaveCount(0);
-  await panel.getByLabel("مدرب مفضل اختياري", { exact: true }).selectOption(coach.id); await query();
+  await panel.getByRole("combobox", { name: "مدرب مفضل اختياري", exact: true }).selectOption(""); await expect(choices).toHaveCount(0);
+  await panel.getByRole("combobox", { name: "مدرب مفضل اختياري", exact: true }).selectOption(coach.id); await query();
   await panel.getByRole("combobox", { name: "وقت مفضل اختياري — الساعة", exact: true }).selectOption("10"); await expect(choices).toHaveCount(0);
   await panel.getByRole("combobox", { name: "وقت مفضل اختياري — الساعة", exact: true }).selectOption("11"); await query();
   await panel.getByRole("button", { name: "مسح الوقت" }).click(); await expect(choices).toHaveCount(0);

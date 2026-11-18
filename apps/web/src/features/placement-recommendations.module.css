@@ -1,0 +1,28 @@
+.workspace :global(.placement-suggestions) article {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.workspace :global(.placement-suggestions) h4,
+.workspace :global(.placement-suggestions) ul {
+  color: var(--text);
+}
+
+.workspace :global(.placement-suggestions) article p {
+  color: var(--muted);
+}
+
+.workspace :global(.placement-suggestions) article header > span,
+.workspace :global(.placement-suggestions) article > a {
+  background: var(--staff-info-soft, var(--primary-soft));
+  color: var(--staff-info, var(--primary));
+}
+
+.workspace :global(.placement-suggestions) article > a:hover {
+  background: var(--staff-surface-muted, var(--surface));
+}
+
+.workspace :global(.placement-suggestions) article > a:focus-visible {
+  outline-color: var(--staff-info, var(--primary));
+}

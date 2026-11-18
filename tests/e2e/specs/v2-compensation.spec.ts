@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { compensationLedger, prepareCompensation, signInCompensationGuardian } from "../support/compensation";
-import { afterDays, assertPlacementContrast, assertPlacementViewport, placementId as id, placementRead, placementWrite, setPlacementAppearance } from "../support/placement";
+import { afterDays, assertPlacementContrast, assertPlacementViewport, ensurePlacementSession, placementId as id, placementRead, placementWrite, setPlacementAppearance } from "../support/placement";
 import { formatDateAr } from "../../../apps/web/src/lib/formatters";
 
 test("Approved compensation books once after a lost reply and is visible to its linked Guardian through reviewed release", async ({ page, browser }, info) => {
   expect((await placementWrite(page.request, "/api/v1/auth/login", { email: "owner.nogoom@example.test", password: "Demo-Only-123!" })).status()).toBe(200);
   const setup = await prepareCompensation(page.request);
+  const outside = await ensurePlacementSession(page.request, id(90), afterDays(setup.today, 31), "19:00", "20:00");
   const before = await compensationLedger(page.request);
   expect(before.grants).toEqual([]);
   await page.goto(`/dashboard/players/${id(80)}?tab=training`);
@@ -40,6 +41,14 @@ test("Approved compensation books once after a lost reply and is visible to its 
   const duplicate = await placementWrite(page.request, `${root}/preview`, saved.body);
   expect(duplicate.status()).toBe(200); expect((await duplicate.json()).conflicts.join(" ")).toContain("صدر تعويض لهذه الواقعة بالفعل");
   expect((await placementWrite(page.request, root, saved.body)).status()).toBe(409);
+  const bookingPath = `/api/v1/people/compensations/${saved.id}/booking`;
+  for (const session of [id(71), id(91), outside.id]) {
+    const response = await placementWrite(page.request, `${bookingPath}/preview`, { trainingSessionId: session });
+    expect(response.status(), await response.text()).toBe(200);
+    const blocked = await response.json(); expect(blocked.conflicts.length).toBeGreaterThan(0);
+    expect((await placementWrite(page.request, bookingPath, { trainingSessionId: session, fingerprint: blocked.fingerprint })).status()).toBe(409);
+  }
+  expect((await placementWrite(page.request, `${bookingPath}/preview`, { trainingSessionId: "ffffffff-ffff-ffff-ffff-ffffffffffff" })).status()).toBe(404);
   let ledger = await compensationLedger(page.request);
   expect(ledger.grants).toHaveLength(1); expect(ledger.grants[0]).toMatchObject({ id: saved.id, units: 1, allocated: 0, consumed: 0, bookings: [] });
   expect(ledger.service).toEqual(before.service); expect(ledger.collections).toEqual(before.collections);
