@@ -100,6 +100,7 @@ test("Minutes, a real capacity change, lost release acknowledgement and Guardian
     await review.getByRole("button", { name: "تأكيد حجز التعويض" }).click(); await expect(panel.getByText("تم حجز الحصة التعويضية وتحديث مواعيد ولي الأمر.", { exact: true })).toBeVisible();
     expect(writes.slice(0, 2).map(w => w.status)).toEqual([409, 200]); expect(writes[1].key).toBe(writes[0].key); expect(writes[1].fingerprint).not.toBe(writes[0].fingerprint);
     let row = (await grants(page.request))[0]; expect(row).toMatchObject({ allocated: 30, consumed: 0 }); expect(row.bookings).toHaveLength(1);
+    const occupied = await placementRead<GroupRecord>(page.request, groupPath); expect((await put(page.request, groupPath, groupBody(occupied, 0))).status()).toBe(409); expect(await placementRead(page.request, groupPath)).toEqual(occupied);
     await editor.goto(`/dashboard/academy/groups/${group}/edit`); const options = await placementRead<{ categories: { id: string }[] }>(page.request, "/api/v1/manage/structure/options"); const other = options.categories.find(c => c.id !== original.ageCategoryId); expect(other).toBeTruthy();
     await editor.getByRole("combobox", { name: "الفئة العمرية", exact: true }).selectOption(other!.id);
     const categoryRejection = editor.waitForResponse(r => r.url().endsWith(groupPath) && r.request().method() === "PUT"); await editor.getByRole("button", { name: "حفظ التعديلات", exact: true }).click(); expect((await categoryRejection).status()).toBe(409);
@@ -160,7 +161,7 @@ test("Group editor guards invalid capacity, cancels its draft and rejects untrus
   await name.fill(""); await page.getByRole("button", { name: "حفظ التعديلات", exact: true }).click(); expect(await name.evaluate((el: HTMLInputElement) => el.validity.valueMissing)).toBe(true); await name.fill(original.arabicName);
   for (const value of ["0", "1.5"]) { await capacity.fill(value); await page.getByRole("button", { name: "حفظ التعديلات", exact: true }).click(); expect(await capacity.evaluate((el: HTMLInputElement) => el.validity.valid)).toBe(false); } expect(puts).toBe(0);
   await page.getByRole("link", { name: "العودة إلى الملف", exact: true }).click(); await expect(page).toHaveURL(new RegExp(`/groups/${group}$`));
-  try { for (const value of [0, -1, 1.5]) { const response = await put(page.request, groupPath, groupBody(original, value)); expect(response.status(), await response.text()).toBe(Number.isInteger(value) ? 422 : 400); expect(await placementRead(page.request, groupPath)).toEqual(original); } }
+  try { for (const value of [0, -1, 1.5]) { const response = await put(page.request, groupPath, groupBody(original, value)); expect(await placementRead(page.request, groupPath)).toEqual(original); expect(response.status(), await response.text()).toBe(value === 0 ? 422 : Number.isInteger(value) ? 409 : 400); } }
   finally { expect((await put(page.request, groupPath, groupBody(original, original.capacity))).status()).toBe(204); }
   for (const role of ["visitor", "coach", "other-academy"] as const) {
     const context = await browser.newContext({ baseURL: info.project.use.baseURL }); try { let headers: Record<string, string> | undefined;

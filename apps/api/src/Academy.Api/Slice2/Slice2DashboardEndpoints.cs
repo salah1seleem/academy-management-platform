@@ -136,6 +136,7 @@ public static class Slice2DashboardEndpoints
                 if (hasEnrollments && (group.BranchId != request.BranchId || group.SportId != request.SportId))
                     return Results.Conflict(new { message = "لا يمكن تغيير فرع أو رياضة مجموعة مرتبطة بتسجيلات قائمة." });
                 if (request.Capacity.HasValue && request.Capacity < (await DatedGroupRoster.Forecast(db, id, await Academy.Api.Slice4.AttendanceCalendar.TodayAsync(current.AcademyId, db, clock))).Select(x => x.Count).DefaultIfEmpty(0).Max()) return Results.Conflict(new { message = "السعة أقل من أعضاء المجموعة الحاليين أو النقل المجدول." });
+                if (request.Capacity is <= 0) return Results.UnprocessableEntity(new { message = "السعة يجب أن تكون أكبر من صفر." });
                 if (group.Capacity != request.Capacity && group.RegistrationFormat != Academy.Infrastructure.People.TrainingRegistrationFormat.Group) { group.FormatReviewedAtUtc = null; group.FormatReviewedByUserId = null; }
                 group.ArabicName = request.ArabicName.Trim(); group.EnglishName = Clean(request.EnglishName); group.BranchId = request.BranchId.Value; group.SportId = request.SportId.Value; group.AgeCategoryId = request.AgeCategoryId.Value; group.Capacity = request.Capacity; group.UpdatedAtUtc = now;
                 break;
