@@ -313,8 +313,27 @@ void main() {
       expect(api.imageReads, imageReads);
       passed('IP04');
       final matrix = viewer().transformationController!.value.clone();
-      await t.drag(find.byType(InteractiveViewer), const Offset(48, -35));
+      final target = find.byType(InteractiveViewer);
+      await t.ensureVisible(target);
       await t.pumpAndSettle();
+      expect(viewer().panEnabled, true);
+      final scroll = t
+          .state<ScrollableState>(find.byType(Scrollable).last)
+          .position;
+      final scrollBefore = scroll.pixels;
+      final touch = await t.startGesture(t.getCenter(target));
+      for (var frame = 0; frame < 8; frame++) {
+        await touch.moveBy(const Offset(12, -8));
+        await t.pump(const Duration(milliseconds: 32));
+      }
+      await touch.up();
+      await t.pumpAndSettle();
+      debugPrint(
+        'IOS-PROOF pan before=$matrix after=${viewer().transformationController!.value} scrollBefore=$scrollBefore scrollAfter=${scroll.pixels}',
+      );
+      if (viewer().transformationController!.value == matrix) {
+        await capture('pan-failed');
+      }
       expect(viewer().transformationController!.value, isNot(matrix));
       expect(viewer().transformationController!.value.getMaxScaleOnAxis(), 2);
       expect(api.imageReads, imageReads);

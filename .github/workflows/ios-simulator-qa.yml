@@ -8,6 +8,10 @@ on:
         type: choice
         options: [role-homes, enrollment-proof]
         default: role-homes
+      checks_only:
+        description: Analyze and run focused Flutter/runner regressions without native build
+        type: boolean
+        default: false
   push:
     branches: ["codex/qa-off-mac", "codex/qa-staging-release"]
     paths:
@@ -35,6 +39,7 @@ jobs:
       - name: Verify runner failure propagation
         run: python3 scripts/qa/test_ios_runner_exit.py
       - uses: actions/setup-dotnet@v5
+        if: inputs.checks_only != true
         with:
           global-json-file: global.json
       - uses: subosito/flutter-action@v2
@@ -43,6 +48,7 @@ jobs:
           flutter-version: 3.47.2
           cache: true
       - name: Prepare PostgreSQL 17
+        if: inputs.checks_only != true
         run: |
           if ! brew list --versions postgresql@17 >/dev/null; then
             brew install postgresql@17
@@ -52,7 +58,7 @@ jobs:
           fi
           echo "$(brew --prefix postgresql@17)/bin" >> "$GITHUB_PATH"
       - name: Prepare real file inspection tools
-        if: inputs.suite == 'enrollment-proof'
+        if: inputs.suite == 'enrollment-proof' && inputs.checks_only != true
         run: |
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
             HOMEBREW_NO_AUTO_UPDATE=1 gtimeout --kill-after=20s 8m brew install ffmpeg
@@ -72,9 +78,10 @@ jobs:
         if: inputs.suite == 'enrollment-proof'
         working-directory: apps/mobile
         run: |
-          flutter analyze integration_test/cloud_enrollment_proof_test.dart
+          flutter analyze integration_test/cloud_enrollment_proof_test.dart test/enrollment_payment_source_context_test.dart
           flutter test test/enrollment_payment_source_context_test.dart
       - name: Exercise selected suite on one iOS simulator
+        if: inputs.checks_only != true
         env:
           ACADEMY_IOS_SUITE: ${{ inputs.suite || 'role-homes' }}
         run: |
@@ -86,7 +93,7 @@ jobs:
             test -s "$RUNNER_TEMP/academy-ios-qa/evidence/proof-summary.json"
           fi
       - name: Preserve iOS results and diagnostics
-        if: always()
+        if: always() && inputs.checks_only != true
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-qa

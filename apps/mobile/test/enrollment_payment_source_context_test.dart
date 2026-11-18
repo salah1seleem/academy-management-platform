@@ -146,6 +146,45 @@ void main() {
       },
     );
   }
+  for (final direction in <String, Offset>{
+    'horizontal': const Offset(12, 0),
+    'vertical': const Offset(0, -8),
+    'diagonal': const Offset(12, -8),
+  }.entries) {
+    testWidgets(
+      'zoomed proof responds to continuous ${direction.key} touch without another download',
+      (t) async {
+        final api = ProofTransport((_) async => pixel);
+        final auth = await openProof(t, api);
+        final zoom = find.text('تكبير');
+        await until(t, zoom);
+        await Scrollable.ensureVisible(t.element(zoom), alignment: 0);
+        await t.pumpAndSettle();
+        await t.tap(zoom.hitTestable());
+        await t.pumpAndSettle();
+        final target = find.byType(InteractiveViewer);
+        await t.ensureVisible(target);
+        await t.pumpAndSettle();
+        final viewer = t.widget<InteractiveViewer>(target);
+        expect(viewer.panEnabled, true);
+        final before = viewer.transformationController!.value.clone();
+        final touch = await t.startGesture(t.getCenter(target));
+        for (var frame = 0; frame < 8; frame++) {
+          await touch.moveBy(direction.value);
+          await t.pump(const Duration(milliseconds: 32));
+        }
+        await touch.up();
+        await t.pumpAndSettle();
+        expect(viewer.transformationController!.value, isNot(before));
+        expect(viewer.transformationController!.value.getMaxScaleOnAxis(), 2);
+        expect(api.reads, 1);
+        expect(api.detailReads, 1);
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(const SizedBox());
+        auth.dispose();
+      },
+    );
+  }
   testWidgets('enrollment proof never renders bytes that arrive after logout', (
     t,
   ) async {
