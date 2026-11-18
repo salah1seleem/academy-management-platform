@@ -253,7 +253,8 @@ void main() {
 
       Future<void> capture(String name) async {
         expect(t.takeException(), isNull);
-        await binding.takeScreenshot('phase-iosproof-$name');
+        final bytes = await binding.takeScreenshot('phase-iosproof-$name');
+        expect(bytes, isNotEmpty);
       }
 
       Future<void> open(
@@ -525,6 +526,7 @@ void main() {
       passed('IP19');
       expect(t.takeException(), isNull);
       binding.reportData = {
+        ...?binding.reportData,
         'proofReview': {
           'executedPassed': done,
           'visualReviewRequired': 'IP20',
@@ -541,6 +543,7 @@ void main() {
           'businessWritesAfterFixture': api.writes,
         },
       };
+      expect(binding.reportData!['screenshots'], hasLength(11));
       await t.pumpWidget(const SizedBox());
     },
   );
