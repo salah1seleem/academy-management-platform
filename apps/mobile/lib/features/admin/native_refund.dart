@@ -257,10 +257,7 @@ class _NativePlayerRefundState
           if (current) {
             setState(() {
               data = validSource(refreshed) ? refreshed : null;
-              if (data != null &&
-                  e is ApiFailure &&
-                  e.status == 409 &&
-                  attemptedAmount != null) {
+              if (data != null && e.status == 409 && attemptedAmount != null) {
                 final latest = rows(data!['collections'])
                     .where((row) => row['id'] == attemptedCollection)
                     .firstOrNull;
