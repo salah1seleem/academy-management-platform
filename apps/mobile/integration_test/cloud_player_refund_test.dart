@@ -316,6 +316,7 @@ void main() {
       }
 
       Future<void> capture(String phase) async {
+        await t.pumpAndSettle();
         expect(t.takeException(), isNull);
         final bytes = await binding.takeScreenshot('phase-iosrefund-$phase');
         expect(bytes, isNotEmpty);

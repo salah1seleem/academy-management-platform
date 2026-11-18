@@ -5,9 +5,11 @@ import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/features/admin/native_refund.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'approved_native_refund_test.dart' as flow;
+import 'shared_ui_quality_test.dart' show capture;
 import 'v2_role_workspaces_test.dart' show authenticate, app;
 
 Map<String, dynamic> source() => {
@@ -30,6 +32,16 @@ Future<void> amount(WidgetTester t, String value) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    final arabic = FontLoader('AcademyArabic');
+    for (final weight in [300, 400, 500, 600, 700]) {
+      arabic.addFont(rootBundle.load('assets/fonts/AcademyArabic-$weight.ttf'));
+    }
+    final icons = FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await Future.wait([arabic.load(), icons.load()]);
+  });
   testWidgets(
     'RFN01 refund form retains the player identity passed by its file',
     (t) async {
@@ -195,12 +207,15 @@ void main() {
             (m, p, b, token) async => p.endsWith('/quote') ? quote() : data,
           );
           await t.pumpWidget(
-            app(
-              Theme(
-                data: dark ? AcademyTheme.dark() : AcademyTheme.light(),
-                child: NativePlayerRefund(auth: auth, playerId: 'player'),
+            RepaintBoundary(
+              key: const ValueKey('quality-capture'),
+              child: app(
+                Theme(
+                  data: dark ? AcademyTheme.dark() : AcademyTheme.light(),
+                  child: NativePlayerRefund(auth: auth, playerId: 'player'),
+                ),
+                scale: scale,
               ),
-              scale: scale,
             ),
           );
           await t.pumpAndSettle();
@@ -208,6 +223,10 @@ void main() {
             t,
             'التحصيل',
             'RC-20261118-ABCD1234 · 2026-10-21 · المتاح 100 ج.م',
+          );
+          await capture(
+            t,
+            'source-${width.toInt()}-text${scale.toInt()}-${dark ? 'dark' : 'light'}',
           );
           final sourceField = find.widgetWithText(
             DropdownButtonFormField<String>,
@@ -254,6 +273,10 @@ void main() {
           );
           await t.ensureVisible(confirm);
           await t.pumpAndSettle();
+          await capture(
+            t,
+            'review-${width.toInt()}-text${scale.toInt()}-${dark ? 'dark' : 'light'}',
+          );
           expect(t.widget<FilledButton>(confirm).onPressed, isNotNull);
           final rect = t.getRect(confirm);
           expect(rect.left, greaterThanOrEqualTo(0));

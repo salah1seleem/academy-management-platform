@@ -89,7 +89,15 @@ jobs:
         working-directory: apps/mobile
         run: |
           flutter analyze lib/features/admin/native_refund.dart lib/features/admin/native_player_workspace.dart test/native_refund_negative_test.dart integration_test/cloud_player_refund_test.dart
-          flutter test test/native_refund_negative_test.dart test/approved_native_refund_test.dart test/approved_refund_readback_test.dart
+          flutter test --dart-define=UI_QUALITY_CAPTURE_DIR=../../tmp/qa-ios-refund-widget test/native_refund_negative_test.dart test/approved_native_refund_test.dart test/approved_refund_readback_test.dart
+      - name: Preserve focused refund screen evidence
+        if: always() && inputs.suite == 'player-refund'
+        uses: actions/upload-artifact@v4
+        with:
+          name: refund-widget-qa
+          path: tmp/qa-ios-refund-widget/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Exercise selected suite on one iOS simulator
         if: inputs.checks_only != true
         env:
