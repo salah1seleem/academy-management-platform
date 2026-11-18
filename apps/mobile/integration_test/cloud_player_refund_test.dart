@@ -547,12 +547,13 @@ void main() {
             : 'إعادة تأكيد الاسترداد نفسه';
         await wait(find.text(retry));
         expect(find.text(_success), findsNothing);
+        final sourceSelector = find.widgetWithText(
+          DropdownButtonFormField<String>,
+          'التحصيل',
+        );
+        await reach(sourceSelector);
         expect(
-          t
-              .widget<DropdownButtonFormField<String>>(
-                find.widgetWithText(DropdownButtonFormField<String>, 'التحصيل'),
-              )
-              .onChanged,
+          t.widget<DropdownButtonFormField<String>>(sourceSelector).onChanged,
           isNull,
         );
         await reach(find.text(retry));

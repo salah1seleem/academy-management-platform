@@ -270,6 +270,14 @@ void main() {
             ),
           );
           await t.pumpAndSettle();
+          final emptySource = find.widgetWithText(
+            DropdownButtonFormField<String>,
+            'التحصيل',
+          );
+          expect(
+            t.getSize(emptySource).height,
+            lessThanOrEqualTo(scale == 1 ? 80 : 112),
+          );
           await flow.choose(
             t,
             'التحصيل',
