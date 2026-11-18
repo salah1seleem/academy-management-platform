@@ -460,11 +460,26 @@ void main() {
       passed('IP14');
       final assetBefore = api.imageReads;
       await open(owner, order: empty['id'] as String);
-      await wait(find.text('لم تُحدد قيمة الدفع لهذا الطلب بعد.'));
+      await wait(find.text('لم يُحدد بعد'));
       expect(find.text('لم يصل إثبات دفع.'), findsOneWidget);
+      expect(find.byType(EmptyMessage), findsNothing);
       expect(api.imageReads, assetBefore);
       await capture('unset');
       passed('IP15');
+      expect(
+        t.getTopLeft(find.text('المبلغ المطلوب')).dy,
+        closeTo(t.getTopLeft(find.text('الحالة')).dy, .01),
+      );
+      await open(owner, order: empty['id'] as String, scale: 2);
+      await reach(find.text('لم يُحدد بعد'));
+      expect(find.byType(EmptyMessage), findsNothing);
+      expect(
+        t.getTopLeft(find.text('المبلغ المطلوب')).dy,
+        greaterThan(t.getTopLeft(find.text('الحالة')).dy),
+      );
+      expect(api.imageReads, assetBefore);
+      await capture('unset-large-text');
+      passed('IP25');
       await open(owner);
       await zoom();
       final firstMembership = owner.session!.selected!.id;
@@ -543,7 +558,7 @@ void main() {
           'businessWritesAfterFixture': api.writes,
         },
       };
-      expect((binding.reportData!['screenshots'] as List).length, 11);
+      expect((binding.reportData!['screenshots'] as List).length, 12);
       await t.pumpWidget(const SizedBox());
     },
   );

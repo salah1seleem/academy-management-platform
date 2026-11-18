@@ -7,6 +7,7 @@ import 'package:academy_mobile/core/auth/auth_controller.dart';
 import 'package:academy_mobile/core/theme/app_theme.dart';
 import 'package:academy_mobile/core/theme/ui_text.dart';
 import 'package:academy_mobile/features/admin/native_enrollment_payment_read.dart';
+import 'package:academy_mobile/features/guardian/guardian_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,10 +20,17 @@ final pixel = base64Decode(
 );
 
 class ProofTransport extends FakeApi implements AssetTransport {
-  ProofTransport(this.response, {this.hasProof = true})
-    : super((_, _, _, _) async => null);
+  ProofTransport(
+    this.response, {
+    this.hasProof = true,
+    this.amount = 720,
+    this.currency = 'EGP',
+    this.plan = 'plan',
+  }) : super((_, _, _, _) async => null);
   final Future<Uint8List> Function(int read) response;
   final bool hasProof;
+  final num? amount;
+  final String? currency, plan;
   int reads = 0, detailReads = 0;
 
   @override
@@ -54,8 +62,9 @@ class ProofTransport extends FakeApi implements AssetTransport {
       'id': 'source',
       'child': 'لاعب اختبار',
       'status': 'Pending',
-      'amount': 720,
-      'currency': 'EGP',
+      'amount': amount,
+      'currency': currency,
+      'subscriptionPlanId': plan,
       'proofUrl': hasProof ? proof : null,
     };
   }
@@ -77,15 +86,20 @@ class ProofTransport extends FakeApi implements AssetTransport {
 
 Future<AuthController> openProof(
   WidgetTester t,
-  ProofTransport transport,
-) async {
-  t.view.physicalSize = const Size(320, 844);
+  ProofTransport transport, {
+  double width = 320,
+  double scale = 2,
+}) async {
+  t.view.physicalSize = Size(width, 844);
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
   final auth = AuthController(transport, MemoryStore())..restoring = false;
   await auth.verify('phone', 'challenge', 'code');
   await t.pumpWidget(
-    app(NativeEnrollmentPaymentRead(auth: auth, id: 'source'), scale: 2),
+    app(
+      NativeEnrollmentPaymentRead(auth: auth, id: 'source'),
+      scale: scale,
+    ),
   );
   await until(t, find.byType(ListView));
   return auth;
@@ -117,6 +131,78 @@ Future<void> dragProofFrames(
 }
 
 void main() {
+  for (final width in [320.0, 390.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'unset payment amount is a compact summary at $width text $scale',
+        (t) async {
+          final api = ProofTransport(
+            (_) async => pixel,
+            hasProof: false,
+            amount: null,
+            currency: null,
+            plan: null,
+          );
+          final auth = await openProof(t, api, width: width, scale: scale);
+          final value = find.text('لم يُحدد بعد');
+          await until(t, value);
+          expect(find.byType(EmptyMessage), findsNothing);
+          expect(find.text('لم يصل إثبات دفع.'), findsOneWidget);
+          final stateLabel = t.getTopLeft(find.text('الحالة')).dy;
+          final amountLabel = t.getTopLeft(find.text('المبلغ المطلوب')).dy;
+          expect(
+            amountLabel,
+            scale == 1 ? closeTo(stateLabel, .01) : greaterThan(stateLabel),
+          );
+          final bounds = t.getRect(value);
+          expect(bounds.left, greaterThanOrEqualTo(20));
+          expect(bounds.right, lessThanOrEqualTo(width - 20 + .01));
+          expect(api.reads, 0);
+          expect(t.takeException(), isNull);
+          await t.pumpWidget(const SizedBox());
+          auth.dispose();
+        },
+      );
+    }
+  }
+  testWidgets(
+    'a real zero amount remains valid rather than being called unset',
+    (t) async {
+      final api = ProofTransport(
+        (_) async => pixel,
+        hasProof: false,
+        amount: 0,
+      );
+      final auth = await openProof(t, api, width: 390, scale: 1);
+      await until(t, find.text(money(0, 'EGP')));
+      expect(find.text('لم يُحدد بعد'), findsNothing);
+      expect(find.text('تعذر التحقق من مبلغ الطلب وعملته.'), findsNothing);
+      expect(find.text('عرض الإيصال'), findsNothing);
+      expect(api.reads, 0);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'an invalid priced quote retains its amount and currency warning',
+    (t) async {
+      final api = ProofTransport(
+        (_) async => pixel,
+        hasProof: false,
+        currency: null,
+      );
+      final auth = await openProof(t, api, width: 390, scale: 1);
+      await until(t, find.text('تعذر التحقق من مبلغ الطلب وعملته.'));
+      expect(find.text('لم يُحدد بعد'), findsNothing);
+      expect(find.textContaining('720'), findsNothing);
+      expect(find.byType(EmptyMessage), findsNothing);
+      expect(api.reads, 0);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
   for (final corrupt in [false, true]) {
     testWidgets(
       'enrollment proof recovers and zooms after an image failure, corrupt=$corrupt',

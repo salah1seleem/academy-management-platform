@@ -88,13 +88,14 @@ class NativeEnrollmentPaymentRead extends StatelessWidget {
                     : 'مبلغ الطلب',
                 money(amount, currency),
               ),
+            if (!validAmount)
+              (
+                'المبلغ المطلوب',
+                amount == null && data['subscriptionPlanId'] == null
+                    ? 'لم يُحدد بعد'
+                    : 'تعذر التحقق من مبلغ الطلب وعملته.',
+              ),
           ]),
-          if (!validAmount)
-            EmptyMessage(
-              amount == null && data['subscriptionPlanId'] == null
-                  ? 'لم تُحدد قيمة الدفع لهذا الطلب بعد.'
-                  : 'تعذر التحقق من مبلغ الطلب وعملته.',
-            ),
           if (collected && receipt is String && receipt.isNotEmpty)
             FilledButton(
               onPressed: () => openPage(
@@ -128,19 +129,19 @@ class _PaymentSummary extends StatelessWidget {
   const _PaymentSummary(this.items);
   final List<(String, String)> items;
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final single = MediaQuery.textScalerOf(context).scale(14) > 21;
-      return GCard(
-        child: Wrap(
+  Widget build(BuildContext context) => GCard(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final single = MediaQuery.textScalerOf(context).scale(14) > 21;
+        return Wrap(
           spacing: 12,
           runSpacing: 16,
           children: [
             for (final item in items)
               SizedBox(
                 width: single
-                    ? constraints.maxWidth - 28
-                    : (constraints.maxWidth - 40) / 2,
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - 12) / 2,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -156,8 +157,8 @@ class _PaymentSummary extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 }

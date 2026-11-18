@@ -164,14 +164,14 @@ import hashlib, json, pathlib, sys
 folder = pathlib.Path(sys.argv[1])
 report = json.loads((folder / 'ios-cloud-response.json').read_text())
 proof = report['proofReview']
-expected = {f'IP{i:02}' for i in range(1, 25)} - {'IP20', 'IP22'}
+expected = {f'IP{i:02}' for i in range(1, 26)} - {'IP20', 'IP22'}
 assert set(proof['executedPassed']) == expected
 assert proof['businessWritesAfterFixture'] == []
 assert {row['direction'] for row in proof['gestures']} == {'horizontal', 'vertical', 'diagonal'}
 assert all(row['before'] != row['after'] for row in proof['gestures'])
 assert proof['pinchScale'] > 2
 assert set(proof['successfulAssetHashes']) == {proof['originalPngSha256']}
-assert len(list(folder.glob('phase-iosproof-*.png'))) == 11
+assert len(list(folder.glob('phase-iosproof-*.png'))) == 12
 money = json.loads((folder / 'money-after.json').read_text())
 summary = {'executedAutomated': sorted(expected | {'IP22'}),
            'visualReviewPending': ['IP20'],
