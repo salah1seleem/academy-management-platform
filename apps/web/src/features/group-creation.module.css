@@ -1,0 +1,25 @@
+.workspace :global(.placement-preview) {
+  color: var(--text);
+  background: var(--staff-surface-muted, var(--surface));
+  border-color: var(--border);
+  border-inline-start-color: var(--staff-info, var(--primary));
+}
+
+.workspace :global(.timetable-preview-counts) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace :global(.timetable-preview-counts) p {
+  padding: 12px 8px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.workspace :global(.timetable-preview-counts) strong {
+  color: var(--text);
+}
+
+.workspace :global(.placement-preview) [role="alert"] {
+  color: var(--staff-danger, #8b3340);
+}

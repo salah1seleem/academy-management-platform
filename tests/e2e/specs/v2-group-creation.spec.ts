@@ -1,3 +1,4 @@
+import { formatDateAr } from "../../../apps/web/src/lib/formatters";
 import { expect, test } from "@playwright/test";
 import { creationDayLabel, creationDraft, creationState, fillCreationIdentity, fillCreationSchedule } from "../support/group-creation";
 import { afterDays, assertPlacementContrast, assertPlacementViewport, placementEnrollment, placementId as id, placementRead, placementWrite, serviceIdentity, setPlacementAppearance, type PlacementPlayer } from "../support/placement";
@@ -17,10 +18,20 @@ test("Owner creates one reviewed group after a lost save reply; Guardian receive
   await expect(page.getByRole("heading", { name: "اختر لاعبي الانتظار · اختياري" })).toBeVisible();
   const selected = page.getByRole("checkbox", { name: "اختيار لاعب إنشاء مجموعة تجريبي", exact: true });
   await selected.check();
+  const unpaid = page.getByRole("checkbox", { name: "اختيار لاعب انتظار غير مدفوع تجريبي", exact: true });
+  await unpaid.check();
+  await page.getByRole("button", { name: "معاينة المجموعة كاملة" }).click();
+  await expect(page.getByRole("region", { name: "معاينة إنشاء المجموعة" })).toContainText("لا يوجد استحقاق تدريب سار");
+  await expect(page.getByRole("button", { name: "تأكيد إنشاء المجموعة" })).toBeDisabled();
+  expect(await creationState(page.request, draft.timetable.from)).toEqual(before);
+  await page.screenshot({ path: info.outputPath("group-mixed-batch-rejected.png"), fullPage: true, animations: "disabled" });
+  await page.getByRole("button", { name: "رجوع للخطوة السابقة" }).click();
+  await unpaid.uncheck(); await expect(selected).toBeChecked();
   await page.getByRole("button", { name: "معاينة المجموعة كاملة" }).click();
   const review = page.getByRole("region", { name: "معاينة إنشاء المجموعة" });
   await expect(review).toBeVisible();
-  for (const label of ["حصة فعلية", "لاعب مختار"]) await expect(review.locator(".timetable-preview-counts p").filter({ hasText: label }).locator("strong")).toHaveText("1");
+  await expect(review).toContainText(formatDateAr(draft.timetable.from));
+  for (const label of ["الحصص بعد الحفظ", "اللاعبون المختارون"]) await expect(review.locator(".timetable-preview-counts p").filter({ hasText: label }).locator("strong")).toHaveText("1");
   await expect(page.getByRole("button", { name: "تأكيد إنشاء المجموعة" })).toBeEnabled();
   expect(await creationState(page.request, draft.timetable.from)).toEqual(before);
   for (const width of [390, 1440]) {
@@ -42,7 +53,7 @@ test("Owner creates one reviewed group after a lost save reply; Guardian receive
     else await route.fulfill({ response });
   });
   await page.getByRole("button", { name: "تأكيد إنشاء المجموعة" }).click();
-  await expect(page.getByRole("alert")).toContainText("تعذر تأكيد الحفظ");
+  await expect(page.locator(".group-creation").getByRole("alert")).toContainText("تعذر تأكيد الحفظ");
   await expect(review).toBeVisible();
   await expect(page).toHaveURL(/\/dashboard\/academy\/groups\/new$/);
   expect(writes).toHaveLength(1);
@@ -100,12 +111,12 @@ test("An empty-group preview recovers a read failure, preserves the draft on bac
     else await route.continue();
   });
   await page.getByRole("button", { name: "معاينة المجموعة كاملة" }).click();
-  await expect(page.getByRole("alert")).toContainText("تعذر تحميل نتيجة الطلب. أعد المحاولة.");
+  await expect(page.locator(".group-creation").getByRole("alert")).toContainText("تعذر تحميل نتيجة الطلب. أعد المحاولة.");
   await expect(page.getByRole("heading", { name: "اختر لاعبي الانتظار · اختياري" })).toBeVisible();
   await expect(page.getByRole("button", { name: "تأكيد إنشاء المجموعة" })).toHaveCount(0);
   await page.getByRole("button", { name: "معاينة المجموعة كاملة" }).click();
   const review = page.getByRole("region", { name: "معاينة إنشاء المجموعة" });
-  await expect(review.locator(".timetable-preview-counts p").filter({ hasText: "لاعب مختار" }).locator("strong")).toHaveText("0");
+  await expect(review.locator(".timetable-preview-counts p").filter({ hasText: "اللاعبون المختارون" }).locator("strong")).toHaveText("0");
   await expect(page.getByRole("button", { name: "تأكيد إنشاء المجموعة" })).toBeEnabled();
   await page.getByRole("button", { name: "رجوع للخطوة السابقة" }).click();
   await expect(review).toHaveCount(0);
@@ -116,6 +127,10 @@ test("An empty-group preview recovers a read failure, preserves the draft on bac
   await page.getByRole("button", { name: "رجوع للخطوة السابقة" }).click();
   await expect(page.getByLabel("اسم المجموعة", { exact: true })).toHaveValue(draft.arabicName);
   await expect(page.getByLabel("السعة", { exact: true })).toHaveValue("2");
+  await page.getByRole("button", { name: "متابعة", exact: true }).click();
+  await page.getByRole("button", { name: "متابعة", exact: true }).click();
+  await page.getByRole("button", { name: "معاينة المجموعة كاملة" }).click();
+  await expect(review).toBeVisible();
   await page.getByRole("button", { name: "إلغاء", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/academy\/groups$/);
   expect(await creationState(page.request, draft.timetable.from)).toEqual(before);
@@ -138,7 +153,7 @@ test("Required fields, past dates, missing weekdays and reversed times block the
   const day = page.getByRole("checkbox", { name: creationDayLabel(draft.timetable.days[0]), exact: true });
   await day.uncheck();
   await page.getByRole("button", { name: "متابعة", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("اختر أيام التدريب أولًا");
+  await expect(page.locator(".group-creation").getByRole("alert")).toContainText("اختر أيام التدريب أولًا");
   await day.check();
   await page.getByLabel("من تاريخ", { exact: true }).fill(afterDays(today, -1));
   await page.getByRole("button", { name: "متابعة", exact: true }).click();
@@ -147,8 +162,10 @@ test("Required fields, past dates, missing weekdays and reversed times block the
   await page.getByLabel("من تاريخ", { exact: true }).fill(draft.timetable.from);
   await page.getByRole("combobox", { name: "وقت النهاية — الساعة", exact: true }).selectOption("1");
   await page.getByRole("button", { name: "متابعة", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("اختر وقت نهاية بعد وقت البداية");
+  await expect(page.locator(".group-creation").getByRole("alert")).toContainText("اختر وقت نهاية بعد وقت البداية");
   await page.screenshot({ path: info.outputPath("group-invalid-schedule.png"), fullPage: true, animations: "disabled" });
   expect(candidateReads).toBe(0); expect(writes).toBe(0);
+  await page.getByRole("button", { name: "إلغاء", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/academy\/groups$/);
   expect(await creationState(page.request, draft.timetable.from)).toEqual(before);
 });

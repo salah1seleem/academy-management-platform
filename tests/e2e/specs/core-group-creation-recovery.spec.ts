@@ -1,3 +1,4 @@
+import { mobileDemoToken } from "../support/mobile-demo-session";
 import { expect, test } from "@playwright/test";
 import { creationDraft, creationState, type CreationDraft } from "../support/group-creation";
 import { afterDays, ensurePlacementSession, placementEnrollment, placementId as id, placementRead, placementWrite, serviceIdentity, type PlacementPlayer } from "../support/placement";
@@ -54,13 +55,21 @@ test("Invalid group drafts and an unpaid mixed batch roll back group, schedule a
   for (const role of ["visitor", "coach", "other-academy"] as const) {
     const context = await browser.newContext({ baseURL: info.project.use.baseURL });
     try {
-      if (role !== "visitor") {
-        const email = role === "coach" ? "coach.nogoom@example.test" : "owner.future@example.test";
-        expect((await placementWrite(context.request, "/api/v1/auth/login", { email, password: "Demo-Only-123!" })).status()).toBe(200);
+      let coachHeaders: Record<string, string> | undefined;
+      if (role === "coach") {
+        const token = await mobileDemoToken(context.request, "01000000020", "رفض إنشاء مجموعة من دور المدرب الاصطناعي");
+        coachHeaders = { Authorization: `Bearer ${token}`, "Idempotency-Key": crypto.randomUUID() };
+        const groups = await context.request.get("/api/v1/coach/groups", { headers: coachHeaders });
+        expect(groups.status()).toBe(200); expect((await groups.json()).some((row: { id: string }) => row.id === id(1))).toBe(true);
+      } else if (role === "other-academy") {
+        expect((await placementWrite(context.request, "/api/v1/auth/login", { email: "owner.future@example.test", password: "Demo-Only-123!" })).status()).toBe(200);
       }
       const otherBefore = role === "other-academy" ? await placementRead(context.request, "/api/v1/subscriptions/collections") : null;
       for (const suffix of ["/preview", ""]) {
-        const response = await placementWrite(context.request, `/api/v1/manage/group-creation${suffix}`, { ...draft, fingerprint: "not-issued-to-this-identity" });
+        const body = { ...draft, fingerprint: "not-issued-to-this-identity" };
+        const response = coachHeaders
+          ? await context.request.post(`/api/v1/manage/group-creation${suffix}`, { headers: coachHeaders, data: body })
+          : await placementWrite(context.request, `/api/v1/manage/group-creation${suffix}`, body);
         expect(response.status()).toBe(role === "visitor" ? 401 : role === "coach" ? 403 : 404);
         expect(await response.text()).not.toContain("لاعب إنشاء مجموعة تجريبي");
       }
