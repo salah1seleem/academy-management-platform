@@ -32,5 +32,11 @@
     "specs": "/(core-placement-recovery|v2-group-placement|v2-group-transfers|v2-registration-formats|v2-session-transfers)\\.spec\\.ts$",
     "config": "regression",
     "provider_quarantine": "false"
+  },
+  {
+    "group": "group-creation",
+    "specs": "/(core-group-creation-recovery|v2-group-creation)\\.spec\\.ts$",
+    "config": "regression",
+    "provider_quarantine": "false"
   }
 ]

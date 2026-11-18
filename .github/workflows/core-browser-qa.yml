@@ -15,6 +15,7 @@ on:
           - football-staff-and-receipts
           - staff-verification
           - placement-and-transfers
+          - group-creation
   push:
     branches: ["codex/qa-core-release"]
 
@@ -78,7 +79,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install private media inspection tools
-        if: ${{ matrix.group != 'placement-and-transfers' }}
+        if: ${{ matrix.group != 'placement-and-transfers' && matrix.group != 'group-creation' }}
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: dotnet tool restore
       - run: dotnet build apps/api/src/Academy.Api --configuration Release -m:1
