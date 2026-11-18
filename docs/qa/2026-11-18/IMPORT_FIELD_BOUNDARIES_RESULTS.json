@@ -1,0 +1,520 @@
+{
+  "source": "12434a4081f2220516a69ccf6644d208363b8c9c",
+  "coreRun": 44234750650,
+  "coreJob": 134568175878,
+  "coreJourneysPassed": 3,
+  "webRun": 44234683987,
+  "webJob": 134567847990,
+  "webTestsPassed": 1390,
+  "webFilesPassed": 193,
+  "fixtureChecksPassed": 15,
+  "written": 46,
+  "executedInDeclaredLayers": 46,
+  "passedInDeclaredLayers": 46,
+  "blockedInThisSlice": 0,
+  "artifactId": 14396923550,
+  "artifactSha256": "b44a7c20c38d62c7f06f1d21451ea33b5ac241d7a7ee9138b2f1908a1e2601ce",
+  "newPlayers": 50,
+  "uniqueGuardians": 25,
+  "receiptCountBeforeAndAfter": 20,
+  "receiptTotalBeforeAndAfter": 11500,
+  "cases": [
+    {
+      "id": "IF-R01",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "A23",
+      "issueRow": 23,
+      "field": "كود اللاعب *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL22",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R02",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "B2",
+      "issueRow": 2,
+      "field": "الاسم الأول *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL01",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R03",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "C3",
+      "issueRow": 3,
+      "field": "باقي الاسم *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL02",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R04",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "D5",
+      "issueRow": 5,
+      "field": "هاتف ولي الأمر كنص *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL04",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R05",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "E4",
+      "issueRow": 4,
+      "field": "الميلاد yyyy-MM-dd *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL03",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R06",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "H6",
+      "issueRow": 6,
+      "field": "كود الفرع *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL05",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R07",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "I7",
+      "issueRow": 7,
+      "field": "كود الرياضة *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL06",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R08",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "J8",
+      "issueRow": 8,
+      "field": "كود المجموعة *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL07",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R09",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "K9",
+      "issueRow": 9,
+      "field": "كود الباقة *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL08",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R10",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "L10",
+      "issueRow": 10,
+      "field": "بداية الاشتراك yyyy-MM-dd *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL09",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-R11",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "Q11",
+      "issueRow": 11,
+      "field": "العملة *",
+      "messages": [
+        "حقل مطلوب."
+      ],
+      "correctedRecord": "PL10",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D01",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "D13",
+      "issueRow": 13,
+      "field": "هاتف ولي الأمر كنص *",
+      "messages": [
+        "اكتب رقم موبايل مصري صالحًا في خلية نصية، مثل 01012345678 أو ‎+201012345678."
+      ],
+      "correctedRecord": "PL12",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D02",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "D15",
+      "issueRow": 15,
+      "field": "هاتف ولي الأمر كنص *",
+      "messages": [
+        "اكتب رقم موبايل مصري صالحًا في خلية نصية، مثل 01012345678 أو ‎+201012345678."
+      ],
+      "correctedRecord": "PL14",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D03",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "D17",
+      "issueRow": 17,
+      "field": "هاتف ولي الأمر كنص *",
+      "messages": [
+        "اكتب رقم موبايل مصري صالحًا في خلية نصية، مثل 01012345678 أو ‎+201012345678."
+      ],
+      "correctedRecord": "PL16",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D04",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "D19",
+      "issueRow": 19,
+      "field": "هاتف ولي الأمر كنص *",
+      "messages": [
+        "اكتب رقم موبايل مصري صالحًا في خلية نصية، مثل 01012345678 أو ‎+201012345678."
+      ],
+      "correctedRecord": "PL18",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D05",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "D21",
+      "issueRow": 21,
+      "field": "هاتف ولي الأمر كنص *",
+      "messages": [
+        "اكتب رقم موبايل مصري صالحًا في خلية نصية، مثل 01012345678 أو ‎+201012345678."
+      ],
+      "correctedRecord": "PL20",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D06",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "E12",
+      "issueRow": 12,
+      "field": "الميلاد yyyy-MM-dd *",
+      "messages": [
+        "أدخل تاريخ ميلاد صحيحًا بصيغة سنة-شهر-يوم."
+      ],
+      "correctedRecord": "PL11",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D07",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "L14",
+      "issueRow": 14,
+      "field": "بداية الاشتراك yyyy-MM-dd *",
+      "messages": [
+        "أدخل تاريخ بداية صحيحًا بصيغة سنة-شهر-يوم."
+      ],
+      "correctedRecord": "PL13",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D08",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "E16",
+      "issueRow": 16,
+      "field": "بداية الاشتراك yyyy-MM-dd *",
+      "messages": [
+        "بداية الاشتراك تسبق تاريخ الميلاد."
+      ],
+      "correctedRecord": "PL15",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D09",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "F18",
+      "issueRow": 18,
+      "field": "ذكر أو أنثى",
+      "messages": [
+        "اختر ذكر أو أنثى، أو اترك الحقل فارغًا."
+      ],
+      "correctedRecord": "PL17",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D10",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "G20",
+      "issueRow": 20,
+      "field": "الصورة الرمزية اختياري",
+      "messages": [
+        "اختر ذكر أو أنثى أو محايد، أو اترك الحقل فارغًا."
+      ],
+      "correctedRecord": "PL19",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-D11",
+      "status": "passed",
+      "layer": "browser-api-persistence",
+      "cell": "A22",
+      "issueRow": 22,
+      "field": "كود اللاعب *",
+      "messages": [
+        "اكتب كودًا نصيًا ثابتًا حتى 24 حرفًا لاتينيًا أو رقمًا، مثل PL01."
+      ],
+      "correctedRecord": "PL21",
+      "evidence": [
+        "raw-mixed-preview.json",
+        "field-import-reconciliation.json"
+      ]
+    },
+    {
+      "id": "IF-H01",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H02",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H03",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H04",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H05",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H06",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H07",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H08",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H09",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-H10",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F01",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F02",
+      "status": "passed",
+      "layer": "component",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F03",
+      "status": "passed",
+      "layer": "component",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F04",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F05",
+      "status": "passed",
+      "layer": "component",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F06",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F07",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F08",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F09",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-F10",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-U01",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-U02",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-U03",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    },
+    {
+      "id": "IF-U04",
+      "status": "passed",
+      "layer": "declared-browser-api-component-or-visual-layer",
+      "evidence": "See per-case evidence table in IMPORT_FIELD_BOUNDARIES_AR.md"
+    }
+  ],
+  "scope": "Chromium CI and component checks only; no staging, native app or whole-module closure"
+}
