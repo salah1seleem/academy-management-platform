@@ -93,3 +93,12 @@ export function readImportCells(input: Buffer, sheet: string): Map<string, Fixtu
     return [attrs.r, { value, isText: ["s", "str", "inlineStr"].includes(attrs.t) }];
   }));
 }
+
+// Keep field validation independent of seeded plans that deliberately reuse
+// a sample name with different commercial terms. Only the copied name changes.
+export function isolateImportFieldPlans(input: Buffer) {
+  const cells = readImportCells(input, "الباقات");
+  const names = [...cells].filter(([cell]) => /^B\d+$/.test(cell) && Number(cell.slice(1)) > 1);
+  if (!names.length) throw new Error("Missing synthetic plan names");
+  return editImportCells(input, names.map(([cell, data]) => ({ sheet: "الباقات", cell, value: `حقول الاستيراد — ${data.value}` })));
+}

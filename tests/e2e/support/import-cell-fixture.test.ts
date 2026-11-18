@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { editImportCells, readImportCells } from "./import-cell-fixture.ts";
+import { editImportCells, isolateImportFieldPlans, readImportCells } from "./import-cell-fixture.ts";
 import { ownImportWorkbook } from "./import-workbook.ts";
 
 const source = readFileSync(new URL("../../../apps/api/src/Academy.Api/Assets/academy-completed-sample.xlsx", import.meta.url));
@@ -84,4 +84,20 @@ test("edits an omitted blank only in an existing row and header column", () => {
   for (const [cell, data] of readImportCells(omitted, "اللاعبون")) assert.deepEqual(after.get(cell), data);
   assert.throws(() => editImportCells(omitted, [{ sheet: "اللاعبون", cell: "ZZ24", value: "x" }]), /Missing synthetic cell/);
   assert.throws(() => editImportCells(omitted, [{ sheet: "اللاعبون", cell: "F999", value: "x" }]), /Missing synthetic cell/);
+});
+
+test("isolates copied plan names while retaining commercial terms, metadata and all other sheets", () => {
+  const isolated = isolateImportFieldPlans(source);
+  const before = readImportCells(source, "الباقات"), after = readImportCells(isolated, "الباقات");
+  let count = 0;
+  for (const [cell, data] of before) {
+    if (/^B\d+$/.test(cell) && Number(cell.slice(1)) > 1) { assert.equal(after.get(cell)?.value, `حقول الاستيراد — ${data.value}`); count++; }
+    else assert.deepEqual(after.get(cell), data);
+  }
+  assert.ok(count > 0); assert.equal(digest(source), originalHash);
+  const previous = entries(source), next = entries(isolated);
+  const changed = [...previous].filter(([name, bytes]) => !bytes.equals(next.get(name)!));
+  assert.equal(changed.length, 1);
+  assert.match(changed[0][0], /^xl\/worksheets\/sheet\d+\.xml$/);
+  assert.ok(next.get(changed[0][0])!.toString().includes("حقول الاستيراد"));
 });
