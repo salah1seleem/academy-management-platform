@@ -44,3 +44,44 @@ test("also reads and edits default-namespace output from the server writer", () 
   const changed = editImportCells(plain, [{ sheet: "اللاعبون", cell: "D2", value: "0101234567" }]);
   assert.deepEqual(readImportCells(changed, "اللاعبون").get("D2"), { value: "0101234567", isText: true });
 });
+
+function serverDates(serial: number, date1904 = false, format = 164) {
+  return ownImportWorkbook(source, {}, (name, bytes) => {
+    let xml = bytes.toString();
+    if (name === "xl/styles.xml") {
+      xml = xml.replace(/(<x:styleSheet[^>]*>)/, '$1<x:numFmts count="1"><x:numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></x:numFmts>')
+        .replace(/<x:cellXfs count="6">/, '<x:cellXfs count="7">')
+        .replace('</x:cellXfs>', `<x:xf numFmtId="${format}"/></x:cellXfs>`);
+    }
+    if (name === "xl/workbook.xml" && date1904) xml = xml.replace(/(<x:workbook[^>]*>)/, '$1<x:workbookPr date1904="1"/>');
+    if (name === "xl/worksheets/sheet2.xml") xml = xml.replace(/<x:c\b[^>]*\br="E2"[^>]*>[\s\S]*?<\/x:c>/, `<x:c r="E2" s="6"><x:v>${serial}</x:v></x:c>`);
+    return Buffer.from(xml);
+  });
+}
+test("reads the server's styled numeric date while preserving numeric phone types", () => {
+  const cells = readImportCells(serverDates(46296), "اللاعبون");
+  assert.deepEqual(cells.get("E2"), { value: "2026-10-01", isText: false });
+  const numeric = editImportCells(serverDates(46296), [{ sheet: "اللاعبون", cell: "D2", value: "1012345678", isText: false }]);
+  assert.deepEqual(readImportCells(numeric, "اللاعبون").get("D2"), { value: "1012345678", isText: false });
+});
+test("reads built-in date formats and the workbook's 1904 date epoch", () => {
+  assert.equal(readImportCells(serverDates(46296, false, 14), "اللاعبون").get("E2")?.value, "2026-10-01");
+  assert.equal(readImportCells(serverDates(44834, true), "اللاعبون").get("E2")?.value, "2026-10-01");
+});
+test("restores a styled numeric date as the intended textual date without changing another cell", () => {
+  const dated = serverDates(46296), before = readImportCells(dated, "اللاعبون");
+  const repaired = editImportCells(dated, [{ sheet: "اللاعبون", cell: "E2", value: before.get("E2")!.value }]);
+  const after = readImportCells(repaired, "اللاعبون");
+  assert.deepEqual(after.get("E2"), { value: "2026-10-01", isText: true });
+  for (const [cell, data] of before) if (cell !== "E2") assert.deepEqual(after.get(cell), data);
+});
+test("edits an omitted blank only in an existing row and header column", () => {
+  const omitted = ownImportWorkbook(source, {}, (name, bytes) => name === "xl/worksheets/sheet2.xml" ? Buffer.from(bytes.toString().replace(/<x:c\b[^>]*\br="F24"[^>]*>[\s\S]*?<\/x:c>/, '')) : bytes);
+  assert.equal(readImportCells(omitted, "اللاعبون").has("F24"), false);
+  const changed = editImportCells(omitted, [{ sheet: "اللاعبون", cell: "F24", value: "" }]);
+  const after = readImportCells(changed, "اللاعبون");
+  assert.deepEqual(after.get("F24"), { value: "", isText: true });
+  for (const [cell, data] of readImportCells(omitted, "اللاعبون")) assert.deepEqual(after.get(cell), data);
+  assert.throws(() => editImportCells(omitted, [{ sheet: "اللاعبون", cell: "ZZ24", value: "x" }]), /Missing synthetic cell/);
+  assert.throws(() => editImportCells(omitted, [{ sheet: "اللاعبون", cell: "F999", value: "x" }]), /Missing synthetic cell/);
+});

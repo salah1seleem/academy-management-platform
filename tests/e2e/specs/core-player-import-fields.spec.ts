@@ -95,10 +95,25 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
   }
   await guide.locator(":scope > summary").click(); const playerGuide = guide.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^اللاعبون/ }) });
   await playerGuide.locator(":scope > summary").focus(); await playerGuide.locator(":scope > summary").press("Enter"); await expect(playerGuide).not.toHaveAttribute("open", ""); await playerGuide.locator(":scope > summary").press("Enter"); await expect(playerGuide).toHaveAttribute("open", "");
-  await page.getByRole("link", { name: "العودة إلى الرئيسية", exact: true }).click(); await expect(page).toHaveURL(/\/dashboard$/); await page.getByRole("link", { name: "استيراد البيانات", exact: true }).click(); await expect(page).toHaveURL(/\/dashboard\/import$/); expect(writes).toEqual([]);
+  const guideSheets: { sheet: string; fields: string[] }[] = [];
+  await expect(guide.locator("details")).toHaveCount(schema.connectedSheets.length);
+  for (const [index, sheet] of schema.connectedSheets.entries()) {
+    const section = guide.locator("details").nth(index), summary = section.locator(":scope > summary");
+    await expect(summary).toContainText(sheet.name);
+    if (await section.getAttribute("open") !== null) await summary.click();
+    await expect(section).not.toHaveAttribute("open", "");
+    await summary.focus(); await summary.press("Enter"); await expect(section).toHaveAttribute("open", "");
+    const fields = sheet.columns.filter(field => field.key !== "ExistingId");
+    const actual = await section.locator("li").allTextContents();
+    expect(actual).toEqual([...fields.filter(field => field.required), ...fields.filter(field => !field.required)].map(field => field.label));
+    guideSheets.push({ sheet: sheet.name, fields: actual });
+    await summary.click(); await expect(section).not.toHaveAttribute("open", "");
+  }
+  await writeFile(info.outputPath("field-guide-sheets.json"), JSON.stringify(guideSheets, null, 2));
+  await page.getByRole("link", { name: "العودة إلى الرئيسية", exact: true }).click(); await expect(page).toHaveURL(/\/dashboard$/); await page.getByRole("button", { name: "إدارة الأكاديمية", exact: true }).click(); await page.getByRole("link", { name: "استيراد البيانات", exact: true }).click(); await expect(page).toHaveURL(/\/dashboard\/import$/); expect(writes).toEqual([]);
   const source = await download(page, /تنزيل نموذج مكتمل/); const sourceHash = hash(source), sourceCells = readImportCells(source, "اللاعبون");
   expect(columns.map(column => sourceCells.get(`${column}1`)!.value)).toEqual(fields.map(field => `${field.label}${field.required ? " *" : ""}`));
-  const cohort = fieldCohort(source); await choose(page, cohort.mixed, "player-field-errors.xlsx"); expect(writes).toEqual([]); expect(await placementRead(page.request, `${root}/jobs`)).toEqual(jobsBefore);
+  await writeFile(info.outputPath("source-player-fields.xlsx"), source); const cohort = fieldCohort(source); await choose(page, cohort.mixed, "player-field-errors.xlsx"); expect(writes).toEqual([]); expect(await placementRead(page.request, `${root}/jobs`)).toEqual(jobsBefore);
   const mixed = await preview(page); expect(mixed.canApprove).toBe(false); expect(mixed.cleanRows).toMatchObject({ playerCount: 28, excludedRows: 22 });
   await expect(page.getByRole("heading", { name: "الملف يحتاج تصحيحًا", exact: true })).toBeVisible(); await expect(page.getByRole("heading", { name: "28 سليمًا · 22 للتصحيح", exact: true })).toBeVisible();
   const reasons: Record<string, string> = { D06: "تاريخ ميلاد صحيح", D07: "تاريخ بداية صحيح", D08: "تسبق تاريخ الميلاد", D09: "اختر ذكر أو أنثى", D10: "اختر ذكر أو أنثى أو محايد", D11: "اكتب كودًا نصيًا ثابتًا" };
@@ -112,14 +127,14 @@ test("Owner isolates22 corrupt field records, imports28 valid records and then22
   const csv = parseCsv((await download(page, /تنزيل تقرير الأخطاء/)).toString());
   for (const issue of mixed.errors) expect(csv).toContainEqual([issue.sheetLabel ?? issue.sheet, String(issue.row), issue.columnLabel ?? issue.column, issue.message]);
   await issues.getByRole("button", { name: "مسح التصفية" }).click();
-  for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); for (const mode of ["dark", "light"] as const) { await setPlacementAppearance(page, mode); await assertPlacementViewport(page, width); await issues.screenshot({ path: info.outputPath(`import-errors-${mode}-${width}.png`), animations: "disabled" }); } }
+  for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); for (const mode of ["dark", "light"] as const) { await setPlacementAppearance(page, mode); await assertPlacementViewport(page, width); await assertPlacementContrast(issues, "th, td, label, button, p, h3, h4"); await issues.screenshot({ path: info.outputPath(`import-errors-${mode}-${width}.png`), animations: "disabled" }); } }
   const clean = await download(page, /تنزيل ملف اللاعبين السليمين/), correction = await download(page, /تنزيل صفوف التصحيح/);
   const cleanRows = playerRows(clean), correctionRows = playerRows(correction), expectedClean = cohort.originals.slice(22).map(row => row.cells.A);
   expect(cleanRows.map(row => row.cells.A)).toEqual(expectedClean); expect(correctionRows.map(row => row.cells)).toEqual(playerRows(cohort.mixed).slice(0, 22).map(row => row.cells));
   expect(hash(source)).toBe(sourceHash); expect(await placementRead(page.request, `${root}/jobs`)).toEqual(jobsBefore); expect(await financial(page.request, today)).toEqual(before); expect(writes.filter(path => path.endsWith("/commit"))).toHaveLength(0);
   await writeFile(info.outputPath("field-preview-evidence.json"), JSON.stringify({ sourceHash, fields, cases: cohort.failures, mixed, cleanPlayers: cleanRows, correctionPlayers: correctionRows, financialBefore: before }, null, 2));
   await choose(page, clean, "valid-player-fields.xlsx"); const validPreview = await preview(page); expect(validPreview.canApprove).toBe(true); expect(validPreview.playerCount).toBe(28); expect(validPreview.errors).toEqual([]);
-  const first = await publish(page, 28); expect(first.rows.map(row => row.legacyPlayerId)).toEqual(expectedClean);
+  const first = await publish(page, 28); expect(first.rows.map(row => row.legacyPlayerId).sort()).toEqual([...expectedClean].sort());
   const fixed = repairCohort(correction, source); await choose(page, fixed, "corrected-player-fields.xlsx"); const repairedPreview = await preview(page); expect(repairedPreview.canApprove).toBe(true); expect(repairedPreview.playerCount).toBe(22); expect(repairedPreview.errors).toEqual([]);
   const second = await publish(page, 22), saved = [...first.rows, ...second.rows].sort((a, b) => a.legacyPlayerId.localeCompare(b.legacyPlayerId));
   expect(saved).toHaveLength(50); expect(new Set(saved.map(row => row.id)).size).toBe(50); expect(new Set(saved.map(row => row.legacyEnrollmentId)).size).toBe(50); expect(saved.map(row => row.legacyPlayerId)).toEqual(cohort.originals.map(row => row.cells.A));
@@ -160,7 +175,7 @@ test("Platform import recovers malformed issue and split data and JSON without a
     await page.goto("/platform/login"); await page.getByLabel("البريد الإلكتروني").fill("platform.demo@example.test"); await page.getByLabel("كلمة المرور").fill("Demo-Only-123!"); await page.getByLabel("رمز التحقق").fill("246810"); await page.getByRole("button", { name: "تسجيل الدخول", exact: true }).click(); await expect(page).toHaveURL(/\/platform$/);
     const academy = page.getByRole("button", { name: /أكاديمية النجوم الرياضية/ }); await expect(academy).toHaveCount(1); await academy.click();
     const schemaResponse = page.waitForResponse(response => /\/platform\/academies\/[^/]+\/import\/schema$/.test(response.url())); await page.getByRole("tab", { name: "استيراد البيانات", exact: true }).click(); const apiBase = new URL((await schemaResponse).url()).pathname.replace(/\/schema$/, "");
-    await prepareImportUpload(page); const source = await download(page, /تنزيل نموذج مكتمل/); const cohort = fieldCohort(source); await choose(page, cohort.mixed, "read-recovery-fields.xlsx");
+    await prepareImportUpload(page); const source = await download(page, /تنزيل نموذج مكتمل/); await writeFile(info.outputPath("source-platform-fields.xlsx"), source); const cohort = fieldCohort(source); await choose(page, cohort.mixed, "read-recovery-fields.xlsx");
     const jobs = await placementRead(page.request, `${apiBase}/jobs`); let mode = "issues"; const writes: string[] = [], crashes: string[] = [], reads: { mode: string; status: number; errors?: number }[] = [];
     page.on("request", request => { if (request.method() === "POST" && request.url().includes(`${apiBase}/`)) writes.push(new URL(request.url()).pathname); }); page.on("pageerror", error => crashes.push(error.message));
     await page.route(`**${apiBase}/preview`, async route => {

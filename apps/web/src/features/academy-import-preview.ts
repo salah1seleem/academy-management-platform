@@ -10,7 +10,7 @@ const optional = (value: unknown, valid: (value: unknown) => boolean) => value =
 const list = (value: unknown, valid: (value: unknown) => boolean) => Array.isArray(value) && value.every(valid);
 
 function issue(value: unknown) {
-  return object(value) && text(value.sheet) && count(value.row) && text(value.column) && text(value.message)
+  return object(value) && text(value.sheet) && count(value.row) && typeof value.column === "string" && text(value.message)
     && optional(value.sheetLabel, text) && optional(value.columnLabel, text);
 }
 function row(value: unknown) {
@@ -26,10 +26,12 @@ function clean(value: unknown) {
 // Validate the read contract before rendering or offering a financial/identity write.
 // rows may be a bounded preview, so its length is not the total registration count.
 export function validImportPreview(value: unknown): boolean {
-  if (!object(value) || !["schemaVersion", "fileHash", "referenceStamp", "sourceSystem"].every(key => text(value[key]))
-    || !date(value.cutoffDate) || !["rowCount", "playerCount", "householdCount", "financiallyIncomplete"].every(key => count(value[key]))
+  if (!object(value) || !["schemaVersion", "fileHash", "referenceStamp"].every(key => text(value[key]))
+    || !optional(value.sourceSystem, source => typeof source === "string") || !optional(value.cutoffDate, date)
+    || !["rowCount", "playerCount", "householdCount", "financiallyIncomplete"].every(key => count(value[key]))
     || typeof value.canApprove !== "boolean" || !list(value.errors, issue) || !list(value.rows, row)
     || value.canApprove && (value.errors as unknown[]).length > 0 || !optional(value.cleanRows, clean)) return false;
+  if (value.canApprove && (!text(value.sourceSystem) || !date(value.cutoffDate))) return false;
   if (!["guardianCount", "guardianRelationships", "coachAssignments", "tournamentParticipations", "historicalPayments"].every(key => optional(value[key], count))) return false;
   if (!optional(value.historicalPaymentTotal, amount => typeof amount === "number" && Number.isFinite(amount) && amount >= 0)
     || !optional(value.historicalPaymentCurrency, text)) return false;

@@ -11,11 +11,14 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it.each([
   { name: "null issue", data: { ...split, errors: [null] } },
   { name: "missing issue field", data: { ...split, errors: [{ sheet: "اللاعبون", row: 3, message: "حقل مطلوب." }] } },
+  { name: "invalid issue column type", data: { ...split, errors: [{ ...issue, column: 3 }] } },
   { name: "invalid issue row", data: { ...split, errors: [{ ...issue, row: "3" }] } },
   { name: "negative row count", data: { ...report, rowCount: -1 } },
   { name: "fractional player count", data: { ...report, playerCount: 1.5 } },
   { name: "text financial count", data: { ...report, financiallyIncomplete: "0" } },
   { name: "negative household count", data: { ...report, householdCount: -1 } },
+  { name: "approved missing source", data: { ...report, sourceSystem: null } },
+  { name: "approved missing cutoff", data: { ...report, cutoffDate: null } },
   { name: "string approval flag", data: { ...report, canApprove: "true" } },
   { name: "approval with errors", data: { ...report, errors: [issue] } },
   { name: "negative clean count", data: { ...split, cleanRows: { playerCount: -1, excludedRows: 1 } } },
@@ -48,4 +51,35 @@ it.each([
   fireEvent.click(screen.getByRole("button", { name: "متابعة لفحص الملف" }));
   expect(await screen.findByRole("heading", { name: "اكتملت المعاينة دون أخطاء" })).toBeVisible();
   expect(writes).toEqual(["/api/v1/people/import/preview", "/api/v1/people/import/preview"]);
+});
+
+it("preserves legitimate metadata rejection details when source and cutoff are unknown", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/jobs")) return Response.json([]);
+    if (path.endsWith("/schema")) return Response.json({ connectedSheets: [], maxRows: 1000, maxFileBytes: 5242880 });
+    if (path.endsWith("/csrf")) return Response.json({ token: "test-csrf" });
+    expect(path.endsWith("/preview")).toBe(true); expect(init?.method).toBe("POST");
+    return Response.json({ ...report, sourceSystem: null, cutoffDate: null, canApprove: false, rows: [], errors: [{ sheet: "Metadata", sheetLabel: "إعداد الملف", row: 1, column: "SourceSystem", columnLabel: "كود المصدر", message: "كود المصدر مطلوب." }] });
+  }));
+  render(<AcademyImport />); fireEvent.change(screen.getByLabelText("ملف بيانات الأكاديمية"), { target: { files: [new File(["synthetic"], "missing-metadata.xlsx")] } }); fireEvent.click(screen.getByRole("button", { name: "متابعة لفحص الملف" }));
+  expect(await screen.findByRole("heading", { name: "الملف يحتاج تصحيحًا" })).toBeVisible(); expect(screen.getByText("كود المصدر مطلوب.")).toBeVisible(); expect(screen.queryByText("تعذر قراءة نتيجة الفحص.")).not.toBeInTheDocument(); expect(screen.queryByRole("button", { name: "اعتماد وبدء الاستيراد" })).not.toBeInTheDocument();
+});
+
+it("preserves a legitimate sheet-header rejection with an empty column key", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/jobs")) return Response.json([]);
+    if (path.endsWith("/schema")) return Response.json({ connectedSheets: [], maxRows: 1000, maxFileBytes: 5242880 });
+    if (path.endsWith("/csrf")) return Response.json({ token: "test-csrf" });
+    expect(path.endsWith("/preview")).toBe(true);
+    return Response.json({ ...report, canApprove: false, rows: [], errors: [{ sheet: "Enrollments", sheetLabel: "التسجيلات", row: 1, column: "", columnLabel: "بنية الملف", message: "عناوين الأعمدة لا تطابق نسخة القالب." }] });
+  }));
+  render(<AcademyImport />);
+  fireEvent.change(screen.getByLabelText("ملف بيانات الأكاديمية"), { target: { files: [new File(["synthetic"], "invalid-headers.xlsx")] } });
+  fireEvent.click(screen.getByRole("button", { name: "متابعة لفحص الملف" }));
+  expect(await screen.findByRole("heading", { name: "الملف يحتاج تصحيحًا" })).toBeVisible();
+  expect(screen.getByText("عناوين الأعمدة لا تطابق نسخة القالب.")).toBeVisible();
+  expect(screen.getByRole("table", { name: "مشكلات الاستيراد" })).toHaveTextContent("بنية الملف");
+  expect(screen.queryByRole("button", { name: "اعتماد وبدء الاستيراد" })).not.toBeInTheDocument();
 });
