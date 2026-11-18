@@ -54,8 +54,8 @@ it('keeps a failed private command draft and reuses its request ID, then shows t
 it('closed cases allow explicit reopen only and show a bounded, escaped private history',async()=>{
   global.fetch=vi.fn(async()=>Response.json({...item,version:4,status:'Closed',ownerResponse:'رد سابق محفوظ',historyHasMore:true,history:[{id:'c1',action:'Transition',fromStatus:'Resolved',toStatus:'Closed',internalNote:'<img src=x onerror=alert(1)>',createdAtUtc:'2026-10-19T07:00:00Z'}]})) as typeof fetch;
   render(<GuardianFeedbackDetail id="f1"/>);await screen.findByText(item.message);
-  openTab('الرد والمتابعة'); expect(screen.getByRole('option',{name:'أعيد فتحها'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'إرسال الرد وحل الملاحظة'})).not.toBeInTheDocument();
-  openTab('السجل'); expect(screen.getByText('توجد تحديثات أقدم غير معروضة؛ لم تُحذف.')).toBeVisible();expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  openTab('الرد والمتابعة'); expect(await screen.findByRole('option',{name:'أعيد فتحها'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'إرسال الرد وحل الملاحظة'})).not.toBeInTheDocument();
+  openTab('السجل'); expect(await screen.findByText('توجد تحديثات أقدم غير معروضة؛ لم تُحذف.')).toBeVisible();expect(screen.queryByRole('img')).not.toBeInTheDocument();
 });
 
 it('preserves an unsent reply across tabs and never submits on tab navigation',async()=>{

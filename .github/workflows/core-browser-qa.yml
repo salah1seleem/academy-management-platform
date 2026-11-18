@@ -121,6 +121,9 @@ jobs:
         env:
           API_INTERNAL_URL: http://127.0.0.1:5190
         run: npm run build:web
+      - name: Verify bounded import cell fixtures
+        if: ${{ matrix.group == 'payments-and-import' }}
+        run: node --experimental-strip-types --test tests/e2e/support/import-cell-fixture.test.ts
       - name: Run core browser journeys
         env:
           CORE_BROWSER_CONFIG: ${{ matrix.config }}

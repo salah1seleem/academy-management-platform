@@ -4,7 +4,7 @@ import { inflateRawSync } from "node:zlib";
 // exact shared-string values so a rehearsal owns its groups/source/phone;
 // schema, reference stamp and historical financial data remain unchanged.
 // No spreadsheet library, formulas, application endpoint or fixture reset.
-export function ownImportWorkbook(input: Buffer, replacements: Record<string, string>): Buffer {
+export function ownImportWorkbook(input: Buffer, replacements: Record<string, string>, transform?: (name: string, data: Buffer) => Buffer): Buffer {
   const end = input.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   if (end < 0) throw new Error("Missing synthetic ZIP directory");
   let directory = input.readUInt32LE(end + 16), offset = 0;
@@ -24,6 +24,7 @@ export function ownImportWorkbook(input: Buffer, replacements: Record<string, st
       for (const [from, to] of Object.entries(replacements)) content = content.replaceAll(`>${xml(from)}</t>`, `>${xml(to)}</t>`);
       data = Buffer.from(content);
     }
+    if (transform) data = transform(name.toString(), data);
     let crc = 0xffffffff;
     for (const byte of data) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); }
     crc = (crc ^ 0xffffffff) >>> 0;
