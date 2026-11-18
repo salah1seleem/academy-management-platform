@@ -32,6 +32,8 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+      - name: Verify runner failure propagation
+        run: python3 scripts/qa/test_ios_runner_exit.py
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json

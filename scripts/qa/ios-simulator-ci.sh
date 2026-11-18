@@ -31,6 +31,11 @@ simulator=''
 api_pid=''
 cleanup() {
   local status=$?
+  # macOS Bash 3.2 can report zero to EXIT for an unset-variable abort.
+  # A successful suite must have written its final completion marker.
+  if [[ "$status" == 0 && ! -s "$qa_dir/evidence/suite-completed.txt" ]]; then
+    status=1
+  fi
   trap - EXIT
   set +e
   if [[ -n "$simulator" ]]; then
