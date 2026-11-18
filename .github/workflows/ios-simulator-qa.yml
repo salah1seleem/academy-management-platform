@@ -83,7 +83,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           flutter analyze lib/features/shared/payment_proof_image.dart integration_test/cloud_enrollment_proof_test.dart test/enrollment_payment_source_context_test.dart
-          flutter test test/enrollment_payment_source_context_test.dart
+          flutter test test/enrollment_payment_source_context_test.dart test/approved_native_product_orders_test.dart
       - name: Exercise selected suite on one iOS simulator
         if: inputs.checks_only != true
         env:

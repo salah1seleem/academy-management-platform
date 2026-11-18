@@ -312,33 +312,76 @@ void main() {
       await zoom();
       expect(api.imageReads, imageReads);
       passed('IP04');
-      final matrix = viewer().transformationController!.value.clone();
+      final gestures = <Json>[];
+      for (final direction in <String, Offset>{
+        'horizontal': const Offset(12, 0),
+        'vertical': const Offset(0, -8),
+        'diagonal': const Offset(12, -8),
+      }.entries) {
+        if (gestures.isNotEmpty) {
+          await reach(find.text('الحجم الأصلي'));
+          await t.tap(find.text('الحجم الأصلي').hitTestable());
+          await t.pumpAndSettle();
+          await zoom();
+        }
+        final target = find.byType(InteractiveViewer);
+        await t.ensureVisible(target);
+        await t.pumpAndSettle();
+        expect(viewer().panEnabled, true);
+        final matrix = viewer().transformationController!.value.clone();
+        final scroll = t
+            .state<ScrollableState>(find.byType(Scrollable).last)
+            .position;
+        final scrollBefore = scroll.pixels;
+        final touch = await t.startGesture(t.getCenter(target));
+        for (var frame = 0; frame < 8; frame++) {
+          await touch.moveBy(direction.value);
+          await t.pump(const Duration(milliseconds: 32));
+        }
+        await touch.up();
+        await t.pumpAndSettle();
+        final after = viewer().transformationController!.value;
+        debugPrint(
+          'IOS-PROOF pan ${direction.key} before=$matrix after=$after scrollBefore=$scrollBefore scrollAfter=${scroll.pixels}',
+        );
+        if (after == matrix) await capture('pan-failed-${direction.key}');
+        expect(after, isNot(matrix));
+        expect(after.getMaxScaleOnAxis(), 2);
+        expect(api.imageReads, imageReads);
+        gestures.add({
+          'direction': direction.key,
+          'before': matrix.storage.toList(),
+          'after': after.storage.toList(),
+          'scrollBefore': scrollBefore,
+          'scrollAfter': scroll.pixels,
+        });
+      }
+      await capture('panned');
       final target = find.byType(InteractiveViewer);
-      await t.ensureVisible(target);
-      await t.pumpAndSettle();
-      expect(viewer().panEnabled, true);
-      final scroll = t
-          .state<ScrollableState>(find.byType(Scrollable).last)
-          .position;
-      final scrollBefore = scroll.pixels;
-      final touch = await t.startGesture(t.getCenter(target));
+      final center = t.getCenter(target);
+      final upper = await t.startGesture(
+        center - const Offset(0, 40),
+        pointer: 41,
+      );
+      final lower = await t.startGesture(
+        center + const Offset(0, 40),
+        pointer: 42,
+      );
       for (var frame = 0; frame < 8; frame++) {
-        await touch.moveBy(const Offset(12, -8));
+        await upper.moveBy(const Offset(0, -4));
+        await lower.moveBy(const Offset(0, 4));
         await t.pump(const Duration(milliseconds: 32));
       }
-      await touch.up();
+      await upper.up();
+      await lower.up();
       await t.pumpAndSettle();
-      debugPrint(
-        'IOS-PROOF pan before=$matrix after=${viewer().transformationController!.value} scrollBefore=$scrollBefore scrollAfter=${scroll.pixels}',
-      );
-      if (viewer().transformationController!.value == matrix) {
-        await capture('pan-failed');
-      }
-      expect(viewer().transformationController!.value, isNot(matrix));
-      expect(viewer().transformationController!.value.getMaxScaleOnAxis(), 2);
+      final pinchScale = viewer().transformationController!.value
+          .getMaxScaleOnAxis();
+      expect(pinchScale, greaterThan(2));
+      expect(pinchScale, lessThanOrEqualTo(viewer().maxScale + 0.000001));
       expect(api.imageReads, imageReads);
-      await capture('panned');
       passed('IP05');
+      await reach(find.text('الحجم الأصلي'));
       await t.tap(find.text('الحجم الأصلي').hitTestable());
       await t.pumpAndSettle();
       expect(viewer().transformationController!.value.isIdentity(), true);
@@ -459,6 +502,8 @@ void main() {
           'emptyRequestId': empty['id'],
           'amount': detail['amount'],
           'currency': detail['currency'],
+          'gestures': gestures,
+          'pinchScale': pinchScale,
           'originalPngSha256': hash,
           'successfulAssetHashes': api.imageHashes,
           'businessWritesAfterFixture': api.writes,

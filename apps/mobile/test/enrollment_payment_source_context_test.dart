@@ -101,6 +101,21 @@ Future<void> until(WidgetTester t, Finder finder) async {
   expect(finder, findsOneWidget);
 }
 
+Future<void> dragProofFrames(
+  WidgetTester t,
+  Finder target,
+  Offset delta, {
+  int frames = 8,
+}) async {
+  final touch = await t.startGesture(t.getCenter(target));
+  for (var frame = 0; frame < frames; frame++) {
+    await touch.moveBy(delta);
+    await t.pump(const Duration(milliseconds: 32));
+  }
+  await touch.up();
+  await t.pumpAndSettle();
+}
+
 void main() {
   for (final corrupt in [false, true]) {
     testWidgets(
@@ -185,6 +200,121 @@ void main() {
       },
     );
   }
+  testWidgets(
+    'enlarged proof vertical pan stays inside both image boundaries',
+    (t) async {
+      final api = ProofTransport((_) async => pixel);
+      final auth = await openProof(t, api);
+      final zoom = find.text('تكبير');
+      await until(t, zoom);
+      await t.ensureVisible(zoom);
+      await t.pumpAndSettle();
+      await t.tap(zoom.hitTestable());
+      await t.pumpAndSettle();
+      final target = find.byType(InteractiveViewer);
+      await t.ensureVisible(target);
+      await t.pumpAndSettle();
+      final viewer = t.widget<InteractiveViewer>(target);
+      await dragProofFrames(t, target, const Offset(0, -60), frames: 4);
+      expect(
+        viewer.transformationController!.value.getTranslation().y,
+        closeTo(-t.getSize(target).height, .01),
+      );
+      await dragProofFrames(t, target, const Offset(0, 60), frames: 4);
+      expect(viewer.transformationController!.value.getTranslation().y, 0);
+      expect(viewer.transformationController!.value.getMaxScaleOnAxis(), 2);
+      expect(api.reads, 1);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'page scrolls through a normal image and outside an enlarged proof',
+    (t) async {
+      final api = ProofTransport((_) async => pixel);
+      final auth = await openProof(t, api);
+      t.view.physicalSize = const Size(320, 600);
+      await t.pump();
+      final zoom = find.text('تكبير');
+      await until(t, zoom);
+      final target = find.byType(InteractiveViewer);
+      await t.ensureVisible(target);
+      await t.pumpAndSettle();
+      final scroll = t
+          .state<ScrollableState>(find.byType(Scrollable).last)
+          .position;
+      final viewer = t.widget<InteractiveViewer>(target);
+      final before = scroll.pixels;
+      expect(before, greaterThan(0));
+      await dragProofFrames(t, target, const Offset(0, 8));
+      expect(scroll.pixels, lessThan(before));
+      expect(viewer.transformationController!.value.isIdentity(), true);
+      await t.ensureVisible(zoom);
+      await t.pumpAndSettle();
+      await t.tap(zoom.hitTestable());
+      await t.pumpAndSettle();
+      final heading = find.text('إثبات الدفع');
+      await Scrollable.ensureVisible(t.element(heading), alignment: .3);
+      await t.pumpAndSettle();
+      final enlarged = viewer.transformationController!.value.clone();
+      final outsideBefore = scroll.pixels;
+      expect(outsideBefore, greaterThan(0));
+      await dragProofFrames(t, heading, const Offset(0, 8));
+      expect(scroll.pixels, lessThan(outsideBefore));
+      expect(viewer.transformationController!.value, enlarged);
+      expect(api.reads, 1);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
+  testWidgets(
+    'vertical two-finger pinch still scales enlarged proof without download',
+    (t) async {
+      final api = ProofTransport((_) async => pixel);
+      final auth = await openProof(t, api);
+      final zoom = find.text('تكبير');
+      await until(t, zoom);
+      await t.ensureVisible(zoom);
+      await t.pumpAndSettle();
+      await t.tap(zoom.hitTestable());
+      await t.pumpAndSettle();
+      final target = find.byType(InteractiveViewer);
+      await t.ensureVisible(target);
+      await t.pumpAndSettle();
+      final center = t.getCenter(target);
+      final upper = await t.startGesture(
+        center - const Offset(0, 40),
+        pointer: 41,
+      );
+      final lower = await t.startGesture(
+        center + const Offset(0, 40),
+        pointer: 42,
+      );
+      for (var frame = 0; frame < 8; frame++) {
+        await upper.moveBy(const Offset(0, -4));
+        await lower.moveBy(const Offset(0, 4));
+        await t.pump(const Duration(milliseconds: 32));
+      }
+      await upper.up();
+      await lower.up();
+      await t.pumpAndSettle();
+      final viewer = t.widget<InteractiveViewer>(target);
+      expect(
+        viewer.transformationController!.value.getMaxScaleOnAxis(),
+        greaterThan(2),
+      );
+      expect(
+        viewer.transformationController!.value.getMaxScaleOnAxis(),
+        lessThanOrEqualTo(viewer.maxScale + 0.000001),
+      );
+      expect(api.reads, 1);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      auth.dispose();
+    },
+  );
   testWidgets('enrollment proof never renders bytes that arrive after logout', (
     t,
   ) async {
