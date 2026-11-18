@@ -1,7 +1,7 @@
 [
   {
     "group": "payments-and-import",
-    "specs": "/(authentication|core-expense-post-recovery|core-player-import-recovery|enrollment-request-review|slice8d-demo-closure|subscription-discounts|subscriptions-payments|transfer-settings-recovery|v2-family-renewal-request|v2-renewal-opportunities|v2-staff-family-quote)\\.spec\\.ts$",
+    "specs": "/(authentication|core-expense-post-recovery|core-player-import-(recovery|fields)|enrollment-request-review|slice8d-demo-closure|subscription-discounts|subscriptions-payments|transfer-settings-recovery|v2-family-renewal-request|v2-renewal-opportunities|v2-staff-family-quote)\\.spec\\.ts$",
     "config": "regression",
     "provider_quarantine": "false"
   },
