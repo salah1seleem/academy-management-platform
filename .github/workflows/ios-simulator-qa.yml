@@ -6,7 +6,7 @@ on:
       suite:
         description: Isolated suite on one hosted iOS simulator
         type: choice
-        options: [role-homes, enrollment-proof, player-refund]
+        options: [role-homes, enrollment-proof, player-refund, owner-finance]
         default: role-homes
       checks_only:
         description: Analyze and run focused Flutter/runner regressions without native build
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Reject unsupported checks-only selection
-        if: inputs.checks_only == true && inputs.suite != 'enrollment-proof' && inputs.suite != 'player-refund'
+        if: inputs.checks_only == true && inputs.suite != 'enrollment-proof' && inputs.suite != 'player-refund' && inputs.suite != 'owner-finance'
         run: exit 1
       - name: Verify runner failure propagation
         run: python3 scripts/qa/test_ios_runner_exit.py
@@ -96,6 +96,20 @@ jobs:
         with:
           name: refund-widget-qa
           path: tmp/qa-ios-refund-widget/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Check focused owner finance sources
+        if: inputs.suite == 'owner-finance'
+        working-directory: apps/mobile
+        run: |
+          flutter analyze lib/features/owner/refined_home_panels.dart lib/features/owner/owner_dashboard.dart test/owner_finance_source_contract_test.dart
+          flutter test --dart-define=UI_QUALITY_CAPTURE_DIR=../../tmp/qa-ios-owner-widget test/owner_finance_source_contract_test.dart test/owner_home_refinement_test.dart test/receivable_balances_test.dart test/receivable_document_test.dart
+      - name: Preserve focused owner finance evidence
+        if: always() && inputs.suite == 'owner-finance'
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-finance-widget-qa
+          path: tmp/qa-ios-owner-widget/
           if-no-files-found: warn
           retention-days: 7
       - name: Exercise selected suite on one iOS simulator
